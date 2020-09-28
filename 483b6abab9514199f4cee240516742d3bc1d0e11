@@ -1,0 +1,101 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b5ca1c9e_28c67521",
+        "filename": "services/core/java/com/android/server/pocket/PocketService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 73,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-28T14:18:00Z",
+      "side": 1,
+      "message": "Add another state which defines the fact that the sensor is not unknown, but also not in the pocket.",
+      "revId": "483b6abab9514199f4cee240516742d3bc1d0e11",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9d95c782_4bfc8ed2",
+        "filename": "services/core/java/com/android/server/pocket/PocketService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 739,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-28T14:18:00Z",
+      "side": 1,
+      "message": "can you make this a single if statemenntn to improve readability",
+      "range": {
+        "startLine": 734,
+        "startChar": 1,
+        "endLine": 739,
+        "endChar": 59
+      },
+      "revId": "483b6abab9514199f4cee240516742d3bc1d0e11",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "0ecfae81_234371da",
+        "filename": "services/core/java/com/android/server/pocket/PocketService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 747,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-28T14:18:00Z",
+      "side": 1,
+      "message": "change this to reflect the state where sensor is not unknown, but also not in the pocket.",
+      "range": {
+        "startLine": 747,
+        "startChar": 80,
+        "endLine": 747,
+        "endChar": 101
+      },
+      "revId": "483b6abab9514199f4cee240516742d3bc1d0e11",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "8e828c4a_8f49b9bf",
+        "filename": "services/core/java/com/android/server/pocket/PocketService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 749,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-28T14:18:00Z",
+      "side": 1,
+      "message": "Don\u0027t catch NPE\u0027s. Instead use a null-check on variables which can be null",
+      "revId": "483b6abab9514199f4cee240516742d3bc1d0e11",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "39c795a8_1bade2b4",
+        "filename": "services/core/java/com/android/server/pocket/PocketService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 839,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-28T14:18:00Z",
+      "side": 1,
+      "message": "this doesn\u0027t need to be static. Make it non-static and remove. SensorManager from the arguments",
+      "revId": "483b6abab9514199f4cee240516742d3bc1d0e11",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
