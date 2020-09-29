@@ -396,6 +396,18 @@ public class Utils {
     /**
      * Returns the Wifi icon resource for a given RSSI level.
      *
+     * @param showX True if a connected Wi-Fi network has the problem which should show Pie+x
+     *              signal icon to users.
+     * @param level The number of bars to show (0-4)
+     * @throws IllegalArgumentException if an invalid RSSI level is given.
+     */
+    public static int getWifiIconResource(boolean showX, int level) {
+        return getWifiIconResource(showX, level, 0 /* standard */, false /* isReady */);
+    }
+
+    /**
+     * Returns the Wifi icon resource for a given RSSI level.
+     *
      * @param level The number of bars to show (0-4)
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
