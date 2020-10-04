@@ -27,6 +27,12 @@
         android:key="volume_and_do_not_disturb"
         android:title="@string/volume_and_do_not_disturb">
 
+        <!-- nfc -->
+        <com.android.systemui.tuner.StatusBarSwitch
+            android:key="nfc"
+            android:persistent="false"
+            android:title="@string/status_bar_nfc" />
+
         <!-- Action for this is
              MetricsConstants.ACTION_TUNER_DO_NOT_DISTURB_VOLUME_SHORTCUT -->
         <com.android.systemui.tuner.TunerSwitch
