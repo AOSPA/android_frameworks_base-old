@@ -2851,6 +2851,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         makeFinishingLocked();
 
+        getRootTask().onARStopTriggered(this);
         final boolean activityRemoved = destroyImmediately("finish-imm:" + reason);
 
         // If the display does not have running activity, the configuration may need to be

@@ -5660,6 +5660,10 @@ class Task extends WindowContainer<WindowContainer> {
             return false;
         }
 
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+            mActivityPluginDelegate.activitySuspendNotification
+                (prev.info.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
+        }
         ProtoLog.v(WM_DEBUG_STATES, "Moving to PAUSING: %s", prev);
         mPausingActivity = prev;
         mLastPausedActivity = prev;
@@ -6168,6 +6172,11 @@ class Task extends WindowContainer<WindowContainer> {
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+            mActivityPluginDelegate.activityInvokeNotification
+                (next.info.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN);
+        }
+
         // If we are currently pausing an activity, then don't do anything until that is done.
         if (!mRootWindowContainer.allPausedActivitiesComplete()) {
             ProtoLog.v(WM_DEBUG_STATES,
@@ -6565,6 +6574,11 @@ class Task extends WindowContainer<WindowContainer> {
         ProtoLog.i(WM_DEBUG_ADD_REMOVE, "Adding activity %s to stack to task %s "
                         + "callers: %s", r, task, new RuntimeException("here").fillInStackTrace());
         task.positionChildAtTop(r);
+
+        if (mActivityPluginDelegate != null) {
+            mActivityPluginDelegate.activityInvokeNotification
+                (r.info.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN);
+        }
 
         // The transition animation and starting window are not needed if {@code allowMoveToFront}
         // is false, because the activity won't be visible.
