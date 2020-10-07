@@ -2046,13 +2046,6 @@ public class AudioService extends IAudioService.Stub
         if (DEBUG_VOL) Log.d(TAG, "adjustStreamVolume() stream=" + streamType + ", dir=" + direction
                 + ", flags=" + flags + ", caller=" + caller);
 
-        /* If MirrorLink audio is playing, then disable volume changes */
-        String value = SystemProperties.get("vendor.mls.audio.session.status", "default");
-        if (true == value.equals("started")){
-            Log.e(TAG, "adjustStreamVolume() Ignore volume change during MirrorLink session");
-            return;
-        }
-
         if (mUseFixedVolume) {
             return;
         }
@@ -2698,13 +2691,6 @@ public class AudioService extends IAudioService.Stub
         if (DEBUG_VOL) {
             Log.d(TAG, "setStreamVolume(stream=" + streamType+", index=" + index
                     + ", calling=" + callingPackage + ")");
-        }
-
-        /* If MirrorLink audio is playing, then disable volume changes */
-        String value = SystemProperties.get("vendor.mls.audio.session.status", "default");
-        if (true == value.equals("started")){
-            Log.e(TAG, "setStreamVolume() Ignore volume change during MirrorLink session");
-            return;
         }
 
         if (mUseFixedVolume) {
@@ -7544,6 +7530,7 @@ public class AudioService extends IAudioService.Stub
                         + " FromRestrictions=" + mMicMuteFromRestrictions
                         + " FromApi=" + mMicMuteFromApi
                         + " from system=" + mMicMuteFromSystemCached);
+        pw.print("  mMonitorRotation="); pw.println(mMonitorRotation);
 
         dumpAudioPolicies(pw);
         mDynPolicyLogger.dump(pw);
