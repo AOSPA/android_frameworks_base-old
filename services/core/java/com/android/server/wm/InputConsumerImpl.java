@@ -16,6 +16,8 @@
 
 package com.android.server.wm;
 
+import static android.os.IInputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
+
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -69,25 +71,23 @@ class InputConsumerImpl implements IBinder.DeathRecipient {
 
         mApplicationHandle = new InputApplicationHandle(new Binder());
         mApplicationHandle.name = name;
-        mApplicationHandle.dispatchingTimeoutNanos =
-                WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
+        mApplicationHandle.dispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 
         mWindowHandle = new InputWindowHandle(mApplicationHandle, displayId);
         mWindowHandle.name = name;
         mWindowHandle.token = mServerChannel.getToken();
         mWindowHandle.layoutParamsType = WindowManager.LayoutParams.TYPE_INPUT_CONSUMER;
         mWindowHandle.layoutParamsFlags = 0;
-        mWindowHandle.dispatchingTimeoutNanos =
-                WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
+        mWindowHandle.dispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
         mWindowHandle.visible = true;
-        mWindowHandle.canReceiveKeys = false;
-        mWindowHandle.hasFocus = false;
+        mWindowHandle.focusable = false;
         mWindowHandle.hasWallpaper = false;
         mWindowHandle.paused = false;
         mWindowHandle.ownerPid = Process.myPid();
         mWindowHandle.ownerUid = Process.myUid();
         mWindowHandle.inputFeatures = 0;
         mWindowHandle.scaleFactor = 1.0f;
+        mWindowHandle.trustedOverlay = true;
 
         mInputSurface = mService.makeSurfaceBuilder(mService.mRoot.getDisplayContent(displayId).getSession())
                 .setContainerLayer()
@@ -156,7 +156,7 @@ class InputConsumerImpl implements IBinder.DeathRecipient {
     }
 
     void disposeChannelsLw(SurfaceControl.Transaction t) {
-        mService.mInputManager.unregisterInputChannel(mServerChannel);
+        mService.mInputManager.unregisterInputChannel(mServerChannel.getToken());
         mClientChannel.dispose();
         mServerChannel.dispose();
         t.remove(mInputSurface);

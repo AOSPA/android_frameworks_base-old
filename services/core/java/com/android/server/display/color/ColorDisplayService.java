@@ -58,6 +58,7 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings.Secure;
@@ -76,6 +77,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.server.DisplayThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.twilight.TwilightListener;
 import com.android.server.twilight.TwilightManager;
 import com.android.server.twilight.TwilightState;
@@ -205,30 +207,24 @@ public final class ColorDisplayService extends SystemService {
     }
 
     @Override
-    public void onStartUser(int userHandle) {
-        super.onStartUser(userHandle);
-
+    public void onUserStarting(@NonNull TargetUser user) {
         if (mCurrentUser == UserHandle.USER_NULL) {
             final Message message = mHandler.obtainMessage(MSG_USER_CHANGED);
-            message.arg1 = userHandle;
+            message.arg1 = user.getUserIdentifier();
             mHandler.sendMessage(message);
         }
     }
 
     @Override
-    public void onSwitchUser(int userHandle) {
-        super.onSwitchUser(userHandle);
-
+    public void onUserSwitching(@Nullable TargetUser from, @NonNull TargetUser to) {
         final Message message = mHandler.obtainMessage(MSG_USER_CHANGED);
-        message.arg1 = userHandle;
+        message.arg1 = to.getUserIdentifier();
         mHandler.sendMessage(message);
     }
 
     @Override
-    public void onStopUser(int userHandle) {
-        super.onStopUser(userHandle);
-
-        if (mCurrentUser == userHandle) {
+    public void onUserStopping(@NonNull TargetUser user) {
+        if (mCurrentUser == user.getUserIdentifier()) {
             final Message message = mHandler.obtainMessage(MSG_USER_CHANGED);
             message.arg1 = UserHandle.USER_NULL;
             mHandler.sendMessage(message);
@@ -819,7 +815,13 @@ public final class ColorDisplayService extends SystemService {
         return LocalDateTime.MIN;
     }
 
-    private boolean setAppSaturationLevelInternal(String callingPackageName,
+    void setSaturationLevelInternal(int saturationLevel) {
+        final Message message = mHandler.obtainMessage(MSG_APPLY_GLOBAL_SATURATION);
+        message.arg1 = saturationLevel;
+        mHandler.sendMessage(message);
+    }
+
+    boolean setAppSaturationLevelInternal(String callingPackageName,
             String affectedPackageName, int saturationLevel) {
         return mAppSaturationController
                 .setSaturationLevel(callingPackageName, affectedPackageName, mCurrentUser,
@@ -1509,9 +1511,7 @@ public final class ColorDisplayService extends SystemService {
             }
             final long token = Binder.clearCallingIdentity();
             try {
-                final Message message = mHandler.obtainMessage(MSG_APPLY_GLOBAL_SATURATION);
-                message.arg1 = level;
-                mHandler.sendMessage(message);
+                setSaturationLevelInternal(level);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1720,6 +1720,23 @@ public final class ColorDisplayService extends SystemService {
             final long token = Binder.clearCallingIdentity();
             try {
                 dumpInternal(pw);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public int handleShellCommand(ParcelFileDescriptor in,
+                ParcelFileDescriptor out, ParcelFileDescriptor err, String[] args) {
+            getContext().enforceCallingOrSelfPermission(
+                    Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS,
+                    "Permission required to use ADB color transform commands");
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return new ColorDisplayShellCommand(ColorDisplayService.this)
+                    .exec(this, in.getFileDescriptor(), out.getFileDescriptor(),
+                        err.getFileDescriptor(),
+                        args);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }

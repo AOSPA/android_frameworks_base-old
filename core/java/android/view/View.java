@@ -17,7 +17,6 @@
 package android.view;
 
 import static android.content.res.Resources.ID_NULL;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED;
 
 import static com.android.internal.util.FrameworkStatsLog.TOUCH_GESTURE_CLASSIFIED__CLASSIFICATION__DEEP_PRESS;
@@ -43,6 +42,7 @@ import android.annotation.Nullable;
 import android.annotation.Size;
 import android.annotation.StyleRes;
 import android.annotation.TestApi;
+import android.annotation.UiContext;
 import android.annotation.UiThread;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.AutofillOptions;
@@ -952,8 +952,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Prior to P, {@code #startDragAndDrop} accepts a builder which produces an empty drag shadow.
-     * Currently zero size SurfaceControl cannot be created thus we create a dummy 1x1 surface
-     * instead.
+     * Currently zero size SurfaceControl cannot be created thus we create a 1x1 surface instead.
      */
     private static boolean sAcceptZeroSizeDragShadow;
 
@@ -4910,6 +4909,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     @ViewDebug.ExportedProperty(deepExport = true)
     @UnsupportedAppUsage
+    @UiContext
     protected Context mContext;
 
     @UnsupportedAppUsage
@@ -5434,8 +5434,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
             sAcceptZeroSizeDragShadow = targetSdkVersion < Build.VERSION_CODES.P;
 
-            sBrokenInsetsDispatch = ViewRootImpl.sNewInsetsMode != NEW_INSETS_MODE_FULL
-                    || targetSdkVersion < Build.VERSION_CODES.R;
+            sBrokenInsetsDispatch = targetSdkVersion < Build.VERSION_CODES.R;
 
             sBrokenWindowBackground = targetSdkVersion < Build.VERSION_CODES.Q;
 
@@ -14940,20 +14939,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * inside.  In effect, this tells you the available area where content can
      * be placed and remain visible to users.
      *
-     * <p>This function requires an IPC back to the window manager to retrieve
-     * the requested information, so should not be used in performance critical
-     * code like drawing.
-     *
      * @param outRect Filled in with the visible display frame.  If the view
      * is not attached to a window, this is simply the raw display size.
      */
     public void getWindowVisibleDisplayFrame(Rect outRect) {
         if (mAttachInfo != null) {
-            try {
-                mAttachInfo.mSession.getDisplayFrame(mAttachInfo.mWindow, outRect);
-            } catch (RemoteException e) {
-                return;
-            }
+            mAttachInfo.mViewRootImpl.getDisplayFrame(outRect);
             // XXX This is really broken, and probably all needs to be done
             // in the window manager, and we need to know more about whether
             // we want the area behind or in front of the IME.
@@ -14979,11 +14970,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @UnsupportedAppUsage
     public void getWindowDisplayFrame(Rect outRect) {
         if (mAttachInfo != null) {
-            try {
-                mAttachInfo.mSession.getDisplayFrame(mAttachInfo.mWindow, outRect);
-            } catch (RemoteException e) {
-                return;
-            }
+            mAttachInfo.mViewRootImpl.getDisplayFrame(outRect);
             return;
         }
         // The view is not attached to a display so we don't have a context.
@@ -15072,6 +15059,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return The view's Context.
      */
     @ViewDebug.CapturedViewProperty
+    @UiContext
     public final Context getContext() {
         return mContext;
     }
@@ -23360,7 +23348,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *            displaying, else return the result of calling through to the
      *            super class.
      *
-     * @return boolean If true than the Drawable is being displayed in the
+     * @return boolean If true then the Drawable is being displayed in the
      *         view; else false and it is not allowed to animate.
      *
      * @see #unscheduleDrawable(android.graphics.drawable.Drawable)
@@ -26274,6 +26262,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 }
             }
         }
+    }
+
+    /**
+     * This needs to be a better API before it is exposed. For now, only the root view will get
+     * notified.
+     * @hide
+     */
+    public void onSystemBarAppearanceChanged(@WindowInsetsController.Appearance int appearance) {
     }
 
     /**
@@ -30027,7 +30023,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Dump all private flags in readable format, useful for documentation and
-     * sanity checking.
+     * consistency checking.
      */
     private static void dumpFlags() {
         final HashMap<String, String> found = Maps.newHashMap();

@@ -17,10 +17,6 @@
 package android.view;
 
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_IME;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_NONE;
-import static android.view.ViewRootImpl.sNewInsetsMode;
 import static android.view.WindowInsets.Type.MANDATORY_SYSTEM_GESTURES;
 import static android.view.WindowInsets.Type.SYSTEM_GESTURES;
 import static android.view.WindowInsets.Type.displayCutout;
@@ -30,11 +26,15 @@ import static android.view.WindowInsets.Type.isVisibleInsetsType;
 import static android.view.WindowInsets.Type.statusBars;
 import static android.view.WindowInsets.Type.systemBars;
 import static android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN;
+import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
+import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
+import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
 import android.annotation.IntDef;
 import android.annotation.Nullable;
+import android.app.WindowConfiguration;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.os.Parcel;
@@ -59,6 +59,8 @@ import java.util.StringJoiner;
  * @hide
  */
 public class InsetsState implements Parcelable {
+
+    public static final InsetsState EMPTY = new InsetsState();
 
     /**
      * Internal representation of inset source types. This is different from the public API in
@@ -172,6 +174,7 @@ public class InsetsState implements Parcelable {
     public WindowInsets calculateInsets(Rect frame, @Nullable InsetsState ignoringVisibilityState,
             boolean isScreenRound, boolean alwaysConsumeSystemBars, DisplayCutout cutout,
             int legacySoftInputMode, int legacyWindowFlags, int legacySystemUiFlags,
+            int windowType, @WindowConfiguration.WindowingMode int windowingMode,
             @Nullable @InternalInsetsSide SparseIntArray typeSideMap) {
         Insets[] typeInsetsMap = new Insets[Type.SIZE];
         Insets[] typeMaxInsetsMap = new Insets[Type.SIZE];
@@ -185,18 +188,6 @@ public class InsetsState implements Parcelable {
                 if (typeInsetsMap[index] == null) {
                     typeInsetsMap[index] = Insets.NONE;
                 }
-                continue;
-            }
-
-            boolean skipNonImeInImeMode = ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_IME
-                    && source.getType() != ITYPE_IME;
-            boolean skipSystemBars = ViewRootImpl.sNewInsetsMode != NEW_INSETS_MODE_FULL
-                    && (type == ITYPE_STATUS_BAR || type == ITYPE_NAVIGATION_BAR);
-            boolean skipLegacyTypes = ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_NONE
-                    && (type == ITYPE_STATUS_BAR || type == ITYPE_NAVIGATION_BAR
-                            || type == ITYPE_IME);
-            if (skipSystemBars || skipLegacyTypes || skipNonImeInImeMode) {
-                typeVisibilityMap[indexOf(toPublicType(type))] = source.isVisible();
                 continue;
             }
 
@@ -226,11 +217,13 @@ public class InsetsState implements Parcelable {
         if ((legacyWindowFlags & FLAG_FULLSCREEN) != 0) {
             compatInsetsTypes &= ~statusBars();
         }
+        if (clearCompatInsets(windowType, legacyWindowFlags, windowingMode)) {
+            compatInsetsTypes = 0;
+        }
 
         return new WindowInsets(typeInsetsMap, typeMaxInsetsMap, typeVisibilityMap, isScreenRound,
                 alwaysConsumeSystemBars, cutout, compatInsetsTypes,
-                sNewInsetsMode == NEW_INSETS_MODE_FULL
-                        && (legacySystemUiFlags & SYSTEM_UI_FLAG_LAYOUT_STABLE) != 0);
+                (legacySystemUiFlags & SYSTEM_UI_FLAG_LAYOUT_STABLE) != 0);
     }
 
     public Rect calculateVisibleInsets(Rect frame, @SoftInputModeFlags int softInputMode) {
@@ -238,9 +231,6 @@ public class InsetsState implements Parcelable {
         for (int type = FIRST_TYPE; type <= LAST_TYPE; type++) {
             InsetsSource source = mSources[type];
             if (source == null) {
-                continue;
-            }
-            if (sNewInsetsMode != NEW_INSETS_MODE_FULL && type != ITYPE_IME) {
                 continue;
             }
 
@@ -445,6 +435,12 @@ public class InsetsState implements Parcelable {
 
     public void addSource(InsetsSource source) {
         mSources[source.getType()] = source;
+    }
+
+    public static boolean clearCompatInsets(int windowType, int windowFlags, int windowingMode) {
+        return (windowFlags & FLAG_LAYOUT_NO_LIMITS) != 0
+                && windowType != TYPE_WALLPAPER && windowType != TYPE_SYSTEM_ERROR
+                && !WindowConfiguration.inMultiWindowMode(windowingMode);
     }
 
     public static @InternalInsetsType ArraySet<Integer> toInternalType(@InsetsType int types) {

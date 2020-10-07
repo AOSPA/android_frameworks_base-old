@@ -19,12 +19,12 @@ package android.media.session;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ParceledListSlice;
 import android.media.AudioAttributes;
 import android.media.MediaDescription;
 import android.media.MediaMetadata;
@@ -35,6 +35,7 @@ import android.net.Uri;
 import android.os.BadParcelableException;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Parcel;
@@ -102,9 +103,12 @@ public final class MediaSession {
      * System only flag for a session that needs to have priority over all other
      * sessions. This flag ensures this session will receive media button events
      * regardless of the current ordering in the system.
+     * If there are two or more sessions with this flag, the last session that sets this flag
+     * will be the global priority session.
      *
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final int FLAG_EXCLUSIVE_GLOBAL_PRIORITY = 1 << 16;
 
     /**
@@ -489,7 +493,12 @@ public final class MediaSession {
      */
     public void setQueue(@Nullable List<QueueItem> queue) {
         try {
-            mBinder.setQueue(queue == null ? null : new ParceledListSlice(queue));
+            if (queue == null) {
+                mBinder.resetQueue();
+            } else {
+                IBinder binder = mBinder.getBinderForSetQueue();
+                ParcelableListBinder.send(binder, queue);
+            }
         } catch (RemoteException e) {
             Log.wtf("Dead object in setQueue.", e);
         }
@@ -819,9 +828,10 @@ public final class MediaSession {
         }
 
         /**
-         * Gets the UID of this token.
+         * Gets the UID of the application that created the media session.
          * @hide
          */
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
         public int getUid() {
             return mUid;
         }

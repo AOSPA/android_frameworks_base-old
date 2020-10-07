@@ -237,11 +237,16 @@ binder::Status BinderIncrementalService::unlink(int32_t storageId, const std::st
     return ok();
 }
 
-binder::Status BinderIncrementalService::isFileRangeLoaded(int32_t storageId,
-                                                           const std::string& path, int64_t start,
-                                                           int64_t end, bool* _aidl_return) {
-    // TODO: implement
-    *_aidl_return = false;
+binder::Status BinderIncrementalService::isFileFullyLoaded(int32_t storageId,
+                                                           const std::string& path,
+                                                           int32_t* _aidl_return) {
+    *_aidl_return = mImpl.isFileFullyLoaded(storageId, path);
+    return ok();
+}
+
+binder::Status BinderIncrementalService::getLoadingProgress(int32_t storageId,
+                                                            float* _aidl_return) {
+    *_aidl_return = mImpl.getLoadingProgress(storageId);
     return ok();
 }
 
@@ -293,6 +298,20 @@ binder::Status BinderIncrementalService::configureNativeBinaries(
 binder::Status BinderIncrementalService::waitForNativeBinariesExtraction(int storageId,
                                                                          bool* _aidl_return) {
     *_aidl_return = mImpl.waitForNativeBinariesExtraction(storageId);
+    return ok();
+}
+
+binder::Status BinderIncrementalService::registerLoadingProgressListener(
+        int32_t storageId,
+        const ::android::sp<::android::os::incremental::IStorageLoadingProgressListener>&
+                progressListener,
+        bool* _aidl_return) {
+    *_aidl_return = mImpl.registerLoadingProgressListener(storageId, progressListener);
+    return ok();
+}
+binder::Status BinderIncrementalService::unregisterLoadingProgressListener(int32_t storageId,
+                                                                           bool* _aidl_return) {
+    *_aidl_return = mImpl.unregisterLoadingProgressListener(storageId);
     return ok();
 }
 

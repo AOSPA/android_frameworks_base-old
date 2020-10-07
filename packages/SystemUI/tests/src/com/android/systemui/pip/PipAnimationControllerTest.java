@@ -16,7 +16,7 @@
 
 package com.android.systemui.pip;
 
-import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_TO_FULLSCREEN;
+import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_LEAVE_PIP;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_TO_PIP;
 
 import static org.junit.Assert.assertEquals;
@@ -81,7 +81,7 @@ public class PipAnimationControllerTest extends SysuiTestCase {
     @Test
     public void getAnimator_withBounds_returnBoundsAnimator() {
         final PipAnimationController.PipTransitionAnimator animator = mPipAnimationController
-                .getAnimator(mLeash, new Rect(), new Rect(), null);
+                .getAnimator(mLeash, new Rect(), new Rect(), null, TRANSITION_DIRECTION_TO_PIP);
 
         assertEquals("Expect ANIM_TYPE_BOUNDS animation",
                 animator.getAnimationType(), PipAnimationController.ANIM_TYPE_BOUNDS);
@@ -93,12 +93,12 @@ public class PipAnimationControllerTest extends SysuiTestCase {
         final Rect endValue1 = new Rect(100, 100, 200, 200);
         final Rect endValue2 = new Rect(200, 200, 300, 300);
         final PipAnimationController.PipTransitionAnimator oldAnimator = mPipAnimationController
-                .getAnimator(mLeash, startValue, endValue1, null);
+                .getAnimator(mLeash, startValue, endValue1, null, TRANSITION_DIRECTION_TO_PIP);
         oldAnimator.setSurfaceControlTransactionFactory(DummySurfaceControlTx::new);
         oldAnimator.start();
 
         final PipAnimationController.PipTransitionAnimator newAnimator = mPipAnimationController
-                .getAnimator(mLeash, startValue, endValue2, null);
+                .getAnimator(mLeash, startValue, endValue2, null, TRANSITION_DIRECTION_TO_PIP);
 
         assertEquals("getAnimator with same type returns same animator",
                 oldAnimator, newAnimator);
@@ -116,9 +116,9 @@ public class PipAnimationControllerTest extends SysuiTestCase {
 
         animator = mPipAnimationController
                 .getAnimator(mLeash, new Rect(), 0f, 1f)
-                .setTransitionDirection(TRANSITION_DIRECTION_TO_FULLSCREEN);
+                .setTransitionDirection(TRANSITION_DIRECTION_LEAVE_PIP);
         assertEquals("Transition to fullscreen mode",
-                animator.getTransitionDirection(), TRANSITION_DIRECTION_TO_FULLSCREEN);
+                animator.getTransitionDirection(), TRANSITION_DIRECTION_LEAVE_PIP);
     }
 
     @Test
@@ -128,7 +128,7 @@ public class PipAnimationControllerTest extends SysuiTestCase {
         final Rect endValue1 = new Rect(100, 100, 200, 200);
         final Rect endValue2 = new Rect(200, 200, 300, 300);
         final PipAnimationController.PipTransitionAnimator animator = mPipAnimationController
-                .getAnimator(mLeash, startValue, endValue1, null);
+                .getAnimator(mLeash, startValue, endValue1, null, TRANSITION_DIRECTION_TO_PIP);
 
         animator.updateEndValue(endValue2);
 
@@ -140,7 +140,7 @@ public class PipAnimationControllerTest extends SysuiTestCase {
         final Rect startValue = new Rect(0, 0, 100, 100);
         final Rect endValue = new Rect(100, 100, 200, 200);
         final PipAnimationController.PipTransitionAnimator animator = mPipAnimationController
-                .getAnimator(mLeash, startValue, endValue, null);
+                .getAnimator(mLeash, startValue, endValue, null, TRANSITION_DIRECTION_TO_PIP);
         animator.setSurfaceControlTransactionFactory(DummySurfaceControlTx::new);
 
         animator.setPipAnimationCallback(mPipAnimationCallback);

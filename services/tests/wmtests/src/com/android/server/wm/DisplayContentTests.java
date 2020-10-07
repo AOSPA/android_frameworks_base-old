@@ -24,10 +24,10 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER;
 import static android.os.Build.VERSION_CODES.P;
 import static android.os.Build.VERSION_CODES.Q;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.Display.FLAG_PRIVATE;
 import static android.view.DisplayCutout.BOUNDS_POSITION_LEFT;
 import static android.view.DisplayCutout.BOUNDS_POSITION_TOP;
 import static android.view.DisplayCutout.fromBoundingRect;
@@ -95,6 +95,7 @@ import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
 import android.util.DisplayMetrics;
 import android.view.DisplayCutout;
+import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.IDisplayWindowRotationCallback;
 import android.view.IDisplayWindowRotationController;
@@ -326,7 +327,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(dc, stack.getDisplayContent());
 
         final Task task = createTaskInStack(stack, 0 /* userId */);
-        final ActivityRecord activity = WindowTestUtils.createTestActivityRecord(dc);
+        final ActivityRecord activity = createTestActivityRecord(dc);
         task.addChild(activity, 0);
         assertEquals(dc, task.getDisplayContent());
         assertEquals(dc, activity.getDisplayContent());
@@ -397,16 +398,14 @@ public class DisplayContentTests extends WindowTestsBase {
         // Add stack with activity.
         final Task stack0 = createTaskStackOnDisplay(dc0);
         final Task task0 = createTaskInStack(stack0, 0 /* userId */);
-        final ActivityRecord activity =
-                WindowTestUtils.createTestActivityRecord(dc0);
+        final ActivityRecord activity = createTestActivityRecord(dc0);
         task0.addChild(activity, 0);
         dc0.configureDisplayPolicy();
         assertNotNull(dc0.mTapDetector);
 
         final Task stack1 = createTaskStackOnDisplay(dc1);
         final Task task1 = createTaskInStack(stack1, 0 /* userId */);
-        final ActivityRecord activity1 =
-                WindowTestUtils.createTestActivityRecord(dc0);
+        final ActivityRecord activity1 = createTestActivityRecord(dc0);
         task1.addChild(activity1, 0);
         dc1.configureDisplayPolicy();
         assertNotNull(dc1.mTapDetector);
@@ -762,13 +761,14 @@ public class DisplayContentTests extends WindowTestsBase {
                 window.mAttrs.screenOrientation, dc.getOrientation());
 
         // ----------------------------
-        // Test close-to-square display
+        // Test close-to-square display - should be handled in the same way
         // ----------------------------
         dc.mBaseDisplayHeight = dc.mBaseDisplayWidth;
         dc.configureDisplayPolicy();
 
-        assertEquals("Screen orientation must be SCREEN_ORIENTATION_USER.",
-                SCREEN_ORIENTATION_USER, dc.getOrientation());
+        assertEquals(
+                "Screen orientation must be defined by the window even on close-to-square display.",
+                window.mAttrs.screenOrientation, dc.getOrientation());
     }
 
     @Test
@@ -823,7 +823,14 @@ public class DisplayContentTests extends WindowTestsBase {
         final DisplayContent newDisplay = createNewDisplay();
 
         final WindowState appWin = createWindow(null, TYPE_APPLICATION, mDisplayContent, "appWin");
+        final Task stack = mDisplayContent.getTopStack();
+        final ActivityRecord activity = stack.topRunningActivity();
+        doReturn(true).when(activity).shouldBeVisibleUnchecked();
+
         final WindowState appWin1 = createWindow(null, TYPE_APPLICATION, newDisplay, "appWin1");
+        final Task stack1 = newDisplay.getTopStack();
+        final ActivityRecord activity1 = stack1.topRunningActivity();
+        doReturn(true).when(activity1).shouldBeVisibleUnchecked();
         appWin.setHasSurface(true);
         appWin1.setHasSurface(true);
 
@@ -849,17 +856,17 @@ public class DisplayContentTests extends WindowTestsBase {
         dc.getDisplayRotation().setFixedToUserRotation(
                 IWindowManager.FIXED_TO_USER_ROTATION_DISABLED);
 
-        final Task stack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
-                        .setDisplay(dc)
-                        .build();
+        final Task stack = new TaskBuilder(mSupervisor)
+                .setDisplay(dc)
+                .setCreateActivity(true)
+                .build();
         doReturn(true).when(stack).isVisible();
 
-        final Task freeformStack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
-                        .setDisplay(dc)
-                        .setWindowingMode(WINDOWING_MODE_FREEFORM)
-                        .build();
+        final Task freeformStack = new TaskBuilder(mSupervisor)
+                .setDisplay(dc)
+                .setCreateActivity(true)
+                .setWindowingMode(WINDOWING_MODE_FREEFORM)
+                .build();
         doReturn(true).when(freeformStack).isVisible();
         freeformStack.getTopChild().setBounds(100, 100, 300, 400);
 
@@ -881,9 +888,8 @@ public class DisplayContentTests extends WindowTestsBase {
                 IWindowManager.FIXED_TO_USER_ROTATION_DISABLED);
         final int newOrientation = getRotatedOrientation(dc);
 
-        final Task stack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
-                        .setDisplay(dc).build();
+        final Task stack = new TaskBuilder(mSupervisor)
+                .setDisplay(dc).setCreateActivity(true).build();
         final ActivityRecord activity = stack.getTopMostTask().getTopNonFinishingActivity();
 
         activity.setRequestedOrientation(newOrientation);
@@ -901,9 +907,8 @@ public class DisplayContentTests extends WindowTestsBase {
                 IWindowManager.FIXED_TO_USER_ROTATION_ENABLED);
         final int newOrientation = getRotatedOrientation(dc);
 
-        final Task stack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
-                        .setDisplay(dc).build();
+        final Task stack = new TaskBuilder(mSupervisor)
+                .setDisplay(dc).setCreateActivity(true).build();
         final ActivityRecord activity = stack.getTopMostTask().getTopNonFinishingActivity();
 
         activity.setRequestedOrientation(newOrientation);
@@ -1114,7 +1119,7 @@ public class DisplayContentTests extends WindowTestsBase {
         performLayout(mDisplayContent);
 
         // The frame is empty because the requested height is zero.
-        assertTrue(win.getFrameLw().isEmpty());
+        assertTrue(win.getFrame().isEmpty());
         // The window should be scheduled to resize then the client may report a new non-empty size.
         win.updateResizingWindowIfNeeded();
         assertThat(mWm.mResizingWindows).contains(win);
@@ -1213,8 +1218,8 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(t, never()).setPosition(any(), eq(0), eq(0));
 
         // Launch another activity before the transition is finished.
-        final ActivityRecord app2 = new ActivityTestsBase.StackBuilder(mWm.mRoot)
-                .setDisplay(mDisplayContent).build().getTopMostActivity();
+        final ActivityRecord app2 = new TaskBuilder(mSupervisor)
+                .setDisplay(mDisplayContent).setCreateActivity(true).build().getTopMostActivity();
         app2.setVisible(false);
         mDisplayContent.mOpeningApps.add(app2);
         app2.setRequestedOrientation(newOrientation);
@@ -1247,8 +1252,7 @@ public class DisplayContentTests extends WindowTestsBase {
         final ActivityRecord app = createActivityRecord(mDisplayContent, WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD);
         final Task task = app.getTask();
-        final ActivityRecord app2 = new ActivityTestsBase.ActivityBuilder(mWm.mAtmService)
-                .setTask(task).build();
+        final ActivityRecord app2 = new ActivityBuilder(mWm.mAtmService).setTask(task).build();
         mDisplayContent.setFixedRotationLaunchingApp(app2, (mDisplayContent.getRotation() + 1) % 4);
         doReturn(true).when(task).isAppTransitioning();
         // If the task is animating transition, this should be no-op.
@@ -1299,7 +1303,7 @@ public class DisplayContentTests extends WindowTestsBase {
         final ActivityRecord pinnedActivity = createActivityRecord(displayContent,
                 WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD);
         final Task pinnedTask = pinnedActivity.getRootTask();
-        final ActivityRecord homeActivity = WindowTestUtils.createTestActivityRecord(
+        final ActivityRecord homeActivity = createTestActivityRecord(
                 displayContent.getDefaultTaskDisplayArea().getOrCreateRootHomeTask());
         if (displayConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
             homeActivity.setOrientation(SCREEN_ORIENTATION_PORTRAIT);
@@ -1354,7 +1358,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertFalse(displayRotation.updateRotationUnchecked(false));
 
         // Rotation can be updated if the recents animation is finished.
-        mDisplayContent.mFixedRotationTransitionListener.onFinishRecentsAnimation(false);
+        mDisplayContent.mFixedRotationTransitionListener.onFinishRecentsAnimation();
         assertTrue(displayRotation.updateRotationUnchecked(false));
 
         // Rotation can be updated if the recents animation is animating but it is not on top, e.g.
@@ -1513,8 +1517,7 @@ public class DisplayContentTests extends WindowTestsBase {
     @Test
     public void testSetWindowingModeAtomicallyUpdatesWindoingModeAndDisplayWindowingMode() {
         final DisplayContent dc = createNewDisplay();
-        final Task stack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
+        final Task stack = new TaskBuilder(mSupervisor)
                 .setDisplay(dc)
                 .build();
         doAnswer(invocation -> {
@@ -1526,6 +1529,28 @@ public class DisplayContentTests extends WindowTestsBase {
         }).when(stack).onConfigurationChanged(any());
         dc.setWindowingMode(WINDOWING_MODE_FREEFORM);
         dc.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+    }
+
+    @Test
+    public void testForceDesktopMode() {
+        mWm.mForceDesktopModeOnExternalDisplays = true;
+        // Not applicable for default display
+        assertFalse(mDefaultDisplay.forceDesktopMode());
+
+        // Not applicable for private secondary display.
+        final DisplayInfo displayInfo = new DisplayInfo();
+        displayInfo.copyFrom(mDisplayInfo);
+        displayInfo.flags = FLAG_PRIVATE;
+        final DisplayContent privateDc = createNewDisplay(displayInfo);
+        assertFalse(privateDc.forceDesktopMode());
+
+        // Applicable for public secondary display.
+        final DisplayContent publicDc = createNewDisplay();
+        assertTrue(publicDc.forceDesktopMode());
+
+        // Make sure forceDesktopMode() is false when the force config is disabled.
+        mWm.mForceDesktopModeOnExternalDisplays = false;
+        assertFalse(publicDc.forceDesktopMode());
     }
 
     private boolean isOptionsPanelAtRight(int displayId) {

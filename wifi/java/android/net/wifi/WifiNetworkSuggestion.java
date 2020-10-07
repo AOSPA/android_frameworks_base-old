@@ -72,12 +72,12 @@ public final class WifiNetworkSuggestion implements Parcelable {
         private @Nullable String mWpa3SaePassphrase;
         /**
          * The enterprise configuration details specifying the EAP method,
-         * certificates and other settings associated with the WPA-EAP networks.
+         * certificates and other settings associated with the WPA/WPA2-Enterprise networks.
          */
         private @Nullable WifiEnterpriseConfig mWpa2EnterpriseConfig;
         /**
          * The enterprise configuration details specifying the EAP method,
-         * certificates and other settings associated with the SuiteB networks.
+         * certificates and other settings associated with the WPA3-Enterprise networks.
          */
         private @Nullable WifiEnterpriseConfig mWpa3EnterpriseConfig;
         /**
@@ -102,10 +102,15 @@ public final class WifiNetworkSuggestion implements Parcelable {
          */
         private int mMeteredOverride;
         /**
-         * Priority of this network among other network suggestions provided by the app.
+         * Priority of this network among other network suggestions from same priority group
+         * provided by the app.
          * The lower the number, the higher the priority (i.e value of 0 = highest priority).
          */
         private int mPriority;
+        /**
+         * Priority group ID, while suggestion priority will only effect inside the priority group.
+         */
+        private int mPriorityGroup;
 
         /**
          * The carrier ID identifies the operator who provides this network configuration.
@@ -144,6 +149,11 @@ public final class WifiNetworkSuggestion implements Parcelable {
          */
         private boolean mIsNetworkUntrusted;
 
+        /**
+         * Whether this network will use enhanced MAC randomization.
+         */
+        private boolean mIsEnhancedMacRandomizationEnabled;
+
         public Builder() {
             mSsid = null;
             mBssid =  null;
@@ -165,6 +175,8 @@ public final class WifiNetworkSuggestion implements Parcelable {
             mWapiPskPassphrase = null;
             mWapiEnterpriseConfig = null;
             mIsNetworkUntrusted = false;
+            mPriorityGroup = 0;
+            mIsEnhancedMacRandomizationEnabled = false;
         }
 
         /**
@@ -276,7 +288,11 @@ public final class WifiNetworkSuggestion implements Parcelable {
 
         /**
          * Set the associated enterprise configuration for this network. Needed for authenticating
-         * to WPA3 enterprise networks. See {@link WifiEnterpriseConfig} for description.
+         * to WPA3-Enterprise networks (standard and 192-bit security). See
+         * {@link WifiEnterpriseConfig} for description. For 192-bit security networks, both the
+         * client and CA certificates must be provided, and must be of type of either
+         * sha384WithRSAEncryption (OID 1.2.840.113549.1.1.12) or ecdsa-with-SHA384
+         * (OID 1.2.840.10045.4.3.3).
          *
          * @param enterpriseConfig Instance of {@link WifiEnterpriseConfig}.
          * @return Instance of {@link Builder} to enable chaining of the builder method.
@@ -329,6 +345,18 @@ public final class WifiNetworkSuggestion implements Parcelable {
         }
 
         /**
+         * Set the priority group ID, {@link #setPriority(int)} will only impact the network
+         * suggestions from the same priority group within the same app.
+         *
+         * @param priorityGroup priority group id, if not set default is 0.
+         * @return Instance of {@link Builder} to enable chaining of the builder method.
+         */
+        public @NonNull Builder setPriorityGroup(int priorityGroup) {
+            mPriorityGroup = priorityGroup;
+            return this;
+        }
+
+        /**
          * Set the ASCII WAPI passphrase for this network. Needed for authenticating to
          * WAPI-PSK networks.
          *
@@ -376,6 +404,30 @@ public final class WifiNetworkSuggestion implements Parcelable {
         }
 
         /**
+         * Specifies the MAC randomization method.
+         * <p>
+         * Suggested networks will never use the device (factory) MAC address to associate to the
+         * network - instead they use a locally generated random MAC address. This method controls
+         * the strategy for generating the random MAC address:
+         * <li> Persisted MAC randomization (false - the default): generates the MAC address from a
+         * secret seed and information from the Wi-Fi configuration (SSID or Passpoint profile).
+         * This means that the same generated MAC address will be used for each subsequent
+         * association. </li>
+         * <li> Enhanced MAC randomization (true): periodically generates a new MAC
+         * address for new connections. Under this option, the randomized MAC address should change
+         * if the suggestion is removed and then added back. </li>
+         *
+         * @param enabled {@code true} to periodically change the randomized MAC address.
+         *                {@code false} to use the same randomized MAC for all connections to this
+         *                            network.
+         * @return Instance of {@link Builder} to enable chaining of the builder method.
+         */
+        public @NonNull Builder setIsEnhancedMacRandomizationEnabled(boolean enabled) {
+            mIsEnhancedMacRandomizationEnabled = enabled;
+            return this;
+        }
+
+        /**
          * Specifies whether the app needs to log in to a captive portal to obtain Internet access.
          * <p>
          * This will dictate if the directed broadcast
@@ -411,8 +463,9 @@ public final class WifiNetworkSuggestion implements Parcelable {
 
         /**
          * Specify the priority of this network among other network suggestions provided by the same
-         * app (priorities have no impact on suggestions by different apps). The higher the number,
-         * the higher the priority (i.e value of 0 = lowest priority).
+         * app (priorities have no impact on suggestions by different apps) and within the same
+         * priority group, see {@link #setPriorityGroup(int)}.
+         * The higher the number, the higher the priority (i.e value of 0 = lowest priority).
          * <p>
          * <li>If not set, defaults a lower priority than any assigned priority.</li>
          *
@@ -522,8 +575,25 @@ public final class WifiNetworkSuggestion implements Parcelable {
             } else if (mWpa2EnterpriseConfig != null) { // WPA-EAP network
                 configuration.setSecurityParams(WifiConfiguration.SECURITY_TYPE_EAP);
                 configuration.enterpriseConfig = mWpa2EnterpriseConfig;
-            } else if (mWpa3EnterpriseConfig != null) { // WPA3-SuiteB network
-                configuration.setSecurityParams(WifiConfiguration.SECURITY_TYPE_EAP_SUITE_B);
+            } else if (mWpa3EnterpriseConfig != null) { // WPA3-Enterprise
+                if (mWpa3EnterpriseConfig.getEapMethod() == WifiEnterpriseConfig.Eap.TLS
+                        && WifiEnterpriseConfig.isSuiteBCipherCert(
+                        mWpa3EnterpriseConfig.getClientCertificate())
+                        && WifiEnterpriseConfig.isSuiteBCipherCert(
+                        mWpa3EnterpriseConfig.getCaCertificate())) {
+                    // WPA3-Enterprise in 192-bit security mode (Suite-B)
+                    configuration.setSecurityParams(WifiConfiguration.SECURITY_TYPE_EAP_SUITE_B);
+                } else {
+                    // WPA3-Enterprise
+                    configuration.setSecurityParams(WifiConfiguration.SECURITY_TYPE_EAP);
+                    configuration.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
+                    configuration.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                    configuration.allowedPairwiseCiphers.set(
+                            WifiConfiguration.PairwiseCipher.GCMP_256);
+                    configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
+                    configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_256);
+                    configuration.requirePmf = true;
+                }
                 configuration.enterpriseConfig = mWpa3EnterpriseConfig;
             } else if (mIsEnhancedOpen) { // OWE network
                 configuration.setSecurityParams(WifiConfiguration.SECURITY_TYPE_OWE);
@@ -558,6 +628,9 @@ public final class WifiNetworkSuggestion implements Parcelable {
             wifiConfiguration.meteredOverride = mMeteredOverride;
             wifiConfiguration.carrierId = mCarrierId;
             wifiConfiguration.trusted = !mIsNetworkUntrusted;
+            wifiConfiguration.macRandomizationSetting = mIsEnhancedMacRandomizationEnabled
+                    ? WifiConfiguration.RANDOMIZATION_ENHANCED
+                    : WifiConfiguration.RANDOMIZATION_PERSISTENT;
             return wifiConfiguration;
         }
 
@@ -588,6 +661,9 @@ public final class WifiNetworkSuggestion implements Parcelable {
             wifiConfiguration.trusted = !mIsNetworkUntrusted;
             mPasspointConfiguration.setCarrierId(mCarrierId);
             mPasspointConfiguration.setMeteredOverride(wifiConfiguration.meteredOverride);
+            wifiConfiguration.macRandomizationSetting = mIsEnhancedMacRandomizationEnabled
+                    ? WifiConfiguration.RANDOMIZATION_ENHANCED
+                    : WifiConfiguration.RANDOMIZATION_PERSISTENT;
             return wifiConfiguration;
         }
 
@@ -656,6 +732,8 @@ public final class WifiNetworkSuggestion implements Parcelable {
                             + "suggestion with Passpoint configuration");
                 }
                 wifiConfiguration = buildWifiConfigurationForPasspoint();
+                mPasspointConfiguration.setEnhancedMacRandomizationEnabled(
+                        mIsEnhancedMacRandomizationEnabled);
             } else {
                 if (mSsid == null) {
                     throw new IllegalStateException("setSsid should be invoked for suggestion");
@@ -696,7 +774,8 @@ public final class WifiNetworkSuggestion implements Parcelable {
                     mIsAppInteractionRequired,
                     mIsUserInteractionRequired,
                     mIsSharedWithUser,
-                    mIsInitialAutojoinEnabled);
+                    mIsInitialAutojoinEnabled,
+                    mPriorityGroup);
         }
     }
 
@@ -739,6 +818,12 @@ public final class WifiNetworkSuggestion implements Parcelable {
      */
     public final boolean isInitialAutoJoinEnabled;
 
+    /**
+     * Priority group ID.
+     * @hide
+     */
+    public final int priorityGroup;
+
     /** @hide */
     public WifiNetworkSuggestion() {
         this.wifiConfiguration = new WifiConfiguration();
@@ -747,6 +832,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
         this.isUserInteractionRequired = false;
         this.isUserAllowedToManuallyConnect = true;
         this.isInitialAutoJoinEnabled = true;
+        this.priorityGroup = 0;
     }
 
     /** @hide */
@@ -755,7 +841,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
                                  boolean isAppInteractionRequired,
                                  boolean isUserInteractionRequired,
                                  boolean isUserAllowedToManuallyConnect,
-                                 boolean isInitialAutoJoinEnabled) {
+                                 boolean isInitialAutoJoinEnabled, int priorityGroup) {
         checkNotNull(networkConfiguration);
         this.wifiConfiguration = networkConfiguration;
         this.passpointConfiguration = passpointConfiguration;
@@ -764,6 +850,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
         this.isUserInteractionRequired = isUserInteractionRequired;
         this.isUserAllowedToManuallyConnect = isUserAllowedToManuallyConnect;
         this.isInitialAutoJoinEnabled = isInitialAutoJoinEnabled;
+        this.priorityGroup = priorityGroup;
     }
 
     public static final @NonNull Creator<WifiNetworkSuggestion> CREATOR =
@@ -776,7 +863,8 @@ public final class WifiNetworkSuggestion implements Parcelable {
                             in.readBoolean(), // isAppInteractionRequired
                             in.readBoolean(), // isUserInteractionRequired
                             in.readBoolean(), // isSharedCredentialWithUser
-                            in.readBoolean()  // isAutojoinEnabled
+                            in.readBoolean(),  // isAutojoinEnabled
+                            in.readInt() // priorityGroup
                     );
                 }
 
@@ -799,6 +887,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
         dest.writeBoolean(isUserInteractionRequired);
         dest.writeBoolean(isUserAllowedToManuallyConnect);
         dest.writeBoolean(isInitialAutoJoinEnabled);
+        dest.writeInt(priorityGroup);
     }
 
     @Override
@@ -842,6 +931,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
                 .append(", isCredentialSharedWithUser=").append(isUserAllowedToManuallyConnect)
                 .append(", isInitialAutoJoinEnabled=").append(isInitialAutoJoinEnabled)
                 .append(", isUnTrusted=").append(!wifiConfiguration.trusted)
+                .append(", priorityGroup=").append(priorityGroup)
                 .append(" ]");
         return sb.toString();
     }
@@ -943,6 +1033,9 @@ public final class WifiNetworkSuggestion implements Parcelable {
      */
     @Nullable
     public WifiEnterpriseConfig getEnterpriseConfig() {
+        if (!wifiConfiguration.isEnterprise()) {
+            return null;
+        }
         return wifiConfiguration.enterpriseConfig;
     }
 
@@ -958,5 +1051,12 @@ public final class WifiNetworkSuggestion implements Parcelable {
             return null;
         }
         return WifiInfo.removeDoubleQuotes(wifiConfiguration.preSharedKey);
+    }
+
+    /**
+     * @see Builder#setPriorityGroup(int)
+     */
+    public int getPriorityGroup() {
+        return priorityGroup;
     }
 }

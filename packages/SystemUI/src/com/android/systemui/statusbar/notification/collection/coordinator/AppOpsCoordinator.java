@@ -19,28 +19,24 @@ package com.android.systemui.statusbar.notification.collection.coordinator;
 import static android.app.NotificationManager.IMPORTANCE_MIN;
 
 import android.app.Notification;
-import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
-import android.util.ArraySet;
 
 import com.android.systemui.ForegroundServiceController;
 import com.android.systemui.appops.AppOpsController;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.statusbar.notification.collection.ListEntry;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter;
-import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifSection;
-import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
+import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifSectioner;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender;
-import com.android.systemui.util.Assert;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.util.HashMap;
 import java.util.Map;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Handles ForegroundService and AppOp interactions with notifications.
@@ -55,7 +51,7 @@ import javax.inject.Singleton;
  *  frameworks/base/packages/SystemUI/src/com/android/systemui/ForegroundServiceNotificationListener
  *  frameworks/base/packages/SystemUI/src/com/android/systemui/ForegroundServiceLifetimeExtender
  */
-@Singleton
+@SysUISingleton
 public class AppOpsCoordinator implements Coordinator {
     private static final String TAG = "AppOpsCoordinator";
 
@@ -82,18 +78,13 @@ public class AppOpsCoordinator implements Coordinator {
         // extend the lifetime of foreground notification services to show for at least 5 seconds
         mNotifPipeline.addNotificationLifetimeExtender(mForegroundLifetimeExtender);
 
-        // listen for new notifications to add appOps
-        mNotifPipeline.addCollectionListener(mNotifCollectionListener);
-
         // filter out foreground service notifications that aren't necessary anymore
         mNotifPipeline.addPreGroupFilter(mNotifFilter);
 
-        // when appOps change, update any relevant notifications to update appOps for
-        mAppOpsController.addCallback(ForegroundServiceController.APP_OPS, this::onAppOpsChanged);
     }
 
-    public NotifSection getSection() {
-        return mNotifSection;
+    public NotifSectioner getSectioner() {
+        return mNotifSectioner;
     }
 
     /**
@@ -186,38 +177,9 @@ public class AppOpsCoordinator implements Coordinator {
     };
 
     /**
-     * Adds appOps to incoming and updating notifications
-     */
-    private NotifCollectionListener mNotifCollectionListener = new NotifCollectionListener() {
-        @Override
-        public void onEntryAdded(NotificationEntry entry) {
-            tagAppOps(entry);
-        }
-
-        @Override
-        public void onEntryUpdated(NotificationEntry entry) {
-            tagAppOps(entry);
-        }
-
-        private void tagAppOps(NotificationEntry entry) {
-            final StatusBarNotification sbn = entry.getSbn();
-            // note: requires that the ForegroundServiceController is updating their appOps first
-            ArraySet<Integer> activeOps =
-                    mForegroundServiceController.getAppOps(
-                            sbn.getUser().getIdentifier(),
-                            sbn.getPackageName());
-
-            entry.mActiveAppOps.clear();
-            if (activeOps != null) {
-                entry.mActiveAppOps.addAll(activeOps);
-            }
-        }
-    };
-
-    /**
      * Puts foreground service notifications into its own section.
      */
-    private final NotifSection mNotifSection = new NotifSection("ForegroundService") {
+    private final NotifSectioner mNotifSectioner = new NotifSectioner("ForegroundService") {
         @Override
         public boolean isInSection(ListEntry entry) {
             NotificationEntry notificationEntry = entry.getRepresentativeEntry();
@@ -230,53 +192,4 @@ public class AppOpsCoordinator implements Coordinator {
             return false;
         }
     };
-
-    private void onAppOpsChanged(int code, int uid, String packageName, boolean active) {
-        mMainExecutor.execute(() -> handleAppOpsChanged(code, uid, packageName, active));
-    }
-
-    /**
-     * Update the appOp for the posted notification associated with the current foreground service
-     *
-     * @param code code for appOp to add/remove
-     * @param uid of user the notification is sent to
-     * @param packageName package that created the notification
-     * @param active whether the appOpCode is active or not
-     */
-    private void handleAppOpsChanged(int code, int uid, String packageName, boolean active) {
-        Assert.isMainThread();
-
-        int userId = UserHandle.getUserId(uid);
-
-        // Update appOps of the app's posted notifications with standard layouts
-        final ArraySet<String> notifKeys =
-                mForegroundServiceController.getStandardLayoutKeys(userId, packageName);
-        if (notifKeys != null) {
-            boolean changed = false;
-            for (int i = 0; i < notifKeys.size(); i++) {
-                final NotificationEntry entry = findNotificationEntryWithKey(notifKeys.valueAt(i));
-                if (entry != null
-                        && uid == entry.getSbn().getUid()
-                        && packageName.equals(entry.getSbn().getPackageName())) {
-                    if (active) {
-                        changed |= entry.mActiveAppOps.add(code);
-                    } else {
-                        changed |= entry.mActiveAppOps.remove(code);
-                    }
-                }
-            }
-            if (changed) {
-                mNotifFilter.invalidateList();
-            }
-        }
-    }
-
-    private NotificationEntry findNotificationEntryWithKey(String key) {
-        for (NotificationEntry entry : mNotifPipeline.getAllNotifs()) {
-            if (entry.getKey().equals(key)) {
-                return entry;
-            }
-        }
-        return null;
-    }
 }

@@ -22,8 +22,6 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.mockito.stubbing.Stubber
 
-// TODO(chiuwinson): Move this entire file to a shared utility module
-// TODO(b/135203078): De-dupe utils added for overlays vs package refactor
 object MockitoUtils {
     val ANSWER_THROWS = Answer<Any?> {
         when (val name = it.method.name) {
@@ -64,7 +62,7 @@ fun <Type : Any?> whenever(mock: Type, block: InvocationOnMock.() -> Any?) =
 
 fun whenever(mock: Unit) = Mockito.`when`(mock).thenAnswer { }
 
-inline fun <reified T> spyThrowOnUnmocked(value: T?, block: T.() -> Unit): T {
+inline fun <reified T> spyThrowOnUnmocked(value: T?, block: T.() -> Unit = {}): T {
     val swappingAnswer = object : Answer<Any?> {
         var delegate: Answer<*> = Answers.RETURNS_DEFAULTS
 
@@ -81,4 +79,5 @@ inline fun <reified T> spyThrowOnUnmocked(value: T?, block: T.() -> Unit): T {
             }
 }
 
-inline fun <reified T> mockThrowOnUnmocked(block: T.() -> Unit) = spyThrowOnUnmocked<T>(null, block)
+inline fun <reified T> mockThrowOnUnmocked(block: T.() -> Unit = {}) =
+        spyThrowOnUnmocked<T>(null, block)

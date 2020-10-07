@@ -139,6 +139,8 @@
     <integer name="quick_settings_brightness_dialog_short_timeout">2000</integer>
     <integer name="quick_settings_brightness_dialog_long_timeout">4000</integer>
 
+    <!-- Show indicator for Wifi on but not connected. -->
+    <bool name="config_showWifiIndicatorWhenEnabled">false</bool>
 
     <!-- The number of milliseconds before the heads up notification auto-dismisses. -->
     <integer name="heads_up_notification_decay">5000</integer>
@@ -158,13 +160,6 @@
 
     <!-- The number of milliseconds to extend ambient pulse by when prompted (e.g. on touch) -->
     <integer name="ambient_notification_extension_time">10000</integer>
-
-    <!-- In multi-window, determines whether the stack where recents lives should grow from
-         the smallest position when being launched. -->
-    <bool name="recents_grow_in_multiwindow">true</bool>
-
-    <!-- Animation duration when using long press on recents to dock -->
-    <integer name="long_press_dock_anim_duration">250</integer>
 
     <!-- Whether to enable KeyguardService or not -->
     <bool name="config_enableKeyguardService">true</bool>
@@ -303,13 +298,11 @@
         <item>com.android.systemui.keyguard.KeyguardViewMediator</item>
         <item>com.android.systemui.recents.Recents</item>
         <item>com.android.systemui.volume.VolumeUI</item>
-        <item>com.android.systemui.stackdivider.Divider</item>
         <item>com.android.systemui.statusbar.phone.StatusBar</item>
         <item>com.android.systemui.usb.StorageNotification</item>
         <item>com.android.systemui.power.PowerUI</item>
         <item>com.android.systemui.media.RingtonePlayer</item>
         <item>com.android.systemui.keyboard.KeyboardUI</item>
-        <item>com.android.systemui.pip.PipUI</item>
         <item>com.android.systemui.shortcut.ShortcutKeyDispatcher</item>
         <item>@string/config_systemUIVendorServiceComponent</item>
         <item>com.android.systemui.util.leak.GarbageMonitor$Service</item>
@@ -324,7 +317,7 @@
         <item>com.android.systemui.accessibility.WindowMagnification</item>
         <item>com.android.systemui.accessibility.SystemActions</item>
         <item>com.android.systemui.toast.ToastUI</item>
-        <item>com.android.systemui.onehanded.OneHandedUI</item>
+        <item>com.android.systemui.wmshell.WMShell</item>
     </string-array>
 
     <!-- QS tile shape store width. negative implies fill configuration instead of stroke-->
@@ -521,11 +514,11 @@
     <!-- Whether or not to add a "people" notifications section -->
     <bool name="config_usePeopleFiltering">false</bool>
 
-    <!-- Defines the blacklist for system icons.  That is to say, the icons in the status bar that
-         are part of the blacklist are never displayed. Each item in the blacklist must be a string
-         defined in core/res/res/config.xml to properly blacklist the icon.
+    <!-- Defines system icons to be excluded from the display. That is to say, the icons in the
+         status bar that are part of this list are never displayed. Each item in the list must be a
+         string defined in core/res/res/config.xml to properly exclude the icon.
      -->
-    <string-array name="config_statusBarIconBlackList" translatable="false">
+    <string-array name="config_statusBarIconsToExclude" translatable="false">
         <item>@*android:string/status_bar_rotate</item>
         <item>@*android:string/status_bar_headset</item>
     </string-array>
@@ -571,13 +564,6 @@
     <!-- If the config font scale is >= this value, potentially adjust the number of columns-->
     <item name="controls_max_columns_adjust_above_font_scale" translatable="false" format="float" type="dimen">1.25</item>
 
-    <!-- One handed mode default offset % of display size -->
-    <fraction name="config_one_handed_offset">50%</fraction>
-
-    <!-- Allow one handed to enable round corner -->
-    <bool name="config_one_handed_enable_round_corner">true</bool>
-
-    <!-- Animation duration for translating of one handed when trigger / dismiss. -->
-    <integer name="config_one_handed_translate_animation_duration">150</integer>
-
+    <!-- Show a separate icon for low and high volume on the volume dialog -->
+    <bool name="config_showLowMediaVolumeIcon">false</bool>
 </resources>

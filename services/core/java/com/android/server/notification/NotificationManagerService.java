@@ -31,6 +31,7 @@ import static android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED
 import static android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED_INTERNAL;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED;
+import static android.app.NotificationManager.ACTION_NOTIFICATION_LISTENER_ENABLED_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_POLICY_ACCESS_GRANTED_CHANGED;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_ALL;
 import static android.app.NotificationManager.EXTRA_AUTOMATIC_ZEN_RULE_ID;
@@ -274,6 +275,7 @@ import com.android.server.policy.PhoneWindowManager;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.wm.ActivityTaskManagerInternal;
+import com.android.server.wm.BackgroundActivityStartCallback;
 import com.android.server.wm.WindowManagerInternal;
 
 import libcore.io.IoUtils;
@@ -321,7 +323,7 @@ public class NotificationManagerService extends SystemService {
     static final boolean DEBUG_INTERRUPTIVENESS = SystemProperties.getBoolean(
             "debug.notification.interruptiveness", false);
 
-    static final int MAX_PACKAGE_NOTIFICATIONS = 25;
+    static final int MAX_PACKAGE_NOTIFICATIONS = 50;
     static final float DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE = 5f;
 
     // message codes
@@ -515,7 +517,7 @@ public class NotificationManagerService extends SystemService {
 
     private static final int MY_UID = Process.myUid();
     private static final int MY_PID = Process.myPid();
-    private static final IBinder WHITELIST_TOKEN = new Binder();
+    private static final IBinder ALLOWLIST_TOKEN = new Binder();
     protected RankingHandler mRankingHandler;
     private long mLastOverRateLogTime;
     private float mMaxPackageEnqueueRate = DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE;
@@ -963,8 +965,7 @@ public class NotificationManagerService extends SystemService {
                     nv.recycle();
                 }
                 reportUserInteraction(r);
-                mAssistants.notifyAssistantActionClicked(
-                        r.getSbn(), actionIndex, action, generatedByAssistant);
+                mAssistants.notifyAssistantActionClicked(r.getSbn(), action, generatedByAssistant);
             }
         }
 
@@ -1683,8 +1684,10 @@ public class NotificationManagerService extends SystemService {
                 final IntArray userIds = mUserProfiles.getCurrentProfileIds();
 
                 for (int i = 0; i < userIds.size(); i++) {
-                    mArchive.updateHistoryEnabled(userIds.get(i), Settings.Secure.getInt(resolver,
-                            Settings.Secure.NOTIFICATION_HISTORY_ENABLED, 0) == 1);
+                    mArchive.updateHistoryEnabled(userIds.get(i),
+                            Settings.Secure.getIntForUser(resolver,
+                                    Settings.Secure.NOTIFICATION_HISTORY_ENABLED, 0,
+                                    userIds.get(i)) == 1);
                 }
             }
             if (uri == null || NOTIFICATION_SHOW_MEDIA_ON_QUICK_SETTINGS_URI.equals(uri)) {
@@ -1722,7 +1725,7 @@ public class NotificationManagerService extends SystemService {
         super(context);
         mNotificationRecordLogger = notificationRecordLogger;
         mNotificationInstanceIdSequence = notificationInstanceIdSequence;
-        Notification.processWhitelistToken = WHITELIST_TOKEN;
+        Notification.processAllowlistToken = ALLOWLIST_TOKEN;
     }
 
     // TODO - replace these methods with new fields in the VisibleForTesting constructor
@@ -1894,6 +1897,7 @@ public class NotificationManagerService extends SystemService {
                 (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
         mAm = am;
         mAtm = atm;
+        mAtm.setBackgroundActivityStartCallback(new NotificationTrampolineCallback());
         mUgm = ugm;
         mUgmInternal = ugmInternal;
         mPackageManager = packageManager;
@@ -1949,6 +1953,13 @@ public class NotificationManagerService extends SystemService {
                 Binder.withCleanCallingIdentity(() -> {
                     sendRegisteredOnlyBroadcast(
                             NotificationManager.ACTION_NOTIFICATION_POLICY_CHANGED);
+                    mRankingHandler.requestSort();
+                });
+            }
+
+            @Override
+            void onConsolidatedPolicyChanged() {
+                Binder.withCleanCallingIdentity(() -> {
                     mRankingHandler.requestSort();
                 });
             }
@@ -2349,11 +2360,11 @@ public class NotificationManagerService extends SystemService {
     }
 
     @Override
-    public void onUnlockUser(@NonNull UserInfo userInfo) {
+    public void onUserUnlocking(@NonNull TargetUser user) {
         mHandler.post(() -> {
             Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "notifHistoryUnlockUser");
             try {
-                mHistoryManager.onUserUnlocked(userInfo.id);
+                mHistoryManager.onUserUnlocked(user.getUserIdentifier());
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
             }
@@ -2361,11 +2372,11 @@ public class NotificationManagerService extends SystemService {
     }
 
     @Override
-    public void onStopUser(@NonNull UserInfo userInfo) {
+    public void onUserStopping(@NonNull TargetUser user) {
         mHandler.post(() -> {
             Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "notifHistoryStopUser");
             try {
-                mHistoryManager.onUserStopped(userInfo.id);
+                mHistoryManager.onUserStopped(user.getUserIdentifier());
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
             }
@@ -4859,7 +4870,6 @@ public class NotificationManagerService extends SystemService {
                             // calculate the final importance here
                             r.calculateImportance();
                             foundEnqueued = true;
-                            break;
                         }
                     }
                     if (!foundEnqueued) {
@@ -5781,21 +5791,21 @@ public class NotificationManagerService extends SystemService {
             mShortcutHelper.cacheShortcut(info, user);
         }
 
-        // Whitelist pending intents.
+        // temporarily allow apps to perform extra work when their pending intents are launched
         if (notification.allPendingIntents != null) {
             final int intentCount = notification.allPendingIntents.size();
             if (intentCount > 0) {
                 final ActivityManagerInternal am = LocalServices
                         .getService(ActivityManagerInternal.class);
                 final long duration = LocalServices.getService(
-                        DeviceIdleInternal.class).getNotificationWhitelistDuration();
+                        DeviceIdleInternal.class).getNotificationAllowlistDuration();
                 for (int i = 0; i < intentCount; i++) {
                     PendingIntent pendingIntent = notification.allPendingIntents.valueAt(i);
                     if (pendingIntent != null) {
                         am.setPendingIntentWhitelistDuration(pendingIntent.getTarget(),
-                                WHITELIST_TOKEN, duration);
+                                ALLOWLIST_TOKEN, duration);
                         am.setPendingIntentAllowBgActivityStarts(pendingIntent.getTarget(),
-                                WHITELIST_TOKEN, (FLAG_ACTIVITY_SENDER | FLAG_BROADCAST_SENDER
+                                ALLOWLIST_TOKEN, (FLAG_ACTIVITY_SENDER | FLAG_BROADCAST_SENDER
                                         | FLAG_SERVICE_SENDER));
                     }
                 }
@@ -6100,7 +6110,8 @@ public class NotificationManagerService extends SystemService {
     protected boolean isBlocked(NotificationRecord r, NotificationUsageStats usageStats) {
         if (isBlocked(r)) {
             if (DBG) {
-                Slog.e(TAG, "Suppressing notification from package by user request.");
+                Slog.e(TAG, "Suppressing notification from package " + r.getSbn().getPackageName()
+                        + " by user request.");
             }
             usageStats.registerBlocked(r);
             return true;
@@ -6257,6 +6268,8 @@ public class NotificationManagerService extends SystemService {
                     for (NotificationRecord r : enqueued) {
                         if (r.mUpdateTimeMs > mWhen) {
                             // At least one enqueue was posted after the cancel, so we're invalid
+                            Slog.i(TAG, "notification cancel ignored due to newer enqueued entry"
+                                    + "key=" + r.getSbn().getKey());
                             return;
                         }
                     }
@@ -7144,9 +7157,10 @@ public class NotificationManagerService extends SystemService {
     }
 
     protected void playInCallNotification() {
+        final ContentResolver cr = getContext().getContentResolver();
         if (mAudioManager.getRingerModeInternal() == AudioManager.RINGER_MODE_NORMAL
-                && Settings.Secure.getInt(getContext().getContentResolver(),
-                Settings.Secure.IN_CALL_NOTIFICATION_ENABLED, 1) != 0) {
+                && Settings.Secure.getIntForUser(cr,
+                Settings.Secure.IN_CALL_NOTIFICATION_ENABLED, 1, cr.getUserId()) != 0) {
             new Thread() {
                 @Override
                 public void run() {
@@ -7286,12 +7300,12 @@ public class NotificationManagerService extends SystemService {
 
     @GuardedBy("mToastQueue")
     private void keepProcessAliveForToastIfNeededLocked(int pid) {
-        int toastCount = 0; // toasts from this pid
+        int toastCount = 0; // toasts from this pid, rendered by the app
         ArrayList<ToastRecord> list = mToastQueue;
         int n = list.size();
         for (int i = 0; i < n; i++) {
             ToastRecord r = list.get(i);
-            if (r.pid == pid) {
+            if (r.pid == pid && r.keepProcessAlive()) {
                 toastCount++;
             }
         }
@@ -7648,7 +7662,7 @@ public class NotificationManagerService extends SystemService {
                     // make sure deleteIntent cannot be used to start activities from background
                     LocalServices.getService(ActivityManagerInternal.class)
                             .clearPendingIntentAllowBgActivityStarts(deleteIntent.getTarget(),
-                            WHITELIST_TOKEN);
+                                    ALLOWLIST_TOKEN);
                     deleteIntent.send();
                 } catch (PendingIntent.CanceledException ex) {
                     // do nothing - there's no relevant way to recover, and
@@ -7756,6 +7770,13 @@ public class NotificationManagerService extends SystemService {
     @VisibleForTesting
     void updateUriPermissions(@Nullable NotificationRecord newRecord,
             @Nullable NotificationRecord oldRecord, String targetPkg, int targetUserId) {
+        updateUriPermissions(newRecord, oldRecord, targetPkg, targetUserId, false);
+    }
+
+    @VisibleForTesting
+    void updateUriPermissions(@Nullable NotificationRecord newRecord,
+            @Nullable NotificationRecord oldRecord, String targetPkg, int targetUserId,
+            boolean onlyRevokeCurrentTarget) {
         final String key = (newRecord != null) ? newRecord.getKey() : oldRecord.getKey();
         if (DBG) Slog.d(TAG, key + ": updating permissions");
 
@@ -7783,7 +7804,9 @@ public class NotificationManagerService extends SystemService {
         }
 
         // If we have no Uris to grant, but an existing owner, go destroy it
-        if (newUris == null && permissionOwner != null) {
+        // When revoking permissions of a single listener, destroying the owner will revoke
+        // permissions of other listeners who need to keep access.
+        if (newUris == null && permissionOwner != null && !onlyRevokeCurrentTarget) {
             destroyPermissionOwner(permissionOwner, UserHandle.getUserId(oldRecord.getUid()), key);
             permissionOwner = null;
         }
@@ -7806,9 +7829,20 @@ public class NotificationManagerService extends SystemService {
                 final Uri uri = oldUris.valueAt(i);
                 if (newUris == null || !newUris.contains(uri)) {
                     if (DBG) Slog.d(TAG, key + ": revoking " + uri);
-                    int userId = ContentProvider.getUserIdFromUri(
-                            uri, UserHandle.getUserId(oldRecord.getUid()));
-                    revokeUriPermission(permissionOwner, uri, userId);
+                    if (onlyRevokeCurrentTarget) {
+                        // We're revoking permission from one listener only; other listeners may
+                        // still need access because the notification may still exist
+                        revokeUriPermission(permissionOwner, uri,
+                                UserHandle.getUserId(oldRecord.getUid()), targetPkg, targetUserId);
+                    } else {
+                        // This is broad to unilaterally revoke permissions to this Uri as granted
+                        // by this notification.  But this code-path can only be used when the
+                        // reason for revoking is that the notification posted again without this
+                        // Uri, not when removing an individual listener.
+                        revokeUriPermission(permissionOwner, uri,
+                                UserHandle.getUserId(oldRecord.getUid()),
+                                null, UserHandle.USER_ALL);
+                    }
                 }
             }
         }
@@ -7837,8 +7871,10 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    private void revokeUriPermission(IBinder owner, Uri uri, int userId) {
+    private void revokeUriPermission(IBinder owner, Uri uri, int sourceUserId, String targetPkg,
+            int targetUserId) {
         if (uri == null || !ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) return;
+        int userId = ContentProvider.getUserIdFromUri(uri, sourceUserId);
 
         final long ident = Binder.clearCallingIdentity();
         try {
@@ -7846,7 +7882,7 @@ public class NotificationManagerService extends SystemService {
                     owner,
                     ContentProvider.getUriWithoutUserId(uri),
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                    userId);
+                    userId, targetPkg, targetUserId);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -8436,7 +8472,10 @@ public class NotificationManagerService extends SystemService {
         if (Notification.CATEGORY_CAR_EMERGENCY.equals(notification.category)
                 || Notification.CATEGORY_CAR_WARNING.equals(notification.category)
                 || Notification.CATEGORY_CAR_INFORMATION.equals(notification.category)) {
-                    checkCallerIsSystem();
+            getContext().enforceCallingPermission(
+                    android.Manifest.permission.SEND_CATEGORY_CAR_NOTIFICATIONS,
+                    String.format("Notification category %s restricted",
+                            notification.category));
         }
     }
 
@@ -8603,12 +8642,25 @@ public class NotificationManagerService extends SystemService {
                 ServiceManager.getService(Context.COMPANION_DEVICE_SERVICE));
     }
 
-    private boolean isVisibleToListener(StatusBarNotification sbn, ManagedServiceInfo listener) {
+    @VisibleForTesting
+    boolean isVisibleToListener(StatusBarNotification sbn, ManagedServiceInfo listener) {
         if (!listener.enabledAndUserMatches(sbn.getUserId())) {
             return false;
         }
-        // TODO: remove this for older listeners.
-        return true;
+        return isInteractionVisibleToListener(listener, sbn.getUserId());
+    }
+
+    /**
+     * Returns whether the given assistant should be informed about interactions on the given user.
+     *
+     * Normally an assistant would be able to see all interactions on the current user and any
+     * associated profiles because they are notification listeners, but since NASes have one
+     * instance per user, we want to filter out interactions that are not for the user that the
+     * given NAS is bound in.
+     */
+    private boolean isInteractionVisibleToListener(ManagedServiceInfo info, int userId) {
+        boolean isAssistantService = mAssistants.isServiceTokenValidLocked(info.service);
+        return !isAssistantService || info.isSameUser(userId);
     }
 
     private boolean isPackageSuspendedForUser(String pkg, int uid) {
@@ -8830,8 +8882,6 @@ public class NotificationManagerService extends SystemService {
         }
 
         protected void onNotificationsSeenLocked(ArrayList<NotificationRecord> records) {
-            // There should be only one, but it's a list, so while we enforce
-            // singularity elsewhere, we keep it general here, to avoid surprises.
             for (final ManagedServiceInfo info : NotificationAssistants.this.getServices()) {
                 ArrayList<String> keys = new ArrayList<>(records.size());
                 for (NotificationRecord r : records) {
@@ -8849,6 +8899,8 @@ public class NotificationManagerService extends SystemService {
         }
 
         protected void onPanelRevealed(int items) {
+            // send to all currently bounds NASes since notifications from both users will appear in
+            // the panel
             for (final ManagedServiceInfo info : NotificationAssistants.this.getServices()) {
                 mHandler.post(() -> {
                     final INotificationListener assistant = (INotificationListener) info.service;
@@ -8862,6 +8914,8 @@ public class NotificationManagerService extends SystemService {
         }
 
         protected void onPanelHidden() {
+            // send to all currently bounds NASes since notifications from both users will appear in
+            // the panel
             for (final ManagedServiceInfo info : NotificationAssistants.this.getServices()) {
                 mHandler.post(() -> {
                     final INotificationListener assistant = (INotificationListener) info.service;
@@ -8950,7 +9004,7 @@ public class NotificationManagerService extends SystemService {
             }
             notifyAssistantLocked(
                     sbn,
-                    false /* sameUserOnly */,
+                    true /* sameUserOnly */,
                     (assistant, sbnHolder) -> {
                         try {
                             assistant.onNotificationVisibilityChanged(key, isVisible);
@@ -8968,7 +9022,7 @@ public class NotificationManagerService extends SystemService {
             final String key = sbn.getKey();
             notifyAssistantLocked(
                     sbn,
-                    false /* sameUserOnly */,
+                    true /* sameUserOnly */,
                     (assistant, sbnHolder) -> {
                         try {
                             assistant.onNotificationExpansionChanged(key, isUserAction, isExpanded);
@@ -8984,7 +9038,7 @@ public class NotificationManagerService extends SystemService {
             final String key = sbn.getKey();
             notifyAssistantLocked(
                     sbn,
-                    false /* sameUserOnly */,
+                    true /* sameUserOnly */,
                     (assistant, sbnHolder) -> {
                         try {
                             assistant.onNotificationDirectReply(key);
@@ -9000,7 +9054,7 @@ public class NotificationManagerService extends SystemService {
             final String key = sbn.getKey();
             notifyAssistantLocked(
                     sbn,
-                    false /* sameUserOnly */,
+                    true /* sameUserOnly */,
                     (assistant, sbnHolder) -> {
                         try {
                             assistant.onSuggestedReplySent(
@@ -9017,12 +9071,12 @@ public class NotificationManagerService extends SystemService {
 
         @GuardedBy("mNotificationLock")
         void notifyAssistantActionClicked(
-                final StatusBarNotification sbn, int actionIndex, Notification.Action action,
+                final StatusBarNotification sbn, Notification.Action action,
                 boolean generatedByAssistant) {
             final String key = sbn.getKey();
             notifyAssistantLocked(
                     sbn,
-                    false /* sameUserOnly */,
+                    true /* sameUserOnly */,
                     (assistant, sbnHolder) -> {
                         try {
                             assistant.onActionClicked(
@@ -9046,7 +9100,7 @@ public class NotificationManagerService extends SystemService {
                 final StatusBarNotification sbn, final String snoozeCriterionId) {
             notifyAssistantLocked(
                     sbn,
-                    false /* sameUserOnly */,
+                    true /* sameUserOnly */,
                     (assistant, sbnHolder) -> {
                         try {
                             assistant.onNotificationSnoozedUntilContext(
@@ -9103,7 +9157,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         protected void resetDefaultAssistantsIfNecessary() {
-            final List<UserInfo> activeUsers = mUm.getUsers(true);
+            final List<UserInfo> activeUsers = mUm.getAliveUsers();
             for (UserInfo userInfo : activeUsers) {
                 int userId = userInfo.getUserHandle().getIdentifier();
                 if (!hasUserSet(userId)) {
@@ -9153,6 +9207,17 @@ public class NotificationManagerService extends SystemService {
 
         public NotificationListeners(IPackageManager pm) {
             super(getContext(), mNotificationLock, mUserProfiles, pm);
+        }
+
+        @Override
+        protected void setPackageOrComponentEnabled(String pkgOrComponent, int userId,
+                boolean isPrimary, boolean enabled) {
+            super.setPackageOrComponentEnabled(pkgOrComponent, userId, isPrimary, enabled);
+
+            getContext().sendBroadcastAsUser(
+                    new Intent(ACTION_NOTIFICATION_LISTENER_ENABLED_CHANGED)
+                            .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY),
+                    UserHandle.ALL, null);
         }
 
         @Override
@@ -9217,6 +9282,7 @@ public class NotificationManagerService extends SystemService {
             final NotificationRankingUpdate update;
             synchronized (mNotificationLock) {
                 update = makeRankingUpdateLocked(info);
+                updateUriPermissionsForActiveNotificationsLocked(info, true);
             }
             try {
                 listener.onListenerConnected(update);
@@ -9228,6 +9294,7 @@ public class NotificationManagerService extends SystemService {
         @Override
         @GuardedBy("mNotificationLock")
         protected void onServiceRemovedLocked(ManagedServiceInfo removed) {
+            updateUriPermissionsForActiveNotificationsLocked(removed, false);
             if (removeDisabledHints(removed)) {
                 updateListenerHintsLocked();
                 updateEffectsSuppressorLocked();
@@ -9254,10 +9321,12 @@ public class NotificationManagerService extends SystemService {
         }
 
         public void onStatusBarIconsBehaviorChanged(boolean hideSilentStatusIcons) {
+            // send to all currently bounds NASes since notifications from both users will appear in
+            // the status bar
             for (final ManagedServiceInfo info : getServices()) {
                 mHandler.post(() -> {
                     final INotificationListener listener = (INotificationListener) info.service;
-                     try {
+                    try {
                         listener.onStatusBarIconsBehaviorChanged(hideSilentStatusIcons);
                     } catch (RemoteException ex) {
                         Slog.e(TAG, "unable to notify listener "
@@ -9294,8 +9363,7 @@ public class NotificationManagerService extends SystemService {
 
                 for (final ManagedServiceInfo info : getServices()) {
                     boolean sbnVisible = isVisibleToListener(sbn, info);
-                    boolean oldSbnVisible = oldSbn != null ? isVisibleToListener(oldSbn, info)
-                            : false;
+                    boolean oldSbnVisible = (oldSbn != null) && isVisibleToListener(oldSbn, info);
                     // This notification hasn't been and still isn't visible -> ignore.
                     if (!oldSbnVisible && !sbnVisible) {
                         continue;
@@ -9319,13 +9387,8 @@ public class NotificationManagerService extends SystemService {
                     // This notification became invisible -> remove the old one.
                     if (oldSbnVisible && !sbnVisible) {
                         final StatusBarNotification oldSbnLightClone = oldSbn.cloneLight();
-                        mHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                notifyRemoved(
-                                        info, oldSbnLightClone, update, null, REASON_USER_STOPPED);
-                            }
-                        });
+                        mHandler.post(() -> notifyRemoved(
+                                info, oldSbnLightClone, update, null, REASON_USER_STOPPED));
                         continue;
                     }
 
@@ -9335,15 +9398,50 @@ public class NotificationManagerService extends SystemService {
                     updateUriPermissions(r, old, info.component.getPackageName(), targetUserId);
 
                     final StatusBarNotification sbnToPost = trimCache.ForListener(info);
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            notifyPosted(info, sbnToPost, update);
-                        }
-                    });
+                    mHandler.post(() -> notifyPosted(info, sbnToPost, update));
                 }
             } catch (Exception e) {
                 Slog.e(TAG, "Could not notify listeners for " + r.getKey(), e);
+            }
+        }
+
+        /**
+         * Synchronously grant or revoke permissions to Uris for all active and visible
+         * notifications to just the NotificationListenerService provided.
+         */
+        @GuardedBy("mNotificationLock")
+        private void updateUriPermissionsForActiveNotificationsLocked(
+                ManagedServiceInfo info, boolean grant) {
+            try {
+                for (final NotificationRecord r : mNotificationList) {
+                    // When granting permissions, ignore notifications which are invisible.
+                    // When revoking permissions, all notifications are invisible, so process all.
+                    if (grant && !isVisibleToListener(r.getSbn(), info)) {
+                        continue;
+                    }
+                    // If the notification is hidden, permissions are not required by the listener.
+                    if (r.isHidden() && info.targetSdkVersion < Build.VERSION_CODES.P) {
+                        continue;
+                    }
+                    // Grant or revoke access synchronously
+                    final int targetUserId = (info.userid == UserHandle.USER_ALL)
+                            ? UserHandle.USER_SYSTEM : info.userid;
+                    if (grant) {
+                        // Grant permissions by passing arguments as if the notification is new.
+                        updateUriPermissions(/* newRecord */ r, /* oldRecord */ null,
+                                info.component.getPackageName(), targetUserId);
+                    } else {
+                        // Revoke permissions by passing arguments as if the notification was
+                        // removed, but set `onlyRevokeCurrentTarget` to avoid revoking permissions
+                        // granted to *other* targets by this notification's URIs.
+                        updateUriPermissions(/* newRecord */ null, /* oldRecord */ r,
+                                info.component.getPackageName(), targetUserId,
+                                /* onlyRevokeCurrentTarget */ true);
+                    }
+                }
+            } catch (Exception e) {
+                Slog.e(TAG, "Could not " + (grant ? "grant" : "revoke") + " Uri permissions to "
+                        + info.component, e);
             }
         }
 
@@ -9382,18 +9480,11 @@ public class NotificationManagerService extends SystemService {
                 final NotificationStats stats = mAssistants.isServiceTokenValidLocked(info.service)
                         ? notificationStats : null;
                 final NotificationRankingUpdate update = makeRankingUpdateLocked(info);
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        notifyRemoved(info, sbnLight, update, stats, reason);
-                    }
-                });
+                mHandler.post(() -> notifyRemoved(info, sbnLight, update, stats, reason));
             }
 
             // Revoke access after all listeners have been updated
-            mHandler.post(() -> {
-                updateUriPermissions(null, r, null, UserHandle.USER_SYSTEM);
-            });
+            mHandler.post(() -> updateUriPermissions(null, r, null, UserHandle.USER_SYSTEM));
         }
 
         /**
@@ -9409,7 +9500,8 @@ public class NotificationManagerService extends SystemService {
                     && changedHiddenNotifications.size() > 0;
 
             for (final ManagedServiceInfo serviceInfo : getServices()) {
-                if (!serviceInfo.isEnabledForCurrentProfiles()) {
+                if (!serviceInfo.isEnabledForCurrentProfiles() || !isInteractionVisibleToListener(
+                        serviceInfo, ActivityManager.getCurrentUser())) {
                     continue;
                 }
 
@@ -9428,12 +9520,7 @@ public class NotificationManagerService extends SystemService {
                     final NotificationRankingUpdate update = makeRankingUpdateLocked(
                             serviceInfo);
 
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            notifyRankingUpdate(serviceInfo, update);
-                        }
-                    });
+                    mHandler.post(() -> notifyRankingUpdate(serviceInfo, update));
                 }
             }
         }
@@ -9441,15 +9528,11 @@ public class NotificationManagerService extends SystemService {
         @GuardedBy("mNotificationLock")
         public void notifyListenerHintsChangedLocked(final int hints) {
             for (final ManagedServiceInfo serviceInfo : getServices()) {
-                if (!serviceInfo.isEnabledForCurrentProfiles()) {
+                if (!serviceInfo.isEnabledForCurrentProfiles() || !isInteractionVisibleToListener(
+                        serviceInfo, ActivityManager.getCurrentUser())) {
                     continue;
                 }
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        notifyListenerHintsChanged(serviceInfo, hints);
-                    }
-                });
+                mHandler.post(() -> notifyListenerHintsChanged(serviceInfo, hints));
             }
         }
 
@@ -9501,15 +9584,12 @@ public class NotificationManagerService extends SystemService {
 
         public void notifyInterruptionFilterChanged(final int interruptionFilter) {
             for (final ManagedServiceInfo serviceInfo : getServices()) {
-                if (!serviceInfo.isEnabledForCurrentProfiles()) {
+                if (!serviceInfo.isEnabledForCurrentProfiles() || !isInteractionVisibleToListener(
+                        serviceInfo, ActivityManager.getCurrentUser())) {
                     continue;
                 }
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        notifyInterruptionFilterChanged(serviceInfo, interruptionFilter);
-                    }
-                });
+                mHandler.post(
+                        () -> notifyInterruptionFilterChanged(serviceInfo, interruptionFilter));
             }
         }
 
@@ -9518,15 +9598,16 @@ public class NotificationManagerService extends SystemService {
             if (channel == null) {
                 return;
             }
-            for (final ManagedServiceInfo serviceInfo : getServices()) {
-                if (!serviceInfo.enabledAndUserMatches(UserHandle.getCallingUserId())) {
+            for (final ManagedServiceInfo info : getServices()) {
+                if (!info.enabledAndUserMatches(UserHandle.getCallingUserId())
+                        || !isInteractionVisibleToListener(info, UserHandle.getCallingUserId())) {
                     continue;
                 }
 
                 BackgroundThread.getHandler().post(() -> {
-                    if (serviceInfo.isSystem || hasCompanionDevice(serviceInfo)) {
+                    if (info.isSystem || hasCompanionDevice(info)) {
                         notifyNotificationChannelChanged(
-                                serviceInfo, pkg, user, channel, modificationType);
+                                info, pkg, user, channel, modificationType);
                     }
                 });
             }
@@ -9538,15 +9619,16 @@ public class NotificationManagerService extends SystemService {
             if (group == null) {
                 return;
             }
-            for (final ManagedServiceInfo serviceInfo : getServices()) {
-                if (!serviceInfo.enabledAndUserMatches(UserHandle.getCallingUserId())) {
+            for (final ManagedServiceInfo info : getServices()) {
+                if (!info.enabledAndUserMatches(UserHandle.getCallingUserId())
+                        || !isInteractionVisibleToListener(info, UserHandle.getCallingUserId())) {
                     continue;
                 }
 
                 BackgroundThread.getHandler().post(() -> {
-                    if (serviceInfo.isSystem || hasCompanionDevice(serviceInfo)) {
+                    if (info.isSystem || hasCompanionDevice(info)) {
                         notifyNotificationChannelGroupChanged(
-                                serviceInfo, pkg, user, group, modificationType);
+                                info, pkg, user, group, modificationType);
                     }
                 });
             }
@@ -9565,9 +9647,6 @@ public class NotificationManagerService extends SystemService {
 
         private void notifyRemoved(ManagedServiceInfo info, StatusBarNotification sbn,
                 NotificationRankingUpdate rankingUpdate, NotificationStats stats, int reason) {
-            if (!info.enabledAndUserMatches(sbn.getUserId())) {
-                return;
-            }
             final INotificationListener listener = (INotificationListener) info.service;
             StatusBarNotificationHolder sbnHolder = new StatusBarNotificationHolder(sbn);
             try {
@@ -9923,5 +10002,37 @@ public class NotificationManagerService extends SystemService {
     private static boolean safeBoolean(String val, boolean defValue) {
         if (TextUtils.isEmpty(val)) return defValue;
         return Boolean.parseBoolean(val);
+    }
+
+    /**
+     * Shows a warning on logcat. Shows the toast only once per package. This is to avoid being too
+     * aggressive and annoying the user.
+     *
+     * TODO(b/161957908): Remove dogfooder toast.
+     */
+    private class NotificationTrampolineCallback implements BackgroundActivityStartCallback {
+        private Set<String> mPackagesShown = new ArraySet<>();
+
+        @Override
+        public IBinder getToken() {
+            return ALLOWLIST_TOKEN;
+        }
+
+        @Override
+        public void onExclusiveTokenActivityStart(String packageName) {
+            Slog.w(TAG, "Indirect notification activity start from " + packageName);
+            boolean isFirstOccurrence = mPackagesShown.add(packageName);
+            if (!isFirstOccurrence) {
+                return;
+            }
+
+            mUiHandler.post(() ->
+                    Toast.makeText(getUiContext(),
+                            "Indirect activity start from "
+                                    + packageName + ". "
+                                    + "This will be blocked in S.\n"
+                                    + "See go/s-trampolines.",
+                            Toast.LENGTH_LONG).show());
+        }
     }
 }

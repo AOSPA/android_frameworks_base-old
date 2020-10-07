@@ -25,11 +25,9 @@ import android.window.WindowContainerTransaction;
 interface ITaskOrganizerController {
 
     /**
-     * Register a TaskOrganizer to manage tasks as they enter the given windowing mode.
-     * If there was already a TaskOrganizer for this windowing mode it will be evicted
-     * and receive taskVanished callbacks in the process.
+     * Register a TaskOrganizer to manage all the tasks with supported windowing modes.
      */
-    void registerTaskOrganizer(ITaskOrganizer organizer, int windowingMode);
+    void registerTaskOrganizer(ITaskOrganizer organizer);
 
     /**
      * Unregisters a previously registered task organizer.
@@ -62,5 +60,6 @@ interface ITaskOrganizerController {
      * Requests that the given task organizer is notified when back is pressed on the root activity
      * of one of its controlled tasks.
      */
-    void setInterceptBackPressedOnTaskRoot(ITaskOrganizer organizer, boolean interceptBackPressed);
+    void setInterceptBackPressedOnTaskRoot(in WindowContainerToken task,
+            boolean interceptBackPressed);
 }

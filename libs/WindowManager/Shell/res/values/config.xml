@@ -26,4 +26,10 @@
 
     <!-- Allow PIP to enable round corner, see also R.dimen.pip_corner_radius -->
     <bool name="config_pipEnableRoundCorner">false</bool>
+
+    <!-- Animation duration when using long press on recents to dock -->
+    <integer name="long_press_dock_anim_duration">250</integer>
+
+    <!-- Allow one handed to enable round corner -->
+    <bool name="config_one_handed_enable_round_corner">true</bool>
 </resources>

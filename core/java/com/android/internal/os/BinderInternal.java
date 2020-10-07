@@ -85,8 +85,9 @@ public class BinderInternal {
         long timeStarted;
         // Should be set to one when an exception is thrown.
         boolean exceptionThrown;
+        // Detailed information should be recorded for this call when it ends.
+        public boolean recordedCall;
     }
-
 
     /**
      * Responsible for resolving a work source.
@@ -142,7 +143,8 @@ public class BinderInternal {
          * Notes incoming binder call stats associated with this work source UID.
          */
         void noteCallStats(int workSourceUid, long incrementalCallCount,
-                Collection<BinderCallsStats.CallStat> callStats);
+                Collection<BinderCallsStats.CallStat> callStats,
+                int[] binderThreadNativeTids);
     }
 
     /**

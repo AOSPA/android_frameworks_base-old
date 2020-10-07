@@ -146,6 +146,15 @@ public class WifiAwareManagerTest {
         verify(mockAwareService).getCharacteristics();
     }
 
+    /**
+     * Validate pass-through of isDeviceAttached() API.
+     */
+    @Test
+    public void testIsAttached() throws Exception {
+        mDut.isDeviceAttached();
+        verify(mockAwareService).isDeviceAttached();
+    }
+
     /*
      * WifiAwareEventCallbackProxy Tests
      */
@@ -360,12 +369,18 @@ public class WifiAwareManagerTest {
                 eq(publishConfig));
         inOrder.verify(mockSessionCallback).onSessionConfigFailed();
 
-        // (5) terminate
+        // (5) discovery session is no longer visible
+        sessionProxyCallback.getValue().onMatchExpired(peerHandle.peerId);
+        mMockLooper.dispatchAll();
+        inOrder.verify(mockSessionCallback).onServiceLost(peerIdCaptor.capture());
+        assertEquals(peerHandle.peerId, peerIdCaptor.getValue().peerId);
+
+        // (6) terminate
         publishSession.getValue().close();
         mMockLooper.dispatchAll();
         inOrder.verify(mockAwareService).terminateSession(clientId, sessionId);
 
-        // (6) try an update (nothing)
+        // (7) try an update (nothing)
         publishSession.getValue().updatePublish(publishConfig);
         mMockLooper.dispatchAll();
 
@@ -502,12 +517,18 @@ public class WifiAwareManagerTest {
                 eq(subscribeConfig));
         inOrder.verify(mockSessionCallback).onSessionConfigFailed();
 
-        // (5) terminate
+        // (5) discovery session is no longer visible
+        sessionProxyCallback.getValue().onMatchExpired(peerHandle.peerId);
+        mMockLooper.dispatchAll();
+        inOrder.verify(mockSessionCallback).onServiceLost(peerIdCaptor.capture());
+        assertEquals(peerHandle.peerId, peerIdCaptor.getValue().peerId);
+
+        // (6) terminate
         subscribeSession.getValue().close();
         mMockLooper.dispatchAll();
         inOrder.verify(mockAwareService).terminateSession(clientId, sessionId);
 
-        // (6) try an update (nothing)
+        // (7) try an update (nothing)
         subscribeSession.getValue().updateSubscribe(subscribeConfig);
         mMockLooper.dispatchAll();
 
@@ -1585,7 +1606,7 @@ public class WifiAwareManagerTest {
     public void testWifiAwareNetworkCapabilitiesParcel() throws UnknownHostException {
         final Inet6Address inet6 = MacAddress.fromString(
                 "11:22:33:44:55:66").getLinkLocalIpv6FromEui48Mac();
-        // note: dummy scope = 5
+        // note: placeholder scope = 5
         final Inet6Address inet6Scoped = Inet6Address.getByAddress(null, inet6.getAddress(), 5);
         final int port = 5;
         final int transportProtocol = 6;

@@ -171,6 +171,12 @@ static int IP_V6_LENGTH = 16;
 
 void DestroyCallback(const C2Buffer * /* buf */, void *arg) {
     android::sp<android::MediaEvent> event = (android::MediaEvent *)arg;
+    if (event->mLinearBlockObj != NULL) {
+        JNIEnv *env = android::AndroidRuntime::getJNIEnv();
+        env->DeleteWeakGlobalRef(event->mLinearBlockObj);
+        event->mLinearBlockObj = NULL;
+    }
+
     event->mAvHandleRefCnt--;
     event->finalize();
 }
@@ -180,6 +186,12 @@ namespace android {
 LnbCallback::LnbCallback(jobject lnbObj, LnbId id) : mId(id) {
     JNIEnv *env = AndroidRuntime::getJNIEnv();
     mLnb = env->NewWeakGlobalRef(lnbObj);
+}
+
+LnbCallback::~LnbCallback() {
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    env->DeleteWeakGlobalRef(mLnb);
+    mLnb = NULL;
 }
 
 Return<void> LnbCallback::onEvent(LnbEventType lnbEventType) {
@@ -291,8 +303,9 @@ MQ& Dvr::getDvrMQ() {
 C2DataIdInfo::C2DataIdInfo(uint32_t index, uint64_t value) : C2Param(kParamSize, index) {
     CHECK(isGlobal());
     CHECK_EQ(C2Param::INFO, kind());
-    DummyInfo info{value};
-    memcpy(this + 1, static_cast<C2Param *>(&info) + 1, kParamSize - sizeof(C2Param));
+    mInfo = StubInfo(value);
+    memcpy(static_cast<C2Param *>(this) + 1, static_cast<C2Param *>(&mInfo) + 1,
+            kParamSize - sizeof(C2Param));
 }
 
 /////////////// MediaEvent ///////////////////////
@@ -304,6 +317,7 @@ MediaEvent::MediaEvent(sp<IFilter> iFilter, hidl_handle avHandle,
     JNIEnv *env = AndroidRuntime::getJNIEnv();
     mMediaEventObj = env->NewWeakGlobalRef(obj);
     mAvHandle = native_handle_clone(avHandle.getNativeHandle());
+    mLinearBlockObj = NULL;
 }
 
 MediaEvent::~MediaEvent() {
@@ -366,7 +380,7 @@ jobject MediaEvent::getLinearBlock() {
                 true);
         mLinearBlockObj = env->NewWeakGlobalRef(linearBlock);
         mAvHandleRefCnt++;
-        return mLinearBlockObj;
+        return linearBlock;
     } else {
         native_handle_close(const_cast<native_handle_t*>(
                     reinterpret_cast<const native_handle_t*>(mIonHandle)));
@@ -2059,7 +2073,7 @@ static FrontendSettings getDvbcFrontendSettings(JNIEnv *env, const jobject& sett
                     env->GetIntField(settings, env->GetFieldID(clazz, "mModulation", "I")));
     FrontendInnerFec innerFec =
             static_cast<FrontendInnerFec>(
-                    env->GetLongField(settings, env->GetFieldID(clazz, "mFec", "J")));
+                    env->GetLongField(settings, env->GetFieldID(clazz, "mInnerFec", "J")));
     uint32_t symbolRate =
             static_cast<uint32_t>(
                     env->GetIntField(settings, env->GetFieldID(clazz, "mSymbolRate", "I")));
@@ -2068,7 +2082,7 @@ static FrontendSettings getDvbcFrontendSettings(JNIEnv *env, const jobject& sett
                     env->GetIntField(settings, env->GetFieldID(clazz, "mOuterFec", "I")));
     FrontendDvbcAnnex annex =
             static_cast<FrontendDvbcAnnex>(
-                    env->GetByteField(settings, env->GetFieldID(clazz, "mAnnex", "B")));
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mAnnex", "I")));
     FrontendDvbcSpectralInversion spectralInversion =
             static_cast<FrontendDvbcSpectralInversion>(
                     env->GetIntField(

@@ -31,8 +31,6 @@ import com.android.systemui.Interpolators;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
-import javax.inject.Inject;
-
 /**
  * Controller class of PiP animations (both from and to PiP mode).
  */
@@ -53,16 +51,16 @@ public class PipAnimationController {
     public static final int TRANSITION_DIRECTION_NONE = 0;
     public static final int TRANSITION_DIRECTION_SAME = 1;
     public static final int TRANSITION_DIRECTION_TO_PIP = 2;
-    public static final int TRANSITION_DIRECTION_TO_FULLSCREEN = 3;
-    public static final int TRANSITION_DIRECTION_TO_SPLIT_SCREEN = 4;
+    public static final int TRANSITION_DIRECTION_LEAVE_PIP = 3;
+    public static final int TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN = 4;
     public static final int TRANSITION_DIRECTION_REMOVE_STACK = 5;
 
     @IntDef(prefix = { "TRANSITION_DIRECTION_" }, value = {
             TRANSITION_DIRECTION_NONE,
             TRANSITION_DIRECTION_SAME,
             TRANSITION_DIRECTION_TO_PIP,
-            TRANSITION_DIRECTION_TO_FULLSCREEN,
-            TRANSITION_DIRECTION_TO_SPLIT_SCREEN,
+            TRANSITION_DIRECTION_LEAVE_PIP,
+            TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN,
             TRANSITION_DIRECTION_REMOVE_STACK
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -73,8 +71,8 @@ public class PipAnimationController {
     }
 
     public static boolean isOutPipDirection(@TransitionDirection int direction) {
-        return direction == TRANSITION_DIRECTION_TO_FULLSCREEN
-                || direction == TRANSITION_DIRECTION_TO_SPLIT_SCREEN;
+        return direction == TRANSITION_DIRECTION_LEAVE_PIP
+                || direction == TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN;
     }
 
     private final PipSurfaceTransactionHelper mSurfaceTransactionHelper;
@@ -88,7 +86,6 @@ public class PipAnimationController {
                 return handler;
             });
 
-    @Inject
     PipAnimationController(PipSurfaceTransactionHelper helper) {
         mSurfaceTransactionHelper = helper;
     }
@@ -112,10 +109,11 @@ public class PipAnimationController {
 
     @SuppressWarnings("unchecked")
     PipTransitionAnimator getAnimator(SurfaceControl leash, Rect startBounds, Rect endBounds,
-            Rect sourceHintRect) {
+            Rect sourceHintRect, @PipAnimationController.TransitionDirection int direction) {
         if (mCurrentAnimator == null) {
             mCurrentAnimator = setupPipTransitionAnimator(
-                    PipTransitionAnimator.ofBounds(leash, startBounds, endBounds, sourceHintRect));
+                    PipTransitionAnimator.ofBounds(leash, startBounds, endBounds, sourceHintRect,
+                            direction));
         } else if (mCurrentAnimator.getAnimationType() == ANIM_TYPE_ALPHA
                 && mCurrentAnimator.isRunning()) {
             // If we are still animating the fade into pip, then just move the surface and ensure
@@ -130,7 +128,8 @@ public class PipAnimationController {
         } else {
             mCurrentAnimator.cancel();
             mCurrentAnimator = setupPipTransitionAnimator(
-                    PipTransitionAnimator.ofBounds(leash, startBounds, endBounds, sourceHintRect));
+                    PipTransitionAnimator.ofBounds(leash, startBounds, endBounds, sourceHintRect,
+                            direction));
         }
         return mCurrentAnimator;
     }
@@ -284,7 +283,8 @@ public class PipAnimationController {
 
         boolean inScaleTransition() {
             if (mAnimationType != ANIM_TYPE_BOUNDS) return false;
-            return !isInPipDirection(getTransitionDirection());
+            final int direction = getTransitionDirection();
+            return !isInPipDirection(direction) && !isOutPipDirection(direction);
         }
 
         /**
@@ -360,16 +360,26 @@ public class PipAnimationController {
         }
 
         static PipTransitionAnimator<Rect> ofBounds(SurfaceControl leash,
-                Rect startValue, Rect endValue, Rect sourceHintRect) {
+                Rect startValue, Rect endValue, Rect sourceHintRect,
+                @PipAnimationController.TransitionDirection int direction) {
             // Just for simplicity we'll interpolate between the source rect hint insets and empty
             // insets to calculate the window crop
-            final Rect initialStartValue = new Rect(startValue);
-            final Rect sourceHintRectInsets = sourceHintRect != null
-                    ? new Rect(sourceHintRect.left - startValue.left,
-                            sourceHintRect.top - startValue.top,
-                            startValue.right - sourceHintRect.right,
-                            startValue.bottom - sourceHintRect.bottom)
-                    : null;
+            final Rect initialSourceValue;
+            if (isOutPipDirection(direction)) {
+                initialSourceValue = new Rect(endValue);
+            } else {
+                initialSourceValue = new Rect(startValue);
+            }
+
+            final Rect sourceHintRectInsets;
+            if (sourceHintRect == null) {
+                sourceHintRectInsets = null;
+            } else {
+                sourceHintRectInsets = new Rect(sourceHintRect.left - initialSourceValue.left,
+                        sourceHintRect.top - initialSourceValue.top,
+                        initialSourceValue.right - sourceHintRect.right,
+                        initialSourceValue.bottom - sourceHintRect.bottom);
+            }
             final Rect sourceInsets = new Rect(0, 0, 0, 0);
 
             // construct new Rect instances in case they are recycled
@@ -385,21 +395,23 @@ public class PipAnimationController {
                     final Rect end = getEndValue();
                     Rect bounds = mRectEvaluator.evaluate(fraction, start, end);
                     setCurrentValue(bounds);
-                    if (inScaleTransition()) {
-                        if (isOutPipDirection(getTransitionDirection())) {
+                    if (inScaleTransition() || sourceHintRect == null) {
+                        if (isOutPipDirection(direction)) {
                             getSurfaceTransactionHelper().scale(tx, leash, end, bounds);
                         } else {
                             getSurfaceTransactionHelper().scale(tx, leash, start, bounds);
                         }
                     } else {
-                        if (sourceHintRectInsets != null) {
-                            Rect insets = mInsetsEvaluator.evaluate(fraction, sourceInsets,
-                                    sourceHintRectInsets);
-                            getSurfaceTransactionHelper().scaleAndCrop(tx, leash, initialStartValue,
-                                    bounds, insets);
+                        final Rect insets;
+                        if (isOutPipDirection(direction)) {
+                            insets = mInsetsEvaluator.evaluate(fraction, sourceHintRectInsets,
+                                    sourceInsets);
                         } else {
-                            getSurfaceTransactionHelper().scale(tx, leash, start, bounds);
+                            insets = mInsetsEvaluator.evaluate(fraction, sourceInsets,
+                                    sourceHintRectInsets);
                         }
+                        getSurfaceTransactionHelper().scaleAndCrop(tx, leash,
+                                initialSourceValue, bounds, insets);
                     }
                     tx.apply();
                 }

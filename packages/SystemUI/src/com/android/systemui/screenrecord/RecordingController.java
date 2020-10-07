@@ -26,19 +26,21 @@ import android.os.CountDownTimer;
 import android.os.UserHandle;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.policy.CallbackController;
 
 import java.util.ArrayList;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Helper class to initiate a screen recording
  */
-@Singleton
+@SysUISingleton
 public class RecordingController
         implements CallbackController<RecordingController.RecordingStateChangeCallback> {
     private static final String TAG = "RecordingController";
@@ -191,12 +193,12 @@ public class RecordingController
     }
 
     @Override
-    public void addCallback(RecordingStateChangeCallback listener) {
+    public void addCallback(@NonNull RecordingStateChangeCallback listener) {
         mListeners.add(listener);
     }
 
     @Override
-    public void removeCallback(RecordingStateChangeCallback listener) {
+    public void removeCallback(@NonNull RecordingStateChangeCallback listener) {
         mListeners.remove(listener);
     }
 

@@ -832,8 +832,7 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Ապակողպելու կամ շտապ կանչ անելու համար սեղմեք «Ընտրացանկ»"</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Ապակողպելու համար սեղմեք Ցանկը:"</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Հավաքեք սխեման` ապակողպելու համար"</string>
-    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
-    <skip />
+    <string name="lockscreen_emergency_call" msgid="7549683825868928636">"Շտապ կանչ"</string>
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Վերադառնալ զանգին"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Ճիշտ է:"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Կրկին փորձեք"</string>
@@ -1895,7 +1894,7 @@
     <string name="deprecated_target_sdk_message" msgid="5203207875657579953">"Այս հավելվածը ստեղծվել է Android-ի ավելի հին տարբերակի համար և կարող է պատշաճ չաշխատել: Ստուգեք թարմացումների առկայությունը կամ դիմեք մշակողին:"</string>
     <string name="deprecated_target_sdk_app_store" msgid="8456784048558808909">"Ստուգել նոր տարբերակի առկայությունը"</string>
     <string name="new_sms_notification_title" msgid="6528758221319927107">"Դուք ունեք նոր հաղորդագրություններ"</string>
-    <string name="new_sms_notification_content" msgid="3197949934153460639">"Դիտելու համար բացել SMS հավելվածը"</string>
+    <string name="new_sms_notification_content" msgid="3197949934153460639">"Դիտելու համար բացել SMS-ների փոխանակման հավելվածը"</string>
     <string name="profile_encrypted_title" msgid="9001208667521266472">"Որոշ գործառույթներ կարող են չաշխատել"</string>
     <string name="profile_encrypted_detail" msgid="5279730442756849055">"Աշխատանքային պրոֆիլը կողպված է"</string>
     <string name="profile_encrypted_message" msgid="1128512616293157802">"Հպեք՝ այն ապակողպելու համար"</string>
@@ -1980,7 +1979,7 @@
     <string name="shortcut_restore_signature_mismatch" msgid="579345304221605479">"Չհաջողվեց վերականգնել դյուրանցումը, քանի որ հավելվածների ստորագրությունները տարբեր են"</string>
     <string name="shortcut_restore_unknown_issue" msgid="2478146134395982154">"Չհաջողվեց վերականգնել դյուրանցումը"</string>
     <string name="shortcut_disabled_reason_unknown" msgid="753074793553599166">"Դյուրանցումն անջատված է"</string>
-    <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"ՀԵՌԱՑՆԵԼ"</string>
+    <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"ԱՊԱՏԵՂԱԴՐԵԼ"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"ԲԱՑԵԼ"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Հայտնաբերվել է վնասաբեր հավելված"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> հավելվածն ուզում է ցուցադրել հատվածներ <xliff:g id="APP_2">%2$s</xliff:g> հավելվածից"</string>

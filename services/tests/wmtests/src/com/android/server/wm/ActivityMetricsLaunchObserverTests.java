@@ -20,6 +20,7 @@ import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
 import static android.content.ComponentName.createRelative;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verifyNoMoreInteractions;
@@ -32,6 +33,8 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.timeout;
 
+import android.app.ActivityOptions;
+import android.app.ActivityOptions.SourceInfo;
 import android.content.Intent;
 import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
@@ -59,7 +62,7 @@ import java.util.concurrent.TimeUnit;
 @SmallTest
 @Presubmit
 @RunWith(WindowTestRunner.class)
-public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
+public class ActivityMetricsLaunchObserverTests extends WindowTestsBase {
     private ActivityMetricsLogger mActivityMetricsLogger;
     private ActivityMetricsLogger.LaunchingState mLaunchingState;
     private ActivityMetricsLaunchObserver mLaunchObserver;
@@ -67,6 +70,7 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
 
     private ActivityRecord mTrampolineActivity;
     private ActivityRecord mTopActivity;
+    private ActivityOptions mActivityOptions;
     private boolean mLaunchTopByTrampoline;
 
     @Before
@@ -81,11 +85,11 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
 
         // Sometimes we need an ActivityRecord for ActivityMetricsLogger to do anything useful.
         // This seems to be the easiest way to create an ActivityRecord.
-        mTrampolineActivity = new ActivityBuilder(mService)
+        mTrampolineActivity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setComponent(createRelative(DEFAULT_COMPONENT_PACKAGE_NAME, "TrampolineActivity"))
                 .build();
-        mTopActivity = new ActivityBuilder(mService)
+        mTopActivity = new ActivityBuilder(mAtm)
                 .setTask(mTrampolineActivity.getTask())
                 .setComponent(createRelative(DEFAULT_COMPONENT_PACKAGE_NAME, "TopActivity"))
                 .build();
@@ -121,7 +125,7 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     private <T> T verifyAsync(T mock) {
         // With WindowTestRunner, all test methods are inside WM lock, so we have to unblock any
         // messages that are waiting for the lock.
-        waitHandlerIdle(mService.mH);
+        waitHandlerIdle(mAtm.mH);
         // AMLO callbacks happen on a separate thread than AML calls, so we need to use a timeout.
         return verify(mock, timeout(TimeUnit.SECONDS.toMillis(5)));
     }
@@ -176,7 +180,8 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     public void testOnActivityLaunchCancelled_hasDrawn() {
         onActivityLaunched(mTopActivity);
 
-        mTopActivity.mVisibleRequested = mTopActivity.mDrawn = true;
+        mTopActivity.mVisibleRequested = true;
+        doReturn(true).when(mTopActivity).isReportedDrawn();
 
         // Cannot time already-visible activities.
         notifyActivityLaunched(START_TASK_TO_FRONT, mTopActivity);
@@ -187,16 +192,14 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
 
     @Test
     public void testOnActivityLaunchCancelled_finishedBeforeDrawn() {
-        mTopActivity.mVisibleRequested = mTopActivity.mDrawn = true;
+        mTopActivity.mVisibleRequested = true;
+        doReturn(true).when(mTopActivity).isReportedDrawn();
 
-        // Suppress resume when creating the record because we want to notify logger manually.
-        mSupervisor.beginDeferResume();
         // Create an activity with different process that meets process switch.
-        final ActivityRecord noDrawnActivity = new ActivityBuilder(mService)
+        final ActivityRecord noDrawnActivity = new ActivityBuilder(mAtm)
                 .setTask(mTopActivity.getTask())
                 .setProcessName("other")
                 .build();
-        mSupervisor.readyToResume();
 
         notifyActivityLaunching(noDrawnActivity.intent);
         notifyActivityLaunched(START_SUCCESS, noDrawnActivity);
@@ -209,6 +212,8 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
 
     @Test
     public void testOnReportFullyDrawn() {
+        mActivityOptions = ActivityOptions.makeBasic();
+        mActivityOptions.setSourceInfo(SourceInfo.TYPE_LAUNCHER, SystemClock.uptimeMillis() - 10);
         onActivityLaunched(mTopActivity);
 
         // The activity reports fully drawn before windows drawn, then the fully drawn event will
@@ -216,7 +221,10 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
         mActivityMetricsLogger.logAppTransitionReportedDrawn(mTopActivity, false);
         notifyTransitionStarting(mTopActivity);
         // The pending fully drawn event should send when the actual windows drawn event occurs.
-        notifyWindowsDrawn(mTopActivity);
+        final ActivityMetricsLogger.TransitionInfoSnapshot info = notifyWindowsDrawn(mTopActivity);
+        assertWithMessage("Record start source").that(info.sourceType)
+                .isEqualTo(SourceInfo.TYPE_LAUNCHER);
+        assertWithMessage("Record event time").that(info.sourceEventDelayMs).isAtLeast(10);
 
         verifyAsync(mLaunchObserver).onReportFullyDrawn(eqProto(mTopActivity), anyLong());
         verifyOnActivityLaunchFinished(mTopActivity);
@@ -251,7 +259,8 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     }
 
     private void notifyActivityLaunched(int resultCode, ActivityRecord activity) {
-        mActivityMetricsLogger.notifyActivityLaunched(mLaunchingState, resultCode, activity);
+        mActivityMetricsLogger.notifyActivityLaunched(mLaunchingState, resultCode, activity,
+                mActivityOptions);
     }
 
     private void notifyTransitionStarting(ActivityRecord activity) {
@@ -260,8 +269,8 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
         mActivityMetricsLogger.notifyTransitionStarting(reasons);
     }
 
-    private void notifyWindowsDrawn(ActivityRecord r) {
-        mActivityMetricsLogger.notifyWindowsDrawn(r, SystemClock.elapsedRealtimeNanos());
+    private ActivityMetricsLogger.TransitionInfoSnapshot notifyWindowsDrawn(ActivityRecord r) {
+        return mActivityMetricsLogger.notifyWindowsDrawn(r, SystemClock.elapsedRealtimeNanos());
     }
 
     @Test
@@ -294,7 +303,7 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     public void testOnActivityLaunchCancelledTrampoline() {
         onActivityLaunchedTrampoline();
 
-        mTopActivity.mDrawn = true;
+        doReturn(true).when(mTopActivity).isReportedDrawn();
 
         // Cannot time already-visible activities.
         notifyActivityLaunched(START_TASK_TO_FRONT, mTopActivity);
@@ -321,7 +330,7 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
         onActivityLaunched(mTopActivity);
         final ActivityMetricsLogger.LaunchingState previousState = mLaunchingState;
 
-        final ActivityRecord otherActivity = new ActivityBuilder(mService)
+        final ActivityRecord otherActivity = new ActivityBuilder(mAtm)
                 .setComponent(createRelative(DEFAULT_COMPONENT_PACKAGE_NAME, "OtherActivity"))
                 .setCreateTask(true)
                 .build();
@@ -341,11 +350,10 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     public void testConsecutiveLaunchOnDifferentDisplay() {
         onActivityLaunched(mTopActivity);
 
-        final Task stack = new StackBuilder(mRootWindowContainer)
+        final Task stack = new TaskBuilder(mSupervisor)
                 .setDisplay(addNewDisplayContentAt(DisplayContent.POSITION_BOTTOM))
-                .setCreateActivity(false)
                 .build();
-        final ActivityRecord activityOnNewDisplay = new ActivityBuilder(mService)
+        final ActivityRecord activityOnNewDisplay = new ActivityBuilder(mAtm)
                 .setStack(stack)
                 .setCreateTask(true)
                 .setProcessName("new")

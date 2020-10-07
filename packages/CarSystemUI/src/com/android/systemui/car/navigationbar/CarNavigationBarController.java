@@ -22,16 +22,16 @@ import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
 
-import com.android.systemui.R;
 import com.android.systemui.car.hvac.HvacController;
+import com.android.systemui.car.statusbar.UserNameViewController;
+import com.android.systemui.dagger.SysUISingleton;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 import dagger.Lazy;
 
 /** A single class which controls the navigation bar views. */
-@Singleton
+@SysUISingleton
 public class CarNavigationBarController {
 
     private final Context mContext;
@@ -39,6 +39,7 @@ public class CarNavigationBarController {
     private final ButtonSelectionStateController mButtonSelectionStateController;
     private final ButtonRoleHolderController mButtonRoleHolderController;
     private final Lazy<HvacController> mHvacControllerLazy;
+    private final Lazy<UserNameViewController> mUserNameViewControllerLazy;
 
     private boolean mShowTop;
     private boolean mShowBottom;
@@ -61,27 +62,28 @@ public class CarNavigationBarController {
             NavigationBarViewFactory navigationBarViewFactory,
             ButtonSelectionStateController buttonSelectionStateController,
             Lazy<HvacController> hvacControllerLazy,
-            ButtonRoleHolderController buttonRoleHolderController) {
+            Lazy<UserNameViewController> userNameViewControllerLazy,
+            ButtonRoleHolderController buttonRoleHolderController,
+            SystemBarConfigs systemBarConfigs) {
         mContext = context;
         mNavigationBarViewFactory = navigationBarViewFactory;
         mButtonSelectionStateController = buttonSelectionStateController;
         mHvacControllerLazy = hvacControllerLazy;
+        mUserNameViewControllerLazy = userNameViewControllerLazy;
         mButtonRoleHolderController = buttonRoleHolderController;
 
         // Read configuration.
-        mShowTop = mContext.getResources().getBoolean(R.bool.config_enableTopNavigationBar);
-        mShowBottom = mContext.getResources().getBoolean(R.bool.config_enableBottomNavigationBar);
-        mShowLeft = mContext.getResources().getBoolean(R.bool.config_enableLeftNavigationBar);
-        mShowRight = mContext.getResources().getBoolean(R.bool.config_enableRightNavigationBar);
+        mShowTop = systemBarConfigs.getEnabledStatusBySide(SystemBarConfigs.TOP);
+        mShowBottom = systemBarConfigs.getEnabledStatusBySide(SystemBarConfigs.BOTTOM);
+        mShowLeft = systemBarConfigs.getEnabledStatusBySide(SystemBarConfigs.LEFT);
+        mShowRight = systemBarConfigs.getEnabledStatusBySide(SystemBarConfigs.RIGHT);
     }
 
     /**
      * Hides all system bars.
      */
     public void hideBars() {
-        if (mTopView != null) {
-            mTopView.setVisibility(View.GONE);
-        }
+        setTopWindowVisibility(View.GONE);
         setBottomWindowVisibility(View.GONE);
         setLeftWindowVisibility(View.GONE);
         setRightWindowVisibility(View.GONE);
@@ -91,9 +93,7 @@ public class CarNavigationBarController {
      * Shows all system bars.
      */
     public void showBars() {
-        if (mTopView != null) {
-            mTopView.setVisibility(View.VISIBLE);
-        }
+        setTopWindowVisibility(View.VISIBLE);
         setBottomWindowVisibility(View.VISIBLE);
         setLeftWindowVisibility(View.VISIBLE);
         setRightWindowVisibility(View.VISIBLE);
@@ -109,6 +109,7 @@ public class CarNavigationBarController {
         mHvacControllerLazy.get().removeAllComponents();
         mButtonSelectionStateController.removeAll();
         mButtonRoleHolderController.removeAll();
+        mUserNameViewControllerLazy.get().removeAll();
     }
 
     /** Gets the top window if configured to do so. */
@@ -133,6 +134,11 @@ public class CarNavigationBarController {
     @Nullable
     public ViewGroup getRightWindow() {
         return mShowRight ? mNavigationBarViewFactory.getRightWindow() : null;
+    }
+
+    /** Toggles the top nav bar visibility. */
+    public boolean setTopWindowVisibility(@View.Visibility int visibility) {
+        return setWindowVisibility(getTopWindow(), visibility);
     }
 
     /** Toggles the bottom nav bar visibility. */
@@ -218,6 +224,7 @@ public class CarNavigationBarController {
         mButtonSelectionStateController.addAllButtonsWithSelectionState(view);
         mButtonRoleHolderController.addAllButtonsWithRoleName(view);
         mHvacControllerLazy.get().addTemperatureViewToController(view);
+        mUserNameViewControllerLazy.get().addUserNameView(view);
     }
 
     /** Sets a touch listener for the top navigation bar. */

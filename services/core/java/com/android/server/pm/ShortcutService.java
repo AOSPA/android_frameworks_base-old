@@ -108,6 +108,7 @@ import com.android.internal.util.Preconditions;
 import com.android.internal.util.StatLogger;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.pm.ShortcutUser.PackageWithUser;
 import com.android.server.uri.UriGrantsManagerInternal;
 
@@ -259,7 +260,8 @@ public class ShortcutService extends IShortcutService.Stub {
     private static final int PACKAGE_MATCH_FLAGS =
             PackageManager.MATCH_DIRECT_BOOT_AWARE
                     | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
-                    | PackageManager.MATCH_UNINSTALLED_PACKAGES;
+                    | PackageManager.MATCH_UNINSTALLED_PACKAGES
+                    | PackageManager.MATCH_DISABLED_COMPONENTS;
 
     private static final int SYSTEM_APP_MASK =
             ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
@@ -275,12 +277,6 @@ public class ShortcutService extends IShortcutService.Stub {
         public boolean test(ResolveInfo ri) {
             return !ri.activityInfo.exported;
         }
-    };
-
-    private static Predicate<ResolveInfo> ACTIVITY_NOT_SYSTEM_NOR_ENABLED = (ri) -> {
-        final ApplicationInfo ai = ri.activityInfo.applicationInfo;
-        final boolean isSystemApp = ai != null && (ai.flags & SYSTEM_APP_MASK) != 0;
-        return !isSystemApp && !ri.activityInfo.enabled;
     };
 
     private static Predicate<ResolveInfo> ACTIVITY_NOT_INSTALLED = (ri) ->
@@ -614,13 +610,13 @@ public class ShortcutService extends IShortcutService.Stub {
         }
 
         @Override
-        public void onStopUser(int userHandle) {
-            mService.handleStopUser(userHandle);
+        public void onUserStopping(@NonNull TargetUser user) {
+            mService.handleStopUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onUnlockUser(int userId) {
-            mService.handleUnlockUser(userId);
+        public void onUserUnlocking(@NonNull TargetUser user) {
+            mService.handleUnlockUser(user.getUserIdentifier());
         }
     }
 
@@ -3305,7 +3301,7 @@ public class ShortcutService extends IShortcutService.Stub {
 
                 final long token = Binder.clearCallingIdentity();
                 try {
-                    int packageUid = mPackageManagerInternal.getPackageUidInternal(packageName,
+                    int packageUid = mPackageManagerInternal.getPackageUid(packageName,
                             PackageManager.MATCH_DIRECT_BOOT_AUTO, userId);
                     // Grant read uri permission to the caller on behalf of the shortcut owner. All
                     // granted permissions are revoked when the default launcher changes, or when
@@ -3684,10 +3680,8 @@ public class ShortcutService extends IShortcutService.Stub {
         final long start = getStatStartTime();
         final long token = injectClearCallingIdentity();
         try {
-            return mIPackageManager.getPackageInfo(
-                    packageName, PACKAGE_MATCH_FLAGS | PackageManager.MATCH_DISABLED_COMPONENTS
-                            | (getSignatures ? PackageManager.GET_SIGNING_CERTIFICATES : 0),
-                    userId);
+            return mIPackageManager.getPackageInfo(packageName, PACKAGE_MATCH_FLAGS
+                    | (getSignatures ? PackageManager.GET_SIGNING_CERTIFICATES : 0), userId);
         } catch (RemoteException e) {
             // Shouldn't happen.
             Slog.wtf(TAG, "RemoteException", e);
@@ -3720,8 +3714,7 @@ public class ShortcutService extends IShortcutService.Stub {
         final long start = getStatStartTime();
         final long token = injectClearCallingIdentity();
         try {
-            return mIPackageManager.getApplicationInfo(packageName,
-                    PACKAGE_MATCH_FLAGS | PackageManager.MATCH_DISABLED_COMPONENTS, userId);
+            return mIPackageManager.getApplicationInfo(packageName, PACKAGE_MATCH_FLAGS, userId);
         } catch (RemoteException e) {
             // Shouldn't happen.
             Slog.wtf(TAG, "RemoteException", e);
@@ -3752,9 +3745,8 @@ public class ShortcutService extends IShortcutService.Stub {
         final long start = getStatStartTime();
         final long token = injectClearCallingIdentity();
         try {
-            return mIPackageManager.getActivityInfo(activity, (PACKAGE_MATCH_FLAGS
-                    | PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.GET_META_DATA),
-                    userId);
+            return mIPackageManager.getActivityInfo(activity,
+                    PACKAGE_MATCH_FLAGS | PackageManager.GET_META_DATA, userId);
         } catch (RemoteException e) {
             // Shouldn't happen.
             Slog.wtf(TAG, "RemoteException", e);
@@ -3799,8 +3791,7 @@ public class ShortcutService extends IShortcutService.Stub {
     List<PackageInfo> injectGetPackagesWithUninstalled(@UserIdInt int userId)
             throws RemoteException {
         final ParceledListSlice<PackageInfo> parceledList =
-                mIPackageManager.getInstalledPackages(
-                        PACKAGE_MATCH_FLAGS | PackageManager.MATCH_DISABLED_COMPONENTS, userId);
+                mIPackageManager.getInstalledPackages(PACKAGE_MATCH_FLAGS, userId);
         if (parceledList == null) {
             return Collections.emptyList();
         }
@@ -3833,6 +3824,41 @@ public class ShortcutService extends IShortcutService.Stub {
     private boolean isApplicationFlagSet(@NonNull String packageName, int userId, int flags) {
         final ApplicationInfo ai = injectApplicationInfoWithUninstalled(packageName, userId);
         return (ai != null) && ((ai.flags & flags) == flags);
+    }
+
+    // Due to b/38267327, ActivityInfo.enabled may not reflect the current state of the component
+    // and we need to check the enabled state via PackageManager.getComponentEnabledSetting.
+    private boolean isEnabled(@Nullable ActivityInfo ai, int userId) {
+        if (ai == null) {
+            return false;
+        }
+
+        int enabledFlag;
+        final long token = injectClearCallingIdentity();
+        try {
+            enabledFlag = mIPackageManager.getComponentEnabledSetting(
+                    ai.getComponentName(), userId);
+        } catch (RemoteException e) {
+            // Shouldn't happen.
+            Slog.wtf(TAG, "RemoteException", e);
+            return false;
+        } finally {
+            injectRestoreCallingIdentity(token);
+        }
+
+        if ((enabledFlag == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && ai.enabled)
+                || enabledFlag == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isSystem(@Nullable ActivityInfo ai) {
+        return (ai != null) && isSystem(ai.applicationInfo);
+    }
+
+    private static boolean isSystem(@Nullable ApplicationInfo ai) {
+        return (ai != null) && (ai.flags & SYSTEM_APP_MASK) != 0;
     }
 
     private static boolean isInstalled(@Nullable ApplicationInfo ai) {
@@ -3899,12 +3925,6 @@ public class ShortcutService extends IShortcutService.Stub {
         return intent;
     }
 
-    private static boolean isSystemApp(@Nullable final ApplicationInfo ai) {
-        final int systemAppMask =
-                ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
-        return ai != null && ((ai.flags & systemAppMask) != 0);
-    }
-
     /**
      * Same as queryIntentActivitiesAsUser, except it makes sure the package is installed,
      * and only returns exported activities.
@@ -3937,7 +3957,10 @@ public class ShortcutService extends IShortcutService.Stub {
         }
         // Make sure the package is installed.
         resolved.removeIf(ACTIVITY_NOT_INSTALLED);
-        resolved.removeIf(ACTIVITY_NOT_SYSTEM_NOR_ENABLED);
+        resolved.removeIf((ri) -> {
+            final ActivityInfo ai = ri.activityInfo;
+            return !isSystem(ai) && !isEnabled(ai, userId);
+        });
         if (exportedOnly) {
             resolved.removeIf(ACTIVITY_NOT_EXPORTED);
         }
@@ -3982,7 +4005,7 @@ public class ShortcutService extends IShortcutService.Stub {
     }
 
     /**
-     * Create a dummy "main activity" component name which is used to create a dynamic shortcut
+     * Create a placeholder "main activity" component name which is used to create a dynamic shortcut
      * with no main activity temporarily.
      */
     @NonNull

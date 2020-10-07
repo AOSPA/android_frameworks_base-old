@@ -33,7 +33,6 @@ import java.io.IOException;
 /** @hide **/
 public class ParsingUtils {
 
-    // TODO(b/135203078): Consolidate log tags
     public static final String TAG = "PackageParsing";
 
     @Nullable
@@ -62,7 +61,7 @@ public class ParsingUtils {
             return input.error("Bad element under " + parentTag + ": " + parser.getName());
         }
         Slog.w(TAG, "Unknown element under " + parentTag + ": "
-                + parser.getName() + " at " + pkg.getBaseCodePath() + " "
+                + parser.getName() + " at " + pkg.getBaseApkPath() + " "
                 + parser.getPositionDescription());
         XmlUtils.skipCurrentTag(parser);
         return input.success(null); // Type doesn't matter

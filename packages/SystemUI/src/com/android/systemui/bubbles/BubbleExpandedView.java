@@ -16,15 +16,12 @@
 
 package com.android.systemui.bubbles;
 
-import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.graphics.PixelFormat.TRANSPARENT;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.InsetsState.ITYPE_IME;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
-import static android.view.ViewRootImpl.sNewInsetsMode;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -34,6 +31,7 @@ import static com.android.systemui.bubbles.BubbleDebugConfig.DEBUG_BUBBLE_EXPAND
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_BUBBLES;
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME;
 
+import android.annotation.NonNull;
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
@@ -47,7 +45,6 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Color;
-import android.graphics.Insets;
 import android.graphics.Outline;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -76,6 +73,9 @@ import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.recents.TriangleShape;
 import com.android.systemui.statusbar.AlphaOptimizedButton;
+
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 
 /**
  * Container for the expanded bubble view, handles rendering the caret and settings icon.
@@ -160,7 +160,7 @@ public class BubbleExpandedView extends LinearLayout {
                     ActivityOptions options = ActivityOptions.makeCustomAnimation(getContext(),
                             0 /* enterResId */, 0 /* exitResId */);
                     options.setTaskAlwaysOnTop(true);
-                    options.setLaunchWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
+                    // Soptions.setLaunchWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
                     // Post to keep the lifecycle normal
                     post(() -> {
                         if (DEBUG_BUBBLE_EXPANDED_VIEW) {
@@ -299,14 +299,15 @@ public class BubbleExpandedView extends LinearLayout {
                 R.dimen.bubble_manage_button_height);
         mSettingsIcon = findViewById(R.id.settings_button);
 
-        mActivityView = new ActivityView(mContext, null /* attrs */, 0 /* defStyle */,
-                true /* singleTaskInstance */, false /* usePublicVirtualDisplay*/,
-                true /* disableSurfaceViewBackgroundLayer */);
+        mActivityView = new ActivityView.Builder(mContext)
+                .setSingleInstance(true)
+                .setDisableSurfaceViewBackgroundLayer(true)
+                .setUseTrustedDisplay(true)
+                .build();
 
         // Set ActivityView's alpha value as zero, since there is no view content to be shown.
         setContentVisibility(false);
 
-        mActivityViewContainer.setBackgroundColor(Color.WHITE);
         mActivityViewContainer.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
@@ -435,9 +436,11 @@ public class BubbleExpandedView extends LinearLayout {
     }
 
     void applyThemeAttrs() {
-        final TypedArray ta = mContext.obtainStyledAttributes(
-                new int[] {android.R.attr.dialogCornerRadius});
+        final TypedArray ta = mContext.obtainStyledAttributes(new int[] {
+                android.R.attr.dialogCornerRadius,
+                android.R.attr.colorBackgroundFloating});
         mCornerRadius = ta.getDimensionPixelSize(0, 0);
+        mActivityViewContainer.setBackgroundColor(ta.getColor(1, Color.WHITE));
         ta.recycle();
 
         if (mActivityView != null && ScreenDecorationsUtils.supportsRoundedCornersOnWindows(
@@ -458,26 +461,13 @@ public class BubbleExpandedView extends LinearLayout {
         mPointerView.setBackground(mPointerDrawable);
     }
 
-    /**
-     * Hides the IME if it's showing. This is currently done by dispatching a back press to the AV.
-     */
-    void hideImeIfVisible() {
-        if (mKeyboardVisible) {
-            performBackPressIfNeeded();
-        }
-    }
-
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         mKeyboardVisible = false;
         mNeedsNewHeight = false;
         if (mActivityView != null) {
-            if (sNewInsetsMode == NEW_INSETS_MODE_FULL) {
-                setImeWindowToDisplay(0, 0);
-            } else {
-                mActivityView.setForwardedInsets(Insets.of(0, 0, 0, 0));
-            }
+            setImeWindowToDisplay(0, 0);
         }
         if (DEBUG_BUBBLE_EXPANDED_VIEW) {
             Log.d(TAG, "onDetachedFromWindow: bubble=" + getBubbleKey());
@@ -527,13 +517,7 @@ public class BubbleExpandedView extends LinearLayout {
                     insets.getDisplayCutout() != null
                             ? insets.getDisplayCutout().getSafeInsetBottom()
                             : 0);
-            final int insetsBottom = Math.max(activityViewBottom - keyboardTop, 0);
-
-            if (sNewInsetsMode == NEW_INSETS_MODE_FULL) {
-                setImeWindowToDisplay(getWidth(), insetsBottom);
-            } else {
-                mActivityView.setForwardedInsets(Insets.of(0, 0, 0, insetsBottom));
-            }
+            setImeWindowToDisplay(getWidth(), Math.max(activityViewBottom - keyboardTop, 0));
         }
     }
 
@@ -602,14 +586,17 @@ public class BubbleExpandedView extends LinearLayout {
      */
     void update(Bubble bubble) {
         if (DEBUG_BUBBLE_EXPANDED_VIEW) {
-            Log.d(TAG, "update: bubble=" + (bubble != null ? bubble.getKey() : "null"));
+            Log.d(TAG, "update: bubble=" + bubble);
+        }
+        if (mStackView == null) {
+            Log.w(TAG, "Stack is null for bubble: " + bubble);
+            return;
         }
         boolean isNew = mBubble == null || didBackingContentChange(bubble);
         if (isNew || bubble != null && bubble.getKey().equals(mBubble.getKey())) {
             mBubble = bubble;
             mSettingsIcon.setContentDescription(getResources().getString(
                     R.string.bubbles_settings_button_description, bubble.getAppName()));
-
             mSettingsIcon.setAccessibilityDelegate(
                     new AccessibilityDelegate() {
                         @Override
@@ -816,5 +803,16 @@ public class BubbleExpandedView extends LinearLayout {
             return mActivityView.getVirtualDisplay();
         }
         return null;
+    }
+
+    /**
+     * Description of current expanded view state.
+     */
+    public void dump(
+            @NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
+        pw.print("BubbleExpandedView");
+        pw.print("  taskId:               "); pw.println(mTaskId);
+        pw.print("  activityViewStatus:   "); pw.println(mActivityViewStatus);
+        pw.print("  stackView:            "); pw.println(mStackView);
     }
 }

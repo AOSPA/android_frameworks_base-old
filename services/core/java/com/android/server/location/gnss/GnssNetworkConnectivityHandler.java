@@ -88,7 +88,7 @@ class GnssNetworkConnectivityHandler {
 
     // Default time limit in milliseconds for the ConnectivityManager to find a suitable
     // network with SUPL connectivity or report an error.
-    private static final int SUPL_NETWORK_REQUEST_TIMEOUT_MILLIS = 10 * 1000;
+    private static final int SUPL_NETWORK_REQUEST_TIMEOUT_MILLIS = 20 * 1000;
 
     private static final int HASH_MAP_INITIAL_CAPACITY_TO_TRACK_CONNECTED_NETWORKS = 5;
 
@@ -518,7 +518,7 @@ class GnssNetworkConnectivityHandler {
 
         if (mAGpsDataConnectionState == AGPS_DATA_CONNECTION_OPENING) {
             if (apn == null) {
-                // assign a dummy value in the case of C2K as otherwise we will have a runtime
+                // assign a placeholder value in the case of C2K as otherwise we will have a runtime
                 // exception in the following call to native_agps_data_conn_open
                 apn = "dummy-apn";
             }

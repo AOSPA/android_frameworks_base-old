@@ -23,10 +23,11 @@ import static android.app.ActivityManager.USER_OP_ERROR_IS_SYSTEM;
 import static android.app.ActivityManager.USER_OP_ERROR_RELATED_USERS_CANNOT_STOP;
 import static android.app.ActivityManager.USER_OP_IS_CURRENT;
 import static android.app.ActivityManager.USER_OP_SUCCESS;
-import static android.app.ActivityManagerInternal.ALLOW_ALL_PROFILE_PERMISSIONS_IN_PROFILE;
+import static android.app.ActivityManagerInternal.ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_FULL;
+import static android.app.ActivityManagerInternal.ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_NON_FULL;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
-import static android.app.ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE;
+import static android.app.ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE_OR_FULL;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
 
@@ -423,7 +424,7 @@ class UserController implements Handler.Callback {
         for (Integer userId : mUserLru) {
             UserState uss = mStartedUsers.get(userId);
             if (uss == null) {
-                // Shouldn't happen, but be sane if it does.
+                // Shouldn't happen, but recover if it does.
                 continue;
             }
             if (uss.state == UserState.STATE_STOPPING
@@ -988,6 +989,8 @@ class UserController implements Handler.Callback {
         final ArrayList<IStopUserCallback> stopCallbacks;
         final ArrayList<KeyEvictedCallback> keyEvictedCallbacks;
         int userIdToLock = userId;
+        // Must get a reference to UserInfo before it's removed
+        final UserInfo userInfo = getUserInfo(userId);
         synchronized (mLock) {
             stopCallbacks = new ArrayList<>(uss.mStopCallbacks);
             keyEvictedCallbacks = new ArrayList<>(uss.mKeyEvictedCallbacks);
@@ -1030,8 +1033,8 @@ class UserController implements Handler.Callback {
         if (stopped) {
             mInjector.systemServiceManagerCleanupUser(userId);
             mInjector.stackSupervisorRemoveUser(userId);
+
             // Remove the user if it is ephemeral.
-            UserInfo userInfo = getUserInfo(userId);
             if (userInfo.isEphemeral() && !userInfo.preCreated) {
                 mInjector.getUserManager().removeUserEvenWhenDisallowed(userId);
             }
@@ -1630,7 +1633,7 @@ class UserController implements Handler.Callback {
             UserInfo currentUserInfo = getUserInfo(currentUserId);
             Pair<UserInfo, UserInfo> userNames = new Pair<>(currentUserInfo, targetUserInfo);
             mUiHandler.removeMessages(START_USER_SWITCH_UI_MSG);
-            mUiHandler.sendMessage(mHandler.obtainMessage(
+            mUiHandler.sendMessage(mUiHandler.obtainMessage(
                     START_USER_SWITCH_UI_MSG, userNames));
         } else {
             mHandler.removeMessages(START_USER_SWITCH_FG_MSG);
@@ -1891,8 +1894,7 @@ class UserController implements Handler.Callback {
         if (callingUid != 0 && callingUid != SYSTEM_UID) {
             final boolean allow;
             final boolean isSameProfileGroup = isSameProfileGroup(callingUserId, targetUserId);
-            if (mInjector.isCallerRecents(callingUid)
-                    && isSameProfileGroup(callingUserId, targetUserId)) {
+            if (mInjector.isCallerRecents(callingUid) && isSameProfileGroup) {
                 // If the caller is Recents and the caller has ownership of the profile group,
                 // we then allow it to access its profiles.
                 allow = true;
@@ -1910,11 +1912,12 @@ class UserController implements Handler.Callback {
                     callingUid, -1, true) != PackageManager.PERMISSION_GRANTED) {
                 // If the caller does not have either permission, they are always doomed.
                 allow = false;
-            } else if (allowMode == ALLOW_NON_FULL) {
+            } else if (allowMode == ALLOW_NON_FULL
+                    || allowMode == ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_NON_FULL) {
                 // We are blanket allowing non-full access, you lucky caller!
                 allow = true;
-            } else if (allowMode == ALLOW_NON_FULL_IN_PROFILE
-                        || allowMode == ALLOW_ALL_PROFILE_PERMISSIONS_IN_PROFILE) {
+            } else if (allowMode == ALLOW_NON_FULL_IN_PROFILE_OR_FULL
+                        || allowMode == ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_FULL) {
                 // We may or may not allow this depending on whether the two users are
                 // in the same profile.
                 allow = isSameProfileGroup;
@@ -1941,12 +1944,15 @@ class UserController implements Handler.Callback {
                     builder.append("; this requires ");
                     builder.append(INTERACT_ACROSS_USERS_FULL);
                     if (allowMode != ALLOW_FULL_ONLY) {
-                        if (allowMode == ALLOW_NON_FULL || isSameProfileGroup) {
+                        if (allowMode == ALLOW_NON_FULL
+                                || allowMode == ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_NON_FULL
+                                || isSameProfileGroup) {
                             builder.append(" or ");
                             builder.append(INTERACT_ACROSS_USERS);
                         }
                         if (isSameProfileGroup
-                                && allowMode == ALLOW_ALL_PROFILE_PERMISSIONS_IN_PROFILE) {
+                                && (allowMode == ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_FULL
+                                || allowMode == ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_NON_FULL)) {
                             builder.append(" or ");
                             builder.append(INTERACT_ACROSS_PROFILES);
                         }
@@ -1973,7 +1979,8 @@ class UserController implements Handler.Callback {
     private boolean canInteractWithAcrossProfilesPermission(
             int allowMode, boolean isSameProfileGroup, int callingPid, int callingUid,
             String callingPackage) {
-        if (allowMode != ALLOW_ALL_PROFILE_PERMISSIONS_IN_PROFILE) {
+        if (allowMode != ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_FULL
+                && allowMode != ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_NON_FULL) {
             return false;
         }
         if (!isSameProfileGroup) {
@@ -2883,18 +2890,23 @@ class UserController implements Handler.Callback {
         }
 
         void installEncryptionUnawareProviders(@UserIdInt int userId) {
-            mService.installEncryptionUnawareProviders(userId);
+            mService.mCpHelper.installEncryptionUnawareProviders(userId);
         }
 
         void showUserSwitchingDialog(UserInfo fromUser, UserInfo toUser,
                 String switchingFromSystemUserMessage, String switchingToSystemUserMessage) {
-            if (!mService.mContext.getPackageManager()
+            if (mService.mContext.getPackageManager()
                     .hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
-                final Dialog d = new UserSwitchingDialog(mService, mService.mContext, fromUser,
-                        toUser, true /* above system */, switchingFromSystemUserMessage,
-                        switchingToSystemUserMessage);
-                d.show();
+                // config_customUserSwitchUi is set to true on Automotive as CarSystemUI is
+                // responsible to show the UI; OEMs should not change that, but if they do, we
+                // should at least warn the user...
+                Slog.w(TAG, "Showing user switch dialog on UserController, it could cause a race "
+                        + "condition if it's shown by CarSystemUI as well");
             }
+            final Dialog d = new UserSwitchingDialog(mService, mService.mContext, fromUser,
+                    toUser, true /* above system */, switchingFromSystemUserMessage,
+                    switchingToSystemUserMessage);
+            d.show();
         }
 
         void reportGlobalUsageEventLocked(int event) {

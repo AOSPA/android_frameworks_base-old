@@ -83,6 +83,7 @@ import androidx.annotation.VisibleForTesting;
 import com.android.internal.util.Preconditions;
 import com.android.systemui.RegionInterceptingFrameLayout.RegionInterceptableView;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.qs.SecureSetting;
 import com.android.systemui.tuner.TunerService;
@@ -92,19 +93,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * An overlay that draws screen decorations in software (e.g for rounded corners or display cutout)
  * for antialiasing and emulation purposes.
  */
-@Singleton
+@SysUISingleton
 public class ScreenDecorations extends SystemUI implements Tunable {
     private static final boolean DEBUG = false;
     private static final String TAG = "ScreenDecorations";
 
     public static final String SIZE = "sysui_rounded_size";
     public static final String PADDING = "sysui_rounded_content_padding";
+    // Provide a way for factory to disable ScreenDecorations to run the Display tests.
+    private static final boolean DEBUG_DISABLE_SCREEN_DECORATIONS =
+            SystemProperties.getBoolean("debug.disable_screen_decorations", false);
     private static final boolean DEBUG_SCREENSHOT_ROUNDED_CORNERS =
             SystemProperties.getBoolean("debug.screenshot_rounded_corners", false);
 
@@ -208,6 +211,10 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
     @Override
     public void start() {
+        if (DEBUG_DISABLE_SCREEN_DECORATIONS) {
+            Log.i(TAG, "ScreenDecorations is disabled");
+            return;
+        }
         mHandler = startHandlerThread();
         mHandler.post(this::startOnScreenDecorationsThread);
     }

@@ -1214,12 +1214,16 @@ public class ApnSetting implements Parcelable {
         return false;
     }
 
-    // TODO - if we have this function we should also have hashCode.
-    // Also should handle changes in type order and perhaps case-insensitivity.
+    @Override
+    public int hashCode() {
+        return Objects.hash(mApnName, mProxyAddress, mProxyPort, mMmsc, mMmsProxyAddress,
+                mMmsProxyPort, mUser, mPassword, mAuthType, mApnTypeBitmask, mId, mOperatorNumeric,
+                mProtocol, mRoamingProtocol, mMtu, mCarrierEnabled, mNetworkTypeBitmask, mProfileId,
+                mPersistent, mMaxConns, mWaitTime, mMaxConnsTime, mMvnoType, mMvnoMatchData,
+                mApnSetId, mCarrierId, mSkip464Xlat);
+    }
 
-    /**
-     * @hide
-     */
+    @Override
     public boolean equals(Object o) {
         if (o instanceof ApnSetting == false) {
             return false;
@@ -1643,7 +1647,7 @@ public class ApnSetting implements Parcelable {
      *
      * <pre><code>
      * // Create an MMS proxy address with a hostname. A network might not be
-     * // available, so supply a dummy (0.0.0.0) IPv4 address to avoid DNS lookup.
+     * // available, so supply a placeholder (0.0.0.0) IPv4 address to avoid DNS lookup.
      * String host = "mms.example.com";
      * byte[] ipAddress = new byte[4];
      * InetAddress mmsProxy;
@@ -1828,7 +1832,8 @@ public class ApnSetting implements Parcelable {
          * {@link java.net.InetAddress#getAllByName getAllByName()} require DNS for hostname
          * resolution. To avoid this requirement when setting a hostname, call
          * {@link java.net.InetAddress#getByAddress(java.lang.String, byte[])} with both the
-         * hostname and a dummy IP address. See {@link ApnSetting.Builder above} for an example.
+         * hostname and a placeholder IP address. See {@link ApnSetting.Builder above} for an
+         * example.
          *
          * @param proxy the proxy address to set for the APN
          * @deprecated use {@link #setProxyAddress(String)} instead.
@@ -1882,7 +1887,8 @@ public class ApnSetting implements Parcelable {
          * {@link java.net.InetAddress#getAllByName getAllByName()} require DNS for hostname
          * resolution. To avoid this requirement when setting a hostname, call
          * {@link java.net.InetAddress#getByAddress(java.lang.String, byte[])} with both the
-         * hostname and a dummy IP address. See {@link ApnSetting.Builder above} for an example.
+         * hostname and a placeholder IP address. See {@link ApnSetting.Builder above} for an
+         * example.
          *
          * @param mmsProxy the MMS proxy address to set for the APN
          * @deprecated use {@link #setMmsProxyAddress(String)} instead.

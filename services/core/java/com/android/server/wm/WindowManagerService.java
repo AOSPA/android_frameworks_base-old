@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
+import static android.Manifest.permission.INPUT_CONSUMER;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
 import static android.Manifest.permission.MANAGE_APP_TOKENS;
@@ -35,6 +36,7 @@ import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER
 import static android.content.pm.PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT;
 import static android.content.pm.PackageManager.FEATURE_PC;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.os.IInputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.Process.INVALID_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.myPid;
@@ -83,22 +85,22 @@ import static android.view.WindowManagerGlobal.RELAYOUT_RES_BLAST_SYNC;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BOOT;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_IME;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_KEEP_SCREEN_ON;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_SCREEN_ON;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STARTING_WINDOW;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_MOVEMENT;
+import static com.android.internal.protolog.ProtoLogGroup.WM_ERROR;
+import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
 import static com.android.internal.util.LatencyTracker.ACTION_ROTATE_SCREEN;
 import static com.android.server.LockGuard.INDEX_WINDOW;
 import static com.android.server.LockGuard.installLock;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_BOOT;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_FOCUS;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_IME;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_KEEP_SCREEN_ON;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_SCREEN_ON;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_STARTING_WINDOW;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_WINDOW_MOVEMENT;
-import static com.android.server.wm.ProtoLogGroup.WM_ERROR;
-import static com.android.server.wm.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -257,6 +259,7 @@ import android.view.WindowManager.RemoveContentMode;
 import android.view.WindowManager.TransitionType;
 import android.view.WindowManagerGlobal;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
+import android.window.ClientWindowFrames;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
@@ -265,6 +268,8 @@ import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
 import com.android.internal.policy.KeyInterceptionInfo;
+import com.android.internal.protolog.ProtoLogImpl;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.LatencyTracker;
@@ -281,8 +286,6 @@ import com.android.server.input.InputManagerService;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.policy.WindowManagerPolicy.ScreenOffListener;
 import com.android.server.power.ShutdownThread;
-import com.android.server.protolog.ProtoLogImpl;
-import com.android.server.protolog.common.ProtoLog;
 import com.android.server.utils.PriorityDump;
 import com.android.server.wm.utils.DeviceConfigInterface;
 
@@ -368,9 +371,6 @@ public class WindowManagerService extends IWindowManager.Stub
     // proceding with safe mode detection.
     private static final int INPUT_DEVICES_READY_FOR_SAFE_MODE_DETECTION_TIMEOUT_MILLIS = 1000;
 
-    // Default input dispatching timeout in nanoseconds.
-    static final long DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS = 5000 * 1000000L;
-
     // Poll interval in milliseconds for watching boot animation finished.
     // TODO(b/159045990) Migrate to SystemService.waitForState with dedicated thread.
     private static final int BOOT_ANIMATION_POLL_INTERVAL = 50;
@@ -379,8 +379,11 @@ public class WindowManagerService extends IWindowManager.Stub
     private static final String BOOT_ANIMATION_SERVICE = "bootanim";
 
     static final int UPDATE_FOCUS_NORMAL = 0;
+    /** Caller will assign layers */
     static final int UPDATE_FOCUS_WILL_ASSIGN_LAYERS = 1;
+    /** Caller is performing surface placement */
     static final int UPDATE_FOCUS_PLACING_SURFACES = 2;
+    /** Caller will performSurfacePlacement */
     static final int UPDATE_FOCUS_WILL_PLACE_SURFACES = 3;
     /** Indicates we are removing the focused window when updating the focus. */
     static final int UPDATE_FOCUS_REMOVING_FOCUS = 4;
@@ -398,23 +401,22 @@ public class WindowManagerService extends IWindowManager.Stub
     private static final boolean ALWAYS_KEEP_CURRENT = true;
 
     /**
-     * If set, new app transition framework which supports setting animation on any element
-     * in a surface is used.
-     * <p>
-     * Only set this to non-zero once the new app transition framework is productionalized.
-     * </p>
+     * Restrict ability of activities overriding transition animation in a way such that
+     * an activity can do it only when the transition happens within a same task.
+     *
+     * @see android.app.Activity#overridePendingTransition(int, int)
      */
-    private static final String HIERARCHICAL_ANIMATIONS_PROPERTY =
-            "persist.wm.hierarchical_animations";
+    private static final String DISABLE_CUSTOM_TASK_ANIMATION_PROPERTY =
+            "persist.wm.disable_custom_task_animation";
+
+    /**
+     * @see #DISABLE_CUSTOM_TASK_ANIMATION_PROPERTY
+     */
+    static boolean sDisableCustomTaskAnimationProperty =
+            SystemProperties.getBoolean(DISABLE_CUSTOM_TASK_ANIMATION_PROPERTY, false);
 
     private static final String DISABLE_TRIPLE_BUFFERING_PROPERTY =
             "ro.sf.disable_triple_buffer";
-
-    /**
-     * @see #HIERARCHICAL_ANIMATIONS_PROPERTY
-     */
-    static boolean sHierarchicalAnimations =
-            SystemProperties.getBoolean(HIERARCHICAL_ANIMATIONS_PROPERTY, true);
 
     static boolean sEnableTripleBuffering = !SystemProperties.getBoolean(
             DISABLE_TRIPLE_BUFFERING_PROPERTY, false);
@@ -936,7 +938,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private void setShadowRenderer() {
         mRenderShadowsInCompositor = Settings.Global.getInt(mContext.getContentResolver(),
-                DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR, 0) != 0;
+                DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR, 1) != 0;
     }
 
     PowerManager mPowerManager;
@@ -1413,7 +1415,8 @@ public class WindowManagerService extends IWindowManager.Stub
             if (!displayContent.hasAccess(session.mUid)) {
                 ProtoLog.w(WM_ERROR,
                         "Attempted to add window to a display for which the application "
-                                + "does not have access: %d.  Aborting.", displayId);
+                                + "does not have access: %d.  Aborting.",
+                        displayContent.getDisplayId());
                 return WindowManagerGlobal.ADD_INVALID_DISPLAY;
             }
 
@@ -1854,7 +1857,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
         // We use the visible frame, because we want the animation to morph the window from what
         // was visible to the user to the final destination of the new window.
-        Rect frame = replacedWindow.getVisibleFrameLw();
+        Rect frame = replacedWindow.getVisibleFrame();
         // We treat this as if this activity was opening, so we can trigger the app transition
         // animation and piggy-back on existing transition animation infrastructure.
         final DisplayContent dc = activity.getDisplayContent();
@@ -2067,21 +2070,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    public void getWindowDisplayFrame(Session session, IWindow client,
-            Rect outDisplayFrame) {
-        synchronized (mGlobalLock) {
-            WindowState win = windowForClientLocked(session, client, false);
-            if (win == null) {
-                outDisplayFrame.setEmpty();
-                return;
-            }
-            outDisplayFrame.set(win.getDisplayFrameLw());
-            if (win.inSizeCompatMode()) {
-                outDisplayFrame.scale(win.mInvGlobalScale);
-            }
-        }
-    }
-
     public void onRectangleOnScreenRequested(IBinder token, Rect rectangle) {
         synchronized (mGlobalLock) {
             if (mAccessibilityController != null) {
@@ -2117,9 +2105,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     public int relayoutWindow(Session session, IWindow client, int seq, LayoutParams attrs,
             int requestedWidth, int requestedHeight, int viewVisibility, int flags,
-            long frameNumber, Rect outFrame, Rect outContentInsets,
-            Rect outVisibleInsets, Rect outStableInsets, Rect outBackdropFrame,
-            DisplayCutout.ParcelableWrapper outCutout, MergedConfiguration mergedConfiguration,
+            long frameNumber, ClientWindowFrames outFrames, MergedConfiguration mergedConfiguration,
             SurfaceControl outSurfaceControl, InsetsState outInsetsState,
             InsetsSourceControl[] outActiveControls, Point outSurfaceSize,
             SurfaceControl outBLASTSurfaceControl) {
@@ -2388,14 +2374,10 @@ public class WindowManagerService extends IWindowManager.Stub
             if (win.mActivityRecord != null) {
                 win.mActivityRecord.updateReportedVisibilityLocked();
             }
-            if (winAnimator.mReportSurfaceResized) {
-                winAnimator.mReportSurfaceResized = false;
-                result |= WindowManagerGlobal.RELAYOUT_RES_SURFACE_RESIZED;
-            }
             if (displayPolicy.areSystemBarsForcedShownLw(win)) {
                 result |= WindowManagerGlobal.RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS;
             }
-            if (!win.isGoneForLayoutLw()) {
+            if (!win.isGoneForLayout()) {
                 win.mResizedWhileGone = false;
             }
 
@@ -2421,18 +2403,14 @@ public class WindowManagerService extends IWindowManager.Stub
             // The last inset values represent the last client state
             win.updateLastInsetValues();
 
-            win.getCompatFrame(outFrame);
-            win.getInsetsForRelayout(outContentInsets, outVisibleInsets,
-                    outStableInsets);
-            outCutout.set(win.getWmDisplayCutout().getDisplayCutout());
-            outBackdropFrame.set(win.getBackdropFrame(win.getFrameLw()));
+            win.fillClientWindowFrames(outFrames);
             outInsetsState.set(win.getInsetsState(), win.isClientLocal());
             if (DEBUG) {
                 Slog.v(TAG_WM, "Relayout given client " + client.asBinder()
                         + ", requestedWidth=" + requestedWidth
                         + ", requestedHeight=" + requestedHeight
                         + ", viewVisibility=" + viewVisibility
-                        + "\nRelayout returning frame=" + outFrame
+                        + "\nRelayout returning frame=" + outFrames.frame
                         + ", surface=" + outSurfaceControl);
             }
 
@@ -2442,8 +2420,7 @@ public class WindowManagerService extends IWindowManager.Stub
             result |= mInTouchMode ? WindowManagerGlobal.RELAYOUT_RES_IN_TOUCH_MODE : 0;
 
             if (DEBUG_LAYOUT) {
-                Slog.v(TAG_WM,
-                        "Relayout complete " + win + ": outFrame=" + outFrame.toShortString());
+                Slog.v(TAG_WM, "Relayout complete " + win + ": outFrames=" + outFrames);
             }
             win.mInRelayout = false;
 
@@ -2889,11 +2866,6 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public WindowManagerPolicy.WindowState getInputMethodWindowLw() {
-        return mRoot.getCurrentInputMethodWindow();
-    }
-
-    @Override
     public void notifyKeyguardTrustedChanged() {
         mAtmInternal.notifyKeyguardTrustedChanged();
     }
@@ -2935,8 +2907,8 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mGlobalLock) {
             final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
             if (displayContent != null && mRoot.getTopChild() != displayContent) {
-                displayContent.positionDisplayAt(WindowContainer.POSITION_TOP,
-                        true /* includingParents */);
+                displayContent.getParent().positionChildAt(WindowContainer.POSITION_TOP,
+                        displayContent, true /* includingParents */);
             }
         }
         syncInputTransactions();
@@ -3100,6 +3072,9 @@ public class WindowManagerService extends IWindowManager.Stub
     public void dismissKeyguard(IKeyguardDismissCallback callback, CharSequence message) {
         if (!checkCallingPermission(permission.CONTROL_KEYGUARD, "dismissKeyguard")) {
             throw new SecurityException("Requires CONTROL_KEYGUARD permission");
+        }
+        if (mAtmInternal.isDreaming()) {
+            mAtmService.mStackSupervisor.wakeUp("dismissKeyguard");
         }
         synchronized (mGlobalLock) {
             mPolicy.dismissKeyguardLw(callback, message);
@@ -3635,7 +3610,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             if (SHOW_VERBOSE_TRANSACTIONS) Slog.i(TAG_WM, ">>> showStrictModeViolation");
-            // TODO: Modify this to use the surface trace once it is not going crazy.
+            // TODO: Modify this to use the surface trace once it is not going baffling.
             // b/31532461
             // TODO(multi-display): support multiple displays
             if (mStrictModeFlash == null) {
@@ -4757,13 +4732,30 @@ public class WindowManagerService extends IWindowManager.Stub
         return false;
     }
 
+    void reportFocusChanged(IBinder oldToken, IBinder newToken) {
+        WindowState lastFocus;
+        WindowState newFocus;
+        synchronized (mGlobalLock) {
+            lastFocus = mInputToWindowMap.get(oldToken);
+            newFocus = mInputToWindowMap.get(newToken);
+            ProtoLog.i(WM_DEBUG_FOCUS_LIGHT, "Focus changing: %s -> %s", lastFocus, newFocus);
+        }
+
+        if (newFocus != null) {
+            newFocus.reportFocusChangedSerialized(true);
+            notifyFocusChanged();
+        }
+
+        if (lastFocus != null) {
+            lastFocus.reportFocusChangedSerialized(false);
+        }
+    }
+
     // -------------------------------------------------------------
     // Async Handler
     // -------------------------------------------------------------
 
     final class H extends android.os.Handler {
-        public static final int REPORT_FOCUS_CHANGE = 2;
-        public static final int REPORT_LOSING_FOCUS = 3;
         public static final int WINDOW_FREEZE_TIMEOUT = 11;
 
         public static final int PERSIST_ANIMATION_SCALE = 14;
@@ -4816,73 +4808,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 Slog.v(TAG_WM, "handleMessage: entry what=" + msg.what);
             }
             switch (msg.what) {
-                case REPORT_FOCUS_CHANGE: {
-                    final DisplayContent displayContent = (DisplayContent) msg.obj;
-                    WindowState lastFocus;
-                    WindowState newFocus;
-
-                    AccessibilityController accessibilityController = null;
-
-                    synchronized (mGlobalLock) {
-                        if (mAccessibilityController != null) {
-                            accessibilityController = mAccessibilityController;
-                        }
-
-                        lastFocus = displayContent.mLastFocus;
-                        newFocus = displayContent.mCurrentFocus;
-                        if (lastFocus == newFocus) {
-                            // Focus is not changing, so nothing to do.
-                            return;
-                        }
-                        displayContent.mLastFocus = newFocus;
-                        ProtoLog.i(WM_DEBUG_FOCUS_LIGHT, "Focus moving from %s"
-                                        + " to %s displayId=%d", lastFocus, newFocus,
-                                displayContent.getDisplayId());
-                        if (newFocus != null && lastFocus != null && !newFocus.isDisplayedLw()) {
-                            ProtoLog.i(WM_DEBUG_FOCUS_LIGHT, "Delaying loss of focus...");
-                            displayContent.mLosingFocus.add(lastFocus);
-                            lastFocus = null;
-                        }
-                    }
-
-                    // First notify the accessibility manager for the change so it has
-                    // the windows before the newly focused one starts firing events.
-                    if (accessibilityController != null) {
-                        accessibilityController.onWindowFocusChangedNotLocked(
-                                displayContent.getDisplayId());
-                    }
-
-                    if (newFocus != null) {
-                        ProtoLog.i(WM_DEBUG_FOCUS_LIGHT, "Gaining focus: %s", newFocus);
-                        newFocus.reportFocusChangedSerialized(true);
-                        notifyFocusChanged();
-                    }
-
-                    if (lastFocus != null) {
-                        ProtoLog.i(WM_DEBUG_FOCUS_LIGHT, "Losing focus: %s", lastFocus);
-                        lastFocus.reportFocusChangedSerialized(false);
-                    }
-                    break;
-                }
-
-                case REPORT_LOSING_FOCUS: {
-                    final DisplayContent displayContent = (DisplayContent) msg.obj;
-                    ArrayList<WindowState> losers;
-
-                    synchronized (mGlobalLock) {
-                        losers = displayContent.mLosingFocus;
-                        displayContent.mLosingFocus = new ArrayList<>();
-                    }
-
-                    final int N = losers.size();
-                    for (int i = 0; i < N; i++) {
-                        ProtoLog.i(WM_DEBUG_FOCUS_LIGHT, "Losing delayed focus: %s",
-                                losers.get(i));
-                        losers.get(i).reportFocusChangedSerialized(false);
-                    }
-                    break;
-                }
-
                 case WINDOW_FREEZE_TIMEOUT: {
                     final DisplayContent displayContent = (DisplayContent) msg.obj;
                     synchronized (mGlobalLock) {
@@ -5527,7 +5452,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     // Window has been removed or hidden; no draw will now happen, so stop waiting.
                     ProtoLog.w(WM_DEBUG_SCREEN_ON, "Aborted waiting for drawn: %s", win);
                     container.mWaitingForDrawn.remove(win);
-                } else if (win.hasDrawnLw()) {
+                } else if (win.hasDrawn()) {
                     // Window is now drawn (and shown).
                     ProtoLog.d(WM_DEBUG_SCREEN_ON, "Window drawn win=%s", win);
                     container.mWaitingForDrawn.remove(win);
@@ -5835,19 +5760,6 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void setPipVisibility(boolean visible) {
-        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
-                != PackageManager.PERMISSION_GRANTED) {
-            throw new SecurityException("Caller does not hold permission "
-                    + android.Manifest.permission.STATUS_BAR);
-        }
-
-        synchronized (mGlobalLock) {
-            mPolicy.setPipVisibilityLw(visible);
-        }
-    }
-
-    @Override
     public void statusBarVisibilityChanged(int displayId, int visibility) {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -5917,6 +5829,11 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public void createInputConsumer(IBinder token, String name, int displayId,
             InputChannel inputChannel) {
+        if (!mAtmInternal.isCallerRecents(Binder.getCallingUid())
+                && mContext.checkCallingOrSelfPermission(INPUT_CONSUMER) != PERMISSION_GRANTED) {
+            throw new SecurityException("createInputConsumer requires INPUT_CONSUMER permission");
+        }
+
         synchronized (mGlobalLock) {
             DisplayContent display = mRoot.getDisplayContent(displayId);
             if (display != null) {
@@ -5928,6 +5845,11 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public boolean destroyInputConsumer(String name, int displayId) {
+        if (!mAtmInternal.isCallerRecents(Binder.getCallingUid())
+                && mContext.checkCallingOrSelfPermission(INPUT_CONSUMER) != PERMISSION_GRANTED) {
+            throw new SecurityException("destroyInputConsumer requires INPUT_CONSUMER permission");
+        }
+
         synchronized (mGlobalLock) {
             DisplayContent display = mRoot.getDisplayContent(displayId);
             if (display != null) {
@@ -7401,7 +7323,7 @@ public class WindowManagerService extends IWindowManager.Stub
             synchronized (mGlobalLock) {
                 WindowState windowState = mWindowMap.get(token);
                 if (windowState != null) {
-                    outBounds.set(windowState.getFrameLw());
+                    outBounds.set(windowState.getFrame());
                 } else {
                     outBounds.setEmpty();
                 }
@@ -8044,9 +7966,11 @@ public class WindowManagerService extends IWindowManager.Stub
             return;
         }
 
+        ProtoLog.i(WM_DEBUG_FOCUS_LIGHT, "onPointerDownOutsideFocusLocked called on %s",
+                touchedWindow);
         final DisplayContent displayContent = touchedWindow.getDisplayContent();
         if (!displayContent.isOnTop()) {
-            displayContent.positionDisplayAt(WindowContainer.POSITION_TOP,
+            displayContent.getParent().positionChildAt(WindowContainer.POSITION_TOP, displayContent,
                     true /* includingParents */);
         }
         handleTaskFocusChange(touchedWindow.getTask());
@@ -8072,10 +7996,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         }
 
-        try {
-            mActivityTaskManager.setFocusedTask(task.mTaskId);
-        } catch (RemoteException e) {
-        }
+        mAtmService.setFocusedTask(task.mTaskId);
     }
 
     /**
@@ -8085,16 +8006,17 @@ public class WindowManagerService extends IWindowManager.Stub
      * Used by WindowlessWindowManager to enable input on SurfaceControl embedded
      * views.
      */
-    void grantInputChannel(int callingUid, int callingPid, int displayId, SurfaceControl surface,
-            IWindow window, IBinder hostInputToken, int flags, int privateFlags, int type,
-            InputChannel outInputChannel) {
+    void grantInputChannel(Session session, int callingUid, int callingPid, int displayId,
+                           SurfaceControl surface, IWindow window, IBinder hostInputToken,
+                           int flags, int privateFlags, int type, InputChannel outInputChannel) {
         final InputApplicationHandle applicationHandle;
         final String name;
         final InputChannel clientChannel;
         synchronized (mGlobalLock) {
             EmbeddedWindowController.EmbeddedWindow win =
-                    new EmbeddedWindowController.EmbeddedWindow(this, window,
-                            mInputToWindowMap.get(hostInputToken), callingUid, callingPid, type);
+                    new EmbeddedWindowController.EmbeddedWindow(session, this, window,
+                            mInputToWindowMap.get(hostInputToken), callingUid, callingPid, type,
+                            displayId);
             clientChannel = win.openInputChannel();
             mEmbeddedWindowController.add(clientChannel.getToken(), win);
             applicationHandle = win.getApplicationHandle();
@@ -8109,20 +8031,19 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private void updateInputChannel(IBinder channelToken, int callingUid, int callingPid,
-            int displayId, SurfaceControl surface, String name,
-            InputApplicationHandle applicationHandle, int flags, int privateFlags, int type,
-            Region region) {
+                                    int displayId, SurfaceControl surface, String name,
+                                    InputApplicationHandle applicationHandle, int flags,
+                                    int privateFlags, int type, Region region) {
         InputWindowHandle h = new InputWindowHandle(applicationHandle, displayId);
         h.token = channelToken;
         h.name = name;
 
         final int sanitizedFlags = flags & (LayoutParams.FLAG_NOT_TOUCHABLE
-                | LayoutParams.FLAG_SLIPPERY);
+                | LayoutParams.FLAG_SLIPPERY | LayoutParams.FLAG_NOT_FOCUSABLE);
         h.layoutParamsFlags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | sanitizedFlags;
         h.layoutParamsType = type;
-        h.dispatchingTimeoutNanos = DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
-        h.canReceiveKeys = false;
-        h.hasFocus = false;
+        h.dispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
+        h.focusable = (flags & LayoutParams.FLAG_NOT_FOCUSABLE) == 0;
         h.hasWallpaper = false;
         h.paused = false;
 
@@ -8306,6 +8227,77 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
+        }
+    }
+
+    void grantEmbeddedWindowFocus(Session session, IBinder targetInputToken, boolean grantFocus) {
+        synchronized (mGlobalLock) {
+            final EmbeddedWindowController.EmbeddedWindow embeddedWindow =
+                    mEmbeddedWindowController.get(targetInputToken);
+            if (embeddedWindow == null) {
+                Slog.e(TAG, "Embedded window not found");
+                return;
+            }
+            if (embeddedWindow.mSession != session) {
+                Slog.e(TAG, "Window not in session:" + session);
+                return;
+            }
+            SurfaceControl.Transaction t = mTransactionFactory.get();
+            final int displayId = embeddedWindow.mDisplayId;
+            if (grantFocus) {
+                t.setFocusedWindow(targetInputToken, displayId).apply();
+            } else {
+                // Search for a new focus target
+                DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+                WindowState newFocusTarget =  displayContent == null
+                        ? null : displayContent.findFocusedWindow();
+                if (newFocusTarget == null) {
+                    ProtoLog.v(WM_DEBUG_FOCUS, "grantEmbeddedWindowFocus remove request for "
+                                    + "win=%s dropped since no candidate was found",
+                            embeddedWindow.getName());
+                    return;
+                }
+                t.requestFocusTransfer(newFocusTarget.mInputWindowHandle.token, targetInputToken,
+                        displayId).apply();
+            }
+            ProtoLog.v(WM_DEBUG_FOCUS, "grantEmbeddedWindowFocus win=%s grantFocus=%s",
+                    embeddedWindow.getName(), grantFocus);
+        }
+    }
+
+    void grantEmbeddedWindowFocus(Session session, IWindow callingWindow, IBinder targetInputToken,
+                                  boolean grantFocus) {
+        synchronized (mGlobalLock) {
+            final WindowState hostWindow =
+                    windowForClientLocked(session, callingWindow, false /* throwOnError*/);
+            if (hostWindow == null) {
+                Slog.e(TAG, "Host window not found");
+                return;
+            }
+            if (hostWindow.mInputChannel == null) {
+                Slog.e(TAG, "Host window does not have an input channel");
+                return;
+            }
+            final EmbeddedWindowController.EmbeddedWindow embeddedWindow =
+                    mEmbeddedWindowController.get(targetInputToken);
+            if (embeddedWindow == null) {
+                Slog.e(TAG, "Embedded window not found");
+                return;
+            }
+            if (embeddedWindow.mHostWindowState != hostWindow) {
+                Slog.e(TAG, "Embedded window does not belong to the host");
+                return;
+            }
+            SurfaceControl.Transaction t = mTransactionFactory.get();
+            if (grantFocus) {
+                t.requestFocusTransfer(targetInputToken, hostWindow.mInputChannel.getToken(),
+                        hostWindow.getDisplayId()).apply();
+            } else {
+                t.requestFocusTransfer(hostWindow.mInputChannel.getToken(), targetInputToken,
+                        hostWindow.getDisplayId()).apply();
+            }
+            ProtoLog.v(WM_DEBUG_FOCUS, "grantEmbeddedWindowFocus win=%s grantFocus=%s",
+                    embeddedWindow.getName(), grantFocus);
         }
     }
 }

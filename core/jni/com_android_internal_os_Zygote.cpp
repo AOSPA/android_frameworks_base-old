@@ -849,7 +849,7 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
   }
 
   if (mount_mode == MOUNT_EXTERNAL_NONE && !force_mount_namespace) {
-    // Sane default of no storage visible
+    // Valid default of no storage visible
     return;
   }
 
@@ -1131,7 +1131,7 @@ static pid_t ForkCommon(JNIEnv* env, bool is_system_server,
 
   // Temporarily block SIGCHLD during forks. The SIGCHLD handler might
   // log, which would result in the logging FDs we close being reopened.
-  // This would cause failures because the FDs are not whitelisted.
+  // This would cause failures because the FDs are not allowlisted.
   //
   // Note that the zygote process is single threaded at this point.
   BlockSignal(SIGCHLD, fail_fn);
@@ -1337,7 +1337,7 @@ static void relabelAllDirs(const char* path, security_context_t context, fail_fn
  * in data directories.
  *
  * Steps:
- * 1). Collect a list of all related apps (apps with same uid and whitelisted apps) data info
+ * 1). Collect a list of all related apps (apps with same uid and allowlisted apps) data info
  * (package name, data stored volume uuid, and inode number of its CE data directory)
  * 2). Mount tmpfs on /data/data, /data/user(_de) and /mnt/expand, so apps no longer
  * able to access apps data directly.
@@ -1813,8 +1813,7 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
 #ifdef ANDROID_EXPERIMENTAL_MTE
       SetTagCheckingLevel(PR_MTE_TCF_SYNC);
 #endif
-      // TODO(pcc): Use SYNC here once the allocator supports it.
-      heap_tagging_level = M_HEAP_TAGGING_LEVEL_ASYNC;
+      heap_tagging_level = M_HEAP_TAGGING_LEVEL_SYNC;
       break;
     default:
 #ifdef ANDROID_EXPERIMENTAL_MTE
@@ -2073,7 +2072,7 @@ static void UnmountStorageOnInit(JNIEnv* env) {
     return;
   }
 
-  // Mark rootfs as being a slave so that changes from default
+  // Mark rootfs as being MS_SLAVE so that changes from default
   // namespace only flow into our children.
   if (mount("rootfs", "/", nullptr, (MS_SLAVE | MS_REC), nullptr) == -1) {
     RuntimeAbort(env, __LINE__, "Failed to mount() rootfs as MS_SLAVE");

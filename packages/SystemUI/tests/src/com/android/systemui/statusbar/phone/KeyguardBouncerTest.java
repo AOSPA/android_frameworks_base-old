@@ -38,18 +38,19 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 
 import androidx.test.filters.SmallTest;
 
-import com.android.internal.widget.LockPatternUtils;
-import com.android.keyguard.KeyguardHostView;
+import com.android.keyguard.KeyguardHostViewController;
+import com.android.keyguard.KeyguardRootViewController;
 import com.android.keyguard.KeyguardSecurityModel;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.ViewMediatorCallback;
+import com.android.keyguard.dagger.KeyguardBouncerComponent;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import com.android.systemui.plugins.FalsingManager;
@@ -76,13 +77,11 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     @Mock
     private ViewMediatorCallback mViewMediatorCallback;
     @Mock
-    private LockPatternUtils mLockPatternUtils;
-    @Mock
     private DismissCallbackRegistry mDismissCallbackRegistry;
     @Mock
-    private KeyguardHostView mKeyguardHostView;
+    private AuthController mAuthController;
     @Mock
-    private ViewTreeObserver mViewTreeObserver;
+    private KeyguardHostViewController mKeyguardHostViewController;
     @Mock
     private KeyguardBouncer.BouncerExpansionCallback mExpansionCallback;
     @Mock
@@ -96,7 +95,13 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     @Mock
     private KeyguardSecurityModel mKeyguardSecurityModel;
     @Mock
+    private KeyguardRootViewController mRootViewController;
+    @Mock
     private ViewGroup mRootView;
+    @Mock
+    private KeyguardBouncerComponent.Factory mKeyguardBouncerComponentFactory;
+    @Mock
+    private KeyguardBouncerComponent mKeyguardBouncerComponent;
     @Rule
     public MockitoRule mRule = MockitoJUnit.rule();
     private Integer mRootVisibility = View.INVISIBLE;
@@ -106,7 +111,6 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     public void setup() {
         allowTestableLooperAsMainThread();
         mDependency.injectTestDependency(KeyguardUpdateMonitor.class, mKeyguardUpdateMonitor);
-        mDependency.injectTestDependency(KeyguardSecurityModel.class, mKeyguardSecurityModel);
         mDependency.injectMockDependency(KeyguardStateController.class);
         when(mRootView.getVisibility()).thenAnswer((Answer<Integer>) invocation -> mRootVisibility);
         doAnswer(invocation -> {
@@ -116,19 +120,22 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         when(mKeyguardSecurityModel.getSecurityMode(anyInt()))
                 .thenReturn(KeyguardSecurityModel.SecurityMode.None);
         DejankUtils.setImmediate(true);
+        when(mKeyguardBouncerComponentFactory.create()).thenReturn(mKeyguardBouncerComponent);
+        when(mKeyguardBouncerComponent.getKeyguardHostViewController())
+                .thenReturn(mKeyguardHostViewController);
+        when(mKeyguardBouncerComponent.getKeyguardRootViewController())
+                .thenReturn(mRootViewController);
+
+        when(mRootViewController.getView()).thenReturn(mRootView);
+        when(mRootView.getResources()).thenReturn(mContext.getResources());
+
         final ViewGroup container = new FrameLayout(getContext());
-        when(mKeyguardHostView.getViewTreeObserver()).thenReturn(mViewTreeObserver);
-        when(mKeyguardHostView.getHeight()).thenReturn(500);
-        mBouncer = new KeyguardBouncer(getContext(), mViewMediatorCallback,
-                mLockPatternUtils, container, mDismissCallbackRegistry, mFalsingManager,
-                mExpansionCallback, mKeyguardStateController, mKeyguardUpdateMonitor,
-                mKeyguardBypassController, mHandler) {
-            @Override
-            protected void inflateView() {
-                mKeyguardView = mKeyguardHostView;
-                mRoot = mRootView;
-            }
-        };
+        mBouncer = new KeyguardBouncer.Factory(getContext(), mViewMediatorCallback,
+                mDismissCallbackRegistry, mFalsingManager, mAuthController,
+                mKeyguardStateController, mKeyguardUpdateMonitor,
+                mKeyguardBypassController, mHandler, mKeyguardSecurityModel,
+                mKeyguardBouncerComponentFactory)
+                .create(container, mExpansionCallback);
     }
 
     @Test
@@ -154,12 +161,10 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         mBouncer.ensureView();
         mBouncer.setExpansion(1);
 
-        reset(mKeyguardHostView);
-        when(mKeyguardHostView.getHeight()).thenReturn(500);
+        reset(mKeyguardHostViewController);
 
         mBouncer.show(true);
-        verify(mKeyguardHostView).setAlpha(eq(1f));
-        verify(mKeyguardHostView).setTranslationY(eq(0f));
+        verify(mKeyguardHostViewController).setExpansion(0);
     }
 
     @Test
@@ -177,23 +182,23 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     @Test
     public void testShow_triesToDismissKeyguard() {
         mBouncer.show(true);
-        verify(mKeyguardHostView).dismiss(anyInt());
+        verify(mKeyguardHostViewController).dismiss(anyInt());
     }
 
     @Test
     public void testShow_resetsSecuritySelection() {
         mBouncer.show(false);
-        verify(mKeyguardHostView, never()).showPrimarySecurityScreen();
+        verify(mKeyguardHostViewController, never()).showPrimarySecurityScreen();
 
         mBouncer.hide(false);
         mBouncer.show(true);
-        verify(mKeyguardHostView).showPrimarySecurityScreen();
+        verify(mKeyguardHostViewController).showPrimarySecurityScreen();
     }
 
     @Test
     public void testShow_animatesKeyguardView() {
         mBouncer.show(true);
-        verify(mKeyguardHostView).startAppearAnimation();
+        verify(mKeyguardHostViewController).appear(anyInt());
     }
 
     @Test
@@ -201,7 +206,13 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         final String errorMessage = "an error message";
         when(mViewMediatorCallback.consumeCustomMessage()).thenReturn(errorMessage);
         mBouncer.show(true);
-        verify(mKeyguardHostView).showErrorMessage(eq(errorMessage));
+        verify(mKeyguardHostViewController).showErrorMessage(eq(errorMessage));
+    }
+
+    @Test
+    public void testShow_notifiesAuthControllerStartingToShow() {
+        mBouncer.show(/* resetSecuritySelection */ false);
+        verify(mAuthController).onStartingToShow();
     }
 
     @Test
@@ -218,10 +229,10 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         verify(mExpansionCallback).onFullyShown();
 
         verify(mExpansionCallback, never()).onStartingToHide();
-        verify(mKeyguardHostView, never()).onStartingToHide();
+        verify(mKeyguardHostViewController, never()).onStartingToHide();
         mBouncer.setExpansion(0.9f);
         verify(mExpansionCallback).onStartingToHide();
-        verify(mKeyguardHostView).onStartingToHide();
+        verify(mKeyguardHostViewController).onStartingToHide();
     }
 
     @Test
@@ -230,8 +241,40 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         mBouncer.setExpansion(0.1f);
 
         mBouncer.setExpansion(0);
-        verify(mKeyguardHostView).onResume();
+        verify(mKeyguardHostViewController).onResume();
         verify(mRootView).announceForAccessibility(any());
+    }
+
+    @Test
+    public void testSetExpansion_notifiesAuthControllerFullyShown() {
+        mBouncer.ensureView();
+        mBouncer.setExpansion(0.1f);
+        mBouncer.setExpansion(0f);
+        verify(mAuthController).onFullyShown();
+    }
+
+    @Test
+    public void testSetExpansion_notifiesAuthControllerStartingToHide() {
+        mBouncer.ensureView();
+        mBouncer.setExpansion(0f);
+        mBouncer.setExpansion(0.1f);
+        verify(mAuthController).onStartingToHide();
+    }
+
+    @Test
+    public void testSetExpansion_notifiesAuthControllerFullyHidden() {
+        mBouncer.ensureView();
+        mBouncer.setExpansion(0.9f);
+        mBouncer.setExpansion(1f);
+        verify(mAuthController).onFullyHidden();
+    }
+
+    @Test
+    public void testSetExpansion_negativeAuthControllerStartingToShow() {
+        mBouncer.ensureView();
+        mBouncer.setExpansion(1f);
+        mBouncer.setExpansion(0.9f);
+        verify(mAuthController, never()).onStartingToShow();
     }
 
     @Test
@@ -267,7 +310,7 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     public void testShowPromptReason_propagates() {
         mBouncer.ensureView();
         mBouncer.showPromptReason(1);
-        verify(mKeyguardHostView).showPromptReason(eq(1));
+        verify(mKeyguardHostViewController).showPromptReason(eq(1));
     }
 
     @Test
@@ -275,7 +318,8 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         final String message = "a message";
         mBouncer.ensureView();
         mBouncer.showMessage(message, ColorStateList.valueOf(Color.GREEN));
-        verify(mKeyguardHostView).showMessage(eq(message), eq(ColorStateList.valueOf(Color.GREEN)));
+        verify(mKeyguardHostViewController).showMessage(
+                eq(message), eq(ColorStateList.valueOf(Color.GREEN)));
     }
 
     @Test
@@ -283,7 +327,7 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         final OnDismissAction dismissAction = () -> false;
         final Runnable cancelAction = () -> {};
         mBouncer.showWithDismissAction(dismissAction, cancelAction);
-        verify(mKeyguardHostView).setOnDismissAction(dismissAction, cancelAction);
+        verify(mKeyguardHostViewController).setOnDismissAction(dismissAction, cancelAction);
         Assert.assertTrue("Should be showing", mBouncer.isShowing());
     }
 
@@ -297,7 +341,7 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         ran[0] = false;
         mBouncer.ensureView();
         mBouncer.startPreHideAnimation(r);
-        verify(mKeyguardHostView).startDisappearAnimation(r);
+        verify(mKeyguardHostViewController).startDisappearAnimation(r);
         Assert.assertFalse("Callback should have been deferred", ran[0]);
     }
 
@@ -322,16 +366,14 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     public void testSetExpansion() {
         mBouncer.ensureView();
         mBouncer.setExpansion(0.5f);
-        verify(mKeyguardHostView).setAlpha(anyFloat());
-        verify(mKeyguardHostView).setTranslationY(anyFloat());
+        verify(mKeyguardHostViewController).setExpansion(0.5f);
     }
 
     @Test
     public void testIsFullscreenBouncer_asksKeyguardView() {
         mBouncer.ensureView();
         mBouncer.isFullscreenBouncer();
-        verify(mKeyguardHostView).getCurrentSecurityMode();
-        verify(mKeyguardHostView, never()).getSecurityMode();
+        verify(mKeyguardHostViewController).getCurrentSecurityMode();
     }
 
     @Test
@@ -346,21 +388,18 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     @Test
     public void testIsHiding_skipsTranslation() {
         mBouncer.show(false /* reset */);
-        reset(mKeyguardHostView);
+        reset(mKeyguardHostViewController);
         mBouncer.startPreHideAnimation(null /* runnable */);
         mBouncer.setExpansion(0.5f);
-        verify(mKeyguardHostView, never()).setTranslationY(anyFloat());
-        verify(mKeyguardHostView, never()).setAlpha(anyFloat());
+        verify(mKeyguardHostViewController, never()).setExpansion(anyFloat());
     }
 
     @Test
     public void testIsSecure() {
-        Assert.assertTrue("Bouncer is secure before inflating views", mBouncer.isSecure());
-
         mBouncer.ensureView();
         for (KeyguardSecurityModel.SecurityMode mode : KeyguardSecurityModel.SecurityMode.values()){
-            reset(mKeyguardHostView);
-            when(mKeyguardHostView.getSecurityMode()).thenReturn(mode);
+            reset(mKeyguardSecurityModel);
+            when(mKeyguardSecurityModel.getSecurityMode(anyInt())).thenReturn(mode);
             Assert.assertEquals("Security doesn't match for mode: " + mode,
                     mBouncer.isSecure(), mode != KeyguardSecurityModel.SecurityMode.None);
         }
@@ -392,7 +431,7 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     public void testWillDismissWithAction() {
         mBouncer.ensureView();
         Assert.assertFalse("Action not set yet", mBouncer.willDismissWithAction());
-        when(mKeyguardHostView.hasDismissActions()).thenReturn(true);
+        when(mKeyguardHostViewController.hasDismissActions()).thenReturn(true);
         Assert.assertTrue("Action should exist", mBouncer.willDismissWithAction());
     }
 

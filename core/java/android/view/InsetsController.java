@@ -500,9 +500,11 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
     /** Pending control request that is waiting on IME to be ready to be shown */
     private PendingControlRequest mPendingImeControlRequest;
 
+    private int mWindowType;
     private int mLastLegacySoftInputMode;
     private int mLastLegacyWindowFlags;
     private int mLastLegacySystemUiFlags;
+    private int mLastWindowingMode;
     private DisplayCutout mLastDisplayCutout;
     private boolean mStartingAnimation;
     private int mCaptionInsetsHeight = 0;
@@ -571,7 +573,8 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
             WindowInsets insets = state.calculateInsets(mFrame, mState /* ignoringVisibilityState*/,
                     mLastInsets.isRound(), mLastInsets.shouldAlwaysConsumeSystemBars(),
                     mLastDisplayCutout, mLastLegacySoftInputMode, mLastLegacyWindowFlags,
-                    mLastLegacySystemUiFlags, null /* typeSideMap */);
+                    mLastLegacySystemUiFlags, mWindowType, mLastWindowingMode,
+                    null /* typeSideMap */);
             mHost.dispatchWindowInsetsAnimationProgress(insets, mUnmodifiableTmpRunningAnims);
             if (DEBUG) {
                 for (WindowInsetsAnimation anim : mUnmodifiableTmpRunningAnims) {
@@ -618,16 +621,20 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
             return false;
         }
         if (DEBUG) Log.d(TAG, "onStateChanged: " + state);
-        updateState(state);
-
-        boolean localStateChanged = !mState.equals(mLastDispatchedState,
-                true /* excludingCaptionInsets */, true /* excludeInvisibleIme */);
         mLastDispatchedState.set(state, true /* copySources */);
 
+        final InsetsState lastState = new InsetsState(mState, true /* copySources */);
+        updateState(state);
         applyLocalVisibilityOverride();
-        if (localStateChanged) {
-            if (DEBUG) Log.d(TAG, "onStateChanged, notifyInsetsChanged, send state to WM: " + mState);
+
+        if (!mState.equals(lastState, true /* excludingCaptionInsets */,
+                true /* excludeInvisibleIme */)) {
+            if (DEBUG) Log.d(TAG, "onStateChanged, notifyInsetsChanged");
             mHost.notifyInsetsChanged();
+        }
+        if (!mState.equals(mLastDispatchedState, true /* excludingCaptionInsets */,
+                true /* excludeInvisibleIme */)) {
+            if (DEBUG) Log.d(TAG, "onStateChanged, send state to WM: " + mState);
             updateRequestedState();
         }
         return true;
@@ -705,9 +712,11 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
      * @see InsetsState#calculateInsets
      */
     @VisibleForTesting
-    public WindowInsets calculateInsets(boolean isScreenRound,
-            boolean alwaysConsumeSystemBars, DisplayCutout cutout,
+    public WindowInsets calculateInsets(boolean isScreenRound, boolean alwaysConsumeSystemBars,
+            DisplayCutout cutout, int windowType, int windowingMode,
             int legacySoftInputMode, int legacyWindowFlags, int legacySystemUiFlags) {
+        mWindowType = windowType;
+        mLastWindowingMode = windowingMode;
         mLastLegacySoftInputMode = legacySoftInputMode;
         mLastLegacyWindowFlags = legacyWindowFlags;
         mLastLegacySystemUiFlags = legacySystemUiFlags;
@@ -715,7 +724,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         mLastInsets = mState.calculateInsets(mFrame, null /* ignoringVisibilityState*/,
                 isScreenRound, alwaysConsumeSystemBars, cutout,
                 legacySoftInputMode, legacyWindowFlags, legacySystemUiFlags,
-                null /* typeSideMap */);
+                windowType, windowingMode, null /* typeSideMap */);
         return mLastInsets;
     }
 
@@ -1134,21 +1143,24 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         if (invokeCallback) {
             control.cancel();
         }
+        boolean stateChanged = false;
         for (int i = mRunningAnimations.size() - 1; i >= 0; i--) {
             RunningAnimation runningAnimation = mRunningAnimations.get(i);
             if (runningAnimation.runner == control) {
                 mRunningAnimations.remove(i);
                 ArraySet<Integer> types = toInternalType(control.getTypes());
                 for (int j = types.size() - 1; j >= 0; j--) {
-                    if (getSourceConsumer(types.valueAt(j)).notifyAnimationFinished()) {
-                        mHost.notifyInsetsChanged();
-                    }
+                    stateChanged |= getSourceConsumer(types.valueAt(j)).notifyAnimationFinished();
                 }
                 if (invokeCallback && runningAnimation.startDispatched) {
                     dispatchAnimationEnd(runningAnimation.runner.getAnimation());
                 }
                 break;
             }
+        }
+        if (stateChanged) {
+            mHost.notifyInsetsChanged();
+            updateRequestedState();
         }
     }
 

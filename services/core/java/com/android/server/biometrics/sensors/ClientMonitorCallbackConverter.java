@@ -128,11 +128,11 @@ public final class ClientMonitorCallbackConverter {
         }
     }
 
-    public void onChallengeGenerated(long challenge) throws RemoteException {
+    public void onChallengeGenerated(int sensorId, long challenge) throws RemoteException {
         if (mFaceServiceReceiver != null) {
-            mFaceServiceReceiver.onChallengeGenerated(challenge);
+            mFaceServiceReceiver.onChallengeGenerated(sensorId, challenge);
         } else if (mFingerprintServiceReceiver != null) {
-            mFingerprintServiceReceiver.onChallengeGenerated(challenge);
+            mFingerprintServiceReceiver.onChallengeGenerated(sensorId, challenge);
         }
     }
 
@@ -142,10 +142,21 @@ public final class ClientMonitorCallbackConverter {
         }
     }
 
-    public void onFeatureGet(boolean success, int feature, boolean value)
-            throws RemoteException {
+    public void onFeatureGet(boolean success, int feature, boolean value) throws RemoteException {
         if (mFaceServiceReceiver != null) {
             mFaceServiceReceiver.onFeatureGet(success, feature, value);
+        }
+    }
+
+    public void onChallengeInterrupted(int sensorId) throws RemoteException {
+        if (mFaceServiceReceiver != null) {
+            mFaceServiceReceiver.onChallengeInterrupted(sensorId);
+        }
+    }
+
+    public void onChallengeInterruptFinished(int sensorId) throws RemoteException {
+        if (mFaceServiceReceiver != null) {
+            mFaceServiceReceiver.onChallengeInterruptFinished(sensorId);
         }
     }
 }

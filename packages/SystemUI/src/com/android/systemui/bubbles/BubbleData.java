@@ -34,6 +34,7 @@ import androidx.annotation.Nullable;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
 import com.android.systemui.bubbles.BubbleController.DismissReason;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -52,15 +53,16 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Keeps track of active bubbles.
  */
-@Singleton
+@SysUISingleton
 public class BubbleData {
 
     private BubbleLoggerImpl mLogger = new BubbleLoggerImpl();
+
+    private int mCurrentUserId;
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "BubbleData" : TAG_BUBBLES;
 
@@ -76,6 +78,8 @@ public class BubbleData {
         @Nullable Bubble selectedBubble;
         @Nullable Bubble addedBubble;
         @Nullable Bubble updatedBubble;
+        @Nullable Bubble addedOverflowBubble;
+        @Nullable Bubble removedOverflowBubble;
         // Pair with Bubble and @DismissReason Integer
         final List<Pair<Bubble, Integer>> removedBubbles = new ArrayList<>();
 
@@ -94,10 +98,12 @@ public class BubbleData {
                     || addedBubble != null
                     || updatedBubble != null
                     || !removedBubbles.isEmpty()
+                    || addedOverflowBubble != null
+                    || removedOverflowBubble != null
                     || orderChanged;
         }
 
-        void bubbleRemoved(Bubble bubbleToRemove, @DismissReason  int reason) {
+        void bubbleRemoved(Bubble bubbleToRemove, @DismissReason int reason) {
             removedBubbles.add(new Pair<>(bubbleToRemove, reason));
         }
     }
@@ -487,8 +493,9 @@ public class BubbleData {
                     b.stopInflation();
                 }
                 mLogger.logOverflowRemove(b, reason);
-                mStateChange.bubbleRemoved(b, reason);
                 mOverflowBubbles.remove(b);
+                mStateChange.bubbleRemoved(b, reason);
+                mStateChange.removedOverflowBubble = b;
             }
             return;
         }
@@ -533,6 +540,7 @@ public class BubbleData {
         }
         mLogger.logOverflowAdd(bubble, reason);
         mOverflowBubbles.add(0, bubble);
+        mStateChange.addedOverflowBubble = bubble;
         bubble.stopInflation();
         if (mOverflowBubbles.size() == mMaxOverflowBubbles + 1) {
             // Remove oldest bubble.
@@ -543,6 +551,7 @@ public class BubbleData {
             mStateChange.bubbleRemoved(oldest, BubbleController.DISMISS_OVERFLOW_MAX_REACHED);
             mLogger.log(bubble, BubbleLogger.Event.BUBBLE_OVERFLOW_REMOVE_MAX_REACHED);
             mOverflowBubbles.remove(oldest);
+            mStateChange.removedOverflowBubble = oldest;
         }
     }
 
@@ -611,6 +620,10 @@ public class BubbleData {
         mStateChange.selectionChanged = true;
     }
 
+    void setCurrentUserId(int uid) {
+        mCurrentUserId = uid;
+    }
+
     /**
      * Logs the bubble UI event.
      *
@@ -628,7 +641,9 @@ public class BubbleData {
         if (provider == null) {
             mLogger.logStackUiChanged(packageName, action, bubbleCount, normalX, normalY);
         } else if (provider.getKey().equals(BubbleOverflow.KEY)) {
-            mLogger.logShowOverflow(packageName, action, bubbleCount, normalX, normalY);
+            if (action == SysUiStatsLog.BUBBLE_UICHANGED__ACTION__EXPANDED) {
+                mLogger.logShowOverflow(packageName, mCurrentUserId);
+            }
         } else {
             mLogger.logBubbleUiChanged((Bubble) provider, packageName, action, bubbleCount, normalX,
                     normalY, bubbleIndex);
@@ -822,11 +837,19 @@ public class BubbleData {
                 : "null");
         pw.print("expanded: ");
         pw.println(mExpanded);
-        pw.print("count:    ");
+
+        pw.print("stack bubble count:    ");
         pw.println(mBubbles.size());
         for (Bubble bubble : mBubbles) {
             bubble.dump(fd, pw, args);
         }
+
+        pw.print("overflow bubble count:    ");
+        pw.println(mOverflowBubbles.size());
+        for (Bubble bubble : mOverflowBubbles) {
+            bubble.dump(fd, pw, args);
+        }
+
         pw.print("summaryKeys: ");
         pw.println(mSuppressedGroupKeys.size());
         for (String key : mSuppressedGroupKeys.keySet()) {

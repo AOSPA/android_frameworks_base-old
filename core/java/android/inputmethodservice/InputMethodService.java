@@ -18,7 +18,6 @@ package android.inputmethodservice;
 
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_NONE;
 import static android.view.WindowInsets.Type.navigationBars;
 import static android.view.WindowInsets.Type.statusBars;
 import static android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
@@ -32,6 +31,7 @@ import android.annotation.IntDef;
 import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UiContext;
 import android.app.ActivityManager;
 import android.app.Dialog;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -258,6 +258,7 @@ import java.util.Collections;
  * @attr ref android.R.styleable#InputMethodService_imeExtractEnterAnimation
  * @attr ref android.R.styleable#InputMethodService_imeExtractExitAnimation
  */
+@UiContext
 public class InputMethodService extends AbstractInputMethodService {
     static final String TAG = "InputMethodService";
     static final boolean DEBUG = false;
@@ -452,20 +453,20 @@ public class InputMethodService extends AbstractInputMethodService {
     /**
      * An opaque {@link Binder} token of window requesting {@link InputMethodImpl#showSoftInput}
      * The original app window token is passed from client app window.
-     * {@link com.android.server.inputmethod.InputMethodManagerService} creates a unique dummy
-     * token to identify this window.
-     * This dummy token is only valid for a single call to {@link InputMethodImpl#showSoftInput},
-     * after which it is set null until next call.
+     * {@link com.android.server.inputmethod.InputMethodManagerService} creates a unique
+     * placeholder token to identify this window.
+     * This placeholder token is only valid for a single call to
+     * {@link InputMethodImpl#showSoftInput}, after which it is set null until next call.
      */
     private IBinder mCurShowInputToken;
 
     /**
      * An opaque {@link Binder} token of window requesting {@link InputMethodImpl#hideSoftInput}
      * The original app window token is passed from client app window.
-     * {@link com.android.server.inputmethod.InputMethodManagerService} creates a unique dummy
-     * token to identify this window.
-     * This dummy token is only valid for a single call to {@link InputMethodImpl#hideSoftInput},
-     * after which it is set {@code null} until next call.
+     * {@link com.android.server.inputmethod.InputMethodManagerService} creates a unique
+     * placeholder token to identify this window.
+     * This placeholder token is only valid for a single call to
+     * {@link InputMethodImpl#hideSoftInput}, after which it is set {@code null} until next call.
      */
     private IBinder mCurHideInputToken;
 
@@ -1208,15 +1209,19 @@ public class InputMethodService extends AbstractInputMethodService {
         mWindow.getWindow().getAttributes().setFitInsetsIgnoringVisibility(true);
 
         // IME layout should always be inset by navigation bar, no matter its current visibility,
-        // unless automotive requests it, since automotive may hide the navigation bar.
+        // unless automotive requests it. Automotive devices may request the navigation bar to be
+        // hidden when the IME shows up (controlled via config_automotiveHideNavBarForKeyboard)
+        // in order to maximize the visible screen real estate. When this happens, the IME window
+        // should animate from the bottom of the screen to reduce the jank that happens from the
+        // lack of synchronization between the bottom system window and the IME window.
+        if (mIsAutomotive && mAutomotiveHideNavBarForKeyboard) {
+            mWindow.getWindow().setDecorFitsSystemWindows(false);
+        }
         mWindow.getWindow().getDecorView().setOnApplyWindowInsetsListener(
                 (v, insets) -> v.onApplyWindowInsets(
                         new WindowInsets.Builder(insets).setInsets(
                                 navigationBars(),
-                                mIsAutomotive && mAutomotiveHideNavBarForKeyboard
-                                        ? android.graphics.Insets.NONE
-                                        : insets.getInsetsIgnoringVisibility(navigationBars())
-                                )
+                                insets.getInsetsIgnoringVisibility(navigationBars()))
                                 .build()));
 
         // For ColorView in DecorView to work, FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS needs to be set
@@ -2195,20 +2200,13 @@ public class InputMethodService extends AbstractInputMethodService {
     }
 
     /**
-     * Apply the IME visibility in {@link android.view.ImeInsetsSourceConsumer} when
-     * {@link ViewRootImpl.sNewInsetsMode} is enabled.
+     * Applies the IME visibility in {@link android.view.ImeInsetsSourceConsumer}.
+     *
      * @param setVisible {@code true} to make it visible, false to hide it.
      */
     private void applyVisibilityInInsetsConsumerIfNecessary(boolean setVisible) {
-        if (!isVisibilityAppliedUsingInsetsConsumer()) {
-            return;
-        }
         mPrivOps.applyImeVisibility(setVisible
                 ? mCurShowInputToken : mCurHideInputToken, setVisible);
-    }
-
-    private boolean isVisibilityAppliedUsingInsetsConsumer() {
-        return ViewRootImpl.sNewInsetsMode > NEW_INSETS_MODE_NONE;
     }
 
     private void finishViews(boolean finishingInput) {
@@ -2235,14 +2233,9 @@ public class InputMethodService extends AbstractInputMethodService {
         mWindowVisible = false;
         finishViews(false /* finishingInput */);
         if (mDecorViewVisible) {
-            // When insets API is enabled, it is responsible for client and server side
-            // visibility of IME window.
-            if (isVisibilityAppliedUsingInsetsConsumer()) {
-                if (mInputView != null) {
-                    mInputView.dispatchWindowVisibilityChanged(View.GONE);
-                }
-            } else {
-                mWindow.hide();
+            // It is responsible for client and server side visibility of IME window.
+            if (mInputView != null) {
+                mInputView.dispatchWindowVisibilityChanged(View.GONE);
             }
             mDecorViewVisible = false;
             onWindowHidden();

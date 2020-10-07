@@ -291,6 +291,22 @@ package android.telephony {
     method public static boolean isVoiceMailNumber(@NonNull android.content.Context, int, @Nullable String);
   }
 
+  public final class PhysicalChannelConfig implements android.os.Parcelable {
+    method public int describeContents();
+    method public int getCellBandwidthDownlink();
+    method public int getChannelNumber();
+    method public int getConnectionStatus();
+    method public int getNetworkType();
+    method @IntRange(from=0, to=1007) public int getPhysicalCellId();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field public static final int CHANNEL_NUMBER_UNKNOWN = -1; // 0xffffffff
+    field public static final int CONNECTION_PRIMARY_SERVING = 1; // 0x1
+    field public static final int CONNECTION_SECONDARY_SERVING = 2; // 0x2
+    field public static final int CONNECTION_UNKNOWN = -1; // 0xffffffff
+    field @NonNull public static final android.os.Parcelable.Creator<android.telephony.PhysicalChannelConfig> CREATOR;
+    field public static final int PHYSICAL_CELL_ID_UNKNOWN = -1; // 0xffffffff
+  }
+
   public final class PreciseCallState implements android.os.Parcelable {
     ctor public PreciseCallState(int, int, int, int, int);
     method public int describeContents();
@@ -316,6 +332,7 @@ package android.telephony {
     method @Deprecated public int getDataConnectionApnTypeBitMask();
     method @Deprecated public int getDataConnectionFailCause();
     method @Deprecated public int getDataConnectionState();
+    method public int getId();
   }
 
   public final class PreciseDisconnectCause {
@@ -686,10 +703,8 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isAnyRadioPoweredOn();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isApnMetered(int);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isApplicationOnUicc(int);
-    method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isDataConnectionAllowed();
     method public boolean isDataConnectivityPossible();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isDataEnabledForApn(int);
-    method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_NETWORK_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isDataEnabledWithReason(int);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isEmergencyAssistanceEnabled();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) @WorkerThread public boolean isIccLockEnabled();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isIdle();
@@ -721,7 +736,6 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int setCarrierRestrictionRules(@NonNull android.telephony.CarrierRestrictionRules);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataActivationState(int);
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataEnabled(int, boolean);
-    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataEnabledWithReason(int, boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataRoamingEnabled(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setMultiSimCarrierRestriction(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean setOpportunisticNetworkState(boolean);
@@ -759,10 +773,6 @@ package android.telephony {
     field public static final int CARRIER_PRIVILEGE_STATUS_HAS_ACCESS = 1; // 0x1
     field public static final int CARRIER_PRIVILEGE_STATUS_NO_ACCESS = 0; // 0x0
     field public static final int CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED = -1; // 0xffffffff
-    field public static final int DATA_ENABLED_REASON_CARRIER = 2; // 0x2
-    field public static final int DATA_ENABLED_REASON_POLICY = 1; // 0x1
-    field public static final int DATA_ENABLED_REASON_THERMAL = 3; // 0x3
-    field public static final int DATA_ENABLED_REASON_USER = 0; // 0x0
     field public static final String EXTRA_ANOMALY_DESCRIPTION = "android.telephony.extra.ANOMALY_DESCRIPTION";
     field public static final String EXTRA_ANOMALY_ID = "android.telephony.extra.ANOMALY_ID";
     field public static final String EXTRA_PHONE_IN_ECM_STATE = "android.telephony.extra.PHONE_IN_ECM_STATE";
@@ -878,6 +888,7 @@ package android.telephony.data {
     method public int getCause();
     method @NonNull public java.util.List<java.net.InetAddress> getDnsAddresses();
     method @NonNull public java.util.List<java.net.InetAddress> getGatewayAddresses();
+    method public int getHandoverFailureMode();
     method public int getId();
     method @NonNull public String getInterfaceName();
     method public int getLinkStatus();
@@ -889,6 +900,11 @@ package android.telephony.data {
     method public int getSuggestedRetryTime();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.telephony.data.DataCallResponse> CREATOR;
+    field public static final int HANDOVER_FAILURE_MODE_DO_FALLBACK = 2; // 0x2
+    field public static final int HANDOVER_FAILURE_MODE_LEGACY = 1; // 0x1
+    field public static final int HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER = 3; // 0x3
+    field public static final int HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL = 4; // 0x4
+    field public static final int HANDOVER_FAILURE_MODE_UNKNOWN = 0; // 0x0
     field public static final int LINK_STATUS_ACTIVE = 2; // 0x2
     field public static final int LINK_STATUS_DORMANT = 1; // 0x1
     field public static final int LINK_STATUS_INACTIVE = 0; // 0x0
@@ -902,6 +918,7 @@ package android.telephony.data {
     method @NonNull public android.telephony.data.DataCallResponse.Builder setCause(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setDnsAddresses(@NonNull java.util.List<java.net.InetAddress>);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setGatewayAddresses(@NonNull java.util.List<java.net.InetAddress>);
+    method @NonNull public android.telephony.data.DataCallResponse.Builder setHandoverFailureMode(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setId(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setInterfaceName(@NonNull String);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setLinkStatus(int);
@@ -1624,6 +1641,7 @@ package android.telephony.ims {
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) @WorkerThread public int setProvisioningStringValue(int, @NonNull String);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) @WorkerThread public void setRcsProvisioningStatusForCapability(int, boolean);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public void unregisterProvisioningChangedCallback(@NonNull android.telephony.ims.ProvisioningManager.Callback);
+    field public static final int KEY_VOICE_OVER_WIFI_ENTITLEMENT_ID = 67; // 0x43
     field public static final int KEY_VOICE_OVER_WIFI_MODE_OVERRIDE = 27; // 0x1b
     field public static final int KEY_VOICE_OVER_WIFI_ROAMING_ENABLED_OVERRIDE = 26; // 0x1a
     field public static final int PROVISIONING_VALUE_DISABLED = 0; // 0x0

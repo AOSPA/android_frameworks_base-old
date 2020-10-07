@@ -223,7 +223,11 @@ public class WifiNl80211Manager {
     /**
      * Callbacks for SoftAp interface registered using
      * {@link #registerApCallback(String, Executor, SoftApCallback)}.
+     *
+     * @deprecated The usage is replaced by vendor HAL
+     * {@code android.hardware.wifi.hostapd.V1_3.IHostapdCallback}.
      */
+    @Deprecated
     public interface SoftApCallback {
         /**
          * Invoked when there is a fatal failure and the SoftAp is shutdown.
@@ -1038,6 +1042,7 @@ public class WifiNl80211Manager {
      * {@link WifiScanner#WIFI_BAND_5_GHZ},
      * {@link WifiScanner#WIFI_BAND_5_GHZ_DFS_ONLY},
      * {@link WifiScanner#WIFI_BAND_6_GHZ}
+     * {@link WifiScanner.WIFI_BAND_60_GHZ}
      * @return frequencies vector of valid frequencies (MHz), or an empty array for error.
      * @throws IllegalArgumentException if band is not recognized.
      */
@@ -1060,6 +1065,9 @@ public class WifiNl80211Manager {
                     break;
                 case WifiScanner.WIFI_BAND_6_GHZ:
                     result = mWificond.getAvailable6gChannels();
+                    break;
+                case WifiScanner.WIFI_BAND_60_GHZ:
+                    result = mWificond.getAvailable60gChannels();
                     break;
                 default:
                     throw new IllegalArgumentException("unsupported band " + band);
@@ -1115,7 +1123,11 @@ public class WifiNl80211Manager {
      * @param callback Callback for AP events.
      * @return true on success, false on failure (e.g. when called on an interface which has not
      * been set up).
+     *
+     * @deprecated The usage is replaced by vendor HAL
+     * {@code android.hardware.wifi.hostapd.V1_3.IHostapdCallback}.
      */
+    @Deprecated
     public boolean registerApCallback(@NonNull String ifaceName,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull SoftApCallback callback) {

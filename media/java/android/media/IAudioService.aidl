@@ -17,6 +17,7 @@
 package android.media;
 
 import android.bluetooth.BluetoothDevice;
+import android.content.ComponentName;
 import android.media.AudioAttributes;
 import android.media.AudioDeviceAttributes;
 import android.media.AudioFocusInfo;
@@ -26,10 +27,11 @@ import android.media.AudioRoutesInfo;
 import android.media.IAudioFocusDispatcher;
 import android.media.IAudioRoutesObserver;
 import android.media.IAudioServerStateDispatcher;
+import android.media.ICapturePresetDevicesRoleDispatcher;
 import android.media.IPlaybackConfigDispatcher;
 import android.media.IRecordingConfigDispatcher;
 import android.media.IRingtonePlayer;
-import android.media.IStrategyPreferredDeviceDispatcher;
+import android.media.IStrategyPreferredDevicesDispatcher;
 import android.media.IVolumeController;
 import android.media.IVolumeController;
 import android.media.PlayerBase;
@@ -40,6 +42,7 @@ import android.media.audiopolicy.AudioVolumeGroup;
 import android.media.audiopolicy.IAudioPolicyCallback;
 import android.media.projection.IMediaProjection;
 import android.net.Uri;
+import android.os.UserHandle;
 import android.view.KeyEvent;
 
 /**
@@ -282,11 +285,11 @@ interface IAudioService {
 
     boolean isCallScreeningModeSupported();
 
-    int setPreferredDeviceForStrategy(in int strategy, in AudioDeviceAttributes device);
+    int setPreferredDevicesForStrategy(in int strategy, in List<AudioDeviceAttributes> device);
 
-    int removePreferredDeviceForStrategy(in int strategy);
+    int removePreferredDevicesForStrategy(in int strategy);
 
-    AudioDeviceAttributes getPreferredDeviceForStrategy(in int strategy);
+    List<AudioDeviceAttributes> getPreferredDevicesForStrategy(in int strategy);
 
     List<AudioDeviceAttributes> getDevicesForAttributes(in AudioAttributes attributes);
 
@@ -294,10 +297,10 @@ interface IAudioService {
 
     int getAllowedCapturePolicy();
 
-    void registerStrategyPreferredDeviceDispatcher(IStrategyPreferredDeviceDispatcher dispatcher);
+    void registerStrategyPreferredDevicesDispatcher(IStrategyPreferredDevicesDispatcher dispatcher);
 
-    oneway void unregisterStrategyPreferredDeviceDispatcher(
-            IStrategyPreferredDeviceDispatcher dispatcher);
+    oneway void unregisterStrategyPreferredDevicesDispatcher(
+            IStrategyPreferredDevicesDispatcher dispatcher);
 
     oneway void setRttEnabled(in boolean rttEnabled);
 
@@ -310,4 +313,28 @@ interface IAudioService {
     // code via IAudioManager.h need to be added to the top section.
 
     oneway void setMultiAudioFocusEnabled(in boolean enabled);
+
+    int setPreferredDevicesForCapturePreset(
+            in int capturePreset, in List<AudioDeviceAttributes> devices);
+
+    int clearPreferredDevicesForCapturePreset(in int capturePreset);
+
+    List<AudioDeviceAttributes> getPreferredDevicesForCapturePreset(in int capturePreset);
+
+    void registerCapturePresetDevicesRoleDispatcher(ICapturePresetDevicesRoleDispatcher dispatcher);
+
+    oneway void unregisterCapturePresetDevicesRoleDispatcher(
+            ICapturePresetDevicesRoleDispatcher dispatcher);
+
+    oneway void adjustStreamVolumeForUid(int streamType, int direction, int flags,
+            in String packageName, int uid, int pid, in UserHandle userHandle,
+            int targetSdkVersion);
+
+    oneway void adjustSuggestedStreamVolumeForUid(int streamType, int direction, int flags,
+            in String packageName, int uid, int pid, in UserHandle userHandle,
+            int targetSdkVersion);
+
+    oneway void setStreamVolumeForUid(int streamType, int direction, int flags,
+            in String packageName, int uid, int pid, in UserHandle userHandle,
+            int targetSdkVersion);
 }

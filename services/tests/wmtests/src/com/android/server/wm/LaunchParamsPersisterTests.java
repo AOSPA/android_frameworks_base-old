@@ -65,7 +65,7 @@ import java.util.function.Predicate;
 @MediumTest
 @Presubmit
 @RunWith(WindowTestRunner.class)
-public class LaunchParamsPersisterTests extends ActivityTestsBase {
+public class LaunchParamsPersisterTests extends WindowTestsBase {
     private static final int TEST_USER_ID = 3;
     private static final int ALTERNATIVE_USER_ID = 0;
     private static final ComponentName TEST_COMPONENT =
@@ -109,14 +109,14 @@ public class LaunchParamsPersisterTests extends ActivityTestsBase {
         deleteRecursively(mFolder);
 
         mDisplayUniqueId = "test:" + sNextUniqueId++;
-        mTestDisplay = new TestDisplayContent.Builder(mService, 1000, 1500)
+        mTestDisplay = new TestDisplayContent.Builder(mAtm, 1000, 1500)
                 .setUniqueId(mDisplayUniqueId).build();
         when(mRootWindowContainer.getDisplayContent(eq(mDisplayUniqueId)))
                 .thenReturn(mTestDisplay);
 
         Task stack = mTestDisplay.getDefaultTaskDisplayArea()
                 .createStack(TEST_WINDOWING_MODE, ACTIVITY_TYPE_STANDARD, /* onTop */ true);
-        mTestTask = new TaskBuilder(mSupervisor).setComponent(TEST_COMPONENT).setStack(stack)
+        mTestTask = new TaskBuilder(mSupervisor).setComponent(TEST_COMPONENT).setParentTask(stack)
                 .build();
         mTestTask.mUserId = TEST_USER_ID;
         mTestTask.mLastNonFullscreenBounds = TEST_BOUNDS;
@@ -172,7 +172,7 @@ public class LaunchParamsPersisterTests extends ActivityTestsBase {
     public void testFetchesSameResultWithActivity() {
         mTarget.saveTask(mTestTask);
 
-        final ActivityRecord activity = new ActivityBuilder(mService).setComponent(TEST_COMPONENT)
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setComponent(TEST_COMPONENT)
                 .setUid(TEST_USER_ID * UserHandle.PER_USER_RANGE).build();
 
         mTarget.getLaunchParams(null, activity, mResult);
@@ -342,7 +342,7 @@ public class LaunchParamsPersisterTests extends ActivityTestsBase {
         final Task anotherTaskOfTheSameUser = new TaskBuilder(mSupervisor)
                 .setComponent(ALTERNATIVE_COMPONENT)
                 .setUserId(TEST_USER_ID)
-                .setStack(stack)
+                .setParentTask(stack)
                 .build();
         anotherTaskOfTheSameUser.setWindowingMode(WINDOWING_MODE_FREEFORM);
         anotherTaskOfTheSameUser.setBounds(200, 300, 400, 500);
@@ -354,7 +354,7 @@ public class LaunchParamsPersisterTests extends ActivityTestsBase {
         final Task anotherTaskOfDifferentUser = new TaskBuilder(mSupervisor)
                 .setComponent(TEST_COMPONENT)
                 .setUserId(ALTERNATIVE_USER_ID)
-                .setStack(stack)
+                .setParentTask(stack)
                 .build();
         anotherTaskOfDifferentUser.setWindowingMode(WINDOWING_MODE_FREEFORM);
         anotherTaskOfDifferentUser.setBounds(300, 400, 500, 600);

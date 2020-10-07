@@ -26,6 +26,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -57,6 +58,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.systemui.SystemUIFactory;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dump.DumpManager;
@@ -65,21 +67,23 @@ import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
+import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.RankingBuilder;
+import com.android.systemui.statusbar.SuperStatusBarViewFactory;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationFilter;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationTestHelper;
-import com.android.systemui.statusbar.notification.row.dagger.NotificationRowComponent;
+import com.android.systemui.statusbar.notification.row.dagger.NotificationShelfComponent;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.LockscreenLockIconController;
-import com.android.systemui.statusbar.phone.NotificationGroupManager;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
+import com.android.systemui.statusbar.phone.NotificationShadeWindowControllerImpl;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowView;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.BatteryController;
@@ -87,6 +91,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.util.FloatingContentCoordinator;
+import com.android.systemui.util.InjectionInflationController;
 
 import org.junit.Before;
 import org.junit.Ignore;
@@ -111,7 +116,7 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
     @Mock
     private NotificationEntryManager mNotificationEntryManager;
     @Mock
-    private NotificationGroupManager mNotificationGroupManager;
+    private NotificationGroupManagerLegacy mNotificationGroupManager;
     @Mock
     private BubbleController.NotifCallback mNotifCallback;
     @Mock
@@ -148,7 +153,7 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
     @Captor
     private ArgumentCaptor<NotifCollectionListener> mNotifListenerCaptor;
     private TestableBubbleController mBubbleController;
-    private NotificationShadeWindowController mNotificationShadeWindowController;
+    private NotificationShadeWindowControllerImpl mNotificationShadeWindowController;
     private NotifCollectionListener mEntryListener;
     private NotificationTestHelper mNotificationTestHelper;
     private ExpandableNotificationRow mRow;
@@ -167,7 +172,7 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
     @Mock
     private ShadeController mShadeController;
     @Mock
-    private NotificationRowComponent mNotificationRowComponent;
+    private NotificationShelfComponent mNotificationShelfComponent;
     @Mock
     private NotifPipeline mNotifPipeline;
     @Mock
@@ -184,6 +189,7 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
     private BubbleData mBubbleData;
 
     private TestableLooper mTestableLooper;
+    private SuperStatusBarViewFactory mSuperStatusBarViewFactory;
 
     @Before
     public void setUp() throws Exception {
@@ -194,8 +200,25 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
         mContext.addMockSystemService(FaceManager.class, mFaceManager);
         when(mColorExtractor.getNeutralColors()).thenReturn(mGradientColors);
 
+        mSuperStatusBarViewFactory = new SuperStatusBarViewFactory(mContext,
+                new InjectionInflationController(SystemUIFactory.getInstance().getSysUIComponent()
+                        .createViewInstanceCreatorFactory()),
+                new NotificationShelfComponent.Builder() {
+                    @Override
+                    public NotificationShelfComponent.Builder notificationShelf(
+                            NotificationShelf view) {
+                        return this;
+                    }
+
+                    @Override
+                    public NotificationShelfComponent build() {
+                        return mNotificationShelfComponent;
+                    }
+                },
+                mLockIconController);
+
         // Bubbles get added to status bar window view
-        mNotificationShadeWindowController = new NotificationShadeWindowController(mContext,
+        mNotificationShadeWindowController = new NotificationShadeWindowControllerImpl(mContext,
                 mWindowManager, mActivityManager, mDozeParameters, mStatusBarStateController,
                 mConfigurationController, mKeyguardViewMediator, mKeyguardBypassController,
                 mColorExtractor, mDumpManager);
@@ -301,7 +324,7 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
         assertTrue(mBubbleData.hasOverflowBubbleWithKey(mRow.getEntry().getKey()));
 
         // We don't remove the notification since the bubble is still in overflow.
-        verify(mNotifCallback, never()).removeNotification(eq(mRow.getEntry()), anyInt());
+        verify(mNotifCallback, never()).removeNotification(eq(mRow.getEntry()), any(), anyInt());
         assertFalse(mBubbleController.hasBubbles());
     }
 
@@ -325,7 +348,8 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
 
         // Since the notif is dismissed and not in overflow, once the bubble is removed,
         // removeNotification gets called to really remove the notif
-        verify(mNotifCallback, times(1)).removeNotification(eq(mRow.getEntry()), anyInt());
+        verify(mNotifCallback, times(1)).removeNotification(eq(mRow.getEntry()),
+                any(), anyInt());
         assertFalse(mBubbleController.hasBubbles());
     }
 
@@ -831,10 +855,11 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
         // THEN only the NON-bubble children are dismissed
         List<ExpandableNotificationRow> childrenRows = groupSummary.getAttachedChildren();
         verify(mNotifCallback, times(1)).removeNotification(
-                childrenRows.get(0).getEntry(), REASON_GROUP_SUMMARY_CANCELED);
+                eq(childrenRows.get(0).getEntry()), any(), eq(REASON_GROUP_SUMMARY_CANCELED));
         verify(mNotifCallback, times(1)).removeNotification(
-                childrenRows.get(1).getEntry(), REASON_GROUP_SUMMARY_CANCELED);
-        verify(mNotifCallback, never()).removeNotification(eq(groupedBubble.getEntry()), anyInt());
+                eq(childrenRows.get(1).getEntry()), any(), eq(REASON_GROUP_SUMMARY_CANCELED));
+        verify(mNotifCallback, never()).removeNotification(eq(groupedBubble.getEntry()),
+                any(), anyInt());
 
         // THEN the bubble child still exists as a bubble and is suppressed from the shade
         assertTrue(mBubbleData.hasBubbleInStackWithKey(groupedBubble.getEntry().getKey()));

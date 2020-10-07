@@ -22,19 +22,20 @@ import static com.android.systemui.Dependency.LEAK_REPORT_EMAIL_NAME;
 import android.content.Context;
 import android.os.Handler;
 import android.os.PowerManager;
-import android.view.IWindowManager;
 
 import com.android.keyguard.KeyguardViewController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.car.CarDeviceProvisionedController;
 import com.android.systemui.car.CarDeviceProvisionedControllerImpl;
 import com.android.systemui.car.keyguard.CarKeyguardViewController;
+import com.android.systemui.car.notification.NotificationShadeWindowControllerImpl;
 import com.android.systemui.car.statusbar.DozeServiceHost;
-import com.android.systemui.car.statusbar.DummyNotificationShadeWindowController;
 import com.android.systemui.car.volume.CarVolumeDialogComponent;
-import com.android.systemui.dagger.SystemUIRootComponent;
+import com.android.systemui.dagger.GlobalRootComponent;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.dock.DockManagerImpl;
 import com.android.systemui.doze.DozeHost;
@@ -46,16 +47,15 @@ import com.android.systemui.qs.dagger.QSModule;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsImplementation;
-import com.android.systemui.stackdivider.DividerModule;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManagerImpl;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.collection.render.GroupMembershipManager;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.KeyguardEnvironmentImpl;
-import com.android.systemui.statusbar.phone.NotificationGroupManager;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.ShadeControllerImpl;
 import com.android.systemui.statusbar.policy.BatteryController;
@@ -64,42 +64,41 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.volume.VolumeDialogComponent;
-import com.android.systemui.wm.DisplaySystemBarsController;
-import com.android.wm.shell.common.DisplayController;
-import com.android.wm.shell.common.DisplayImeController;
-import com.android.wm.shell.common.SystemWindows;
-import com.android.wm.shell.common.TransactionPool;
+import com.android.systemui.wmshell.CarWMShellModule;
 
 import javax.inject.Named;
-import javax.inject.Singleton;
 
 import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
 
-@Module(includes = {DividerModule.class, QSModule.class})
-public abstract class CarSystemUIModule {
+@Module(
+        includes = {
+                QSModule.class,
+                CarWMShellModule.class
+        })
+abstract class CarSystemUIModule {
 
-    @Singleton
+    @SysUISingleton
     @Provides
     @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME)
     static boolean provideAllowNotificationLongPress() {
         return false;
     }
 
-    @Singleton
+    @SysUISingleton
     @Provides
     static HeadsUpManagerPhone provideHeadsUpManagerPhone(
             Context context,
             StatusBarStateController statusBarStateController,
             KeyguardBypassController bypassController,
-            NotificationGroupManager groupManager,
+            GroupMembershipManager groupManager,
             ConfigurationController configurationController) {
         return new HeadsUpManagerPhone(context, statusBarStateController, bypassController,
                 groupManager, configurationController);
     }
 
-    @Singleton
+    @SysUISingleton
     @Provides
     @Named(LEAK_REPORT_EMAIL_NAME)
     static String provideLeakReportEmail() {
@@ -107,36 +106,11 @@ public abstract class CarSystemUIModule {
     }
 
     @Provides
-    @Singleton
+    @SysUISingleton
     static Recents provideRecents(Context context, RecentsImplementation recentsImplementation,
             CommandQueue commandQueue) {
         return new Recents(context, recentsImplementation, commandQueue);
     }
-
-    @Singleton
-    @Provides
-    static TransactionPool provideTransactionPool() {
-        return new TransactionPool();
-    }
-
-    @Singleton
-    @Provides
-    static DisplayController providerDisplayController(Context context, @Main Handler handler,
-            IWindowManager wmService) {
-        return new DisplayController(context, handler, wmService);
-    }
-
-    @Singleton
-    @Provides
-    static SystemWindows provideSystemWindows(DisplayController displayController,
-            IWindowManager wmService) {
-        return new SystemWindows(displayController, wmService);
-    }
-
-    @Singleton
-    @Binds
-    abstract DisplayImeController bindDisplayImeController(
-            DisplaySystemBarsController displaySystemBarsController);
 
     @Binds
     abstract HeadsUpManager bindHeadsUpManagerPhone(HeadsUpManagerPhone headsUpManagerPhone);
@@ -149,19 +123,20 @@ public abstract class CarSystemUIModule {
             NotificationLockscreenUserManagerImpl notificationLockscreenUserManager);
 
     @Provides
-    @Singleton
+    @SysUISingleton
     static BatteryController provideBatteryController(Context context,
             EnhancedEstimates enhancedEstimates, PowerManager powerManager,
-            BroadcastDispatcher broadcastDispatcher, @Main Handler mainHandler,
+            BroadcastDispatcher broadcastDispatcher, DemoModeController demoModeController,
+            @Main Handler mainHandler,
             @Background Handler bgHandler) {
         BatteryController bC = new BatteryControllerImpl(context, enhancedEstimates, powerManager,
-                broadcastDispatcher, mainHandler, bgHandler);
+                broadcastDispatcher, demoModeController, mainHandler, bgHandler);
         bC.init();
         return bC;
     }
 
     @Binds
-    @Singleton
+    @SysUISingleton
     public abstract QSFactory bindQSFactory(QSFactoryImpl qsFactoryImpl);
 
     @Binds
@@ -175,8 +150,8 @@ public abstract class CarSystemUIModule {
     abstract ShadeController provideShadeController(ShadeControllerImpl shadeController);
 
     @Binds
-    abstract SystemUIRootComponent bindSystemUIRootComponent(
-            CarSystemUIRootComponent systemUIRootComponent);
+    abstract GlobalRootComponent bindGlobalRootComponent(
+            CarGlobalRootComponent globalRootComponent);
 
     @Binds
     abstract VolumeDialogComponent bindVolumeDialogComponent(
@@ -187,16 +162,16 @@ public abstract class CarSystemUIModule {
             CarKeyguardViewController carKeyguardViewController);
 
     @Binds
+    abstract NotificationShadeWindowController bindNotificationShadeController(
+            NotificationShadeWindowControllerImpl notificationPanelViewController);
+
+    @Binds
     abstract DeviceProvisionedController bindDeviceProvisionedController(
             CarDeviceProvisionedControllerImpl deviceProvisionedController);
 
     @Binds
     abstract CarDeviceProvisionedController bindCarDeviceProvisionedController(
             CarDeviceProvisionedControllerImpl deviceProvisionedController);
-
-    @Binds
-    abstract NotificationShadeWindowController bindNotificationShadeWindowController(
-            DummyNotificationShadeWindowController notificationShadeWindowController);
 
     @Binds
     abstract DozeHost bindDozeHost(DozeServiceHost dozeServiceHost);

@@ -53,7 +53,7 @@ import java.util.List;
 /** @hide */
 public class ApkLiteParseUtils {
 
-    private static final String TAG = ParsingPackageUtils.TAG;
+    private static final String TAG = ParsingUtils.TAG;
 
     // TODO(b/135203078): Consolidate constants
     private static final int DEFAULT_MIN_SDK_VERSION = 1;
@@ -67,7 +67,7 @@ public class ApkLiteParseUtils {
      * Automatically detects if the package is a monolithic style (single APK
      * file) or cluster style (directory of APKs).
      * <p>
-     * This performs sanity checking on cluster style packages, such as
+     * This performs validity checking on cluster style packages, such as
      * requiring identical package name and version codes, a single base APK,
      * and unique split names.
      *

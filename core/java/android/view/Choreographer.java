@@ -656,11 +656,11 @@ public final class Choreographer {
                     long curr = System.nanoTime();
                     boolean skipFlag = curr - mLastTouchOptTimeNanos < mFrameIntervalNanos;
                     Trace.traceBegin(Trace.TRACE_TAG_VIEW, "scheduleFrameLocked-mMotionEventType:"
-                                     + mMotionEventType + " mTouchMoveNum:"+ mTouchMoveNum 
+                                     + mMotionEventType + " mTouchMoveNum:"+ mTouchMoveNum
                                      + " mConsumedDown:" + mConsumedDown
                                      + " mConsumedMove:" + mConsumedMove
                                      + " mIsDoFrameProcessing:" + mIsDoFrameProcessing
-                                     + " skip:" + skipFlag 
+                                     + " skip:" + skipFlag
                                      + " diff:" + (curr - mLastTouchOptTimeNanos));
                     Trace.traceEnd(Trace.TRACE_TAG_VIEW);
                     synchronized(this) {
@@ -735,8 +735,7 @@ public final class Choreographer {
         ThreadedRenderer.setFPSDivisor(divisor);
     }
 
-    @UnsupportedAppUsage
-    void doFrame(long frameTimeNanos, int frame) {
+    void doFrame(long frameTimeNanos, int frame, long frameTimelineVsyncId) {
         final long startNanos;
         synchronized (mLock) {
             mIsVsyncScheduled = false;
@@ -787,7 +786,7 @@ public final class Choreographer {
                 }
             }
 
-            mFrameInfo.setVsync(intendedFrameTimeNanos, frameTimeNanos);
+            mFrameInfo.setVsync(intendedFrameTimeNanos, frameTimeNanos, frameTimelineVsyncId);
             mFrameScheduled = false;
             mLastFrameTimeNanos = frameTimeNanos;
         }
@@ -980,7 +979,7 @@ public final class Choreographer {
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case MSG_DO_FRAME:
-                    doFrame(System.nanoTime(), 0);
+                    doFrame(System.nanoTime(), 0, FrameInfo.INVALID_VSYNC_ID);
                     break;
                 case MSG_DO_SCHEDULE_VSYNC:
                     doScheduleVsync();
@@ -997,6 +996,7 @@ public final class Choreographer {
         private boolean mHavePendingVsync;
         private long mTimestampNanos;
         private int mFrame;
+        private long mFrameTimelineVsyncId;
 
         public FrameDisplayEventReceiver(Looper looper, int vsyncSource) {
             super(looper, vsyncSource, CONFIG_CHANGED_EVENT_SUPPRESS);
@@ -1006,7 +1006,8 @@ public final class Choreographer {
         // the internal display and DisplayEventReceiver#scheduleVsync only allows requesting VSYNC
         // for the internal display implicitly.
         @Override
-        public void onVsync(long timestampNanos, long physicalDisplayId, int frame) {
+        public void onVsync(long timestampNanos, long physicalDisplayId, int frame,
+                long frameTimelineVsyncId) {
             // Post the vsync event to the Handler.
             // The idea is to prevent incoming vsync events from completely starving
             // the message queue.  If there are no messages in the queue with timestamps
@@ -1030,6 +1031,7 @@ public final class Choreographer {
             mTimestampNanos = timestampNanos;
             mFrame = frame;
             ScrollOptimizer.setVsyncTime(mTimestampNanos);
+            mFrameTimelineVsyncId = frameTimelineVsyncId;
             Message msg = Message.obtain(mHandler, this);
             msg.setAsynchronous(true);
             mHandler.sendMessageAtTime(msg, timestampNanos / TimeUtils.NANOS_PER_MS);
@@ -1038,7 +1040,7 @@ public final class Choreographer {
         @Override
         public void run() {
             mHavePendingVsync = false;
-            doFrame(mTimestampNanos, mFrame);
+            doFrame(mTimestampNanos, mFrame, mFrameTimelineVsyncId);
         }
     }
 

@@ -33,6 +33,7 @@ import android.car.user.CarUserManager;
 import android.car.user.UserCreationResult;
 import android.car.user.UserSwitchResult;
 import android.car.userlib.UserHelper;
+import android.car.util.concurrent.AsyncFuture;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -60,7 +61,6 @@ import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.android.internal.infra.AndroidFuture;
 import com.android.internal.util.UserIcons;
 import com.android.systemui.R;
 
@@ -131,7 +131,7 @@ public class UserGridRecyclerView extends RecyclerView {
     }
 
     private List<UserInfo> getUsersForUserGrid() {
-        return mUserManager.getUsers(/* excludeDying= */ true)
+        return mUserManager.getAliveUsers()
                 .stream()
                 .filter(UserInfo::supportsSwitchToByUser)
                 .collect(Collectors.toList());
@@ -338,7 +338,7 @@ public class UserGridRecyclerView extends RecyclerView {
                 maxSupportedUsers -= 1;
             }
 
-            List<UserInfo> users = mUserManager.getUsers(/* excludeDying= */ true);
+            List<UserInfo> users = mUserManager.getAliveUsers();
 
             // Count all users that are managed profiles of another user.
             int managedProfilesCount = 0;
@@ -449,7 +449,7 @@ public class UserGridRecyclerView extends RecyclerView {
          */
         @Nullable
         public UserInfo createNewOrFindExistingGuest(Context context) {
-            AndroidFuture<UserCreationResult> future = mCarUserManager.createGuest(mGuestName);
+            AsyncFuture<UserCreationResult> future = mCarUserManager.createGuest(mGuestName);
             // CreateGuest will return null if a guest already exists.
             UserInfo newGuest = getUserInfo(future);
             if (newGuest != null) {
@@ -482,7 +482,7 @@ public class UserGridRecyclerView extends RecyclerView {
         }
 
         @Nullable
-        private UserInfo getUserInfo(AndroidFuture<UserCreationResult> future) {
+        private UserInfo getUserInfo(AsyncFuture<UserCreationResult> future) {
             UserCreationResult userCreationResult;
             try {
                 userCreationResult = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -504,7 +504,7 @@ public class UserGridRecyclerView extends RecyclerView {
         }
 
         private boolean switchUser(@UserIdInt int userId) {
-            AndroidFuture<UserSwitchResult> userSwitchResultFuture =
+            AsyncFuture<UserSwitchResult> userSwitchResultFuture =
                     mCarUserManager.switchUser(userId);
             UserSwitchResult userSwitchResult;
             try {
@@ -531,7 +531,7 @@ public class UserGridRecyclerView extends RecyclerView {
 
             @Override
             protected UserInfo doInBackground(String... userNames) {
-                AndroidFuture<UserCreationResult> future = mCarUserManager.createUser(userNames[0],
+                AsyncFuture<UserCreationResult> future = mCarUserManager.createUser(userNames[0],
                         /* flags= */ 0);
                 try {
                     UserInfo user = getUserInfo(future);

@@ -25,9 +25,9 @@ import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
 import android.hardware.face.Face;
+import android.hardware.face.FaceSensorProperties;
 import android.hardware.face.IFaceService;
 import android.hardware.face.IFaceServiceReceiver;
-import android.hardware.face.FaceSensorProperties;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.NativeHandle;
@@ -80,16 +80,27 @@ public class FaceService extends SystemService {
         }
 
         @Override // Binder call
-        public void generateChallenge(IBinder token, IFaceServiceReceiver receiver,
+        public void generateChallenge(IBinder token, int sensorId, IFaceServiceReceiver receiver,
                 String opPackageName) {
             Utils.checkPermission(getContext(), MANAGE_BIOMETRIC);
-            mFace10.scheduleGenerateChallenge(token, receiver, opPackageName);
+            if (sensorId == mFace10.getFaceSensorProperties().sensorId) {
+                mFace10.scheduleGenerateChallenge(token, receiver, opPackageName);
+                return;
+            }
+
+            Slog.w(TAG, "No matching sensor for generateChallenge, sensorId: " + sensorId);
         }
 
         @Override // Binder call
-        public void revokeChallenge(IBinder token, String owner) {
+        public void revokeChallenge(IBinder token, int sensorId, String owner) {
             Utils.checkPermission(getContext(), MANAGE_BIOMETRIC);
-            mFace10.scheduleRevokeChallenge(token, owner);
+
+            if (sensorId == mFace10.getFaceSensorProperties().sensorId) {
+                mFace10.scheduleRevokeChallenge(token, owner);
+                return;
+            }
+
+            Slog.w(TAG, "No matching sensor for revokeChallenge, sensorId: " + sensorId);
         }
 
         @Override // Binder call
@@ -267,9 +278,16 @@ public class FaceService extends SystemService {
         }
 
         @Override // Binder call
-        public void resetLockout(int userId, byte[] hardwareAuthToken) {
+        public void resetLockout(IBinder token, int sensorId, int userId, byte[] hardwareAuthToken,
+                String opPackageName) {
             Utils.checkPermission(getContext(), USE_BIOMETRIC_INTERNAL);
-            mFace10.scheduleResetLockout(userId, hardwareAuthToken);
+
+            if (sensorId == mFace10.getFaceSensorProperties().sensorId) {
+                mFace10.scheduleResetLockout(userId, hardwareAuthToken);
+                return;
+            }
+
+            Slog.w(TAG, "No matching sensor for resetLockout, sensorId: " + sensorId);
         }
 
         @Override
@@ -285,7 +303,8 @@ public class FaceService extends SystemService {
         public void getFeature(final IBinder token, int userId, int feature,
                 IFaceServiceReceiver receiver, final String opPackageName) {
             Utils.checkPermission(getContext(), MANAGE_BIOMETRIC);
-            mFace10.scheduleGetFeature(token, userId, feature, receiver, opPackageName);
+            mFace10.scheduleGetFeature(token, userId, feature,
+                    new ClientMonitorCallbackConverter(receiver), opPackageName);
         }
 
         @Override // Binder call

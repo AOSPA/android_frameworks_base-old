@@ -31,6 +31,7 @@ import android.content.pm.IPackageInstaller;
 import android.content.pm.IPackageDeleteObserver;
 import android.content.pm.IPackageDeleteObserver2;
 import android.content.pm.IPackageDataObserver;
+import android.content.pm.IPackageLoadingProgressCallback;
 import android.content.pm.IPackageMoveObserver;
 import android.content.pm.IPackageStatsObserver;
 import android.content.pm.IntentFilterVerificationInfo;
@@ -81,6 +82,11 @@ interface IPackageManager {
 
     @UnsupportedAppUsage
     ApplicationInfo getApplicationInfo(String packageName, int flags ,int userId);
+
+    /**
+     * @return the target SDK for the given package name, or -1 if it cannot be retrieved
+     */
+    int getTargetSdkVersion(String packageName);
 
     @UnsupportedAppUsage
     ActivityInfo getActivityInfo(in ComponentName className, int flags, int userId);
@@ -742,6 +748,8 @@ interface IPackageManager {
     void setRuntimePermissionsVersion(int version, int userId);
 
     void notifyPackagesReplacedReceived(in String[] packages);
+
+    void getChecksums(in String packageName, boolean includeSplits, int optional, int required, in List trustedInstallers, in IntentSender statusReceiver, int userId);
 
     //------------------------------------------------------------------------
     //

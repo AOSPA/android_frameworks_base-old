@@ -115,8 +115,8 @@ import java.util.function.Supplier;
  *     <dt>{@link #MODE_ALLOWED}
  *     <dd>Allow the access
  *     <dt>{@link #MODE_IGNORED}
- *     <dd>Don't allow the access, i.e. don't perform the requested action or return no or dummy
- *     data
+ *     <dd>Don't allow the access, i.e. don't perform the requested action or return no or
+ *     placeholder data
  *     <dt>{@link #MODE_ERRORED}
  *     <dd>Throw a {@link SecurityException} on access. This can be suppressed by using a
  *     {@code ...noThrow} method to check the mode
@@ -135,7 +135,7 @@ import java.util.function.Supplier;
  * <p>Each platform defined runtime permission (beside background modifiers) has an associated app
  * op which is used for tracking but also to allow for silent failures. I.e. if the runtime
  * permission is denied the caller gets a {@link SecurityException}, but if the permission is
- * granted and the app-op is {@link #MODE_IGNORED} then the callers gets dummy behavior, e.g.
+ * granted and the app-op is {@link #MODE_IGNORED} then the callers gets placeholder behavior, e.g.
  * location callbacks would not happen.
  *
  * <h3>App-op permissions</h3>
@@ -1145,9 +1145,32 @@ public class AppOpsManager {
     /** @hide */
     public static final int OP_NO_ISOLATED_STORAGE = AppProtoEnums.APP_OP_NO_ISOLATED_STORAGE;
 
+    /**
+     * Phone call is using microphone
+     *
+     * @hide
+     */
+    // TODO: Add as AppProtoEnums
+    public static final int OP_PHONE_CALL_MICROPHONE = 100;
+    /**
+     * Phone call is using camera
+     *
+     * @hide
+     */
+    // TODO: Add as AppProtoEnums
+    public static final int OP_PHONE_CALL_CAMERA = 101;
+
+    /**
+     * Audio is being recorded for hotword detection.
+     *
+     * @hide
+     */
+    // TODO: Add as AppProtoEnums
+    public static final int OP_RECORD_AUDIO_HOTWORD = 102;
+
     /** @hide */
     @UnsupportedAppUsage
-    public static final int _NUM_OP = 100;
+    public static final int _NUM_OP = 103;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1469,6 +1492,26 @@ public class AppOpsManager {
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final String OPSTR_NO_ISOLATED_STORAGE = "android:no_isolated_storage";
 
+    /**
+     * Phone call is using microphone
+     *
+     * @hide
+     */
+    public static final String OPSTR_PHONE_CALL_MICROPHONE = "android:phone_call_microphone";
+    /**
+     * Phone call is using camera
+     *
+     * @hide
+     */
+    public static final String OPSTR_PHONE_CALL_CAMERA = "android:phone_call_camera";
+
+    /**
+     * Audio is being recorded for hotword detection.
+     *
+     * @hide
+     */
+    public static final String OPSTR_RECORD_AUDIO_HOTWORD = "android:record_audio_hotword";
+
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
     /** Should not collect noting of this app-op in {@link #sAppOpsToNote} */
@@ -1658,6 +1701,9 @@ public class AppOpsManager {
             OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED, //AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             OP_AUTO_REVOKE_MANAGED_BY_INSTALLER, //OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
             OP_NO_ISOLATED_STORAGE,             // NO_ISOLATED_STORAGE
+            OP_PHONE_CALL_MICROPHONE,           // OP_PHONE_CALL_MICROPHONE
+            OP_PHONE_CALL_CAMERA,               // OP_PHONE_CALL_CAMERA
+            OP_RECORD_AUDIO_HOTWORD,            // RECORD_AUDIO_HOTWORD
     };
 
     /**
@@ -1764,6 +1810,9 @@ public class AppOpsManager {
             OPSTR_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
             OPSTR_AUTO_REVOKE_MANAGED_BY_INSTALLER,
             OPSTR_NO_ISOLATED_STORAGE,
+            OPSTR_PHONE_CALL_MICROPHONE,
+            OPSTR_PHONE_CALL_CAMERA,
+            OPSTR_RECORD_AUDIO_HOTWORD,
     };
 
     /**
@@ -1871,6 +1920,9 @@ public class AppOpsManager {
             "AUTO_REVOKE_PERMISSIONS_IF_UNUSED",
             "AUTO_REVOKE_MANAGED_BY_INSTALLER",
             "NO_ISOLATED_STORAGE",
+            "PHONE_CALL_MICROPHONE",
+            "PHONE_CALL_CAMERA",
+            "RECORD_AUDIO_HOTWORD",
     };
 
     /**
@@ -1912,7 +1964,7 @@ public class AppOpsManager {
             null, // no permission for writing clipboard
             null, // no permission for taking media buttons
             null, // no permission for taking audio focus
-            null, // no permission for changing master volume
+            null, // no permission for changing global volume
             null, // no permission for changing voice volume
             null, // no permission for changing ring volume
             null, // no permission for changing media volume
@@ -1979,6 +2031,9 @@ public class AppOpsManager {
             null, // no permission for OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // no permission for OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
             null, // no permission for OP_NO_ISOLATED_STORAGE
+            null, // no permission for OP_PHONE_CALL_MICROPHONE
+            null, // no permission for OP_PHONE_CALL_CAMERA
+            null, // no permission for OP_RECORD_AUDIO_HOTWORD
     };
 
     /**
@@ -2087,6 +2142,9 @@ public class AppOpsManager {
             null, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // AUTO_REVOKE_MANAGED_BY_INSTALLER
             null, // NO_ISOLATED_STORAGE
+            null, // PHONE_CALL_MICROPHONE
+            null, // PHONE_CALL_MICROPHONE
+            null, // RECORD_AUDIO_HOTWORD
     };
 
     /**
@@ -2194,6 +2252,9 @@ public class AppOpsManager {
             null, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // AUTO_REVOKE_MANAGED_BY_INSTALLER
             null, // NO_ISOLATED_STORAGE
+            null, // PHONE_CALL_MICROPHONE
+            null, // PHONE_CALL_CAMERA
+            null, // RECORD_AUDIO_HOTWORD
     };
 
     /**
@@ -2300,6 +2361,9 @@ public class AppOpsManager {
             AppOpsManager.MODE_DEFAULT, // OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             AppOpsManager.MODE_ALLOWED, // OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
             AppOpsManager.MODE_ERRORED, // OP_NO_ISOLATED_STORAGE
+            AppOpsManager.MODE_ALLOWED, // PHONE_CALL_MICROPHONE
+            AppOpsManager.MODE_ALLOWED, // PHONE_CALL_CAMERA
+            AppOpsManager.MODE_ALLOWED, // OP_RECORD_AUDIO_HOTWORD
     };
 
     /**
@@ -2410,6 +2474,9 @@ public class AppOpsManager {
             false, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             false, // AUTO_REVOKE_MANAGED_BY_INSTALLER
             true, // NO_ISOLATED_STORAGE
+            false, // PHONE_CALL_MICROPHONE
+            false, // PHONE_CALL_CAMERA
+            false, // RECORD_AUDIO_HOTWORD
     };
 
     /**
@@ -2657,8 +2724,10 @@ public class AppOpsManager {
      * @hide
      */
     // TODO: this should probably be @SystemApi as well
-    public static @NonNull String toReceiverId(@NonNull Object obj) {
-        if (obj instanceof PendingIntent) {
+    public static @NonNull String toReceiverId(@Nullable Object obj) {
+        if (obj == null) {
+            return "null";
+        } else if (obj instanceof PendingIntent) {
             return toReceiverId((PendingIntent) obj);
         } else {
             return obj.getClass().getName() + "@" + System.identityHashCode(obj);
@@ -6456,7 +6525,7 @@ public class AppOpsManager {
      * Retrieve current operation state for all applications.
      *
      * The mode of the ops returned are set for the package but may not reflect their effective
-     * state due to UID policy or because it's controlled by a different master op.
+     * state due to UID policy or because it's controlled by a different global op.
      *
      * Use {@link #unsafeCheckOp(String, int, String)}} or
      * {@link #noteOp(String, int, String, String, String)} if the effective mode is needed.
@@ -6480,7 +6549,7 @@ public class AppOpsManager {
      * Retrieve current operation state for all applications.
      *
      * The mode of the ops returned are set for the package but may not reflect their effective
-     * state due to UID policy or because it's controlled by a different master op.
+     * state due to UID policy or because it's controlled by a different global op.
      *
      * Use {@link #unsafeCheckOp(String, int, String)}} or
      * {@link #noteOp(String, int, String, String, String)} if the effective mode is needed.
@@ -6502,7 +6571,7 @@ public class AppOpsManager {
      * Retrieve current operation state for one application.
      *
      * The mode of the ops returned are set for the package but may not reflect their effective
-     * state due to UID policy or because it's controlled by a different master op.
+     * state due to UID policy or because it's controlled by a different global op.
      *
      * Use {@link #unsafeCheckOp(String, int, String)}} or
      * {@link #noteOp(String, int, String, String, String)} if the effective mode is needed.
@@ -6535,7 +6604,7 @@ public class AppOpsManager {
      * package must match.
      *
      * The mode of the ops returned are set for the package but may not reflect their effective
-     * state due to UID policy or because it's controlled by a different master op.
+     * state due to UID policy or because it's controlled by a different global op.
      *
      * Use {@link #unsafeCheckOp(String, int, String)}} or
      * {@link #noteOp(String, int, String, String, String)} if the effective mode is needed.
@@ -6672,10 +6741,14 @@ public class AppOpsManager {
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setUidMode(int code, int uid, @Mode int mode) {
+        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+        long token = Binder.clearCallingIdentity();
         try {
             mService.setUidMode(code, uid, mode);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -6693,11 +6766,7 @@ public class AppOpsManager {
     @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setUidMode(@NonNull String appOp, int uid, @Mode int mode) {
-        try {
-            mService.setUidMode(AppOpsManager.strOpToOp(appOp), uid, mode);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        setUidMode(AppOpsManager.strOpToOp(appOp), uid, mode);
     }
 
     /** @hide */
@@ -6726,10 +6795,14 @@ public class AppOpsManager {
     @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setMode(int code, int uid, String packageName, @Mode int mode) {
+        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+        long token = Binder.clearCallingIdentity();
         try {
             mService.setMode(code, uid, packageName, mode);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -6749,11 +6822,7 @@ public class AppOpsManager {
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setMode(@NonNull String op, int uid, @Nullable String packageName,
             @Mode int mode) {
-        try {
-            mService.setMode(strOpToOp(op), uid, packageName, mode);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        setMode(strOpToOp(op), uid, packageName, mode);
     }
 
     /**
@@ -7229,10 +7298,14 @@ public class AppOpsManager {
      * @hide
      */
     public int unsafeCheckOpRawNoThrow(int op, int uid, @NonNull String packageName) {
+        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+        long token = Binder.clearCallingIdentity();
         try {
             return mService.checkOperationRaw(op, uid, packageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -7404,8 +7477,20 @@ public class AppOpsManager {
                 }
             }
 
-            int mode = mService.noteOperation(op, uid, packageName, attributionTag,
-                    collectionMode == COLLECT_ASYNC, message, shouldCollectMessage);
+            int mode;
+            // Making the binder call "noteOperation" usually sets Binder.callingUid to the calling
+            // processes UID. Hence clearing the calling UID is superfluous.
+            // If the call is inside the system server though "noteOperation" is not a binder all,
+            // it is only a method call. Hence Binder.callingUid might still be set to the app that
+            // called the system server. This can lead to problems as not every app can see the
+            // same appops the system server can see.
+            long token = Binder.clearCallingIdentity();
+            try {
+                mode = mService.noteOperation(op, uid, packageName, attributionTag,
+                        collectionMode == COLLECT_ASYNC, message, shouldCollectMessage);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
 
             if (mode == MODE_ALLOWED) {
                 if (collectionMode == COLLECT_SELF) {
@@ -7568,10 +7653,17 @@ public class AppOpsManager {
                 }
             }
 
-            int mode = mService.noteProxyOperation(op, proxiedUid, proxiedPackageName,
-                    proxiedAttributionTag, myUid, mContext.getOpPackageName(),
-                    mContext.getAttributionTag(), collectionMode == COLLECT_ASYNC, message,
-                    shouldCollectMessage);
+            int mode;
+            // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+            long token = Binder.clearCallingIdentity();
+            try {
+                mode = mService.noteProxyOperation(op, proxiedUid, proxiedPackageName,
+                        proxiedAttributionTag, myUid, mContext.getOpPackageName(),
+                        mContext.getAttributionTag(), collectionMode == COLLECT_ASYNC, message,
+                        shouldCollectMessage);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
 
             if (mode == MODE_ALLOWED) {
                 if (collectionMode == COLLECT_SELF) {
@@ -7621,6 +7713,8 @@ public class AppOpsManager {
      */
     @UnsupportedAppUsage
     public int checkOp(int op, int uid, String packageName) {
+        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+        long token = Binder.clearCallingIdentity();
         try {
             int mode = mService.checkOperation(op, uid, packageName);
             if (mode == MODE_ERRORED) {
@@ -7629,6 +7723,8 @@ public class AppOpsManager {
             return mode;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -7639,11 +7735,15 @@ public class AppOpsManager {
      */
     @UnsupportedAppUsage
     public int checkOpNoThrow(int op, int uid, String packageName) {
+        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+        long token = Binder.clearCallingIdentity();
         try {
             int mode = mService.checkOperation(op, uid, packageName);
             return mode == AppOpsManager.MODE_FOREGROUND ? AppOpsManager.MODE_ALLOWED : mode;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -7895,9 +7995,16 @@ public class AppOpsManager {
                 }
             }
 
-            int mode = mService.startOperation(getClientId(), op, uid, packageName,
-                    attributionTag, startIfModeDefault, collectionMode == COLLECT_ASYNC, message,
-                    shouldCollectMessage);
+            int mode;
+            // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+            long token = Binder.clearCallingIdentity();
+            try {
+                mode = mService.startOperation(getClientId(), op, uid, packageName,
+                        attributionTag, startIfModeDefault, collectionMode == COLLECT_ASYNC,
+                        message, shouldCollectMessage);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
 
             if (mode == MODE_ALLOWED) {
                 if (collectionMode == COLLECT_SELF) {
@@ -7960,10 +8067,14 @@ public class AppOpsManager {
      */
     public void finishOp(int op, int uid, @NonNull String packageName,
             @Nullable String attributionTag) {
+        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+        long token = Binder.clearCallingIdentity();
         try {
             mService.finishOperation(getClientId(), op, uid, packageName, attributionTag);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -8555,10 +8666,14 @@ public class AppOpsManager {
     // TODO: Uncomment below annotation once b/73559440 is fixed
     // @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
     public boolean isOperationActive(int code, int uid, String packageName) {
+        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
+        long token = Binder.clearCallingIdentity();
         try {
             return mService.isOperationActive(code, uid, packageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 

@@ -18,7 +18,6 @@ package com.android.systemui.tuner;
 import android.app.ActivityManager;
 import android.content.ContentResolver;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
@@ -33,9 +32,10 @@ import android.util.ArraySet;
 
 import com.android.internal.util.ArrayUtils;
 import com.android.systemui.DejankUtils;
-import com.android.systemui.DemoMode;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.qs.QSTileHost;
 import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
@@ -46,24 +46,25 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 
 /**
  */
-@Singleton
+@SysUISingleton
 public class TunerServiceImpl extends TunerService {
 
+    private static final String TAG = "TunerService";
     private static final String TUNER_VERSION = "sysui_tuner_version";
 
     private static final int CURRENT_TUNER_VERSION = 4;
 
     // Things that use the tunable infrastructure but are now real user settings and
     // shouldn't be reset with tuner settings.
-    private static final String[] RESET_BLACKLIST = new String[] {
+    private static final String[] RESET_EXCEPTION_LIST = new String[] {
             QSTileHost.TILES_SETTING,
             Settings.Secure.DOZE_ALWAYS_ON,
-            Settings.Secure.MEDIA_CONTROLS_RESUME
+            Settings.Secure.MEDIA_CONTROLS_RESUME,
+            Secure.MEDIA_CONTROLS_RESUME_BLOCKED
     };
 
     private final Observer mObserver = new Observer();
@@ -76,6 +77,7 @@ public class TunerServiceImpl extends TunerService {
     private final HashSet<Tunable> mTunables = LeakDetector.ENABLED ? new HashSet<>() : null;
     private final Context mContext;
     private final LeakDetector mLeakDetector;
+    private final DemoModeController mDemoModeController;
 
     private ContentResolver mContentResolver;
     private int mCurrentUser;
@@ -84,11 +86,16 @@ public class TunerServiceImpl extends TunerService {
     /**
      */
     @Inject
-    public TunerServiceImpl(Context context, @Main Handler mainHandler,
-            LeakDetector leakDetector, BroadcastDispatcher broadcastDispatcher) {
+    public TunerServiceImpl(
+            Context context,
+            @Main Handler mainHandler,
+            LeakDetector leakDetector,
+            DemoModeController demoModeController,
+            BroadcastDispatcher broadcastDispatcher) {
         mContext = context;
         mContentResolver = mContext.getContentResolver();
         mLeakDetector = leakDetector;
+        mDemoModeController = demoModeController;
 
         for (UserInfo user : UserManager.get(mContext).getUsers()) {
             mCurrentUser = user.getUserHandle().getIdentifier();
@@ -116,17 +123,17 @@ public class TunerServiceImpl extends TunerService {
 
     private void upgradeTuner(int oldVersion, int newVersion, Handler mainHandler) {
         if (oldVersion < 1) {
-            String blacklistStr = getValue(StatusBarIconController.ICON_BLACKLIST);
-            if (blacklistStr != null) {
-                ArraySet<String> iconBlacklist =
-                        StatusBarIconController.getIconBlacklist(mContext, blacklistStr);
+            String hideListStr = getValue(StatusBarIconController.ICON_HIDE_LIST);
+            if (hideListStr != null) {
+                ArraySet<String> iconHideList =
+                        StatusBarIconController.getIconHideList(mContext, hideListStr);
 
-                iconBlacklist.add("rotate");
-                iconBlacklist.add("headset");
+                iconHideList.add("rotate");
+                iconHideList.add("headset");
 
                 Settings.Secure.putStringForUser(mContentResolver,
-                        StatusBarIconController.ICON_BLACKLIST,
-                        TextUtils.join(",", iconBlacklist), mCurrentUser);
+                        StatusBarIconController.ICON_HIDE_LIST,
+                        TextUtils.join(",", iconHideList), mCurrentUser);
             }
         }
         if (oldVersion < 2) {
@@ -244,14 +251,13 @@ public class TunerServiceImpl extends TunerService {
     }
 
     public void clearAllFromUser(int user) {
-        // A couple special cases.
-        Settings.Global.putString(mContentResolver, DemoMode.DEMO_MODE_ALLOWED, null);
-        Intent intent = new Intent(DemoMode.ACTION_DEMO);
-        intent.putExtra(DemoMode.EXTRA_COMMAND, DemoMode.COMMAND_EXIT);
-        mContext.sendBroadcast(intent);
+        // Turn off demo mode
+        mDemoModeController.requestFinishDemoMode();
+        mDemoModeController.requestSetDemoModeAllowed(false);
 
+        // A couple special cases.
         for (String key : mTunableLookup.keySet()) {
-            if (ArrayUtils.contains(RESET_BLACKLIST, key)) {
+            if (ArrayUtils.contains(RESET_EXCEPTION_LIST, key)) {
                 continue;
             }
             Settings.Secure.putStringForUser(mContentResolver, key, null, user);

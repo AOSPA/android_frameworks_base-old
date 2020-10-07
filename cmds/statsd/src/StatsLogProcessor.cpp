@@ -120,10 +120,9 @@ static void flushProtoToBuffer(ProtoOutputStream& proto, vector<uint8_t>* outDat
     }
 }
 
-void StatsLogProcessor::onAnomalyAlarmFired(
+void StatsLogProcessor::processFiredAnomalyAlarmsLocked(
         const int64_t& timestampNs,
         unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet) {
-    std::lock_guard<std::mutex> lock(mMetricsMutex);
     for (const auto& itr : mMetricsManagers) {
         itr.second->onAnomalyAlarmFired(timestampNs, alarmSet);
     }
@@ -429,6 +428,20 @@ void StatsLogProcessor::OnLogEvent(LogEvent* event, int64_t elapsedRealtimeNs) {
         return;
     }
 
+    bool fireAlarm = false;
+    {
+        std::lock_guard<std::mutex> anomalyLock(mAnomalyAlarmMutex);
+        if (mNextAnomalyAlarmTime != 0 &&
+            MillisToNano(mNextAnomalyAlarmTime) <= elapsedRealtimeNs) {
+            mNextAnomalyAlarmTime = 0;
+            VLOG("informing anomaly alarm at time %lld", (long long)elapsedRealtimeNs);
+            fireAlarm = true;
+        }
+    }
+    if (fireAlarm) {
+        informAnomalyAlarmFiredLocked(NanoToMillis(elapsedRealtimeNs));
+    }
+
     int64_t curTimeSec = getElapsedRealtimeSec();
     if (curTimeSec - mLastPullerCacheClearTimeSec > StatsdStats::kPullerCacheClearIntervalSec) {
         mPullerManager->ClearPullerCacheIfNecessary(curTimeSec * NS_PER_SEC);
@@ -513,19 +526,35 @@ void StatsLogProcessor::OnConfigUpdated(const int64_t timestampNs, const ConfigK
     OnConfigUpdatedLocked(timestampNs, key, config);
 }
 
-void StatsLogProcessor::OnConfigUpdatedLocked(
-        const int64_t timestampNs, const ConfigKey& key, const StatsdConfig& config) {
+void StatsLogProcessor::OnConfigUpdatedLocked(const int64_t timestampNs, const ConfigKey& key,
+                                              const StatsdConfig& config, bool modularUpdate) {
     VLOG("Updated configuration for key %s", key.ToString().c_str());
-    sp<MetricsManager> newMetricsManager =
-            new MetricsManager(key, config, mTimeBaseNs, timestampNs, mUidMap, mPullerManager,
-                               mAnomalyAlarmMonitor, mPeriodicAlarmMonitor);
-    if (newMetricsManager->isConfigValid()) {
-        newMetricsManager->init();
-        mUidMap->OnConfigUpdated(key);
-        newMetricsManager->refreshTtl(timestampNs);
-        mMetricsManagers[key] = newMetricsManager;
-        VLOG("StatsdConfig valid");
+    // Create new config if this is not a modular update or if this is a new config.
+    const auto& it = mMetricsManagers.find(key);
+    bool configValid = false;
+    if (!modularUpdate || it == mMetricsManagers.end()) {
+        sp<MetricsManager> newMetricsManager =
+                new MetricsManager(key, config, mTimeBaseNs, timestampNs, mUidMap, mPullerManager,
+                                   mAnomalyAlarmMonitor, mPeriodicAlarmMonitor);
+        configValid = newMetricsManager->isConfigValid();
+        if (configValid) {
+            newMetricsManager->init();
+            mUidMap->OnConfigUpdated(key);
+            newMetricsManager->refreshTtl(timestampNs);
+            mMetricsManagers[key] = newMetricsManager;
+            VLOG("StatsdConfig valid");
+        }
     } else {
+        // Preserve the existing MetricsManager, update necessary components and metadata in place.
+        configValid = it->second->updateConfig(config, mTimeBaseNs, timestampNs,
+                                               mAnomalyAlarmMonitor, mPeriodicAlarmMonitor);
+        if (configValid) {
+            // TODO(b/162323476): refresh TTL, ensure init() is handled properly.
+            mUidMap->OnConfigUpdated(key);
+
+        }
+    }
+    if (!configValid) {
         // If there is any error in the config, don't use it.
         // Remove any existing config with the same key.
         ALOGE("StatsdConfig NOT valid");
@@ -1088,6 +1117,28 @@ void StatsLogProcessor::onStatsdInitCompleted(const int64_t& elapsedTimeNs) {
 void StatsLogProcessor::noteOnDiskData(const ConfigKey& key) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
     mOnDiskDataConfigs.insert(key);
+}
+
+void StatsLogProcessor::setAnomalyAlarm(const int64_t elapsedTimeMillis) {
+    std::lock_guard<std::mutex> lock(mAnomalyAlarmMutex);
+    mNextAnomalyAlarmTime = elapsedTimeMillis;
+}
+
+void StatsLogProcessor::cancelAnomalyAlarm() {
+    std::lock_guard<std::mutex> lock(mAnomalyAlarmMutex);
+    mNextAnomalyAlarmTime = 0;
+}
+
+void StatsLogProcessor::informAnomalyAlarmFiredLocked(const int64_t elapsedTimeMillis) {
+    VLOG("StatsService::informAlarmForSubscriberTriggeringFired was called");
+    std::unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet =
+            mAnomalyAlarmMonitor->popSoonerThan(static_cast<uint32_t>(elapsedTimeMillis / 1000));
+    if (alarmSet.size() > 0) {
+        VLOG("Found periodic alarm fired.");
+        processFiredAnomalyAlarmsLocked(MillisToNano(elapsedTimeMillis), alarmSet);
+    } else {
+        ALOGW("Cannot find an periodic alarm that fired. Perhaps it was recently cancelled.");
+    }
 }
 
 }  // namespace statsd

@@ -23,7 +23,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <binder/AppOpsManager.h>
-#include <binder/Nullable.h>
 #include <binder/Status.h>
 #include <sys/stat.h>
 #include <uuid/uuid.h>
@@ -38,7 +37,6 @@
 #include "Metadata.pb.h"
 
 using namespace std::literals;
-namespace fs = std::filesystem;
 
 constexpr const char* kDataUsageStats = "android.permission.LOADER_USAGE_STATS";
 constexpr const char* kOpUsage = "android:loader_usage_stats";
@@ -277,6 +275,8 @@ IncrementalService::IncrementalService(ServiceManagerWrapper&& sm, std::string_v
         mJni(sm.getJni()),
         mLooper(sm.getLooper()),
         mTimedQueue(sm.getTimedQueue()),
+        mProgressUpdateJobQueue(sm.getProgressUpdateJobQueue()),
+        mFs(sm.getFs()),
         mIncrementalDir(rootDir) {
     CHECK(mVold) << "Vold service is unavailable";
     CHECK(mDataLoaderManager) << "DataLoaderManagerService is unavailable";
@@ -284,6 +284,8 @@ IncrementalService::IncrementalService(ServiceManagerWrapper&& sm, std::string_v
     CHECK(mJni) << "JNI is unavailable";
     CHECK(mLooper) << "Looper is unavailable";
     CHECK(mTimedQueue) << "TimedQueue is unavailable";
+    CHECK(mProgressUpdateJobQueue) << "mProgressUpdateJobQueue is unavailable";
+    CHECK(mFs) << "Fs is unavailable";
 
     mJobQueue.reserve(16);
     mJobProcessor = std::thread([this]() {
@@ -309,6 +311,7 @@ IncrementalService::~IncrementalService() {
     mLooper->wake();
     mCmdLooperThread.join();
     mTimedQueue->stop();
+    mProgressUpdateJobQueue->stop();
     // Ensure that mounts are destroyed while the service is still valid.
     mBindsByPath.clear();
     mMounts.clear();
@@ -346,7 +349,8 @@ void IncrementalService::onDump(int fd) {
             }
             dprintf(fd, "    storages (%d): {\n", int(mnt.storages.size()));
             for (auto&& [storageId, storage] : mnt.storages) {
-                dprintf(fd, "      [%d] -> [%s]\n", storageId, storage.name.c_str());
+                dprintf(fd, "      [%d] -> [%s] (%d %% loaded) \n", storageId, storage.name.c_str(),
+                        (int)(getLoadingProgressFromPath(mnt, storage.name.c_str()) * 100));
             }
             dprintf(fd, "    }\n");
 
@@ -1405,7 +1409,7 @@ void IncrementalService::prepareDataLoaderLocked(IncFsMount& ifs, DataLoaderPara
     }
 
     FileSystemControlParcel fsControlParcel;
-    fsControlParcel.incremental = aidl::make_nullable<IncrementalFileSystemControlParcel>();
+    fsControlParcel.incremental = std::make_optional<IncrementalFileSystemControlParcel>();
     fsControlParcel.incremental->cmd.reset(dup(ifs.control.cmd()));
     fsControlParcel.incremental->pendingReads.reset(dup(ifs.control.pendingReads()));
     fsControlParcel.incremental->log.reset(dup(ifs.control.logs()));
@@ -1603,7 +1607,8 @@ void IncrementalService::extractZipFile(const IfsMountPtr& ifs, ZipArchiveHandle
 
     const auto writeFd = mIncFs->openForSpecialOps(ifs->control, libFileId);
     if (!writeFd.ok()) {
-        LOG(ERROR) << "Failed to open write fd for: " << targetLibPath << " errno: " << writeFd;
+        LOG(ERROR) << "Failed to open write fd for: " << targetLibPath
+                   << " errno: " << writeFd.get();
         return;
     }
 
@@ -1671,6 +1676,105 @@ bool IncrementalService::waitForNativeBinariesExtraction(StorageId storage) {
                 (mPendingJobsMount != mount && mJobQueue.find(mount) == mJobQueue.end());
     });
     return mRunning;
+}
+
+int IncrementalService::isFileFullyLoaded(StorageId storage, const std::string& path) const {
+    std::unique_lock l(mLock);
+    const auto ifs = getIfsLocked(storage);
+    if (!ifs) {
+        LOG(ERROR) << "isFileFullyLoaded failed, invalid storageId: " << storage;
+        return -EINVAL;
+    }
+    const auto storageInfo = ifs->storages.find(storage);
+    if (storageInfo == ifs->storages.end()) {
+        LOG(ERROR) << "isFileFullyLoaded failed, no storage: " << storage;
+        return -EINVAL;
+    }
+    l.unlock();
+    return isFileFullyLoadedFromPath(*ifs, path);
+}
+
+int IncrementalService::isFileFullyLoadedFromPath(const IncFsMount& ifs,
+                                                  std::string_view filePath) const {
+    const auto [filledBlocks, totalBlocks] = mIncFs->countFilledBlocks(ifs.control, filePath);
+    if (filledBlocks < 0) {
+        LOG(ERROR) << "isFileFullyLoadedFromPath failed to get filled blocks count for: "
+                   << filePath << " errno: " << filledBlocks;
+        return filledBlocks;
+    }
+    if (totalBlocks < filledBlocks) {
+        LOG(ERROR) << "isFileFullyLoadedFromPath failed to get total num of blocks";
+        return -EINVAL;
+    }
+    return totalBlocks - filledBlocks;
+}
+
+float IncrementalService::getLoadingProgress(StorageId storage) const {
+    std::unique_lock l(mLock);
+    const auto ifs = getIfsLocked(storage);
+    if (!ifs) {
+        LOG(ERROR) << "getLoadingProgress failed, invalid storageId: " << storage;
+        return -EINVAL;
+    }
+    const auto storageInfo = ifs->storages.find(storage);
+    if (storageInfo == ifs->storages.end()) {
+        LOG(ERROR) << "getLoadingProgress failed, no storage: " << storage;
+        return -EINVAL;
+    }
+    l.unlock();
+    return getLoadingProgressFromPath(*ifs, storageInfo->second.name);
+}
+
+float IncrementalService::getLoadingProgressFromPath(const IncFsMount& ifs,
+                                                     std::string_view storagePath) const {
+    size_t totalBlocks = 0, filledBlocks = 0;
+    const auto filePaths = mFs->listFilesRecursive(storagePath);
+    for (const auto& filePath : filePaths) {
+        const auto [filledBlocksCount, totalBlocksCount] =
+                mIncFs->countFilledBlocks(ifs.control, filePath);
+        if (filledBlocksCount < 0) {
+            LOG(ERROR) << "getLoadingProgress failed to get filled blocks count for: " << filePath
+                       << " errno: " << filledBlocksCount;
+            return filledBlocksCount;
+        }
+        totalBlocks += totalBlocksCount;
+        filledBlocks += filledBlocksCount;
+    }
+
+    if (totalBlocks == 0) {
+        // No file in the storage or files are empty; regarded as fully loaded
+        return 1;
+    }
+    return (float)filledBlocks / (float)totalBlocks;
+}
+
+bool IncrementalService::updateLoadingProgress(
+        StorageId storage, const StorageLoadingProgressListener& progressListener) {
+    const auto progress = getLoadingProgress(storage);
+    if (progress < 0) {
+        // Failed to get progress from incfs, abort.
+        return false;
+    }
+    progressListener->onStorageLoadingProgressChanged(storage, progress);
+    if (progress > 1 - 0.001f) {
+        // Stop updating progress once it is fully loaded
+        return true;
+    }
+    static constexpr auto kProgressUpdateInterval = 1000ms;
+    addTimedJob(*mProgressUpdateJobQueue, storage, kProgressUpdateInterval /* repeat after 1s */,
+                [storage, progressListener, this]() {
+                    updateLoadingProgress(storage, progressListener);
+                });
+    return true;
+}
+
+bool IncrementalService::registerLoadingProgressListener(
+        StorageId storage, const StorageLoadingProgressListener& progressListener) {
+    return updateLoadingProgress(storage, progressListener);
+}
+
+bool IncrementalService::unregisterLoadingProgressListener(StorageId storage) {
+    return removeTimedJobs(*mProgressUpdateJobQueue, storage);
 }
 
 bool IncrementalService::perfLoggingEnabled() {
@@ -1755,18 +1859,21 @@ void IncrementalService::onAppOpChanged(const std::string& packageName) {
     }
 }
 
-void IncrementalService::addTimedJob(MountId id, Milliseconds after, Job what) {
+bool IncrementalService::addTimedJob(TimedQueueWrapper& timedQueue, MountId id, Milliseconds after,
+                                     Job what) {
     if (id == kInvalidStorageId) {
-        return;
+        return false;
     }
-    mTimedQueue->addJob(id, after, std::move(what));
+    timedQueue.addJob(id, after, std::move(what));
+    return true;
 }
 
-void IncrementalService::removeTimedJobs(MountId id) {
+bool IncrementalService::removeTimedJobs(TimedQueueWrapper& timedQueue, MountId id) {
     if (id == kInvalidStorageId) {
-        return;
+        return false;
     }
-    mTimedQueue->removeJobs(id);
+    timedQueue.removeJobs(id);
+    return true;
 }
 
 IncrementalService::DataLoaderStub::DataLoaderStub(IncrementalService& service, MountId id,
@@ -1808,7 +1915,7 @@ void IncrementalService::DataLoaderStub::cleanupResources() {
         mHealthPath.clear();
         unregisterFromPendingReads();
         resetHealthControl();
-        mService.removeTimedJobs(mId);
+        mService.removeTimedJobs(*mService.mTimedQueue, mId);
     }
 
     requestDestroy();
@@ -2031,11 +2138,13 @@ void IncrementalService::DataLoaderStub::updateHealthStatus(bool baseline) {
 
         // Healthcheck depends on timestamp of the oldest pending read.
         // To get it, we need to re-open a pendingReads FD to get a full list of reads.
-        // Additionally we need to re-register for epoll with fresh FDs in case there are no reads.
+        // Additionally we need to re-register for epoll with fresh FDs in case there are no
+        // reads.
         const auto now = Clock::now();
         const auto kernelTsUs = getOldestPendingReadTs();
         if (baseline) {
-            // Updating baseline only on looper/epoll callback, i.e. on new set of pending reads.
+            // Updating baseline only on looper/epoll callback, i.e. on new set of pending
+            // reads.
             mHealthBase = {now, kernelTsUs};
         }
 
@@ -2096,7 +2205,8 @@ void IncrementalService::DataLoaderStub::updateHealthStatus(bool baseline) {
         }
         LOG(DEBUG) << id() << ": updateHealthStatus in " << double(checkBackAfter.count()) / 1000.0
                    << "secs";
-        mService.addTimedJob(id(), checkBackAfter, [this]() { updateHealthStatus(); });
+        mService.addTimedJob(*mService.mTimedQueue, id(), checkBackAfter,
+                             [this]() { updateHealthStatus(); });
     }
 
     // With kTolerance we are expecting these to execute before the next update.

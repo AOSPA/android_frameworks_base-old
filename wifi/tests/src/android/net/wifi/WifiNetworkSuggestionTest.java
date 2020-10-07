@@ -16,7 +16,12 @@
 
 package android.net.wifi;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import android.net.MacAddress;
 import android.net.wifi.hotspot2.PasspointConfiguration;
@@ -26,6 +31,8 @@ import android.os.Parcel;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Test;
+
+import java.security.cert.X509Certificate;
 
 /**
  * Unit tests for {@link android.net.wifi.WifiNetworkSuggestion}.
@@ -39,6 +46,8 @@ public class WifiNetworkSuggestionTest {
     private static final String TEST_FQDN = "fqdn";
     private static final String TEST_WAPI_CERT_SUITE = "suite";
     private static final String TEST_DOMAIN_SUFFIX_MATCH = "domainSuffixMatch";
+    private static final int DEFAULT_PRIORITY_GROUP = 0;
+    private static final int TEST_PRIORITY_GROUP = 1;
 
     /**
      * Validate correctness of WifiNetworkSuggestion object created by
@@ -62,6 +71,7 @@ public class WifiNetworkSuggestionTest {
         assertEquals(-1, suggestion.wifiConfiguration.priority);
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
         assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -92,6 +102,7 @@ public class WifiNetworkSuggestionTest {
         assertEquals(0, suggestion.wifiConfiguration.priority);
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
         assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -122,6 +133,7 @@ public class WifiNetworkSuggestionTest {
         assertEquals(-1, suggestion.wifiConfiguration.priority);
         assertTrue(suggestion.isUserAllowedToManuallyConnect);
         assertFalse(suggestion.isInitialAutoJoinEnabled);
+        assertNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -152,6 +164,7 @@ public class WifiNetworkSuggestionTest {
         assertEquals(-1, suggestion.wifiConfiguration.priority);
         assertTrue(suggestion.isUserAllowedToManuallyConnect);
         assertFalse(suggestion.isInitialAutoJoinEnabled);
+        assertNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -174,6 +187,7 @@ public class WifiNetworkSuggestionTest {
         assertTrue(suggestion.wifiConfiguration.requirePmf);
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
         assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -197,19 +211,55 @@ public class WifiNetworkSuggestionTest {
         assertTrue(suggestion.wifiConfiguration.requirePmf);
         assertTrue(suggestion.isUserAllowedToManuallyConnect);
         assertFalse(suggestion.isInitialAutoJoinEnabled);
+        assertNull(suggestion.getEnterpriseConfig());
     }
-
 
     /**
      * Validate correctness of WifiNetworkSuggestion object created by
-     * {@link WifiNetworkSuggestion.Builder#build()} for SuiteB network.
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise network.
      */
     @Test
     public void testWifiNetworkSuggestionBuilderForWpa3EapNetwork() {
         WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
         enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
-        enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.GTC);
         enterpriseConfig.setCaCertificate(FakeKeys.CA_CERT0);
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa3EnterpriseConfig(enterpriseConfig)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.IEEE8021X));
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.WPA_EAP));
+        assertFalse(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupCiphers
+                .get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(suggestion.wifiConfiguration.requirePmf);
+        assertNull(suggestion.wifiConfiguration.preSharedKey);
+        // allowedSuiteBCiphers are set according to the loaded certificate and cannot be tested
+        // here.
+        assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNotNull(suggestion.getEnterpriseConfig());
+    }
+
+    /**
+     * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise 192-bit RSA SuiteB network.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderForWpa3SuiteBRsaEapNetwork() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_SUITE_B_RSA3072_CERT);
+        enterpriseConfig.setClientKeyEntryWithCertificateChain(FakeKeys.CLIENT_SUITE_B_RSA3072_KEY,
+                new X509Certificate[] {FakeKeys.CLIENT_SUITE_B_RSA3072_CERT});
+
         enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
 
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
@@ -230,6 +280,42 @@ public class WifiNetworkSuggestionTest {
         // here.
         assertTrue(suggestion.isUserAllowedToManuallyConnect);
         assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNotNull(suggestion.getEnterpriseConfig());
+    }
+
+    /**
+     * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise 192-bit ECC SuiteB network.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderForWpa3SuiteBEccEapNetwork() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_SUITE_B_ECDSA_CERT);
+        enterpriseConfig.setClientKeyEntryWithCertificateChain(FakeKeys.CLIENT_SUITE_B_ECC_KEY,
+                new X509Certificate[] {FakeKeys.CLIENT_SUITE_B_ECDSA_CERT});
+
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa3EnterpriseConfig(enterpriseConfig)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupCiphers
+                .get(WifiConfiguration.GroupCipher.GCMP_256));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupManagementCiphers
+                .get(WifiConfiguration.GroupMgmtCipher.BIP_GMAC_256));
+        assertTrue(suggestion.wifiConfiguration.requirePmf);
+        assertNull(suggestion.wifiConfiguration.preSharedKey);
+        // allowedSuiteBCiphers are set according to the loaded certificate and cannot be tested
+        // here.
+        assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNotNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -286,6 +372,7 @@ public class WifiNetworkSuggestionTest {
                 .get(WifiConfiguration.GroupCipher.SMS4));
         assertEquals("\"" + TEST_PRESHARED_KEY + "\"",
                 suggestion.wifiConfiguration.preSharedKey);
+        assertNull(suggestion.getEnterpriseConfig());
     }
 
 
@@ -316,6 +403,7 @@ public class WifiNetworkSuggestionTest {
                 suggestion.wifiConfiguration.enterpriseConfig.getEapMethod());
         assertEquals(TEST_WAPI_CERT_SUITE,
                 suggestion.wifiConfiguration.enterpriseConfig.getWapiCertSuite());
+        assertNotNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -345,6 +433,7 @@ public class WifiNetworkSuggestionTest {
                 suggestion.wifiConfiguration.enterpriseConfig.getEapMethod());
         assertEquals("",
                 suggestion.wifiConfiguration.enterpriseConfig.getWapiCertSuite());
+        assertNotNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -367,6 +456,7 @@ public class WifiNetworkSuggestionTest {
         assertEquals(suggestion.getPasspointConfig().getMeteredOverride(),
                 WifiConfiguration.METERED_OVERRIDE_METERED);
         assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertNull(suggestion.getEnterpriseConfig());
     }
 
     /**
@@ -592,6 +682,58 @@ public class WifiNetworkSuggestionTest {
     }
 
     /**
+     * Verify that the macRandomizationSetting defaults to RANDOMIZATION_PERSISTENT and could be set
+     * to RANDOMIZATION_ENHANCED.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderSetMacRandomization() {
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .build();
+        assertEquals(WifiConfiguration.RANDOMIZATION_PERSISTENT,
+                suggestion.wifiConfiguration.macRandomizationSetting);
+
+        suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setIsEnhancedMacRandomizationEnabled(false)
+                .build();
+        assertEquals(WifiConfiguration.RANDOMIZATION_PERSISTENT,
+                suggestion.wifiConfiguration.macRandomizationSetting);
+
+        suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setIsEnhancedMacRandomizationEnabled(true)
+                .build();
+        assertEquals(WifiConfiguration.RANDOMIZATION_ENHANCED,
+                suggestion.wifiConfiguration.macRandomizationSetting);
+    }
+
+    /**
+     * Verify that the builder creates the appropriate PasspointConfiguration according to the
+     * enhanced MAC randomization setting.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderSetMacRandomizationPasspoint() {
+        PasspointConfiguration passpointConfiguration = PasspointTestUtils.createConfig();
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setPasspointConfig(passpointConfiguration)
+                .build();
+        assertEquals(false, suggestion.passpointConfiguration.isEnhancedMacRandomizationEnabled());
+
+        suggestion = new WifiNetworkSuggestion.Builder()
+                .setPasspointConfig(passpointConfiguration)
+                .setIsEnhancedMacRandomizationEnabled(false)
+                .build();
+        assertEquals(false, suggestion.passpointConfiguration.isEnhancedMacRandomizationEnabled());
+
+        suggestion = new WifiNetworkSuggestion.Builder()
+                .setPasspointConfig(passpointConfiguration)
+                .setIsEnhancedMacRandomizationEnabled(true)
+                .build();
+        assertEquals(true, suggestion.passpointConfiguration.isEnhancedMacRandomizationEnabled());
+    }
+
+    /**
      * Check that parcel marshalling/unmarshalling works
      */
     @Test
@@ -601,7 +743,7 @@ public class WifiNetworkSuggestionTest {
         configuration.BSSID = TEST_BSSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion(
-                configuration, null, false, true, true, true);
+                configuration, null, false, true, true, true, TEST_PRIORITY_GROUP);
 
         Parcel parcelW = Parcel.obtain();
         suggestion.writeToParcel(parcelW, 0);
@@ -672,14 +814,16 @@ public class WifiNetworkSuggestionTest {
         configuration.BSSID = TEST_BSSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
         WifiNetworkSuggestion suggestion =
-                new WifiNetworkSuggestion(configuration, null, true, false, true, true);
+                new WifiNetworkSuggestion(configuration, null, true, false, true, true,
+                        TEST_PRIORITY_GROUP);
 
         WifiConfiguration configuration1 = new WifiConfiguration();
         configuration1.SSID = TEST_SSID;
         configuration1.BSSID = TEST_BSSID;
         configuration1.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
         WifiNetworkSuggestion suggestion1 =
-                new WifiNetworkSuggestion(configuration1, null, false, true, true, true);
+                new WifiNetworkSuggestion(configuration1, null, false, true, true, true,
+                        DEFAULT_PRIORITY_GROUP);
 
         assertEquals(suggestion, suggestion1);
         assertEquals(suggestion.hashCode(), suggestion1.hashCode());
@@ -695,13 +839,15 @@ public class WifiNetworkSuggestionTest {
         configuration.SSID = TEST_SSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion =
-                new WifiNetworkSuggestion(configuration, null, false, false, true, true);
+                new WifiNetworkSuggestion(configuration, null, false, false, true, true,
+                        DEFAULT_PRIORITY_GROUP);
 
         WifiConfiguration configuration1 = new WifiConfiguration();
         configuration1.SSID = TEST_SSID_1;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion1 =
-                new WifiNetworkSuggestion(configuration1, null, false, false, true, true);
+                new WifiNetworkSuggestion(configuration1, null, false, false, true, true,
+                        DEFAULT_PRIORITY_GROUP);
 
         assertNotEquals(suggestion, suggestion1);
     }
@@ -717,13 +863,15 @@ public class WifiNetworkSuggestionTest {
         configuration.BSSID = TEST_BSSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion =
-                new WifiNetworkSuggestion(configuration, null,  false, false, true, true);
+                new WifiNetworkSuggestion(configuration, null, false, false, true, true,
+                        DEFAULT_PRIORITY_GROUP);
 
         WifiConfiguration configuration1 = new WifiConfiguration();
         configuration1.SSID = TEST_SSID;
         configuration1.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion1 =
-                new WifiNetworkSuggestion(configuration1, null, false, false, true, true);
+                new WifiNetworkSuggestion(configuration1, null, false, false, true, true,
+                        DEFAULT_PRIORITY_GROUP);
 
         assertNotEquals(suggestion, suggestion1);
     }
@@ -738,13 +886,15 @@ public class WifiNetworkSuggestionTest {
         configuration.SSID = TEST_SSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion =
-                new WifiNetworkSuggestion(configuration, null, false, false, true, true);
+                new WifiNetworkSuggestion(configuration, null, false, false, true, true,
+                        DEFAULT_PRIORITY_GROUP);
 
         WifiConfiguration configuration1 = new WifiConfiguration();
         configuration1.SSID = TEST_SSID;
         configuration1.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
         WifiNetworkSuggestion suggestion1 =
-                new WifiNetworkSuggestion(configuration1, null, false, false, true, true);
+                new WifiNetworkSuggestion(configuration1, null, false, false, true, true,
+                        DEFAULT_PRIORITY_GROUP);
 
         assertNotEquals(suggestion, suggestion1);
     }

@@ -36,6 +36,7 @@ import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
@@ -67,6 +68,7 @@ import com.android.server.UiThread;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.notification.NotificationDelegate;
 import com.android.server.policy.GlobalActionsProvider;
+import com.android.server.power.ShutdownCheckPoints;
 import com.android.server.power.ShutdownThread;
 import com.android.server.UiThread;
 
@@ -531,6 +533,15 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
             if (mBar != null) {
                 try {
                     mBar.requestWindowMagnificationConnection(request);
+                } catch (RemoteException ex) { }
+            }
+        }
+
+        @Override
+        public void handleWindowManagerLoggingCommand(String[] args, ParcelFileDescriptor outFd) {
+            if (mBar != null) {
+                try {
+                    mBar.handleWindowManagerLoggingCommand(args, outFd);
                 } catch (RemoteException ex) { }
             }
         }
@@ -1183,13 +1194,14 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     @Override
     public void shutdown() {
         enforceStatusBarService();
+        String reason = PowerManager.SHUTDOWN_USER_REQUESTED;
+        ShutdownCheckPoints.recordCheckPoint(Binder.getCallingPid(), reason);
         long identity = Binder.clearCallingIdentity();
         try {
             mNotificationDelegate.prepareForPossibleShutdown();
             // ShutdownThread displays UI, so give it a UI context.
             mHandler.post(() ->
-                    ShutdownThread.shutdown(getUiContext(),
-                        PowerManager.SHUTDOWN_USER_REQUESTED, false));
+                    ShutdownThread.shutdown(getUiContext(), reason, false));
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -1201,6 +1213,10 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     @Override
     public void reboot(boolean safeMode) {
         enforceStatusBarService();
+        String reason = safeMode
+                ? PowerManager.REBOOT_SAFE_MODE
+                : PowerManager.SHUTDOWN_USER_REQUESTED;
+        ShutdownCheckPoints.recordCheckPoint(Binder.getCallingPid(), reason);
         long identity = Binder.clearCallingIdentity();
         try {
             mNotificationDelegate.prepareForPossibleShutdown();
@@ -1209,8 +1225,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 if (safeMode) {
                     ShutdownThread.rebootSafeMode(getUiContext(), true);
                 } else {
-                    ShutdownThread.reboot(getUiContext(),
-                            PowerManager.SHUTDOWN_USER_REQUESTED, false);
+                    ShutdownThread.reboot(getUiContext(), reason, false);
                 }
             });
         } finally {

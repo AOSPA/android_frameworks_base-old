@@ -69,6 +69,7 @@ import static android.view.WindowManager.TAKE_SCREENSHOT_SELECTED_REGION;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerGlobal.ADD_PERMISSION_DENIED;
 
+import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.SCREENSHOT_KEYCHORD_DELAY;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_COVERED;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_COVER_ABSENT;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_UNCOVERED;
@@ -148,6 +149,7 @@ import android.os.UEventObserver;
 import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.DeviceConfig;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.service.dreams.DreamManagerInternal;
@@ -279,7 +281,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final int LONG_PRESS_HOME_NOTHING = 0;
     static final int LONG_PRESS_HOME_ALL_APPS = 1;
     static final int LONG_PRESS_HOME_ASSIST = 2;
-    static final int LAST_LONG_PRESS_HOME_BEHAVIOR = LONG_PRESS_HOME_ASSIST;
+    static final int LONG_PRESS_HOME_NOTIFICATION_PANEL = 3;
+    static final int LAST_LONG_PRESS_HOME_BEHAVIOR = LONG_PRESS_HOME_NOTIFICATION_PANEL;
 
     // must match: config_doubleTapOnHomeBehavior in config.xml
     static final int DOUBLE_TAP_HOME_NOTHING = 0;
@@ -450,7 +453,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     volatile int mPendingWakeKey = PENDING_KEY_NULL;
 
     int mRecentAppsHeldModifiers;
-    boolean mLanguageSwitchKeyPressed;
 
     int mCameraLensCoverState = CAMERA_LENS_COVER_ABSENT;
     boolean mHaveBuiltInKeyboard;
@@ -942,6 +944,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
+        final boolean handledByPowerManager = mPowerManagerInternal.interceptPowerKeyDown(event);
+
         GestureLauncherService gestureService = LocalServices.getService(
                 GestureLauncherService.class);
         boolean gesturedServiceIntercepted = false;
@@ -961,7 +965,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // If the power key has still not yet been handled, then detect short
         // press, long press, or multi press and decide what to do.
         mPowerKeyHandled = hungUp || mScreenshotChordVolumeDownKeyTriggered
-                || mA11yShortcutChordVolumeUpKeyTriggered || gesturedServiceIntercepted;
+                || mA11yShortcutChordVolumeUpKeyTriggered || gesturedServiceIntercepted
+                || handledByPowerManager;
         if (!mPowerKeyHandled) {
             if (interactive) {
                 // When interactive, we're already awake.
@@ -1385,12 +1390,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private long getScreenshotChordLongPressDelay() {
+        long delayMs = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_SYSTEMUI, SCREENSHOT_KEYCHORD_DELAY,
+                ViewConfiguration.get(mContext).getScreenshotChordKeyTimeout());
         if (mKeyguardDelegate.isShowing()) {
             // Double the time it takes to take a screenshot from the keyguard
-            return (long) (KEYGUARD_SCREENSHOT_CHORD_DELAY_MULTIPLIER *
-                    ViewConfiguration.get(mContext).getScreenshotChordKeyTimeout());
+            return (long) (KEYGUARD_SCREENSHOT_CHORD_DELAY_MULTIPLIER * delayMs);
         }
-        return ViewConfiguration.get(mContext).getScreenshotChordKeyTimeout();
+        return delayMs;
     }
 
     private long getRingerToggleChordDelay() {
@@ -1697,8 +1704,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 case LONG_PRESS_HOME_ASSIST:
                     launchAssistAction(null, deviceId);
                     break;
+                case LONG_PRESS_HOME_NOTIFICATION_PANEL:
+                    IStatusBarService statusBarService = getStatusBarService();
+                    if (statusBarService != null) {
+                        try {
+                            statusBarService.togglePanel();
+                        } catch (RemoteException e) {
+                            // do nothing.
+                        }
+                    }
+                    break;
                 default:
-                    Log.w(TAG, "Undefined home long press behavior: "
+                    Log.w(TAG, "Undefined long press on home behavior: "
                             + mLongPressOnHomeBehavior);
                     break;
             }
@@ -2223,11 +2240,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         && isHidden(mLidNavigationAccessibility))) {
             config.navigationHidden = Configuration.NAVIGATIONHIDDEN_YES;
         }
-    }
-
-    @Override
-    public int getMaxWallpaperLayer() {
-        return getWindowLayerFromTypeLw(TYPE_NOTIFICATION_SHADE);
     }
 
     @Override
@@ -2942,12 +2954,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 && (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH || isCtrlOrMetaSpace)) {
             int direction = (metaState & KeyEvent.META_SHIFT_MASK) != 0 ? -1 : 1;
             mWindowManagerFuncs.switchKeyboardLayout(event.getDeviceId(), direction);
-            return -1;
-        }
-        if (mLanguageSwitchKeyPressed && !down
-                && (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH
-                        || keyCode == KeyEvent.KEYCODE_SPACE)) {
-            mLanguageSwitchKeyPressed = false;
             return -1;
         }
 
@@ -5335,15 +5341,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void setSwitchingUser(boolean switching) {
         mKeyguardDelegate.setSwitchingUser(switching);
-    }
-
-    @Override
-    public boolean isTopLevelWindow(int windowType) {
-        if (windowType >= WindowManager.LayoutParams.FIRST_SUB_WINDOW
-                && windowType <= WindowManager.LayoutParams.LAST_SUB_WINDOW) {
-            return (windowType == WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG);
-        }
-        return true;
     }
 
     @Override

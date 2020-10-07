@@ -41,6 +41,7 @@ import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -273,7 +274,6 @@ public final class PowerManager {
 
     /**
      * Brightness value for fully off in float.
-     * TODO(brightnessfloat): rename this to BRIGHTNES_OFF and remove the integer-based constant.
      * @hide
      */
     public static final float BRIGHTNESS_OFF_FLOAT = -1.0f;
@@ -1719,6 +1719,70 @@ public final class PowerManager {
     }
 
     /**
+     * Allows an app to tell the system how long it believes the battery will last and whether
+     * this estimate is customized based on historical device usage or on a generic configuration.
+     * These estimates will be displayed on system UI surfaces in place of the system computed
+     * value.
+     *
+     * Calling this requires the {@link android.Manifest.permission#DEVICE_POWER} permission.
+     *
+     * @param timeRemaining  The time remaining as a {@link Duration}.
+     * @param isPersonalized true if personalized based on device usage history, false otherwise.
+     * @throws IllegalStateException if the device is powered or currently charging
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.DEVICE_POWER)
+    public void setBatteryDischargePrediction(@NonNull Duration timeRemaining,
+            boolean isPersonalized) {
+        if (timeRemaining == null) {
+            throw new IllegalArgumentException("time remaining must not be null");
+        }
+        try {
+            mService.setBatteryDischargePrediction(new ParcelDuration(timeRemaining),
+                    isPersonalized);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the current battery life remaining estimate.
+     *
+     * @return The estimated battery life remaining as a {@link Duration}. Will be {@code null} if
+     * the device is powered, charging, or an error was encountered.
+     */
+    @Nullable
+    public Duration getBatteryDischargePrediction() {
+        try {
+            final ParcelDuration parcelDuration = mService.getBatteryDischargePrediction();
+            if (parcelDuration == null) {
+                return null;
+            }
+            return parcelDuration.getDuration();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns whether the current battery life remaining estimate is personalized based on device
+     * usage history or not. This value does not take a device's powered or charging state into
+     * account.
+     *
+     * @return A boolean indicating if the current discharge estimate is personalized based on
+     * historical device usage or not.
+     */
+    public boolean isBatteryDischargePredictionPersonalized() {
+        try {
+            return mService.isBatteryDischargePredictionPersonalized();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Get data about the battery saver mode for a specific service
      * @param serviceType unique key for the service, one of {@link ServiceType}
      * @return Battery saver state data.
@@ -1795,8 +1859,8 @@ public final class PowerManager {
     }
 
     /**
-     * Return whether the given application package name is on the device's power whitelist.
-     * Apps can be placed on the whitelist through the settings UI invoked by
+     * Return whether the given application package name is on the device's power allowlist.
+     * Apps can be placed on the allowlist through the settings UI invoked by
      * {@link android.provider.Settings#ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS}.
      */
     public boolean isIgnoringBatteryOptimizations(String packageName) {
@@ -2185,6 +2249,18 @@ public final class PowerManager {
     }
 
     /**
+     * Intent that is broadcast when the enhanced battery discharge prediction changes. The new
+     * value can be retrieved via {@link #getBatteryDischargePrediction()}.
+     * This broadcast is only sent to registered receivers.
+     *
+     * @hide
+     */
+    @TestApi
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_ENHANCED_DISCHARGE_PREDICTION_CHANGED =
+            "android.os.action.ENHANCED_DISCHARGE_PREDICTION_CHANGED";
+
+    /**
      * Intent that is broadcast when the state of {@link #isPowerSaveMode()} changes.
      * This broadcast is only sent to registered receivers.
      */
@@ -2219,7 +2295,7 @@ public final class PowerManager {
             = "android.os.action.LIGHT_DEVICE_IDLE_MODE_CHANGED";
 
     /**
-     * @hide Intent that is broadcast when the set of power save whitelist apps has changed.
+     * @hide Intent that is broadcast when the set of power save allowlist apps has changed.
      * This broadcast is only sent to registered receivers.
      */
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
@@ -2227,7 +2303,7 @@ public final class PowerManager {
             = "android.os.action.POWER_SAVE_WHITELIST_CHANGED";
 
     /**
-     * @hide Intent that is broadcast when the set of temporarily whitelisted apps has changed.
+     * @hide Intent that is broadcast when the set of temporarily allowlisted apps has changed.
      * This broadcast is only sent to registered receivers.
      */
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)

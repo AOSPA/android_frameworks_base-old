@@ -122,9 +122,7 @@ import com.android.server.inputmethod.MultiClientInputMethodManagerService;
 import com.android.server.integrity.AppIntegrityManagerService;
 import com.android.server.lights.LightsService;
 import com.android.server.location.LocationManagerService;
-import com.android.server.media.MediaResourceMonitorService;
 import com.android.server.media.MediaRouterService;
-import com.android.server.media.MediaSessionService;
 import com.android.server.media.projection.MediaProjectionManagerService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
@@ -153,6 +151,8 @@ import com.android.server.policy.role.LegacyRoleResolutionPolicy;
 import com.android.server.power.PowerManagerService;
 import com.android.server.power.ShutdownThread;
 import com.android.server.power.ThermalManagerService;
+import com.android.server.powerstats.PowerStatsService;
+import com.android.server.profcollect.ProfcollectForwardingService;
 import com.android.server.recoverysystem.RecoverySystemService;
 import com.android.server.restrictions.RestrictionsManagerService;
 import com.android.server.role.RoleManagerService;
@@ -297,6 +297,8 @@ public final class SystemServer {
             "com.android.server.timedetector.TimeDetectorService$Lifecycle";
     private static final String TIME_ZONE_DETECTOR_SERVICE_CLASS =
             "com.android.server.timezonedetector.TimeZoneDetectorService$Lifecycle";
+    private static final String LOCATION_TIME_ZONE_MANAGER_SERVICE_CLASS =
+            "com.android.server.location.timezone.LocationTimeZoneManagerService$Lifecycle";
     private static final String ACCESSIBILITY_MANAGER_SERVICE_CLASS =
             "com.android.server.accessibility.AccessibilityManagerService$Lifecycle";
     private static final String ADB_SERVICE_CLASS =
@@ -315,6 +317,10 @@ public final class SystemServer {
             "com.android.server.rollback.RollbackManagerService";
     private static final String ALARM_MANAGER_SERVICE_CLASS =
             "com.android.server.alarm.AlarmManagerService";
+    private static final String MEDIA_SESSION_SERVICE_CLASS =
+            "com.android.server.media.MediaSessionService";
+    private static final String MEDIA_RESOURCE_MONITOR_SERVICE_CLASS =
+            "com.android.server.media.MediaResourceMonitorService";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -762,6 +768,11 @@ public final class SystemServer {
         mSystemServiceManager.startService(UriGrantsManagerService.Lifecycle.class);
         t.traceEnd();
 
+        t.traceBegin("StartPowerStatsService");
+        // Tracks rail data to be used for power statistics.
+        mSystemServiceManager.startService(PowerStatsService.class);
+        t.traceEnd();
+
         // Activity manager runs the show.
         t.traceBegin("StartActivityManager");
         // TODO: Might need to move after migration to WM.
@@ -1126,7 +1137,7 @@ public final class SystemServer {
             t.traceEnd();
 
             t.traceBegin("InstallSystemProviders");
-            mActivityManagerService.installSystemProviders();
+            mActivityManagerService.getContentProviderHelper().installSystemProviders();
             // Now that SettingsProvider is ready, reactivate SQLiteCompatibilityWalFlags
             SQLiteCompatibilityWalFlags.reset();
             t.traceEnd();
@@ -1237,6 +1248,12 @@ public final class SystemServer {
             t.traceEnd();
 
             mSystemServiceManager.startService(ActivityTriggerService.class);
+
+            if (Build.IS_DEBUGGABLE) {
+                t.traceBegin("ProfcollectForwardingService");
+                mSystemServiceManager.startService(ProfcollectForwardingService.class);
+                t.traceEnd();
+            }
 
             t.traceBegin("SignedConfigService");
             SignedConfigService.registerUpdateReceiver(mSystemContext);
@@ -1643,7 +1660,7 @@ public final class SystemServer {
             try {
                 mSystemServiceManager.startService(TIME_DETECTOR_SERVICE_CLASS);
             } catch (Throwable e) {
-                reportWtf("starting StartTimeDetectorService service", e);
+                reportWtf("starting TimeDetectorService service", e);
             }
             t.traceEnd();
 
@@ -1651,7 +1668,15 @@ public final class SystemServer {
             try {
                 mSystemServiceManager.startService(TIME_ZONE_DETECTOR_SERVICE_CLASS);
             } catch (Throwable e) {
-                reportWtf("starting StartTimeZoneDetectorService service", e);
+                reportWtf("starting TimeZoneDetectorService service", e);
+            }
+            t.traceEnd();
+
+            t.traceBegin("StartLocationTimeZoneManagerService");
+            try {
+                mSystemServiceManager.startService(LOCATION_TIME_ZONE_MANAGER_SERVICE_CLASS);
+            } catch (Throwable e) {
+                reportWtf("starting LocationTimeZoneManagerService service", e);
             }
             t.traceEnd();
 
@@ -1923,7 +1948,7 @@ public final class SystemServer {
             t.traceEnd();
 
             t.traceBegin("StartMediaSessionService");
-            mSystemServiceManager.startService(MediaSessionService.class);
+            mSystemServiceManager.startService(MEDIA_SESSION_SERVICE_CLASS);
             t.traceEnd();
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_HDMI_CEC)) {
@@ -1947,7 +1972,7 @@ public final class SystemServer {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
                 t.traceBegin("StartMediaResourceMonitor");
-                mSystemServiceManager.startService(MediaResourceMonitorService.class);
+                mSystemServiceManager.startService(MEDIA_RESOURCE_MONITOR_SERVICE_CLASS);
                 t.traceEnd();
             }
 

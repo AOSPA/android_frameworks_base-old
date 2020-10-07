@@ -18,9 +18,9 @@ package com.android.server.wm;
 
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
+import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_SURFACE_ALLOC;
 import static com.android.server.wm.AnimationSpecProto.ROTATE;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
-import static com.android.server.wm.ProtoLogGroup.WM_SHOW_SURFACE_ALLOC;
 import static com.android.server.wm.RotationAnimationSpecProto.DURATION_MS;
 import static com.android.server.wm.RotationAnimationSpecProto.END_LUMA;
 import static com.android.server.wm.RotationAnimationSpecProto.START_LUMA;
@@ -51,7 +51,7 @@ import android.view.animation.AnimationUtils;
 import android.view.animation.Transformation;
 
 import com.android.internal.R;
-import com.android.server.protolog.common.ProtoLog;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 import com.android.server.wm.utils.RotationAnimationUtils;
@@ -105,7 +105,6 @@ class ScreenRotationAnimation {
     private final Transformation mRotateExitTransformation = new Transformation();
     private final Transformation mRotateEnterTransformation = new Transformation();
     // Complete transformations being applied.
-    private final Transformation mEnterTransformation = new Transformation();
     private final Matrix mSnapshotInitialMatrix = new Matrix();
     private final WindowManagerService mService;
     /** Only used for custom animations and not screen rotation. */
@@ -315,8 +314,6 @@ class ScreenRotationAnimation {
         pw.print(" "); mRotateExitTransformation.printShortString(pw); pw.println();
         pw.print(prefix); pw.print("mRotateEnterAnimation="); pw.print(mRotateEnterAnimation);
         pw.print(" "); mRotateEnterTransformation.printShortString(pw); pw.println();
-        pw.print(prefix); pw.print("mEnterTransformation=");
-        mEnterTransformation.printShortString(pw); pw.println();
         pw.print(prefix); pw.print("mSnapshotInitialMatrix=");
         mSnapshotInitialMatrix.dump(pw); pw.println();
         pw.print(prefix); pw.print("mForceDefaultOrientation="); pw.print(mForceDefaultOrientation);
@@ -521,10 +518,6 @@ class ScreenRotationAnimation {
 
     public boolean isRotating() {
         return mCurRotation != mOriginalRotation;
-    }
-
-    public Transformation getEnterTransformation() {
-        return mEnterTransformation;
     }
 
     /**

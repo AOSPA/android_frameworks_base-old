@@ -22,6 +22,7 @@ import static android.app.ITaskStackListener.FORCED_RESIZEABLE_REASON_SECONDARY_
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
@@ -39,6 +40,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import android.app.WaitResult;
 import android.content.pm.ActivityInfo;
 import android.platform.test.annotations.Presubmit;
+import android.view.Display;
 
 import androidx.test.filters.MediumTest;
 
@@ -55,7 +57,7 @@ import org.junit.runner.RunWith;
 @MediumTest
 @Presubmit
 @RunWith(WindowTestRunner.class)
-public class ActivityStackSupervisorTests extends ActivityTestsBase {
+public class ActivityStackSupervisorTests extends WindowTestsBase {
     private Task mFullscreenStack;
 
     @Before
@@ -69,7 +71,7 @@ public class ActivityStackSupervisorTests extends ActivityTestsBase {
      */
     @Test
     public void testStoppingActivityRemovedWhenResumed() {
-        final ActivityRecord firstActivity = new ActivityBuilder(mService).setCreateTask(true)
+        final ActivityRecord firstActivity = new ActivityBuilder(mAtm).setCreateTask(true)
                 .setStack(mFullscreenStack).build();
         mSupervisor.mStoppingActivities.add(firstActivity);
 
@@ -83,7 +85,7 @@ public class ActivityStackSupervisorTests extends ActivityTestsBase {
      */
     @Test
     public void testReportWaitingActivityLaunchedIfNeeded() {
-        final ActivityRecord firstActivity = new ActivityBuilder(mService).setCreateTask(true)
+        final ActivityRecord firstActivity = new ActivityBuilder(mAtm).setCreateTask(true)
                 .setStack(mFullscreenStack).build();
 
         final WaitResult taskToFrontWait = new WaitResult();
@@ -113,15 +115,15 @@ public class ActivityStackSupervisorTests extends ActivityTestsBase {
     public void testHandleNonResizableTaskOnSecondaryDisplay() {
         // Create an unresizable task on secondary display.
         final DisplayContent newDisplay = addNewDisplayContentAt(DisplayContent.POSITION_TOP);
-        final Task stack = new StackBuilder(mRootWindowContainer)
-                .setDisplay(newDisplay).build();
+        final Task stack = new TaskBuilder(mSupervisor)
+                .setDisplay(newDisplay).setCreateActivity(true).build();
         final ActivityRecord unresizableActivity = stack.getTopNonFinishingActivity();
         final Task task = unresizableActivity.getTask();
         unresizableActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
         task.setResizeMode(unresizableActivity.info.resizeMode);
 
         final TaskChangeNotificationController taskChangeNotifier =
-                mService.getTaskChangeNotificationController();
+                mAtm.getTaskChangeNotificationController();
         spyOn(taskChangeNotifier);
 
         mSupervisor.handleNonResizableTaskIfNeeded(task, newDisplay.getWindowingMode(),
@@ -133,7 +135,7 @@ public class ActivityStackSupervisorTests extends ActivityTestsBase {
         reset(taskChangeNotifier);
 
         // Put a resizable activity on top of the unresizable task.
-        final ActivityRecord resizableActivity = new ActivityBuilder(mService)
+        final ActivityRecord resizableActivity = new ActivityBuilder(mAtm)
                 .setTask(task).build();
         resizableActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_RESIZEABLE;
 
@@ -150,27 +152,52 @@ public class ActivityStackSupervisorTests extends ActivityTestsBase {
      */
     @Test
     public void testNotifyTaskFocusChanged() {
-        final ActivityRecord fullScreenActivityA = new ActivityBuilder(mService).setCreateTask(true)
+        final ActivityRecord fullScreenActivityA = new ActivityBuilder(mAtm).setCreateTask(true)
                 .setStack(mFullscreenStack).build();
         final Task taskA = fullScreenActivityA.getTask();
 
         final TaskChangeNotificationController taskChangeNotifier =
-                mService.getTaskChangeNotificationController();
+                mAtm.getTaskChangeNotificationController();
         spyOn(taskChangeNotifier);
 
-        mService.setResumedActivityUncheckLocked(fullScreenActivityA, "resumeA");
+        mAtm.setResumedActivityUncheckLocked(fullScreenActivityA, "resumeA");
         verify(taskChangeNotifier).notifyTaskFocusChanged(eq(taskA.mTaskId) /* taskId */,
                 eq(true) /* focused */);
         reset(taskChangeNotifier);
 
-        final ActivityRecord fullScreenActivityB = new ActivityBuilder(mService).setCreateTask(true)
+        final ActivityRecord fullScreenActivityB = new ActivityBuilder(mAtm).setCreateTask(true)
                 .setStack(mFullscreenStack).build();
         final Task taskB = fullScreenActivityB.getTask();
 
-        mService.setResumedActivityUncheckLocked(fullScreenActivityB, "resumeB");
+        mAtm.setResumedActivityUncheckLocked(fullScreenActivityB, "resumeB");
         verify(taskChangeNotifier).notifyTaskFocusChanged(eq(taskA.mTaskId) /* taskId */,
                 eq(false) /* focused */);
         verify(taskChangeNotifier).notifyTaskFocusChanged(eq(taskB.mTaskId) /* taskId */,
                 eq(true) /* focused */);
+    }
+
+    /**
+     * Ensures that a trusted display can launch arbitrary activity and an untrusted display can't.
+     */
+    @Test
+    public void testDisplayCanLaunchActivities() {
+        final Display display = mDisplayContent.mDisplay;
+        // An empty info without FLAG_ALLOW_EMBEDDED.
+        final ActivityInfo activityInfo = new ActivityInfo();
+        final int callingPid = 12345;
+        final int callingUid = 12345;
+        spyOn(display);
+
+        doReturn(true).when(display).isTrusted();
+        final boolean allowedOnTrusted = mSupervisor.isCallerAllowedToLaunchOnDisplay(callingPid,
+                callingUid, display.getDisplayId(), activityInfo);
+
+        assertThat(allowedOnTrusted).isTrue();
+
+        doReturn(false).when(display).isTrusted();
+        final boolean allowedOnUntrusted = mSupervisor.isCallerAllowedToLaunchOnDisplay(callingPid,
+                callingUid, display.getDisplayId(), activityInfo);
+
+        assertThat(allowedOnUntrusted).isFalse();
     }
 }

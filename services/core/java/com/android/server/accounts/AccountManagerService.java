@@ -106,6 +106,7 @@ import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 
 import com.google.android.collect.Lists;
 import com.google.android.collect.Sets;
@@ -161,14 +162,14 @@ public class AccountManagerService
         }
 
         @Override
-        public void onUnlockUser(int userHandle) {
-            mService.onUnlockUser(userHandle);
+        public void onUserUnlocking(@NonNull TargetUser user) {
+            mService.onUnlockUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onStopUser(int userHandle) {
-            Slog.i(TAG, "onStopUser " + userHandle);
-            mService.purgeUserData(userHandle);
+        public void onUserStopping(@NonNull TargetUser user) {
+            Slog.i(TAG, "onStopUser " + user);
+            mService.purgeUserData(user.getUserIdentifier());
         }
     }
 
@@ -2115,7 +2116,7 @@ public class AccountManagerService
                  * Owner or system user account was renamed, rename the account for
                  * those users with which the account was shared.
                  */
-                    List<UserInfo> users = getUserManager().getUsers(true);
+                    List<UserInfo> users = getUserManager().getAliveUsers();
                     for (UserInfo user : users) {
                         if (user.isRestricted()
                                 && (user.restrictedProfileParentId == parentUserId)) {
@@ -2327,7 +2328,7 @@ public class AccountManagerService
                 List<String> accountRemovedReceivers =
                     getAccountRemovedReceivers(account, accounts);
                 accounts.accountsDb.beginTransaction();
-                // Set to a dummy value, this will only be used if the database
+                // Set to a placeholder value, this will only be used if the database
                 // transaction succeeds.
                 long accountId = -1;
                 try {
@@ -2374,7 +2375,7 @@ public class AccountManagerService
             int parentUserId = accounts.userId;
             if (canHaveProfile(parentUserId)) {
                 // Remove from any restricted profiles that are sharing this account.
-                List<UserInfo> users = getUserManager().getUsers(true);
+                List<UserInfo> users = getUserManager().getAliveUsers();
                 for (UserInfo user : users) {
                     if (user.isRestricted() && parentUserId == (user.restrictedProfileParentId)) {
                         removeSharedAccountAsUser(account, user.id, callingUid);
@@ -4273,7 +4274,7 @@ public class AccountManagerService
      */
     @NonNull
     public AccountAndUser[] getAllAccounts() {
-        final List<UserInfo> users = getUserManager().getUsers(true);
+        final List<UserInfo> users = getUserManager().getAliveUsers();
         final int[] userIds = new int[users.size()];
         for (int i = 0; i < userIds.length; i++) {
             userIds[i] = users.get(i).id;
@@ -6290,7 +6291,7 @@ public class AccountManagerService
                     PRE_N_DATABASE_NAME);
             if (userId == 0) {
                 // Migrate old file, if it exists, to the new location.
-                // Make sure the new file doesn't already exist. A dummy file could have been
+                // Make sure the new file doesn't already exist. A placeholder file could have been
                 // accidentally created in the old location,
                 // causing the new one to become corrupted as well.
                 File oldFile = new File(systemDir, PRE_N_DATABASE_NAME);

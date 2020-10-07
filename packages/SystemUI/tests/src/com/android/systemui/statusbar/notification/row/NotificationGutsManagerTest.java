@@ -69,17 +69,16 @@ import com.android.internal.logging.testing.UiEventLoggerFake;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
-import com.android.systemui.settings.CurrentUserContextTracker;
+import com.android.systemui.settings.UserContextProvider;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.notification.AssistantFeedbackController;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager.OnSettingsClickListener;
-import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 
@@ -114,10 +113,10 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
 
     @Rule public MockitoRule mockito = MockitoJUnit.rule();
     @Mock private MetricsLogger mMetricsLogger;
-    @Mock private VisualStabilityManager mVisualStabilityManager;
+    @Mock private OnUserInteractionCallback mOnUserInteractionCallback;
     @Mock private NotificationPresenter mPresenter;
     @Mock private NotificationActivityStarter mNotificationActivityStarter;
-    @Mock private NotificationStackScrollLayout mStackScroller;
+    @Mock private NotificationListContainer mNotificationListContainer;
     @Mock private NotificationInfo.CheckSaveListener mCheckSaveListener;
     @Mock private OnSettingsClickListener mOnSettingsClickListener;
     @Mock private DeviceProvisionedController mDeviceProvisionedController;
@@ -129,7 +128,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
     @Mock private ShortcutManager mShortcutManager;
     @Mock private ChannelEditorDialogController mChannelEditorDialogController;
     @Mock private PeopleNotificationIdentifier mPeopleNotificationIdentifier;
-    @Mock private CurrentUserContextTracker mContextTracker;
+    @Mock private UserContextProvider mContextTracker;
     @Mock private BubbleController mBubbleController;
     @Mock(answer = Answers.RETURNS_SELF)
     private PriorityOnboardingDialogController.Builder mBuilder;
@@ -143,20 +142,22 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         mDependency.injectTestDependency(DeviceProvisionedController.class,
                 mDeviceProvisionedController);
         mDependency.injectTestDependency(MetricsLogger.class, mMetricsLogger);
-        mDependency.injectTestDependency(VisualStabilityManager.class, mVisualStabilityManager);
+        mDependency.injectTestDependency(
+                OnUserInteractionCallback.class,
+                mOnUserInteractionCallback);
         mDependency.injectTestDependency(BubbleController.class, mBubbleController);
         mDependency.injectMockDependency(NotificationLockscreenUserManager.class);
         mHandler = Handler.createAsync(mTestableLooper.getLooper());
         mHelper = new NotificationTestHelper(mContext, mDependency, TestableLooper.get(this));
         when(mAccessibilityManager.isTouchExplorationEnabled()).thenReturn(false);
 
-        mGutsManager = new NotificationGutsManager(mContext, mVisualStabilityManager,
+        mGutsManager = new NotificationGutsManager(mContext,
                 () -> mStatusBar, mHandler, mHandler, mAccessibilityManager, mHighPriorityProvider,
                 mINotificationManager, mLauncherApps, mShortcutManager,
                 mChannelEditorDialogController, mContextTracker, mProvider,
                 mAssistantFeedbackController, mBubbleController,
-                new UiEventLoggerFake());
-        mGutsManager.setUpWithPresenter(mPresenter, mStackScroller,
+                new UiEventLoggerFake(), mOnUserInteractionCallback);
+        mGutsManager.setUpWithPresenter(mPresenter, mNotificationListContainer,
                 mCheckSaveListener, mOnSettingsClickListener);
         mGutsManager.setNotificationActivityStarter(mNotificationActivityStarter);
     }
@@ -360,7 +361,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         verify(notificationInfoView).bindNotification(
                 any(PackageManager.class),
                 any(INotificationManager.class),
-                eq(mVisualStabilityManager),
+                eq(mOnUserInteractionCallback),
                 eq(mChannelEditorDialogController),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
@@ -394,7 +395,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         verify(notificationInfoView).bindNotification(
                 any(PackageManager.class),
                 any(INotificationManager.class),
-                eq(mVisualStabilityManager),
+                eq(mOnUserInteractionCallback),
                 eq(mChannelEditorDialogController),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
@@ -426,7 +427,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         verify(notificationInfoView).bindNotification(
                 any(PackageManager.class),
                 any(INotificationManager.class),
-                eq(mVisualStabilityManager),
+                eq(mOnUserInteractionCallback),
                 eq(mChannelEditorDialogController),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),

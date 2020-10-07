@@ -19,11 +19,13 @@ package android.window;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_TRUSTED;
 import static android.view.Display.INVALID_DISPLAY;
 
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
+import android.app.ActivityTaskManager.RootTaskInfo;
 import android.app.ActivityView;
 import android.app.TaskStackListener;
 import android.content.ComponentName;
@@ -63,6 +65,7 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
     private int mDisplayDensityDpi;
     private final boolean mSingleTaskInstance;
     private final boolean mUsePublicVirtualDisplay;
+    private final boolean mUseTrustedDisplay;
     private VirtualDisplay mVirtualDisplay;
     private Insets mForwardedInsets;
     private DisplayMetrics mTmpDisplayMetrics;
@@ -77,10 +80,12 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
      *                           only applicable if virtual displays are used
      */
     public VirtualDisplayTaskEmbedder(Context context, VirtualDisplayTaskEmbedder.Host host,
-            boolean singleTaskInstance, boolean usePublicVirtualDisplay) {
+            boolean singleTaskInstance, boolean usePublicVirtualDisplay,
+            boolean useTrustedDisplay) {
         super(context, host);
         mSingleTaskInstance = singleTaskInstance;
         mUsePublicVirtualDisplay = usePublicVirtualDisplay;
+        mUseTrustedDisplay = useTrustedDisplay;
     }
 
     /**
@@ -102,6 +107,9 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
                 | VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL;
         if (mUsePublicVirtualDisplay) {
             virtualDisplayFlags |= VIRTUAL_DISPLAY_FLAG_PUBLIC;
+        }
+        if (mUseTrustedDisplay) {
+            virtualDisplayFlags |= VIRTUAL_DISPLAY_FLAG_TRUSTED;
         }
 
         mVirtualDisplay = displayManager.createVirtualDisplay(
@@ -350,40 +358,40 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
     private class TaskStackListenerImpl extends TaskStackListener {
 
         @Override
-        public void onTaskDescriptionChanged(ActivityManager.RunningTaskInfo taskInfo)
+        public void onTaskDescriptionChanged(ActivityManager.RunningTaskInfo runningTaskInfo)
                 throws RemoteException {
             if (!isInitialized()) {
                 return;
             }
-            if (taskInfo.displayId != getDisplayId()) {
+            if (runningTaskInfo.displayId != getDisplayId()) {
                 return;
             }
-            ActivityManager.StackInfo stackInfo = getTopMostStackInfo();
-            if (stackInfo == null) {
+            RootTaskInfo taskInfo = getTopMostRootTaskInfo();
+            if (taskInfo == null) {
                 return;
             }
             // Found the topmost stack on target display. Now check if the topmost task's
             // description changed.
-            if (taskInfo.taskId == stackInfo.taskIds[stackInfo.taskIds.length - 1]) {
+            if (runningTaskInfo.taskId == taskInfo.childTaskIds[taskInfo.childTaskIds.length - 1]) {
                 mHost.post(()-> mHost.onTaskBackgroundColorChanged(VirtualDisplayTaskEmbedder.this,
-                        taskInfo.taskDescription.getBackgroundColor()));
+                        runningTaskInfo.taskDescription.getBackgroundColor()));
             }
         }
 
         @Override
-        public void onTaskMovedToFront(ActivityManager.RunningTaskInfo taskInfo)
+        public void onTaskMovedToFront(ActivityManager.RunningTaskInfo runningTaskInfo)
                 throws RemoteException {
             if (!isInitialized() || mListener == null
-                    || taskInfo.displayId != getDisplayId()) {
+                    || runningTaskInfo.displayId != getDisplayId()) {
                 return;
             }
 
-            ActivityManager.StackInfo stackInfo = getTopMostStackInfo();
-            // if StackInfo was null or unrelated to the "move to front" then there's no use
+            RootTaskInfo taskInfo = getTopMostRootTaskInfo();
+            // if TaskInfo was null or unrelated to the "move to front" then there's no use
             // notifying the callback
-            if (stackInfo != null
-                    && taskInfo.taskId == stackInfo.taskIds[stackInfo.taskIds.length - 1]) {
-                mListener.onTaskMovedToFront(taskInfo.taskId);
+            if (taskInfo != null && runningTaskInfo.taskId == taskInfo.childTaskIds[
+                    taskInfo.childTaskIds.length - 1]) {
+                mListener.onTaskMovedToFront(runningTaskInfo.taskId);
             }
         }
 
@@ -393,11 +401,11 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
                 return;
             }
 
-            ActivityManager.StackInfo stackInfo = getTopMostStackInfo();
-            // if StackInfo was null or unrelated to the task creation then there's no use
+            RootTaskInfo taskInfo = getTopMostRootTaskInfo();
+            // if TaskInfo was null or unrelated to the task creation then there's no use
             // notifying the callback
-            if (stackInfo != null
-                    && taskId == stackInfo.taskIds[stackInfo.taskIds.length - 1]) {
+            if (taskInfo != null
+                    && taskId == taskInfo.childTaskIds[taskInfo.childTaskIds.length - 1]) {
                 mListener.onTaskCreated(taskId, componentName);
             }
         }
@@ -413,16 +421,16 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
             mListener.onTaskRemovalStarted(taskInfo.taskId);
         }
 
-        private ActivityManager.StackInfo getTopMostStackInfo() throws RemoteException {
+        private RootTaskInfo getTopMostRootTaskInfo() throws RemoteException {
             // Find the topmost task on our virtual display - it will define the background
             // color of the surface view during resizing.
             final int displayId = getDisplayId();
-            final List<ActivityManager.StackInfo> stackInfoList =
-                    mActivityTaskManager.getAllStackInfosOnDisplay(displayId);
-            if (stackInfoList.isEmpty()) {
+            final List<RootTaskInfo> taskInfoList =
+                    mActivityTaskManager.getAllRootTaskInfosOnDisplay(displayId);
+            if (taskInfoList.isEmpty()) {
                 return null;
             }
-            return stackInfoList.get(0);
+            return taskInfoList.get(0);
         }
     }
 }

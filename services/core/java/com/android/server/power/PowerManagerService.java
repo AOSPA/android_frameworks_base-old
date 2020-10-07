@@ -56,6 +56,7 @@ import android.os.IBinder;
 import android.os.IPowerManager;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelDuration;
 import android.os.PowerManager;
 import android.os.PowerManager.ServiceType;
 import android.os.PowerManager.WakeData;
@@ -86,13 +87,16 @@ import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
+import android.view.KeyEvent;
 
 import com.android.internal.BrightnessSynchronizer;
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.Preconditions;
 import com.android.server.EventLogTags;
 import com.android.server.LockGuard;
 import com.android.server.RescueParty;
@@ -237,6 +241,18 @@ public final class PowerManagerService extends SystemService
     private static final int HALT_MODE_REBOOT = 1;
     private static final int HALT_MODE_REBOOT_SAFE_MODE = 2;
 
+    /**
+     * How stale we'll allow the enhanced discharge prediction values to get before considering them
+     * invalid.
+     */
+    private static final long ENHANCED_DISCHARGE_PREDICTION_TIMEOUT_MS = 30 * 60 * 1000L;
+
+    /**
+     * The minimum amount of time between sending consequent
+     * {@link PowerManager#ACTION_ENHANCED_DISCHARGE_PREDICTION_CHANGED} broadcasts.
+     */
+    private static final long ENHANCED_DISCHARGE_PREDICTION_BROADCAST_MIN_DELAY_MS = 60 * 1000L;
+
     private final Context mContext;
     private final ServiceThread mHandlerThread;
     private final Handler mHandler;
@@ -379,6 +395,34 @@ public final class PowerManagerService extends SystemService
     // The current battery level percentage.
     private int mBatteryLevel;
 
+    /**
+     * The lock that should be held when interacting with {@link #mEnhancedDischargeTimeElapsed},
+     * {@link #mLastEnhancedDischargeTimeUpdatedElapsed}, and
+     * {@link #mEnhancedDischargePredictionIsPersonalized}.
+     */
+    private final Object mEnhancedDischargeTimeLock = new Object();
+
+    /**
+     * The time (in the elapsed realtime timebase) at which the battery level will reach 0%. This
+     * is provided as an enhanced estimate and only valid if
+     * {@link #mLastEnhancedDischargeTimeUpdatedElapsed} is greater than 0.
+     */
+    @GuardedBy("mEnhancedDischargeTimeLock")
+    private long mEnhancedDischargeTimeElapsed;
+
+    /**
+     * Timestamp (in the elapsed realtime timebase) of last update to enhanced battery estimate
+     * data.
+     */
+    @GuardedBy("mEnhancedDischargeTimeLock")
+    private long mLastEnhancedDischargeTimeUpdatedElapsed;
+
+    /**
+     * Whether or not the current enhanced discharge prediction is personalized to the user.
+     */
+    @GuardedBy("mEnhancedDischargeTimeLock")
+    private boolean mEnhancedDischargePredictionIsPersonalized;
+
     // The battery level percentage at the time the dream started.
     // This is used to terminate a dream and go to sleep if the battery is
     // draining faster than it is charging and the user activity timeout has expired.
@@ -493,9 +537,6 @@ public final class PowerManagerService extends SystemService
     private boolean mProximityPositive;
 
     // Screen brightness setting limits.
-    private float mScreenBrightnessSettingMinimum;
-    private float mScreenBrightnessSettingMaximum;
-    private float mScreenBrightnessSettingDefault;
     public final float mScreenBrightnessMinimum;
     public final float mScreenBrightnessMaximum;
     public final float mScreenBrightnessDefault;
@@ -895,19 +936,13 @@ public final class PowerManagerService extends SystemService
                 || def == INVALID_BRIGHTNESS_IN_CONFIG) {
             mScreenBrightnessMinimum = BrightnessSynchronizer.brightnessIntToFloat(
                     mContext.getResources().getInteger(com.android.internal.R.integer
-                            .config_screenBrightnessSettingMinimum),
-                    PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON,
-                    PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX);
+                            .config_screenBrightnessSettingMinimum));
             mScreenBrightnessMaximum = BrightnessSynchronizer.brightnessIntToFloat(
                     mContext.getResources().getInteger(com.android.internal.R.integer
-                            .config_screenBrightnessSettingMaximum),
-                    PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON,
-                    PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX);
+                            .config_screenBrightnessSettingMaximum));
             mScreenBrightnessDefault = BrightnessSynchronizer.brightnessIntToFloat(
                     mContext.getResources().getInteger(com.android.internal.R.integer
-                            .config_screenBrightnessSettingDefault),
-                    PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON,
-                    PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX);
+                            .config_screenBrightnessSettingDefault));
         } else {
             mScreenBrightnessMinimum = min;
             mScreenBrightnessMaximum = max;
@@ -916,18 +951,14 @@ public final class PowerManagerService extends SystemService
         if (doze == INVALID_BRIGHTNESS_IN_CONFIG) {
             mScreenBrightnessDoze = BrightnessSynchronizer.brightnessIntToFloat(
                     mContext.getResources().getInteger(com.android.internal.R.integer
-                            .config_screenBrightnessDoze), PowerManager.BRIGHTNESS_OFF + 1,
-                    PowerManager.BRIGHTNESS_ON, PowerManager.BRIGHTNESS_MIN,
-                    PowerManager.BRIGHTNESS_MAX);
+                            .config_screenBrightnessDoze));
         } else {
             mScreenBrightnessDoze = doze;
         }
         if (dim == INVALID_BRIGHTNESS_IN_CONFIG) {
             mScreenBrightnessDim = BrightnessSynchronizer.brightnessIntToFloat(
                     mContext.getResources().getInteger(com.android.internal.R.integer
-                            .config_screenBrightnessDim), PowerManager.BRIGHTNESS_OFF + 1,
-                    PowerManager.BRIGHTNESS_ON, PowerManager.BRIGHTNESS_MIN,
-                    PowerManager.BRIGHTNESS_MAX);
+                            .config_screenBrightnessDim));
         } else {
             mScreenBrightnessDim = dim;
         }
@@ -942,19 +973,13 @@ public final class PowerManagerService extends SystemService
                 || vrDef == INVALID_BRIGHTNESS_IN_CONFIG) {
             mScreenBrightnessMinimumVr = BrightnessSynchronizer.brightnessIntToFloat(
                     mContext.getResources().getInteger(com.android.internal.R.integer
-                            .config_screenBrightnessForVrSettingMinimum),
-                    PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON,
-                    PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX);
+                            .config_screenBrightnessForVrSettingMinimum));
             mScreenBrightnessMaximumVr = BrightnessSynchronizer.brightnessIntToFloat(
                     mContext.getResources().getInteger(com.android.internal.R.integer
-                            .config_screenBrightnessForVrSettingMaximum),
-                    PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON,
-                    PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX);
+                            .config_screenBrightnessForVrSettingMaximum));
             mScreenBrightnessDefaultVr = BrightnessSynchronizer.brightnessIntToFloat(
                     mContext.getResources().getInteger(com.android.internal.R.integer
-                            .config_screenBrightnessForVrSettingDefault),
-                    PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON,
-                    PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX);
+                            .config_screenBrightnessForVrSettingDefault));
         } else {
             mScreenBrightnessMinimumVr = vrMin;
             mScreenBrightnessMaximumVr = vrMax;
@@ -1029,14 +1054,6 @@ public final class PowerManagerService extends SystemService
             mPolicy = getLocalService(WindowManagerPolicy.class);
             mBatteryManagerInternal = getLocalService(BatteryManagerInternal.class);
             mAttentionDetector.systemReady(mContext);
-
-            PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-            mScreenBrightnessSettingMinimum = pm.getBrightnessConstraint(
-                    PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM);
-            mScreenBrightnessSettingMaximum = pm.getBrightnessConstraint(
-                    PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MAXIMUM);
-            mScreenBrightnessSettingDefault = pm.getBrightnessConstraint(
-                    PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_DEFAULT);
 
             SensorManager sensorManager = new SystemSensorManager(mContext, mHandler.getLooper());
 
@@ -2818,7 +2835,7 @@ public final class PowerManagerService extends SystemService
                 // Keep the brightness steady during boot. This requires the
                 // bootloader brightness and the default brightness to be identical.
                 autoBrightness = false;
-                screenBrightnessOverride = mScreenBrightnessSettingDefault;
+                screenBrightnessOverride = mScreenBrightnessDefault;
             } else if (isValidBrightness(mScreenBrightnessOverrideFromWindowManager)) {
                 autoBrightness = false;
                 screenBrightnessOverride = mScreenBrightnessOverrideFromWindowManager;
@@ -3208,6 +3225,7 @@ public final class PowerManagerService extends SystemService
                 // If we're stuck in a really low-level reboot loop, and a
                 // rescue party is trying to prompt the user for a factory data
                 // reset, we must GET TO DA CHOPPA!
+                // No check point from ShutdownCheckPoints will be dumped at this state.
                 PowerManagerService.lowLevelReboot(reason);
             } else {
                 throw new IllegalStateException("Too early to call shutdown() or reboot()");
@@ -3476,7 +3494,7 @@ public final class PowerManagerService extends SystemService
                 }
                 if (mDeviceIdleMode) {
                     // If we are in idle mode, we will also ignore all partial wake locks that are
-                    // for application uids that are not whitelisted.
+                    // for application uids that are not allowlisted.
                     final UidState state = wakeLock.mUidState;
                     if (Arrays.binarySearch(mDeviceIdleWhitelist, appid) < 0 &&
                             Arrays.binarySearch(mDeviceIdleTempWhitelist, appid) < 0 &&
@@ -3600,8 +3618,7 @@ public final class PowerManagerService extends SystemService
                 mDozeScreenStateOverrideFromDreamManager = screenState;
                 mDozeScreenBrightnessOverrideFromDreamManager = screenBrightness;
                 mDozeScreenBrightnessOverrideFromDreamManagerFloat =
-                        BrightnessSynchronizer.brightnessIntToFloat(mContext,
-                                mDozeScreenBrightnessOverrideFromDreamManager);
+                        BrightnessSynchronizer.brightnessIntToFloat(mDozeScreenBrightnessOverrideFromDreamManager);
                 mDirty |= DIRTY_SETTINGS;
                 updatePowerStateLocked();
             }
@@ -3763,6 +3780,13 @@ public final class PowerManagerService extends SystemService
             pw.println("  mProximityPositive=" + mProximityPositive);
             pw.println("  mBootCompleted=" + mBootCompleted);
             pw.println("  mSystemReady=" + mSystemReady);
+            synchronized (mEnhancedDischargeTimeLock) {
+                pw.println("  mEnhancedDischargeTimeElapsed=" + mEnhancedDischargeTimeElapsed);
+                pw.println("  mLastEnhancedDischargeTimeUpdatedElapsed="
+                        + mLastEnhancedDischargeTimeUpdatedElapsed);
+                pw.println("  mEnhancedDischargePredictionIsPersonalized="
+                        + mEnhancedDischargePredictionIsPersonalized);
+            }
             pw.println("  mHalAutoSuspendModeEnabled=" + mHalAutoSuspendModeEnabled);
             pw.println("  mHalInteractiveModeEnabled=" + mHalInteractiveModeEnabled);
             pw.println("  mWakeLockSummary=0x" + Integer.toHexString(mWakeLockSummary));
@@ -3868,9 +3892,9 @@ public final class PowerManagerService extends SystemService
             pw.println("  mDrawWakeLockOverrideFromSidekick=" + mDrawWakeLockOverrideFromSidekick);
             pw.println("  mDozeScreenBrightnessOverrideFromDreamManager="
                     + mDozeScreenBrightnessOverrideFromDreamManager);
-            pw.println("  mScreenBrightnessSettingMinimumFloat=" + mScreenBrightnessSettingMinimum);
-            pw.println("  mScreenBrightnessSettingMaximumFloat=" + mScreenBrightnessSettingMaximum);
-            pw.println("  mScreenBrightnessSettingDefaultFloat=" + mScreenBrightnessSettingDefault);
+            pw.println("  mScreenBrightnessMinimum=" + mScreenBrightnessMinimum);
+            pw.println("  mScreenBrightnessMaximum=" + mScreenBrightnessMaximum);
+            pw.println("  mScreenBrightnessDefault=" + mScreenBrightnessDefault);
             pw.println("  mDoubleTapWakeEnabled=" + mDoubleTapWakeEnabled);
             pw.println("  mIsVrModeEnabled=" + mIsVrModeEnabled);
             pw.println("  mForegroundProfile=" + mForegroundProfile);
@@ -3978,6 +4002,16 @@ public final class PowerManagerService extends SystemService
             proto.write(PowerManagerServiceDumpProto.IS_PROXIMITY_POSITIVE, mProximityPositive);
             proto.write(PowerManagerServiceDumpProto.IS_BOOT_COMPLETED, mBootCompleted);
             proto.write(PowerManagerServiceDumpProto.IS_SYSTEM_READY, mSystemReady);
+            synchronized (mEnhancedDischargeTimeLock) {
+                proto.write(PowerManagerServiceDumpProto.ENHANCED_DISCHARGE_TIME_ELAPSED,
+                        mEnhancedDischargeTimeElapsed);
+                proto.write(
+                        PowerManagerServiceDumpProto.LAST_ENHANCED_DISCHARGE_TIME_UPDATED_ELAPSED,
+                        mLastEnhancedDischargeTimeUpdatedElapsed);
+                proto.write(
+                        PowerManagerServiceDumpProto.IS_ENHANCED_DISCHARGE_PREDICTION_PERSONALIZED,
+                        mEnhancedDischargePredictionIsPersonalized);
+            }
             proto.write(
                     PowerManagerServiceDumpProto.IS_HAL_AUTO_SUSPEND_MODE_ENABLED,
                     mHalAutoSuspendModeEnabled);
@@ -3985,7 +4019,8 @@ public final class PowerManagerService extends SystemService
                     PowerManagerServiceDumpProto.IS_HAL_AUTO_INTERACTIVE_MODE_ENABLED,
                     mHalInteractiveModeEnabled);
 
-            final long activeWakeLocksToken = proto.start(PowerManagerServiceDumpProto.ACTIVE_WAKE_LOCKS);
+            final long activeWakeLocksToken = proto.start(
+                    PowerManagerServiceDumpProto.ACTIVE_WAKE_LOCKS);
             proto.write(
                     PowerManagerServiceDumpProto.ActiveWakeLocksProto.IS_CPU,
                     (mWakeLockSummary & WAKE_LOCK_CPU) != 0);
@@ -4227,15 +4262,15 @@ public final class PowerManagerService extends SystemService
             proto.write(
                     PowerServiceSettingsAndConfigurationDumpProto.ScreenBrightnessSettingLimitsProto
                             .SETTING_MINIMUM_FLOAT,
-                    mScreenBrightnessSettingMinimum);
+                    mScreenBrightnessMinimum);
             proto.write(
                     PowerServiceSettingsAndConfigurationDumpProto.ScreenBrightnessSettingLimitsProto
                             .SETTING_MAXIMUM_FLOAT,
-                    mScreenBrightnessSettingMaximum);
+                    mScreenBrightnessMaximum);
             proto.write(
                     PowerServiceSettingsAndConfigurationDumpProto.ScreenBrightnessSettingLimitsProto
                             .SETTING_DEFAULT_FLOAT,
-                    mScreenBrightnessSettingDefault);
+                    mScreenBrightnessDefault);
             proto.end(screenBrightnessSettingLimitsToken);
 
             proto.write(
@@ -4288,6 +4323,7 @@ public final class PowerManagerService extends SystemService
         if (wcd != null) {
             wcd.dumpDebug(proto, PowerManagerServiceDumpProto.WIRELESS_CHARGER_DETECTOR);
         }
+
         proto.flush();
     }
 
@@ -5048,6 +5084,96 @@ public final class PowerManagerService extends SystemService
         }
 
         @Override // Binder call
+        public void setBatteryDischargePrediction(@NonNull ParcelDuration timeRemaining,
+                boolean isPersonalized) {
+            // Get current time before acquiring the lock so that the calculated end time is as
+            // accurate as possible.
+            final long nowElapsed = SystemClock.elapsedRealtime();
+            mContext.enforceCallingOrSelfPermission(android.Manifest.permission.DEVICE_POWER, null);
+
+            final long timeRemainingMs = timeRemaining.getDuration().toMillis();
+                // A non-positive number means the battery should be dead right now...
+            Preconditions.checkArgumentPositive(timeRemainingMs,
+                    "Given time remaining is not positive: " + timeRemainingMs);
+
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    if (mIsPowered) {
+                        throw new IllegalStateException(
+                                "Discharge prediction can't be set while the device is charging");
+                    }
+                }
+
+                final long broadcastDelayMs;
+                synchronized (mEnhancedDischargeTimeLock) {
+                    if (mLastEnhancedDischargeTimeUpdatedElapsed > nowElapsed) {
+                        // Another later call made it into the block first. Keep the latest info.
+                        return;
+                    }
+                    broadcastDelayMs = Math.max(0,
+                            ENHANCED_DISCHARGE_PREDICTION_BROADCAST_MIN_DELAY_MS
+                                    - (nowElapsed - mLastEnhancedDischargeTimeUpdatedElapsed));
+
+                    // No need to persist the discharge prediction values since they'll most likely
+                    // be wrong immediately after a reboot anyway.
+                    mEnhancedDischargeTimeElapsed = nowElapsed + timeRemainingMs;
+                    mEnhancedDischargePredictionIsPersonalized = isPersonalized;
+                    mLastEnhancedDischargeTimeUpdatedElapsed = nowElapsed;
+                }
+                mNotifier.postEnhancedDischargePredictionBroadcast(broadcastDelayMs);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        private boolean isEnhancedDischargePredictionValidLocked(long nowElapsed) {
+            return mLastEnhancedDischargeTimeUpdatedElapsed > 0
+                    && nowElapsed < mEnhancedDischargeTimeElapsed
+                    && nowElapsed - mLastEnhancedDischargeTimeUpdatedElapsed
+                    < ENHANCED_DISCHARGE_PREDICTION_TIMEOUT_MS;
+        }
+
+        @Override // Binder call
+        public ParcelDuration getBatteryDischargePrediction() {
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    if (mIsPowered) {
+                        return null;
+                    }
+                }
+                synchronized (mEnhancedDischargeTimeLock) {
+                    // Get current time after acquiring the lock so that the calculated duration
+                    // is as accurate as possible.
+                    final long nowElapsed = SystemClock.elapsedRealtime();
+                    if (isEnhancedDischargePredictionValidLocked(nowElapsed)) {
+                        return new ParcelDuration(mEnhancedDischargeTimeElapsed - nowElapsed);
+                    }
+                }
+                return new ParcelDuration(mBatteryStats.computeBatteryTimeRemaining());
+            } catch (RemoteException e) {
+                // Shouldn't happen in-process.
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+            return null;
+        }
+
+        @Override // Binder call
+        public boolean isBatteryDischargePredictionPersonalized() {
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                synchronized (mEnhancedDischargeTimeLock) {
+                    return isEnhancedDischargePredictionValidLocked(SystemClock.elapsedRealtime())
+                            && mEnhancedDischargePredictionIsPersonalized;
+                }
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
         public boolean isDeviceIdleMode() {
             final long ident = Binder.clearCallingIdentity();
             try {
@@ -5114,6 +5240,7 @@ public final class PowerManagerService extends SystemService
                 mContext.enforceCallingOrSelfPermission(android.Manifest.permission.RECOVERY, null);
             }
 
+            ShutdownCheckPoints.recordCheckPoint(Binder.getCallingPid(), reason);
             final long ident = Binder.clearCallingIdentity();
             try {
                 shutdownOrRebootInternal(HALT_MODE_REBOOT, confirm, reason, wait);
@@ -5132,10 +5259,11 @@ public final class PowerManagerService extends SystemService
         public void rebootSafeMode(boolean confirm, boolean wait) {
             mContext.enforceCallingOrSelfPermission(android.Manifest.permission.REBOOT, null);
 
+            String reason = PowerManager.REBOOT_SAFE_MODE;
+            ShutdownCheckPoints.recordCheckPoint(Binder.getCallingPid(), reason);
             final long ident = Binder.clearCallingIdentity();
             try {
-                shutdownOrRebootInternal(HALT_MODE_REBOOT_SAFE_MODE, confirm,
-                        PowerManager.REBOOT_SAFE_MODE, wait);
+                shutdownOrRebootInternal(HALT_MODE_REBOOT_SAFE_MODE, confirm, reason, wait);
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -5151,6 +5279,7 @@ public final class PowerManagerService extends SystemService
         public void shutdown(boolean confirm, String reason, boolean wait) {
             mContext.enforceCallingOrSelfPermission(android.Manifest.permission.REBOOT, null);
 
+            ShutdownCheckPoints.recordCheckPoint(Binder.getCallingPid(), reason);
             final long ident = Binder.clearCallingIdentity();
             try {
                 shutdownOrRebootInternal(HALT_MODE_SHUTDOWN, confirm, reason, wait);
@@ -5400,6 +5529,29 @@ public final class PowerManagerService extends SystemService
         }
     }
 
+    /**
+     * If the user presses power while the proximity sensor is enabled and keeping
+     * the screen off, then turn the screen back on by telling display manager to
+     * ignore the proximity sensor.  We don't turn off the proximity sensor because
+     * we still want it to be reenabled if it's state changes.
+     *
+     * @return True if the proximity sensor was successfully ignored and we should
+     * consume the key event.
+     */
+    private boolean interceptPowerKeyDownInternal(KeyEvent event) {
+        synchronized (mLock) {
+            // DisplayPowerController only reports proximity positive (near) if it's
+            // positive and the proximity wasn't already being ignored. So it reliably
+            // also tells us that we're not already ignoring the proximity sensor.
+            if (mDisplayPowerRequest.useProximitySensor && mProximityPositive) {
+                mDisplayManagerInternal.ignoreProximitySensorUntilChanged();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     @VisibleForTesting
     final class LocalService extends PowerManagerInternal {
         @Override
@@ -5531,6 +5683,11 @@ public final class PowerManagerService extends SystemService
         @Override
         public WakeData getLastWakeup() {
             return getLastWakeupInternal();
+        }
+
+        @Override
+        public boolean interceptPowerKeyDown(KeyEvent event) {
+            return interceptPowerKeyDownInternal(event);
         }
     }
 }

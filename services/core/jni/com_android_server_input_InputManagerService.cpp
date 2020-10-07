@@ -75,6 +75,12 @@
 using android::base::ParseUint;
 using android::base::StringPrintf;
 
+// Maximum allowable delay value in a vibration pattern before
+// which the delay will be truncated.
+static constexpr std::chrono::duration MAX_VIBRATE_PATTERN_DELAY = 100s;
+static constexpr std::chrono::milliseconds MAX_VIBRATE_PATTERN_DELAY_MILLIS =
+        std::chrono::duration_cast<std::chrono::milliseconds>(MAX_VIBRATE_PATTERN_DELAY);
+
 namespace android {
 
 // The exponent used to calculate the pointer speed scaling factor.
@@ -203,7 +209,7 @@ public:
     status_t registerInputChannel(JNIEnv* env, const std::shared_ptr<InputChannel>& inputChannel);
     status_t registerInputMonitor(JNIEnv* env, const std::shared_ptr<InputChannel>& inputChannel,
                                   int32_t displayId, bool isGestureMonitor);
-    status_t unregisterInputChannel(JNIEnv* env, const InputChannel& inputChannel);
+    status_t unregisterInputChannel(JNIEnv* env, const sp<IBinder>& connectionToken);
     status_t pilferPointers(const sp<IBinder>& token);
 
     void displayRemoved(JNIEnv* env, int32_t displayId);
@@ -227,7 +233,8 @@ public:
     virtual void getReaderConfiguration(InputReaderConfiguration* outConfig);
     virtual std::shared_ptr<PointerControllerInterface> obtainPointerController(int32_t deviceId);
     virtual void notifyInputDevicesChanged(const std::vector<InputDeviceInfo>& inputDevices);
-    virtual sp<KeyCharacterMap> getKeyboardLayoutOverlay(const InputDeviceIdentifier& identifier);
+    virtual std::shared_ptr<KeyCharacterMap> getKeyboardLayoutOverlay(
+            const InputDeviceIdentifier& identifier);
     virtual std::string getDeviceAlias(const InputDeviceIdentifier& identifier);
     virtual TouchAffineTransformation getTouchAffineTransformation(JNIEnv *env,
             jfloatArray matrixArr);
@@ -239,9 +246,9 @@ public:
     void notifySwitch(nsecs_t when, uint32_t switchValues, uint32_t switchMask,
                       uint32_t policyFlags) override;
     void notifyConfigurationChanged(nsecs_t when) override;
-    std::chrono::nanoseconds notifyAnr(const sp<InputApplicationHandle>& inputApplicationHandle,
-                                       const sp<IBinder>& token,
-                                       const std::string& reason) override;
+    std::chrono::nanoseconds notifyAnr(
+            const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle,
+            const sp<IBinder>& token, const std::string& reason) override;
     void notifyInputChannelBroken(const sp<IBinder>& token) override;
     void notifyFocusChanged(const sp<IBinder>& oldToken, const sp<IBinder>& newToken) override;
     bool filterInputEvent(const InputEvent* inputEvent, uint32_t policyFlags) override;
@@ -415,6 +422,10 @@ void NativeInputManager::setDisplayViewports(JNIEnv* env, jobjectArray viewportO
         AutoMutex _l(mLock);
         mLocked.viewports = viewports;
         mLocked.pointerDisplayId = pointerDisplayId;
+        std::shared_ptr<PointerController> controller = mLocked.pointerController.lock();
+        if (controller != nullptr) {
+            controller->onDisplayViewportsUpdated(mLocked.viewports);
+        }
     } // release lock
 
     mInputManager->getReader()->requestRefreshConfiguration(
@@ -436,9 +447,9 @@ status_t NativeInputManager::registerInputMonitor(JNIEnv* /* env */,
 }
 
 status_t NativeInputManager::unregisterInputChannel(JNIEnv* /* env */,
-                                                    const InputChannel& inputChannel) {
+                                                    const sp<IBinder>& connectionToken) {
     ATRACE_CALL();
-    return mInputManager->getDispatcher()->unregisterInputChannel(inputChannel);
+    return mInputManager->getDispatcher()->unregisterInputChannel(connectionToken);
 }
 
 status_t NativeInputManager::pilferPointers(const sp<IBinder>& token) {
@@ -612,12 +623,12 @@ void NativeInputManager::notifyInputDevicesChanged(const std::vector<InputDevice
     checkAndClearExceptionFromCallback(env, "notifyInputDevicesChanged");
 }
 
-sp<KeyCharacterMap> NativeInputManager::getKeyboardLayoutOverlay(
+std::shared_ptr<KeyCharacterMap> NativeInputManager::getKeyboardLayoutOverlay(
         const InputDeviceIdentifier& identifier) {
     ATRACE_CALL();
     JNIEnv* env = jniEnv();
 
-    sp<KeyCharacterMap> result;
+    std::shared_ptr<KeyCharacterMap> result;
     ScopedLocalRef<jstring> descriptor(env, env->NewStringUTF(identifier.descriptor.c_str()));
     ScopedLocalRef<jobject> identifierObj(env, env->NewObject(gInputDeviceIdentifierInfo.clazz,
             gInputDeviceIdentifierInfo.constructor, descriptor.get(),
@@ -632,8 +643,12 @@ sp<KeyCharacterMap> NativeInputManager::getKeyboardLayoutOverlay(
         ScopedUtfChars filenameChars(env, filenameObj.get());
         ScopedUtfChars contentsChars(env, contentsObj.get());
 
-        KeyCharacterMap::loadContents(filenameChars.c_str(),
-                contentsChars.c_str(), KeyCharacterMap::FORMAT_OVERLAY, &result);
+        base::Result<std::shared_ptr<KeyCharacterMap>> ret =
+                KeyCharacterMap::loadContents(filenameChars.c_str(), contentsChars.c_str(),
+                                              KeyCharacterMap::FORMAT_OVERLAY);
+        if (ret) {
+            result = *ret;
+        }
     }
     checkAndClearExceptionFromCallback(env, "getKeyboardLayoutOverlay");
     return result;
@@ -682,8 +697,8 @@ void NativeInputManager::notifyConfigurationChanged(nsecs_t when) {
     checkAndClearExceptionFromCallback(env, "notifyConfigurationChanged");
 }
 
-static jobject getInputApplicationHandleObjLocalRef(JNIEnv* env,
-        const sp<InputApplicationHandle>& inputApplicationHandle) {
+static jobject getInputApplicationHandleObjLocalRef(
+        JNIEnv* env, const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle) {
     if (inputApplicationHandle == nullptr) {
         return nullptr;
     }
@@ -694,8 +709,8 @@ static jobject getInputApplicationHandleObjLocalRef(JNIEnv* env,
 }
 
 std::chrono::nanoseconds NativeInputManager::notifyAnr(
-        const sp<InputApplicationHandle>& inputApplicationHandle, const sp<IBinder>& token,
-        const std::string& reason) {
+        const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle,
+        const sp<IBinder>& token, const std::string& reason) {
 #if DEBUG_INPUT_DISPATCHER_POLICY
     ALOGD("notifyANR");
 #endif
@@ -710,9 +725,8 @@ std::chrono::nanoseconds NativeInputManager::notifyAnr(
     jobject tokenObj = javaObjectForIBinder(env, token);
     jstring reasonObj = env->NewStringUTF(reason.c_str());
 
-    jlong newTimeout = env->CallLongMethod(mServiceObj,
-            gServiceClassInfo.notifyANR, inputApplicationHandleObj, tokenObj,
-                 reasonObj);
+    jlong newTimeout = env->CallLongMethod(mServiceObj, gServiceClassInfo.notifyANR,
+                                           inputApplicationHandleObj, tokenObj, reasonObj);
     if (checkAndClearExceptionFromCallback(env, "notifyANR")) {
         newTimeout = 0; // abort dispatch
     } else {
@@ -780,8 +794,12 @@ void NativeInputManager::displayRemoved(JNIEnv* env, int32_t displayId) {
 
 void NativeInputManager::setFocusedApplication(JNIEnv* env, int32_t displayId,
         jobject applicationHandleObj) {
-    sp<InputApplicationHandle> applicationHandle =
+    if (!applicationHandleObj) {
+        return;
+    }
+    std::shared_ptr<InputApplicationHandle> applicationHandle =
             android_view_InputApplicationHandle_getHandle(env, applicationHandleObj);
+    applicationHandle->updateInfo();
     mInputManager->getDispatcher()->setFocusedApplication(displayId, applicationHandle);
 }
 
@@ -809,8 +827,8 @@ void NativeInputManager::updateInactivityTimeoutLocked() REQUIRES(mLock) {
     }
 
     bool lightsOut = mLocked.systemUiVisibility & ASYSTEM_UI_VISIBILITY_STATUS_BAR_HIDDEN;
-    controller->setInactivityTimeout(lightsOut ? PointerController::InactivityTimeout::SHORT
-                                               : PointerController::InactivityTimeout::NORMAL);
+    controller->setInactivityTimeout(lightsOut ? InactivityTimeout::SHORT
+                                               : InactivityTimeout::NORMAL);
 }
 
 void NativeInputManager::setPointerSpeed(int32_t speed) {
@@ -1346,7 +1364,7 @@ static void handleInputChannelDisposed(JNIEnv* env, jobject /* inputChannelObj *
 
     ALOGW("Input channel object '%s' was disposed without first being unregistered with "
             "the input manager!", inputChannel->getName().c_str());
-    im->unregisterInputChannel(env, *inputChannel);
+    im->unregisterInputChannel(env, inputChannel->getConnectionToken());
 }
 
 static void nativeRegisterInputChannel(JNIEnv* env, jclass /* clazz */,
@@ -1399,20 +1417,12 @@ static void nativeRegisterInputMonitor(JNIEnv* env, jclass /* clazz */,
     }
 }
 
-static void nativeUnregisterInputChannel(JNIEnv* env, jclass /* clazz */,
-        jlong ptr, jobject inputChannelObj) {
+static void nativeUnregisterInputChannel(JNIEnv* env, jclass /* clazz */, jlong ptr,
+                                         jobject tokenObj) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+    sp<IBinder> token = ibinderForJavaObject(env, tokenObj);
 
-    std::shared_ptr<InputChannel> inputChannel =
-            android_view_InputChannel_getInputChannel(env, inputChannelObj);
-    if (inputChannel == nullptr) {
-        throwInputChannelNotInitialized(env);
-        return;
-    }
-
-    android_view_InputChannel_setDisposeCallback(env, inputChannelObj, nullptr, nullptr);
-
-    status_t status = im->unregisterInputChannel(env, *inputChannel);
+    status_t status = im->unregisterInputChannel(env, token);
     if (status && status != BAD_VALUE) { // ignore already unregistered channel
         std::string message;
         message += StringPrintf("Failed to unregister input channel.  status=%d", status);
@@ -1633,17 +1643,19 @@ static void nativeVibrate(JNIEnv* env, jclass /* clazz */, jlong ptr, jint devic
             patternObj, nullptr));
     jint* amplitudes = static_cast<jint*>(env->GetPrimitiveArrayCritical(amplitudesObj, nullptr));
 
-    std::vector<VibrationElement> pattern(patternSize);
+    std::vector<VibrationElement> elements(patternSize);
     for (size_t i = 0; i < patternSize; i++) {
-        jlong duration =
-                max(min(patternMillis[i], (jlong)MAX_VIBRATE_PATTERN_DELAY_MSECS), (jlong)0);
-        pattern[i].duration = std::chrono::milliseconds(duration);
-        pattern[i].channels = {amplitudes[i]};
+        // VibrationEffect.validate guarantees duration > 0.
+        std::chrono::milliseconds duration(patternMillis[i]);
+        elements[i].duration = std::min(duration, MAX_VIBRATE_PATTERN_DELAY_MILLIS);
+        // TODO: (b/161629089) apply channel specific amplitudes from development API.
+        elements[i].channels = {static_cast<uint8_t>(amplitudes[i]),
+                                static_cast<uint8_t>(amplitudes[i])};
     }
     env->ReleasePrimitiveArrayCritical(patternObj, patternMillis, JNI_ABORT);
     env->ReleasePrimitiveArrayCritical(amplitudesObj, amplitudes, JNI_ABORT);
 
-    im->getInputManager()->getReader()->vibrate(deviceId, pattern, repeat, token);
+    im->getInputManager()->getReader()->vibrate(deviceId, elements, repeat, token);
 }
 
 static void nativeCancelVibrate(JNIEnv* /* env */,
@@ -1772,7 +1784,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
          (void*)nativeRegisterInputChannel},
         {"nativeRegisterInputMonitor", "(JLandroid/view/InputChannel;IZ)V",
          (void*)nativeRegisterInputMonitor},
-        {"nativeUnregisterInputChannel", "(JLandroid/view/InputChannel;)V",
+        {"nativeUnregisterInputChannel", "(JLandroid/os/IBinder;)V",
          (void*)nativeUnregisterInputChannel},
         {"nativePilferPointers", "(JLandroid/os/IBinder;)V", (void*)nativePilferPointers},
         {"nativeSetInputFilterEnabled", "(JZ)V", (void*)nativeSetInputFilterEnabled},

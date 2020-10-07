@@ -99,6 +99,14 @@ public abstract class AuthenticationClient<T> extends AcquisitionClient<T>
         return getCookie() != 0;
     }
 
+    public long getOperationId() {
+        return mOperationId;
+    }
+
+    public boolean isRestricted() {
+        return mIsRestricted;
+    }
+
     @Override
     protected boolean isCryptoOperation() {
         return mOperationId != 0;
@@ -187,11 +195,13 @@ public abstract class AuthenticationClient<T> extends AcquisitionClient<T>
                     if (listener != null) {
                         listener.onAuthenticationFailed(getSensorId());
                     }
+                } else {
+                    mAlreadyDone = true;
                 }
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "Unable to notify listener, finishing", e);
-            mFinishCallback.onClientFinished(this, false /* success */);
+            mCallback.onClientFinished(this, false /* success */);
         }
     }
 
@@ -211,8 +221,8 @@ public abstract class AuthenticationClient<T> extends AcquisitionClient<T>
      * Start authentication
      */
     @Override
-    public void start(@NonNull FinishCallback finishCallback) {
-        super.start(finishCallback);
+    public void start(@NonNull Callback callback) {
+        super.start(callback);
 
         final @LockoutTracker.LockoutMode int lockoutMode =
                 mLockoutTracker.getLockoutModeForUser(getTargetUserId());

@@ -48,6 +48,7 @@ import static com.android.server.wm.Task.STACK_VISIBILITY_INVISIBLE;
 import static com.android.server.wm.Task.STACK_VISIBILITY_VISIBLE;
 import static com.android.server.wm.Task.STACK_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
 import static com.android.server.wm.TaskDisplayArea.getStackAbove;
+import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -88,7 +89,7 @@ import java.util.function.Consumer;
 @SmallTest
 @Presubmit
 @RunWith(WindowTestRunner.class)
-public class ActivityStackTests extends ActivityTestsBase {
+public class ActivityStackTests extends WindowTestsBase {
     private TaskDisplayArea mDefaultTaskDisplayArea;
     private Task mStack;
     private Task mTask;
@@ -99,12 +100,12 @@ public class ActivityStackTests extends ActivityTestsBase {
         mStack = mDefaultTaskDisplayArea.createStack(WINDOWING_MODE_UNDEFINED,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
         spyOn(mStack);
-        mTask = new TaskBuilder(mSupervisor).setStack(mStack).build();
+        mTask = new TaskBuilder(mSupervisor).setParentTask(mStack).build();
     }
 
     @Test
     public void testResumedActivity() {
-        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord r = new ActivityBuilder(mAtm).setTask(mTask).build();
         assertNull(mStack.getResumedActivity());
         r.setState(RESUMED, "testResumedActivity");
         assertEquals(r, mStack.getResumedActivity());
@@ -114,7 +115,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testResumedActivityFromTaskReparenting() {
-        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord r = new ActivityBuilder(mAtm).setTask(mTask).build();
         // Ensure moving task between two stacks updates resumed activity
         r.setState(RESUMED, "testResumedActivityFromTaskReparenting");
         assertEquals(r, mStack.getResumedActivity());
@@ -132,7 +133,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testResumedActivityFromActivityReparenting() {
-        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord r = new ActivityBuilder(mAtm).setTask(mTask).build();
         // Ensure moving task between two stacks updates resumed activity
         r.setState(RESUMED, "testResumedActivityFromActivityReparenting");
         assertEquals(r, mStack.getResumedActivity());
@@ -148,7 +149,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testPrimarySplitScreenMoveToBack() {
-        TestSplitOrganizer organizer = new TestSplitOrganizer(mService);
+        TestSplitOrganizer organizer = new TestSplitOrganizer(mAtm);
         // We're testing an edge case here where we have primary + fullscreen rather than secondary.
         organizer.setMoveToSecondaryOnEnter(false);
 
@@ -176,7 +177,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testMoveToPrimarySplitScreenThenMoveToBack() {
-        TestSplitOrganizer organizer = new TestSplitOrganizer(mService);
+        TestSplitOrganizer organizer = new TestSplitOrganizer(mAtm);
         // This time, start with a fullscreen activitystack
         final Task primarySplitScreen = mDefaultTaskDisplayArea.createStack(
                 WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
@@ -201,7 +202,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testSplitScreenMoveToBack() {
-        TestSplitOrganizer organizer = new TestSplitOrganizer(mService);
+        TestSplitOrganizer organizer = new TestSplitOrganizer(mAtm);
         // Set up split-screen with primary on top and secondary containing the home task below
         // another stack.
         final Task primaryTask = mDefaultTaskDisplayArea.createStack(
@@ -210,7 +211,7 @@ public class ActivityStackTests extends ActivityTestsBase {
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
         final Task secondaryTask = mDefaultTaskDisplayArea.createStack(
                 WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        mDefaultTaskDisplayArea.positionStackAtTop(organizer.mPrimary,
+        mDefaultTaskDisplayArea.positionChildAt(POSITION_TOP, organizer.mPrimary,
                 false /* includingParents */);
 
         // Move primary to back.
@@ -240,12 +241,12 @@ public class ActivityStackTests extends ActivityTestsBase {
     @Test
     public void testRemoveOrganizedTask_UpdateStackReference() {
         final Task rootHomeTask = mDefaultTaskDisplayArea.getRootHomeTask();
-        final ActivityRecord homeActivity = new ActivityBuilder(mService)
+        final ActivityRecord homeActivity = new ActivityBuilder(mAtm)
                 .setStack(rootHomeTask)
                 .setCreateTask(true)
                 .build();
         final Task secondaryStack = (Task) WindowContainer.fromBinder(
-                mService.mTaskOrganizerController.createRootTask(rootHomeTask.getDisplayId(),
+                mAtm.mTaskOrganizerController.createRootTask(rootHomeTask.getDisplayId(),
                         WINDOWING_MODE_SPLIT_SCREEN_SECONDARY).token.asBinder());
 
         rootHomeTask.reparent(secondaryStack, POSITION_TOP);
@@ -291,7 +292,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testStopActivityWhenActivityDestroyed() {
-        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord r = new ActivityBuilder(mAtm).setTask(mTask).build();
         r.info.flags |= ActivityInfo.FLAG_NO_HISTORY;
         mStack.moveToFront("testStopActivityWithDestroy");
         r.stopIfPossible();
@@ -301,14 +302,14 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testFindTaskWithOverlay() {
-        final ActivityRecord r = new ActivityBuilder(mService)
+        final ActivityRecord r = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setStack(mStack)
                 .setUid(0)
                 .build();
         final Task task = r.getTask();
         // Overlay must be for a different user to prevent recognizing a matching top activity
-        final ActivityRecord taskOverlay = new ActivityBuilder(mService).setTask(task)
+        final ActivityRecord taskOverlay = new ActivityBuilder(mAtm).setTask(task)
                 .setUid(UserHandle.PER_USER_RANGE * 2).build();
         taskOverlay.setTaskOverlay(true);
 
@@ -329,21 +330,21 @@ public class ActivityStackTests extends ActivityTestsBase {
                 targetActivity);
         final ComponentName alias = new ComponentName(DEFAULT_COMPONENT_PACKAGE_NAME,
                 aliasActivity);
-        final Task task = new TaskBuilder(mService.mStackSupervisor).setStack(mStack).build();
+        final Task task = new TaskBuilder(mAtm.mStackSupervisor).setParentTask(mStack).build();
         task.origActivity = alias;
         task.realActivity = target;
-        new ActivityBuilder(mService).setComponent(target).setTask(task).setTargetActivity(
+        new ActivityBuilder(mAtm).setComponent(target).setTask(task).setTargetActivity(
                 targetActivity).build();
 
         // Using target activity to find task.
-        final ActivityRecord r1 = new ActivityBuilder(mService).setComponent(
+        final ActivityRecord r1 = new ActivityBuilder(mAtm).setComponent(
                 target).setTargetActivity(targetActivity).build();
         RootWindowContainer.FindTaskResult result = new RootWindowContainer.FindTaskResult();
         result.process(r1, mStack);
         assertThat(result.mRecord).isNotNull();
 
         // Using alias activity to find task.
-        final ActivityRecord r2 = new ActivityBuilder(mService).setComponent(
+        final ActivityRecord r2 = new ActivityBuilder(mAtm).setComponent(
                 alias).setTargetActivity(targetActivity).build();
         result = new RootWindowContainer.FindTaskResult();
         result.process(r2, mStack);
@@ -376,7 +377,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         final Task pinnedStack = createStackForShouldBeVisibleTest(mDefaultTaskDisplayArea,
                 WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         // Add an activity to the pinned stack so it isn't considered empty for visibility check.
-        final ActivityRecord pinnedActivity = new ActivityBuilder(mService)
+        final ActivityRecord pinnedActivity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setStack(pinnedStack)
                 .build();
@@ -675,7 +676,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertEquals(STACK_VISIBILITY_VISIBLE,
                 translucentStack.getVisibility(null /* starting */));
         // Add an activity to the pinned stack so it isn't considered empty for visibility check.
-        final ActivityRecord pinnedActivity = new ActivityBuilder(mService)
+        final ActivityRecord pinnedActivity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setStack(pinnedStack)
                 .build();
@@ -688,7 +689,7 @@ public class ActivityStackTests extends ActivityTestsBase {
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
         ActivityRecord topRunningHomeActivity = homeStack.topRunningActivity();
         if (topRunningHomeActivity == null) {
-            topRunningHomeActivity = new ActivityBuilder(mService)
+            topRunningHomeActivity = new ActivityBuilder(mAtm)
                     .setStack(homeStack)
                     .setCreateTask(true)
                     .build();
@@ -720,12 +721,12 @@ public class ActivityStackTests extends ActivityTestsBase {
         final Task homeStack = createStackForShouldBeVisibleTest(mDefaultTaskDisplayArea,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
 
-        final ActivityRecord firstActivity = new ActivityBuilder(mService)
+        final ActivityRecord firstActivity = new ActivityBuilder(mAtm)
                     .setStack(homeStack)
                     .setCreateTask(true)
                     .build();
         final Task task = firstActivity.getTask();
-        final ActivityRecord secondActivity = new ActivityBuilder(mService)
+        final ActivityRecord secondActivity = new ActivityBuilder(mAtm)
                 .setTask(task)
                 .build();
 
@@ -988,18 +989,13 @@ public class ActivityStackTests extends ActivityTestsBase {
     @SuppressWarnings("TypeParameterUnusedInFormals")
     private Task createStackForShouldBeVisibleTest(
             TaskDisplayArea taskDisplayArea, int windowingMode, int activityType, boolean onTop) {
-        final Task stack;
+        final Task task;
         if (activityType == ACTIVITY_TYPE_HOME) {
-            // Home stack and activity are created in ActivityTestsBase#setupActivityManagerService
-            stack = mDefaultTaskDisplayArea.getStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
-            if (onTop) {
-                mDefaultTaskDisplayArea.positionStackAtTop(stack,
-                        false /* includingParents */);
-            } else {
-                mDefaultTaskDisplayArea.positionStackAtBottom(stack);
-            }
+            task = mDefaultTaskDisplayArea.getStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
+            mDefaultTaskDisplayArea.positionChildAt(onTop ? POSITION_TOP : POSITION_BOTTOM, task,
+                    false /* includingParents */);
         } else {
-            stack = new StackBuilder(mRootWindowContainer)
+            task = new TaskBuilder(mSupervisor)
                     .setTaskDisplayArea(taskDisplayArea)
                     .setWindowingMode(windowingMode)
                     .setActivityType(activityType)
@@ -1007,13 +1003,13 @@ public class ActivityStackTests extends ActivityTestsBase {
                     .setCreateActivity(true)
                     .build();
         }
-        return stack;
+        return task;
     }
 
     @Test
     public void testFinishDisabledPackageActivities_FinishAliveActivities() {
-        final ActivityRecord firstActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        final ActivityRecord secondActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord firstActivity = new ActivityBuilder(mAtm).setTask(mTask).build();
+        final ActivityRecord secondActivity = new ActivityBuilder(mAtm).setTask(mTask).build();
         firstActivity.setState(STOPPED, "testFinishDisabledPackageActivities");
         secondActivity.setState(RESUMED, "testFinishDisabledPackageActivities");
         mStack.mResumedActivity = secondActivity;
@@ -1032,10 +1028,10 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testFinishDisabledPackageActivities_RemoveNonAliveActivities() {
-        final ActivityRecord activity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(mTask).build();
 
         // The overlay activity is not in the disabled package but it is in the same task.
-        final ActivityRecord overlayActivity = new ActivityBuilder(mService).setTask(mTask)
+        final ActivityRecord overlayActivity = new ActivityBuilder(mAtm).setTask(mTask)
                 .setComponent(new ComponentName("package.overlay", ".OverlayActivity")).build();
         // If the task only remains overlay activity, the task should also be removed.
         // See {@link ActivityStack#removeFromHistory}.
@@ -1061,8 +1057,8 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testHandleAppDied() {
-        final ActivityRecord firstActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        final ActivityRecord secondActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord firstActivity = new ActivityBuilder(mAtm).setTask(mTask).build();
+        final ActivityRecord secondActivity = new ActivityBuilder(mAtm).setTask(mTask).build();
 
         // Making the first activity a task overlay means it will be removed from the task's
         // activities as well once second activity is removed as handleAppDied processes the
@@ -1075,7 +1071,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         assertEquals(2, mTask.getChildCount());
 
-        mRootWindowContainer.handleAppDied(secondActivity.app);
+        secondActivity.app.handleAppDied();
 
         assertFalse(mTask.hasChild());
         assertFalse(mStack.hasChild());
@@ -1083,13 +1079,13 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testHandleAppDied_RelaunchesAfterCrashDuringWindowingModeResize() {
-        final ActivityRecord activity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(mTask).build();
 
         activity.mRelaunchReason = RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
         activity.launchCount = 1;
         activity.setSavedState(null /* savedState */);
 
-        mRootWindowContainer.handleAppDied(activity.app);
+        activity.app.handleAppDied();
 
         assertEquals(1, mTask.getChildCount());
         assertEquals(1, mStack.getChildCount());
@@ -1097,13 +1093,13 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testHandleAppDied_NotRelaunchAfterThreeCrashesDuringWindowingModeResize() {
-        final ActivityRecord activity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(mTask).build();
 
         activity.mRelaunchReason = RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
         activity.launchCount = 3;
         activity.setSavedState(null /* savedState */);
 
-        mRootWindowContainer.handleAppDied(activity.app);
+        activity.app.handleAppDied();
 
         assertFalse(mTask.hasChild());
         assertFalse(mStack.hasChild());
@@ -1111,13 +1107,13 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testHandleAppDied_RelaunchesAfterCrashDuringFreeResize() {
-        final ActivityRecord activity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(mTask).build();
 
         activity.mRelaunchReason = RELAUNCH_REASON_FREE_RESIZE;
         activity.launchCount = 1;
         activity.setSavedState(null /* savedState */);
 
-        mRootWindowContainer.handleAppDied(activity.app);
+        activity.app.handleAppDied();
 
         assertEquals(1, mTask.getChildCount());
         assertEquals(1, mStack.getChildCount());
@@ -1125,13 +1121,13 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testHandleAppDied_NotRelaunchAfterThreeCrashesDuringFreeResize() {
-        final ActivityRecord activity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(mTask).build();
 
         activity.mRelaunchReason = RELAUNCH_REASON_FREE_RESIZE;
         activity.launchCount = 3;
         activity.setSavedState(null /* savedState */);
 
-        mRootWindowContainer.handleAppDied(activity.app);
+        activity.app.handleAppDied();
 
         assertFalse(mTask.hasChild());
         assertFalse(mStack.hasChild());
@@ -1139,11 +1135,11 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testCompletePauseOnResumeWhilePausingActivity() {
-        final ActivityRecord bottomActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord bottomActivity = new ActivityBuilder(mAtm).setTask(mTask).build();
         doReturn(true).when(bottomActivity).attachedToProcess();
         mStack.mPausingActivity = null;
         mStack.mResumedActivity = bottomActivity;
-        final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord topActivity = new ActivityBuilder(mAtm).setTask(mTask).build();
         topActivity.info.flags |= FLAG_RESUME_WHILE_PAUSING;
 
         mStack.startPausingLocked(false /* userLeaving */, false /* uiSleeping */, topActivity);
@@ -1157,7 +1153,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         ActivityRecord activity = homeStack.topRunningActivity();
         if (activity == null) {
-            activity = new ActivityBuilder(mService)
+            activity = new ActivityBuilder(mAtm)
                     .setStack(homeStack)
                     .setCreateTask(true)
                     .build();
@@ -1206,19 +1202,22 @@ public class ActivityStackTests extends ActivityTestsBase {
     @Test
     public void testShouldSleepActivities() {
         // When focused activity and keyguard is going away, we should not sleep regardless
-        // of the display state
+        // of the display state, but keyguard-going-away should only take effects on default
+        // display since there is no keyguard on secondary displays (yet).
         verifyShouldSleepActivities(true /* focusedStack */, true /*keyguardGoingAway*/,
-                true /* displaySleeping */, false /* expected*/);
+                true /* displaySleeping */, true /* isDefaultDisplay */, false /* expected */);
+        verifyShouldSleepActivities(true /* focusedStack */, true /*keyguardGoingAway*/,
+                true /* displaySleeping */, false /* isDefaultDisplay */, true /* expected */);
 
         // When not the focused stack, defer to display sleeping state.
         verifyShouldSleepActivities(false /* focusedStack */, true /*keyguardGoingAway*/,
-                true /* displaySleeping */, true /* expected*/);
+                true /* displaySleeping */, true /* isDefaultDisplay */, true /* expected */);
 
         // If keyguard is going away, defer to the display sleeping state.
         verifyShouldSleepActivities(true /* focusedStack */, false /*keyguardGoingAway*/,
-                true /* displaySleeping */, true /* expected*/);
+                true /* displaySleeping */, true /* isDefaultDisplay */, true /* expected */);
         verifyShouldSleepActivities(true /* focusedStack */, false /*keyguardGoingAway*/,
-                false /* displaySleeping */, false /* expected*/);
+                false /* displaySleeping */, true /* isDefaultDisplay */, false /* expected */);
     }
 
     @Test
@@ -1256,7 +1255,8 @@ public class ActivityStackTests extends ActivityTestsBase {
                     mDefaultTaskDisplayArea, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
                     true /* onTop */);
             mDefaultTaskDisplayArea.registerStackOrderChangedListener(listener);
-            mDefaultTaskDisplayArea.positionStackAtBottom(fullscreenStack1);
+            mDefaultTaskDisplayArea.positionChildAt(POSITION_BOTTOM, fullscreenStack1,
+                    false /*includingParents*/);
         } finally {
             mDefaultTaskDisplayArea.unregisterStackOrderChangedListener(listener);
         }
@@ -1267,13 +1267,13 @@ public class ActivityStackTests extends ActivityTestsBase {
     public void testNavigateUpTo() {
         final ActivityStartController controller = mock(ActivityStartController.class);
         final ActivityStarter starter = new ActivityStarter(controller,
-                mService, mService.mStackSupervisor, mock(ActivityStartInterceptor.class));
-        doReturn(controller).when(mService).getActivityStartController();
+                mAtm, mAtm.mStackSupervisor, mock(ActivityStartInterceptor.class));
+        doReturn(controller).when(mAtm).getActivityStartController();
         spyOn(starter);
         doReturn(ActivityManager.START_SUCCESS).when(starter).execute();
 
-        final ActivityRecord firstActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        final ActivityRecord secondActivity = new ActivityBuilder(mService).setTask(mTask)
+        final ActivityRecord firstActivity = new ActivityBuilder(mAtm).setTask(mTask).build();
+        final ActivityRecord secondActivity = new ActivityBuilder(mAtm).setTask(mTask)
                 .setUid(firstActivity.getUid() + 1).build();
         doReturn(starter).when(controller).obtainStarter(eq(firstActivity.intent), anyString());
 
@@ -1299,7 +1299,7 @@ public class ActivityStackTests extends ActivityTestsBase {
     @Test
     public void testShouldUpRecreateTaskLockedWithCorrectAffinityFormat() {
         final String affinity = "affinity";
-        final ActivityRecord activity = new ActivityBuilder(mService).setAffinity(affinity)
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setAffinity(affinity)
                 .setUid(Binder.getCallingUid()).setCreateTask(true).build();
         activity.getTask().affinity = activity.taskAffinity;
 
@@ -1309,7 +1309,7 @@ public class ActivityStackTests extends ActivityTestsBase {
     @Test
     public void testShouldUpRecreateTaskLockedWithWrongAffinityFormat() {
         final String affinity = "affinity";
-        final ActivityRecord activity = new ActivityBuilder(mService).setAffinity(affinity)
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setAffinity(affinity)
                 .setUid(Binder.getCallingUid()).setCreateTask(true).build();
         activity.getTask().affinity = activity.taskAffinity;
         final String fakeAffinity = activity.getUid() + activity.taskAffinity;
@@ -1320,12 +1320,12 @@ public class ActivityStackTests extends ActivityTestsBase {
     @Test
     public void testResetTaskWithFinishingActivities() {
         final ActivityRecord taskTop =
-                new ActivityBuilder(mService).setStack(mStack).setCreateTask(true).build();
+                new ActivityBuilder(mAtm).setStack(mStack).setCreateTask(true).build();
         // Make all activities in the task are finishing to simulate Task#getTopActivity
         // returns null.
         taskTop.finishing = true;
 
-        final ActivityRecord newR = new ActivityBuilder(mService).build();
+        final ActivityRecord newR = new ActivityBuilder(mAtm).build();
         final ActivityRecord result = mStack.resetTaskIfNeeded(taskTop, newR);
         assertThat(result).isEqualTo(taskTop);
     }
@@ -1335,9 +1335,9 @@ public class ActivityStackTests extends ActivityTestsBase {
         final ArrayList<ActivityRecord> occludedActivities = new ArrayList<>();
         final Consumer<ActivityRecord> handleOccludedActivity = occludedActivities::add;
         final ActivityRecord bottomActivity =
-                new ActivityBuilder(mService).setStack(mStack).setTask(mTask).build();
+                new ActivityBuilder(mAtm).setStack(mStack).setTask(mTask).build();
         final ActivityRecord topActivity =
-                new ActivityBuilder(mService).setStack(mStack).setTask(mTask).build();
+                new ActivityBuilder(mAtm).setStack(mStack).setTask(mTask).build();
         // Top activity occludes bottom activity.
         doReturn(true).when(mStack).shouldBeVisible(any());
         assertTrue(topActivity.shouldBeVisible());
@@ -1356,7 +1356,7 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         // A finishing activity should not occlude other activities behind.
         final ActivityRecord finishingActivity =
-                new ActivityBuilder(mService).setStack(mStack).setTask(mTask).build();
+                new ActivityBuilder(mAtm).setStack(mStack).setTask(mTask).build();
         finishingActivity.finishing = true;
         doCallRealMethod().when(finishingActivity).occludesParent();
         assertTrue(topActivity.shouldBeVisible());
@@ -1378,9 +1378,9 @@ public class ActivityStackTests extends ActivityTestsBase {
         final ActivityRecord[] activities = new ActivityRecord[2];
         mSupervisor.beginDeferResume();
         for (int i = 0; i < activities.length; i++) {
-            final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
+            final ActivityRecord r = new ActivityBuilder(mAtm).setTask(mTask).build();
             activities[i] = r;
-            doReturn(null).when(mService).getProcessController(
+            doReturn(null).when(mAtm).getProcessController(
                     eq(r.processName), eq(r.info.applicationInfo.uid));
             r.setState(Task.ActivityState.INITIALIZING, "test");
             // Ensure precondition that the activity is opaque.
@@ -1390,7 +1390,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         }
         mSupervisor.endDeferResume();
 
-        setBooted(mService);
+        setBooted(mAtm);
         // 2 activities are started while keyguard is locked, so they are waiting to be resolved.
         assertFalse(unknownAppVisibilityController.allResolved());
 
@@ -1407,10 +1407,10 @@ public class ActivityStackTests extends ActivityTestsBase {
     @Test
     public void testNonTopVisibleActivityNotResume() {
         final ActivityRecord nonTopVisibleActivity =
-                new ActivityBuilder(mService).setTask(mTask).build();
-        new ActivityBuilder(mService).setTask(mTask).build();
+                new ActivityBuilder(mAtm).setTask(mTask).build();
+        new ActivityBuilder(mAtm).setTask(mTask).build();
         doReturn(false).when(nonTopVisibleActivity).attachedToProcess();
-        doReturn(true).when(nonTopVisibleActivity).shouldBeVisible(anyBoolean(), anyBoolean());
+        doReturn(true).when(nonTopVisibleActivity).shouldBeVisibleUnchecked();
         doNothing().when(mSupervisor).startSpecificActivity(any(), anyBoolean(),
                 anyBoolean());
 
@@ -1426,11 +1426,13 @@ public class ActivityStackTests extends ActivityTestsBase {
     }
 
     private void verifyShouldSleepActivities(boolean focusedStack,
-            boolean keyguardGoingAway, boolean displaySleeping, boolean expected) {
+            boolean keyguardGoingAway, boolean displaySleeping, boolean isDefaultDisplay,
+            boolean expected) {
         final DisplayContent display = mock(DisplayContent.class);
         final KeyguardController keyguardController = mSupervisor.getKeyguardController();
+        display.isDefaultDisplay = isDefaultDisplay;
 
-        doReturn(display).when(mStack).getDisplay();
+        mStack.mDisplayContent = display;
         doReturn(keyguardGoingAway).when(keyguardController).isKeyguardGoingAway();
         doReturn(displaySleeping).when(display).isSleeping();
         doReturn(focusedStack).when(mStack).isFocusedStackOnDisplay();

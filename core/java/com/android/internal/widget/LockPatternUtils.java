@@ -130,6 +130,19 @@ public class LockPatternUtils {
     public @interface CredentialType {}
 
     /**
+     * Flag provided to {@link #verifyCredential(LockscreenCredential, int, int)} . If set, the
+     * method will return a handle to the Gatekeeper Password in the
+     * {@link VerifyCredentialResponse}.
+     */
+    public static final int VERIFY_FLAG_REQUEST_GK_PW_HANDLE = 1 << 0;
+
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, value = {
+            VERIFY_FLAG_REQUEST_GK_PW_HANDLE
+    })
+    public @interface VerifyFlag {}
+
+    /**
      * Special user id for triggering the FRP verification flow.
      */
     public static final int USER_FRP = UserHandle.USER_NULL + 1;
@@ -374,29 +387,54 @@ public class LockPatternUtils {
      * If credential matches, return an opaque attestation that the challenge was verified.
      *
      * @param credential The credential to check.
-     * @param challenge The challenge to verify against the credential
      * @param userId The user whose credential is being verified
-     * @return the attestation that the challenge was verified, or null
-     * @throws RequestThrottledException if credential verification is being throttled due to
-     *         to many incorrect attempts.
+     * @param flags See {@link VerifyFlag}
      * @throws IllegalStateException if called on the main thread.
      */
-    public byte[] verifyCredential(@NonNull LockscreenCredential credential, long challenge,
-            int userId) throws RequestThrottledException {
+    @NonNull
+    public VerifyCredentialResponse verifyCredential(@NonNull LockscreenCredential credential,
+            int userId, @VerifyFlag int flags) {
         throwIfCalledOnMainThread();
         try {
-            VerifyCredentialResponse response = getLockSettings().verifyCredential(
-                    credential, challenge, userId);
-            if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
-                return response.getPayload();
-            } else if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_RETRY) {
-                throw new RequestThrottledException(response.getTimeout());
+            final VerifyCredentialResponse response = getLockSettings().verifyCredential(
+                    credential, userId, flags);
+            if (response == null) {
+                return VerifyCredentialResponse.ERROR;
             } else {
-                return null;
+                return response;
             }
         } catch (RemoteException re) {
             Log.e(TAG, "failed to verify credential", re);
-            return null;
+            return VerifyCredentialResponse.ERROR;
+        }
+    }
+
+    /**
+     * With the Gatekeeper Password Handle returned via {@link #verifyCredential(
+     * LockscreenCredential, int, int)}, request Gatekeeper to create a HardwareAuthToken wrapping
+     * the given challenge.
+     */
+    @NonNull
+    public VerifyCredentialResponse verifyGatekeeperPasswordHandle(long gatekeeperPasswordHandle,
+            long challenge, int userId) {
+        try {
+            final VerifyCredentialResponse response = getLockSettings()
+                    .verifyGatekeeperPasswordHandle(gatekeeperPasswordHandle, challenge, userId);
+            if (response == null) {
+                return VerifyCredentialResponse.ERROR;
+            }
+            return response;
+        } catch (RemoteException e) {
+            Log.e(TAG, "failed to verify gatekeeper password", e);
+            return VerifyCredentialResponse.ERROR;
+        }
+    }
+
+    public void removeGatekeeperPasswordHandle(long gatekeeperPasswordHandle) {
+        try {
+            getLockSettings().removeGatekeeperPasswordHandle(gatekeeperPasswordHandle);
+        } catch (RemoteException e) {
+            Log.e(TAG, "failed to remove gatekeeper password handle", e);
         }
     }
 
@@ -418,8 +456,9 @@ public class LockPatternUtils {
         try {
             VerifyCredentialResponse response = getLockSettings().checkCredential(
                     credential, userId, wrapCallback(progressCallback));
-
-            if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
+            if (response == null) {
+                return false;
+            } else if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
                 return true;
             } else if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_RETRY) {
                 throw new RequestThrottledException(response.getTimeout());
@@ -439,30 +478,26 @@ public class LockPatternUtils {
      * verified.
      *
      * @param credential The parent user's credential to check.
-     * @param challenge The challenge to verify against the credential
      * @return the attestation that the challenge was verified, or null
      * @param userId The managed profile user id
-     * @throws RequestThrottledException if credential verification is being throttled due to
-     *         to many incorrect attempts.
+     * @param flags See {@link VerifyFlag}
      * @throws IllegalStateException if called on the main thread.
      */
-    public byte[] verifyTiedProfileChallenge(@NonNull LockscreenCredential credential,
-            long challenge, int userId) throws RequestThrottledException {
+    @NonNull
+    public VerifyCredentialResponse verifyTiedProfileChallenge(
+            @NonNull LockscreenCredential credential, int userId, @VerifyFlag int flags) {
         throwIfCalledOnMainThread();
         try {
-            VerifyCredentialResponse response =
-                    getLockSettings().verifyTiedProfileChallenge(credential, challenge, userId);
-
-            if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
-                return response.getPayload();
-            } else if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_RETRY) {
-                throw new RequestThrottledException(response.getTimeout());
+            final VerifyCredentialResponse response = getLockSettings()
+                    .verifyTiedProfileChallenge(credential, userId, flags);
+            if (response == null) {
+                return VerifyCredentialResponse.ERROR;
             } else {
-                return null;
+                return response;
             }
         } catch (RemoteException re) {
             Log.e(TAG, "failed to verify tied profile credential", re);
-            return null;
+            return VerifyCredentialResponse.ERROR;
         }
     }
 
@@ -645,7 +680,7 @@ public class LockPatternUtils {
      */
     public boolean setLockCredential(@NonNull LockscreenCredential newCredential,
             @NonNull LockscreenCredential savedCredential, int userHandle) {
-        if (!hasSecureLockScreen()) {
+        if (!hasSecureLockScreen() && newCredential.getType() != CREDENTIAL_TYPE_NONE) {
             throw new UnsupportedOperationException(
                     "This operation requires the lock screen feature.");
         }
@@ -751,7 +786,7 @@ public class LockPatternUtils {
 
     /** Update the encryption password if it is enabled **/
     private void updateEncryptionPassword(final int type, final byte[] password) {
-        if (!hasSecureLockScreen()) {
+        if (!hasSecureLockScreen() && password != null && password.length != 0) {
             throw new UnsupportedOperationException(
                     "This operation requires the lock screen feature.");
         }
@@ -1187,7 +1222,7 @@ public class LockPatternUtils {
     }
 
     /**
-     * Set and store the lockout deadline, meaning the user can't attempt his/her unlock
+     * Set and store the lockout deadline, meaning the user can't attempt their unlock
      * pattern until the deadline has passed.
      * @return the chosen deadline.
      */
@@ -1205,7 +1240,7 @@ public class LockPatternUtils {
 
     /**
      * @return The elapsed time in millis in the future when the user is allowed to
-     *   attempt to enter his/her lock pattern, or 0 if the user is welcome to
+     *   attempt to enter their lock pattern, or 0 if the user is welcome to
      *   enter a pattern.
      */
     public long getLockoutAttemptDeadline(int userId) {
@@ -1491,7 +1526,7 @@ public class LockPatternUtils {
      * Create an escrow token for the current user, which can later be used to unlock FBE
      * or change user password.
      *
-     * After adding, if the user currently has lockscreen password, he will need to perform a
+     * After adding, if the user currently has lockscreen password, they will need to perform a
      * confirm credential operation in order to activate the token for future use. If the user
      * has no secure lockscreen, then the token is activated immediately.
      *
@@ -1551,7 +1586,7 @@ public class LockPatternUtils {
      */
     public boolean setLockCredentialWithToken(@NonNull LockscreenCredential credential,
             long tokenHandle, byte[] token, int userHandle) {
-        if (!hasSecureLockScreen()) {
+        if (!hasSecureLockScreen() && credential.getType() != CREDENTIAL_TYPE_NONE) {
             throw new UnsupportedOperationException(
                     "This operation requires the lock screen feature.");
         }
@@ -1568,7 +1603,7 @@ public class LockPatternUtils {
 
     /**
      * Unlock the specified user by an pre-activated escrow token. This should have the same effect
-     * on device encryption as the user entering his lockscreen credentials for the first time after
+     * on device encryption as the user entering their lockscreen credentials for the first time after
      * boot, this includes unlocking the user's credential-encrypted storage as well as the keystore
      *
      * <p>This method is only available to code running in the system server process itself.

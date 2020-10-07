@@ -72,6 +72,7 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.IBinder;
@@ -346,6 +347,7 @@ public interface WindowManager extends ViewManager {
             TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE,
             TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION,
             TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER,
+            TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface TransitionFlags {}
@@ -473,9 +475,18 @@ public interface WindowManager extends ViewManager {
      *
      * Note that this might still be smaller than the size of the physical display if certain areas
      * of the display are not available to windows created in this {@link Context}.
+     * <p>
+     * For example, given that there's a device which have a multi-task mode to limit activities
+     * to a half screen. In this case, {@link #getMaximumWindowMetrics()} reports the bounds of
+     * the half screen which the activity is located, while {@link Display#getRealSize(Point)} still
+     * reports the bounds of the whole physical display.
      *
-     * @see #getMaximumWindowMetrics()
+     * Despite this, {@link #getMaximumWindowMetrics()} and {@link Display#getRealSize(Point)}
+     * reports the same bounds in general.
+     *
+     * @see #getCurrentWindowMetrics()
      * @see WindowMetrics
+     * @see Display#getRealSize(Point)
      */
     default @NonNull WindowMetrics getMaximumWindowMetrics() {
         throw new UnsupportedOperationException();
@@ -523,7 +534,8 @@ public interface WindowManager extends ViewManager {
             ScreenshotSource.SCREENSHOT_KEY_OTHER,
             ScreenshotSource.SCREENSHOT_OVERVIEW,
             ScreenshotSource.SCREENSHOT_ACCESSIBILITY_ACTIONS,
-            ScreenshotSource.SCREENSHOT_OTHER})
+            ScreenshotSource.SCREENSHOT_OTHER,
+            ScreenshotSource.SCREENSHOT_VENDOR_GESTURE})
     @interface ScreenshotSource {
         int SCREENSHOT_GLOBAL_ACTIONS = 0;
         int SCREENSHOT_KEY_CHORD = 1;
@@ -531,6 +543,7 @@ public interface WindowManager extends ViewManager {
         int SCREENSHOT_OVERVIEW = 3;
         int SCREENSHOT_ACCESSIBILITY_ACTIONS = 4;
         int SCREENSHOT_OTHER = 5;
+        int SCREENSHOT_VENDOR_GESTURE = 6;
     }
 
     /**
@@ -2090,6 +2103,12 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         public static final int PRIVATE_FLAG_TRUSTED_OVERLAY = 0x20000000;
+
+        /**
+         * Flag to indicate that the parent frame of a window should be inset by IME.
+         * @hide
+         */
+        public static final int PRIVATE_FLAG_INSET_PARENT_FRAME_BY_IME = 0x40000000;
 
         /**
          * An internal annotation for flags that can be specified to {@link #softInputMode}.

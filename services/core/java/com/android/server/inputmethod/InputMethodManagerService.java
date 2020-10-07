@@ -159,6 +159,7 @@ import com.android.internal.view.InputBindResult;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.inputmethod.InputMethodManagerInternal.InputMethodListListener;
 import com.android.server.inputmethod.InputMethodSubtypeSwitchingController.ImeSubtypeListItem;
 import com.android.server.inputmethod.InputMethodUtils.InputMethodSettings;
@@ -1596,10 +1597,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
 
         @Override
-        public void onSwitchUser(@UserIdInt int userHandle) {
+        public void onUserSwitching(@Nullable TargetUser from, @NonNull TargetUser to) {
             // Called on ActivityManager thread.
             synchronized (mService.mMethodMap) {
-                mService.scheduleSwitchUserTaskLocked(userHandle, null /* clientToBeReset */);
+                mService.scheduleSwitchUserTaskLocked(to.getUserIdentifier(),
+                        /* clientToBeReset= */ null);
             }
         }
 
@@ -1615,10 +1617,10 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
 
         @Override
-        public void onUnlockUser(final @UserIdInt int userHandle) {
+        public void onUserUnlocking(@NonNull TargetUser user) {
             // Called on ActivityManager thread.
             mService.mHandler.sendMessage(mService.mHandler.obtainMessage(MSG_SYSTEM_UNLOCK_USER,
-                    userHandle /* arg1 */, 0 /* arg2 */));
+                    /* arg1= */ user.getUserIdentifier(), /* arg2= */ 0));
         }
     }
 
@@ -2211,8 +2213,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
      * @param client {@link android.os.Binder} proxy that is associated with the singleton instance
      *               of {@link android.view.inputmethod.InputMethodManager} that runs on the client
      *               process
-     * @param inputContext communication channel for the dummy
-     *                     {@link android.view.inputmethod.InputConnection}
+     * @param inputContext communication channel for the fallback {@link InputConnection}
      * @param selfReportedDisplayId self-reported display ID to which the client is associated.
      *                              Whether the client is still allowed to access to this display
      *                              or not needs to be evaluated every time the client interacts
@@ -2590,7 +2591,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             if (mCurIntent != null && name.equals(mCurIntent.getComponent())) {
                 mCurMethod = IInputMethod.Stub.asInterface(service);
                 final String curMethodPackage = mCurIntent.getComponent().getPackageName();
-                final int curMethodUid = mPackageManagerInternal.getPackageUidInternal(
+                final int curMethodUid = mPackageManagerInternal.getPackageUid(
                         curMethodPackage, 0 /* flags */, mSettings.getCurrentUserId());
                 if (curMethodUid < 0) {
                     Slog.e(TAG, "Failed to get UID for package=" + curMethodPackage);
@@ -3200,7 +3201,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         boolean res = false;
         if (mCurMethod != null) {
             if (DEBUG) Slog.d(TAG, "showCurrentInputLocked: mCurToken=" + mCurToken);
-            // create a dummy token for IMS so that IMS cannot inject windows into client app.
+            // create a placeholder token for IMS so that IMS cannot inject windows into client app.
             Binder showInputToken = new Binder();
             mShowRequestWindowMap.put(showInputToken, windowToken);
             executeOrSendMessage(mCurMethod, mCaller.obtainMessageIIOOO(
@@ -3273,6 +3274,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     boolean hideCurrentInputLocked(IBinder windowToken, int flags, ResultReceiver resultReceiver,
             @SoftInputShowHideReason int reason) {
+        if (mCurClient == null || mCurClient.curSession == null) {
+            return false;
+        }
         if ((flags&InputMethodManager.HIDE_IMPLICIT_ONLY) != 0
                 && (mShowExplicitlyRequested || mShowForced)) {
             if (DEBUG) Slog.v(TAG, "Not hiding: explicit show not cancelled by non-explicit hide");
@@ -3449,15 +3453,17 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             return InputBindResult.USER_SWITCHING;
         }
 
-        // Master feature flag that overrides other conditions and forces IME preRendering.
+        // Main feature flag that overrides other conditions and forces IME preRendering.
         if (DEBUG) {
-            Slog.v(TAG, "IME PreRendering MASTER flag: "
+            Slog.v(TAG, "IME PreRendering main flag: "
                     + DebugFlags.FLAG_PRE_RENDER_IME_VIEWS.value() + ", LowRam: " + mIsLowRam);
         }
         // pre-rendering not supported on low-ram devices.
         cs.shouldPreRenderIme = DebugFlags.FLAG_PRE_RENDER_IME_VIEWS.value() && !mIsLowRam;
 
-        if (mCurFocusedWindow == windowToken) {
+        final boolean sameWindowFocused = mCurFocusedWindow == windowToken;
+        final boolean isTextEditor = (startInputFlags & StartInputFlags.IS_TEXT_EDITOR) != 0;
+        if (sameWindowFocused && isTextEditor) {
             if (DEBUG) {
                 Slog.w(TAG, "Window already focused, ignoring focus gain of: " + client
                         + " attribute=" + attribute + ", token = " + windowToken
@@ -3472,6 +3478,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     InputBindResult.ResultCode.SUCCESS_REPORT_WINDOW_FOCUS_ONLY,
                     null, null, null, -1, null);
         }
+
         mCurFocusedWindow = windowToken;
         mCurFocusedWindowSoftInputMode = softInputMode;
         mCurFocusedWindowClient = cs;
@@ -3489,7 +3496,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         == LayoutParams.SOFT_INPUT_ADJUST_RESIZE
                 || mRes.getConfiguration().isLayoutSizeAtLeast(
                         Configuration.SCREENLAYOUT_SIZE_LARGE);
-        final boolean isTextEditor = (startInputFlags & StartInputFlags.IS_TEXT_EDITOR) != 0;
 
         // We want to start input before showing the IME, but after closing
         // it.  We want to do this after closing it to help the IME disappear
@@ -3549,9 +3555,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 }
                 break;
             case LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN:
-                if (DEBUG) Slog.v(TAG, "Window asks to hide input");
-                hideCurrentInputLocked(mCurFocusedWindow, 0, null,
-                        SoftInputShowHideReason.HIDE_ALWAYS_HIDDEN_STATE);
+                if (isImeVisible()) {
+                    if (DEBUG) Slog.v(TAG, "Window asks to hide input");
+                    hideCurrentInputLocked(mCurFocusedWindow, 0, null,
+                            SoftInputShowHideReason.HIDE_ALWAYS_HIDDEN_STATE);
+                }
                 break;
             case LayoutParams.SOFT_INPUT_STATE_VISIBLE:
                 if ((softInputMode & LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION) != 0) {
@@ -3576,13 +3584,15 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 if (DEBUG) Slog.v(TAG, "Window asks to always show input");
                 if (InputMethodUtils.isSoftInputModeStateVisibleAllowed(
                         unverifiedTargetSdkVersion, startInputFlags)) {
-                    if (attribute != null) {
-                        res = startInputUncheckedLocked(cs, inputContext, missingMethods,
-                                attribute, startInputFlags, startInputReason);
-                        didStart = true;
+                    if (!isImeVisible()) {
+                        if (attribute != null) {
+                            res = startInputUncheckedLocked(cs, inputContext, missingMethods,
+                                    attribute, startInputFlags, startInputReason);
+                            didStart = true;
+                        }
+                        showCurrentInputLocked(windowToken, InputMethodManager.SHOW_IMPLICIT, null,
+                                SoftInputShowHideReason.SHOW_STATE_ALWAYS_VISIBLE);
                     }
-                    showCurrentInputLocked(windowToken, InputMethodManager.SHOW_IMPLICIT, null,
-                            SoftInputShowHideReason.SHOW_STATE_ALWAYS_VISIBLE);
                 } else {
                     Slog.e(TAG, "SOFT_INPUT_STATE_ALWAYS_VISIBLE is ignored because"
                             + " there is no focused view that also returns true from"
@@ -3600,11 +3610,19 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 } else {
                     res = InputBindResult.NO_EDITOR;
                 }
+            } else if (sameWindowFocused) {
+                return new InputBindResult(
+                        InputBindResult.ResultCode.SUCCESS_REPORT_WINDOW_FOCUS_ONLY,
+                        null, null, null, -1, null);
             } else {
                 res = InputBindResult.NULL_EDITOR_INFO;
             }
         }
         return res;
+    }
+
+    private boolean isImeVisible() {
+        return (mImeWindowVis & InputMethodService.IME_VISIBLE) != 0;
     }
 
     private boolean canShowInputMethodPickerLocked(IInputMethodClient client) {

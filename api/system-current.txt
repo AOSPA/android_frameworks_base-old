@@ -205,6 +205,7 @@ package android {
     field public static final String REVOKE_RUNTIME_PERMISSIONS = "android.permission.REVOKE_RUNTIME_PERMISSIONS";
     field public static final String SCORE_NETWORKS = "android.permission.SCORE_NETWORKS";
     field public static final String SECURE_ELEMENT_PRIVILEGED_OPERATION = "android.permission.SECURE_ELEMENT_PRIVILEGED_OPERATION";
+    field public static final String SEND_CATEGORY_CAR_NOTIFICATIONS = "android.permission.SEND_CATEGORY_CAR_NOTIFICATIONS";
     field public static final String SEND_DEVICE_CUSTOMIZATION_READY = "android.permission.SEND_DEVICE_CUSTOMIZATION_READY";
     field public static final String SEND_SHOW_SUSPENDED_APP_DETAILS = "android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS";
     field public static final String SEND_SMS_NO_CONFIRMATION = "android.permission.SEND_SMS_NO_CONFIRMATION";
@@ -219,6 +220,7 @@ package android {
     field public static final String SET_WALLPAPER_COMPONENT = "android.permission.SET_WALLPAPER_COMPONENT";
     field public static final String SHOW_KEYGUARD_MESSAGE = "android.permission.SHOW_KEYGUARD_MESSAGE";
     field public static final String SHUTDOWN = "android.permission.SHUTDOWN";
+    field public static final String STATUS_BAR_SERVICE = "android.permission.STATUS_BAR_SERVICE";
     field public static final String STOP_APP_SWITCHES = "android.permission.STOP_APP_SWITCHES";
     field public static final String SUBSTITUTE_NOTIFICATION_APP_NAME = "android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME";
     field public static final String SUBSTITUTE_SHARE_TARGET_APP_NAME_AND_ICON = "android.permission.SUBSTITUTE_SHARE_TARGET_APP_NAME_AND_ICON";
@@ -301,6 +303,7 @@ package android {
     field public static final int config_helpIntentNameKey = 17039390; // 0x104001e
     field public static final int config_helpPackageNameKey = 17039387; // 0x104001b
     field public static final int config_helpPackageNameValue = 17039388; // 0x104001c
+    field public static final int config_systemAutomotiveCluster = 17039400; // 0x1040028
     field public static final int config_systemGallery = 17039399; // 0x1040027
   }
 
@@ -668,6 +671,9 @@ package android.app {
     method @Nullable public android.content.ComponentName getAllowedNotificationAssistant();
     method public boolean isNotificationAssistantAccessGranted(@NonNull android.content.ComponentName);
     method public void setNotificationAssistantAccessGranted(@Nullable android.content.ComponentName, boolean);
+    field @RequiresPermission(android.Manifest.permission.STATUS_BAR_SERVICE) public static final String ACTION_CLOSE_NOTIFICATION_HANDLER_PANEL = "android.app.action.CLOSE_NOTIFICATION_HANDLER_PANEL";
+    field @RequiresPermission(android.Manifest.permission.STATUS_BAR_SERVICE) public static final String ACTION_OPEN_NOTIFICATION_HANDLER_PANEL = "android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL";
+    field @RequiresPermission(android.Manifest.permission.STATUS_BAR_SERVICE) public static final String ACTION_TOGGLE_NOTIFICATION_HANDLER_PANEL = "android.app.action.TOGGLE_NOTIFICATION_HANDLER_PANEL";
   }
 
   public final class RuntimeAppOpAccessMessage implements android.os.Parcelable {
@@ -1586,12 +1592,16 @@ package android.bluetooth {
     method @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED) public void setBluetoothTethering(boolean);
     method @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED) public boolean setConnectionPolicy(@NonNull android.bluetooth.BluetoothDevice, int);
     field public static final String ACTION_CONNECTION_STATE_CHANGED = "android.bluetooth.pan.profile.action.CONNECTION_STATE_CHANGED";
+    field public static final String ACTION_TETHERING_STATE_CHANGED = "android.bluetooth.action.TETHERING_STATE_CHANGED";
     field public static final String EXTRA_LOCAL_ROLE = "android.bluetooth.pan.extra.LOCAL_ROLE";
+    field public static final String EXTRA_TETHERING_STATE = "android.bluetooth.extra.TETHERING_STATE";
     field public static final int LOCAL_NAP_ROLE = 1; // 0x1
     field public static final int LOCAL_PANU_ROLE = 2; // 0x2
     field public static final int PAN_ROLE_NONE = 0; // 0x0
     field public static final int REMOTE_NAP_ROLE = 1; // 0x1
     field public static final int REMOTE_PANU_ROLE = 2; // 0x2
+    field public static final int TETHERING_STATE_OFF = 1; // 0x1
+    field public static final int TETHERING_STATE_ON = 2; // 0x2
   }
 
   public class BluetoothPbap implements android.bluetooth.BluetoothProfile {
@@ -1739,6 +1749,7 @@ package android.content {
     field public static final String ETHERNET_SERVICE = "ethernet";
     field public static final String EUICC_CARD_SERVICE = "euicc_card";
     field public static final String HDMI_CONTROL_SERVICE = "hdmi_control";
+    field public static final String MEDIA_TRANSCODING_SERVICE = "media_transcoding";
     field public static final String NETD_SERVICE = "netd";
     field public static final String NETWORK_SCORE_SERVICE = "network_score";
     field public static final String OEM_LOCK_SERVICE = "oem_lock";
@@ -4071,7 +4082,7 @@ package android.location {
 
   public class LocationManager {
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public void flushGnssBatch();
-    method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void getCurrentLocation(@NonNull android.location.LocationRequest, @Nullable android.os.CancellationSignal, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.location.Location>);
+    method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void getCurrentLocation(@NonNull android.location.LocationRequest, @Nullable android.os.CancellationSignal, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.location.Location>);
     method @Nullable public String getExtraLocationControllerPackage();
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public int getGnssBatchSize();
     method @RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) public void injectGnssMeasurementCorrections(@NonNull android.location.GnssMeasurementCorrections);
@@ -4082,9 +4093,9 @@ package android.location {
     method @RequiresPermission(android.Manifest.permission.READ_DEVICE_CONFIG) public boolean isProviderPackage(@Nullable String, @NonNull String);
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public boolean registerGnssBatchedLocationCallback(long, boolean, @NonNull android.location.BatchedLocationCallback, @Nullable android.os.Handler);
     method @RequiresPermission(allOf={android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.LOCATION_HARDWARE}) public boolean registerGnssMeasurementsCallback(@NonNull android.location.GnssRequest, @NonNull java.util.concurrent.Executor, @NonNull android.location.GnssMeasurementsEvent.Callback);
-    method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(@Nullable android.location.LocationRequest, @NonNull android.location.LocationListener, @Nullable android.os.Looper);
-    method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(@Nullable android.location.LocationRequest, @NonNull java.util.concurrent.Executor, @NonNull android.location.LocationListener);
-    method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(@Nullable android.location.LocationRequest, @NonNull android.app.PendingIntent);
+    method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(@Nullable android.location.LocationRequest, @NonNull android.location.LocationListener, @Nullable android.os.Looper);
+    method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(@Nullable android.location.LocationRequest, @NonNull java.util.concurrent.Executor, @NonNull android.location.LocationListener);
+    method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(@Nullable android.location.LocationRequest, @NonNull android.app.PendingIntent);
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public void setExtraLocationControllerPackage(@Nullable String);
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public void setExtraLocationControllerPackageEnabled(boolean);
     method @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void setLocationEnabledForUser(boolean, @NonNull android.os.UserHandle);
@@ -4093,42 +4104,49 @@ package android.location {
   }
 
   public final class LocationRequest implements android.os.Parcelable {
-    method @NonNull public static android.location.LocationRequest create();
-    method @NonNull public static android.location.LocationRequest createFromDeprecatedCriteria(@NonNull android.location.Criteria, long, float, boolean);
-    method @NonNull public static android.location.LocationRequest createFromDeprecatedProvider(@NonNull String, long, float, boolean);
-    method public int describeContents();
+    method @Deprecated @NonNull public static android.location.LocationRequest create();
+    method @Deprecated @NonNull public static android.location.LocationRequest createFromDeprecatedCriteria(@NonNull android.location.Criteria, long, float, boolean);
+    method @Deprecated @NonNull public static android.location.LocationRequest createFromDeprecatedProvider(@NonNull String, long, float, boolean);
     method @Deprecated public long getExpireAt();
-    method public long getExpireIn();
-    method public long getFastestInterval();
-    method public boolean getHideFromAppOps();
-    method public long getInterval();
-    method public int getNumUpdates();
-    method @NonNull public String getProvider();
+    method @Deprecated public long getExpireIn();
+    method @Deprecated public long getFastestInterval();
+    method @Deprecated public boolean getHideFromAppOps();
+    method @Deprecated public long getInterval();
+    method @Deprecated public int getNumUpdates();
+    method @Deprecated @NonNull public String getProvider();
     method public int getQuality();
-    method public float getSmallestDisplacement();
+    method @Deprecated public float getSmallestDisplacement();
     method @Nullable public android.os.WorkSource getWorkSource();
+    method public boolean isHiddenFromAppOps();
     method public boolean isLocationSettingsIgnored();
-    method public boolean isLowPowerMode();
+    method public boolean isLowPower();
+    method @Deprecated public boolean isLowPowerMode();
     method @Deprecated @NonNull public android.location.LocationRequest setExpireAt(long);
-    method @NonNull public android.location.LocationRequest setExpireIn(long);
-    method @NonNull public android.location.LocationRequest setFastestInterval(long);
-    method public void setHideFromAppOps(boolean);
-    method @NonNull public android.location.LocationRequest setInterval(long);
-    method @NonNull @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public android.location.LocationRequest setLocationSettingsIgnored(boolean);
-    method @NonNull public android.location.LocationRequest setLowPowerMode(boolean);
-    method @NonNull public android.location.LocationRequest setNumUpdates(int);
-    method @NonNull public android.location.LocationRequest setProvider(@NonNull String);
-    method @NonNull public android.location.LocationRequest setQuality(int);
-    method @NonNull public android.location.LocationRequest setSmallestDisplacement(float);
-    method public void setWorkSource(@Nullable android.os.WorkSource);
-    method public void writeToParcel(android.os.Parcel, int);
+    method @Deprecated @NonNull public android.location.LocationRequest setExpireIn(long);
+    method @Deprecated @NonNull public android.location.LocationRequest setFastestInterval(long);
+    method @Deprecated public void setHideFromAppOps(boolean);
+    method @Deprecated @NonNull public android.location.LocationRequest setInterval(long);
+    method @Deprecated @NonNull @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public android.location.LocationRequest setLocationSettingsIgnored(boolean);
+    method @Deprecated @NonNull public android.location.LocationRequest setLowPowerMode(boolean);
+    method @Deprecated @NonNull public android.location.LocationRequest setNumUpdates(int);
+    method @Deprecated @NonNull public android.location.LocationRequest setProvider(@NonNull String);
+    method @Deprecated @NonNull public android.location.LocationRequest setQuality(int);
+    method @Deprecated @NonNull public android.location.LocationRequest setSmallestDisplacement(float);
+    method @Deprecated public void setWorkSource(@Nullable android.os.WorkSource);
     field public static final int ACCURACY_BLOCK = 102; // 0x66
     field public static final int ACCURACY_CITY = 104; // 0x68
     field public static final int ACCURACY_FINE = 100; // 0x64
-    field @NonNull public static final android.os.Parcelable.Creator<android.location.LocationRequest> CREATOR;
     field public static final int POWER_HIGH = 203; // 0xcb
     field public static final int POWER_LOW = 201; // 0xc9
-    field public static final int POWER_NONE = 200; // 0xc8
+    field @Deprecated public static final int POWER_NONE = 200; // 0xc8
+  }
+
+  public static final class LocationRequest.Builder {
+    method @NonNull @RequiresPermission(android.Manifest.permission.UPDATE_APP_OPS_STATS) public android.location.LocationRequest.Builder setHiddenFromAppOps(boolean);
+    method @NonNull @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public android.location.LocationRequest.Builder setLocationSettingsIgnored(boolean);
+    method @NonNull @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public android.location.LocationRequest.Builder setLowPower(boolean);
+    method @NonNull public android.location.LocationRequest.Builder setQuality(int);
+    method @NonNull @RequiresPermission(android.Manifest.permission.UPDATE_DEVICE_STATS) public android.location.LocationRequest.Builder setWorkSource(@Nullable android.os.WorkSource);
   }
 
 }
@@ -4195,32 +4213,43 @@ package android.media {
 
   public class AudioManager {
     method @Deprecated public int abandonAudioFocus(android.media.AudioManager.OnAudioFocusChangeListener, android.media.AudioAttributes);
-    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void addOnPreferredDeviceForStrategyChangedListener(@NonNull java.util.concurrent.Executor, @NonNull android.media.AudioManager.OnPreferredDeviceForStrategyChangedListener) throws java.lang.SecurityException;
+    method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void addOnPreferredDeviceForStrategyChangedListener(@NonNull java.util.concurrent.Executor, @NonNull android.media.AudioManager.OnPreferredDeviceForStrategyChangedListener) throws java.lang.SecurityException;
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void addOnPreferredDevicesForCapturePresetChangedListener(@NonNull java.util.concurrent.Executor, @NonNull android.media.AudioManager.OnPreferredDevicesForCapturePresetChangedListener) throws java.lang.SecurityException;
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void addOnPreferredDevicesForStrategyChangedListener(@NonNull java.util.concurrent.Executor, @NonNull android.media.AudioManager.OnPreferredDevicesForStrategyChangedListener) throws java.lang.SecurityException;
     method public void clearAudioServerStateCallback();
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public boolean clearPreferredDevicesForCapturePreset(int);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public int dispatchAudioFocusChange(@NonNull android.media.AudioFocusInfo, int, @NonNull android.media.audiopolicy.AudioPolicy);
     method @IntRange(from=0) public long getAdditionalOutputDeviceDelay(@NonNull android.media.AudioDeviceInfo);
     method @NonNull @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public static java.util.List<android.media.audiopolicy.AudioProductStrategy> getAudioProductStrategies();
     method @NonNull @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public static java.util.List<android.media.audiopolicy.AudioVolumeGroup> getAudioVolumeGroups();
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public int getDeviceVolumeBehavior(@NonNull android.media.AudioDeviceAttributes);
     method @NonNull @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public java.util.List<android.media.AudioDeviceAttributes> getDevicesForAttributes(@NonNull android.media.AudioAttributes);
     method @IntRange(from=0) public long getMaxAdditionalOutputDeviceDelay(@NonNull android.media.AudioDeviceInfo);
     method @IntRange(from=0) @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public int getMaxVolumeIndexForAttributes(@NonNull android.media.AudioAttributes);
     method @IntRange(from=0) @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public int getMinVolumeIndexForAttributes(@NonNull android.media.AudioAttributes);
     method @Nullable @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public android.media.AudioDeviceAttributes getPreferredDeviceForStrategy(@NonNull android.media.audiopolicy.AudioProductStrategy);
+    method @NonNull @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public java.util.List<android.media.AudioDeviceAttributes> getPreferredDevicesForCapturePreset(int);
+    method @NonNull @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public java.util.List<android.media.AudioDeviceAttributes> getPreferredDevicesForStrategy(@NonNull android.media.audiopolicy.AudioProductStrategy);
     method @NonNull @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public int[] getSupportedSystemUsages();
     method @IntRange(from=0) @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public int getVolumeIndexForAttributes(@NonNull android.media.AudioAttributes);
     method public boolean isAudioServerRunning();
     method public boolean isHdmiSystemAudioSupported();
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public int registerAudioPolicy(@NonNull android.media.audiopolicy.AudioPolicy);
     method public void registerVolumeGroupCallback(@NonNull java.util.concurrent.Executor, @NonNull android.media.AudioManager.VolumeGroupCallback);
-    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void removeOnPreferredDeviceForStrategyChangedListener(@NonNull android.media.AudioManager.OnPreferredDeviceForStrategyChangedListener);
+    method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void removeOnPreferredDeviceForStrategyChangedListener(@NonNull android.media.AudioManager.OnPreferredDeviceForStrategyChangedListener);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void removeOnPreferredDevicesForCapturePresetChangedListener(@NonNull android.media.AudioManager.OnPreferredDevicesForCapturePresetChangedListener);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void removeOnPreferredDevicesForStrategyChangedListener(@NonNull android.media.AudioManager.OnPreferredDevicesForStrategyChangedListener);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public boolean removePreferredDeviceForStrategy(@NonNull android.media.audiopolicy.AudioProductStrategy);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int requestAudioFocus(android.media.AudioManager.OnAudioFocusChangeListener, @NonNull android.media.AudioAttributes, int, int) throws java.lang.IllegalArgumentException;
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.MODIFY_PHONE_STATE, android.Manifest.permission.MODIFY_AUDIO_ROUTING}) public int requestAudioFocus(android.media.AudioManager.OnAudioFocusChangeListener, @NonNull android.media.AudioAttributes, int, int, android.media.audiopolicy.AudioPolicy) throws java.lang.IllegalArgumentException;
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public int requestAudioFocus(@NonNull android.media.AudioFocusRequest, @Nullable android.media.audiopolicy.AudioPolicy);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public boolean setAdditionalOutputDeviceDelay(@NonNull android.media.AudioDeviceInfo, @IntRange(from=0) long);
     method public void setAudioServerStateCallback(@NonNull java.util.concurrent.Executor, @NonNull android.media.AudioManager.AudioServerStateCallback);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void setDeviceVolumeBehavior(@NonNull android.media.AudioDeviceAttributes, int);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void setFocusRequestResult(@NonNull android.media.AudioFocusInfo, int, @NonNull android.media.audiopolicy.AudioPolicy);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public boolean setPreferredDeviceForCapturePreset(int, @NonNull android.media.AudioDeviceAttributes);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public boolean setPreferredDeviceForStrategy(@NonNull android.media.audiopolicy.AudioProductStrategy, @NonNull android.media.AudioDeviceAttributes);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public boolean setPreferredDevicesForStrategy(@NonNull android.media.audiopolicy.AudioProductStrategy, @NonNull java.util.List<android.media.AudioDeviceAttributes>);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void setSupportedSystemUsages(@NonNull int[]);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void setVolumeIndexForAttributes(@NonNull android.media.AudioAttributes, int, int);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void unregisterAudioPolicy(@NonNull android.media.audiopolicy.AudioPolicy);
@@ -4229,6 +4258,11 @@ package android.media {
     field public static final int AUDIOFOCUS_FLAG_DELAY_OK = 1; // 0x1
     field public static final int AUDIOFOCUS_FLAG_LOCK = 4; // 0x4
     field public static final int AUDIOFOCUS_FLAG_PAUSES_ON_DUCKABLE_LOSS = 2; // 0x2
+    field public static final int DEVICE_VOLUME_BEHAVIOR_ABSOLUTE = 3; // 0x3
+    field public static final int DEVICE_VOLUME_BEHAVIOR_ABSOLUTE_MULTI_MODE = 4; // 0x4
+    field public static final int DEVICE_VOLUME_BEHAVIOR_FIXED = 2; // 0x2
+    field public static final int DEVICE_VOLUME_BEHAVIOR_FULL = 1; // 0x1
+    field public static final int DEVICE_VOLUME_BEHAVIOR_VARIABLE = 0; // 0x0
     field @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public static final int STREAM_ASSISTANT = 11; // 0xb
     field public static final int SUCCESS = 0; // 0x0
   }
@@ -4239,8 +4273,16 @@ package android.media {
     method public void onAudioServerUp();
   }
 
-  public static interface AudioManager.OnPreferredDeviceForStrategyChangedListener {
-    method public void onPreferredDeviceForStrategyChanged(@NonNull android.media.audiopolicy.AudioProductStrategy, @Nullable android.media.AudioDeviceAttributes);
+  @Deprecated public static interface AudioManager.OnPreferredDeviceForStrategyChangedListener {
+    method @Deprecated public void onPreferredDeviceForStrategyChanged(@NonNull android.media.audiopolicy.AudioProductStrategy, @Nullable android.media.AudioDeviceAttributes);
+  }
+
+  public static interface AudioManager.OnPreferredDevicesForCapturePresetChangedListener {
+    method public void onPreferredDevicesForCapturePresetChanged(int, @NonNull java.util.List<android.media.AudioDeviceAttributes>);
+  }
+
+  public static interface AudioManager.OnPreferredDevicesForStrategyChangedListener {
+    method public void onPreferredDevicesForStrategyChanged(@NonNull android.media.audiopolicy.AudioProductStrategy, @NonNull java.util.List<android.media.AudioDeviceAttributes>);
   }
 
   public abstract static class AudioManager.VolumeGroupCallback {
@@ -4310,10 +4352,76 @@ package android.media {
     method @NonNull public android.media.HwAudioSource.Builder setAudioDeviceInfo(@NonNull android.media.AudioDeviceInfo);
   }
 
+  public class MediaPlayer implements android.media.AudioRouting android.media.VolumeAutomation {
+    method @RequiresPermission("android.permission.BIND_IMS_SERVICE") public void setOnImsRxNoticeListener(@Nullable android.media.MediaPlayer.OnImsRxNoticeListener, @Nullable android.os.Handler);
+  }
+
+  public static interface MediaPlayer.OnImsRxNoticeListener {
+    method public void onImsRxNotice(@NonNull android.media.MediaPlayer, @NonNull byte[]);
+  }
+
   public final class MediaRecorder.AudioSource {
     field @RequiresPermission(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT) public static final int ECHO_REFERENCE = 1997; // 0x7cd
     field @RequiresPermission(android.Manifest.permission.CAPTURE_AUDIO_HOTWORD) public static final int HOTWORD = 1999; // 0x7cf
     field @RequiresPermission(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT) public static final int RADIO_TUNER = 1998; // 0x7ce
+  }
+
+  public final class MediaTranscodeManager {
+    method @NonNull public android.media.MediaTranscodeManager.TranscodingJob enqueueRequest(@NonNull android.media.MediaTranscodeManager.TranscodingRequest, @NonNull java.util.concurrent.Executor, @NonNull android.media.MediaTranscodeManager.OnTranscodingFinishedListener) throws java.io.FileNotFoundException, android.media.MediaTranscodingException.ServiceNotAvailableException;
+    field public static final int PRIORITY_REALTIME = 1; // 0x1
+    field public static final int TRANSCODING_TYPE_VIDEO = 1; // 0x1
+  }
+
+  @java.lang.FunctionalInterface public static interface MediaTranscodeManager.OnTranscodingFinishedListener {
+    method public void onTranscodingFinished(@NonNull android.media.MediaTranscodeManager.TranscodingJob);
+  }
+
+  public static final class MediaTranscodeManager.TranscodingJob {
+    method public void cancel();
+    method public int getJobId();
+    method @IntRange(from=0, to=100) public int getProgress();
+    method public int getResult();
+    method public int getStatus();
+    method public void setOnProgressUpdateListener(@NonNull java.util.concurrent.Executor, @Nullable android.media.MediaTranscodeManager.TranscodingJob.OnProgressUpdateListener);
+    method public void setOnProgressUpdateListener(int, @NonNull java.util.concurrent.Executor, @Nullable android.media.MediaTranscodeManager.TranscodingJob.OnProgressUpdateListener);
+    field public static final int RESULT_CANCELED = 4; // 0x4
+    field public static final int RESULT_ERROR = 3; // 0x3
+    field public static final int RESULT_NONE = 1; // 0x1
+    field public static final int RESULT_SUCCESS = 2; // 0x2
+    field public static final int STATUS_FINISHED = 3; // 0x3
+    field public static final int STATUS_PAUSED = 4; // 0x4
+    field public static final int STATUS_PENDING = 1; // 0x1
+    field public static final int STATUS_RUNNING = 2; // 0x2
+  }
+
+  @java.lang.FunctionalInterface public static interface MediaTranscodeManager.TranscodingJob.OnProgressUpdateListener {
+    method public void onProgressUpdate(@NonNull android.media.MediaTranscodeManager.TranscodingJob, @IntRange(from=0, to=100) int);
+  }
+
+  public static final class MediaTranscodeManager.TranscodingRequest {
+    method @NonNull public android.net.Uri getDestinationUri();
+    method public int getPriority();
+    method @NonNull public android.net.Uri getSourceUri();
+    method public int getType();
+    method @Nullable public android.media.MediaFormat getVideoTrackFormat();
+  }
+
+  public static final class MediaTranscodeManager.TranscodingRequest.Builder {
+    ctor public MediaTranscodeManager.TranscodingRequest.Builder();
+    method @NonNull public android.media.MediaTranscodeManager.TranscodingRequest build();
+    method @NonNull public android.media.MediaTranscodeManager.TranscodingRequest.Builder setDestinationUri(@NonNull android.net.Uri);
+    method @NonNull public android.media.MediaTranscodeManager.TranscodingRequest.Builder setPriority(int);
+    method @NonNull public android.media.MediaTranscodeManager.TranscodingRequest.Builder setSourceUri(@NonNull android.net.Uri);
+    method @NonNull public android.media.MediaTranscodeManager.TranscodingRequest.Builder setType(int);
+    method @NonNull public android.media.MediaTranscodeManager.TranscodingRequest.Builder setVideoTrackFormat(@NonNull android.media.MediaFormat);
+  }
+
+  public static class MediaTranscodeManager.TranscodingRequest.MediaFormatResolver {
+    ctor public MediaTranscodeManager.TranscodingRequest.MediaFormatResolver();
+    method @Nullable public android.media.MediaFormat resolveVideoFormat();
+    method @NonNull public android.media.MediaTranscodeManager.TranscodingRequest.MediaFormatResolver setSourceVideoFormatHint(@NonNull android.media.MediaFormat);
+    method public boolean shouldTranscode();
+    field public static final String CAPS_SUPPORTS_HEVC = "support-hevc";
   }
 
   public class PlayerProxy {
@@ -7100,6 +7208,7 @@ package android.net.wifi {
     method public int getBandwidth();
     method @Nullable public android.net.MacAddress getBssid();
     method public int getFrequency();
+    method public int getWifiStandard();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field public static final int CHANNEL_WIDTH_160MHZ = 6; // 0x6
     field public static final int CHANNEL_WIDTH_20MHZ = 2; // 0x2
@@ -7134,6 +7243,8 @@ package android.net.wifi {
     field @Deprecated public static final int METERED_OVERRIDE_METERED = 1; // 0x1
     field @Deprecated public static final int METERED_OVERRIDE_NONE = 0; // 0x0
     field @Deprecated public static final int METERED_OVERRIDE_NOT_METERED = 2; // 0x2
+    field @Deprecated public static final int RANDOMIZATION_AUTO = 3; // 0x3
+    field @Deprecated public static final int RANDOMIZATION_ENHANCED = 2; // 0x2
     field @Deprecated public static final int RANDOMIZATION_NONE = 0; // 0x0
     field @Deprecated public static final int RANDOMIZATION_PERSISTENT = 1; // 0x1
     field @Deprecated public static final int RECENT_FAILURE_AP_UNABLE_TO_HANDLE_NEW_STA = 17; // 0x11
@@ -7255,6 +7366,7 @@ package android.net.wifi {
     method @Deprecated @Nullable @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public android.net.wifi.WifiConfiguration getWifiApConfiguration();
     method @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public int getWifiApState();
     method @NonNull @RequiresPermission(anyOf={android.Manifest.permission.NETWORK_SETTINGS, android.Manifest.permission.NETWORK_SETUP_WIZARD}) public java.util.List<android.net.wifi.WifiConfiguration> getWifiConfigForMatchedNetworkSuggestionsSharedWithUser(@NonNull java.util.List<android.net.wifi.ScanResult>);
+    method public boolean is60GHzBandSupported();
     method public boolean isApMacRandomizationSupported();
     method public boolean isConnectedMacRandomizationSupported();
     method @Deprecated public boolean isDeviceToDeviceRttSupported();
@@ -7494,6 +7606,7 @@ package android.net.wifi {
     field public static final int WIFI_BAND_5_GHZ = 2; // 0x2
     field public static final int WIFI_BAND_5_GHZ_DFS_ONLY = 4; // 0x4
     field public static final int WIFI_BAND_5_GHZ_WITH_DFS = 6; // 0x6
+    field public static final int WIFI_BAND_60_GHZ = 16; // 0x10
     field public static final int WIFI_BAND_6_GHZ = 8; // 0x8
     field public static final int WIFI_BAND_BOTH = 3; // 0x3
     field public static final int WIFI_BAND_BOTH_WITH_DFS = 7; // 0x7
@@ -7733,6 +7846,8 @@ package android.net.wifi.nl80211 {
     field public static final int BSS_CAPABILITY_CF_POLL_REQUEST = 8; // 0x8
     field public static final int BSS_CAPABILITY_CHANNEL_AGILITY = 128; // 0x80
     field public static final int BSS_CAPABILITY_DELAYED_BLOCK_ACK = 16384; // 0x4000
+    field public static final int BSS_CAPABILITY_DMG_ESS = 3; // 0x3
+    field public static final int BSS_CAPABILITY_DMG_IBSS = 1; // 0x1
     field public static final int BSS_CAPABILITY_DSSS_OFDM = 8192; // 0x2000
     field public static final int BSS_CAPABILITY_ESS = 1; // 0x1
     field public static final int BSS_CAPABILITY_IBSS = 2; // 0x2
@@ -7802,7 +7917,7 @@ package android.net.wifi.nl80211 {
     method @NonNull public java.util.List<android.net.wifi.nl80211.NativeScanResult> getScanResults(@NonNull String, int);
     method @Nullable public android.net.wifi.nl80211.WifiNl80211Manager.TxPacketCounters getTxPacketCounters(@NonNull String);
     method @Nullable public static android.net.wifi.nl80211.WifiNl80211Manager.OemSecurityType parseOemSecurityTypeElement(int, int, @NonNull byte[]);
-    method public boolean registerApCallback(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.net.wifi.nl80211.WifiNl80211Manager.SoftApCallback);
+    method @Deprecated public boolean registerApCallback(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.net.wifi.nl80211.WifiNl80211Manager.SoftApCallback);
     method public void sendMgmtFrame(@NonNull String, @NonNull byte[], int, @NonNull java.util.concurrent.Executor, @NonNull android.net.wifi.nl80211.WifiNl80211Manager.SendMgmtFrameCallback);
     method public void setOnServiceDeadCallback(@NonNull Runnable);
     method public boolean setupInterfaceForClientMode(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.net.wifi.nl80211.WifiNl80211Manager.ScanEventCallback, @NonNull android.net.wifi.nl80211.WifiNl80211Manager.ScanEventCallback);
@@ -7853,10 +7968,10 @@ package android.net.wifi.nl80211 {
     field public final int txBitrateMbps;
   }
 
-  public static interface WifiNl80211Manager.SoftApCallback {
-    method public void onConnectedClientsChanged(@NonNull android.net.wifi.nl80211.NativeWifiClient, boolean);
-    method public void onFailure();
-    method public void onSoftApChannelSwitched(int, int);
+  @Deprecated public static interface WifiNl80211Manager.SoftApCallback {
+    method @Deprecated public void onConnectedClientsChanged(@NonNull android.net.wifi.nl80211.NativeWifiClient, boolean);
+    method @Deprecated public void onFailure();
+    method @Deprecated public void onSoftApChannelSwitched(int, int);
   }
 
   public static class WifiNl80211Manager.TxPacketCounters {
@@ -8376,6 +8491,7 @@ package android.os {
     method @RequiresPermission(android.Manifest.permission.READ_DREAM_STATE) public boolean isAmbientDisplaySuppressedForToken(@NonNull String);
     method @RequiresPermission(anyOf={android.Manifest.permission.DEVICE_POWER, android.Manifest.permission.POWER_SAVER}) public boolean setAdaptivePowerSaveEnabled(boolean);
     method @RequiresPermission(anyOf={android.Manifest.permission.DEVICE_POWER, android.Manifest.permission.POWER_SAVER}) public boolean setAdaptivePowerSavePolicy(@NonNull android.os.BatterySaverPolicyConfig);
+    method @RequiresPermission(android.Manifest.permission.DEVICE_POWER) public void setBatteryDischargePrediction(@NonNull java.time.Duration, boolean);
     method @RequiresPermission(android.Manifest.permission.POWER_SAVER) public boolean setDynamicPowerSaveHint(boolean, int);
     method @RequiresPermission(anyOf={android.Manifest.permission.DEVICE_POWER, android.Manifest.permission.POWER_SAVER}) public boolean setPowerSaveModeEnabled(boolean);
     method @RequiresPermission(android.Manifest.permission.WRITE_DREAM_STATE) public void suppressAmbientDisplay(@NonNull String, boolean);
@@ -9262,6 +9378,7 @@ package android.provider {
     field public static final String APN_SET_ID = "apn_set_id";
     field public static final int CARRIER_EDITED = 4; // 0x4
     field public static final String EDITED_STATUS = "edited";
+    field public static final int MATCH_ALL_APN_SET_ID = -1; // 0xffffffff
     field public static final String MAX_CONNECTIONS = "max_conns";
     field public static final String MODEM_PERSIST = "modem_cognitive";
     field public static final String MTU = "mtu";
@@ -10273,6 +10390,10 @@ package android.telecom {
     method public final void addExistingConnection(@NonNull android.telecom.PhoneAccountHandle, @NonNull android.telecom.Connection, @NonNull android.telecom.Conference);
   }
 
+  public final class DisconnectCause implements android.os.Parcelable {
+    field public static final String REASON_EMULATING_SINGLE_CALL = "EMULATING_SINGLE_CALL";
+  }
+
   public abstract class InCallService extends android.app.Service {
     method @Deprecated public android.telecom.Phone getPhone();
     method @Deprecated public void onPhoneCreated(android.telecom.Phone);
@@ -10401,7 +10522,12 @@ package android.telecom {
   }
 
   public final class PhoneAccount implements android.os.Parcelable {
+    field public static final int CAPABILITY_EMERGENCY_CALLS_ONLY = 128; // 0x80
+    field public static final int CAPABILITY_EMERGENCY_PREFERRED = 8192; // 0x2000
+    field public static final int CAPABILITY_EMERGENCY_VIDEO_CALLING = 512; // 0x200
     field public static final int CAPABILITY_MULTI_USER = 32; // 0x20
+    field public static final String EXTRA_PLAY_CALL_RECORDING_TONE = "android.telecom.extra.PLAY_CALL_RECORDING_TONE";
+    field public static final String EXTRA_SORT_ORDER = "android.telecom.extra.SORT_ORDER";
   }
 
   public static class PhoneAccount.Builder {
@@ -10482,15 +10608,25 @@ package android.telecom {
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public int getCurrentTtyMode();
     method @Nullable @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public String getDefaultDialerPackage(@NonNull android.os.UserHandle);
     method @Deprecated public android.content.ComponentName getDefaultPhoneApp();
-    method public java.util.List<android.telecom.PhoneAccountHandle> getPhoneAccountsForPackage();
+    method @Deprecated public java.util.List<android.telecom.PhoneAccountHandle> getPhoneAccountsForPackage();
     method @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public java.util.List<android.telecom.PhoneAccountHandle> getPhoneAccountsSupportingScheme(String);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean isInEmergencyCall();
     method @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isRinging();
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setUserSelectedOutgoingPhoneAccount(@Nullable android.telecom.PhoneAccountHandle);
+    field public static final String ACTION_CURRENT_TTY_MODE_CHANGED = "android.telecom.action.CURRENT_TTY_MODE_CHANGED";
+    field public static final String ACTION_TTY_PREFERRED_MODE_CHANGED = "android.telecom.action.TTY_PREFERRED_MODE_CHANGED";
+    field public static final int CALL_SOURCE_EMERGENCY_DIALPAD = 1; // 0x1
+    field public static final int CALL_SOURCE_EMERGENCY_SHORTCUT = 2; // 0x2
+    field public static final int CALL_SOURCE_UNSPECIFIED = 0; // 0x0
     field public static final String EXTRA_CALL_BACK_INTENT = "android.telecom.extra.CALL_BACK_INTENT";
+    field public static final String EXTRA_CALL_SOURCE = "android.telecom.extra.CALL_SOURCE";
+    field public static final String EXTRA_CALL_TECHNOLOGY_TYPE = "android.telecom.extra.CALL_TECHNOLOGY_TYPE";
     field public static final String EXTRA_CLEAR_MISSED_CALLS_INTENT = "android.telecom.extra.CLEAR_MISSED_CALLS_INTENT";
     field public static final String EXTRA_CONNECTION_SERVICE = "android.telecom.extra.CONNECTION_SERVICE";
+    field public static final String EXTRA_CURRENT_TTY_MODE = "android.telecom.extra.CURRENT_TTY_MODE";
     field public static final String EXTRA_IS_USER_INTENT_EMERGENCY_CALL = "android.telecom.extra.IS_USER_INTENT_EMERGENCY_CALL";
+    field public static final String EXTRA_TTY_PREFERRED_MODE = "android.telecom.extra.TTY_PREFERRED_MODE";
+    field public static final String EXTRA_UNKNOWN_CALL_HANDLE = "android.telecom.extra.UNKNOWN_CALL_HANDLE";
     field public static final int TTY_MODE_FULL = 1; // 0x1
     field public static final int TTY_MODE_HCO = 2; // 0x2
     field public static final int TTY_MODE_OFF = 0; // 0x0
@@ -10798,8 +10934,11 @@ package android.telephony {
 
   public class PhoneStateListener {
     method public void onCallAttributesChanged(@NonNull android.telephony.CallAttributes);
-    method public void onOutgoingEmergencyCall(@NonNull android.telephony.emergency.EmergencyNumber);
-    method public void onOutgoingEmergencySms(@NonNull android.telephony.emergency.EmergencyNumber);
+    method @Deprecated public void onOutgoingEmergencyCall(@NonNull android.telephony.emergency.EmergencyNumber);
+    method public void onOutgoingEmergencyCall(@NonNull android.telephony.emergency.EmergencyNumber, int);
+    method @Deprecated public void onOutgoingEmergencySms(@NonNull android.telephony.emergency.EmergencyNumber);
+    method public void onOutgoingEmergencySms(@NonNull android.telephony.emergency.EmergencyNumber, int);
+    method public void onPhysicalChannelConfigurationChanged(@NonNull java.util.List<android.telephony.PhysicalChannelConfig>);
     method @RequiresPermission("android.permission.READ_PRECISE_PHONE_STATE") public void onPreciseCallStateChanged(@NonNull android.telephony.PreciseCallState);
     method public void onRadioPowerStateChanged(int);
     method public void onSrvccStateChanged(int);
@@ -10807,10 +10946,27 @@ package android.telephony {
     field @RequiresPermission("android.permission.READ_PRECISE_PHONE_STATE") public static final int LISTEN_CALL_ATTRIBUTES_CHANGED = 67108864; // 0x4000000
     field @RequiresPermission(android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION) public static final int LISTEN_OUTGOING_EMERGENCY_CALL = 268435456; // 0x10000000
     field @RequiresPermission(android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION) public static final int LISTEN_OUTGOING_EMERGENCY_SMS = 536870912; // 0x20000000
+    field @RequiresPermission(android.Manifest.permission.READ_PRECISE_PHONE_STATE) public static final long LISTEN_PHYSICAL_CHANNEL_CONFIGURATION = 4294967296L; // 0x100000000L
     field @RequiresPermission("android.permission.READ_PRECISE_PHONE_STATE") public static final int LISTEN_PRECISE_CALL_STATE = 2048; // 0x800
     field @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public static final int LISTEN_RADIO_POWER_STATE_CHANGED = 8388608; // 0x800000
     field @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public static final int LISTEN_SRVCC_STATE_CHANGED = 16384; // 0x4000
     field @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public static final int LISTEN_VOICE_ACTIVATION_STATE = 131072; // 0x20000
+  }
+
+  public final class PhysicalChannelConfig implements android.os.Parcelable {
+    method public int describeContents();
+    method public int getCellBandwidthDownlink();
+    method public int getChannelNumber();
+    method public int getConnectionStatus();
+    method public int getNetworkType();
+    method @IntRange(from=0, to=1007) public int getPhysicalCellId();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field public static final int CHANNEL_NUMBER_UNKNOWN = -1; // 0xffffffff
+    field public static final int CONNECTION_PRIMARY_SERVING = 1; // 0x1
+    field public static final int CONNECTION_SECONDARY_SERVING = 2; // 0x2
+    field public static final int CONNECTION_UNKNOWN = -1; // 0xffffffff
+    field @NonNull public static final android.os.Parcelable.Creator<android.telephony.PhysicalChannelConfig> CREATOR;
+    field public static final int PHYSICAL_CELL_ID_UNKNOWN = -1; // 0xffffffff
   }
 
   public final class PreciseCallState implements android.os.Parcelable {
@@ -10838,6 +10994,7 @@ package android.telephony {
     method @Deprecated public int getDataConnectionApnTypeBitMask();
     method @Deprecated public int getDataConnectionFailCause();
     method @Deprecated public int getDataConnectionState();
+    method public int getId();
   }
 
   public final class PreciseDisconnectCause {
@@ -11214,10 +11371,8 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isAnyRadioPoweredOn();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isApnMetered(int);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isApplicationOnUicc(int);
-    method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isDataConnectionAllowed();
     method public boolean isDataConnectivityPossible();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isDataEnabledForApn(int);
-    method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_NETWORK_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isDataEnabledWithReason(int);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isEmergencyAssistanceEnabled();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) @WorkerThread public boolean isIccLockEnabled();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isIdle();
@@ -11249,7 +11404,6 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int setCarrierRestrictionRules(@NonNull android.telephony.CarrierRestrictionRules);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataActivationState(int);
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataEnabled(int, boolean);
-    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataEnabledWithReason(int, boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataRoamingEnabled(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setMultiSimCarrierRestriction(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean setOpportunisticNetworkState(boolean);
@@ -11287,10 +11441,6 @@ package android.telephony {
     field public static final int CARRIER_PRIVILEGE_STATUS_HAS_ACCESS = 1; // 0x1
     field public static final int CARRIER_PRIVILEGE_STATUS_NO_ACCESS = 0; // 0x0
     field public static final int CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED = -1; // 0xffffffff
-    field public static final int DATA_ENABLED_REASON_CARRIER = 2; // 0x2
-    field public static final int DATA_ENABLED_REASON_POLICY = 1; // 0x1
-    field public static final int DATA_ENABLED_REASON_THERMAL = 3; // 0x3
-    field public static final int DATA_ENABLED_REASON_USER = 0; // 0x0
     field public static final String EXTRA_ANOMALY_DESCRIPTION = "android.telephony.extra.ANOMALY_DESCRIPTION";
     field public static final String EXTRA_ANOMALY_ID = "android.telephony.extra.ANOMALY_ID";
     field public static final String EXTRA_PHONE_IN_ECM_STATE = "android.telephony.extra.PHONE_IN_ECM_STATE";
@@ -11406,6 +11556,7 @@ package android.telephony.data {
     method public int getCause();
     method @NonNull public java.util.List<java.net.InetAddress> getDnsAddresses();
     method @NonNull public java.util.List<java.net.InetAddress> getGatewayAddresses();
+    method public int getHandoverFailureMode();
     method public int getId();
     method @NonNull public String getInterfaceName();
     method public int getLinkStatus();
@@ -11417,6 +11568,11 @@ package android.telephony.data {
     method public int getSuggestedRetryTime();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.telephony.data.DataCallResponse> CREATOR;
+    field public static final int HANDOVER_FAILURE_MODE_DO_FALLBACK = 2; // 0x2
+    field public static final int HANDOVER_FAILURE_MODE_LEGACY = 1; // 0x1
+    field public static final int HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER = 3; // 0x3
+    field public static final int HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL = 4; // 0x4
+    field public static final int HANDOVER_FAILURE_MODE_UNKNOWN = 0; // 0x0
     field public static final int LINK_STATUS_ACTIVE = 2; // 0x2
     field public static final int LINK_STATUS_DORMANT = 1; // 0x1
     field public static final int LINK_STATUS_INACTIVE = 0; // 0x0
@@ -11430,6 +11586,7 @@ package android.telephony.data {
     method @NonNull public android.telephony.data.DataCallResponse.Builder setCause(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setDnsAddresses(@NonNull java.util.List<java.net.InetAddress>);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setGatewayAddresses(@NonNull java.util.List<java.net.InetAddress>);
+    method @NonNull public android.telephony.data.DataCallResponse.Builder setHandoverFailureMode(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setId(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setInterfaceName(@NonNull String);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setLinkStatus(int);
@@ -12152,6 +12309,7 @@ package android.telephony.ims {
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) @WorkerThread public int setProvisioningStringValue(int, @NonNull String);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) @WorkerThread public void setRcsProvisioningStatusForCapability(int, boolean);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public void unregisterProvisioningChangedCallback(@NonNull android.telephony.ims.ProvisioningManager.Callback);
+    field public static final int KEY_VOICE_OVER_WIFI_ENTITLEMENT_ID = 67; // 0x43
     field public static final int KEY_VOICE_OVER_WIFI_MODE_OVERRIDE = 27; // 0x1b
     field public static final int KEY_VOICE_OVER_WIFI_ROAMING_ENABLED_OVERRIDE = 26; // 0x1a
     field public static final int PROVISIONING_VALUE_DISABLED = 0; // 0x0
@@ -12725,6 +12883,9 @@ package android.webkit {
   public interface PacProcessor {
     method @Nullable public String findProxyForUrl(@NonNull String);
     method @NonNull public static android.webkit.PacProcessor getInstance();
+    method @NonNull public static android.webkit.PacProcessor getInstanceForNetwork(@Nullable android.net.Network);
+    method @Nullable public default android.net.Network getNetwork();
+    method public default void releasePacProcessor();
     method public boolean setProxyScript(@NonNull String);
   }
 
@@ -12864,6 +13025,7 @@ package android.webkit {
     method public android.webkit.CookieManager getCookieManager();
     method public android.webkit.GeolocationPermissions getGeolocationPermissions();
     method @NonNull public default android.webkit.PacProcessor getPacProcessor();
+    method @NonNull public default android.webkit.PacProcessor getPacProcessorForNetwork(@Nullable android.net.Network);
     method public android.webkit.ServiceWorkerController getServiceWorkerController();
     method public android.webkit.WebViewFactoryProvider.Statics getStatics();
     method @Deprecated public android.webkit.TokenBindingService getTokenBindingService();

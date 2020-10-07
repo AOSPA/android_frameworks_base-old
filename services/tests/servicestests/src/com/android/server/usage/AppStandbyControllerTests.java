@@ -112,6 +112,8 @@ public class AppStandbyControllerTests {
     private static final int UID_SYSTEM_HEADFULL = 10002;
     private static final String PACKAGE_SYSTEM_HEADLESS = "com.example.system.headless";
     private static final int UID_SYSTEM_HEADLESS = 10003;
+    private static final String PACKAGE_WELLBEING = "com.example.wellbeing";
+    private static final int UID_WELLBEING = 10004;
     private static final int USER_ID = 0;
     private static final int USER_ID2 = 10;
     private static final UserHandle USER_HANDLE_USER2 = new UserHandle(USER_ID2);
@@ -139,10 +141,13 @@ public class AppStandbyControllerTests {
     private AppStandbyController mController;
 
     private CountDownLatch mStateChangedLatch = new CountDownLatch(1);
+    private String mLatchPkgName = null;
     private AppIdleStateChangeListener mListener = new AppIdleStateChangeListener() {
         @Override
         public void onAppIdleStateChanged(String packageName, int userId,
                 boolean idle, int bucket, int reason) {
+            // Ignore events not related to mLatchPkgName, if set.
+            if (mLatchPkgName != null && !mLatchPkgName.equals(packageName)) return;
             mStateChangedLatch.countDown();
         }
     };
@@ -215,6 +220,11 @@ public class AppStandbyControllerTests {
         @Override
         boolean isNonIdleWhitelisted(String packageName) {
             return mNonIdleWhitelistApps.contains(packageName);
+        }
+
+        @Override
+        boolean isWellbeingPackage(String packageName) {
+            return PACKAGE_WELLBEING.equals(packageName);
         }
 
         @Override
@@ -329,6 +339,12 @@ public class AppStandbyControllerTests {
         pish.packageName = PACKAGE_SYSTEM_HEADLESS;
         packages.add(pish);
 
+        PackageInfo piw = new PackageInfo();
+        piw.applicationInfo = new ApplicationInfo();
+        piw.applicationInfo.uid = UID_WELLBEING;
+        piw.packageName = PACKAGE_WELLBEING;
+        packages.add(piw);
+
         doReturn(packages).when(mockPm).getInstalledPackagesAsUser(anyInt(), anyInt());
         try {
             for (int i = 0; i < packages.size(); ++i) {
@@ -374,6 +390,7 @@ public class AppStandbyControllerTests {
                         mInjector.mElapsedRealtime, false));
 
         controller.addListener(mListener);
+        mLatchPkgName = null;
         return controller;
     }
 
@@ -1377,21 +1394,21 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testUnexemptedSyncScheduled() throws Exception {
-        mStateChangedLatch = new CountDownLatch(1);
+        rearmLatch(PACKAGE_1);
         mController.addListener(mListener);
         assertEquals("Test package did not start in the Never bucket", STANDBY_BUCKET_NEVER,
                 getStandbyBucket(mController, PACKAGE_1));
 
         mController.postReportSyncScheduled(PACKAGE_1, USER_ID, false);
-        mStateChangedLatch.await(100, TimeUnit.MILLISECONDS);
+        mStateChangedLatch.await(1000, TimeUnit.MILLISECONDS);
         assertEquals("Unexempted sync scheduled should bring the package out of the Never bucket",
                 STANDBY_BUCKET_WORKING_SET, getStandbyBucket(mController, PACKAGE_1));
 
         setAndAssertBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE, REASON_MAIN_FORCED_BY_SYSTEM);
 
-        mStateChangedLatch = new CountDownLatch(1);
+        rearmLatch(PACKAGE_1);
         mController.postReportSyncScheduled(PACKAGE_1, USER_ID, false);
-        mStateChangedLatch.await(100, TimeUnit.MILLISECONDS);
+        mStateChangedLatch.await(1000, TimeUnit.MILLISECONDS);
         assertEquals("Unexempted sync scheduled should not elevate a non Never bucket",
                 STANDBY_BUCKET_RARE, getStandbyBucket(mController, PACKAGE_1));
     }
@@ -1400,17 +1417,17 @@ public class AppStandbyControllerTests {
     public void testExemptedSyncScheduled() throws Exception {
         setAndAssertBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE, REASON_MAIN_FORCED_BY_SYSTEM);
         mInjector.mDeviceIdleMode = true;
-        mStateChangedLatch = new CountDownLatch(1);
+        rearmLatch(PACKAGE_1);
         mController.postReportSyncScheduled(PACKAGE_1, USER_ID, true);
-        mStateChangedLatch.await(100, TimeUnit.MILLISECONDS);
+        mStateChangedLatch.await(1000, TimeUnit.MILLISECONDS);
         assertEquals("Exempted sync scheduled in doze should set bucket to working set",
                 STANDBY_BUCKET_WORKING_SET, getStandbyBucket(mController, PACKAGE_1));
 
         setAndAssertBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE, REASON_MAIN_FORCED_BY_SYSTEM);
         mInjector.mDeviceIdleMode = false;
-        mStateChangedLatch = new CountDownLatch(1);
+        rearmLatch(PACKAGE_1);
         mController.postReportSyncScheduled(PACKAGE_1, USER_ID, true);
-        mStateChangedLatch.await(100, TimeUnit.MILLISECONDS);
+        mStateChangedLatch.await(1000, TimeUnit.MILLISECONDS);
         assertEquals("Exempted sync scheduled while not in doze should set bucket to active",
                 STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController, PACKAGE_1));
     }
@@ -1516,6 +1533,25 @@ public class AppStandbyControllerTests {
         assertBucket(STANDBY_BUCKET_RARE, PACKAGE_1);
     }
 
+    @Test
+    public void testWellbeingAppElevated() {
+        reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_WELLBEING);
+        assertBucket(STANDBY_BUCKET_ACTIVE, PACKAGE_WELLBEING);
+        reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_1);
+        assertBucket(STANDBY_BUCKET_ACTIVE, PACKAGE_1);
+        mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD;
+
+        // Make sure the default wellbeing app does not get lowered below WORKING_SET.
+        mController.setAppStandbyBucket(PACKAGE_WELLBEING, USER_ID, STANDBY_BUCKET_RARE,
+                REASON_MAIN_TIMEOUT);
+        assertBucket(STANDBY_BUCKET_WORKING_SET, PACKAGE_WELLBEING);
+
+        // A non default wellbeing app should be able to fall lower than WORKING_SET.
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE,
+                REASON_MAIN_TIMEOUT);
+        assertBucket(STANDBY_BUCKET_RARE, PACKAGE_1);
+    }
+
     private String getAdminAppsStr(int userId) {
         return getAdminAppsStr(userId, mController.getActiveAdminAppsForTest(userId));
     }
@@ -1558,10 +1594,19 @@ public class AppStandbyControllerTests {
     }
 
     private void setAndAssertBucket(String pkg, int user, int bucket, int reason) throws Exception {
-        mStateChangedLatch = new CountDownLatch(1);
+        rearmLatch(pkg);
         mController.setAppStandbyBucket(pkg, user, bucket, reason);
         mStateChangedLatch.await(100, TimeUnit.MILLISECONDS);
         assertEquals("Failed to set package bucket", bucket,
                 getStandbyBucket(mController, PACKAGE_1));
+    }
+
+    private void rearmLatch(String pkgName) {
+        mLatchPkgName = pkgName;
+        mStateChangedLatch = new CountDownLatch(1);
+    }
+
+    private void rearmLatch() {
+        rearmLatch(null);
     }
 }

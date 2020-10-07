@@ -31,7 +31,7 @@ namespace android {
 namespace os {
 namespace statsd {
 
-struct ValueBucket {
+struct PastValueBucket {
     int64_t mBucketStartNs;
     int64_t mBucketEndNs;
     std::vector<int> valueIndex;
@@ -40,7 +40,6 @@ struct ValueBucket {
     // When we tune statsd memory usage in the future, this is a candidate to optimize.
     int64_t mConditionTrueNs;
 };
-
 
 // Aggregates values within buckets.
 //
@@ -53,9 +52,9 @@ public:
     ValueMetricProducer(
             const ConfigKey& key, const ValueMetric& valueMetric, const int conditionIndex,
             const vector<ConditionState>& initialConditionCache,
-            const sp<ConditionWizard>& conditionWizard, const int whatMatcherIndex,
-            const sp<EventMatcherWizard>& matcherWizard, const int pullTagId,
-            const int64_t timeBaseNs, const int64_t startTimeNs,
+            const sp<ConditionWizard>& conditionWizard, const uint64_t protoHash,
+            const int whatMatcherIndex, const sp<EventMatcherWizard>& matcherWizard,
+            const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs,
             const sp<StatsPullerManager>& pullerManager,
             const std::unordered_map<int, std::shared_ptr<Activation>>& eventActivationMap = {},
             const std::unordered_map<int, std::vector<std::shared_ptr<Activation>>>&
@@ -92,6 +91,10 @@ public:
 
     void onStateChanged(int64_t eventTimeNs, int32_t atomId, const HashableDimensionKey& primaryKey,
                         const FieldValue& oldState, const FieldValue& newState) override;
+
+    MetricType getMetricType() const override {
+        return METRIC_TYPE_VALUE;
+    }
 
 protected:
     void onMatchedLogEventInternalLocked(
@@ -173,7 +176,7 @@ private:
     // if this is pulled metric
     const bool mIsPulled;
 
-    // internal state of an ongoing aggregation bucket.
+    // Tracks the value information of one value field.
     typedef struct {
         // Index in multi value aggregation.
         int valueIndex;
@@ -188,25 +191,40 @@ private:
         bool seenNewData = false;
     } Interval;
 
+    // Internal state of an ongoing aggregation bucket.
+    typedef struct CurrentValueBucket {
+        // Value information for each value field of the metric.
+        std::vector<Interval> intervals;
+    } CurrentValueBucket;
+
+    // Holds base information for diffing values from one value field.
     typedef struct {
         // Holds current base value of the dimension. Take diff and update if necessary.
         Value base;
         // Whether there is a base to diff to.
         bool hasBase;
+    } BaseInfo;
+
+    // State key and base information for a specific DimensionsInWhat key.
+    typedef struct {
+        std::vector<BaseInfo> baseInfos;
         // Last seen state value(s).
         HashableDimensionKey currentState;
         // Whether this dimensions in what key has a current state key.
         bool hasCurrentState;
-    } BaseInfo;
+    } DimensionsInWhatInfo;
 
-    std::unordered_map<MetricDimensionKey, std::vector<Interval>> mCurrentSlicedBucket;
+    // Tracks the internal state in the ongoing aggregation bucket for each DimensionsInWhat
+    // key and StateValuesKey pair.
+    std::unordered_map<MetricDimensionKey, CurrentValueBucket> mCurrentSlicedBucket;
 
-    std::unordered_map<HashableDimensionKey, std::vector<BaseInfo>> mCurrentBaseInfo;
+    // Tracks current state key and base information for each DimensionsInWhat key.
+    std::unordered_map<HashableDimensionKey, DimensionsInWhatInfo> mCurrentBaseInfo;
 
     std::unordered_map<MetricDimensionKey, int64_t> mCurrentFullBucket;
 
     // Save the past buckets and we can clear when the StatsLogReport is dumped.
-    std::unordered_map<MetricDimensionKey, std::vector<ValueBucket>> mPastBuckets;
+    std::unordered_map<MetricDimensionKey, std::vector<PastValueBucket>> mPastBuckets;
 
     const int64_t mMinBucketSizeNs;
 
@@ -224,8 +242,8 @@ private:
     void accumulateEvents(const std::vector<std::shared_ptr<LogEvent>>& allData,
                           int64_t originalPullTimeNs, int64_t eventElapsedTimeNs);
 
-    ValueBucket buildPartialBucket(int64_t bucketEndTime,
-                                   const std::vector<Interval>& intervals);
+    PastValueBucket buildPartialBucket(int64_t bucketEndTime,
+                                       const std::vector<Interval>& intervals);
 
     void initCurrentSlicedBucket(int64_t nextBucketStartTimeNs);
 
@@ -234,7 +252,7 @@ private:
     // Reset diff base and mHasGlobalBase
     void resetBase();
 
-    static const size_t kBucketSize = sizeof(ValueBucket{});
+    static const size_t kBucketSize = sizeof(PastValueBucket{});
 
     const size_t mDimensionSoftLimit;
 

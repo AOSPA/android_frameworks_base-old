@@ -23,6 +23,8 @@ import android.content.Context;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.os.Debug;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.Choreographer;
 
@@ -54,8 +56,9 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
 
     private static final int SHRINK_STACK_FROM_MENU_DURATION = 250;
     private static final int EXPAND_STACK_TO_MENU_DURATION = 250;
-    private static final int EXPAND_STACK_TO_FULLSCREEN_DURATION = 300;
+    private static final int LEAVE_PIP_DURATION = 300;
     private static final int SHIFT_DURATION = 300;
+    private static final float STASH_RATIO = 0.25f;
 
     /** Friction to use for PIP when it moves via physics fling animations. */
     private static final float DEFAULT_FRICTION = 2f;
@@ -65,6 +68,8 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
 
     private PipMenuActivityController mMenuController;
     private PipSnapAlgorithm mSnapAlgorithm;
+
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     /** PIP's current bounds on the screen. */
     private final Rect mBounds = new Rect();
@@ -116,6 +121,8 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     /** FlingConfig instances provided to PhysicsAnimator for fling gestures. */
     private PhysicsAnimator.FlingConfig mFlingConfigX;
     private PhysicsAnimator.FlingConfig mFlingConfigY;
+    /** FlingConfig instances proviced to PhysicsAnimator for stashing. */
+    private PhysicsAnimator.FlingConfig mStashConfigX;
 
     /** SpringConfig to use for fling-then-spring animations. */
     private final PhysicsAnimator.SpringConfig mSpringConfig =
@@ -128,8 +135,10 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
                         SpringForce.STIFFNESS_LOW, SpringForce.DAMPING_RATIO_LOW_BOUNCY);
 
     private final Consumer<Rect> mUpdateBoundsCallback = (Rect newBounds) -> {
-        mMenuController.updateMenuLayout(newBounds);
-        mBounds.set(newBounds);
+        mMainHandler.post(() -> {
+            mMenuController.updateMenuLayout(newBounds);
+            mBounds.set(newBounds);
+        });
     };
 
     /**
@@ -154,7 +163,7 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     private final PipTaskOrganizer.PipTransitionCallback mPipTransitionCallback =
             new PipTaskOrganizer.PipTransitionCallback() {
         @Override
-        public void onPipTransitionStarted(ComponentName activity, int direction) {}
+        public void onPipTransitionStarted(ComponentName activity, int direction, Rect pipBounds) {}
 
         @Override
         public void onPipTransitionFinished(ComponentName activity, int direction) {
@@ -253,7 +262,9 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
                 mTemporaryBounds.set(toBounds);
                 mPipTaskOrganizer.scheduleUserResizePip(mBounds, mTemporaryBounds,
                         (Rect newBounds) -> {
-                            mMenuController.updateMenuLayout(newBounds);
+                            mMainHandler.post(() -> {
+                                mMenuController.updateMenuLayout(newBounds);
+                            });
                     });
             }
         } else {
@@ -304,16 +315,18 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     }
 
     /**
-     * Resizes the pinned stack back to fullscreen.
+     * Resizes the pinned stack back to unknown windowing mode, which could be freeform or
+     *      * fullscreen depending on the display area's windowing mode.
      */
-    void expandPipToFullscreen() {
-        expandPipToFullscreen(false /* skipAnimation */);
+    void expandLeavePip() {
+        expandLeavePip(false /* skipAnimation */);
     }
 
     /**
-     * Resizes the pinned stack back to fullscreen.
+     * Resizes the pinned stack back to unknown windowing mode, which could be freeform or
+     * fullscreen depending on the display area's windowing mode.
      */
-    void expandPipToFullscreen(boolean skipAnimation) {
+    void expandLeavePip(boolean skipAnimation) {
         if (DEBUG) {
             Log.d(TAG, "exitPip: skipAnimation=" + skipAnimation
                     + " callers=\n" + Debug.getCallers(5, "    "));
@@ -323,7 +336,7 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
         mPipTaskOrganizer.getUpdateHandler().post(() -> {
             mPipTaskOrganizer.exitPip(skipAnimation
                     ? 0
-                    : EXPAND_STACK_TO_FULLSCREEN_DURATION);
+                    : LEAVE_PIP_DURATION);
         });
     }
 
@@ -373,6 +386,21 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     void flingToSnapTarget(
             float velocityX, float velocityY,
             @Nullable Runnable updateAction, @Nullable Runnable endAction) {
+        movetoTarget(velocityX, velocityY, updateAction, endAction, false /* isStash */);
+    }
+
+    /**
+     * Stash PiP to the closest edge.
+     */
+    void stashToEdge(
+            float velocityX, float velocityY,
+            @Nullable Runnable updateAction, @Nullable Runnable endAction) {
+        movetoTarget(velocityX, velocityY, updateAction, endAction, true /* isStash */);
+    }
+
+    private void movetoTarget(
+            float velocityX, float velocityY,
+            @Nullable Runnable updateAction, @Nullable Runnable endAction, boolean isStash) {
         // If we're flinging to a snap target now, we're not springing to catch up to the touch
         // location now.
         mSpringingToTouch = false;
@@ -381,8 +409,8 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
                 .spring(FloatProperties.RECT_WIDTH, mBounds.width(), mSpringConfig)
                 .spring(FloatProperties.RECT_HEIGHT, mBounds.height(), mSpringConfig)
                 .flingThenSpring(
-                        FloatProperties.RECT_X, velocityX, mFlingConfigX, mSpringConfig,
-                        true /* flingMustReachMinOrMax */)
+                        FloatProperties.RECT_X, velocityX, isStash ? mStashConfigX : mFlingConfigX,
+                        mSpringConfig, true /* flingMustReachMinOrMax */)
                 .flingThenSpring(
                         FloatProperties.RECT_Y, velocityY, mFlingConfigY, mSpringConfig)
                 .withEndActions(endAction);
@@ -392,7 +420,11 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
                     (target, values) -> updateAction.run());
         }
 
-        final float xEndValue = velocityX < 0 ? mMovementBounds.left : mMovementBounds.right;
+        final float offset = ((float) mBounds.width()) * (1.0f - STASH_RATIO);
+        final float leftEdge = isStash ? mMovementBounds.left - offset : mMovementBounds.left;
+        final float rightEdge = isStash ?  mMovementBounds.right + offset : mMovementBounds.right;
+
+        final float xEndValue = velocityX < 0 ? leftEdge : rightEdge;
         final float estimatedFlingYEndValue =
                 PhysicsAnimator.estimateFlingEndValue(
                         mTemporaryBounds.top, velocityY, mFlingConfigY);
@@ -496,6 +528,9 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
                 DEFAULT_FRICTION, mMovementBounds.left, mMovementBounds.right);
         mFlingConfigY = new PhysicsAnimator.FlingConfig(
                 DEFAULT_FRICTION, mMovementBounds.top, mMovementBounds.bottom);
+        final float offset = ((float) mBounds.width()) * (1.0f - STASH_RATIO);
+        mStashConfigX = new PhysicsAnimator.FlingConfig(
+                DEFAULT_FRICTION, mMovementBounds.left - offset, mMovementBounds.right + offset);
     }
 
     /**
