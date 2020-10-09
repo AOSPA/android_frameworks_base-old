@@ -1072,6 +1072,7 @@ public abstract class PanelViewController {
 
     public void setLaunchingNotification(boolean launchingNotification) {
         mLaunchingNotification = launchingNotification;
+        mStatusBar.setLaunchingNotification();
     }
 
     public void collapseWithDuration(int animationDuration) {

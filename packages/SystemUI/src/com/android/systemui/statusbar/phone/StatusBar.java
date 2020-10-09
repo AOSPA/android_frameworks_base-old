@@ -76,6 +76,7 @@ import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.hardware.fingerprint.IFingerprintService;
+import android.graphics.drawable.Drawable;
 import android.media.AudioAttributes;
 import android.metrics.LogMaker;
 import android.net.Uri;
@@ -104,6 +105,9 @@ import android.util.EventLog;
 import android.util.Log;
 import android.util.MathUtils;
 import android.util.Slog;
+import android.view.animation.Animation;
+import android.view.animation.Animation.AnimationListener;
+import android.view.animation.AnimationUtils;
 import android.view.Display;
 import android.view.IWindowManager;
 import android.view.InsetsState.InternalInsetsType;
@@ -118,6 +122,8 @@ import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.DateTimeView;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
 
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
@@ -448,6 +454,15 @@ public class StatusBar extends SystemUI implements DemoMode,
     private final ScreenPinningRequest mScreenPinningRequest;
 
     private final MetricsLogger mMetricsLogger;
+
+    private ImageButton mDismissAllButton;
+    private Animation mDismissShowAnim;
+    private Animation mDismissHideAnim;
+    private boolean mDismissAllShowing;
+    private boolean mLaunchingNotification;
+    private boolean mKeyguardFadingWhilePulsing;
+    private boolean mClearableNotifications;
+    private boolean mScreenOn;
 
     // ensure quick settings is disabled until the current user makes it through the setup wizard
     @VisibleForTesting
@@ -1052,6 +1067,35 @@ public class StatusBar extends SystemUI implements DemoMode,
         inflateStatusBarWindow();
         mNotificationShadeWindowViewController.setService(this, mNotificationShadeWindowController);
         mNotificationShadeWindowView.setOnTouchListener(getStatusBarWindowTouchListener());
+        mDismissAllButton = mNotificationShadeWindowView.findViewById(R.id.clear_notifications);
+        mDismissHideAnim = AnimationUtils.loadAnimation(mContext,
+                R.anim.dismiss_all_hide);
+        mDismissShowAnim = AnimationUtils.loadAnimation(mContext,
+                R.anim.dismiss_all_show);
+
+        mDismissAllButton.setVisibility(View.INVISIBLE);
+        mDismissHideAnim.setAnimationListener(new AnimationListener() {
+            public void onAnimationStart(Animation animation) {}
+
+            public void onAnimationEnd(Animation animation) {
+                mDismissAllButton.setVisibility(View.INVISIBLE);
+                mDismissAllButton.setAlpha(0f);
+                mDismissAllShowing = false;
+            }
+
+            public void onAnimationRepeat(Animation animation) {}
+        });
+        mDismissShowAnim.setAnimationListener(new AnimationListener() {
+            public void onAnimationStart(Animation animation) {
+                mDismissAllButton.setVisibility(View.VISIBLE);
+                mDismissAllButton.setAlpha(1f);
+                mDismissAllShowing = true;
+            }
+
+            public void onAnimationEnd(Animation animation) {}
+
+            public void onAnimationRepeat(Animation animation) {}
+        });
 
         // TODO: Deal with the ugliness that comes from having some of the statusbar broken out
         // into fragments, but the rest here, it leaves some awkward lifecycle and whatnot.
@@ -1331,6 +1375,87 @@ public class StatusBar extends SystemUI implements DemoMode,
         mBroadcastDispatcher.registerReceiver(mBroadcastReceiver, filter, null, UserHandle.ALL);
     }
 
+    public void setLaunchingNotification() {
+        mLaunchingNotification = true;
+        hideDismissAnimate();
+    }
+
+    public void updateDismissAllVisibility(float qsExpansion) {
+        if (!mPanelExpanded && mDismissAllShowing) {
+            mDismissHideAnim.cancel();
+            mDismissHideAnim.reset();
+            return;
+        }
+
+        if (mLaunchingNotification) {
+            if (!mPanelExpanded) {
+                mLaunchingNotification = false;
+            } else {
+                return;
+            }
+        }
+
+        if (mKeyguardFadingWhilePulsing || !mScreenOn) {
+            return;
+        }
+
+        final float panelFrac = mNotificationPanelViewController.getExpandedFraction();
+        if (mClearableNotifications && mState != StatusBarState.KEYGUARD
+                && panelFrac > 0.9f && qsExpansion < 0.3f) {
+            showDismissAnimate();
+        } else {
+            hideDismissAnimate();
+        }
+    }
+
+    private void hideDismissAnimate() {
+        if (mDismissAllShowing) {
+            if (mDismissHideAnim.hasStarted() && !mDismissHideAnim.hasEnded()) {
+                return;
+            }
+            if (mDismissShowAnim != null) {
+                mDismissShowAnim.cancel();
+            }
+            mDismissAllButton.startAnimation(mDismissHideAnim);
+        }
+    }
+
+    private void showDismissAnimate() {
+        if (!mDismissAllShowing) {
+            if (mDismissShowAnim.hasStarted() && !mDismissShowAnim.hasEnded()) {
+                return;
+            }
+            if (mDismissHideAnim != null) {
+                mDismissHideAnim.cancel();
+            }
+            mDismissAllButton.startAnimation(mDismissShowAnim);
+        }
+    }
+
+    public void updateDismissAllButton() {
+        if (mDismissAllButton != null) {
+            final int iconcolor = mContext.getColor(R.color.dismiss_all_icon_color);
+            mDismissAllButton.setBackgroundDrawable(null);
+            mDismissAllButton.setImageDrawable(null);
+            FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) mDismissAllButton.getLayoutParams();
+            layoutParams.width = mContext.getResources().getDimensionPixelSize(R.dimen.dismiss_all_button_width);
+            layoutParams.height = mContext.getResources().getDimensionPixelSize(R.dimen.dismiss_all_button_height);
+            layoutParams.bottomMargin = mContext.getResources().getDimensionPixelSize(R.dimen.dismiss_all_button_margin_bottom);
+            mDismissAllButton.setElevation(mContext.getResources().getDimension(R.dimen.dismiss_all_button_elevation));
+            mDismissAllButton.setColorFilter(iconcolor);
+            mDismissAllButton.setImageResource(R.drawable.dismiss_all_icon);
+            mDismissAllButton.setBackgroundResource(R.drawable.dismiss_all_background);
+        }
+    }
+
+    public void setHasClearableNotifs(boolean notifs) {
+        mClearableNotifications = notifs;
+    }
+
+    public View getDismissAllButton() {
+        return mDismissAllButton;
+    }
+
     protected QS createDefaultQSFragment() {
         return FragmentHostManager.get(mNotificationShadeWindowView).create(QSFragment.class);
     }
@@ -1456,6 +1581,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             ((AutoReinflateContainer) mAmbientIndicationContainer).inflateLayout();
         }
         mNotificationIconAreaController.onThemeChanged();
+        updateDismissAllButton();
     }
 
     @Override
@@ -1474,6 +1600,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (mBrightnessMirrorController != null) {
             mBrightnessMirrorController.onUiModeChanged();
         }
+        updateDismissAllButton();
     }
 
     protected void createUserSwitcher() {
@@ -3345,6 +3472,10 @@ public class StatusBar extends SystemUI implements DemoMode,
      * fading.
      */
     public void fadeKeyguardWhilePulsing() {
+        mKeyguardFadingWhilePulsing = true;
+        mHandler.postDelayed(() -> {
+            mKeyguardFadingWhilePulsing = false;
+        }, 400);
         mNotificationPanelViewController.fadeOut(0, FADE_KEYGUARD_DURATION_PULSING,
                 ()-> {
                 hideKeyguard();
@@ -3896,6 +4027,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         @Override
         public void onScreenTurnedOn() {
+            mScreenOn = true;
             mScrimController.onScreenTurnedOn();
         }
 
@@ -3904,6 +4036,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             mDozeServiceHost.updateDozing();
             mFalsingManager.onScreenOff();
             mScrimController.onScreenTurnedOff();
+            mScreenOn = false;
             updateIsKeyguard();
         }
     };

@@ -1267,7 +1267,7 @@ public class NotificationPanelViewController extends PanelViewController {
         return !mQsTouchAboveFalsingThreshold;
     }
 
-    private float getQsExpansionFraction() {
+    public float getQsExpansionFraction() {
         return Math.min(
                 1f, (mQsExpansionHeight - mQsMinExpansionHeight) / (mQsMaxExpansionHeight
                         - mQsMinExpansionHeight));
@@ -1759,6 +1759,7 @@ public class NotificationPanelViewController extends PanelViewController {
     protected void updateQsExpansion() {
         if (mQs == null) return;
         float qsExpansionFraction = getQsExpansionFraction();
+        mStatusBar.updateDismissAllVisibility(qsExpansionFraction);
         mQs.setQsExpansion(qsExpansionFraction, getHeaderTranslation());
         mMediaHierarchyManager.setQsExpansion(qsExpansionFraction);
         mNotificationStackScroller.setQsExpansionFraction(qsExpansionFraction);
@@ -3707,6 +3708,9 @@ public class NotificationPanelViewController extends PanelViewController {
                     int pulseColor = mPulseLightsView.getNotificationLightsColor();
                     if (pulseColorAutomatic) {
                         ExpandableNotificationRow row = mNotificationStackScroller.getFirstActiveClearableNotification(ROWS_HIGH_PRIORITY);
+                        if (row == null) {
+                            return;
+                        }
                         int notificationColor = row.getEntry().getSbn().getNotification().color;
                         if (notificationColor != Notification.COLOR_DEFAULT ) {
                             pulseColor = notificationColor;
