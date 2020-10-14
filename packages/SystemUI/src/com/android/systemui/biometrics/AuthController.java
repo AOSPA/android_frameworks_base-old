@@ -22,7 +22,6 @@ import static android.hardware.biometrics.BiometricManager.Authenticators;
 
 import android.annotation.Nullable;
 import android.app.ActivityManager;
-import android.app.ActivityTaskManager;
 import android.app.IActivityTaskManager;
 import android.app.TaskStackListener;
 import android.content.BroadcastReceiver;
@@ -49,26 +48,33 @@ import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.SomeArgs;
 import com.android.systemui.SystemUI;
+import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.doze.DozeReceiver;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.phone.KeyguardBouncer;
 
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
+import javax.inject.Provider;
 
 /**
  * Receives messages sent from {@link com.android.server.biometrics.BiometricService} and shows the
  * appropriate biometric UI (e.g. BiometricDialogView).
  */
-@Singleton
+@SysUISingleton
 public class AuthController extends SystemUI implements CommandQueue.Callbacks,
-        AuthDialogCallback {
+        AuthDialogCallback, DozeReceiver, KeyguardBouncer.BouncerExpansionCallback {
 
-    private static final String TAG = "BiometricPrompt/AuthController";
+    private static final String TAG = "AuthController";
     private static final boolean DEBUG = true;
 
     private final CommandQueue mCommandQueue;
-    private final Injector mInjector;
+    private final StatusBarStateController mStatusBarStateController;
+    private final IActivityTaskManager mActivityTaskManager;
+    @Nullable private final FingerprintManager mFingerprintManager;
+    private final Provider<UdfpsController> mUdfpsControllerFactory;
 
     // TODO: These should just be saved from onSaveState
     private SomeArgs mCurrentDialogArgs;
@@ -77,18 +83,17 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
 
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private WindowManager mWindowManager;
+    @Nullable
     private UdfpsController mUdfpsController;
     @VisibleForTesting
-    IActivityTaskManager mActivityTaskManager;
-    @VisibleForTesting
-    BiometricTaskStackListener mTaskStackListener;
+    TaskStackListener mTaskStackListener;
     @VisibleForTesting
     IBiometricSysuiReceiver mReceiver;
 
-    public class BiometricTaskStackListener extends TaskStackListener {
+    private class BiometricTaskStackListener extends TaskStackListener {
         @Override
         public void onTaskStackChanged() {
-            mHandler.post(mTaskStackChangedRunnable);
+            mHandler.post(AuthController.this::handleTaskStackChanged);
         }
     }
 
@@ -115,7 +120,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         }
     };
 
-    private final Runnable mTaskStackChangedRunnable = () -> {
+    private void handleTaskStackChanged() {
         if (mCurrentDialog != null) {
             try {
                 final String clientPackage = mCurrentDialog.getOpPackageName();
@@ -140,7 +145,14 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
                 Log.e(TAG, "Remote exception", e);
             }
         }
-    };
+    }
+
+    @Override
+    public void dozeTimeTick() {
+        if (mUdfpsController != null) {
+            mUdfpsController.dozeTimeTick();
+        }
+    }
 
     @Override
     public void onTryAgainPressed() {
@@ -226,6 +238,34 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         }
     }
 
+    /**
+     * Requests fingerprint scan.
+     *
+     * @param screenX X position of long press
+     * @param screenY Y position of long press
+     */
+    public void onAodInterrupt(int screenX, int screenY) {
+        if (mUdfpsController == null) {
+            return;
+        }
+        mUdfpsController.onAodInterrupt(screenX, screenY);
+    }
+
+    /**
+     * Cancel a fingerprint scan.
+     *
+     * The sensor that triggers an AOD interrupt for fingerprint doesn't give
+     * ACTION_UP/ACTION_CANCEL events, so the scan needs to be cancelled manually. This should be
+     * called when authentication either succeeds or fails. Failing to cancel the scan will leave
+     * the screen in high brightness mode.
+     */
+    private void onCancelAodInterrupt() {
+        if (mUdfpsController == null) {
+            return;
+        }
+        mUdfpsController.onCancelAodInterrupt();
+    }
+
     private void sendResultAndCleanUp(@DismissedReason int reason,
             @Nullable byte[] credentialAttestation) {
         if (mReceiver == null) {
@@ -240,26 +280,18 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         onDialogDismissed(reason);
     }
 
-    public static class Injector {
-        IActivityTaskManager getActivityTaskManager() {
-            return ActivityTaskManager.getService();
-        }
-
-        FingerprintManager getFingerprintManager(Context context) {
-            return context.getSystemService(FingerprintManager.class);
-        }
-    }
-
     @Inject
-    public AuthController(Context context, CommandQueue commandQueue) {
-        this(context, commandQueue, new Injector());
-    }
-
-    @VisibleForTesting
-    AuthController(Context context, CommandQueue commandQueue, Injector injector) {
+    public AuthController(Context context, CommandQueue commandQueue,
+            StatusBarStateController statusBarStateController,
+            IActivityTaskManager activityTaskManager,
+            @Nullable FingerprintManager fingerprintManager,
+            Provider<UdfpsController> udfpsControllerFactory) {
         super(context);
         mCommandQueue = commandQueue;
-        mInjector = injector;
+        mStatusBarStateController = statusBarStateController;
+        mActivityTaskManager = activityTaskManager;
+        mFingerprintManager = fingerprintManager;
+        mUdfpsControllerFactory = udfpsControllerFactory;
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
@@ -272,15 +304,13 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     public void start() {
         mCommandQueue.addCallback(this);
         mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
-        mActivityTaskManager = mInjector.getActivityTaskManager();
 
-        final FingerprintManager fpm = mInjector.getFingerprintManager(mContext);
-        if (fpm != null && fpm.isHardwareDetected()) {
+        if (mFingerprintManager != null && mFingerprintManager.isHardwareDetected()) {
             final List<FingerprintSensorProperties> fingerprintSensorProperties =
-                    fpm.getSensorProperties();
+                    mFingerprintManager.getSensorProperties();
             for (FingerprintSensorProperties props : fingerprintSensorProperties) {
                 if (props.sensorType == FingerprintSensorProperties.TYPE_UDFPS) {
-                    mUdfpsController = new UdfpsController(mContext, mWindowManager);
+                    mUdfpsController = mUdfpsControllerFactory.get();
                     break;
                 }
             }
@@ -327,6 +357,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     @Override
     public void onBiometricAuthenticated() {
         mCurrentDialog.onAuthenticationSucceeded();
+        onCancelAodInterrupt();
     }
 
     @Override
@@ -376,6 +407,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
             if (DEBUG) Log.d(TAG, "onBiometricError, hard error: " + errorMessage);
             mCurrentDialog.onError(errorMessage);
         }
+        onCancelAodInterrupt();
     }
 
     @Override
@@ -393,6 +425,35 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         // BiometricService will have already sent the callback to the client in this case.
         // This avoids a round trip to SystemUI. So, just dismiss the dialog and we're done.
         mCurrentDialog = null;
+    }
+
+    /** See {@link KeyguardBouncer.BouncerExpansionCallback#onFullyShown}. */
+    @Override
+    public void onFullyShown() {
+        if (mUdfpsController != null) {
+            mUdfpsController.setBouncerVisibility(true);
+        }
+    }
+
+    /** See {@link KeyguardBouncer.BouncerExpansionCallback#onStartingToHide}. */
+    @Override
+    public void onStartingToHide() {
+    }
+
+    /** See {@link KeyguardBouncer.BouncerExpansionCallback#onStartingToShow}. */
+    @Override
+    public void onStartingToShow() {
+        if (mUdfpsController != null) {
+            mUdfpsController.setBouncerVisibility(true);
+        }
+    }
+
+    /** See {@link KeyguardBouncer.BouncerExpansionCallback#onFullyHidden}. */
+    @Override
+    public void onFullyHidden() {
+        if (mUdfpsController != null) {
+            mUdfpsController.setBouncerVisibility(false);
+        }
     }
 
     private void showDialog(SomeArgs args, boolean skipAnimation, Bundle savedState) {

@@ -204,6 +204,7 @@ message DisplayAreaProto {
     optional WindowContainerProto window_container = 1;
     optional string name = 2 [ (.android.privacy).dest = DEST_EXPLICIT ];
     repeated DisplayAreaChildProto children = 3 [deprecated=true];
+    optional bool is_task_display_area = 4;
 }
 
 /* represents a generic child of a DisplayArea */
@@ -275,7 +276,7 @@ message TaskProto {
     optional bool adjusted_for_ime = 23;
     optional float adjust_ime_amount = 24;
     optional float adjust_divider_amount = 25;
-    optional bool animating_bounds = 26;
+    optional bool animating_bounds = 26 [deprecated = true];
     optional float minimize_amount = 27;
     optional bool created_by_organizer = 28;
 }
@@ -315,6 +316,7 @@ message ActivityRecordProto {
     optional bool front_of_task = 28;
     optional int32 proc_id = 29;
     optional bool translucent = 30;
+    optional bool pip_auto_enter_enabled = 31;
 }
 
 /* represents WindowToken */

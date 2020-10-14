@@ -700,7 +700,7 @@ public class DisplayModeDirector {
         // Application can specify preferred refresh rate with below attrs.
         // @see android.view.WindowManager.LayoutParams#preferredRefreshRate
         // @see android.view.WindowManager.LayoutParams#preferredDisplayModeId
-        // System also forces some apps like blacklisted app to run at a lower refresh rate.
+        // System also forces some apps like denylisted app to run at a lower refresh rate.
         // @see android.R.array#config_highRefreshRateBlacklist
         public static final int PRIORITY_APP_REQUEST_REFRESH_RATE = 3;
         public static final int PRIORITY_APP_REQUEST_SIZE = 4;
@@ -869,10 +869,11 @@ public class DisplayModeDirector {
         }
 
         private void updateRefreshRateSettingLocked() {
-            float minRefreshRate = Settings.System.getFloat(mContext.getContentResolver(),
-                    Settings.System.MIN_REFRESH_RATE, 0f);
-            float peakRefreshRate = Settings.System.getFloat(mContext.getContentResolver(),
-                    Settings.System.PEAK_REFRESH_RATE, mDefaultPeakRefreshRate);
+            final ContentResolver cr = mContext.getContentResolver();
+            float minRefreshRate = Settings.System.getFloatForUser(cr,
+                    Settings.System.MIN_REFRESH_RATE, 0f, cr.getUserId());
+            float peakRefreshRate = Settings.System.getFloatForUser(cr,
+                    Settings.System.PEAK_REFRESH_RATE, mDefaultPeakRefreshRate, cr.getUserId());
             updateRefreshRateSettingLocked(minRefreshRate, peakRefreshRate, mDefaultRefreshRate);
         }
 
@@ -1301,8 +1302,9 @@ public class DisplayModeDirector {
         }
         // TODO: brightnessfloat: make it use float not int
         private void onBrightnessChangedLocked() {
-            int brightness = Settings.System.getInt(mContext.getContentResolver(),
-                    Settings.System.SCREEN_BRIGHTNESS, -1);
+            final ContentResolver cr = mContext.getContentResolver();
+            int brightness = Settings.System.getIntForUser(cr,
+                    Settings.System.SCREEN_BRIGHTNESS, -1, cr.getUserId());
 
             Vote vote = null;
             boolean insideZone = isInsideZone(brightness, mAmbientLux);

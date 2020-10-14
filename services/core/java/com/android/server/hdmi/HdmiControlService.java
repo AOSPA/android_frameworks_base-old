@@ -772,6 +772,11 @@ public class HdmiControlService extends SystemService {
         return content;
     }
 
+    void writeStringSetting(String key, String value) {
+        ContentResolver cr = getContext().getContentResolver();
+        Global.putString(cr, key, value);
+    }
+
     private void initializeCec(int initiatedBy) {
         mAddressAllocated = false;
         mCecController.setOption(OptionKey.SYSTEM_CEC_CONTROL, true);
@@ -1965,7 +1970,21 @@ public class HdmiControlService extends SystemService {
 
         @Override
         public void powerOnRemoteDevice(int logicalAddress, int powerStatus) {
-            // TODO(amyjojo): implement the method
+            enforceAccessPermission();
+            runOnServiceThread(new Runnable() {
+                @Override
+                public void run() {
+                    Slog.i(TAG, "Device "
+                            + logicalAddress + " power status is " + powerStatus
+                            + " before power on command sent out");
+                    if (getSwitchDevice() != null) {
+                        getSwitchDevice().sendUserControlPressedAndReleased(
+                                logicalAddress, HdmiCecKeycode.CEC_KEYCODE_POWER_ON_FUNCTION);
+                    } else {
+                        Slog.e(TAG, "Can't get the correct local device to handle routing.");
+                    }
+                }
+            });
         }
 
         @Override
@@ -2290,7 +2309,7 @@ public class HdmiControlService extends SystemService {
             pw.println("mHdmiControlEnabled: " + mHdmiControlEnabled);
             pw.println("mMhlInputChangeEnabled: " + mMhlInputChangeEnabled);
             pw.println("mSystemAudioActivated: " + isSystemAudioActivated());
-            pw.println("mHdmiCecVolumeControlEnabled " + mHdmiCecVolumeControlEnabled);
+            pw.println("mHdmiCecVolumeControlEnabled: " + mHdmiCecVolumeControlEnabled);
             pw.decreaseIndent();
 
             pw.println("mMhlController: ");
@@ -3209,7 +3228,7 @@ public class HdmiControlService extends SystemService {
         }
     }
 
-    void setActiveSource(int logicalAddress, int physicalAddress) {
+    void setActiveSource(int logicalAddress, int physicalAddress, String caller) {
         synchronized (mLock) {
             mActiveSource.logicalAddress = logicalAddress;
             mActiveSource.physicalAddress = physicalAddress;
@@ -3220,14 +3239,17 @@ public class HdmiControlService extends SystemService {
             // mIsActiveSource only exists in source device, ignore this setting if the current
             // device is not an HdmiCecLocalDeviceSource.
             if (!(device instanceof HdmiCecLocalDeviceSource)) {
+                device.addActiveSourceHistoryItem(new ActiveSource(logicalAddress, physicalAddress),
+                        false, caller);
                 continue;
             }
-            if (logicalAddress == device.getDeviceInfo().getLogicalAddress()
-                && physicalAddress == getPhysicalAddress()) {
-                ((HdmiCecLocalDeviceSource) device).setIsActiveSource(true);
-            } else {
-                ((HdmiCecLocalDeviceSource) device).setIsActiveSource(false);
-            }
+            boolean deviceIsActiveSource =
+                    logicalAddress == device.getDeviceInfo().getLogicalAddress()
+                            && physicalAddress == getPhysicalAddress();
+
+            ((HdmiCecLocalDeviceSource) device).setIsActiveSource(deviceIsActiveSource);
+            device.addActiveSourceHistoryItem(new ActiveSource(logicalAddress, physicalAddress),
+                    deviceIsActiveSource, caller);
         }
     }
 
@@ -3244,7 +3266,6 @@ public class HdmiControlService extends SystemService {
             playback.setIsActiveSource(true);
             playback.wakeUpIfActiveSource();
             playback.maySendActiveSource(source);
-            setActiveSource(playback.mAddress, physicalAddress);
         }
 
         if (deviceType == HdmiDeviceInfo.DEVICE_AUDIO_SYSTEM) {
@@ -3255,7 +3276,6 @@ public class HdmiControlService extends SystemService {
                 audioSystem.setIsActiveSource(true);
                 audioSystem.wakeUpIfActiveSource();
                 audioSystem.maySendActiveSource(source);
-                setActiveSource(audioSystem.mAddress, physicalAddress);
             }
         }
     }
@@ -3278,13 +3298,11 @@ public class HdmiControlService extends SystemService {
             if (audioSystem != null) {
                 audioSystem.setIsActiveSource(false);
             }
-            setActiveSource(playback.mAddress, physicalAddress);
         } else {
             if (audioSystem != null) {
                 audioSystem.setIsActiveSource(true);
                 audioSystem.wakeUpIfActiveSource();
                 audioSystem.maySendActiveSource(sourceAddress);
-                setActiveSource(audioSystem.mAddress, physicalAddress);
             }
         }
     }

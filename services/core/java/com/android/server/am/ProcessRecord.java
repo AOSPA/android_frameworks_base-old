@@ -25,6 +25,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityManagerService.MY_PID;
 
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ApplicationErrorReport;
 import android.app.ApplicationExitInfo;
@@ -276,9 +277,6 @@ class ProcessRecord implements WindowProcessListener {
     final ArrayMap<String, ContentProviderRecord> pubProviders = new ArrayMap<>();
     // All ContentProviderRecord process is using
     final ArrayList<ContentProviderConnection> conProviders = new ArrayList<>();
-    // A set of tokens that currently contribute to this process being temporarily allowed
-    // to start activities even if it's not in the foreground
-    final ArraySet<Binder> mAllowBackgroundActivityStartsTokens = new ArraySet<>();
     // a set of UIDs of all bound clients
     private ArraySet<Integer> mBoundClientUids = new ArraySet<>();
 
@@ -629,13 +627,6 @@ class ProcessRecord implements WindowProcessListener {
                 pw.print(prefix); pw.print("  - "); pw.println(receivers.valueAt(i));
             }
         }
-        if (mAllowBackgroundActivityStartsTokens.size() > 0) {
-            pw.print(prefix); pw.println("Background activity start tokens:");
-            for (int i = 0; i < mAllowBackgroundActivityStartsTokens.size(); i++) {
-                pw.print(prefix); pw.print("  - ");
-                pw.println(mAllowBackgroundActivityStartsTokens.valueAt(i));
-            }
-        }
     }
 
     ProcessRecord(ActivityManagerService _service, ApplicationInfo _info, String _processName,
@@ -696,30 +687,33 @@ class ProcessRecord implements WindowProcessListener {
                             + ",isDebugging=" + (isDebugging() ? 1 : 0);
         android.util.SeempLog.record_str(386, seempStr);
         if (thread == null) {
-            final ProcessState origBase = baseProcessTracker;
-            if (origBase != null) {
-                origBase.setState(ProcessStats.STATE_NOTHING,
-                        tracker.getMemFactorLocked(), SystemClock.uptimeMillis(), pkgList.mPkgList);
-                for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
-                    FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
-                            uid, processName, pkgList.keyAt(ipkg),
-                            ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
-                            pkgList.valueAt(ipkg).appVersion);
+            synchronized (tracker.mLock) {
+                final ProcessState origBase = baseProcessTracker;
+                if (origBase != null) {
+                    origBase.setState(ProcessStats.STATE_NOTHING,
+                            tracker.getMemFactorLocked(), SystemClock.uptimeMillis(),
+                            pkgList.mPkgList);
+                    for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
+                        FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
+                                uid, processName, pkgList.keyAt(ipkg),
+                                ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
+                                pkgList.valueAt(ipkg).appVersion);
+                    }
+                    origBase.makeInactive();
                 }
-                origBase.makeInactive();
-            }
-            baseProcessTracker = tracker.getProcessStateLocked(info.packageName, info.uid,
-                    info.longVersionCode, processName);
-            baseProcessTracker.makeActive();
-            for (int i=0; i<pkgList.size(); i++) {
-                ProcessStats.ProcessStateHolder holder = pkgList.valueAt(i);
-                if (holder.state != null && holder.state != origBase) {
-                    holder.state.makeInactive();
-                }
-                tracker.updateProcessStateHolderLocked(holder, pkgList.keyAt(i), info.uid,
+                baseProcessTracker = tracker.getProcessStateLocked(info.packageName, info.uid,
                         info.longVersionCode, processName);
-                if (holder.state != baseProcessTracker) {
-                    holder.state.makeActive();
+                baseProcessTracker.makeActive();
+                for (int i = 0, ipkg = pkgList.size(); i < ipkg; i++) {
+                    ProcessStats.ProcessStateHolder holder = pkgList.valueAt(i);
+                    if (holder.state != null && holder.state != origBase) {
+                        holder.state.makeInactive();
+                    }
+                    tracker.updateProcessStateHolderLocked(holder, pkgList.keyAt(i), info.uid,
+                            info.longVersionCode, processName);
+                    if (holder.state != baseProcessTracker) {
+                        holder.state.makeActive();
+                    }
                 }
             }
         }
@@ -742,27 +736,30 @@ class ProcessRecord implements WindowProcessListener {
         android.util.SeempLog.record_str(387, seempStr);
         thread = null;
         mWindowProcessController.setThread(null);
-        final ProcessState origBase = baseProcessTracker;
-        if (origBase != null) {
+        synchronized (tracker.mLock) {
+            final ProcessState origBase = baseProcessTracker;
             if (origBase != null) {
-                origBase.setState(ProcessStats.STATE_NOTHING,
-                        tracker.getMemFactorLocked(), SystemClock.uptimeMillis(), pkgList.mPkgList);
-                for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
-                    FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
-                            uid, processName, pkgList.keyAt(ipkg),
-                            ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
-                            pkgList.valueAt(ipkg).appVersion);
+                if (origBase != null) {
+                    origBase.setState(ProcessStats.STATE_NOTHING,
+                            tracker.getMemFactorLocked(), SystemClock.uptimeMillis(),
+                            pkgList.mPkgList);
+                    for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
+                        FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
+                                uid, processName, pkgList.keyAt(ipkg),
+                                ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
+                                pkgList.valueAt(ipkg).appVersion);
+                    }
+                    origBase.makeInactive();
                 }
-                origBase.makeInactive();
-            }
-            baseProcessTracker = null;
-            for (int i=0; i<pkgList.size(); i++) {
-                ProcessStats.ProcessStateHolder holder = pkgList.valueAt(i);
-                if (holder.state != null && holder.state != origBase) {
-                    holder.state.makeInactive();
+                baseProcessTracker = null;
+                for (int i = 0, ipkg = pkgList.size(); i < ipkg; i++) {
+                    ProcessStats.ProcessStateHolder holder = pkgList.valueAt(i);
+                    if (holder.state != null && holder.state != origBase) {
+                        holder.state.makeInactive();
+                    }
+                    holder.pkg = null;
+                    holder.state = null;
                 }
-                holder.pkg = null;
-                holder.state = null;
             }
         }
     }
@@ -1069,17 +1066,19 @@ class ProcessRecord implements WindowProcessListener {
      */
     public boolean addPackage(String pkg, long versionCode, ProcessStatsService tracker) {
         if (!pkgList.containsKey(pkg)) {
-            ProcessStats.ProcessStateHolder holder = new ProcessStats.ProcessStateHolder(
-                    versionCode);
-            if (baseProcessTracker != null) {
-                tracker.updateProcessStateHolderLocked(holder, pkg, info.uid, versionCode,
-                        processName);
-                pkgList.put(pkg, holder);
-                if (holder.state != baseProcessTracker) {
-                    holder.state.makeActive();
+            synchronized (tracker.mLock) {
+                ProcessStats.ProcessStateHolder holder = new ProcessStats.ProcessStateHolder(
+                        versionCode);
+                if (baseProcessTracker != null) {
+                    tracker.updateProcessStateHolderLocked(holder, pkg, info.uid, versionCode,
+                            processName);
+                    pkgList.put(pkg, holder);
+                    if (holder.state != baseProcessTracker) {
+                        holder.state.makeActive();
+                    }
+                } else {
+                    pkgList.put(pkg, holder);
                 }
-            } else {
-                pkgList.put(pkg, holder);
             }
             return true;
         }
@@ -1114,37 +1113,40 @@ class ProcessRecord implements WindowProcessListener {
      */
     public void resetPackageList(ProcessStatsService tracker) {
         final int N = pkgList.size();
-        if (baseProcessTracker != null) {
-            long now = SystemClock.uptimeMillis();
-            baseProcessTracker.setState(ProcessStats.STATE_NOTHING,
-                    tracker.getMemFactorLocked(), now, pkgList.mPkgList);
-            for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
-                FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
-                        uid, processName, pkgList.keyAt(ipkg),
-                        ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
-                        pkgList.valueAt(ipkg).appVersion);
-            }
-            if (N != 1) {
-                for (int i=0; i<N; i++) {
-                    ProcessStats.ProcessStateHolder holder = pkgList.valueAt(i);
-                    if (holder.state != null && holder.state != baseProcessTracker) {
-                        holder.state.makeInactive();
-                    }
+        synchronized (tracker.mLock) {
+            if (baseProcessTracker != null) {
+                long now = SystemClock.uptimeMillis();
+                baseProcessTracker.setState(ProcessStats.STATE_NOTHING,
+                        tracker.getMemFactorLocked(), now, pkgList.mPkgList);
+                for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
+                    FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
+                            uid, processName, pkgList.keyAt(ipkg),
+                            ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
+                            pkgList.valueAt(ipkg).appVersion);
+                }
+                if (N != 1) {
+                    for (int i = 0; i < N; i++) {
+                        ProcessStats.ProcessStateHolder holder = pkgList.valueAt(i);
+                        if (holder.state != null && holder.state != baseProcessTracker) {
+                            holder.state.makeInactive();
+                        }
 
+                    }
+                    pkgList.clear();
+                    ProcessStats.ProcessStateHolder holder = new ProcessStats.ProcessStateHolder(
+                            info.longVersionCode);
+                    tracker.updateProcessStateHolderLocked(holder, info.packageName, info.uid,
+                            info.longVersionCode, processName);
+                    pkgList.put(info.packageName, holder);
+                    if (holder.state != baseProcessTracker) {
+                        holder.state.makeActive();
+                    }
                 }
+            } else if (N != 1) {
                 pkgList.clear();
-                ProcessStats.ProcessStateHolder holder = new ProcessStats.ProcessStateHolder(
-                        info.longVersionCode);
-                tracker.updateProcessStateHolderLocked(holder, info.packageName, info.uid,
-                        info.longVersionCode, processName);
-                pkgList.put(info.packageName, holder);
-                if (holder.state != baseProcessTracker) {
-                    holder.state.makeActive();
-                }
+                pkgList.put(info.packageName,
+                        new ProcessStats.ProcessStateHolder(info.longVersionCode));
             }
-        } else if (N != 1) {
-            pkgList.clear();
-            pkgList.put(info.packageName, new ProcessStats.ProcessStateHolder(info.longVersionCode));
         }
     }
 
@@ -1365,17 +1367,23 @@ class ProcessRecord implements WindowProcessListener {
         return mUsingWrapper;
     }
 
-    void addAllowBackgroundActivityStartsToken(Binder entity) {
+    /**
+     * Allows background activity starts using token {@param entity}. Optionally, you can provide
+     * {@param originatingToken} if you have one such originating token, this is useful for tracing
+     * back the grant in the case of the notification token.
+     */
+    void addAllowBackgroundActivityStartsToken(Binder entity, @Nullable IBinder originatingToken) {
         if (entity == null) return;
-        mAllowBackgroundActivityStartsTokens.add(entity);
-        mWindowProcessController.setAllowBackgroundActivityStarts(true);
+        mWindowProcessController.addAllowBackgroundActivityStartsToken(entity, originatingToken);
     }
 
     void removeAllowBackgroundActivityStartsToken(Binder entity) {
         if (entity == null) return;
-        mAllowBackgroundActivityStartsTokens.remove(entity);
-        mWindowProcessController.setAllowBackgroundActivityStarts(
-                !mAllowBackgroundActivityStartsTokens.isEmpty());
+        mWindowProcessController.removeAllowBackgroundActivityStartsToken(entity);
+    }
+
+    boolean areBackgroundActivityStartsAllowedByToken() {
+        return mWindowProcessController.areBackgroundActivityStartsAllowedByToken();
     }
 
     void addBoundClientUid(int clientUid) {
@@ -1448,12 +1456,7 @@ class ProcessRecord implements WindowProcessListener {
     @Override
     public void clearProfilerIfNeeded() {
         synchronized (mService) {
-            if (mService.mProfileData.getProfileProc() == null
-                    || mService.mProfileData.getProfilerInfo() == null
-                    || mService.mProfileData.getProfileProc() != this) {
-                return;
-            }
-            mService.clearProfilerLocked();
+            mService.mAppProfiler.clearProfilerLocked();
         }
     }
 
@@ -1509,7 +1512,7 @@ class ProcessRecord implements WindowProcessListener {
      */
     @Override
     public long getCpuTime() {
-        return mService.mProcessCpuTracker.getCpuTimeForPid(pid);
+        return mService.mAppProfiler.getCpuTimeForPid(pid);
     }
 
     @Override
@@ -1518,7 +1521,7 @@ class ProcessRecord implements WindowProcessListener {
         synchronized (mService) {
             waitingToKill = null;
             if (setProfileProc) {
-                mService.mProfileData.setProfileProc(this);
+                mService.mAppProfiler.setProfileProcLocked(this);
             }
             if (packageName != null) {
                 addPackage(packageName, versionCode, mService.mProcessStats);
@@ -1559,8 +1562,8 @@ class ProcessRecord implements WindowProcessListener {
         }
     }
 
-    public long getInputDispatchingTimeout() {
-        return mWindowProcessController.getInputDispatchingTimeout();
+    public long getInputDispatchingTimeoutMillis() {
+        return mWindowProcessController.getInputDispatchingTimeoutMillis();
     }
 
     public int getProcessClassEnum() {
@@ -1592,7 +1595,7 @@ class ProcessRecord implements WindowProcessListener {
     /** Non-private access is for tests only. */
     @VisibleForTesting
     boolean isMonitorCpuUsage() {
-        return mService.MONITOR_CPU_USAGE;
+        return mService.mAppProfiler.MONITOR_CPU_USAGE;
     }
 
     void appNotResponding(String activityShortComponentName, ApplicationInfo aInfo,
@@ -1725,9 +1728,7 @@ class ProcessRecord implements WindowProcessListener {
 
         if (isMonitorCpuUsage()) {
             mService.updateCpuStatsNow();
-            synchronized (mService.mProcessCpuTracker) {
-                report.append(mService.mProcessCpuTracker.printCurrentState(anrTime));
-            }
+            mService.mAppProfiler.printCurrentCpuState(report, anrTime);
             info.append(processCpuTracker.printCurrentLoad());
             info.append(report);
         }

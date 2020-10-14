@@ -810,8 +810,7 @@ public class WindowContainerTests extends WindowTestsBase {
     public void testOnDisplayChanged() {
         final Task stack = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stack, 0 /* userId */);
-        final ActivityRecord activity =
-                WindowTestUtils.createActivityRecordInTask(mDisplayContent, task);
+        final ActivityRecord activity = createActivityRecordInTask(mDisplayContent, task);
 
         final DisplayContent newDc = createNewDisplay();
         stack.getDisplayArea().removeStack(stack);
@@ -830,7 +829,7 @@ public class WindowContainerTests extends WindowTestsBase {
         final DisplayContent displayContent = createNewDisplay();
         // Do not reparent activity to default display when removing the display.
         doReturn(true).when(displayContent).shouldDestroyContentOnRemove();
-        final ActivityRecord r = new ActivityTestsBase.StackBuilder(mWm.mRoot)
+        final ActivityRecord r = new TaskBuilder(mSupervisor).setCreateActivity(true)
                 .setDisplay(displayContent).build().getTopMostActivity();
         // Add a window and make the activity animating so the removal of activity is deferred.
         createWindow(null, TYPE_BASE_APPLICATION, r, "win");
@@ -854,19 +853,17 @@ public class WindowContainerTests extends WindowTestsBase {
     public void testTaskCanApplyAnimation() {
         final Task stack = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stack, 0 /* userId */);
-        final ActivityRecord activity2 =
-                WindowTestUtils.createActivityRecordInTask(mDisplayContent, task);
-        final ActivityRecord activity1 =
-                WindowTestUtils.createActivityRecordInTask(mDisplayContent, task);
+        final ActivityRecord activity2 = createActivityRecordInTask(mDisplayContent, task);
+        final ActivityRecord activity1 = createActivityRecordInTask(mDisplayContent, task);
         verifyWindowContainerApplyAnimation(task, activity1, activity2);
     }
 
     @Test
     public void testStackCanApplyAnimation() {
         final Task stack = createTaskStackOnDisplay(mDisplayContent);
-        final ActivityRecord activity2 = WindowTestUtils.createActivityRecordInTask(mDisplayContent,
+        final ActivityRecord activity2 = createActivityRecordInTask(mDisplayContent,
                 createTaskInStack(stack, 0 /* userId */));
-        final ActivityRecord activity1 = WindowTestUtils.createActivityRecordInTask(mDisplayContent,
+        final ActivityRecord activity1 = createActivityRecordInTask(mDisplayContent,
                 createTaskInStack(stack, 0 /* userId */));
         verifyWindowContainerApplyAnimation(stack, activity1, activity2);
     }

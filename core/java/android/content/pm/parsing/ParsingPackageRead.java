@@ -548,7 +548,7 @@ public interface ParsingPackageRead extends Parcelable {
     String getPackageName();
 
     /** Path of base APK */
-    String getBaseCodePath();
+    String getBaseApkPath();
 
     /**
      * Path where this package was found on disk. For monolithic packages
@@ -556,7 +556,7 @@ public interface ParsingPackageRead extends Parcelable {
      * path to the cluster directory.
      */
     @NonNull
-    String getCodePath();
+    String getPath();
 
     /**
      * @see ApplicationInfo#compatibleWidthLimitDp
@@ -867,7 +867,7 @@ public interface ParsingPackageRead extends Parcelable {
      * @see ApplicationInfo#gwpAsanMode
      * @see R.styleable#AndroidManifest_gwpAsanMode
      */
-    public int getGwpAsanMode();
+    int getGwpAsanMode();
 
     // TODO(b/135203078): Hide and enforce going through PackageInfoUtils
     ApplicationInfo toAppInfoWithoutState();

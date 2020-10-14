@@ -80,10 +80,16 @@ public class ServiceWatcher implements ServiceConnection {
         default void onError() {}
     }
 
+    /** Function to run on binder interface when first bound. */
+    public interface OnBindRunner {
+        /** Called to run client code with the binder. */
+        void run(IBinder binder, ComponentName service) throws RemoteException;
+    }
+
     /**
      * Information on the service ServiceWatcher has selected as the best option for binding.
      */
-    public static final class ServiceInfo implements Comparable<ServiceInfo> {
+    private static final class ServiceInfo implements Comparable<ServiceInfo> {
 
         public static final ServiceInfo NONE = new ServiceInfo(Integer.MIN_VALUE, null,
                 UserHandle.USER_NULL, false);
@@ -179,25 +185,25 @@ public class ServiceWatcher implements ServiceConnection {
     private final Handler mHandler;
     private final Intent mIntent;
 
-    @Nullable private final BinderRunner mOnBind;
+    @Nullable private final OnBindRunner mOnBind;
     @Nullable private final Runnable mOnUnbind;
 
     // read/write from handler thread only
     private int mCurrentUserId;
 
     // write from handler thread only, read anywhere
-    private volatile ServiceInfo mServiceInfo;
+    private volatile ServiceInfo mTargetService;
     private volatile IBinder mBinder;
 
     public ServiceWatcher(Context context, String action,
-            @Nullable BinderRunner onBind, @Nullable Runnable onUnbind,
+            @Nullable OnBindRunner onBind, @Nullable Runnable onUnbind,
             @BoolRes int enableOverlayResId, @StringRes int nonOverlayPackageResId) {
         this(context, FgThread.getHandler(), action, onBind, onUnbind, enableOverlayResId,
                 nonOverlayPackageResId);
     }
 
     public ServiceWatcher(Context context, Handler handler, String action,
-            @Nullable BinderRunner onBind, @Nullable Runnable onUnbind,
+            @Nullable OnBindRunner onBind, @Nullable Runnable onUnbind,
             @BoolRes int enableOverlayResId, @StringRes int nonOverlayPackageResId) {
         mContext = context;
         mHandler = handler;
@@ -214,7 +220,7 @@ public class ServiceWatcher implements ServiceConnection {
 
         mCurrentUserId = UserHandle.USER_NULL;
 
-        mServiceInfo = ServiceInfo.NONE;
+        mTargetService = ServiceInfo.NONE;
         mBinder = null;
     }
 
@@ -232,24 +238,13 @@ public class ServiceWatcher implements ServiceConnection {
 
         new PackageMonitor() {
             @Override
-            public void onPackageUpdateFinished(String packageName, int uid) {
-                ServiceWatcher.this.onPackageChanged(packageName);
-            }
-
-            @Override
-            public void onPackageAdded(String packageName, int uid) {
-                ServiceWatcher.this.onPackageChanged(packageName);
-            }
-
-            @Override
-            public void onPackageRemoved(String packageName, int uid) {
-                ServiceWatcher.this.onPackageChanged(packageName);
-            }
-
-            @Override
             public boolean onPackageChanged(String packageName, int uid, String[] components) {
-                ServiceWatcher.this.onPackageChanged(packageName);
-                return super.onPackageChanged(packageName, uid, components);
+                return true;
+            }
+
+            @Override
+            public void onSomePackagesChanged() {
+                onBestServiceChanged(false);
             }
         }.register(mContext, UserHandle.ALL, true, mHandler);
 
@@ -304,7 +299,7 @@ public class ServiceWatcher implements ServiceConnection {
             }
         }
 
-        if (forceRebind || !bestServiceInfo.equals(mServiceInfo)) {
+        if (forceRebind || !bestServiceInfo.equals(mTargetService)) {
             rebind(bestServiceInfo);
         }
     }
@@ -312,32 +307,30 @@ public class ServiceWatcher implements ServiceConnection {
     private void rebind(ServiceInfo newServiceInfo) {
         Preconditions.checkState(Looper.myLooper() == mHandler.getLooper());
 
-        if (!mServiceInfo.equals(ServiceInfo.NONE)) {
+        if (!mTargetService.equals(ServiceInfo.NONE)) {
             if (D) {
-                Log.i(TAG, "[" + mIntent.getAction() + "] unbinding from " + mServiceInfo);
+                Log.d(TAG, "[" + mIntent.getAction() + "] unbinding from " + mTargetService);
             }
 
             mContext.unbindService(this);
-            onServiceDisconnected(mServiceInfo.component);
-            mServiceInfo = ServiceInfo.NONE;
+            onServiceDisconnected(mTargetService.component);
+            mTargetService = ServiceInfo.NONE;
         }
 
-        mServiceInfo = newServiceInfo;
-        if (mServiceInfo.equals(ServiceInfo.NONE)) {
+        mTargetService = newServiceInfo;
+        if (mTargetService.equals(ServiceInfo.NONE)) {
             return;
         }
 
-        Preconditions.checkState(mServiceInfo.component != null);
+        Preconditions.checkState(mTargetService.component != null);
 
-        if (D) {
-            Log.i(TAG, getLogPrefix() + " binding to " + mServiceInfo);
-        }
+        Log.i(TAG, getLogPrefix() + " binding to " + mTargetService);
 
-        Intent bindIntent = new Intent(mIntent).setComponent(mServiceInfo.component);
+        Intent bindIntent = new Intent(mIntent).setComponent(mTargetService.component);
         if (!mContext.bindServiceAsUser(bindIntent, this,
                 BIND_AUTO_CREATE | BIND_NOT_FOREGROUND | BIND_NOT_VISIBLE,
-                mHandler, UserHandle.of(mServiceInfo.userId))) {
-            mServiceInfo = ServiceInfo.NONE;
+                mHandler, UserHandle.of(mTargetService.userId))) {
+            mTargetService = ServiceInfo.NONE;
             Log.e(TAG, getLogPrefix() + " unexpected bind failure - retrying later");
             mHandler.postDelayed(() -> onBestServiceChanged(false), RETRY_DELAY_MS);
         }
@@ -349,17 +342,17 @@ public class ServiceWatcher implements ServiceConnection {
         Preconditions.checkState(mBinder == null);
 
         if (D) {
-            Log.i(TAG, getLogPrefix() + " connected to " + component.toShortString());
+            Log.d(TAG, getLogPrefix() + " connected to " + component.toShortString());
         }
 
         mBinder = binder;
         if (mOnBind != null) {
             try {
-                mOnBind.run(binder);
+                mOnBind.run(binder, component);
             } catch (RuntimeException | RemoteException e) {
                 // binders may propagate some specific non-RemoteExceptions from the other side
                 // through the binder as well - we cannot allow those to crash the system server
-                Log.e(TAG, getLogPrefix() + " exception running on " + mServiceInfo, e);
+                Log.e(TAG, getLogPrefix() + " exception running on " + component, e);
             }
         }
     }
@@ -373,7 +366,7 @@ public class ServiceWatcher implements ServiceConnection {
         }
 
         if (D) {
-            Log.i(TAG, getLogPrefix() + " disconnected from " + component.toShortString());
+            Log.d(TAG, getLogPrefix() + " disconnected from " + component.toShortString());
         }
 
         mBinder = null;
@@ -386,11 +379,14 @@ public class ServiceWatcher implements ServiceConnection {
     public final void onBindingDied(ComponentName component) {
         Preconditions.checkState(Looper.myLooper() == mHandler.getLooper());
 
-        if (D) {
-            Log.i(TAG, getLogPrefix() + " " + component.toShortString() + " died");
-        }
+        Log.i(TAG, getLogPrefix() + " " + component.toShortString() + " died");
 
         onBestServiceChanged(true);
+    }
+
+    @Override
+    public final void onNullBinding(ComponentName component) {
+        Log.e(TAG, getLogPrefix() + " " + component.toShortString() + " has null binding");
     }
 
     void onUserSwitched(@UserIdInt int userId) {
@@ -402,11 +398,6 @@ public class ServiceWatcher implements ServiceConnection {
         if (userId == mCurrentUserId) {
             onBestServiceChanged(false);
         }
-    }
-
-    void onPackageChanged(String packageName) {
-        // force a rebind if the changed package was the currently connected package
-        onBestServiceChanged(packageName.equals(mServiceInfo.getPackageName()));
     }
 
     /**
@@ -425,7 +416,7 @@ public class ServiceWatcher implements ServiceConnection {
             } catch (RuntimeException | RemoteException e) {
                 // binders may propagate some specific non-RemoteExceptions from the other side
                 // through the binder as well - we cannot allow those to crash the system server
-                Log.e(TAG, getLogPrefix() + " exception running on " + mServiceInfo, e);
+                Log.e(TAG, getLogPrefix() + " exception running on " + mTargetService, e);
                 runner.onError();
             }
         });
@@ -437,14 +428,14 @@ public class ServiceWatcher implements ServiceConnection {
 
     @Override
     public String toString() {
-        return mServiceInfo.toString();
+        return mTargetService.toString();
     }
 
     /**
      * Dump for debugging.
      */
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println("service=" + mServiceInfo);
+        pw.println("target service=" + mTargetService);
         pw.println("connected=" + (mBinder != null));
     }
 }

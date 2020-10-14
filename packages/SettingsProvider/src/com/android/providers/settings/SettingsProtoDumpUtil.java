@@ -58,10 +58,14 @@ class SettingsProtoDumpUtil {
                 ConfigSettingsProto.CONNECTIVITY_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_CONTENT_CAPTURE,
                 ConfigSettingsProto.CONTENT_CAPTURE_SETTINGS);
+        namespaceToFieldMap.put(DeviceConfig.NAMESPACE_DEVICE_IDLE,
+                ConfigSettingsProto.DEVICE_IDLE_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_GAME_DRIVER,
                 ConfigSettingsProto.GAME_DRIVER_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_INPUT_NATIVE_BOOT,
                 ConfigSettingsProto.INPUT_NATIVE_BOOT_SETTINGS);
+        namespaceToFieldMap.put(DeviceConfig.NAMESPACE_JOB_SCHEDULER,
+                ConfigSettingsProto.JOB_SCHEDULER_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_NETD_NATIVE,
                 ConfigSettingsProto.NETD_NATIVE_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_PRIVACY,
@@ -564,9 +568,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.DEVICE_PROVISIONING_MOBILE_DATA_ENABLED,
                 GlobalSettingsProto.Device.PROVISIONING_MOBILE_DATA_ENABLED);
         dumpSetting(s, p,
-                Settings.Global.DEVICE_IDLE_CONSTANTS,
-                GlobalSettingsProto.Device.IDLE_CONSTANTS);
-        dumpSetting(s, p,
                 Settings.Global.DEVICE_POLICY_CONSTANTS,
                 GlobalSettingsProto.Device.POLICY_CONSTANTS);
         dumpSetting(s, p,
@@ -761,8 +762,8 @@ class SettingsProtoDumpUtil {
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES,
                 GlobalSettingsProto.Gpu.ANGLE_GL_DRIVER_SELECTION_VALUES);
         dumpSetting(s, p,
-                Settings.Global.GLOBAL_SETTINGS_ANGLE_WHITELIST,
-                GlobalSettingsProto.Gpu.ANGLE_WHITELIST);
+                Settings.Global.GLOBAL_SETTINGS_ANGLE_ALLOWLIST,
+                GlobalSettingsProto.Gpu.ANGLE_ALLOWLIST);
         dumpSetting(s, p,
                 Settings.Global.GLOBAL_SETTINGS_SHOW_ANGLE_IN_USE_DIALOG_BOX,
                 GlobalSettingsProto.Gpu.SHOW_ANGLE_IN_USE_DIALOG);
@@ -773,29 +774,29 @@ class SettingsProtoDumpUtil {
                 Settings.Global.GPU_DEBUG_LAYERS_GLES,
                 GlobalSettingsProto.Gpu.DEBUG_LAYERS_GLES);
         dumpSetting(s, p,
-                Settings.Global.GAME_DRIVER_ALL_APPS,
-                GlobalSettingsProto.Gpu.GAME_DRIVER_ALL_APPS);
+                Settings.Global.UPDATABLE_DRIVER_ALL_APPS,
+                GlobalSettingsProto.Gpu.UPDATABLE_DRIVER_ALL_APPS);
         dumpSetting(s, p,
-                Settings.Global.GAME_DRIVER_OPT_IN_APPS,
-                GlobalSettingsProto.Gpu.GAME_DRIVER_OPT_IN_APPS);
+                Settings.Global.UPDATABLE_DRIVER_PRODUCTION_OPT_IN_APPS,
+                GlobalSettingsProto.Gpu.UPDATABLE_DRIVER_PRODUCTION_OPT_IN_APPS);
         dumpSetting(s, p,
-                Settings.Global.GAME_DRIVER_PRERELEASE_OPT_IN_APPS,
-                GlobalSettingsProto.Gpu.GAME_DRIVER_PRERELEASE_OPT_IN_APPS);
+                Settings.Global.UPDATABLE_DRIVER_PRERELEASE_OPT_IN_APPS,
+                GlobalSettingsProto.Gpu.UPDATABLE_DRIVER_PRERELEASE_OPT_IN_APPS);
         dumpSetting(s, p,
-                Settings.Global.GAME_DRIVER_OPT_OUT_APPS,
-                GlobalSettingsProto.Gpu.GAME_DRIVER_OPT_OUT_APPS);
+                Settings.Global.UPDATABLE_DRIVER_PRODUCTION_OPT_OUT_APPS,
+                GlobalSettingsProto.Gpu.UPDATABLE_DRIVER_PRODUCTION_OPT_OUT_APPS);
         dumpSetting(s, p,
-                Settings.Global.GAME_DRIVER_BLACKLIST,
-                GlobalSettingsProto.Gpu.GAME_DRIVER_BLACKLIST);
+                Settings.Global.UPDATABLE_DRIVER_PRODUCTION_DENYLIST,
+                GlobalSettingsProto.Gpu.UPDATABLE_DRIVER_PRODUCTION_DENYLIST);
         dumpSetting(s, p,
-                Settings.Global.GAME_DRIVER_WHITELIST,
-                GlobalSettingsProto.Gpu.GAME_DRIVER_WHITELIST);
+                Settings.Global.UPDATABLE_DRIVER_PRODUCTION_ALLOWLIST,
+                GlobalSettingsProto.Gpu.UPDATABLE_DRIVER_PRODUCTION_ALLOWLIST);
         dumpSetting(s, p,
-                Settings.Global.GAME_DRIVER_BLACKLISTS,
-                GlobalSettingsProto.Gpu.GAME_DRIVER_BLACKLISTS);
+                Settings.Global.UPDATABLE_DRIVER_PRODUCTION_DENYLISTS,
+                GlobalSettingsProto.Gpu.UPDATABLE_DRIVER_PRODUCTION_DENYLISTS);
         dumpSetting(s, p,
-                Settings.Global.GAME_DRIVER_SPHAL_LIBRARIES,
-                GlobalSettingsProto.Gpu.GAME_DRIVER_SPHAL_LIBRARIES);
+                Settings.Global.UPDATABLE_DRIVER_SPHAL_LIBRARIES,
+                GlobalSettingsProto.Gpu.UPDATABLE_DRIVER_SPHAL_LIBRARIES);
         p.end(gpuToken);
 
         final long hdmiToken = p.start(GlobalSettingsProto.HDMI);
@@ -859,9 +860,6 @@ class SettingsProtoDumpUtil {
                 GlobalSettingsProto.IntentFirewall.UPDATE_METADATA_URL);
         p.end(intentFirewallToken);
 
-        dumpSetting(s, p,
-                Settings.Global.JOB_SCHEDULER_CONSTANTS,
-                GlobalSettingsProto.JOB_SCHEDULER_CONSTANTS);
         dumpSetting(s, p,
                 Settings.Global.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS,
                 GlobalSettingsProto.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS);
@@ -1782,6 +1780,9 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED,
                 SecureSettingsProto.Accessibility.HIGH_TEXT_CONTRAST_ENABLED);
         dumpSetting(s, p,
+                Settings.Secure.FORCE_BOLD_TEXT,
+                SecureSettingsProto.FORCE_BOLD_TEXT);
+        dumpSetting(s, p,
                 Settings.Secure.ACCESSIBILITY_LARGE_POINTER_ICON,
                 SecureSettingsProto.Accessibility.LARGE_POINTER_ICON);
         dumpSetting(s, p,
@@ -1979,6 +1980,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.CONNECTIVITY_RELEASE_PENDING_INTENT_DELAY_MS,
                 SecureSettingsProto.CONNECTIVITY_RELEASE_PENDING_INTENT_DELAY_MS);
+        dumpSetting(s, p,
+                Settings.Secure.ADAPTIVE_CONNECTIVITY_ENABLED,
+                SecureSettingsProto.ADAPTIVE_CONNECTIVITY_ENABLED);
 
         final long controlsToken = p.start(SecureSettingsProto.CONTROLS);
         dumpSetting(s, p,
@@ -2031,6 +2035,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.PANIC_GESTURE_ENABLED,
                 SecureSettingsProto.EmergencyResponse.PANIC_GESTURE_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.PANIC_SOUND_ENABLED,
+                SecureSettingsProto.EmergencyResponse.PANIC_SOUND_ENABLED);
         p.end(emergencyResponseToken);
 
         dumpSetting(s, p,

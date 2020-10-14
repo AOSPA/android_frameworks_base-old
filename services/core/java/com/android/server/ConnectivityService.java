@@ -16,6 +16,7 @@
 
 package com.android.server;
 
+import static android.Manifest.permission.NETWORK_STACK;
 import static android.Manifest.permission.RECEIVE_DATA_ACTIVITY_CHANGE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.net.ConnectivityDiagnosticsManager.ConnectivityReport.KEY_NETWORK_PROBES_ATTEMPTED_BITMASK;
@@ -225,6 +226,8 @@ import com.android.server.net.NetworkPolicyManagerInternal;
 import com.android.server.utils.PriorityDump;
 
 import com.google.android.collect.Lists;
+
+import libcore.io.IoUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -1161,6 +1164,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 intentFilter,
                 null /* broadcastPermission */,
                 mHandler);
+
+        // Listen to lockdown VPN reset.
+        intentFilter = new IntentFilter();
+        intentFilter.addAction(LockdownVpnTracker.ACTION_LOCKDOWN_RESET);
+        mContext.registerReceiverAsUser(
+                mIntentReceiver, UserHandle.ALL, intentFilter, NETWORK_STACK, mHandler);
 
         try {
             mNMS.registerObserver(mDataActivityObserver);
@@ -5006,7 +5015,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 Slog.w(TAG, "User " + userId + " has no Vpn configuration");
                 return null;
             }
-            return vpn.getLockdownWhitelist();
+            return vpn.getLockdownAllowlist();
         }
     }
 
@@ -5244,6 +5253,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
+    private void onVpnLockdownReset() {
+        synchronized (mVpns) {
+            if (mLockdownTracker != null) mLockdownTracker.reset();
+        }
+    }
+
     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -5254,6 +5269,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
             final Uri packageData = intent.getData();
             final String packageName =
                     packageData != null ? packageData.getSchemeSpecificPart() : null;
+
+            if (LockdownVpnTracker.ACTION_LOCKDOWN_RESET.equals(action)) {
+                onVpnLockdownReset();
+            }
+
+            // UserId should be filled for below intents, check the existence.
             if (userId == UserHandle.USER_NULL) return;
 
             if (Intent.ACTION_USER_STARTED.equals(action)) {
@@ -5272,6 +5293,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 final boolean isReplacing = intent.getBooleanExtra(
                         Intent.EXTRA_REPLACING, false);
                 onPackageRemoved(packageName, uid, isReplacing);
+            } else {
+                Log.wtf(TAG, "received unexpected intent: " + action);
             }
         }
     };
@@ -5894,10 +5917,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return nai == getDefaultNetwork();
     }
 
-    private boolean isDefaultRequest(NetworkRequestInfo nri) {
-        return nri.request.requestId == mDefaultRequest.requestId;
-    }
-
     // TODO : remove this method. It's a stopgap measure to help sheperding a number of dependent
     // changes that would conflict throughout the automerger graph. Having this method temporarily
     // helps with the process of going through with all these dependent changes across the entire
@@ -6259,7 +6278,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final int vpnAppUid = nai.networkCapabilities.getOwnerUid();
         // TODO: this create a window of opportunity for apps to receive traffic between the time
         // when the old rules are removed and the time when new rules are added. To fix this,
-        // make eBPF support two whitelisted interfaces so here new rules can be added before the
+        // make eBPF support two allowlisted interfaces so here new rules can be added before the
         // old rules are being removed.
         if (wasFiltering) {
             mPermissionMonitor.onVpnUidRangesRemoved(oldIface, ranges, vpnAppUid);
@@ -7604,18 +7623,34 @@ public class ConnectivityService extends IConnectivityManager.Stub
     public void startNattKeepaliveWithFd(Network network, FileDescriptor fd, int resourceId,
             int intervalSeconds, ISocketKeepaliveCallback cb, String srcAddr,
             String dstAddr) {
-        mKeepaliveTracker.startNattKeepalive(
-                getNetworkAgentInfoForNetwork(network), fd, resourceId,
-                intervalSeconds, cb,
-                srcAddr, dstAddr, NattSocketKeepalive.NATT_PORT);
+        try {
+            mKeepaliveTracker.startNattKeepalive(
+                    getNetworkAgentInfoForNetwork(network), fd, resourceId,
+                    intervalSeconds, cb,
+                    srcAddr, dstAddr, NattSocketKeepalive.NATT_PORT);
+        } finally {
+            // FileDescriptors coming from AIDL calls must be manually closed to prevent leaks.
+            // startNattKeepalive calls Os.dup(fd) before returning, so we can close immediately.
+            if (fd != null && Binder.getCallingPid() != Process.myPid()) {
+                IoUtils.closeQuietly(fd);
+            }
+        }
     }
 
     @Override
     public void startTcpKeepalive(Network network, FileDescriptor fd, int intervalSeconds,
             ISocketKeepaliveCallback cb) {
-        enforceKeepalivePermission();
-        mKeepaliveTracker.startTcpKeepalive(
-                getNetworkAgentInfoForNetwork(network), fd, intervalSeconds, cb);
+        try {
+            enforceKeepalivePermission();
+            mKeepaliveTracker.startTcpKeepalive(
+                    getNetworkAgentInfoForNetwork(network), fd, intervalSeconds, cb);
+        } finally {
+            // FileDescriptors coming from AIDL calls must be manually closed to prevent leaks.
+            // startTcpKeepalive calls Os.dup(fd) before returning, so we can close immediately.
+            if (fd != null && Binder.getCallingPid() != Process.myPid()) {
+                IoUtils.closeQuietly(fd);
+            }
+        }
     }
 
     @Override

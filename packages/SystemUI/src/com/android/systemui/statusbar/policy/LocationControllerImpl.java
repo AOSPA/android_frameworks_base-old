@@ -33,12 +33,14 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.systemui.BootCompleteCache;
 import com.android.systemui.appops.AppOpItem;
 import com.android.systemui.appops.AppOpsController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.util.Utils;
@@ -47,12 +49,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * A controller to manage changes of location related states and update the views accordingly.
  */
-@Singleton
+@SysUISingleton
 public class LocationControllerImpl extends BroadcastReceiver implements LocationController,
         AppOpsController.Callback {
 
@@ -87,12 +88,14 @@ public class LocationControllerImpl extends BroadcastReceiver implements Locatio
     /**
      * Add a callback to listen for changes in location settings.
      */
-    public void addCallback(LocationChangeCallback cb) {
+    @Override
+    public void addCallback(@NonNull LocationChangeCallback cb) {
         mHandler.obtainMessage(H.MSG_ADD_CALLBACK, cb).sendToTarget();
         mHandler.sendEmptyMessage(H.MSG_LOCATION_SETTINGS_CHANGED);
     }
 
-    public void removeCallback(LocationChangeCallback cb) {
+    @Override
+    public void removeCallback(@NonNull LocationChangeCallback cb) {
         mHandler.obtainMessage(H.MSG_REMOVE_CALLBACK, cb).sendToTarget();
     }
 

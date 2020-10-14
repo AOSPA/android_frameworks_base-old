@@ -17,7 +17,7 @@
 package com.android.systemui.car.sideloaded;
 
 import android.annotation.NonNull;
-import android.app.ActivityManager;
+import android.app.ActivityTaskManager.RootTaskInfo;
 import android.content.ComponentName;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.InstallSourceInfo;
@@ -29,19 +29,19 @@ import android.util.Log;
 
 import com.android.systemui.R;
 import com.android.systemui.car.CarDeviceProvisionedController;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 
 import java.util.Arrays;
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * A class that detects unsafe apps.
- * An app is considered safe if is a system app or installed through whitelisted sources.
+ * An app is considered safe if is a system app or installed through allowed sources.
  */
-@Singleton
+@SysUISingleton
 public class SideLoadedAppDetector {
     private static final String TAG = SideLoadedAppDetector.class.getSimpleName();
 
@@ -78,10 +78,10 @@ public class SideLoadedAppDetector {
         return false;
     }
 
-    boolean isSafe(@NonNull ActivityManager.StackInfo stackInfo) {
-        ComponentName componentName = stackInfo.topActivity;
+    boolean isSafe(@NonNull RootTaskInfo taskInfo) {
+        ComponentName componentName = taskInfo.topActivity;
         if (componentName == null) {
-            Log.w(TAG, "Stack info does not have top activity: " + stackInfo.stackId);
+            Log.w(TAG, "Task info does not have top activity: " + taskInfo.taskId);
             return false;
         }
         return isSafe(componentName.getPackageName());

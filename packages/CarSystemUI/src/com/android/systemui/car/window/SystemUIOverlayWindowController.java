@@ -16,6 +16,7 @@
 
 package com.android.systemui.car.window;
 
+import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 
 import android.content.Context;
@@ -29,17 +30,17 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 
 import com.android.systemui.R;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Controls the expansion state of the primary window which will contain all of the fullscreen sysui
  * behavior. This window still has a collapsed state in order to watch for swipe events to expand
  * this window for the notification panel.
  */
-@Singleton
+@SysUISingleton
 public class SystemUIOverlayWindowController implements
         ConfigurationController.ConfigurationListener {
 
@@ -104,6 +105,7 @@ public class SystemUIOverlayWindowController implements
         mLp.setTitle("SystemUIOverlayWindow");
         mLp.packageName = mContext.getPackageName();
         mLp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        mLp.insetsFlags.behavior = BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 
         mWindowManager.addView(mBaseLayout, mLp);
         mLpChanged.copyFrom(mLp);
@@ -160,6 +162,7 @@ public class SystemUIOverlayWindowController implements
     private void updateWindow() {
         if (mLp != null && mLp.copyFrom(mLpChanged) != 0) {
             if (isAttached()) {
+                mLp.insetsFlags.behavior = BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
                 mWindowManager.updateViewLayout(mBaseLayout, mLp);
             }
         }

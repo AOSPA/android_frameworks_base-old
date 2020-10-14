@@ -45,7 +45,6 @@ import android.util.Pair;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.Gravity;
-import android.view.View;
 import android.view.WindowManagerGlobal;
 
 import com.android.internal.R;
@@ -62,7 +61,7 @@ public class DisplayPolicyTestsBase extends WindowTestsBase {
     static final int STATUS_BAR_HEIGHT = 10;
     static final int NAV_BAR_HEIGHT = 15;
     static final int DISPLAY_CUTOUT_HEIGHT = 8;
-    static final int INPUT_METHOD_WINDOW_TOP = 585;
+    static final int IME_HEIGHT = 415;
 
     DisplayPolicy mDisplayPolicy;
 
@@ -99,11 +98,9 @@ public class DisplayPolicyTestsBase extends WindowTestsBase {
 
         mStatusBarWindow.mAttrs.gravity = Gravity.TOP;
         addWindow(mStatusBarWindow);
-        mDisplayPolicy.mLastSystemUiFlags |= View.STATUS_BAR_TRANSPARENT;
 
         mNavBarWindow.mAttrs.gravity = Gravity.BOTTOM;
         addWindow(mNavBarWindow);
-        mDisplayPolicy.mLastSystemUiFlags |= View.NAVIGATION_BAR_TRANSPARENT;
 
         // Update source frame and visibility of insets providers.
         mDisplayContent.getInsetsStateController().onPostLayout();

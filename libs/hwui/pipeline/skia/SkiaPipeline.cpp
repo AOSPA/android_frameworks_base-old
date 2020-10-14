@@ -35,6 +35,7 @@
 #include "VectorDrawable.h"
 #include "thread/CommonPool.h"
 #include "tools/SkSharingProc.h"
+#include "utils/Color.h"
 #include "utils/String8.h"
 #include "utils/TraceUtils.h"
 
@@ -85,7 +86,7 @@ void SkiaPipeline::renderLayers(const LightGeometry& lightGeometry,
 }
 
 void SkiaPipeline::renderLayersImpl(const LayerUpdateQueue& layers, bool opaque) {
-    sk_sp<GrContext> cachedContext;
+    sk_sp<GrDirectContext> cachedContext;
 
     // Render all layers that need to be updated, in order.
     for (size_t i = 0; i < layers.entries().size(); i++) {
@@ -141,7 +142,8 @@ void SkiaPipeline::renderLayersImpl(const LayerUpdateQueue& layers, bool opaque)
 
         // cache the current context so that we can defer flushing it until
         // either all the layers have been rendered or the context changes
-        GrContext* currentContext = layerNode->getLayerSurface()->getCanvas()->getGrContext();
+        GrDirectContext* currentContext =
+            GrAsDirectContext(layerNode->getLayerSurface()->getCanvas()->recordingContext());
         if (cachedContext.get() != currentContext) {
             if (cachedContext.get()) {
                 ATRACE_NAME("flush layers (context changed)");
@@ -200,7 +202,7 @@ bool SkiaPipeline::createOrUpdateLayer(RenderNode* node, const DamageAccumulator
 }
 
 void SkiaPipeline::prepareToDraw(const RenderThread& thread, Bitmap* bitmap) {
-    GrContext* context = thread.getGrContext();
+    GrDirectContext* context = thread.getGrContext();
     if (context) {
         ATRACE_FORMAT("Bitmap#prepareToDraw %dx%d", bitmap->width(), bitmap->height());
         auto image = bitmap->makeImage();
@@ -587,14 +589,23 @@ void SkiaPipeline::dumpResourceCacheUsage() const {
 
 void SkiaPipeline::setSurfaceColorProperties(ColorMode colorMode) {
     mColorMode = colorMode;
-    if (colorMode == ColorMode::SRGB) {
-        mSurfaceColorType = SkColorType::kN32_SkColorType;
-        mSurfaceColorSpace = SkColorSpace::MakeSRGB();
-    } else if (colorMode == ColorMode::WideColorGamut) {
-        mSurfaceColorType = DeviceInfo::get()->getWideColorType();
-        mSurfaceColorSpace = DeviceInfo::get()->getWideColorSpace();
-    } else {
-        LOG_ALWAYS_FATAL("Unreachable: unsupported color mode.");
+    switch (colorMode) {
+        case ColorMode::Default:
+            mSurfaceColorType = SkColorType::kN32_SkColorType;
+            mSurfaceColorSpace = SkColorSpace::MakeSRGB();
+            break;
+        case ColorMode::WideColorGamut:
+            mSurfaceColorType = DeviceInfo::get()->getWideColorType();
+            mSurfaceColorSpace = DeviceInfo::get()->getWideColorSpace();
+            break;
+        case ColorMode::Hdr:
+            mSurfaceColorType = SkColorType::kRGBA_F16_SkColorType;
+            mSurfaceColorSpace = SkColorSpace::MakeRGB(GetPQSkTransferFunction(), SkNamedGamut::kRec2020);
+            break;
+        case ColorMode::Hdr10:
+            mSurfaceColorType = SkColorType::kRGBA_1010102_SkColorType;
+            mSurfaceColorSpace = SkColorSpace::MakeRGB(GetPQSkTransferFunction(), SkNamedGamut::kRec2020);
+            break;
     }
 }
 

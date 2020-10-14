@@ -780,7 +780,7 @@ public class AlarmManagerServiceTest {
         setTestAlarm(ELAPSED_REALTIME_WAKEUP, mNowElapsedTest + 2, alarmPi);
         assertEquals(mNowElapsedTest + 2, mTestTimer.getElapsed());
 
-        final SparseArray<ArrayList<AlarmManagerService.Alarm>> restrictedAlarms =
+        final SparseArray<ArrayList<Alarm>> restrictedAlarms =
                 mService.mPendingBackgroundAlarms;
         assertNull(restrictedAlarms.get(TEST_CALLING_UID));
 
@@ -993,7 +993,7 @@ public class AlarmManagerServiceTest {
 
     @Test
     public void alarmCountOnRemoveFromPendingWhileIdle() {
-        mService.mPendingIdleUntil = mock(AlarmManagerService.Alarm.class);
+        mService.mPendingIdleUntil = mock(Alarm.class);
         final int numAlarms = 15;
         final PendingIntent[] pis = new PendingIntent[numAlarms];
         for (int i = 0; i < numAlarms; i++) {
@@ -1078,6 +1078,49 @@ public class AlarmManagerServiceTest {
         for (int i = 0; i < numAlarms; i++) {
             mService.mListenerDeathRecipient.binderDied(listeners[i].asBinder());
             assertEquals(numAlarms - i - 1, mService.mAlarmsPerUid.get(TEST_CALLING_UID));
+        }
+    }
+
+    @Test
+    public void nonWakeupAlarmsDeferred() throws Exception {
+        final int numAlarms = 10;
+        final PendingIntent[] pis = new PendingIntent[numAlarms];
+        for (int i = 0; i < numAlarms; i++) {
+            pis[i] = getNewMockPendingIntent();
+            setTestAlarm(ELAPSED_REALTIME, mNowElapsedTest + i + 5, pis[i]);
+        }
+        doReturn(true).when(mService).checkAllowNonWakeupDelayLocked(anyLong());
+        // Advance time past all expirations.
+        mNowElapsedTest += numAlarms + 5;
+        mTestTimer.expire();
+        assertEquals(numAlarms, mService.mPendingNonWakeupAlarms.size());
+
+        // These alarms should be sent on interactive state change to true
+        mService.interactiveStateChangedLocked(false);
+        mService.interactiveStateChangedLocked(true);
+
+        for (int i = 0; i < numAlarms; i++) {
+            verify(pis[i]).send(eq(mMockContext), eq(0), any(Intent.class), any(),
+                    any(Handler.class), isNull(), any());
+        }
+    }
+
+    @Test
+    public void alarmCountOnPendingNonWakeupAlarmsRemoved() throws Exception {
+        final int numAlarms = 10;
+        final PendingIntent[] pis = new PendingIntent[numAlarms];
+        for (int i = 0; i < numAlarms; i++) {
+            pis[i] = getNewMockPendingIntent();
+            setTestAlarm(ELAPSED_REALTIME, mNowElapsedTest + i + 5, pis[i]);
+        }
+        doReturn(true).when(mService).checkAllowNonWakeupDelayLocked(anyLong());
+        // Advance time past all expirations.
+        mNowElapsedTest += numAlarms + 5;
+        mTestTimer.expire();
+        assertEquals(numAlarms, mService.mPendingNonWakeupAlarms.size());
+        for (int i = 0; i < numAlarms; i++) {
+            mService.removeLocked(pis[i], null);
+            assertEquals(numAlarms - i - 1, mService.mAlarmsPerUid.get(TEST_CALLING_UID, 0));
         }
     }
 

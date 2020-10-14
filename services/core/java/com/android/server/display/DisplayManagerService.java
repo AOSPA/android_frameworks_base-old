@@ -30,8 +30,6 @@ import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_TRUST
 import static android.hardware.display.DisplayViewport.VIEWPORT_EXTERNAL;
 import static android.hardware.display.DisplayViewport.VIEWPORT_INTERNAL;
 import static android.hardware.display.DisplayViewport.VIEWPORT_VIRTUAL;
-import static android.view.Surface.ROTATION_270;
-import static android.view.Surface.ROTATION_90;
 
 import android.Manifest;
 import android.annotation.NonNull;
@@ -46,7 +44,6 @@ import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.ColorSpace;
 import android.graphics.Point;
-import android.graphics.Rect;
 import android.hardware.SensorManager;
 import android.hardware.display.AmbientBrightnessDayStats;
 import android.hardware.display.BrightnessChangeEvent;
@@ -86,6 +83,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.util.EventLog;
 import android.util.IntArray;
 import android.util.Pair;
 import android.util.Slog;
@@ -288,6 +286,7 @@ public final class DisplayManagerService extends SystemService {
 
     // Temporary display info, used for comparing display configurations.
     private final DisplayInfo mTempDisplayInfo = new DisplayInfo();
+    private final DisplayInfo mTempNonOverrideDisplayInfo = new DisplayInfo();
 
     // Temporary viewports, used when sending new viewport information to the
     // input system.  May be used outside of the lock but only on the handler thread.
@@ -419,7 +418,8 @@ public final class DisplayManagerService extends SystemService {
     }
 
     @Override
-    public void onSwitchUser(@UserIdInt int newUserId) {
+    public void onUserSwitching(@Nullable TargetUser from, @NonNull TargetUser to) {
+        final int newUserId = to.getUserIdentifier();
         final int userSerial = getUserManager().getUserSerialNumber(newUserId);
         synchronized (mSyncRoot) {
             if (mCurrentUserId != newUserId) {
@@ -511,7 +511,8 @@ public final class DisplayManagerService extends SystemService {
         mDisplayTransactionListeners.remove(listener);
     }
 
-    private void setDisplayInfoOverrideFromWindowManagerInternal(
+    @VisibleForTesting
+    void setDisplayInfoOverrideFromWindowManagerInternal(
             int displayId, DisplayInfo info) {
         synchronized (mSyncRoot) {
             LogicalDisplay display = mLogicalDisplays.get(displayId);
@@ -939,7 +940,8 @@ public final class DisplayManagerService extends SystemService {
         adapter.registerLocked();
     }
 
-    private void handleDisplayDeviceAdded(DisplayDevice device) {
+    @VisibleForTesting
+    void handleDisplayDeviceAdded(DisplayDevice device) {
         synchronized (mSyncRoot) {
             handleDisplayDeviceAddedLocked(device);
         }
@@ -951,7 +953,6 @@ public final class DisplayManagerService extends SystemService {
             Slog.w(TAG, "Attempted to add already added display device: " + info);
             return;
         }
-
         Slog.i(TAG, "Display device added: " + info);
         device.mDebugLastLoggedDeviceInfo = info;
 
@@ -964,7 +965,8 @@ public final class DisplayManagerService extends SystemService {
         scheduleTraversalLocked(false);
     }
 
-    private void handleDisplayDeviceChanged(DisplayDevice device) {
+    @VisibleForTesting
+    void handleDisplayDeviceChanged(DisplayDevice device) {
         synchronized (mSyncRoot) {
             DisplayDeviceInfo info = device.getDisplayDeviceInfoLocked();
             if (!mDisplayDevices.contains(device)) {
@@ -1251,6 +1253,7 @@ public final class DisplayManagerService extends SystemService {
             LogicalDisplay display = mLogicalDisplays.valueAt(i);
 
             mTempDisplayInfo.copyFrom(display.getDisplayInfoLocked());
+            display.getNonOverrideDisplayInfoLocked(mTempNonOverrideDisplayInfo);
             display.updateLocked(mDisplayDevices);
             if (!display.isValidLocked()) {
                 mLogicalDisplays.removeAt(i);
@@ -1259,6 +1262,15 @@ public final class DisplayManagerService extends SystemService {
             } else if (!mTempDisplayInfo.equals(display.getDisplayInfoLocked())) {
                 handleLogicalDisplayChanged(displayId, display);
                 changed = true;
+            } else {
+                // While applications shouldn't know nor care about the non-overridden info, we
+                // still need to let WindowManager know so it can update its own internal state for
+                // things like display cutouts.
+                display.getNonOverrideDisplayInfoLocked(mTempDisplayInfo);
+                if (!mTempNonOverrideDisplayInfo.equals(mTempDisplayInfo)) {
+                    handleLogicalDisplayChanged(displayId, display);
+                    changed = true;
+                }
             }
         }
         return changed;
@@ -1407,9 +1419,13 @@ public final class DisplayManagerService extends SystemService {
             }
 
             final DisplayInfo displayInfo = logicalDisplay.getDisplayInfoLocked();
-            return SurfaceControl.screenshotToBufferWithSecureLayersUnsafe(token, new Rect(),
-                    displayInfo.getNaturalWidth(), displayInfo.getNaturalHeight(),
-                    false /* useIdentityTransform */, 0 /* rotation */);
+            final SurfaceControl.DisplayCaptureArgs captureArgs =
+                    new SurfaceControl.DisplayCaptureArgs.Builder(token)
+                            .setSize(displayInfo.getNaturalWidth(), displayInfo.getNaturalHeight())
+                            .setUseIdentityTransform(true)
+                            .setCaptureSecureLayers(true)
+                            .build();
+            return SurfaceControl.captureDisplay(captureArgs);
         }
     }
 
@@ -1419,30 +1435,11 @@ public final class DisplayManagerService extends SystemService {
             if (token == null) {
                 return null;
             }
-            final LogicalDisplay logicalDisplay = mLogicalDisplays.get(displayId);
-            if (logicalDisplay == null) {
-                return null;
-            }
 
-            final DisplayInfo displayInfo = logicalDisplay.getDisplayInfoLocked();
-            // Takes screenshot based on current device orientation.
-            final Display display = DisplayManagerGlobal.getInstance()
-                    .getRealDisplay(displayId);
-            if (display == null) {
-                return null;
-            }
-            final Point displaySize = new Point();
-            display.getRealSize(displaySize);
-
-            int rotation = displayInfo.rotation;
-            // TODO (b/153382624) : This workaround solution would be removed after
-            // SurfaceFlinger fixes the inconsistency with rotation direction issue.
-            if (rotation == ROTATION_90 || rotation == ROTATION_270) {
-                rotation = (rotation == ROTATION_90) ? ROTATION_270 : ROTATION_90;
-            }
-
-            return SurfaceControl.screenshotToBuffer(token, new Rect(), displaySize.x,
-                    displaySize.y, false /* useIdentityTransform */, rotation /* rotation */);
+            final SurfaceControl.DisplayCaptureArgs captureArgs =
+                    new SurfaceControl.DisplayCaptureArgs.Builder(token)
+                            .build();
+            return SurfaceControl.captureDisplay(captureArgs);
         }
     }
 
@@ -2206,10 +2203,16 @@ public final class DisplayManagerService extends SystemService {
                 }
             }
 
-            if (callingUid == Process.SYSTEM_UID
-                    || checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
-                flags |= VIRTUAL_DISPLAY_FLAG_TRUSTED;
-            } else {
+            if (callingUid != Process.SYSTEM_UID && (flags & VIRTUAL_DISPLAY_FLAG_TRUSTED) != 0) {
+                if (!checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
+                    EventLog.writeEvent(0x534e4554, "162627132", callingUid,
+                            "Attempt to create a trusted display without holding permission!");
+                    throw new SecurityException("Requires ADD_TRUSTED_DISPLAY permission to "
+                            + "create a trusted virtual display.");
+                }
+            }
+
+            if ((flags & VIRTUAL_DISPLAY_FLAG_TRUSTED) == 0) {
                 flags &= ~VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS;
             }
 
@@ -2563,8 +2566,7 @@ public final class DisplayManagerService extends SystemService {
         public boolean requestPowerState(DisplayPowerRequest request,
                 boolean waitForNegativeProximity) {
             synchronized (mSyncRoot) {
-                return mDisplayPowerController.requestPowerState(request,
-                        waitForNegativeProximity);
+                return mDisplayPowerController.requestPowerState(request, waitForNegativeProximity);
             }
         }
 
@@ -2692,6 +2694,10 @@ public final class DisplayManagerService extends SystemService {
             return getDisplayedContentSampleInternal(displayId, maxFrames, timestamp);
         }
 
+        @Override
+        public void ignoreProximitySensorUntilChanged() {
+            mDisplayPowerController.ignoreProximitySensorUntilChanged();
+        }
     }
 
     class DesiredDisplayModeSpecsObserver

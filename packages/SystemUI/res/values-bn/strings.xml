@@ -108,10 +108,8 @@
     <string name="screenrecord_resume_label" msgid="4972223043729555575">"আবার চালু করুন"</string>
     <string name="screenrecord_cancel_label" msgid="7850926573274483294">"বাতিল করুন"</string>
     <string name="screenrecord_share_label" msgid="5025590804030086930">"শেয়ার করুন"</string>
-    <string name="screenrecord_delete_label" msgid="1376347010553987058">"মুছুন"</string>
     <string name="screenrecord_cancel_success" msgid="1775448688137393901">"স্ক্রিন রেকর্ডিং বাতিল করা হয়েছে"</string>
     <string name="screenrecord_save_message" msgid="490522052388998226">"স্ক্রিন রেকর্ডিং সেভ করা হয়েছে, দেখতে ট্যাপ করুন"</string>
-    <string name="screenrecord_delete_description" msgid="1604522770162810570">"স্ক্রিন রেকর্ডিং মুছে ফেলা হয়েছে"</string>
     <string name="screenrecord_delete_error" msgid="2870506119743013588">"স্ক্রিন রেকডিং মুছে ফেলার সময় সমস্যা হয়েছে"</string>
     <string name="screenrecord_permission_error" msgid="7856841237023137686">"অনুমতি পাওয়া যায়নি"</string>
     <string name="screenrecord_start_error" msgid="2200660692479682368">"স্ক্রিন রেকর্ডিং শুরু করার সময় সমস্যা হয়েছে"</string>
@@ -125,7 +123,7 @@
     <string name="accessibility_accessibility_button" msgid="4089042473497107709">"অ্যাক্সেসযোগ্যতা"</string>
     <string name="accessibility_rotate_button" msgid="1238584767612362586">"স্ক্রিন ঘোরান"</string>
     <string name="accessibility_recent" msgid="901641734769533575">"এক নজরে"</string>
-    <string name="accessibility_search_light" msgid="524741790416076988">"খুঁজুন"</string>
+    <string name="accessibility_search_light" msgid="524741790416076988">"সার্চ"</string>
     <string name="accessibility_camera_button" msgid="2938898391716647247">"ক্যামেরা"</string>
     <string name="accessibility_phone_button" msgid="4256353121703100427">"ফোন"</string>
     <string name="accessibility_voice_assist_button" msgid="6497706615649754510">"ভয়েস সহায়তা"</string>
@@ -441,7 +439,7 @@
     <string name="expanded_header_battery_charging_with_time" msgid="757991461445765011">"পূর্ণ হতে <xliff:g id="CHARGING_TIME">%s</xliff:g> সময় লাগবে"</string>
     <string name="expanded_header_battery_not_charging" msgid="809409140358955848">"চার্জ হচ্ছে না"</string>
     <string name="ssl_ca_cert_warning" msgid="8373011375250324005">"নেটওয়ার্ক নিরীক্ষণ\nকরা হতে পারে"</string>
-    <string name="description_target_search" msgid="3875069993128855865">"খুঁজুন"</string>
+    <string name="description_target_search" msgid="3875069993128855865">"সার্চ"</string>
     <string name="description_direction_up" msgid="3632251507574121434">"<xliff:g id="TARGET_DESCRIPTION">%s</xliff:g> এর জন্য উপরের দিকে স্লাইড করুন৷"</string>
     <string name="description_direction_left" msgid="4762708739096907741">"<xliff:g id="TARGET_DESCRIPTION">%s</xliff:g> এর জন্য বাঁ দিকে স্লাইড করুন৷"</string>
     <string name="zen_priority_introduction" msgid="3159291973383796646">"অ্যালার্ম, রিমাইন্ডার, ইভেন্ট, এবং আপনার নির্দিষ্ট করে দেওয়া ব্যক্তিদের কল ছাড়া অন্য কোনও আওয়াজ বা ভাইব্রেশন হবে না। তবে সঙ্গীত, ভিডিও, এবং গেম সহ আপনি যা কিছু চালাবেন তার আওয়াজ শুনতে পাবেন।"</string>
@@ -881,29 +879,22 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"কম-গুরুত্বপূর্ণ বিজ্ঞপ্তির আইকন দেখুন"</string>
     <string name="other" msgid="429768510980739978">"অন্যান্য"</string>
-    <string name="accessibility_divider" msgid="2830785970889237307">"বিভক্ত-স্ক্রিন বিভাজক"</string>
-    <string name="accessibility_action_divider_left_full" msgid="7598733539422375847">"বাঁ দিকের অংশ নিয়ে পূর্ণ স্ক্রিন"</string>
-    <string name="accessibility_action_divider_left_70" msgid="4919312892541727761">"৭০% বাকি আছে"</string>
-    <string name="accessibility_action_divider_left_50" msgid="3664701169564893826">"৫০% বাকি আছে"</string>
-    <string name="accessibility_action_divider_left_30" msgid="4358145268046362088">"৩০% বাকি আছে"</string>
-    <string name="accessibility_action_divider_right_full" msgid="8576057422864896305">"ডান দিকের অংশ নিয়ে পূর্ণ স্ক্রিন"</string>
-    <string name="accessibility_action_divider_top_full" msgid="4243901660795169777">"উপর দিকের অংশ নিয়ে পূর্ণ স্ক্রিন"</string>
-    <string name="accessibility_action_divider_top_70" msgid="6941226213260515072">"শীর্ষ ৭০%"</string>
-    <string name="accessibility_action_divider_top_50" msgid="6275211443706497621">"শীর্ষ ৫০%"</string>
-    <string name="accessibility_action_divider_top_30" msgid="5780597635887574916">"শীর্ষ ৩০%"</string>
-    <string name="accessibility_action_divider_bottom_full" msgid="7352434720610115395">"নীচের অংশ নিয়ে পূর্ণ স্ক্রিন"</string>
-    <string name="accessibility_qs_edit_tile_label" msgid="9079791448815232967">"<xliff:g id="POSITION">%1$d</xliff:g> লোকেশন, <xliff:g id="TILE_NAME">%2$s</xliff:g>৷ সম্পাদনা করতে দুবার আলতো চাপুন৷"</string>
-    <string name="accessibility_qs_edit_add_tile_label" msgid="8292218072049068613">"<xliff:g id="TILE_NAME">%1$s</xliff:g>৷ যোগ করতে দুবার আলতো চাপুন৷"</string>
-    <string name="accessibility_qs_edit_move_tile" msgid="6027997446473163426">"<xliff:g id="TILE_NAME">%1$s</xliff:g> সরান"</string>
-    <string name="accessibility_qs_edit_remove_tile" msgid="3406781901949899624">"<xliff:g id="TILE_NAME">%1$s</xliff:g> সরান"</string>
-    <string name="accessibility_qs_edit_tile_add" msgid="6289879620154587233">"<xliff:g id="TILE_NAME">%1$s</xliff:g> <xliff:g id="POSITION">%2$d</xliff:g>-এ যোগ করুন"</string>
-    <string name="accessibility_qs_edit_tile_move" msgid="4841770637244326837">"<xliff:g id="TILE_NAME">%1$s</xliff:g> <xliff:g id="POSITION">%2$d</xliff:g>-এ সরান"</string>
+    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
+    <skip />
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"দ্রুত সেটিংস সম্পাদক৷"</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"<xliff:g id="ID_1">%1$s</xliff:g> বিজ্ঞপ্তি: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
-    <string name="dock_forced_resizable" msgid="4689301323912928801">"অ্যাপ্লিকেশানটি বিভক্ত স্ক্রীনে কাজ নাও করতে পারে৷"</string>
-    <string name="dock_non_resizeble_failed_to_dock_text" msgid="7284915968096153808">"অ্যাপ্লিকেশান বিভক্ত-স্ক্রিন সমর্থন করে না৷"</string>
-    <string name="forced_resizable_secondary_display" msgid="522558907654394940">"সেকেন্ডারি ডিসপ্লেতে অ্যাপটি কাজ নাও করতে পারে।"</string>
-    <string name="activity_launch_on_secondary_display_failed_text" msgid="8446727617187998208">"সেকেন্ডারি ডিসপ্লেতে অ্যাপ লঞ্চ করা যাবে না।"</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"সেটিংস খুলুন।"</string>
     <string name="accessibility_quick_settings_expand" msgid="2609275052412521467">"দ্রুত সেটিংস খুলুন৷"</string>
     <string name="accessibility_quick_settings_collapse" msgid="4674876336725041982">"দ্রুত সেটিংস বন্ধ করুন৷"</string>
@@ -985,6 +976,13 @@
     <string name="open_saver_setting_action" msgid="2111461909782935190">"সেটিংস"</string>
     <string name="auto_saver_okay_action" msgid="7815925750741935386">"বুঝেছি"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
+    <string name="ongoing_privacy_chip_content_single_app" msgid="2969750601815230385">"<xliff:g id="APP">%1$s</xliff:g> আপনার <xliff:g id="TYPES_LIST">%2$s</xliff:g> ব্যবহার করছে।"</string>
+    <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"অ্যাপ্লিকেশনগুলি আপনার <xliff:g id="TYPES_LIST">%s</xliff:g> ব্যবহার করছে।"</string>
+    <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
+    <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" এবং "</string>
+    <string name="privacy_type_camera" msgid="7974051382167078332">"ক্যামেরা"</string>
+    <string name="privacy_type_location" msgid="7991481648444066703">"লোকেশন"</string>
+    <string name="privacy_type_microphone" msgid="9136763906797732428">"মাইক্রোফোন"</string>
     <string name="sensor_privacy_mode" msgid="4462866919026513692">"সেন্সর বন্ধ"</string>
     <string name="device_services" msgid="1549944177856658705">"ডিভাইস সংক্রান্ত পরিষেবা"</string>
     <string name="music_controls_no_title" msgid="4166497066552290938">"কোনও শীর্ষক নেই"</string>
@@ -1062,7 +1060,7 @@
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"সাজেশন লোড করা হচ্ছে"</string>
     <string name="controls_media_title" msgid="1746947284862928133">"মিডিয়া"</string>
     <string name="controls_media_close_session" msgid="3957093425905475065">"বর্তমান সেশন লুকান।"</string>
-    <string name="controls_media_dismiss_button" msgid="4485675693008031646">"লুকান"</string>
+    <string name="controls_media_dismiss_button" msgid="9081375542265132213">"খারিজ করুন"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"আবার চালু করুন"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"সেটিংস"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"বন্ধ আছে, অ্যাপ চেক করুন"</string>
@@ -1077,4 +1075,11 @@
     <string name="controls_added_tooltip" msgid="4842812921719153085">"নতুন কন্ট্রোল দেখতে পাওয়ার বোতাম টিপে ধরে থাকুন"</string>
     <string name="controls_menu_add" msgid="4447246119229920050">"কন্ট্রোল যোগ করুন"</string>
     <string name="controls_menu_edit" msgid="890623986951347062">"কন্ট্রোল এডিট করুন"</string>
+    <string name="media_output_dialog_add_output" msgid="5642703238877329518">"আউটপুট যোগ করুন"</string>
+    <string name="media_output_dialog_group" msgid="5571251347877452212">"গ্রুপ"</string>
+    <string name="media_output_dialog_single_device" msgid="3102758980643351058">"১টি ডিভাইস বেছে নেওয়া হয়েছে"</string>
+    <string name="media_output_dialog_multiple_devices" msgid="1093771040315422350">"<xliff:g id="COUNT">%1$d</xliff:g>টি ডিভাইস বেছে নেওয়া হয়েছে"</string>
+    <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (কানেক্ট করা নেই)"</string>
+    <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"কানেক্ট করা যায়নি। আবার চেষ্টা করুন।"</string>
+    <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"নতুন ডিভাইস পেয়ার করুন"</string>
 </resources>

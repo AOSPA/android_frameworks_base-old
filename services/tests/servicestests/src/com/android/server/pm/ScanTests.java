@@ -470,11 +470,16 @@ public class ScanTests {
 
     private PackageManagerService.ScanResult executeScan(
             PackageManagerService.ScanRequest scanRequest) throws PackageManagerException {
-        return PackageManagerService.scanPackageOnlyLI(
+        PackageManagerService.ScanResult result = PackageManagerService.scanPackageOnlyLI(
                 scanRequest,
                 mMockInjector,
                 false /*isUnderFactoryTest*/,
                 System.currentTimeMillis());
+
+        // Need to call hideAsFinal to cache derived fields. This is normally done in PMS, but not
+        // in this cut down flow used for the test.
+        ((ParsedPackage) result.pkgSetting.pkg).hideAsFinal();
+        return result;
     }
 
     private static String createCodePath(String packageName) {
@@ -484,8 +489,7 @@ public class ScanTests {
     private static PackageSettingBuilder createBasicPackageSettingBuilder(String packageName) {
         return new PackageSettingBuilder()
                 .setName(packageName)
-                .setCodePath(createCodePath(packageName))
-                .setResourcePath(createCodePath(packageName));
+                .setCodePath(createCodePath(packageName));
     }
 
     private static ScanRequestBuilder createBasicScanRequestBuilder(ParsingPackage pkg) {
@@ -534,8 +538,7 @@ public class ScanTests {
                 arrayContaining("some.static.library", "some.other.static.library"));
         assertThat(pkgSetting.usesStaticLibrariesVersions, is(new long[]{234L, 456L}));
         assertThat(pkgSetting.pkg, is(scanResult.request.parsedPackage));
-        assertThat(pkgSetting.codePath, is(new File(createCodePath(packageName))));
-        assertThat(pkgSetting.resourcePath, is(new File(createCodePath(packageName))));
+        assertThat(pkgSetting.getPath(), is(new File(createCodePath(packageName))));
         assertThat(pkgSetting.versionCode, is(PackageInfo.composeLongVersionCode(1, 2345)));
     }
 

@@ -187,6 +187,46 @@ public class Preconditions {
     }
 
     /**
+     * Ensures the truth of an expression involving whether the calling identity is authorized to
+     * call the calling method.
+     *
+     * @param expression a boolean expression
+     * @throws SecurityException if {@code expression} is false
+     */
+    public static void checkCallAuthorization(final boolean expression) {
+        if (!expression) {
+            throw new SecurityException("Calling identity is not authorized");
+        }
+    }
+
+    /**
+     * Ensures the truth of an expression involving whether the calling identity is authorized to
+     * call the calling method.
+     *
+     * @param expression a boolean expression
+     * @param message the message of the security exception to be thrown
+     * @throws SecurityException if {@code expression} is false
+     */
+    public static void checkCallAuthorization(final boolean expression, final String message) {
+        if (!expression) {
+            throw new SecurityException(message);
+        }
+    }
+
+    /**
+     * Ensures the truth of an expression involving whether the calling user is authorized to
+     * call the calling method.
+     *
+     * @param expression a boolean expression
+     * @throws SecurityException if {@code expression} is false
+     */
+    public static void checkCallingUser(final boolean expression) {
+        if (!expression) {
+            throw new SecurityException("Calling user is not authorized");
+        }
+    }
+
+    /**
      * Check the requested flags, throwing if any requested flags are outside
      * the allowed set.
      *

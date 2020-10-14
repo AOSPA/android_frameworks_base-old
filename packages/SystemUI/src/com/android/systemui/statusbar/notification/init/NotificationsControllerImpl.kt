@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.notification.init
 
 import android.service.notification.StatusBarNotification
+import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption
 import com.android.systemui.statusbar.FeatureFlags
 import com.android.systemui.statusbar.NotificationListener
@@ -26,25 +27,24 @@ import com.android.systemui.statusbar.notification.NotificationClicker
 import com.android.systemui.statusbar.notification.NotificationEntryManager
 import com.android.systemui.statusbar.notification.NotificationListController
 import com.android.systemui.statusbar.notification.collection.NotifPipeline
+import com.android.systemui.statusbar.notification.collection.TargetSdkResolver
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl
 import com.android.systemui.statusbar.notification.collection.init.NotifPipelineInitializer
-import com.android.systemui.statusbar.notification.collection.TargetSdkResolver
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy
 import com.android.systemui.statusbar.notification.interruption.HeadsUpController
+import com.android.systemui.statusbar.notification.interruption.HeadsUpViewBinder
 import com.android.systemui.statusbar.notification.row.NotifBindPipelineInitializer
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper
-import com.android.systemui.statusbar.phone.NotificationGroupManager
 import com.android.systemui.statusbar.phone.StatusBar
 import com.android.systemui.statusbar.policy.DeviceProvisionedController
 import com.android.systemui.statusbar.policy.HeadsUpManager
-import com.android.systemui.statusbar.notification.interruption.HeadsUpViewBinder
 import com.android.systemui.statusbar.policy.RemoteInputUriController
 import dagger.Lazy
 import java.io.FileDescriptor
 import java.io.PrintWriter
 import java.util.Optional
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Master controller for all notifications-related work
@@ -53,7 +53,7 @@ import javax.inject.Singleton
  * Once we migrate away from the need for such things, this class becomes primarily a place to do
  * any initialization work that notifications require.
  */
-@Singleton
+@SysUISingleton
 class NotificationsControllerImpl @Inject constructor(
     private val featureFlags: FeatureFlags,
     private val notificationListener: NotificationListener,
@@ -65,7 +65,7 @@ class NotificationsControllerImpl @Inject constructor(
     private val deviceProvisionedController: DeviceProvisionedController,
     private val notificationRowBinder: NotificationRowBinderImpl,
     private val remoteInputUriController: RemoteInputUriController,
-    private val groupManager: NotificationGroupManager,
+    private val groupManagerLegacy: Lazy<NotificationGroupManagerLegacy>,
     private val groupAlertTransferHelper: NotificationGroupAlertTransferHelper,
     private val headsUpManager: HeadsUpManager,
     private val headsUpController: HeadsUpController,
@@ -111,11 +111,11 @@ class NotificationsControllerImpl @Inject constructor(
         } else {
             targetSdkResolver.initialize(entryManager)
             remoteInputUriController.attach(entryManager)
-            groupAlertTransferHelper.bind(entryManager, groupManager)
-            headsUpManager.addListener(groupManager)
+            groupAlertTransferHelper.bind(entryManager, groupManagerLegacy.get())
+            headsUpManager.addListener(groupManagerLegacy.get())
             headsUpManager.addListener(groupAlertTransferHelper)
             headsUpController.attach(entryManager, headsUpManager)
-            groupManager.setHeadsUpManager(headsUpManager)
+            groupManagerLegacy.get().setHeadsUpManager(headsUpManager)
             groupAlertTransferHelper.setHeadsUpManager(headsUpManager)
 
             entryManager.attach(notificationListener)
@@ -131,7 +131,6 @@ class NotificationsControllerImpl @Inject constructor(
         if (dumpTruck) {
             entryManager.dump(pw, "  ")
         }
-        groupManager.dump(fd, pw, args)
     }
 
     // TODO: Convert all functions below this line into listeners instead of public methods

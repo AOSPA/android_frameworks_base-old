@@ -27,10 +27,14 @@ import org.junit.Test;
 
 public class TimeZoneConfigurationTest {
 
+    private static final int ARBITRARY_USER_ID = 9876;
+
     @Test
     public void testBuilder_copyConstructor() {
         TimeZoneConfiguration.Builder builder1 =
-                new TimeZoneConfiguration.Builder().setAutoDetectionEnabled(true);
+                new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID)
+                        .setAutoDetectionEnabled(true)
+                        .setGeoDetectionEnabled(true);
         TimeZoneConfiguration configuration1 = builder1.build();
 
         TimeZoneConfiguration configuration2 =
@@ -40,29 +44,28 @@ public class TimeZoneConfigurationTest {
     }
 
     @Test
-    public void testIsComplete() {
-        TimeZoneConfiguration incompleteConfiguration =
-                new TimeZoneConfiguration.Builder()
-                        .build();
-        assertFalse(incompleteConfiguration.isComplete());
+    public void testIntrospectionMethods() {
+        TimeZoneConfiguration empty = new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID).build();
+        assertFalse(empty.isComplete());
+        assertFalse(empty.hasSetting(TimeZoneConfiguration.SETTING_AUTO_DETECTION_ENABLED));
 
-        TimeZoneConfiguration completeConfiguration =
-                new TimeZoneConfiguration.Builder()
-                        .setAutoDetectionEnabled(true)
-                        .build();
-        assertTrue(completeConfiguration.isComplete());
+        TimeZoneConfiguration completeConfig = new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID)
+                .setAutoDetectionEnabled(true)
+                .setGeoDetectionEnabled(true)
+                .build();
+        assertTrue(completeConfig.isComplete());
+        assertTrue(completeConfig.hasSetting(TimeZoneConfiguration.SETTING_AUTO_DETECTION_ENABLED));
     }
 
     @Test
     public void testBuilder_mergeProperties() {
-        TimeZoneConfiguration configuration1 =
-                new TimeZoneConfiguration.Builder()
-                        .setAutoDetectionEnabled(true)
-                        .build();
+        TimeZoneConfiguration configuration1 = new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID)
+                .setAutoDetectionEnabled(true)
+                .build();
 
         {
             TimeZoneConfiguration mergedEmptyAnd1 =
-                    new TimeZoneConfiguration.Builder()
+                    new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID)
                             .mergeProperties(configuration1)
                             .build();
             assertEquals(configuration1, mergedEmptyAnd1);
@@ -70,7 +73,7 @@ public class TimeZoneConfigurationTest {
 
         {
             TimeZoneConfiguration configuration2 =
-                    new TimeZoneConfiguration.Builder()
+                    new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID)
                             .setAutoDetectionEnabled(false)
                             .build();
 
@@ -87,14 +90,22 @@ public class TimeZoneConfigurationTest {
     @Test
     public void testEquals() {
         TimeZoneConfiguration.Builder builder1 =
-                new TimeZoneConfiguration.Builder();
+                new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID);
         {
             TimeZoneConfiguration one = builder1.build();
             assertEquals(one, one);
         }
 
+        {
+            TimeZoneConfiguration.Builder differentUserBuilder =
+                    new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID + 1);
+            TimeZoneConfiguration one = builder1.build();
+            TimeZoneConfiguration two = differentUserBuilder.build();
+            assertNotEquals(one, two);
+        }
+
         TimeZoneConfiguration.Builder builder2 =
-                new TimeZoneConfiguration.Builder();
+                new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID);
         {
             TimeZoneConfiguration one = builder1.build();
             TimeZoneConfiguration two = builder2.build();
@@ -122,18 +133,45 @@ public class TimeZoneConfigurationTest {
             TimeZoneConfiguration two = builder2.build();
             assertEquals(one, two);
         }
+
+        builder1.setGeoDetectionEnabled(true);
+        {
+            TimeZoneConfiguration one = builder1.build();
+            TimeZoneConfiguration two = builder2.build();
+            assertNotEquals(one, two);
+        }
+
+        builder2.setGeoDetectionEnabled(false);
+        {
+            TimeZoneConfiguration one = builder1.build();
+            TimeZoneConfiguration two = builder2.build();
+            assertNotEquals(one, two);
+        }
+
+        builder1.setGeoDetectionEnabled(false);
+        {
+            TimeZoneConfiguration one = builder1.build();
+            TimeZoneConfiguration two = builder2.build();
+            assertEquals(one, two);
+        }
     }
 
     @Test
     public void testParcelable() {
         TimeZoneConfiguration.Builder builder =
-                new TimeZoneConfiguration.Builder();
+                new TimeZoneConfiguration.Builder(ARBITRARY_USER_ID);
         assertRoundTripParcelable(builder.build());
 
         builder.setAutoDetectionEnabled(true);
         assertRoundTripParcelable(builder.build());
 
         builder.setAutoDetectionEnabled(false);
+        assertRoundTripParcelable(builder.build());
+
+        builder.setGeoDetectionEnabled(false);
+        assertRoundTripParcelable(builder.build());
+
+        builder.setGeoDetectionEnabled(true);
         assertRoundTripParcelable(builder.build());
     }
 }

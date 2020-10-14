@@ -104,6 +104,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     boolean whitelistManager; // any bindings to this service have BIND_ALLOW_WHITELIST_MANAGEMENT?
     boolean delayed;        // are we waiting to start this service in the background?
     boolean fgRequired;     // is the service required to go foreground after starting?
+    boolean hideFgNotification; // Hide the fg service notification
     boolean fgWaiting;      // is a timeout for going foreground already scheduled?
     boolean isForeground;   // is service currently in foreground mode?
     int foregroundId;       // Notification ID of last foreground req.
@@ -145,6 +146,12 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
 
     // the most recent package that start/bind this service.
     String mRecentCallingPackage;
+
+    // allow the service becomes foreground service? Service started from background may not be
+    // allowed to become a foreground service.
+    @ActiveServices.FgsFeatureRetCode int mAllowStartForeground;
+    String mInfoAllowStartForeground;
+    boolean mLoggedInfoAllowStartForeground;
 
     String stringName;      // caching of toString
 
@@ -408,6 +415,10 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                 pw.println(mAllowWhileInUsePermissionInFgs);
         pw.print(prefix); pw.print("recentCallingPackage=");
                 pw.println(mRecentCallingPackage);
+        pw.print(prefix); pw.print("allowStartForeground=");
+        pw.println(mAllowStartForeground);
+        pw.print(prefix); pw.print("infoAllowStartForeground=");
+        pw.println(mInfoAllowStartForeground);
         if (delayed) {
             pw.print(prefix); pw.print("delayed="); pw.println(delayed);
         }
@@ -528,8 +539,9 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             return tracker;
         }
         if ((serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0) {
-            tracker = ams.mProcessStats.getServiceStateLocked(serviceInfo.packageName,
-                    serviceInfo.applicationInfo.uid, serviceInfo.applicationInfo.longVersionCode,
+            tracker = ams.mProcessStats.getServiceState(serviceInfo.packageName,
+                    serviceInfo.applicationInfo.uid,
+                    serviceInfo.applicationInfo.longVersionCode,
                     serviceInfo.processName, serviceInfo.name);
             tracker.applyNewOwner(this);
         }
@@ -546,7 +558,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     public void makeRestarting(int memFactor, long now) {
         if (restartTracker == null) {
             if ((serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0) {
-                restartTracker = ams.mProcessStats.getServiceStateLocked(serviceInfo.packageName,
+                restartTracker = ams.mProcessStats.getServiceState(
+                        serviceInfo.packageName,
                         serviceInfo.applicationInfo.uid,
                         serviceInfo.applicationInfo.longVersionCode,
                         serviceInfo.processName, serviceInfo.name);
@@ -575,7 +588,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                     ? _proc : null;
             if (mIsAllowedBgActivityStartsByStart
                     || mIsAllowedBgActivityStartsByBinding) {
-                _proc.addAllowBackgroundActivityStartsToken(this);
+                _proc.addAllowBackgroundActivityStartsToken(this, null);
             } else {
                 _proc.removeAllowBackgroundActivityStartsToken(this);
             }
@@ -723,7 +736,9 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
      * {@code mIsAllowedBgActivityStartsByBinding}. If either is true, this ServiceRecord
      * should be contributing as a token in parent ProcessRecord.
      *
-     * @see com.android.server.am.ProcessRecord#mAllowBackgroundActivityStartsTokens
+     * @see com.android.server.am.ProcessRecord#addAllowBackgroundActivityStartsToken(Binder,
+     * IBinder)
+     * @see com.android.server.am.ProcessRecord#removeAllowBackgroundActivityStartsToken(Binder)
      */
     private void updateParentProcessBgActivityStartsToken() {
         if (app == null) {
@@ -732,7 +747,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         if (mIsAllowedBgActivityStartsByStart || mIsAllowedBgActivityStartsByBinding) {
             // if the token is already there it's safe to "re-add it" - we're dealing with
             // a set of Binder objects
-            app.addAllowBackgroundActivityStartsToken(this);
+            app.addAllowBackgroundActivityStartsToken(this, null);
         } else {
             app.removeAllowBackgroundActivityStartsToken(this);
         }
@@ -822,6 +837,9 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     }
 
     public void postNotification() {
+        if (hideFgNotification) {
+            return;
+        }
         final int appUid = appInfo.uid;
         final int appPid = app.pid;
         if (foregroundId != 0 && foregroundNoti != null) {
@@ -914,7 +932,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                         }
                         if (localForegroundNoti.getSmallIcon() == null) {
                             // Notifications whose icon is 0 are defined to not show
-                            // a notification, silently ignoring it.  We don't want to
+                            // a notification.  We don't want to
                             // just ignore it, we want to prevent the service from
                             // being foreground.
                             throw new RuntimeException("invalid service notification: "

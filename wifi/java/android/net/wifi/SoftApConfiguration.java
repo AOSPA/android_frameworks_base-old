@@ -22,7 +22,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.net.MacAddress;
-import android.os.Build;
+import android.net.wifi.util.SdkLevelUtil;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
@@ -578,7 +578,7 @@ public final class SoftApConfiguration implements Parcelable {
     @SystemApi
     @MacRandomizationSetting
     public int getMacRandomizationSetting() {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+        if (!SdkLevelUtil.isAtLeastS()) {
             throw new UnsupportedOperationException();
         }
         return mMacRandomizationSetting;
@@ -609,6 +609,7 @@ public final class SoftApConfiguration implements Parcelable {
                 wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
                 break;
             case SECURITY_TYPE_WPA2_PSK:
+            case SECURITY_TYPE_WPA3_SAE_TRANSITION:
                 wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA2_PSK);
                 break;
             case SECURITY_TYPE_OWE:
@@ -1099,7 +1100,7 @@ public final class SoftApConfiguration implements Parcelable {
         @NonNull
         public Builder setMacRandomizationSetting(
                 @MacRandomizationSetting int macRandomizationSetting) {
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+            if (!SdkLevelUtil.isAtLeastS()) {
                 throw new UnsupportedOperationException();
             }
             mMacRandomizationSetting = macRandomizationSetting;

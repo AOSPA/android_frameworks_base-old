@@ -18,7 +18,6 @@ package android.content.pm.parsing;
 
 import static android.content.pm.ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
-import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_MANIFEST;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED;
@@ -128,7 +127,7 @@ import java.util.StringTokenizer;
  */
 public class ParsingPackageUtils {
 
-    public static final String TAG = ParsingUtils.TAG;
+    private static final String TAG = ParsingUtils.TAG;
 
     /**
      * @see #parseDefault(ParseInput, File, int, boolean)
@@ -163,10 +162,10 @@ public class ParsingPackageUtils {
             @Override
             public ParsingPackage startParsingPackage(
                     @NonNull String packageName,
-                    @NonNull String baseCodePath,
-                    @NonNull String codePath,
+                    @NonNull String baseApkPath,
+                    @NonNull String path,
                     @NonNull TypedArray manifestArray, boolean isCoreApp) {
-                return new ParsingPackageImpl(packageName, baseCodePath, codePath, manifestArray);
+                return new ParsingPackageImpl(packageName, baseApkPath, path, manifestArray);
             }
         });
         try {
@@ -185,6 +184,9 @@ public class ParsingPackageUtils {
                 pkg.setSigningDetails(
                         ParsingPackageUtils.getSigningDetails(pkg, false /* skipVerify */));
             }
+
+            // Need to call this to finish the parsing stage
+            pkg.hideAsParsed();
 
             return input.success(pkg);
         } catch (PackageParser.PackageParserException e) {
@@ -211,7 +213,7 @@ public class ParsingPackageUtils {
      * package is a monolithic style (single APK file) or cluster style
      * (directory of APKs).
      * <p>
-     * This performs sanity checking on cluster style packages, such as
+     * This performs validity checking on cluster style packages, such as
      * requiring identical package name and version codes, a single base APK,
      * and unique split names.
      * <p>
@@ -237,7 +239,7 @@ public class ParsingPackageUtils {
 
     /**
      * Parse all APKs contained in the given directory, treating them as a
-     * single package. This also performs sanity checking, such as requiring
+     * single package. This also performs validity checking, such as requiring
      * identical package name and version codes, a single base APK, and unique
      * split names.
      * <p>
@@ -740,7 +742,6 @@ public class ParsingPackageUtils {
             String tagName = parser.getName();
             final ParseResult result;
 
-            // TODO(b/135203078): Convert to instance methods to share variables
             // <application> has special logic, so it's handled outside the general method
             if (PackageParser.TAG_APPLICATION.equals(tagName)) {
                 if (foundApp) {
@@ -1215,9 +1216,9 @@ public class ParsingPackageUtils {
                 features = ArrayUtils.add(features, featureInfo);
             } else {
                 Slog.w(TAG,
-                        "Unknown element under <feature-group>: " + innerTagName +
-                                " at " + pkg.getBaseCodePath() + " " +
-                                parser.getPositionDescription());
+                        "Unknown element under <feature-group>: " + innerTagName
+                                + " at " + pkg.getBaseApkPath() + " "
+                                + parser.getPositionDescription());
             }
         }
 
@@ -1719,10 +1720,6 @@ public class ParsingPackageUtils {
                         .AndroidManifestApplication_persistentWhenFeatureAvailable);
                 pkg.setPersistent(requiredFeature == null || mCallback.hasFeature(requiredFeature));
             }
-
-            // TODO(b/135203078): Should parsing code be responsible for this? Maybe move to a
-            //  util or just have PackageImpl return true if either flag is set
-            pkg.setProfileableByShell(pkg.isProfileableByShell());
 
             if (sa.hasValueOrEmpty(R.styleable.AndroidManifestApplication_resizeableActivity)) {
                 pkg.setResizeableActivity(sa.getBoolean(
@@ -2375,21 +2372,8 @@ public class ParsingPackageUtils {
      * ratio set.
      */
     private void setMinAspectRatio(ParsingPackage pkg) {
-        final float minAspectRatio;
-        float packageMinAspectRatio = pkg.getMinAspectRatio();
-        if (packageMinAspectRatio != 0) {
-            // Use the application max aspect ration as default if set.
-            minAspectRatio = packageMinAspectRatio;
-        } else {
-            // Default to (1.33) 4:3 aspect ratio for pre-Q apps and unset for Q and greater.
-            // NOTE: 4:3 was the min aspect ratio Android devices can support pre-Q per the CDD,
-            // except for watches which always supported 1:1.
-            minAspectRatio = pkg.getTargetSdkVersion() >= Build.VERSION_CODES.Q
-                    ? 0
-                    : (mCallback != null && mCallback.hasFeature(FEATURE_WATCH))
-                            ? PackageParser.DEFAULT_PRE_Q_MIN_ASPECT_RATIO_WATCH
-                            : PackageParser.DEFAULT_PRE_Q_MIN_ASPECT_RATIO;
-        }
+        // Use the application max aspect ration as default if set.
+        final float minAspectRatio = pkg.getMinAspectRatio();
 
         List<ParsedActivity> activities = pkg.getActivities();
         int activitiesSize = activities.size();
@@ -2438,7 +2422,7 @@ public class ParsingPackageUtils {
                     R.styleable.AndroidManifestResourceOverlay_requiredSystemPropertyValue);
             if (!PackageParser.checkRequiredSystemProperties(propName, propValue)) {
                 String message = "Skipping target and overlay pair " + target + " and "
-                        + pkg.getBaseCodePath()
+                        + pkg.getBaseApkPath()
                         + ": overlay ignored due to required system property: "
                         + propName + " with value: " + propValue;
                 Slog.i(TAG, message);
@@ -2693,7 +2677,7 @@ public class ParsingPackageUtils {
                                     "<meta-data> only supports string, integer, float, color, "
                                             + "boolean, and resource reference types: "
                                             + parser.getName() + " at "
-                                            + pkg.getBaseCodePath() + " "
+                                            + pkg.getBaseApkPath() + " "
                                             + parser.getPositionDescription());
                         } else {
                             return input.error("<meta-data> only supports string, integer, float, "
@@ -2730,7 +2714,7 @@ public class ParsingPackageUtils {
         try {
             ParseResult<SigningDetails> result = getSigningDetails(
                     input,
-                    pkg.getBaseCodePath(),
+                    pkg.getBaseApkPath(),
                     skipVerify,
                     pkg.isStaticSharedLibrary(),
                     signingDetails,
@@ -2876,7 +2860,7 @@ public class ParsingPackageUtils {
         boolean hasFeature(String feature);
 
         ParsingPackage startParsingPackage(@NonNull String packageName,
-                @NonNull String baseCodePath, @NonNull String codePath,
+                @NonNull String baseApkPath, @NonNull String path,
                 @NonNull TypedArray manifestArray, boolean isCoreApp);
     }
 }

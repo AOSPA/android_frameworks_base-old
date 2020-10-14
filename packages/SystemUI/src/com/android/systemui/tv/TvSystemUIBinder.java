@@ -16,14 +16,13 @@
 
 package com.android.systemui.tv;
 
-import com.android.systemui.dagger.SystemUIRootComponent;
-import com.android.systemui.pip.tv.dagger.PipModule;
+import com.android.systemui.dagger.GlobalRootComponent;
 
 import dagger.Binds;
 import dagger.Module;
 
-@Module(includes = {PipModule.class})
+@Module()
 interface TvSystemUIBinder {
     @Binds
-    SystemUIRootComponent bindSystemUIRootComponent(TvSystemUIRootComponent systemUIRootComponent);
+    GlobalRootComponent bindGlobalRootComponent(TvGlobalRootComponent globalRootComponent);
 }

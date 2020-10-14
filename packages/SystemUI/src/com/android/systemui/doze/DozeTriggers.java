@@ -39,6 +39,7 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.UiEventLoggerImpl;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.Dependency;
+import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.doze.dagger.DozeScope;
@@ -93,6 +94,7 @@ public class DozeTriggers implements DozeMachine.Part {
     private final DockManager mDockManager;
     private final ProximitySensor.ProximityCheck mProxCheck;
     private final BroadcastDispatcher mBroadcastDispatcher;
+    private final AuthController mAuthController;
 
     private long mNotificationPulseTime;
     private boolean mPulsePending;
@@ -165,7 +167,7 @@ public class DozeTriggers implements DozeMachine.Part {
             WakeLock wakeLock, DockManager dockManager,
             ProximitySensor proximitySensor, ProximitySensor.ProximityCheck proxCheck,
             DozeLog dozeLog, BroadcastDispatcher broadcastDispatcher,
-            SecureSettings secureSettings) {
+            SecureSettings secureSettings, AuthController authController) {
         mContext = context;
         mDozeHost = dozeHost;
         mConfig = config;
@@ -181,6 +183,7 @@ public class DozeTriggers implements DozeMachine.Part {
         mProxCheck = proxCheck;
         mDozeLog = dozeLog;
         mBroadcastDispatcher = broadcastDispatcher;
+        mAuthController = authController;
     }
 
     @Override
@@ -256,17 +259,18 @@ public class DozeTriggers implements DozeMachine.Part {
         boolean isLongPress = pulseReason == DozeLog.PULSE_REASON_SENSOR_LONG_PRESS;
         boolean isWakeDisplay = pulseReason == DozeLog.REASON_SENSOR_WAKE_UP;
         boolean isWakeLockScreen = pulseReason == DozeLog.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN;
+        boolean isUdfpsLongPress = pulseReason == DozeLog.REASON_SENSOR_UDFPS_LONG_PRESS;
         boolean wakeEvent = rawValues != null && rawValues.length > 0 && rawValues[0] != 0;
 
         if (isWakeDisplay) {
             onWakeScreen(wakeEvent, mMachine.isExecutingTransition() ? null : mMachine.getState());
         } else if (isLongPress) {
             requestPulse(pulseReason, true /* alreadyPerformedProxCheck */,
-                    null /* onPulseSupressedListener */);
+                    null /* onPulseSuppressedListener */);
         } else if (isWakeLockScreen) {
             if (wakeEvent) {
                 requestPulse(pulseReason, true /* alreadyPerformedProxCheck */,
-                        null /* onPulseSupressedListener */);
+                        null /* onPulseSuppressedListener */);
             }
         } else {
             proximityCheckThenCall((result) -> {
@@ -281,6 +285,11 @@ public class DozeTriggers implements DozeMachine.Part {
                     gentleWakeUp(pulseReason);
                 } else if (isPickup) {
                     gentleWakeUp(pulseReason);
+                } else if (isUdfpsLongPress) {
+                    gentleWakeUp(pulseReason);
+                    // Since the gesture won't be received by the UDFPS view, manually inject an
+                    // event.
+                    mAuthController.onAodInterrupt((int) screenX, (int) screenY);
                 } else {
                     mDozeHost.extendPulse(pulseReason);
                 }
@@ -536,7 +545,7 @@ public class DozeTriggers implements DozeMachine.Part {
             if (PULSE_ACTION.equals(intent.getAction())) {
                 if (DozeMachine.DEBUG) Log.d(TAG, "Received pulse intent");
                 requestPulse(DozeLog.PULSE_REASON_INTENT, false, /* performedProxCheck */
-                        null /* onPulseSupressedListener */);
+                        null /* onPulseSuppressedListener */);
             }
             if (UiModeManager.ACTION_ENTER_CAR_MODE.equals(intent.getAction())) {
                 mMachine.requestState(DozeMachine.State.FINISH);

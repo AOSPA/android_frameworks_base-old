@@ -2144,7 +2144,7 @@ public class StatsPullAtomService extends SystemService {
             JSONArray app_sizes = json.getJSONArray(DiskStatsFileLogger.APP_SIZES_KEY);
             JSONArray app_data_sizes = json.getJSONArray(DiskStatsFileLogger.APP_DATA_KEY);
             JSONArray app_cache_sizes = json.getJSONArray(DiskStatsFileLogger.APP_CACHES_KEY);
-            // Sanity check: Ensure all 4 lists have the same length.
+            // Validity check: Ensure all 4 lists have the same length.
             int length = pkg_names.length();
             if (app_sizes.length() != length || app_data_sizes.length() != length
                     || app_cache_sizes.length() != length) {
@@ -3005,10 +3005,10 @@ public class StatsPullAtomService extends SystemService {
                           Settings.Secure.FACE_UNLOCK_KEYGUARD_ENABLED, 1, userId);
                 int unlockDismissesKeyguard = Settings.Secure.getIntForUser(
                           mContext.getContentResolver(),
-                          Settings.Secure.FACE_UNLOCK_DISMISSES_KEYGUARD, 0, userId);
+                          Settings.Secure.FACE_UNLOCK_DISMISSES_KEYGUARD, 1, userId);
                 int unlockAttentionRequired = Settings.Secure.getIntForUser(
                           mContext.getContentResolver(),
-                          Settings.Secure.FACE_UNLOCK_ATTENTION_REQUIRED, 1, userId);
+                          Settings.Secure.FACE_UNLOCK_ATTENTION_REQUIRED, 0, userId);
                 int unlockAppEnabled = Settings.Secure.getIntForUser(
                           mContext.getContentResolver(),
                           Settings.Secure.FACE_UNLOCK_APP_ENABLED, 1, userId);

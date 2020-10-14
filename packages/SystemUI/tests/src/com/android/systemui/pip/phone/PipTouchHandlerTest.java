@@ -37,6 +37,7 @@ import com.android.systemui.model.SysUiState;
 import com.android.systemui.pip.PipBoundsHandler;
 import com.android.systemui.pip.PipSnapAlgorithm;
 import com.android.systemui.pip.PipTaskOrganizer;
+import com.android.systemui.pip.PipUiEventLogger;
 import com.android.systemui.shared.system.InputConsumerController;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.FloatingContentCoordinator;
@@ -71,9 +72,6 @@ public class PipTouchHandlerTest extends SysuiTestCase {
     private InputConsumerController mInputConsumerController;
 
     @Mock
-    private PipBoundsHandler mPipBoundsHandler;
-
-    @Mock
     private PipTaskOrganizer mPipTaskOrganizer;
 
     @Mock
@@ -85,6 +83,10 @@ public class PipTouchHandlerTest extends SysuiTestCase {
     @Mock
     private SysUiState mSysUiState;
 
+    @Mock
+    private PipUiEventLogger mPipUiEventLogger;
+
+    private PipBoundsHandler mPipBoundsHandler;
     private PipSnapAlgorithm mPipSnapAlgorithm;
     private PipMotionHelper mMotionHelper;
     private PipResizeGestureHandler mPipResizeGestureHandler;
@@ -100,11 +102,13 @@ public class PipTouchHandlerTest extends SysuiTestCase {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
+        mPipBoundsHandler = new PipBoundsHandler(mContext);
+        mPipSnapAlgorithm = mPipBoundsHandler.getSnapAlgorithm();
         mPipSnapAlgorithm = new PipSnapAlgorithm(mContext);
         mPipTouchHandler = new PipTouchHandler(mContext, mActivityManager,
                 mPipMenuActivityController, mInputConsumerController, mPipBoundsHandler,
-                mPipTaskOrganizer, mFloatingContentCoordinator, mDeviceConfigProxy,
-                mPipSnapAlgorithm, mSysUiState);
+                mPipTaskOrganizer, mFloatingContentCoordinator, mDeviceConfigProxy, mSysUiState,
+                mPipUiEventLogger);
         mMotionHelper = Mockito.spy(mPipTouchHandler.getMotionHelper());
         mPipResizeGestureHandler = Mockito.spy(mPipTouchHandler.getPipResizeGestureHandler());
         mPipTouchHandler.setPipMotionHelper(mMotionHelper);

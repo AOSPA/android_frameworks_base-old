@@ -306,6 +306,8 @@ public class TelephonyManager {
     private static boolean sServiceHandleCacheEnabled = true;
 
     @GuardedBy("sCacheLock")
+    private static ITelephony sITelephony;
+    @GuardedBy("sCacheLock")
     private static IPhoneSubInfo sIPhoneSubInfo;
     @GuardedBy("sCacheLock")
     private static ISub sISub;
@@ -4185,7 +4187,7 @@ public class TelephonyManager {
         }
     }
 
-   /**
+    /**
      * @param keyAvailability bitmask that defines the availabilty of keys for a type.
      * @param keyType the key type which is being checked. (WLAN, EPDG)
      * @return true if the digit at position keyType is 1, else false.
@@ -5505,13 +5507,39 @@ public class TelephonyManager {
         }
     }
 
-   /**
-    * @hide
-    */
+    /**
+     * @hide
+     */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private ITelephony getITelephony() {
-        return ITelephony.Stub.asInterface(TelephonyFrameworkInitializer
-                .getTelephonyServiceManager().getTelephonyServiceRegisterer().get());
+        // Keeps cache disabled until test fixes are checked into AOSP.
+        if (!sServiceHandleCacheEnabled) {
+            return ITelephony.Stub.asInterface(
+                    TelephonyFrameworkInitializer
+                            .getTelephonyServiceManager()
+                            .getTelephonyServiceRegisterer()
+                            .get());
+        }
+
+        if (sITelephony == null) {
+            ITelephony temp = ITelephony.Stub.asInterface(
+                    TelephonyFrameworkInitializer
+                            .getTelephonyServiceManager()
+                            .getTelephonyServiceRegisterer()
+                            .get());
+            synchronized (sCacheLock) {
+                if (sITelephony == null && temp != null) {
+                    try {
+                        sITelephony = temp;
+                        sITelephony.asBinder().linkToDeath(sServiceDeath, 0);
+                    } catch (Exception e) {
+                        // something has gone horribly wrong
+                        sITelephony = null;
+                    }
+                }
+            }
+        }
+        return sITelephony;
     }
 
     private IOns getIOns() {
@@ -5561,8 +5589,49 @@ public class TelephonyManager {
      * @param events The telephony state(s) of interest to the listener,
      *               as a bitwise-OR combination of {@link PhoneStateListener}
      *               LISTEN_ flags.
+     * @deprecated use {@link #listen(long, PhoneStateListener) instead due to the event number
+     *             limit increased to 64.
      */
+    @Deprecated
     public void listen(PhoneStateListener listener, int events) {
+        listen(events, listener);
+    }
+
+    /**
+     * Registers a listener object to receive notification of changes
+     * in specified telephony states.
+     * <p>
+     * To register a listener, pass a {@link PhoneStateListener} and specify at least one telephony
+     * state of interest in the events argument.
+     *
+     * At registration, and when a specified telephony state changes, the telephony manager invokes
+     * the appropriate callback method on the listener object and passes the current (updated)
+     * values.
+     * <p>
+     * To un-register a listener, pass the listener object and set the events argument to
+     * {@link PhoneStateListener#LISTEN_NONE LISTEN_NONE} (0).
+     *
+     * If this TelephonyManager object has been created with {@link #createForSubscriptionId},
+     * applies to the given subId. Otherwise, applies to
+     * {@link SubscriptionManager#getDefaultSubscriptionId()}. To listen events for multiple subIds,
+     * pass a separate listener object to each TelephonyManager object created with
+     * {@link #createForSubscriptionId}.
+     *
+     * Note: if you call this method while in the middle of a binder transaction, you <b>must</b>
+     * call {@link android.os.Binder#clearCallingIdentity()} before calling this method. A
+     * {@link SecurityException} will be thrown otherwise.
+     *
+     * This API should be used sparingly -- large numbers of listeners will cause system
+     * instability. If a process has registered too many listeners without unregistering them, it
+     * may encounter an {@link IllegalStateException} when trying to register more listeners.
+     *
+     * @param events The telephony state(s) of interest to the listener,
+     *               as a bitwise-OR combination of {@link PhoneStateListener}
+     *               LISTEN_ flags.
+     * @param listener The {@link PhoneStateListener} object to register
+     *                 (or unregister)
+     */
+    public void listen(long events, @NonNull PhoneStateListener listener) {
         if (mContext == null) return;
         boolean notifyNow = (getITelephony() != null);
         TelephonyRegistryManager telephonyRegistry =
@@ -9237,7 +9306,7 @@ public class TelephonyManager {
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
      * @param enable Whether to enable mobile data.
-     * @deprecated use setDataEnabledWithReason with reason DATA_ENABLED_REASON_USER instead.
+     * @deprecated use setDataEnabledForReason with reason DATA_ENABLED_REASON_USER instead.
      *
      */
     @Deprecated
@@ -9249,16 +9318,16 @@ public class TelephonyManager {
 
     /**
      * @hide
-     * @deprecated use {@link #setDataEnabledWithReason(int, boolean)} instead.
+     * @deprecated use {@link #setDataEnabledForReason(int, boolean)} instead.
     */
     @SystemApi
     @Deprecated
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setDataEnabled(int subId, boolean enable) {
         try {
-            setDataEnabledWithReason(subId, DATA_ENABLED_REASON_USER, enable);
+            setDataEnabledForReason(subId, DATA_ENABLED_REASON_USER, enable);
         } catch (RuntimeException e) {
-            Log.e(TAG, "Error calling setDataEnabledWithReason e:" + e);
+            Log.e(TAG, "Error calling setDataEnabledForReason e:" + e);
         }
     }
 
@@ -9467,9 +9536,9 @@ public class TelephonyManager {
     @SystemApi
     public boolean getDataEnabled(int subId) {
         try {
-            return isDataEnabledWithReason(DATA_ENABLED_REASON_USER);
+            return isDataEnabledForReason(DATA_ENABLED_REASON_USER);
         } catch (RuntimeException e) {
-            Log.e(TAG, "Error calling isDataEnabledWithReason e:" + e);
+            Log.e(TAG, "Error calling isDataEnabledForReason e:" + e);
         }
         return false;
     }
@@ -11022,7 +11091,7 @@ public class TelephonyManager {
      *
      * @param enabled control enable or disable carrier data.
      * @see #resetAllCarrierActions()
-     * @deprecated use {@link #setDataEnabledWithReason(int, boolean) with
+     * @deprecated use {@link #setDataEnabledForReason(int, boolean) with
      * reason {@link #DATA_ENABLED_REASON_CARRIER}} instead.
      * @hide
      */
@@ -11031,9 +11100,9 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setCarrierDataEnabled(boolean enabled) {
         try {
-            setDataEnabledWithReason(DATA_ENABLED_REASON_CARRIER, enabled);
+            setDataEnabledForReason(DATA_ENABLED_REASON_CARRIER, enabled);
         } catch (RuntimeException e) {
-            Log.e(TAG, "Error calling setDataEnabledWithReason e:" + e);
+            Log.e(TAG, "Error calling setDataEnabledForReason e:" + e);
         }
     }
 
@@ -11119,7 +11188,7 @@ public class TelephonyManager {
     /**
      * Policy control of data connection. Usually used when data limit is passed.
      * @param enabled True if enabling the data, otherwise disabling.
-     * @deprecated use {@link #setDataEnabledWithReason(int, boolean) with
+     * @deprecated use {@link #setDataEnabledForReason(int, boolean) with
      * reason {@link #DATA_ENABLED_REASON_POLICY}} instead.
      * @hide
      */
@@ -11127,9 +11196,9 @@ public class TelephonyManager {
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     public void setPolicyDataEnabled(boolean enabled) {
         try {
-            setDataEnabledWithReason(DATA_ENABLED_REASON_POLICY, enabled);
+            setDataEnabledForReason(DATA_ENABLED_REASON_POLICY, enabled);
         } catch (RuntimeException e) {
-            Log.e(TAG, "Error calling setDataEnabledWithReason e:" + e);
+            Log.e(TAG, "Error calling setDataEnabledForReason e:" + e);
         }
     }
 
@@ -11145,36 +11214,28 @@ public class TelephonyManager {
 
     /**
      * To indicate that user enabled or disabled data.
-     * @hide
      */
-    @SystemApi
     public static final int DATA_ENABLED_REASON_USER = 0;
 
     /**
      * To indicate that data control due to policy. Usually used when data limit is passed.
      * Policy data on/off won't affect user settings but will bypass the
      * settings and turns off data internally if set to {@code false}.
-     * @hide
      */
-    @SystemApi
     public static final int DATA_ENABLED_REASON_POLICY = 1;
 
     /**
      * To indicate enable or disable carrier data by the system based on carrier signalling or
      * carrier privileged apps. Carrier data on/off won't affect user settings but will bypass the
      * settings and turns off data internally if set to {@code false}.
-     * @hide
      */
-    @SystemApi
     public static final int DATA_ENABLED_REASON_CARRIER = 2;
 
     /**
      * To indicate enable or disable data by thermal service.
      * Thermal data on/off won't affect user settings but will bypass the
      * settings and turns off data internally if set to {@code false}.
-     * @hide
      */
-    @SystemApi
     public static final int DATA_ENABLED_REASON_THERMAL = 3;
 
     /**
@@ -11203,25 +11264,23 @@ public class TelephonyManager {
      * has {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} irrespective of
      * the reason.
      * @throws IllegalStateException if the Telephony process is not currently available.
-     * @hide
      */
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
-    @SystemApi
-    public void setDataEnabledWithReason(@DataEnabledReason int reason, boolean enabled) {
-        setDataEnabledWithReason(getSubId(), reason, enabled);
+    public void setDataEnabledForReason(@DataEnabledReason int reason, boolean enabled) {
+        setDataEnabledForReason(getSubId(), reason, enabled);
     }
 
-    private void setDataEnabledWithReason(int subId, @DataEnabledReason int reason,
+    private void setDataEnabledForReason(int subId, @DataEnabledReason int reason,
             boolean enabled) {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
-                service.setDataEnabledWithReason(subId, reason, enabled);
+                service.setDataEnabledForReason(subId, reason, enabled);
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
         } catch (RemoteException ex) {
-            Log.e(TAG, "Telephony#setDataEnabledWithReason RemoteException", ex);
+            Log.e(TAG, "Telephony#setDataEnabledForReason RemoteException", ex);
             ex.rethrowFromSystemServer();
         }
     }
@@ -11229,9 +11288,11 @@ public class TelephonyManager {
     /**
      * Return whether data is enabled for certain reason .
      *
-     * If {@link #isDataEnabledWithReason} returns false, it means in data enablement for a
+     * If {@link #isDataEnabledForReason} returns false, it means in data enablement for a
      * specific reason is turned off. If any of the reason is off, then it will result in
-     * bypassing user preference and result in data to be turned off.
+     * bypassing user preference and result in data to be turned off. Call
+     * {@link #isDataConnectionAllowed} in order to know whether
+     * data connection is allowed on the device.
      *
      * <p>If this object has been created with {@link #createForSubscriptionId}, applies
      *      to the given subId. Otherwise, applies to
@@ -11240,27 +11301,26 @@ public class TelephonyManager {
      * @param reason the reason the data enable change is taking place
      * @return whether data is enabled for a reason.
      * <p>Requires Permission:
-     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} or
+     * {@link android.Manifest.permission#ACCESS_NETWORK_STATE}
      * @throws IllegalStateException if the Telephony process is not currently available.
-     * @hide
      */
     @RequiresPermission(anyOf = {android.Manifest.permission.ACCESS_NETWORK_STATE,
             android.Manifest.permission.READ_PHONE_STATE})
-    @SystemApi
-    public boolean isDataEnabledWithReason(@DataEnabledReason int reason) {
-        return isDataEnabledWithReason(getSubId(), reason);
+    public boolean isDataEnabledForReason(@DataEnabledReason int reason) {
+        return isDataEnabledForReason(getSubId(), reason);
     }
 
-    private boolean isDataEnabledWithReason(int subId, @DataEnabledReason int reason) {
+    private boolean isDataEnabledForReason(int subId, @DataEnabledReason int reason) {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
-                return service.isDataEnabledWithReason(subId, reason);
+                return service.isDataEnabledForReason(subId, reason);
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
         } catch (RemoteException ex) {
-            Log.e(TAG, "Telephony#isDataEnabledWithReason RemoteException", ex);
+            Log.e(TAG, "Telephony#isDataEnabledForReason RemoteException", ex);
             ex.rethrowFromSystemServer();
         }
         return false;
@@ -11401,10 +11461,14 @@ public class TelephonyManager {
      *   <LI>And possibly others.</LI>
      * </UL>
      * @return {@code true} if the overall data connection is allowed; {@code false} if not.
-     * @hide
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} or
+     * {@link android.Manifest.permission#ACCESS_NETWORK_STATE} or
+     * android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE
      */
-    @SystemApi
-    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @RequiresPermission(anyOf = {android.Manifest.permission.ACCESS_NETWORK_STATE,
+            android.Manifest.permission.READ_PHONE_STATE,
+            android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE})
     public boolean isDataConnectionAllowed() {
         boolean retVal = false;
         try {
@@ -13371,6 +13435,10 @@ public class TelephonyManager {
     */
     private static void resetServiceCache() {
         synchronized (sCacheLock) {
+            if (sITelephony != null) {
+                sITelephony.asBinder().unlinkToDeath(sServiceDeath, 0);
+                sITelephony = null;
+            }
             if (sISub != null) {
                 sISub.asBinder().unlinkToDeath(sServiceDeath, 0);
                 sISub = null;
@@ -13387,9 +13455,9 @@ public class TelephonyManager {
         }
     }
 
-   /**
-    * @hide
-    */
+    /**
+     * @hide
+     */
     static IPhoneSubInfo getSubscriberInfoService() {
         // Keeps cache disabled until test fixes are checked into AOSP.
         if (!sServiceHandleCacheEnabled) {

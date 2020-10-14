@@ -16,6 +16,8 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.view.Display.INVALID_DISPLAY;
@@ -50,7 +52,7 @@ import org.mockito.Mockito;
  */
 @Presubmit
 @RunWith(WindowTestRunner.class)
-public class WindowProcessControllerTests extends ActivityTestsBase {
+public class WindowProcessControllerTests extends WindowTestsBase {
 
     WindowProcessController mWpc;
     WindowProcessListener mMockListener;
@@ -62,7 +64,7 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
         ApplicationInfo info = mock(ApplicationInfo.class);
         info.packageName = "test.package.name";
         mWpc = new WindowProcessController(
-                mService, info, null, 0, -1, null, mMockListener);
+                mAtm, info, null, 0, -1, null, mMockListener);
         mWpc.setThread(mock(IApplicationThread.class));
     }
 
@@ -108,7 +110,7 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
     public void testSetRunningRecentsAnimation() {
         mWpc.setRunningRecentsAnimation(true);
         mWpc.setRunningRecentsAnimation(false);
-        waitHandlerIdle(mService.mH);
+        waitHandlerIdle(mAtm.mH);
 
         InOrder orderVerifier = Mockito.inOrder(mMockListener);
         orderVerifier.verify(mMockListener).setRunningRemoteAnimation(eq(true));
@@ -119,7 +121,7 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
     public void testSetRunningRemoteAnimation() {
         mWpc.setRunningRemoteAnimation(true);
         mWpc.setRunningRemoteAnimation(false);
-        waitHandlerIdle(mService.mH);
+        waitHandlerIdle(mAtm.mH);
 
         InOrder orderVerifier = Mockito.inOrder(mMockListener);
         orderVerifier.verify(mMockListener).setRunningRemoteAnimation(eq(true));
@@ -133,7 +135,7 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
 
         mWpc.setRunningRecentsAnimation(false);
         mWpc.setRunningRemoteAnimation(false);
-        waitHandlerIdle(mService.mH);
+        waitHandlerIdle(mAtm.mH);
 
         InOrder orderVerifier = Mockito.inOrder(mMockListener);
         orderVerifier.verify(mMockListener, times(3)).setRunningRemoteAnimation(eq(true));
@@ -147,12 +149,12 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
         assertEquals(INVALID_DISPLAY, mWpc.getDisplayId());
 
         // Register to a new display as a listener.
-        final DisplayContent display = new TestDisplayContent.Builder(mService, 2000, 1000)
+        final DisplayContent display = new TestDisplayContent.Builder(mAtm, 2000, 1000)
                 .setDensityDpi(300).setPosition(DisplayContent.POSITION_TOP).build();
         mWpc.registerDisplayConfigurationListener(display);
 
         assertEquals(display.mDisplayId, mWpc.getDisplayId());
-        final Configuration expectedConfig = mService.mRootWindowContainer.getConfiguration();
+        final Configuration expectedConfig = mAtm.mRootWindowContainer.getConfiguration();
         expectedConfig.updateFrom(display.getConfiguration());
         assertEquals(expectedConfig, mWpc.getConfiguration());
     }
@@ -184,15 +186,15 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
 
     @Test
     public void testActivityNotOverridingSystemUiProcessConfig() {
-        final ComponentName systemUiServiceComponent = mService.getSysUiServiceComponentLocked();
+        final ComponentName systemUiServiceComponent = mAtm.getSysUiServiceComponentLocked();
         ApplicationInfo applicationInfo = mock(ApplicationInfo.class);
         applicationInfo.packageName = systemUiServiceComponent.getPackageName();
 
         WindowProcessController wpc = new WindowProcessController(
-                mService, applicationInfo, null, 0, -1, null, mMockListener);
+                mAtm, applicationInfo, null, 0, -1, null, mMockListener);
         wpc.setThread(mock(IApplicationThread.class));
 
-        final ActivityRecord activity = new ActivityBuilder(mService)
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setUseProcess(wpc)
                 .build();
@@ -209,7 +211,7 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
         // Notify WPC that this process has started an IME service.
         mWpc.onServiceStarted(serviceInfo);
 
-        final ActivityRecord activity = new ActivityBuilder(mService)
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setUseProcess(mWpc)
                 .build();
@@ -226,7 +228,7 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
         // Notify WPC that this process has started an ally service.
         mWpc.onServiceStarted(serviceInfo);
 
-        final ActivityRecord activity = new ActivityBuilder(mService)
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setUseProcess(mWpc)
                 .build();
@@ -243,7 +245,7 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
         // Notify WPC that this process has started an voice interaction service.
         mWpc.onServiceStarted(serviceInfo);
 
-        final ActivityRecord activity = new ActivityBuilder(mService)
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setUseProcess(mWpc)
                 .build();
@@ -253,8 +255,21 @@ public class WindowProcessControllerTests extends ActivityTestsBase {
         assertFalse(mWpc.registeredForActivityConfigChanges());
     }
 
+    @Test
+    public void testProcessLevelConfiguration() {
+        Configuration config = new Configuration();
+        config.windowConfiguration.setActivityType(ACTIVITY_TYPE_HOME);
+        mWpc.onRequestedOverrideConfigurationChanged(config);
+        assertEquals(ACTIVITY_TYPE_HOME, config.windowConfiguration.getActivityType());
+        assertEquals(ACTIVITY_TYPE_UNDEFINED, mWpc.getActivityType());
+
+        mWpc.onMergedOverrideConfigurationChanged(config);
+        assertEquals(ACTIVITY_TYPE_HOME, config.windowConfiguration.getActivityType());
+        assertEquals(ACTIVITY_TYPE_UNDEFINED, mWpc.getActivityType());
+    }
+
     private TestDisplayContent createTestDisplayContentInContainer() {
-        return new TestDisplayContent.Builder(mService, 1000, 1500).build();
+        return new TestDisplayContent.Builder(mAtm, 1000, 1500).build();
     }
 
     private static void invertOrientation(Configuration config) {

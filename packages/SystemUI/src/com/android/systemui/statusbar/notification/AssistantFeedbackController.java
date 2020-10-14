@@ -20,13 +20,20 @@ import static android.service.notification.NotificationListenerService.Ranking;
 
 import android.content.ContentResolver;
 import android.content.Context;
+import android.database.ContentObserver;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.UserHandle;
 import android.provider.Settings;
 
+import androidx.annotation.Nullable;
+
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Determines whether to show any indicators or controls related to notification assistant.
@@ -34,24 +41,43 @@ import javax.inject.Singleton;
  * Flags protect any changes from being shown. Notifications that are adjusted by the assistant
  * should show an indicator.
  */
-@Singleton
-public class AssistantFeedbackController {
+@SysUISingleton
+public class AssistantFeedbackController extends ContentObserver {
+    private final Uri FEEDBACK_URI
+            = Settings.Global.getUriFor(Settings.Global.NOTIFICATION_FEEDBACK_ENABLED);
     private ContentResolver mResolver;
+
+    private boolean mFeedbackEnabled;
 
     /** Injected constructor */
     @Inject
     public AssistantFeedbackController(Context context) {
+        super(new Handler(Looper.getMainLooper()));
         mResolver = context.getContentResolver();
+        mResolver.registerContentObserver(FEEDBACK_URI, false, this, UserHandle.USER_ALL);
+        update(null);
+    }
+
+    @Override
+    public void onChange(boolean selfChange, @Nullable Uri uri, int flags) {
+        update(uri);
+    }
+
+    @VisibleForTesting
+    public void update(@Nullable Uri uri) {
+        if (uri == null || FEEDBACK_URI.equals(uri)) {
+            mFeedbackEnabled = Settings.Global.getInt(mResolver,
+                    Settings.Global.NOTIFICATION_FEEDBACK_ENABLED, 0)
+                    != 0;
+        }
     }
 
     /**
      * Determines whether to show any user controls related to the assistant. This is based on the
-     * settings flag {@link Settings.Secure.NOTIFICATION_FEEDBACK_ENABLED}
+     * settings flag {@link Settings.Global.NOTIFICATION_FEEDBACK_ENABLED}
      */
     public boolean isFeedbackEnabled() {
-        return Settings.Secure.getIntForUser(mResolver,
-                Settings.Secure.NOTIFICATION_FEEDBACK_ENABLED, 0,
-                UserHandle.USER_CURRENT) == 1;
+        return mFeedbackEnabled;
     }
 
     /**

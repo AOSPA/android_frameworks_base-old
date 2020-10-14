@@ -43,6 +43,7 @@ import com.android.internal.infra.AbstractRemoteService;
 import com.android.internal.os.BackgroundThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -70,7 +71,7 @@ import java.util.Objects;
  * <p>See {@code com.android.server.autofill.AutofillManagerService} for a concrete
  * (no pun intended) example of how to use it.
  *
- * @param <M> "master" service class.
+ * @param <M> "main" service class.
  * @param <S> "real" service class.
  *
  * @hide
@@ -299,16 +300,16 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
     }
 
     @Override // from SystemService
-    public void onUnlockUser(int userId) {
+    public void onUserUnlocking(@NonNull TargetUser user) {
         synchronized (mLock) {
-            updateCachedServiceLocked(userId);
+            updateCachedServiceLocked(user.getUserIdentifier());
         }
     }
 
     @Override // from SystemService
-    public void onCleanupUser(int userId) {
+    public void onUserStopped(@NonNull TargetUser user) {
         synchronized (mLock) {
-            removeCachedServiceLocked(userId);
+            removeCachedServiceLocked(user.getUserIdentifier());
         }
     }
 
@@ -948,7 +949,7 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
                         if (debug) {
                             Slog.d(mTag, "Eagerly recreating service for user " + userId);
                         }
-                        getServiceForUserLocked(userId);
+                        updateCachedServiceLocked(userId);
                     }
                 }
                 onServicePackageRestartedLocked(userId);

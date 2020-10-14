@@ -2,38 +2,25 @@ filegroup {
     name: "services.core-sources",
     srcs: ["java/**/*.java"],
     path: "java",
-    visibility: ["//frameworks/base/services"],
-}
-
-java_library {
-    name: "protolog-common",
-    srcs: [
-        "java/com/android/server/protolog/common/**/*.java",
+    visibility: [
+        "//frameworks/base/services",
+        "//frameworks/base/core/java/com/android/internal/protolog",
     ],
-    host_supported: true,
-}
-
-java_library {
-    name: "services.core.wm.protologgroups",
-    srcs: [
-        "java/com/android/server/wm/ProtoLogGroup.java",
-    ],
-    static_libs: ["protolog-common"],
 }
 
 genrule {
     name: "services.core.protologsrc",
     srcs: [
-        ":services.core.wm.protologgroups",
+        ":protolog-groups",
         ":services.core-sources",
     ],
     tools: ["protologtool"],
     cmd: "$(location protologtool) transform-protolog-calls " +
-      "--protolog-class com.android.server.protolog.common.ProtoLog " +
-      "--protolog-impl-class com.android.server.protolog.ProtoLogImpl " +
-      "--protolog-cache-class 'com.android.server.protolog.ProtoLog$$Cache' " +
-      "--loggroups-class com.android.server.wm.ProtoLogGroup " +
-      "--loggroups-jar $(location :services.core.wm.protologgroups) " +
+      "--protolog-class com.android.internal.protolog.common.ProtoLog " +
+      "--protolog-impl-class com.android.internal.protolog.ProtoLogImpl " +
+      "--protolog-cache-class 'com.android.server.wm.ProtoLogCache' " +
+      "--loggroups-class com.android.internal.protolog.ProtoLogGroup " +
+      "--loggroups-jar $(location :protolog-groups) " +
       "--output-srcjar $(out) " +
       "$(locations :services.core-sources)",
     out: ["services.core.protolog.srcjar"],
@@ -42,14 +29,14 @@ genrule {
 genrule {
     name: "generate-protolog.json",
     srcs: [
-        ":services.core.wm.protologgroups",
+        ":protolog-groups",
         ":services.core-sources",
     ],
     tools: ["protologtool"],
     cmd: "$(location protologtool) generate-viewer-config " +
-      "--protolog-class com.android.server.protolog.common.ProtoLog " +
-      "--loggroups-class com.android.server.wm.ProtoLogGroup " +
-      "--loggroups-jar $(location :services.core.wm.protologgroups) " +
+      "--protolog-class com.android.internal.protolog.common.ProtoLog " +
+      "--loggroups-class com.android.internal.protolog.ProtoLogGroup " +
+      "--loggroups-jar $(location :protolog-groups) " +
       "--viewer-conf $(out) " +
       "$(locations :services.core-sources)",
     out: ["services.core.protolog.json"],
@@ -79,6 +66,7 @@ java_library_static {
         ":framework_native_aidl",
         ":gsiservice_aidl",
         ":idmap2_aidl",
+        ":inputconstants_aidl",
         ":installd_aidl",
         ":storaged_aidl",
         ":vold_aidl",
@@ -112,6 +100,7 @@ java_library_static {
     ],
 
     static_libs: [
+        "protolog-lib",
         "time_zone_distro",
         "time_zone_distro_installer",
         "android.hardware.authsecret-V1.0-java",
@@ -132,6 +121,7 @@ java_library_static {
         "android.hidl.manager-V1.2-java",
         "capture_state_listener-aidl-java",
         "dnsresolver_aidl_interface-java",
+        "icu4j_calendar_astronomer",
         "netd_aidl_interfaces-platform-java",
         "overlayable_policy_aidl-java",
         "SurfaceFlingerProperties",

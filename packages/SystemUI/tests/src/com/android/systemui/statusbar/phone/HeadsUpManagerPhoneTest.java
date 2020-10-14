@@ -33,9 +33,11 @@ import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.AlertingNotificationManager;
 import com.android.systemui.statusbar.AlertingNotificationManagerTest;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
+import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 
@@ -56,7 +58,7 @@ public class HeadsUpManagerPhoneTest extends AlertingNotificationManagerTest {
 
     private HeadsUpManagerPhone mHeadsUpManager;
 
-    @Mock private NotificationGroupManager mGroupManager;
+    @Mock private NotificationGroupManagerLegacy mGroupManager;
     @Mock private View mNotificationShadeWindowView;
     @Mock private VisualStabilityManager mVSManager;
     @Mock private StatusBar mBar;
@@ -68,7 +70,7 @@ public class HeadsUpManagerPhoneTest extends AlertingNotificationManagerTest {
     private final class TestableHeadsUpManagerPhone extends HeadsUpManagerPhone {
         TestableHeadsUpManagerPhone(
                 Context context,
-                NotificationGroupManager groupManager,
+                NotificationGroupManagerLegacy groupManager,
                 VisualStabilityManager vsManager,
                 StatusBarStateController statusBarStateController,
                 KeyguardBypassController keyguardBypassController,

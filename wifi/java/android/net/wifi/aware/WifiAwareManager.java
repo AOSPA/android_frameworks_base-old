@@ -179,6 +179,22 @@ public class WifiAwareManager {
     }
 
     /**
+     * Return the current status of the Aware service: whether ot not the device is already attached
+     * to an Aware cluster. To attach to an Aware cluster, please use
+     * {@link #attach(AttachCallback, Handler)} or
+     * {@link #attach(AttachCallback, IdentityChangedListener, Handler)}.
+     * @return A boolean indicating whether the device is attached to a cluster at this time (true)
+     *         or not (false).
+     */
+    public boolean isDeviceAttached() {
+        try {
+            return mService.isDeviceAttached();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns the characteristics of the Wi-Fi Aware interface: a set of parameters which specify
      * limitations on configurations, e.g. the maximum service name length.
      *
@@ -587,6 +603,7 @@ public class WifiAwareManager {
         private static final int CALLBACK_MESSAGE_SEND_FAIL = 6;
         private static final int CALLBACK_MESSAGE_RECEIVED = 7;
         private static final int CALLBACK_MATCH_WITH_DISTANCE = 8;
+        private static final int CALLBACK_MATCH_EXPIRED = 9;
 
         private static final String MESSAGE_BUNDLE_KEY_MESSAGE = "message";
         private static final String MESSAGE_BUNDLE_KEY_MESSAGE2 = "message2";
@@ -676,6 +693,9 @@ public class WifiAwareManager {
                             mOriginalCallback.onMessageReceived(new PeerHandle(msg.arg1),
                                     (byte[]) msg.obj);
                             break;
+                        case CALLBACK_MATCH_EXPIRED:
+                            mOriginalCallback
+                                    .onServiceLost(new PeerHandle(msg.arg1));
                     }
                 }
             };
@@ -745,6 +765,15 @@ public class WifiAwareManager {
 
             onMatchCommon(CALLBACK_MATCH_WITH_DISTANCE, peerId, serviceSpecificInfo, matchFilter,
                     distanceMm);
+        }
+        @Override
+        public void onMatchExpired(int peerId) {
+            if (VDBG) {
+                Log.v(TAG, "onMatchExpired: peerId=" + peerId);
+            }
+            Message msg = mHandler.obtainMessage(CALLBACK_MATCH_EXPIRED);
+            msg.arg1 = peerId;
+            mHandler.sendMessage(msg);
         }
 
         @Override

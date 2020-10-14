@@ -20,7 +20,7 @@
 #include <EGL/eglext.h>
 #include <GrBackendSemaphore.h>
 #include <GrBackendSurface.h>
-#include <GrContext.h>
+#include <GrDirectContext.h>
 #include <GrTypes.h>
 #include <android/sync.h>
 #include <ui/FatVector.h>
@@ -57,12 +57,22 @@ static void free_features_extensions_structs(const VkPhysicalDeviceFeatures2& fe
 #define GET_INST_PROC(F) m##F = (PFN_vk##F)vkGetInstanceProcAddr(mInstance, "vk" #F)
 #define GET_DEV_PROC(F) m##F = (PFN_vk##F)vkGetDeviceProcAddr(mDevice, "vk" #F)
 
-void VulkanManager::destroy() {
-    if (VK_NULL_HANDLE != mCommandPool) {
-        mDestroyCommandPool(mDevice, mCommandPool, nullptr);
-        mCommandPool = VK_NULL_HANDLE;
+sp<VulkanManager> VulkanManager::getInstance() {
+    // cache a weakptr to the context to enable a second thread to share the same vulkan state
+    static wp<VulkanManager> sWeakInstance = nullptr;
+    static std::mutex sLock;
+
+    std::lock_guard _lock{sLock};
+    sp<VulkanManager> vulkanManager = sWeakInstance.promote();
+    if (!vulkanManager.get()) {
+        vulkanManager = new VulkanManager();
+        sWeakInstance = vulkanManager;
     }
 
+    return vulkanManager;
+}
+
+VulkanManager::~VulkanManager() {
     if (mDevice != VK_NULL_HANDLE) {
         mDeviceWaitIdle(mDevice);
         mDestroyDevice(mDevice, nullptr);
@@ -73,7 +83,7 @@ void VulkanManager::destroy() {
     }
 
     mGraphicsQueue = VK_NULL_HANDLE;
-    mPresentQueue = VK_NULL_HANDLE;
+    mAHBUploadQueue = VK_NULL_HANDLE;
     mDevice = VK_NULL_HANDLE;
     mPhysicalDevice = VK_NULL_HANDLE;
     mInstance = VK_NULL_HANDLE;
@@ -175,14 +185,11 @@ void VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
     for (uint32_t i = 0; i < queueCount; i++) {
         if (queueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             mGraphicsQueueIndex = i;
+            LOG_ALWAYS_FATAL_IF(queueProps[i].queueCount < 2);
             break;
         }
     }
     LOG_ALWAYS_FATAL_IF(mGraphicsQueueIndex == queueCount);
-
-    // All physical devices and queue families on Android must be capable of
-    // presentation with any native window. So just use the first one.
-    mPresentQueueIndex = 0;
 
     {
         uint32_t extensionCount = 0;
@@ -277,31 +284,21 @@ void VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
         queueNextPtr = &queuePriorityCreateInfo;
     }
 
-    const VkDeviceQueueCreateInfo queueInfo[2] = {
-            {
-                    VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,  // sType
-                    queueNextPtr,                                // pNext
-                    0,                                           // VkDeviceQueueCreateFlags
-                    mGraphicsQueueIndex,                         // queueFamilyIndex
-                    1,                                           // queueCount
-                    queuePriorities,                             // pQueuePriorities
-            },
-            {
-                    VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,  // sType
-                    queueNextPtr,                                // pNext
-                    0,                                           // VkDeviceQueueCreateFlags
-                    mPresentQueueIndex,                          // queueFamilyIndex
-                    1,                                           // queueCount
-                    queuePriorities,                             // pQueuePriorities
-            }};
-    uint32_t queueInfoCount = (mPresentQueueIndex != mGraphicsQueueIndex) ? 2 : 1;
+    const VkDeviceQueueCreateInfo queueInfo = {
+            VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,  // sType
+            queueNextPtr,                                // pNext
+            0,                                           // VkDeviceQueueCreateFlags
+            mGraphicsQueueIndex,                         // queueFamilyIndex
+            2,                                           // queueCount
+            queuePriorities,                             // pQueuePriorities
+    };
 
     const VkDeviceCreateInfo deviceInfo = {
             VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,  // sType
             &features,                             // pNext
             0,                                     // VkDeviceCreateFlags
-            queueInfoCount,                        // queueCreateInfoCount
-            queueInfo,                             // pQueueCreateInfos
+            1,                                     // queueCreateInfoCount
+            &queueInfo,                            // pQueueCreateInfos
             0,                                     // layerCount
             nullptr,                               // ppEnabledLayerNames
             (uint32_t)mDeviceExtensions.size(),    // extensionCount
@@ -347,29 +344,15 @@ void VulkanManager::initialize() {
     this->setupDevice(mExtensions, mPhysicalDeviceFeatures2);
 
     mGetDeviceQueue(mDevice, mGraphicsQueueIndex, 0, &mGraphicsQueue);
-
-    // create the command pool for the command buffers
-    if (VK_NULL_HANDLE == mCommandPool) {
-        VkCommandPoolCreateInfo commandPoolInfo;
-        memset(&commandPoolInfo, 0, sizeof(VkCommandPoolCreateInfo));
-        commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        // this needs to be on the render queue
-        commandPoolInfo.queueFamilyIndex = mGraphicsQueueIndex;
-        commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        SkDEBUGCODE(VkResult res =)
-                mCreateCommandPool(mDevice, &commandPoolInfo, nullptr, &mCommandPool);
-        SkASSERT(VK_SUCCESS == res);
-    }
-    LOG_ALWAYS_FATAL_IF(mCommandPool == VK_NULL_HANDLE);
-
-    mGetDeviceQueue(mDevice, mPresentQueueIndex, 0, &mPresentQueue);
+    mGetDeviceQueue(mDevice, mGraphicsQueueIndex, 1, &mAHBUploadQueue);
 
     if (Properties::enablePartialUpdates && Properties::useBufferAge) {
         mSwapBehavior = SwapBehavior::BufferAge;
     }
 }
 
-sk_sp<GrContext> VulkanManager::createContext(const GrContextOptions& options) {
+sk_sp<GrDirectContext> VulkanManager::createContext(const GrContextOptions& options,
+                                                    ContextType contextType) {
     auto getProc = [](const char* proc_name, VkInstance instance, VkDevice device) {
         if (device != VK_NULL_HANDLE) {
             return vkGetDeviceProcAddr(device, proc_name);
@@ -381,14 +364,15 @@ sk_sp<GrContext> VulkanManager::createContext(const GrContextOptions& options) {
     backendContext.fInstance = mInstance;
     backendContext.fPhysicalDevice = mPhysicalDevice;
     backendContext.fDevice = mDevice;
-    backendContext.fQueue = mGraphicsQueue;
+    backendContext.fQueue = (contextType == ContextType::kRenderThread) ? mGraphicsQueue
+                                                                        : mAHBUploadQueue;
     backendContext.fGraphicsQueueIndex = mGraphicsQueueIndex;
     backendContext.fMaxAPIVersion = mAPIVersion;
     backendContext.fVkExtensions = &mExtensions;
     backendContext.fDeviceFeatures2 = &mPhysicalDeviceFeatures2;
     backendContext.fGetProc = std::move(getProc);
 
-    return GrContext::MakeVulkan(backendContext, options);
+    return GrDirectContext::MakeVulkan(backendContext, options);
 }
 
 VkFunctorInitParams VulkanManager::getVkFunctorInitParams() const {
@@ -532,8 +516,9 @@ void VulkanManager::swapBuffers(VulkanSurface* surface, const SkRect& dirtyRect)
     flushInfo.fFinishedContext = destroyInfo;
     GrSemaphoresSubmitted submitted = bufferInfo->skSurface->flush(
             SkSurface::BackendSurfaceAccess::kPresent, flushInfo);
-    ALOGE_IF(!bufferInfo->skSurface->getContext(), "Surface is not backed by gpu");
-    bufferInfo->skSurface->getContext()->submit();
+    GrDirectContext* context = GrAsDirectContext(bufferInfo->skSurface->recordingContext());
+    ALOGE_IF(!context, "Surface is not backed by gpu");
+    context->submit();
     if (submitted == GrSemaphoresSubmitted::kYes) {
         VkSemaphoreGetFdInfoKHR getFdInfo;
         getFdInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
@@ -554,17 +539,19 @@ void VulkanManager::swapBuffers(VulkanSurface* surface, const SkRect& dirtyRect)
 
 void VulkanManager::destroySurface(VulkanSurface* surface) {
     // Make sure all submit commands have finished before starting to destroy objects.
-    if (VK_NULL_HANDLE != mPresentQueue) {
-        mQueueWaitIdle(mPresentQueue);
+    if (VK_NULL_HANDLE != mGraphicsQueue) {
+        mQueueWaitIdle(mGraphicsQueue);
     }
     mDeviceWaitIdle(mDevice);
 
     delete surface;
 }
 
-VulkanSurface* VulkanManager::createSurface(ANativeWindow* window, ColorMode colorMode,
+VulkanSurface* VulkanManager::createSurface(ANativeWindow* window,
+                                            ColorMode colorMode,
                                             sk_sp<SkColorSpace> surfaceColorSpace,
-                                            SkColorType surfaceColorType, GrContext* grContext,
+                                            SkColorType surfaceColorType,
+                                            GrDirectContext* grContext,
                                             uint32_t extraBuffers) {
     LOG_ALWAYS_FATAL_IF(!hasVkContext(), "Not initialized");
     if (!window) {
@@ -575,7 +562,7 @@ VulkanSurface* VulkanManager::createSurface(ANativeWindow* window, ColorMode col
                                  *this, extraBuffers);
 }
 
-status_t VulkanManager::fenceWait(int fence, GrContext* grContext) {
+status_t VulkanManager::fenceWait(int fence, GrDirectContext* grContext) {
     if (!hasVkContext()) {
         ALOGE("VulkanManager::fenceWait: VkDevice not initialized");
         return INVALID_OPERATION;
@@ -623,7 +610,7 @@ status_t VulkanManager::fenceWait(int fence, GrContext* grContext) {
     return OK;
 }
 
-status_t VulkanManager::createReleaseFence(int* nativeFence, GrContext* grContext) {
+status_t VulkanManager::createReleaseFence(int* nativeFence, GrDirectContext* grContext) {
     *nativeFence = -1;
     if (!hasVkContext()) {
         ALOGE("VulkanManager::createReleaseFence: VkDevice not initialized");

@@ -42,10 +42,37 @@ import java.util.Set;
  * Settings data for a particular package we know about.
  */
 public class PackageSetting extends PackageSettingBase {
-    int appId;
 
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public int appId;
+
+    /**
+     * This can be null whenever a physical APK on device is missing. This can be the result of
+     * removing an external storage device where the APK resides.
+     *
+     * This will result in the system reading the {@link PackageSetting} from disk, but without
+     * being able to parse the base APK's AndroidManifest.xml to read all of its metadata. The data
+     * that is written and read in {@link Settings} includes a minimal set of metadata needed to
+     * perform other checks in the system.
+     *
+     * This is important in order to enforce uniqueness within the system, as the package, even if
+     * on a removed storage device, is still considered installed. Another package of the same
+     * application ID or declaring the same permissions or similar cannot be installed.
+     *
+     * Re-attaching the storage device to make the APK available should allow the user to use the
+     * app once the device reboots or otherwise re-scans it.
+     *
+     * It is expected that all code that uses a {@link PackageSetting} understands this inner field
+     * may be null. Note that this relationship only works one way. It should not be possible to
+     * have an entry inside {@link PackageManagerService#mPackages} without a corresponding
+     * {@link PackageSetting} inside {@link Settings#mPackages}.
+     *
+     * @deprecated Use {@link #getPkg()}. The setter is favored to avoid unintended mutation.
+     */
     @Nullable
+    @Deprecated
     public AndroidPackage pkg;
+
     /**
      * WARNING. The object reference is important. We perform integer equality and NOT
      * object equality to check whether shared user settings are the same.
@@ -71,13 +98,13 @@ public class PackageSetting extends PackageSettingBase {
     private PackageStateUnserialized pkgState = new PackageStateUnserialized();
 
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-    public PackageSetting(String name, String realName, File codePath, File resourcePath,
+    public PackageSetting(String name, String realName, @NonNull File codePath,
             String legacyNativeLibraryPathString, String primaryCpuAbiString,
             String secondaryCpuAbiString, String cpuAbiOverrideString,
             long pVersionCode, int pkgFlags, int privateFlags,
             int sharedUserId, String[] usesStaticLibraries,
             long[] usesStaticLibrariesVersions, Map<String, ArraySet<String>> mimeGroups) {
-        super(name, realName, codePath, resourcePath, legacyNativeLibraryPathString,
+        super(name, realName, codePath, legacyNativeLibraryPathString,
                 primaryCpuAbiString, secondaryCpuAbiString, cpuAbiOverrideString,
                 pVersionCode, pkgFlags, privateFlags,
                 usesStaticLibraries, usesStaticLibrariesVersions);
@@ -102,6 +129,12 @@ public class PackageSetting extends PackageSettingBase {
     PackageSetting(PackageSetting orig, String realPkgName) {
         super(orig, realPkgName);
         doCopy(orig);
+    }
+
+    /** @see #pkg **/
+    @Nullable
+    public AndroidPackage getPkg() {
+        return pkg;
     }
 
     public int getSharedUserId() {
@@ -200,7 +233,6 @@ public class PackageSetting extends PackageSettingBase {
         return installPermissionsFixed;
     }
 
-    // TODO(b/135203078): Remove these in favor of reading from the package directly
     public boolean isPrivileged() {
         return (pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED) != 0;
     }

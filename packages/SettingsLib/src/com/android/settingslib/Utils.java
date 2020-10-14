@@ -13,6 +13,7 @@ import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -28,6 +29,10 @@ import android.provider.Settings;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.ServiceState;
+
+import androidx.annotation.NonNull;
+import androidx.core.graphics.drawable.RoundedBitmapDrawable;
+import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.UserIcons;
@@ -49,11 +54,19 @@ public class Utils {
     private static String sSharedSystemSharedLibPackageName;
 
     static final int[] WIFI_PIE = {
-            com.android.internal.R.drawable.ic_wifi_signal_0,
-            com.android.internal.R.drawable.ic_wifi_signal_1,
-            com.android.internal.R.drawable.ic_wifi_signal_2,
-            com.android.internal.R.drawable.ic_wifi_signal_3,
-            com.android.internal.R.drawable.ic_wifi_signal_4
+        com.android.internal.R.drawable.ic_wifi_signal_0,
+        com.android.internal.R.drawable.ic_wifi_signal_1,
+        com.android.internal.R.drawable.ic_wifi_signal_2,
+        com.android.internal.R.drawable.ic_wifi_signal_3,
+        com.android.internal.R.drawable.ic_wifi_signal_4
+    };
+
+    static final int[] SHOW_X_WIFI_PIE = {
+        R.drawable.ic_show_x_wifi_signal_0,
+        R.drawable.ic_show_x_wifi_signal_1,
+        R.drawable.ic_show_x_wifi_signal_2,
+        R.drawable.ic_show_x_wifi_signal_3,
+        R.drawable.ic_show_x_wifi_signal_4
     };
 
     static final int[] WIFI_4_PIE = {
@@ -377,7 +390,19 @@ public class Utils {
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
     public static int getWifiIconResource(int level) {
-        return getWifiIconResource(level, 0 /* standard */, false /* isReady */);
+        return getWifiIconResource(false /* showX */, level, 0 /* standard */, false /* isReady */);
+    }
+
+    /**
+     * Returns the Wifi icon resource for a given RSSI level.
+     *
+     * @param showX True if a connected Wi-Fi network has the problem which should show Pie+x
+     *              signal icon to users.
+     * @param level The number of bars to show (0-4)
+     * @throws IllegalArgumentException if an invalid RSSI level is given.
+     */
+    public static int getWifiIconResource(boolean showX, int level) {
+        return getWifiIconResource(showX, level, 0 /* standard */, false /* isReady */);
     }
 
     /**
@@ -387,9 +412,23 @@ public class Utils {
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
     public static int getWifiIconResource(int level, int standard, boolean isReady) {
+        return getWifiIconResource(false /* showX */, level,  standard, isReady);
+    }
+
+    /**
+     * Returns the Wifi icon resource for a given RSSI level.
+     *
+     * @param showX True if a connected Wi-Fi network has the problem which should show Pie+x
+     *              signal icon to users.
+     * @param level The number of bars to show (0-4)
+     * @throws IllegalArgumentException if an invalid RSSI level is given.
+     */
+    public static int getWifiIconResource(boolean showX, int level, int standard, boolean isReady) {
         if (level < 0 || level >= WIFI_PIE.length) {
             throw new IllegalArgumentException("No Wifi icon found for level: " + level);
         }
+
+        if (showX) return SHOW_X_WIFI_PIE[level];
 
         switch (standard) {
             case 4:
@@ -531,5 +570,26 @@ public class Utils {
                 || (networkRegWlan.getRegistrationState()
                 == NetworkRegistrationInfo.REGISTRATION_STATE_ROAMING);
         return !isInIwlan;
+    }
+
+    /**
+     * Returns a bitmap with rounded corner.
+     *
+     * @param context application context.
+     * @param source bitmap to apply round corner.
+     * @param cornerRadius corner radius value.
+     */
+    public static Bitmap convertCornerRadiusBitmap(@NonNull Context context,
+            @NonNull Bitmap source, @NonNull float cornerRadius) {
+        final Bitmap roundedBitmap = Bitmap.createBitmap(source.getWidth(), source.getHeight(),
+                Bitmap.Config.ARGB_8888);
+        final RoundedBitmapDrawable drawable =
+                RoundedBitmapDrawableFactory.create(context.getResources(), source);
+        drawable.setAntiAlias(true);
+        drawable.setCornerRadius(cornerRadius);
+        final Canvas canvas = new Canvas(roundedBitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return roundedBitmap;
     }
 }

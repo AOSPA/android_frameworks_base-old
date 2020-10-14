@@ -32,6 +32,7 @@ import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.accessibility.IWindowMagnificationConnection;
 import android.view.accessibility.IWindowMagnificationConnectionCallback;
+import android.view.accessibility.MagnificationAnimationCallback;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -67,13 +68,14 @@ public class WindowMagnificationManager implements
     private SparseArray<WindowMagnifier> mWindowMagnifiers = new SparseArray<>();
     private int mUserId;
 
+    private boolean mReceiverRegistered = false;
     @VisibleForTesting
     protected final BroadcastReceiver mScreenStateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             final int displayId = context.getDisplayId();
             removeMagnificationButton(displayId);
-            disableWindowMagnification(displayId);
+            disableWindowMagnification(displayId, false);
         }
     };
 
@@ -84,11 +86,12 @@ public class WindowMagnificationManager implements
 
     /**
      * Sets {@link IWindowMagnificationConnection}.
+     *
      * @param connection {@link IWindowMagnificationConnection}
      */
     public void setConnection(@Nullable IWindowMagnificationConnection connection) {
         synchronized (mLock) {
-            //Reset connectionWrapper.
+            // Reset connectionWrapper.
             if (mConnectionWrapper != null) {
                 mConnectionWrapper.setConnectionCallback(null);
                 if (mConnectionCallback != null) {
@@ -124,7 +127,6 @@ public class WindowMagnificationManager implements
     }
 
     /**
-     *
      * @return {@code true} if {@link IWindowMagnificationConnection} is available
      */
     public boolean isConnected() {
@@ -136,10 +138,10 @@ public class WindowMagnificationManager implements
     /**
      * Requests {@link IWindowMagnificationConnection} through
      * {@link StatusBarManagerInternal#requestWindowMagnificationConnection(boolean)} and
-     * destroys all window magnifiers if necessary.
+     * destroys all window magnifications if necessary.
      *
      * @param connect {@code true} if needs connection, otherwise set the connection to null and
-     *                            destroy all window magnifiers.
+     *                destroy all window magnifications.
      * @return {@code true} if {@link IWindowMagnificationConnection} state is going to change.
      */
     public boolean requestConnection(boolean connect) {
@@ -149,10 +151,16 @@ public class WindowMagnificationManager implements
             }
             if (connect) {
                 final IntentFilter intentFilter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
-                mContext.registerReceiver(mScreenStateReceiver, intentFilter);
+                if (!mReceiverRegistered) {
+                    mContext.registerReceiver(mScreenStateReceiver, intentFilter);
+                    mReceiverRegistered = true;
+                }
             } else {
                 disableAllWindowMagnifiers();
-                mContext.unregisterReceiver(mScreenStateReceiver);
+                if (mReceiverRegistered) {
+                    mContext.unregisterReceiver(mScreenStateReceiver);
+                    mReceiverRegistered = false;
+                }
             }
         }
 
@@ -171,7 +179,7 @@ public class WindowMagnificationManager implements
     private void disableAllWindowMagnifiers() {
         for (int i = 0; i < mWindowMagnifiers.size(); i++) {
             final WindowMagnifier magnifier = mWindowMagnifiers.valueAt(i);
-            magnifier.disable();
+            magnifier.disableWindowMagnificationInternal(null);
         }
         mWindowMagnifiers.clear();
     }
@@ -187,12 +195,12 @@ public class WindowMagnificationManager implements
 
     @Override
     public boolean processScroll(int displayId, float distanceX, float distanceY) {
-        moveWindowMagnifier(displayId, -distanceX, -distanceY);
+        moveWindowMagnification(displayId, -distanceX, -distanceY);
         return /* event consumed: */ true;
     }
 
     /**
-     * Scales the magnified region on the specified display if the window magnifier is enabled.
+     * Scales the magnified region on the specified display if window magnification is initiated.
      *
      * @param displayId The logical display id.
      * @param scale The target scale, must be >= 1
@@ -209,37 +217,72 @@ public class WindowMagnificationManager implements
     }
 
     /**
-     * Enables the window magnifier with specified center and scale on the specified display.
-     *  @param displayId The logical display id.
+     * Enables window magnification with specified center and scale on the given display and
+     * animating the transition.
+     *
+     * @param displayId The logical display id.
      * @param scale The target scale, must be >= 1.
      * @param centerX The screen-relative X coordinate around which to center,
      *                or {@link Float#NaN} to leave unchanged.
      * @param centerY The screen-relative Y coordinate around which to center,
      *                or {@link Float#NaN} to leave unchanged.
      */
-    void enableWindowMagnifier(int displayId, float scale, float centerX, float centerY) {
+    void enableWindowMagnification(int displayId, float scale, float centerX, float centerY) {
+        enableWindowMagnification(displayId, scale, centerX, centerY, null);
+    }
+
+    /**
+     * Enables window magnification with specified center and scale on the specified display and
+     * animating the transition.
+     *
+     * @param displayId The logical display id.
+     * @param scale The target scale, must be >= 1.
+     * @param centerX The screen-relative X coordinate around which to center,
+     *                or {@link Float#NaN} to leave unchanged.
+     * @param centerY The screen-relative Y coordinate around which to center,
+     *                or {@link Float#NaN} to leave unchanged.
+     * @param animationCallback Called when the animation result is valid.
+     */
+    void enableWindowMagnification(int displayId, float scale, float centerX, float centerY,
+            @Nullable MagnificationAnimationCallback animationCallback) {
         synchronized (mLock) {
+            if (mConnectionWrapper == null) {
+                return;
+            }
             WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
             if (magnifier == null) {
                 magnifier = createWindowMagnifier(displayId);
             }
-            magnifier.enable(scale, centerX, centerY);
+            magnifier.enableWindowMagnificationInternal(scale, centerX, centerY,
+                    animationCallback);
         }
     }
 
     /**
-     * Disables the window magnifier on the specified display.
+     * Disables window magnification on the given display.
      *
      * @param displayId The logical display id.
-     * @param clear {@true} Clears the state of the window magnifier
+     * @param clear {@true} Clears the state of window magnification.
      */
-    void disableWindowMagnifier(int displayId, boolean clear) {
+    void disableWindowMagnification(int displayId, boolean clear) {
+        disableWindowMagnification(displayId, clear, null);
+    }
+
+    /**
+     * Disables window magnification on the specified display and animating the transition.
+     *
+     * @param displayId The logical display id.
+     * @param clear {@true} Clears the state of window magnification.
+     * @param animationCallback Called when the animation result is valid.
+     */
+    void disableWindowMagnification(int displayId, boolean clear,
+            MagnificationAnimationCallback animationCallback) {
         synchronized (mLock) {
             WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
-            if (magnifier == null) {
+            if (magnifier == null || mConnectionWrapper == null) {
                 return;
             }
-            magnifier.disable();
+            magnifier.disableWindowMagnificationInternal(animationCallback);
             if (clear) {
                 mWindowMagnifiers.delete(displayId);
             }
@@ -264,12 +307,13 @@ public class WindowMagnificationManager implements
     }
 
     /**
-     * Indicates whether this window magnifier is enabled on specified display.
+     * Indicates whether window magnification is enabled on specified display.
      *
      * @param displayId The logical display id.
-     * @return {@code true} if the window magnifier is enabled.
+     * @return {@code true} if the window magnification is enabled.
      */
-    boolean isWindowMagnifierEnabled(int displayId) {
+    @VisibleForTesting
+    public boolean isWindowMagnifierEnabled(int displayId) {
         synchronized (mLock) {
             WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
             if (magnifier == null) {
@@ -323,7 +367,7 @@ public class WindowMagnificationManager implements
     }
 
     /**
-     * Moves the window magnifier with specified offset.
+     * Moves window magnification on the specified display with the specified offset.
      *
      * @param displayId The logical display id.
      * @param offsetX the amount in pixels to offset the region in the X direction, in current
@@ -331,7 +375,7 @@ public class WindowMagnificationManager implements
      * @param offsetY the amount in pixels to offset the region in the Y direction, in current
      *                screen pixels.
      */
-    void moveWindowMagnifier(int displayId, float offsetX, float offsetY) {
+    void moveWindowMagnification(int displayId, float offsetX, float offsetY) {
         synchronized (mLock) {
             WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
             if (magnifier == null) {
@@ -365,7 +409,40 @@ public class WindowMagnificationManager implements
     }
 
     /**
+     * Returns the screen-relative X coordinate of the center of the magnified bounds.
+     *
+     * @param displayId The logical display id
+     * @return the X coordinate. {@link Float#NaN} if the window magnification is not enabled.
+     */
+    float getCenterX(int displayId) {
+        synchronized (mLock) {
+            WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
+            if (magnifier == null) {
+                return Float.NaN;
+            }
+            return magnifier.getCenterX();
+        }
+    }
+
+    /**
+     * Returns the screen-relative Y coordinate of the center of the magnified bounds.
+     *
+     * @param displayId The logical display id
+     * @return the Y coordinate. {@link Float#NaN} if the window magnification is not enabled.
+     */
+    float getCenterY(int displayId) {
+        synchronized (mLock) {
+            WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
+            if (magnifier == null) {
+                return Float.NaN;
+            }
+            return magnifier.getCenterY();
+        }
+    }
+
+    /**
      * Creates the windowMagnifier based on the specified display and stores it.
+     *
      * @param displayId logical display id.
      */
     @GuardedBy("mLock")
@@ -384,7 +461,7 @@ public class WindowMagnificationManager implements
             synchronized (mLock) {
                 WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
                 if (magnifier == null) {
-                    return;
+                    magnifier = createWindowMagnifier(displayId);
                 }
                 if (DBG) {
                     Slog.i(TAG,
@@ -398,6 +475,17 @@ public class WindowMagnificationManager implements
         public void onChangeMagnificationMode(int displayId, int magnificationMode)
                 throws RemoteException {
             //TODO: Uses this method to change the magnification mode on non-default display.
+        }
+
+        @Override
+        public void onSourceBoundsChanged(int displayId, Rect sourceBounds) {
+            synchronized (mLock) {
+                WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
+                if (magnifier == null) {
+                    magnifier = createWindowMagnifier(displayId);
+                }
+                magnifier.onSourceBoundsChanged(sourceBounds);
+            }
         }
 
         @Override
@@ -416,7 +504,8 @@ public class WindowMagnificationManager implements
     }
 
     /**
-     * A class to  manipulate the window magnifier and contains the relevant information.
+     * A class manipulates window magnification per display and contains the magnification
+     * information.
      */
     private static class WindowMagnifier {
 
@@ -425,29 +514,35 @@ public class WindowMagnificationManager implements
         private boolean mEnabled;
 
         private final WindowMagnificationManager mWindowMagnificationManager;
-        //Records the bounds of window magnifier.
+        // Records the bounds of window magnification.
         private final Rect mBounds = new Rect();
+        // The magnified bounds on the screen.
+        private final Rect mSourceBounds = new Rect();
+
         WindowMagnifier(int displayId, WindowMagnificationManager windowMagnificationManager) {
             mDisplayId = displayId;
             mWindowMagnificationManager = windowMagnificationManager;
         }
 
         @GuardedBy("mLock")
-        void enable(float scale, float centerX, float centerY) {
+        void enableWindowMagnificationInternal(float scale, float centerX, float centerY,
+                @Nullable MagnificationAnimationCallback animationCallback) {
             if (mEnabled) {
                 return;
             }
             final float normScale = MathUtils.constrain(scale, MIN_SCALE, MAX_SCALE);
-            if (mWindowMagnificationManager.enableWindowMagnification(mDisplayId, normScale,
-                    centerX, centerY)) {
+            if (mWindowMagnificationManager.enableWindowMagnificationInternal(mDisplayId, normScale,
+                    centerX, centerY, animationCallback)) {
                 mScale = normScale;
                 mEnabled = true;
             }
         }
 
         @GuardedBy("mLock")
-        void disable() {
-            if (mEnabled && mWindowMagnificationManager.disableWindowMagnification(mDisplayId)) {
+        void disableWindowMagnificationInternal(
+                @Nullable MagnificationAnimationCallback animationResultCallback) {
+            if (mEnabled && mWindowMagnificationManager.disableWindowMagnificationInternal(
+                    mDisplayId, animationResultCallback)) {
                 mEnabled = false;
             }
         }
@@ -502,21 +597,37 @@ public class WindowMagnificationManager implements
         void reset() {
             mEnabled = false;
         }
+
+        @GuardedBy("mLock")
+        public void onSourceBoundsChanged(Rect sourceBounds) {
+            mSourceBounds.set(sourceBounds);
+        }
+
+        @GuardedBy("mLock")
+        float getCenterX() {
+            return mEnabled ? mSourceBounds.exactCenterX() : Float.NaN;
+        }
+
+        @GuardedBy("mLock")
+        float getCenterY() {
+            return mEnabled ? mSourceBounds.exactCenterY() : Float.NaN;
+        }
     }
 
-    private boolean enableWindowMagnification(int displayId, float scale, float centerX,
-            float centerY) {
+    private boolean enableWindowMagnificationInternal(int displayId, float scale, float centerX,
+            float centerY, MagnificationAnimationCallback animationCallback) {
         return mConnectionWrapper != null && mConnectionWrapper.enableWindowMagnification(
-                displayId, scale, centerX, centerY);
+                displayId, scale, centerX, centerY, animationCallback);
     }
 
     private boolean setScaleInternal(int displayId, float scale) {
         return mConnectionWrapper != null && mConnectionWrapper.setScale(displayId, scale);
     }
 
-    private boolean disableWindowMagnification(int displayId) {
+    private boolean disableWindowMagnificationInternal(int displayId,
+            MagnificationAnimationCallback animationCallback) {
         return mConnectionWrapper != null && mConnectionWrapper.disableWindowMagnification(
-                displayId);
+                displayId, animationCallback);
     }
 
     private boolean moveWindowMagnifierInternal(int displayId, float offsetX, float offsetY) {

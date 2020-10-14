@@ -47,8 +47,9 @@ import java.util.function.Consumer;
 
 @RunWith(JUnit4.class)
 public class StagedInstallInternalTest {
-
-    private static final String TAG = StagedInstallInternalTest.class.getSimpleName();
+    private static final String APK_IN_APEX_TESTAPEX_NAME = "com.android.apex.apkrollback.test";
+    private static final TestApp TEST_APEX_WITH_APK_V2 = new TestApp("TestApexWithApkV2",
+            APK_IN_APEX_TESTAPEX_NAME, 2, /*isApex*/true, APK_IN_APEX_TESTAPEX_NAME + "_v2.apex");
 
     private File mTestStateFile = new File(
             InstrumentationRegistry.getInstrumentation().getContext().getFilesDir(),
@@ -82,6 +83,24 @@ public class StagedInstallInternalTest {
     }
 
     @Test
+    public void testDuplicateApkInApexShouldFail_Commit() throws Exception {
+        assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(1);
+        // Duplicate packages(TestApp.A) in TEST_APEX_WITH_APK_V2(apk-in-apex) and TestApp.A2(apk)
+        // should fail to install.
+        int sessionId = Install.multi(TEST_APEX_WITH_APK_V2, TestApp.A2).setStaged().commit();
+        storeSessionId(sessionId);
+    }
+
+    @Test
+    public void testDuplicateApkInApexShouldFail_Verify() throws Exception {
+        assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(1);
+        int sessionId = retrieveLastSessionId();
+        PackageInstaller.SessionInfo info =
+                InstallUtils.getPackageInstaller().getSessionInfo(sessionId);
+        assertThat(info.isStagedSessionFailed()).isTrue();
+    }
+
+    @Test
     public void testSystemServerRestartDoesNotAffectStagedSessions_Commit() throws Exception {
         int sessionId = Install.single(TestApp.A1).setStaged().commit();
         assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(-1);
@@ -94,6 +113,18 @@ public class StagedInstallInternalTest {
         assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(-1);
         int sessionId = retrieveLastSessionId();
         assertSessionReady(sessionId);
+    }
+
+    @Test
+    public void testAbandonStagedSessionShouldCleanUp() throws Exception {
+        int id1 = Install.single(TestApp.A1).setStaged().createSession();
+        InstallUtils.getPackageInstaller().abandonSession(id1);
+        int id2 = Install.multi(TestApp.A1).setStaged().createSession();
+        InstallUtils.getPackageInstaller().abandonSession(id2);
+        int id3 = Install.single(TestApp.A1).setStaged().commit();
+        InstallUtils.getPackageInstaller().abandonSession(id3);
+        int id4 = Install.multi(TestApp.A1).setStaged().commit();
+        InstallUtils.getPackageInstaller().abandonSession(id4);
     }
 
     private static void assertSessionReady(int sessionId) {

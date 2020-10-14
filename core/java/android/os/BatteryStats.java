@@ -743,6 +743,12 @@ public abstract class BatteryStats implements Parcelable {
         @UnsupportedAppUsage
         public abstract ArrayMap<String, ? extends Pkg> getPackageStats();
 
+        /**
+         * Returns the proportion of power consumed by the System Service
+         * calls made by this UID.
+         */
+        public abstract double getProportionalSystemServiceUsage();
+
         public abstract ControllerActivityCounter getWifiControllerActivity();
         public abstract ControllerActivityCounter getBluetoothControllerActivity();
         public abstract ControllerActivityCounter getModemControllerActivity();
@@ -1776,7 +1782,7 @@ public abstract class BatteryStats implements Parcelable {
         public static final int EVENT_PACKAGE_INACTIVE = 0x000f;
         // Event for a package becoming active due to an interaction.
         public static final int EVENT_PACKAGE_ACTIVE = 0x0010;
-        // Event for a package being on the temporary whitelist.
+        // Event for a package being on the temporary allowlist.
         public static final int EVENT_TEMP_WHITELIST = 0x0011;
         // Event for the screen waking up.
         public static final int EVENT_SCREEN_WAKE_UP = 0x0012;
@@ -2882,6 +2888,17 @@ public abstract class BatteryStats implements Parcelable {
     public abstract int getDischargeAmountScreenDozeSinceCharge();
 
     /**
+     * Returns the approximate CPU time (in microseconds) spent by the system server handling
+     * incoming service calls from apps.
+     *
+     * @param cluster the index of the CPU cluster.
+     * @param step the index of the CPU speed. This is not the actual speed of the CPU.
+     * @see com.android.internal.os.PowerProfile#getNumCpuClusters()
+     * @see com.android.internal.os.PowerProfile#getNumSpeedStepsInCpuCluster(int)
+     */
+    public abstract long getSystemServiceTimeAtCpuSpeed(int cluster, int step);
+
+    /**
      * Returns the total, last, or current battery uptime in microseconds.
      *
      * @param curTime the elapsed realtime in microseconds.
@@ -2937,7 +2954,7 @@ public abstract class BatteryStats implements Parcelable {
      * enough current data to make a decision, or the battery is currently
      * charging.
      *
-     * @param curTime The current elepsed realtime in microseconds.
+     * @param curTime The current elapsed realtime in microseconds.
      */
     @UnsupportedAppUsage
     public abstract long computeBatteryTimeRemaining(long curTime);

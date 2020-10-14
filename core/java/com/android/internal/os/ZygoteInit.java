@@ -86,8 +86,9 @@ import java.security.Security;
  */
 public class ZygoteInit {
 
-    // TODO (chriswailes): Change this so it is set with Zygote or ZygoteSecondary as appropriate
     private static final String TAG = "Zygote";
+
+    private static final boolean LOGGING_DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final String PROPERTY_DISABLE_GRAPHICS_DRIVER_PRELOADING =
             "ro.zygote.disable_gl_preload";
@@ -289,6 +290,7 @@ public class ZygoteInit {
                     new BufferedReader(new InputStreamReader(is), Zygote.SOCKET_BUFFER_SIZE);
 
             int count = 0;
+            int missingLambdaCount = 0;
             String line;
             while ((line = br.readLine()) != null) {
                 // Skip comments and blank lines.
@@ -307,24 +309,33 @@ public class ZygoteInit {
                     Class.forName(line, true, null);
                     count++;
                 } catch (ClassNotFoundException e) {
-                    Log.w(TAG, "Class not found for preloading: " + line);
+                    if (line.contains("$$Lambda$")) {
+                        if (LOGGING_DEBUG) {
+                            missingLambdaCount++;
+                        }
+                    } else {
+                        Log.w(TAG, "Class not found for preloading: " + line);
+                    }
                 } catch (UnsatisfiedLinkError e) {
                     Log.w(TAG, "Problem preloading " + line + ": " + e);
                 } catch (Throwable t) {
                     Log.e(TAG, "Error preloading " + line + ".", t);
                     if (t instanceof Error) {
                         throw (Error) t;
-                    }
-                    if (t instanceof RuntimeException) {
+                    } else if (t instanceof RuntimeException) {
                         throw (RuntimeException) t;
+                    } else {
+                        throw new RuntimeException(t);
                     }
-                    throw new RuntimeException(t);
                 }
                 Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
             }
 
             Log.i(TAG, "...preloaded " + count + " classes in "
                     + (SystemClock.uptimeMillis() - startTime) + "ms.");
+            if (LOGGING_DEBUG && missingLambdaCount != 0) {
+                Log.i(TAG, "Unresolved lambda preloads: " + missingLambdaCount);
+            }
         } catch (IOException e) {
             Log.e(TAG, "Error reading " + PRELOADED_CLASSES + ".", e);
         } finally {
@@ -588,7 +599,10 @@ public class ZygoteInit {
         VMRuntime.registerAppInfo(profilePath, codePaths);
     }
 
-    public static void setApiBlacklistExemptions(String[] exemptions) {
+    /**
+     * Sets the list of classes/methods for the hidden API
+     */
+    public static void setApiDenylistExemptions(String[] exemptions) {
         VMRuntime.getRuntime().setHiddenApiExemptions(exemptions);
     }
 

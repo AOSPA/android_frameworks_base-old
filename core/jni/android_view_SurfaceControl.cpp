@@ -30,6 +30,7 @@
 #include <android_runtime/android_hardware_HardwareBuffer.h>
 #include <android_runtime/android_view_Surface.h>
 #include <android_runtime/android_view_SurfaceSession.h>
+#include <gui/IScreenCaptureListener.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
@@ -104,6 +105,26 @@ static struct {
     jfieldID top;
 } gRectClassInfo;
 
+static struct {
+    jfieldID pixelFormat;
+    jfieldID sourceCrop;
+    jfieldID frameScale;
+    jfieldID captureSecureLayers;
+} gCaptureArgsClassInfo;
+
+static struct {
+    jfieldID displayToken;
+    jfieldID width;
+    jfieldID height;
+    jfieldID useIdentityTransform;
+} gDisplayCaptureArgsClassInfo;
+
+static struct {
+    jfieldID layer;
+    jfieldID excludeLayers;
+    jfieldID childrenOnly;
+} gLayerCaptureArgsClassInfo;
+
 // Implements SkMallocPixelRef::ReleaseProc, to delete the screenshot on unref.
 void DeleteScreenshot(void* addr, void* context) {
     delete ((ScreenshotClient*) context);
@@ -168,6 +189,11 @@ static struct {
 
 static struct {
     jclass clazz;
+    jmethodID onScreenCaptureComplete;
+} gScreenCaptureListenerClassInfo;
+
+static struct {
+    jclass clazz;
     jmethodID ctor;
     jfieldID defaultConfig;
     jfieldID primaryRefreshRateMin;
@@ -205,6 +231,56 @@ constexpr ui::Dataspace pickDataspaceFromColorMode(const ui::ColorMode colorMode
             return ui::Dataspace::V0_SRGB;
     }
 }
+
+class ScreenCaptureListenerWrapper : public BnScreenCaptureListener {
+public:
+    explicit ScreenCaptureListenerWrapper(JNIEnv* env, jobject jobject) {
+        env->GetJavaVM(&mVm);
+        screenCaptureListenerObject = env->NewGlobalRef(jobject);
+        LOG_ALWAYS_FATAL_IF(!screenCaptureListenerObject, "Failed to make global ref");
+    }
+
+    ~ScreenCaptureListenerWrapper() {
+        if (screenCaptureListenerObject) {
+            getenv()->DeleteGlobalRef(screenCaptureListenerObject);
+            screenCaptureListenerObject = nullptr;
+        }
+    }
+
+    status_t onScreenCaptureComplete(const ScreenCaptureResults& captureResults) override {
+        JNIEnv* env = getenv();
+        if (captureResults.result != NO_ERROR || captureResults.buffer == nullptr) {
+            env->CallVoidMethod(screenCaptureListenerObject,
+                                gScreenCaptureListenerClassInfo.onScreenCaptureComplete, nullptr);
+            return NO_ERROR;
+        }
+        jobject jhardwareBuffer = android_hardware_HardwareBuffer_createFromAHardwareBuffer(
+                env, captureResults.buffer->toAHardwareBuffer());
+        const jint namedColorSpace =
+                fromDataspaceToNamedColorSpaceValue(captureResults.capturedDataspace);
+        jobject screenshotHardwareBuffer =
+                env->CallStaticObjectMethod(gScreenshotHardwareBufferClassInfo.clazz,
+                                            gScreenshotHardwareBufferClassInfo.builder,
+                                            jhardwareBuffer, namedColorSpace,
+                                            captureResults.capturedSecureLayers);
+        env->CallVoidMethod(screenCaptureListenerObject,
+                            gScreenCaptureListenerClassInfo.onScreenCaptureComplete,
+                            screenshotHardwareBuffer);
+        env->DeleteLocalRef(jhardwareBuffer);
+        env->DeleteLocalRef(screenshotHardwareBuffer);
+        return NO_ERROR;
+    }
+
+private:
+    jobject screenCaptureListenerObject;
+    JavaVM* mVm;
+
+    JNIEnv* getenv() {
+        JNIEnv* env;
+        mVm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+        return env;
+    }
+};
 
 // ----------------------------------------------------------------------------
 
@@ -276,55 +352,69 @@ static Rect rectFromObj(JNIEnv* env, jobject rectObj) {
     return Rect(left, top, right, bottom);
 }
 
-static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
-        jobject displayTokenObj, jobject sourceCropObj, jint width, jint height,
-        bool useIdentityTransform, int rotation, bool captureSecureLayers) {
-    sp<IBinder> displayToken = ibinderForJavaObject(env, displayTokenObj);
-    if (displayToken == NULL) {
-        return NULL;
-    }
-    const ui::ColorMode colorMode = SurfaceComposerClient::getActiveColorMode(displayToken);
-    const ui::Dataspace dataspace = pickDataspaceFromColorMode(colorMode);
-
-    Rect sourceCrop = rectFromObj(env, sourceCropObj);
-    sp<GraphicBuffer> buffer;
-    bool capturedSecureLayers = false;
-    status_t res = ScreenshotClient::capture(displayToken, dataspace,
-            ui::PixelFormat::RGBA_8888,
-            sourceCrop, width, height,
-            useIdentityTransform, ui::toRotation(rotation),
-            captureSecureLayers, &buffer, capturedSecureLayers);
-    if (res != NO_ERROR) {
-        return NULL;
-    }
-
-    jobject jhardwareBuffer =
-            android_hardware_HardwareBuffer_createFromAHardwareBuffer(env,
-                                                                      buffer->toAHardwareBuffer());
-    const jint namedColorSpace = fromDataspaceToNamedColorSpaceValue(dataspace);
-    return env->CallStaticObjectMethod(gScreenshotHardwareBufferClassInfo.clazz,
-                                       gScreenshotHardwareBufferClassInfo.builder, jhardwareBuffer,
-                                       namedColorSpace, capturedSecureLayers);
+static void getCaptureArgs(JNIEnv* env, jobject captureArgsObject, CaptureArgs& captureArgs) {
+    captureArgs.pixelFormat = static_cast<ui::PixelFormat>(
+            env->GetIntField(captureArgsObject, gCaptureArgsClassInfo.pixelFormat));
+    captureArgs.sourceCrop =
+            rectFromObj(env,
+                        env->GetObjectField(captureArgsObject, gCaptureArgsClassInfo.sourceCrop));
+    captureArgs.frameScale =
+            env->GetFloatField(captureArgsObject, gCaptureArgsClassInfo.frameScale);
+    captureArgs.captureSecureLayers =
+            env->GetBooleanField(captureArgsObject, gCaptureArgsClassInfo.captureSecureLayers);
 }
 
-static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject displayTokenObj,
-        jlong layerObject, jobject sourceCropObj, jfloat frameScale,
-        jlongArray excludeObjectArray, jint format) {
+static DisplayCaptureArgs displayCaptureArgsFromObject(JNIEnv* env,
+                                                       jobject displayCaptureArgsObject) {
+    DisplayCaptureArgs captureArgs;
+    getCaptureArgs(env, displayCaptureArgsObject, captureArgs);
 
-    auto layer = reinterpret_cast<SurfaceControl *>(layerObject);
-    if (layer == NULL) {
-        return NULL;
+    captureArgs.displayToken =
+            ibinderForJavaObject(env,
+                                 env->GetObjectField(displayCaptureArgsObject,
+                                                     gDisplayCaptureArgsClassInfo.displayToken));
+    captureArgs.width =
+            env->GetIntField(displayCaptureArgsObject, gDisplayCaptureArgsClassInfo.width);
+    captureArgs.height =
+            env->GetIntField(displayCaptureArgsObject, gDisplayCaptureArgsClassInfo.height);
+    captureArgs.useIdentityTransform =
+            env->GetBooleanField(displayCaptureArgsObject,
+                                 gDisplayCaptureArgsClassInfo.useIdentityTransform);
+    return captureArgs;
+}
+
+static jint nativeCaptureDisplay(JNIEnv* env, jclass clazz, jobject displayCaptureArgsObject,
+                                 jobject screenCaptureListenerObject) {
+    const DisplayCaptureArgs captureArgs =
+            displayCaptureArgsFromObject(env, displayCaptureArgsObject);
+
+    if (captureArgs.displayToken == NULL) {
+        return BAD_VALUE;
     }
 
-    Rect sourceCrop;
-    if (sourceCropObj != NULL) {
-        sourceCrop = rectFromObj(env, sourceCropObj);
+    sp<IScreenCaptureListener> captureListener =
+            new ScreenCaptureListenerWrapper(env, screenCaptureListenerObject);
+    return ScreenshotClient::captureDisplay(captureArgs, captureListener);
+}
+
+static jint nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerCaptureArgsObject,
+                                jobject screenCaptureListenerObject) {
+    LayerCaptureArgs captureArgs;
+    getCaptureArgs(env, layerCaptureArgsObject, captureArgs);
+    SurfaceControl* layer = reinterpret_cast<SurfaceControl*>(
+            env->GetLongField(layerCaptureArgsObject, gLayerCaptureArgsClassInfo.layer));
+    if (layer == nullptr) {
+        return BAD_VALUE;
     }
 
-    std::unordered_set<sp<IBinder>,ISurfaceComposer::SpHash<IBinder>> excludeHandles;
+    captureArgs.layerHandle = layer->getHandle();
+    captureArgs.childrenOnly =
+            env->GetBooleanField(layerCaptureArgsObject, gLayerCaptureArgsClassInfo.childrenOnly);
+    jlongArray excludeObjectArray = reinterpret_cast<jlongArray>(
+            env->GetObjectField(layerCaptureArgsObject, gLayerCaptureArgsClassInfo.excludeLayers));
     if (excludeObjectArray != NULL) {
         const jsize len = env->GetArrayLength(excludeObjectArray);
-        excludeHandles.reserve(len);
+        captureArgs.excludeHandles.reserve(len);
 
         const jlong* objects = env->GetLongArrayElements(excludeObjectArray, nullptr);
         for (jsize i = 0; i < len; i++) {
@@ -333,33 +423,14 @@ static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject displayTok
                 jniThrowNullPointerException(env, "Exclude layer is null");
                 return NULL;
             }
-            excludeHandles.emplace(excludeObject->getHandle());
+            captureArgs.excludeHandles.emplace(excludeObject->getHandle());
         }
         env->ReleaseLongArrayElements(excludeObjectArray, const_cast<jlong*>(objects), JNI_ABORT);
     }
 
-    sp<GraphicBuffer> buffer;
-    ui::Dataspace dataspace = ui::Dataspace::V0_SRGB;
-    sp<IBinder> displayToken = ibinderForJavaObject(env, displayTokenObj);
-    if (displayToken != nullptr) {
-        const ui::ColorMode colorMode = SurfaceComposerClient::getActiveColorMode(displayToken);
-        dataspace = pickDataspaceFromColorMode(colorMode);
-    }
-    status_t res = ScreenshotClient::captureChildLayers(layer->getHandle(), dataspace,
-                                                        static_cast<ui::PixelFormat>(format),
-                                                        sourceCrop, excludeHandles, frameScale,
-                                                        &buffer);
-    if (res != NO_ERROR) {
-        return NULL;
-    }
-
-    jobject jhardwareBuffer =
-            android_hardware_HardwareBuffer_createFromAHardwareBuffer(env,
-                                                                      buffer->toAHardwareBuffer());
-    const jint namedColorSpace = fromDataspaceToNamedColorSpaceValue(dataspace);
-    return env->CallStaticObjectMethod(gScreenshotHardwareBufferClassInfo.clazz,
-                                       gScreenshotHardwareBufferClassInfo.builder, jhardwareBuffer,
-                                       namedColorSpace, false /* capturedSecureLayers */);
+    sp<IScreenCaptureListener> captureListener =
+            new ScreenCaptureListenerWrapper(env, screenCaptureListenerObject);
+    return ScreenshotClient::captureLayers(captureArgs, captureListener);
 }
 
 static void nativeApplyTransaction(JNIEnv* env, jclass clazz, jlong transactionObj, jboolean sync) {
@@ -667,7 +738,7 @@ static jlongArray nativeGetPhysicalDisplayIds(JNIEnv* env, jclass clazz) {
 
     jlong* values = env->GetLongArrayElements(array, 0);
     for (size_t i = 0; i < displayIds.size(); ++i) {
-        values[i] = static_cast<jlong>(displayIds[i]);
+        values[i] = static_cast<jlong>(displayIds[i].value);
     }
 
     env->ReleaseLongArrayElements(array, values, 0);
@@ -675,7 +746,8 @@ static jlongArray nativeGetPhysicalDisplayIds(JNIEnv* env, jclass clazz) {
 }
 
 static jobject nativeGetPhysicalDisplayToken(JNIEnv* env, jclass clazz, jlong physicalDisplayId) {
-    sp<IBinder> token = SurfaceComposerClient::getPhysicalDisplayToken(physicalDisplayId);
+    sp<IBinder> token =
+            SurfaceComposerClient::getPhysicalDisplayToken(PhysicalDisplayId(physicalDisplayId));
     return javaObjectForIBinder(env, token);
 }
 
@@ -1471,9 +1543,24 @@ static jlong nativeGetHandle(JNIEnv* env, jclass clazz, jlong nativeObject) {
     return reinterpret_cast<jlong>(surfaceControl->getHandle().get());
 }
 
+static void nativeSetFocusedWindow(JNIEnv* env, jclass clazz, jlong transactionObj,
+                                   jobject toTokenObj, jobject focusedTokenObj, jint displayId) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    if (toTokenObj == NULL) return;
+
+    sp<IBinder> toToken(ibinderForJavaObject(env, toTokenObj));
+    sp<IBinder> focusedToken;
+    if (focusedTokenObj != NULL) {
+        focusedToken = ibinderForJavaObject(env, focusedTokenObj);
+    }
+    transaction->setFocusedWindow(toToken, focusedToken, systemTime(SYSTEM_TIME_MONOTONIC),
+                                  displayId);
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod sSurfaceControlMethods[] = {
+        // clang-format off
     {"nativeCreate", "(Landroid/view/SurfaceSession;Ljava/lang/String;IIIIJLandroid/os/Parcel;)J",
             (void*)nativeCreate },
     {"nativeReadFromParcel", "(Landroid/os/Parcel;)J",
@@ -1614,14 +1701,11 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSeverChildren } ,
     {"nativeSetOverrideScalingMode", "(JJI)V",
             (void*)nativeSetOverrideScalingMode },
-    {"nativeScreenshot",
-            "(Landroid/os/IBinder;Landroid/graphics/Rect;IIZIZ)"
-            "Landroid/view/SurfaceControl$ScreenshotHardwareBuffer;",
-            (void*)nativeScreenshot },
+    {"nativeCaptureDisplay",
+            "(Landroid/view/SurfaceControl$DisplayCaptureArgs;Landroid/view/SurfaceControl$ScreenCaptureListener;)I",
+            (void*)nativeCaptureDisplay },
     {"nativeCaptureLayers",
-            "(Landroid/os/IBinder;JLandroid/graphics/Rect;"
-            "F[JI)"
-            "Landroid/view/SurfaceControl$ScreenshotHardwareBuffer;",
+            "(Landroid/view/SurfaceControl$LayerCaptureArgs;Landroid/view/SurfaceControl$ScreenCaptureListener;)I",
             (void*)nativeCaptureLayers },
     {"nativeSetInputWindowInfo", "(JJLandroid/view/InputWindowHandle;)V",
             (void*)nativeSetInputWindowInfo },
@@ -1653,7 +1737,11 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetGlobalShadowSettings },
     {"nativeGetHandle", "(J)J",
             (void*)nativeGetHandle },
-    {"nativeSetFixedTransformHint", "(JJI)V", (void*)nativeSetFixedTransformHint},
+    {"nativeSetFixedTransformHint", "(JJI)V",
+            (void*)nativeSetFixedTransformHint},
+    {"nativeSetFocusedWindow", "(JLandroid/os/IBinder;Landroid/os/IBinder;I)V",
+            (void*)nativeSetFocusedWindow},
+        // clang-format on
 };
 
 int register_android_view_SurfaceControl(JNIEnv* env)
@@ -1795,6 +1883,40 @@ int register_android_view_SurfaceControl(JNIEnv* env)
     gDesiredDisplayConfigSpecsClassInfo.appRequestRefreshRateMax =
             GetFieldIDOrDie(env, desiredDisplayConfigSpecsClazz, "appRequestRefreshRateMax", "F");
 
+    jclass captureArgsClazz = FindClassOrDie(env, "android/view/SurfaceControl$CaptureArgs");
+    gCaptureArgsClassInfo.pixelFormat = GetFieldIDOrDie(env, captureArgsClazz, "mPixelFormat", "I");
+    gCaptureArgsClassInfo.sourceCrop =
+            GetFieldIDOrDie(env, captureArgsClazz, "mSourceCrop", "Landroid/graphics/Rect;");
+    gCaptureArgsClassInfo.frameScale = GetFieldIDOrDie(env, captureArgsClazz, "mFrameScale", "F");
+    gCaptureArgsClassInfo.captureSecureLayers =
+            GetFieldIDOrDie(env, captureArgsClazz, "mCaptureSecureLayers", "Z");
+
+    jclass displayCaptureArgsClazz =
+            FindClassOrDie(env, "android/view/SurfaceControl$DisplayCaptureArgs");
+    gDisplayCaptureArgsClassInfo.displayToken =
+            GetFieldIDOrDie(env, displayCaptureArgsClazz, "mDisplayToken", "Landroid/os/IBinder;");
+    gDisplayCaptureArgsClassInfo.width =
+            GetFieldIDOrDie(env, displayCaptureArgsClazz, "mWidth", "I");
+    gDisplayCaptureArgsClassInfo.height =
+            GetFieldIDOrDie(env, displayCaptureArgsClazz, "mHeight", "I");
+    gDisplayCaptureArgsClassInfo.useIdentityTransform =
+            GetFieldIDOrDie(env, displayCaptureArgsClazz, "mUseIdentityTransform", "Z");
+
+    jclass layerCaptureArgsClazz =
+            FindClassOrDie(env, "android/view/SurfaceControl$LayerCaptureArgs");
+    gLayerCaptureArgsClassInfo.layer =
+            GetFieldIDOrDie(env, layerCaptureArgsClazz, "mNativeLayer", "J");
+    gLayerCaptureArgsClassInfo.excludeLayers =
+            GetFieldIDOrDie(env, layerCaptureArgsClazz, "mNativeExcludeLayers", "[J");
+    gLayerCaptureArgsClassInfo.childrenOnly =
+            GetFieldIDOrDie(env, layerCaptureArgsClazz, "mChildrenOnly", "Z");
+
+    jclass screenCaptureListenerClazz =
+            FindClassOrDie(env, "android/view/SurfaceControl$ScreenCaptureListener");
+    gScreenCaptureListenerClassInfo.clazz = MakeGlobalRefOrDie(env, screenCaptureListenerClazz);
+    gScreenCaptureListenerClassInfo.onScreenCaptureComplete =
+            GetMethodIDOrDie(env, screenCaptureListenerClazz, "onScreenCaptureComplete",
+                             "(Landroid/view/SurfaceControl$ScreenshotHardwareBuffer;)V");
     return err;
 }
 

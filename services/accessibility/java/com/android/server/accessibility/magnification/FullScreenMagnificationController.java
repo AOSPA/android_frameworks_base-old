@@ -16,8 +16,10 @@
 
 package com.android.server.accessibility.magnification;
 
+import android.animation.Animator;
 import android.animation.ValueAnimator;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -35,6 +37,7 @@ import android.util.SparseArray;
 import android.view.Display;
 import android.view.MagnificationSpec;
 import android.view.View;
+import android.view.accessibility.MagnificationAnimationCallback;
 import android.view.animation.DecelerateInterpolator;
 
 import com.android.internal.R;
@@ -61,6 +64,8 @@ public class FullScreenMagnificationController {
     private static final boolean DEBUG = false;
     private static final String LOG_TAG = "FullScreenMagnificationController";
 
+    private static final MagnificationAnimationCallback STUB_ANIMATION_CALLBACK = success -> {
+    };
     public static final float MIN_SCALE = 1.0f;
     public static final float MAX_SCALE = 8.0f;
 
@@ -292,7 +297,7 @@ public class FullScreenMagnificationController {
                     // Adjust the current spec's offsets if necessary.
                     if (updateCurrentSpecWithOffsetsLocked(
                             mCurrentMagnificationSpec.offsetX, mCurrentMagnificationSpec.offsetY)) {
-                        sendSpecToAnimation(mCurrentMagnificationSpec, false);
+                        sendSpecToAnimation(mCurrentMagnificationSpec, null);
                     }
                     onMagnificationChangedLocked();
                 }
@@ -300,17 +305,19 @@ public class FullScreenMagnificationController {
             }
         }
 
-        void sendSpecToAnimation(MagnificationSpec spec, boolean animate) {
+        void sendSpecToAnimation(MagnificationSpec spec,
+                MagnificationAnimationCallback animationCallback) {
             if (DEBUG) {
                 Slog.i(LOG_TAG,
-                        "sendSpecToAnimation(spec = " + spec + ", animate = " + animate + ")");
+                        "sendSpecToAnimation(spec = " + spec + ", animationCallback = "
+                                + animationCallback + ")");
             }
             if (Thread.currentThread().getId() == mMainThreadId) {
-                mSpecAnimationBridge.updateSentSpecMainThread(spec, animate);
+                mSpecAnimationBridge.updateSentSpecMainThread(spec, animationCallback);
             } else {
                 final Message m = PooledLambda.obtainMessage(
                         SpecAnimationBridge::updateSentSpecMainThread,
-                        mSpecAnimationBridge, spec, animate);
+                        mSpecAnimationBridge, spec, animationCallback);
                 mControllerCtx.getHandler().sendMessage(m);
             }
         }
@@ -410,6 +417,11 @@ public class FullScreenMagnificationController {
 
         @GuardedBy("mLock")
         boolean reset(boolean animate) {
+            return reset(transformToStubCallback(animate));
+        }
+
+        @GuardedBy("mLock")
+        boolean reset(MagnificationAnimationCallback animationCallback) {
             if (!mRegistered) {
                 return false;
             }
@@ -420,7 +432,7 @@ public class FullScreenMagnificationController {
                 onMagnificationChangedLocked();
             }
             mIdOfLastServiceToMagnify = INVALID_ID;
-            sendSpecToAnimation(spec, animate);
+            sendSpecToAnimation(spec, animationCallback);
             return changed;
         }
 
@@ -448,24 +460,23 @@ public class FullScreenMagnificationController {
             final float centerX = normPivotX + offsetX;
             final float centerY = normPivotY + offsetY;
             mIdOfLastServiceToMagnify = id;
-            return setScaleAndCenter(scale, centerX, centerY, animate, id);
+            return setScaleAndCenter(scale, centerX, centerY, transformToStubCallback(animate), id);
         }
 
         @GuardedBy("mLock")
         boolean setScaleAndCenter(float scale, float centerX, float centerY,
-                boolean animate, int id) {
+                MagnificationAnimationCallback animationCallback, int id) {
             if (!mRegistered) {
                 return false;
             }
             if (DEBUG) {
                 Slog.i(LOG_TAG,
                         "setScaleAndCenterLocked(scale = " + scale + ", centerX = " + centerX
-                                + ", centerY = " + centerY + ", animate = " + animate
-                                + ", id = " + id
-                                + ")");
+                                + ", centerY = " + centerY + ", endCallback = "
+                                + animationCallback + ", id = " + id + ")");
             }
             final boolean changed = updateMagnificationSpecLocked(scale, centerX, centerY);
-            sendSpecToAnimation(mCurrentMagnificationSpec, animate);
+            sendSpecToAnimation(mCurrentMagnificationSpec, animationCallback);
             if (isMagnifying() && (id != INVALID_ID)) {
                 mIdOfLastServiceToMagnify = id;
             }
@@ -531,7 +542,7 @@ public class FullScreenMagnificationController {
             if (id != INVALID_ID) {
                 mIdOfLastServiceToMagnify = id;
             }
-            sendSpecToAnimation(mCurrentMagnificationSpec, false);
+            sendSpecToAnimation(mCurrentMagnificationSpec, null);
         }
 
         boolean updateCurrentSpecWithOffsetsLocked(float nonNormOffsetX, float nonNormOffsetY) {
@@ -865,12 +876,27 @@ public class FullScreenMagnificationController {
      *         the spec did not change
      */
     public boolean reset(int displayId, boolean animate) {
+        return reset(displayId, animate ? STUB_ANIMATION_CALLBACK : null);
+    }
+
+    /**
+     * Resets the magnification scale and center, optionally animating the
+     * transition.
+     *
+     * @param displayId The logical display id.
+     * @param animationCallback Called when the animation result is valid.
+     *                    {@code null} to transition immediately
+     * @return {@code true} if the magnification spec changed, {@code false} if
+     *         the spec did not change
+     */
+    public boolean reset(int displayId,
+            MagnificationAnimationCallback animationCallback) {
         synchronized (mLock) {
             final DisplayMagnification display = mDisplays.get(displayId);
             if (display == null) {
                 return false;
             }
-            return display.reset(animate);
+            return display.reset(animationCallback);
         }
     }
 
@@ -921,7 +947,8 @@ public class FullScreenMagnificationController {
             if (display == null) {
                 return false;
             }
-            return display.setScaleAndCenter(Float.NaN, centerX, centerY, animate, id);
+            return display.setScaleAndCenter(Float.NaN, centerX, centerY,
+                    animate ? STUB_ANIMATION_CALLBACK : null, id);
         }
     }
 
@@ -944,12 +971,35 @@ public class FullScreenMagnificationController {
      */
     public boolean setScaleAndCenter(int displayId, float scale, float centerX, float centerY,
             boolean animate, int id) {
+        return setScaleAndCenter(displayId, scale, centerX, centerY,
+                transformToStubCallback(animate), id);
+    }
+
+    /**
+     * Sets the scale and center of the magnified region, optionally
+     * animating the transition. If animation is disabled, the transition
+     * is immediate.
+     *
+     * @param displayId The logical display id.
+     * @param scale the target scale, or {@link Float#NaN} to leave unchanged
+     * @param centerX the screen-relative X coordinate around which to
+     *                center and scale, or {@link Float#NaN} to leave unchanged
+     * @param centerY the screen-relative Y coordinate around which to
+     *                center and scale, or {@link Float#NaN} to leave unchanged
+     * @param animationCallback Called when the animation result is valid.
+     *                           {@code null} to transition immediately
+     * @param id the ID of the service requesting the change
+     * @return {@code true} if the magnification spec changed, {@code false} if
+     *         the spec did not change
+     */
+    public boolean setScaleAndCenter(int displayId, float scale, float centerX, float centerY,
+            MagnificationAnimationCallback animationCallback, int id) {
         synchronized (mLock) {
             final DisplayMagnification display = mDisplays.get(displayId);
             if (display == null) {
                 return false;
             }
-            return display.setScaleAndCenter(scale, centerX, centerY, animate, id);
+            return display.setScaleAndCenter(scale, centerX, centerY, animationCallback, id);
         }
     }
 
@@ -1160,7 +1210,8 @@ public class FullScreenMagnificationController {
      * Class responsible for animating spec on the main thread and sending spec
      * updates to the window manager.
      */
-    private static class SpecAnimationBridge implements ValueAnimator.AnimatorUpdateListener {
+    private static class SpecAnimationBridge implements ValueAnimator.AnimatorUpdateListener,
+            Animator.AnimatorListener {
         private final ControllerContext mControllerCtx;
 
         /**
@@ -1180,6 +1231,8 @@ public class FullScreenMagnificationController {
          */
         private final ValueAnimator mValueAnimator;
 
+        // Called when the callee wants animating and the sent spec matches the target spec.
+        private MagnificationAnimationCallback mAnimationCallback;
         private final Object mLock;
 
         private final int mDisplayId;
@@ -1197,6 +1250,7 @@ public class FullScreenMagnificationController {
             mValueAnimator.setInterpolator(new DecelerateInterpolator(2.5f));
             mValueAnimator.setFloatValues(0.0f, 1.0f);
             mValueAnimator.addUpdateListener(this);
+            mValueAnimator.addListener(this);
         }
 
         /**
@@ -1216,21 +1270,35 @@ public class FullScreenMagnificationController {
             }
         }
 
-        public void updateSentSpecMainThread(MagnificationSpec spec, boolean animate) {
+        void updateSentSpecMainThread(MagnificationSpec spec,
+                MagnificationAnimationCallback animationCallback) {
             if (mValueAnimator.isRunning()) {
                 mValueAnimator.cancel();
             }
 
+            mAnimationCallback = animationCallback;
             // If the current and sent specs don't match, update the sent spec.
             synchronized (mLock) {
                 final boolean changed = !mSentMagnificationSpec.equals(spec);
                 if (changed) {
-                    if (animate) {
+                    if (mAnimationCallback != null) {
                         animateMagnificationSpecLocked(spec);
                     } else {
                         setMagnificationSpecLocked(spec);
                     }
+                } else {
+                    sendEndCallbackMainThread(true);
                 }
+            }
+        }
+
+        private void sendEndCallbackMainThread(boolean success) {
+            if (mAnimationCallback != null) {
+                if (DEBUG) {
+                    Slog.d(LOG_TAG, "sendEndCallbackMainThread: " + success);
+                }
+                mAnimationCallback.onResult(success);
+                mAnimationCallback = null;
             }
         }
 
@@ -1269,6 +1337,25 @@ public class FullScreenMagnificationController {
                     setMagnificationSpecLocked(mTmpMagnificationSpec);
                 }
             }
+        }
+
+        @Override
+        public void onAnimationStart(Animator animation) {
+        }
+
+        @Override
+        public void onAnimationEnd(Animator animation) {
+            sendEndCallbackMainThread(true);
+        }
+
+        @Override
+        public void onAnimationCancel(Animator animation) {
+            sendEndCallbackMainThread(false);
+        }
+
+        @Override
+        public void onAnimationRepeat(Animator animation) {
+
         }
     }
 
@@ -1394,5 +1481,10 @@ public class FullScreenMagnificationController {
         public long getAnimationDuration() {
             return mAnimationDuration;
         }
+    }
+
+    @Nullable
+    private static MagnificationAnimationCallback transformToStubCallback(boolean animate) {
+        return animate ? STUB_ANIMATION_CALLBACK : null;
     }
 }

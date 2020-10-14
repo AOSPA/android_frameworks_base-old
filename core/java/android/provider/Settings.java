@@ -65,6 +65,7 @@ import android.os.Bundle;
 import android.os.DropBoxManager;
 import android.os.IBinder;
 import android.os.LocaleList;
+import android.os.PowerManager;
 import android.os.PowerManager.AutoPowerSaveModeTriggers;
 import android.os.Process;
 import android.os.RemoteCallback;
@@ -6414,6 +6415,17 @@ public final class Settings {
         public static final int LOCATION_MODE_ON = LOCATION_MODE_HIGH_ACCURACY;
 
         /**
+         * The current location time zone detection enabled state for the user.
+         *
+         * See {@link
+         * android.app.timezonedetector.TimeZoneDetector#getCapabilities} for access. See {@link
+         * android.app.timezonedetector.TimeZoneDetector#updateConfiguration} to update.
+         * @hide
+         */
+        public static final String LOCATION_TIME_ZONE_DETECTION_ENABLED =
+                "location_time_zone_detection_enabled";
+
+        /**
          * The accuracy in meters used for coarsening location for clients with only the coarse
          * location permission.
          *
@@ -6798,6 +6810,13 @@ public final class Settings {
          * @hide
          */
         public static final String KEYGUARD_SLICE_URI = "keyguard_slice_uri";
+
+        /**
+         * Whether to draw text in bold.
+         *
+         * @hide
+         */
+        public static final String FORCE_BOLD_TEXT = "force_bold_text";
 
         /**
          * Whether to speak passwords while in accessibility mode.
@@ -7923,6 +7942,13 @@ public final class Settings {
         public static final String TAPS_APP_TO_EXIT = "taps_app_to_exit";
 
         /**
+         * Internal use, one handed mode tutorial showed times.
+         * @hide
+         */
+        public static final String ONE_HANDED_TUTORIAL_SHOW_COUNT =
+                "one_handed_tutorial_show_count";
+
+        /**
          * The current night mode that has been selected by the user.  Owned
          * and controlled by UiModeManagerService.  Constants are as per
          * UiModeManager.
@@ -8318,6 +8344,13 @@ public final class Settings {
          * @hide
          */
         public static final String PANIC_GESTURE_ENABLED = "panic_gesture_enabled";
+
+        /**
+         * Whether the panic button (emergency sos) sound should be enabled.
+         *
+         * @hide
+         */
+        public static final String PANIC_SOUND_ENABLED = "panic_sound_enabled";
 
         /**
          * Whether the camera launch gesture to double tap the power button when the screen is off
@@ -8739,16 +8772,6 @@ public final class Settings {
                 = "bubble_important_conversations";
 
         /**
-         * When enabled, notifications the notification assistant service has modified will show an
-         * indicator. When tapped, this indicator will describe the adjustment made and solicit
-         * feedback. This flag will also add a "automatic" option to the long press menu.
-         *
-         * The value 1 - enable, 0 - disable
-         * @hide
-         */
-        public static final String NOTIFICATION_FEEDBACK_ENABLED = "notification_feedback_enabled";
-
-        /**
          * Whether notifications are dismissed by a right-to-left swipe (instead of a left-to-right
          * swipe).
          *
@@ -8988,6 +9011,14 @@ public final class Settings {
         public static final String MEDIA_CONTROLS_RESUME = "qs_media_resumption";
 
         /**
+         * Controls which packages are blocked from persisting in media controls when resumption is
+         * enabled. The list of packages is set by the user in the Settings app.
+         * @see Settings.Secure#MEDIA_CONTROLS_RESUME
+         * @hide
+         */
+        public static final String MEDIA_CONTROLS_RESUME_BLOCKED = "qs_media_resumption_blocked";
+
+        /**
          * Controls if window magnification is enabled.
          * @hide
          */
@@ -9034,6 +9065,13 @@ public final class Settings {
          */
         public static final String ACCESSIBILITY_MAGNIFICATION_CAPABILITY =
                 "accessibility_magnification_capability";
+
+        /**
+         * Whether the Adaptive connectivity option is enabled.
+         *
+         * @hide
+         */
+        public static final String ADAPTIVE_CONNECTIVITY_ENABLED = "adaptive_connectivity_enabled";
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to
@@ -9803,6 +9841,21 @@ public final class Settings {
          */
         public static final String HDMI_CONTROL_AUTO_DEVICE_OFF_ENABLED =
                 "hdmi_control_auto_device_off_enabled";
+
+        /**
+         * Property to decide which devices the playback device can send a <Standby> message to upon
+         * going to sleep. Supported values are:
+         * <ul>
+         * <li>{@link HdmiControlManager#SEND_STANDBY_ON_SLEEP_TO_TV} to TV only.</li>
+         * <li>{@link HdmiControlManager#SEND_STANDBY_ON_SLEEP_BROADCAST} to all devices in the
+         * network.</li>
+         * <li>{@link HdmiControlManager#SEND_STANDBY_ON_SLEEP_NONE} no <Standby> message sent.</li>
+         * </ul>
+         *
+         * @hide
+         */
+        public static final String HDMI_CONTROL_SEND_STANDBY_ON_SLEEP =
+                "hdmi_control_send_standby_on_sleep";
 
         /**
          * Whether or not media is shown automatically when bypassing as a heads up.
@@ -10853,17 +10906,6 @@ public final class Settings {
        public static final String MODE_RINGER = "mode_ringer";
 
         /**
-         * Specifies whether Enhanced Connectivity is enabled or not. This setting allows the
-         * Connectivity Thermal Power Manager to actively help the device to save power in 5G
-         * scenarios
-         * Type: int 1 is enabled, 0 is disabled
-         *
-         * @hide
-         */
-        public static final String ENHANCED_CONNECTIVITY_ENABLED =
-                "enhanced_connectivity_enable";
-
-        /**
          * Overlay display devices setting.
          * The associated value is a specially formatted string that describes the
          * size and density of simulated secondary display devices.
@@ -11512,38 +11554,6 @@ public final class Settings {
         public static final String APP_OPS_CONSTANTS = "app_ops_constants";
 
         /**
-         * Device Idle (Doze) specific settings.
-         * This is encoded as a key=value list, separated by commas. Ex:
-         *
-         * "inactive_to=60000,sensing_to=400000"
-         *
-         * The following keys are supported:
-         *
-         * <pre>
-         * inactive_to                      (long)
-         * sensing_to                       (long)
-         * motion_inactive_to               (long)
-         * idle_after_inactive_to           (long)
-         * idle_pending_to                  (long)
-         * max_idle_pending_to              (long)
-         * idle_pending_factor              (float)
-         * quick_doze_delay_to              (long)
-         * idle_to                          (long)
-         * max_idle_to                      (long)
-         * idle_factor                      (float)
-         * min_time_to_alarm                (long)
-         * max_temp_app_whitelist_duration  (long)
-         * notification_whitelist_duration  (long)
-         * </pre>
-         *
-         * <p>
-         * Type: string
-         * @hide
-         * @see com.android.server.DeviceIdleController.Constants
-         */
-        public static final String DEVICE_IDLE_CONSTANTS = "device_idle_constants";
-
-        /**
          * Battery Saver specific settings
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -11832,36 +11842,6 @@ public final class Settings {
          * @see com.android.server.AlarmManagerService.Constants
          */
         public static final String ALARM_MANAGER_CONSTANTS = "alarm_manager_constants";
-
-        /**
-         * Job scheduler specific settings.
-         * This is encoded as a key=value list, separated by commas. Ex:
-         *
-         * "min_ready_jobs_count=2,moderate_use_factor=.5"
-         *
-         * The following keys are supported:
-         *
-         * <pre>
-         * min_idle_count                       (int)
-         * min_charging_count                   (int)
-         * min_connectivity_count               (int)
-         * min_content_count                    (int)
-         * min_ready_jobs_count                 (int)
-         * heavy_use_factor                     (float)
-         * moderate_use_factor                  (float)
-         * fg_job_count                         (int)
-         * bg_normal_job_count                  (int)
-         * bg_moderate_job_count                (int)
-         * bg_low_job_count                     (int)
-         * bg_critical_job_count                (int)
-         * </pre>
-         *
-         * <p>
-         * Type: string
-         * @hide
-         * @see com.android.server.job.JobSchedulerService.Constants
-         */
-        public static final String JOB_SCHEDULER_CONSTANTS = "job_scheduler_constants";
 
         /**
          * Job scheduler QuotaController specific settings.
@@ -12347,8 +12327,8 @@ public final class Settings {
          * List of package names that should check ANGLE rules
          * @hide
          */
-        public static final String GLOBAL_SETTINGS_ANGLE_WHITELIST =
-                "angle_whitelist";
+        public static final String GLOBAL_SETTINGS_ANGLE_ALLOWLIST =
+                "angle_allowlist";
 
         /**
          * Show the "ANGLE In Use" dialog box to the user when ANGLE is the OpenGL driver.
@@ -12359,63 +12339,71 @@ public final class Settings {
                 "show_angle_in_use_dialog_box";
 
         /**
-         * Game Driver global preference for all Apps.
+         * Updatable driver global preference for all Apps.
          * 0 = Default
-         * 1 = All Apps use Game Driver
-         * 2 = All Apps use system graphics driver
+         * 1 = All Apps use updatable production driver
+         * 2 = All apps use updatable prerelease driver
+         * 3 = All Apps use system graphics driver
          * @hide
          */
-        public static final String GAME_DRIVER_ALL_APPS = "game_driver_all_apps";
+        public static final String UPDATABLE_DRIVER_ALL_APPS = "updatable_driver_all_apps";
 
         /**
-         * List of Apps selected to use Game Driver.
+         * List of Apps selected to use updatable production driver.
          * i.e. <pkg1>,<pkg2>,...,<pkgN>
          * @hide
          */
-        public static final String GAME_DRIVER_OPT_IN_APPS = "game_driver_opt_in_apps";
+        public static final String UPDATABLE_DRIVER_PRODUCTION_OPT_IN_APPS =
+                "updatable_driver_production_opt_in_apps";
 
         /**
-         * List of Apps selected to use prerelease Game Driver.
+         * List of Apps selected to use updatable prerelease driver.
          * i.e. <pkg1>,<pkg2>,...,<pkgN>
          * @hide
          */
-        public static final String GAME_DRIVER_PRERELEASE_OPT_IN_APPS =
-                "game_driver_prerelease_opt_in_apps";
+        public static final String UPDATABLE_DRIVER_PRERELEASE_OPT_IN_APPS =
+                "updatable_driver_prerelease_opt_in_apps";
 
         /**
-         * List of Apps selected not to use Game Driver.
+         * List of Apps selected not to use updatable production driver.
          * i.e. <pkg1>,<pkg2>,...,<pkgN>
          * @hide
          */
-        public static final String GAME_DRIVER_OPT_OUT_APPS = "game_driver_opt_out_apps";
+        public static final String UPDATABLE_DRIVER_PRODUCTION_OPT_OUT_APPS =
+                "updatable_driver_production_opt_out_apps";
 
         /**
-         * Apps on the blacklist that are forbidden to use Game Driver.
+         * Apps on the denylist that are forbidden to use updatable production driver.
          * @hide
          */
-        public static final String GAME_DRIVER_BLACKLIST = "game_driver_blacklist";
+        public static final String UPDATABLE_DRIVER_PRODUCTION_DENYLIST =
+                "updatable_driver_production_denylist";
 
         /**
-         * List of blacklists, each blacklist is a blacklist for a specific version of Game Driver.
+         * List of denylists, each denylist is a denylist for a specific version of
+         * updatable production driver.
          * @hide
          */
-        public static final String GAME_DRIVER_BLACKLISTS = "game_driver_blacklists";
+        public static final String UPDATABLE_DRIVER_PRODUCTION_DENYLISTS =
+                "updatable_driver_production_denylists";
 
         /**
-         * Apps on the whitelist that are allowed to use Game Driver.
+         * Apps on the allowlist that are allowed to use updatable production driver.
          * The string is a list of application package names, seperated by comma.
          * i.e. <apk1>,<apk2>,...,<apkN>
          * @hide
          */
-        public static final String GAME_DRIVER_WHITELIST = "game_driver_whitelist";
+        public static final String UPDATABLE_DRIVER_PRODUCTION_ALLOWLIST =
+                "updatable_driver_production_allowlist";
 
         /**
-         * List of libraries in sphal accessible by Game Driver
+         * List of libraries in sphal accessible by updatable driver
          * The string is a list of library names, separated by colon.
          * i.e. <lib1>:<lib2>:...:<libN>
          * @hide
          */
-        public static final String GAME_DRIVER_SPHAL_LIBRARIES = "game_driver_sphal_libraries";
+        public static final String UPDATABLE_DRIVER_SPHAL_LIBRARIES =
+                "updatable_driver_sphal_libraries";
 
         /**
          * Ordered GPU debug layer list for Vulkan
@@ -12527,18 +12515,23 @@ public final class Settings {
          * millis. See {@link #BATTERY_ESTIMATES_LAST_UPDATE_TIME} for the last time this value
          * was updated.
          *
+         * @deprecated Use {@link PowerManager#getBatteryDischargePrediction()} instead.
          * @hide
          */
+        @Deprecated
         public static final String TIME_REMAINING_ESTIMATE_MILLIS =
                 "time_remaining_estimate_millis";
 
         /**
-         * A boolean indicating whether {@link #TIME_REMAINING_ESTIMATE_MILLIS} is based customized
-         * to the devices usage or using global models. See
+         * A boolean indicating whether {@link #TIME_REMAINING_ESTIMATE_MILLIS} is customized
+         * to the device's usage or using global models. See
          * {@link #BATTERY_ESTIMATES_LAST_UPDATE_TIME} for the last time this value was updated.
+         *
+         * @deprecated Use {@link PowerManager#isBatteryDischargePredictionPersonalized()} instead.
          *
          * @hide
          */
+        @Deprecated
         public static final String TIME_REMAINING_ESTIMATE_BASED_ON_USAGE =
                 "time_remaining_estimate_based_on_usage";
 
@@ -12547,8 +12540,10 @@ public final class Settings {
          * average based on historical drain rates. See {@link #BATTERY_ESTIMATES_LAST_UPDATE_TIME}
          * for the last time this value was updated.
          *
+         * @deprecated Use {@link PowerManager#getHistoricalDischargeTime()} instead.
          * @hide
          */
+        @Deprecated
         public static final String AVERAGE_TIME_TO_DISCHARGE = "average_time_to_discharge";
 
         /**
@@ -12557,7 +12552,9 @@ public final class Settings {
          * and {@link #AVERAGE_TIME_TO_DISCHARGE} were last updated.
          *
          * @hide
+         * @deprecated No longer needed due to {@link PowerManager#getBatteryDischargePrediction}.
          */
+        @Deprecated
         public static final String BATTERY_ESTIMATES_LAST_UPDATE_TIME =
                 "battery_estimates_last_update_time";
 
@@ -14062,6 +14059,16 @@ public final class Settings {
          */
         public static final String NOTIFICATION_SNOOZE_OPTIONS =
                 "notification_snooze_options";
+
+        /**
+         * When enabled, notifications the notification assistant service has modified will show an
+         * indicator. When tapped, this indicator will describe the adjustment made and solicit
+         * feedback. This flag will also add a "automatic" option to the long press menu.
+         *
+         * The value 1 - enable, 0 - disable
+         * @hide
+         */
+        public static final String NOTIFICATION_FEEDBACK_ENABLED = "notification_feedback_enabled";
 
         /**
          * Settings key for the ratio of notification dismissals to notification views - one of the

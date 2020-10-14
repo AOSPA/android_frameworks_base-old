@@ -31,10 +31,12 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.systemui.R;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.util.Utils;
 
@@ -46,11 +48,10 @@ import java.util.Objects;
 import java.util.UUID;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 
 /** Platform implementation of the cast controller. **/
-@Singleton
+@SysUISingleton
 public class CastControllerImpl implements CastController {
     private static final String TAG = "CastController";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
@@ -95,7 +96,7 @@ public class CastControllerImpl implements CastController {
     }
 
     @Override
-    public void addCallback(Callback callback) {
+    public void addCallback(@NonNull Callback callback) {
         synchronized (mCallbacks) {
             mCallbacks.add(callback);
         }
@@ -106,7 +107,7 @@ public class CastControllerImpl implements CastController {
     }
 
     @Override
-    public void removeCallback(Callback callback) {
+    public void removeCallback(@NonNull Callback callback) {
         synchronized (mCallbacks) {
             mCallbacks.remove(callback);
         }

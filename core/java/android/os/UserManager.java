@@ -43,7 +43,6 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.UserInfo;
 import android.content.pm.UserInfo.UserInfoFlag;
-import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -831,7 +830,7 @@ public class UserManager {
     public static final String DISALLOW_UNMUTE_MICROPHONE = "no_unmute_microphone";
 
     /**
-     * Specifies if a user is disallowed from adjusting the master volume. If set, the master volume
+     * Specifies if a user is disallowed from adjusting the global volume. If set, the global volume
      * will be muted. This can be set by device owners from API 21 and profile owners from API 24.
      * The default value is <code>false</code>.
      *
@@ -1057,7 +1056,7 @@ public class UserManager {
     public static final String DISALLOW_CAMERA = "no_camera";
 
     /**
-     * Specifies if a user is not allowed to unmute the device's master volume.
+     * Specifies if a user is not allowed to unmute the device's global volume.
      *
      * @see DevicePolicyManager#setMasterVolumeMuted(ComponentName, boolean)
      * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
@@ -1294,7 +1293,7 @@ public class UserManager {
      * in {@link UserManager} & {@link DevicePolicyManager}.
      * Note: This is slightly different from the real set of user restrictions listed in {@link
      * com.android.server.pm.UserRestrictionsUtils#USER_RESTRICTIONS}. For example
-     * {@link #KEY_RESTRICTIONS_PENDING} is not a real user restriction, but is a a legitimate
+     * {@link #KEY_RESTRICTIONS_PENDING} is not a real user restriction, but is a legitimate
      * value that can be passed into {@link #hasUserRestriction(String)}.
      * @hide
      */
@@ -3174,28 +3173,55 @@ public class UserManager {
     }
 
     /**
-     * Returns information for all users on this device, including ones marked for deletion.
-     * To retrieve only users that are alive, use {@link #getUsers(boolean)}.
+     * Returns information for all fully-created users on this device, including ones marked for
+     * deletion.
      *
-     * @return the list of users that exist on the device.
+     * <p>To retrieve only users that are not marked for deletion, use {@link #getAliveUsers()}.
+     *
+     * <p>To retrieve *all* users (including partial and pre-created users), use
+     * {@link #getUsers(boolean, boolean, boolean)) getUsers(false, false, false)}.
+     *
+     * <p>To retrieve a more specific list of users, use
+     * {@link #getUsers(boolean, boolean, boolean)}.
+     *
+     * @return the list of users that were created.
+     *
      * @hide
      */
     @UnsupportedAppUsage
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public List<UserInfo> getUsers() {
-        return getUsers(/* excludeDying= */ false);
+        return getUsers(/*excludePartial= */ true, /* excludeDying= */ false,
+                /* excludePreCreated= */ true);
     }
 
     /**
-     * Returns information for all users on this device. Requires
-     * {@link android.Manifest.permission#MANAGE_USERS} permission.
+     * Returns information for all "usable" users on this device (i.e, it excludes users that are
+     * marked for deletion, pre-created users, etc...).
      *
-     * @param excludeDying specify if the list should exclude users being
-     *            removed.
+     * <p>To retrieve all fully-created users, use {@link #getUsers()}.
+     *
+     * <p>To retrieve a more specific list of users, use
+     * {@link #getUsers(boolean, boolean, boolean)}.
+     *
      * @return the list of users that were created.
      * @hide
      */
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public @NonNull List<UserInfo> getAliveUsers() {
+        return getUsers(/*excludePartial= */ true, /* excludeDying= */ true,
+                /* excludePreCreated= */ true);
+    }
+
+    /**
+     * @deprecated use {@link #getAliveUsers()} for {@code getUsers(true)}, or
+     * {@link #getUsers()} for @code getUsers(false)}.
+     *
+     * @hide
+     */
+    @Deprecated
     @UnsupportedAppUsage
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public @NonNull List<UserInfo> getUsers(boolean excludeDying) {
         return getUsers(/*excludePartial= */ true, excludeDying,
                 /* excludePreCreated= */ true);
@@ -3226,7 +3252,8 @@ public class UserManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public @NonNull List<UserHandle> getUserHandles(boolean excludeDying) {
-        List<UserInfo> users = getUsers(excludeDying);
+        List<UserInfo> users = getUsers(/* excludePartial= */ true, excludeDying,
+                /* excludePreCreated= */ true);
         List<UserHandle> result = new ArrayList<>(users.size());
         for (UserInfo user : users) {
             result.add(user.getUserHandle());
@@ -3244,7 +3271,8 @@ public class UserManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public long[] getSerialNumbersOfUsers(boolean excludeDying) {
-        List<UserInfo> users = getUsers(excludeDying);
+        List<UserInfo> users = getUsers(/* excludePartial= */ true, excludeDying,
+                /* excludePreCreated= */ true);
         long[] result = new long[users.size()];
         for (int i = 0; i < result.length; i++) {
             result[i] = users.get(i).serialNumber;
@@ -3310,7 +3338,7 @@ public class UserManager {
     public boolean canAddMoreUsers() {
         // TODO(b/142482943): UMS has different logic, excluding Demo and Profile from counting. Why
         //                    not here? The logic is inconsistent. See UMS.canAddMoreManagedProfiles
-        final List<UserInfo> users = getUsers(true);
+        final List<UserInfo> users = getAliveUsers();
         final int totalUserCount = users.size();
         int aliveUserCount = 0;
         for (int i = 0; i < totalUserCount; i++) {
@@ -4118,7 +4146,7 @@ public class UserManager {
 
     /** Returns whether there are any users (other than the current user) to which to switch. */
     private boolean areThereUsersToWhichToSwitch() {
-        final List<UserInfo> users = getUsers(true);
+        final List<UserInfo> users = getAliveUsers();
         if (users == null) {
             return false;
         }

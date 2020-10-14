@@ -48,7 +48,7 @@ public class PackageManagerServiceTest {
             public void sendPackageBroadcast(final String action, final String pkg,
                     final Bundle extras, final int flags, final String targetPkg,
                     final IIntentReceiver finishedReceiver, final int[] userIds,
-                    int[] instantUserIds, SparseArray<int[]> broadcastWhitelist) {
+                    int[] instantUserIds, SparseArray<int[]> broadcastAllowList) {
             }
 
             public void sendPackageAddedForNewUsers(String packageName,
@@ -86,8 +86,7 @@ public class PackageManagerServiceTest {
         // Create a real (non-null) PackageSetting and confirm that the removed
         // users are copied properly
         setting = new PackageSetting("name", "realName", new File("codePath"),
-                new File("resourcePath"), "legacyNativeLibraryPathString",
-                "primaryCpuAbiString", "secondaryCpuAbiString",
+                "legacyNativeLibraryPathString", "primaryCpuAbiString", "secondaryCpuAbiString",
                 "cpuAbiOverrideString", 0, 0, 0, 0,
                 null, null, null);
         pri.populateUsers(new int[] {

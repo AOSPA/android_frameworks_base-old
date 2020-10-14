@@ -333,6 +333,7 @@ public class TelecomManager {
      * the remote handle of the new call.
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_UNKNOWN_CALL_HANDLE =
             "android.telecom.extra.UNKNOWN_CALL_HANDLE";
 
@@ -403,6 +404,7 @@ public class TelecomManager {
      * </ul>
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_CALL_TECHNOLOGY_TYPE =
             "android.telecom.extra.CALL_TECHNOLOGY_TYPE";
 
@@ -746,17 +748,57 @@ public class TelecomManager {
     public static final int TTY_MODE_VCO = 3;
 
     /**
-     * Broadcast intent action indicating that the current TTY mode has changed. An intent extra
-     * provides this state as an int.
+     * Broadcast intent action indicating that the current TTY mode has changed.
      *
-     * @see #EXTRA_CURRENT_TTY_MODE
+     * This intent will contain {@link #EXTRA_CURRENT_TTY_MODE} as an intent extra, giving the new
+     * TTY mode.
      * @hide
      */
+    @TestApi
+    @SystemApi
     public static final String ACTION_CURRENT_TTY_MODE_CHANGED =
             "android.telecom.action.CURRENT_TTY_MODE_CHANGED";
 
     /**
-     * The lookup key for an int that indicates the current TTY mode.
+     * Integer extra key that indicates the current TTY mode.
+     *
+     * Used with {@link #ACTION_CURRENT_TTY_MODE_CHANGED}.
+     *
+     * Valid modes are:
+     * <ul>
+     *     <li>{@link #TTY_MODE_OFF}</li>
+     *     <li>{@link #TTY_MODE_FULL}</li>
+     *     <li>{@link #TTY_MODE_HCO}</li>
+     *     <li>{@link #TTY_MODE_VCO}</li>
+     * </ul>
+     *
+     * This TTY mode is distinct from the one sent via {@link #ACTION_TTY_PREFERRED_MODE_CHANGED},
+     * since the current TTY mode will always be {@link #TTY_MODE_OFF}unless a TTY terminal is
+     * plugged into the device.
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    public static final String EXTRA_CURRENT_TTY_MODE =
+            "android.telecom.extra.CURRENT_TTY_MODE";
+
+    /**
+     * Broadcast intent action indicating that the TTY preferred operating mode has changed.
+     *
+     * This intent will contain {@link #EXTRA_TTY_PREFERRED_MODE} as an intent extra, giving the new
+     * preferred TTY mode.
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    public static final String ACTION_TTY_PREFERRED_MODE_CHANGED =
+            "android.telecom.action.TTY_PREFERRED_MODE_CHANGED";
+
+    /**
+     * Integer extra key that indicates the preferred TTY mode.
+     *
+     * Used with {@link #ACTION_TTY_PREFERRED_MODE_CHANGED}.
+     *
      * Valid modes are:
      * <ul>
      *     <li>{@link #TTY_MODE_OFF}</li>
@@ -766,26 +808,8 @@ public class TelecomManager {
      * </ul>
      * @hide
      */
-    public static final String EXTRA_CURRENT_TTY_MODE =
-            "android.telecom.extra.CURRENT_TTY_MODE";
-
-    /**
-     * Broadcast intent action indicating that the TTY preferred operating mode has changed. An
-     * intent extra provides the new mode as an int.
-     *
-     * @see #EXTRA_TTY_PREFERRED_MODE
-     * @hide
-     */
-    public static final String ACTION_TTY_PREFERRED_MODE_CHANGED =
-            "android.telecom.action.TTY_PREFERRED_MODE_CHANGED";
-
-    /**
-     * The lookup key for an int that indicates preferred TTY mode. Valid modes are: -
-     * {@link #TTY_MODE_OFF} - {@link #TTY_MODE_FULL} - {@link #TTY_MODE_HCO} -
-     * {@link #TTY_MODE_VCO}
-     *
-     * @hide
-     */
+    @TestApi
+    @SystemApi
     public static final String EXTRA_TTY_PREFERRED_MODE =
             "android.telecom.extra.TTY_PREFERRED_MODE";
 
@@ -861,8 +885,10 @@ public class TelecomManager {
      * {@link TelecomManager#CALL_SOURCE_EMERGENCY_DIALPAD},
      * {@link TelecomManager#CALL_SOURCE_EMERGENCY_SHORTCUT}.
      *
+     * Intended for use with the platform emergency dialer only.
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_CALL_SOURCE = "android.telecom.extra.CALL_SOURCE";
 
     /**
@@ -870,6 +896,7 @@ public class TelecomManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int CALL_SOURCE_EMERGENCY_SHORTCUT = 2;
 
     /**
@@ -877,6 +904,7 @@ public class TelecomManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int CALL_SOURCE_EMERGENCY_DIALPAD = 1;
 
     /**
@@ -884,6 +912,7 @@ public class TelecomManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int CALL_SOURCE_UNSPECIFIED = 0;
 
     /**
@@ -1227,11 +1256,14 @@ public class TelecomManager {
     /**
      *  Returns a list of all {@link PhoneAccount}s registered for the calling package.
      *
+     * @deprecated Use {@link #getSelfManagedPhoneAccounts()} instead to get only self-managed
+     * {@link PhoneAccountHandle} for the calling package.
      * @return A list of {@code PhoneAccountHandle} objects.
      * @hide
      */
     @SystemApi
     @SuppressLint("Doclava125")
+    @Deprecated
     public List<PhoneAccountHandle> getPhoneAccountsForPackage() {
         try {
             if (isServiceConnected()) {
@@ -1885,11 +1917,13 @@ public class TelecomManager {
 
     /**
      * Registers a new incoming conference. A {@link ConnectionService} should invoke this method
-     * when it has an incoming conference. For managed {@link ConnectionService}s, the specified
-     * {@link PhoneAccountHandle} must have been registered with {@link #registerPhoneAccount} and
-     * the user must have enabled the corresponding {@link PhoneAccount}.  This can be checked using
-     * {@link #getPhoneAccount}. Self-managed {@link ConnectionService}s must have
-     * {@link android.Manifest.permission#MANAGE_OWN_CALLS} to add a new incoming call.
+     * when it has an incoming conference. An incoming {@link Conference} is an adhoc conference
+     * call initiated on another device which the user is being invited to join in. For managed
+     * {@link ConnectionService}s, the specified {@link PhoneAccountHandle} must have been
+     * registered with {@link #registerPhoneAccount} and the user must have enabled the
+     * corresponding {@link PhoneAccount}.  This can be checked using
+     * {@link #getPhoneAccount(PhoneAccountHandle)}. Self-managed {@link ConnectionService}s must
+     * have {@link android.Manifest.permission#MANAGE_OWN_CALLS} to add a new incoming call.
      * <p>
      * The incoming conference you are adding is assumed to have a video state of
      * {@link VideoProfile#STATE_AUDIO_ONLY}, unless the extra value
@@ -1897,8 +1931,9 @@ public class TelecomManager {
      * <p>
      * Once invoked, this method will cause the system to bind to the {@link ConnectionService}
      * associated with the {@link PhoneAccountHandle} and request additional information about the
-     * call (See {@link ConnectionService#onCreateIncomingConference}) before starting the incoming
-     * call UI.
+     * call (See
+     * {@link ConnectionService#onCreateIncomingConference(PhoneAccountHandle, ConnectionRequest)})
+     * before starting the incoming call UI.
      * <p>
      * For a managed {@link ConnectionService}, a {@link SecurityException} will be thrown if either
      * the {@link PhoneAccountHandle} does not correspond to a registered {@link PhoneAccount} or
@@ -1908,7 +1943,6 @@ public class TelecomManager {
      *            {@link #registerPhoneAccount}.
      * @param extras A bundle that will be passed through to
      *            {@link ConnectionService#onCreateIncomingConference}.
-     * @hide
      */
     public void addNewIncomingConference(@NonNull PhoneAccountHandle phoneAccount,
             @NonNull Bundle extras) {
@@ -2129,8 +2163,8 @@ public class TelecomManager {
 
 
     /**
-     * Place a new conference call with the provided participants using the system telecom service
-     * This method doesn't support placing of emergency calls.
+     * Place a new adhoc conference call with the provided participants using the system telecom
+     * service. This method doesn't support placing of emergency calls.
      *
      * An adhoc conference call is established by providing a list of addresses to
      * {@code TelecomManager#startConference(List<Uri>, int videoState)} where the
@@ -2148,7 +2182,6 @@ public class TelecomManager {
      *
      * @param participants List of participants to start conference with
      * @param extras Bundle of extras to use with the call
-     * @hide
      */
     @RequiresPermission(android.Manifest.permission.CALL_PHONE)
     public void startConference(@NonNull List<Uri> participants,

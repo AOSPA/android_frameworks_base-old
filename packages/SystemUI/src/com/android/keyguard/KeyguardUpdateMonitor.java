@@ -36,6 +36,7 @@ import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
+import android.app.ActivityTaskManager.RootTaskInfo;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.UserSwitchObserver;
@@ -94,6 +95,7 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
@@ -125,14 +127,13 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Watches for updates that may be interesting to the keyguard, and provides
  * the up to date information as well as a registration for callbacks that care
  * to be updated.
  */
-@Singleton
+@SysUISingleton
 public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpable {
 
     private static final String TAG = "KeyguardUpdateMonitor";
@@ -2530,13 +2531,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         if (isUserUnlocked(getCurrentUser())) {
             return false;
         }
-        Intent homeIntent = new Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_HOME);
-        ResolveInfo resolveInfo = mContext.getPackageManager().resolveActivity(homeIntent,
-                0 /* flags */);
+        Intent homeIntent = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
+        ResolveInfo resolveInfo = mContext.getPackageManager().resolveActivityAsUser(homeIntent,
+                0 /* flags */, getCurrentUser());
 
-        // TODO(b/160971249): Replace in the future by resolving activity as user.
-        if (resolveInfo == null && mIsAutomotive) {
+        if (resolveInfo == null) {
             Log.w(TAG, "resolveNeedsSlowUnlockTransition: returning false since activity "
                     + "could not be resolved.");
             return false;
@@ -2796,7 +2795,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         @Override
         public void onTaskStackChangedBackground() {
             try {
-                ActivityManager.StackInfo info = ActivityTaskManager.getService().getStackInfo(
+                RootTaskInfo info = ActivityTaskManager.getService().getRootTaskInfo(
                         WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_ASSISTANT);
                 if (info == null) {
                     return;

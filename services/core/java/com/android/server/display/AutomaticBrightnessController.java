@@ -17,8 +17,8 @@
 package com.android.server.display;
 
 import android.annotation.Nullable;
-import android.app.ActivityManager.StackInfo;
 import android.app.ActivityTaskManager;
+import android.app.ActivityTaskManager.RootTaskInfo;
 import android.app.IActivityTaskManager;
 import android.app.TaskStackListener;
 import android.content.Context;
@@ -190,7 +190,7 @@ class AutomaticBrightnessController {
 
     // When the short term model is invalidated, we don't necessarily reset it (i.e. clear the
     // user's adjustment) immediately, but wait for a drastic enough change in the ambient light.
-    // The anchor determines what were the light levels when the user has set her preference, and
+    // The anchor determines what were the light levels when the user has set their preference, and
     // we use a relative threshold to determine when to revert to the OEM curve.
     private boolean mShortTermModelValid;
     private float mShortTermModelAnchor;
@@ -846,7 +846,7 @@ class AutomaticBrightnessController {
             public void run() {
                 try {
                     // The foreground app is the top activity of the focused tasks stack.
-                    final StackInfo info = mActivityTaskManager.getFocusedStackInfo();
+                    final RootTaskInfo info = mActivityTaskManager.getFocusedRootTaskInfo();
                     if (info == null || info.topActivity == null) {
                         return;
                     }

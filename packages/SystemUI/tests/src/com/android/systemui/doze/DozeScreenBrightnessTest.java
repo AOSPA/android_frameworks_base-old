@@ -58,6 +58,8 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.Optional;
+
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
 public class DozeScreenBrightnessTest extends SysuiTestCase {
@@ -97,7 +99,7 @@ public class DozeScreenBrightnessTest extends SysuiTestCase {
         mAlwaysOnDisplayPolicy.dimmingScrimArray = SENSOR_TO_OPACITY;
         mSensor = fakeSensorManager.getFakeLightSensor();
         mScreen = new DozeScreenBrightness(mContext, mServiceFake, mSensorManager,
-                mSensor.getSensor(), mDozeHost, null /* handler */,
+                Optional.of(mSensor.getSensor()), mDozeHost, null /* handler */,
                 mAlwaysOnDisplayPolicy);
 
         mScreen.onScreenState(Display.STATE_ON);
@@ -113,8 +115,6 @@ public class DozeScreenBrightnessTest extends SysuiTestCase {
 
     @Test
     public void testAod_usesLightSensor() {
-        mScreen.transitionTo(UNINITIALIZED, INITIALIZED);
-        mScreen.transitionTo(INITIALIZED, DOZE_AOD);
         mScreen.onScreenState(Display.STATE_DOZE);
         waitForSensorManager();
 
@@ -125,8 +125,6 @@ public class DozeScreenBrightnessTest extends SysuiTestCase {
 
     @Test
     public void testAod_usesDebugValue() throws Exception {
-        mScreen.transitionTo(UNINITIALIZED, INITIALIZED);
-        mScreen.transitionTo(INITIALIZED, DOZE_AOD);
         mScreen.onScreenState(Display.STATE_DOZE);
         waitForSensorManager();
 
@@ -167,7 +165,7 @@ public class DozeScreenBrightnessTest extends SysuiTestCase {
     @Test
     public void testPulsing_withoutLightSensor_setsAoDDimmingScrimTransparent() throws Exception {
         mScreen = new DozeScreenBrightness(mContext, mServiceFake, mSensorManager,
-                null /* sensor */, mDozeHost, null /* handler */,
+                Optional.empty() /* sensor */, mDozeHost, null /* handler */,
                 mAlwaysOnDisplayPolicy);
         mScreen.transitionTo(UNINITIALIZED, INITIALIZED);
         mScreen.transitionTo(INITIALIZED, DOZE);
@@ -179,14 +177,13 @@ public class DozeScreenBrightnessTest extends SysuiTestCase {
     }
 
     @Test
-    public void testDozingAfterPulsing_pausesLightSensor() throws Exception {
+    public void testScreenOffAfterPulsing_pausesLightSensor() throws Exception {
         mScreen.transitionTo(UNINITIALIZED, INITIALIZED);
         mScreen.transitionTo(INITIALIZED, DOZE);
         mScreen.transitionTo(DOZE, DOZE_REQUEST_PULSE);
         mScreen.transitionTo(DOZE_REQUEST_PULSE, DOZE_PULSING);
         mScreen.transitionTo(DOZE_PULSING, DOZE_PULSE_DONE);
         mScreen.transitionTo(DOZE_PULSE_DONE, DOZE);
-        mScreen.onScreenState(Display.STATE_DOZE);
         waitForSensorManager();
 
         mSensor.sendSensorEvent(1);
@@ -195,21 +192,36 @@ public class DozeScreenBrightnessTest extends SysuiTestCase {
     }
 
     @Test
+    public void testOnScreenStateSetBeforeTransition_stillRegistersSensor() {
+        mScreen.transitionTo(UNINITIALIZED, INITIALIZED);
+        mScreen.onScreenState(Display.STATE_DOZE);
+        mScreen.transitionTo(INITIALIZED, DOZE_AOD);
+        waitForSensorManager();
+
+        mSensor.sendSensorEvent(1);
+
+        assertEquals(1, mServiceFake.screenBrightness);
+    }
+
+    @Test
     public void testNullSensor() throws Exception {
         mScreen = new DozeScreenBrightness(mContext, mServiceFake, mSensorManager,
-                null /* sensor */, mDozeHost, null /* handler */,
+                Optional.empty() /* sensor */, mDozeHost, null /* handler */,
                 mAlwaysOnDisplayPolicy);
 
         mScreen.transitionTo(UNINITIALIZED, INITIALIZED);
         mScreen.transitionTo(INITIALIZED, DOZE_AOD);
         mScreen.transitionTo(DOZE_AOD, DOZE_AOD_PAUSING);
         mScreen.transitionTo(DOZE_AOD_PAUSING, DOZE_AOD_PAUSED);
+        mScreen.onScreenState(Display.STATE_DOZE);
+        mScreen.onScreenState(Display.STATE_OFF);
     }
 
     @Test
     public void testNoBrightnessDeliveredAfterFinish() throws Exception {
         mScreen.transitionTo(UNINITIALIZED, INITIALIZED);
         mScreen.transitionTo(INITIALIZED, DOZE_AOD);
+        mScreen.onScreenState(Display.STATE_DOZE);
         mScreen.transitionTo(DOZE_AOD, FINISH);
         waitForSensorManager();
 

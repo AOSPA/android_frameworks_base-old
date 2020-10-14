@@ -108,10 +108,8 @@
     <string name="screenrecord_resume_label" msgid="4972223043729555575">"Nastavi"</string>
     <string name="screenrecord_cancel_label" msgid="7850926573274483294">"Otkaži"</string>
     <string name="screenrecord_share_label" msgid="5025590804030086930">"Deli"</string>
-    <string name="screenrecord_delete_label" msgid="1376347010553987058">"Izbriši"</string>
     <string name="screenrecord_cancel_success" msgid="1775448688137393901">"Snimanje ekrana je otkazano"</string>
     <string name="screenrecord_save_message" msgid="490522052388998226">"Snimak ekrana je sačuvan, dodirnite da biste pregledali"</string>
-    <string name="screenrecord_delete_description" msgid="1604522770162810570">"Snimak ekrana je izbrisan"</string>
     <string name="screenrecord_delete_error" msgid="2870506119743013588">"Došlo je do problema pri brisanju snimka ekrana"</string>
     <string name="screenrecord_permission_error" msgid="7856841237023137686">"Preuzimanje dozvola nije uspelo"</string>
     <string name="screenrecord_start_error" msgid="2200660692479682368">"Greška pri pokretanju snimanja ekrana"</string>
@@ -886,29 +884,22 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"Prikaži ikone obaveštenja niskog prioriteta"</string>
     <string name="other" msgid="429768510980739978">"Drugo"</string>
-    <string name="accessibility_divider" msgid="2830785970889237307">"Razdelnik podeljenog ekrana"</string>
-    <string name="accessibility_action_divider_left_full" msgid="7598733539422375847">"Režim celog ekrana za levi ekran"</string>
-    <string name="accessibility_action_divider_left_70" msgid="4919312892541727761">"Levi ekran 70%"</string>
-    <string name="accessibility_action_divider_left_50" msgid="3664701169564893826">"Levi ekran 50%"</string>
-    <string name="accessibility_action_divider_left_30" msgid="4358145268046362088">"Levi ekran 30%"</string>
-    <string name="accessibility_action_divider_right_full" msgid="8576057422864896305">"Režim celog ekrana za donji ekran"</string>
-    <string name="accessibility_action_divider_top_full" msgid="4243901660795169777">"Režim celog ekrana za gornji ekran"</string>
-    <string name="accessibility_action_divider_top_70" msgid="6941226213260515072">"Gornji ekran 70%"</string>
-    <string name="accessibility_action_divider_top_50" msgid="6275211443706497621">"Gornji ekran 50%"</string>
-    <string name="accessibility_action_divider_top_30" msgid="5780597635887574916">"Gornji ekran 30%"</string>
-    <string name="accessibility_action_divider_bottom_full" msgid="7352434720610115395">"Režim celog ekrana za donji ekran"</string>
-    <string name="accessibility_qs_edit_tile_label" msgid="9079791448815232967">"<xliff:g id="POSITION">%1$d</xliff:g>. pozicija, <xliff:g id="TILE_NAME">%2$s</xliff:g>. Dvaput dodirnite da biste izmenili."</string>
-    <string name="accessibility_qs_edit_add_tile_label" msgid="8292218072049068613">"<xliff:g id="TILE_NAME">%1$s</xliff:g>. Dvaput dodirnite da biste dodali."</string>
-    <string name="accessibility_qs_edit_move_tile" msgid="6027997446473163426">"Premesti pločicu <xliff:g id="TILE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_qs_edit_remove_tile" msgid="3406781901949899624">"Ukloni pločicu <xliff:g id="TILE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_qs_edit_tile_add" msgid="6289879620154587233">"Dodajte „<xliff:g id="TILE_NAME">%1$s</xliff:g>“ na poziciju <xliff:g id="POSITION">%2$d</xliff:g>"</string>
-    <string name="accessibility_qs_edit_tile_move" msgid="4841770637244326837">"Premestite „<xliff:g id="TILE_NAME">%1$s</xliff:g>“ na poziciju <xliff:g id="POSITION">%2$d</xliff:g>"</string>
+    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
+    <skip />
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"Uređivač za Brza podešavanja."</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"Obaveštenja za <xliff:g id="ID_1">%1$s</xliff:g>: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
-    <string name="dock_forced_resizable" msgid="4689301323912928801">"Aplikacija možda neće funkcionisati sa podeljenim ekranom."</string>
-    <string name="dock_non_resizeble_failed_to_dock_text" msgid="7284915968096153808">"Aplikacija ne podržava podeljeni ekran."</string>
-    <string name="forced_resizable_secondary_display" msgid="522558907654394940">"Aplikacija možda neće funkcionisati na sekundarnom ekranu."</string>
-    <string name="activity_launch_on_secondary_display_failed_text" msgid="8446727617187998208">"Aplikacija ne podržava pokretanje na sekundarnim ekranima."</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"Otvori Podešavanja."</string>
     <string name="accessibility_quick_settings_expand" msgid="2609275052412521467">"Otvori Brza podešavanja."</string>
     <string name="accessibility_quick_settings_collapse" msgid="4674876336725041982">"Zatvori Brza podešavanja."</string>
@@ -990,6 +981,13 @@
     <string name="open_saver_setting_action" msgid="2111461909782935190">"Podešavanja"</string>
     <string name="auto_saver_okay_action" msgid="7815925750741935386">"Važi"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Izdvoji SysUI mem."</string>
+    <string name="ongoing_privacy_chip_content_single_app" msgid="2969750601815230385">"<xliff:g id="APP">%1$s</xliff:g> koristi <xliff:g id="TYPES_LIST">%2$s</xliff:g>."</string>
+    <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Aplikacije koriste <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
+    <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
+    <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" i "</string>
+    <string name="privacy_type_camera" msgid="7974051382167078332">"kameru"</string>
+    <string name="privacy_type_location" msgid="7991481648444066703">"lokaciju"</string>
+    <string name="privacy_type_microphone" msgid="9136763906797732428">"mikrofon"</string>
     <string name="sensor_privacy_mode" msgid="4462866919026513692">"Senzori su isključeni"</string>
     <string name="device_services" msgid="1549944177856658705">"Usluge za uređaje"</string>
     <string name="music_controls_no_title" msgid="4166497066552290938">"Bez naslova"</string>
@@ -1068,7 +1066,7 @@
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Učitavaju se preporuke"</string>
     <string name="controls_media_title" msgid="1746947284862928133">"Mediji"</string>
     <string name="controls_media_close_session" msgid="3957093425905475065">"Sakrijte aktuelnu sesiju."</string>
-    <string name="controls_media_dismiss_button" msgid="4485675693008031646">"Sakrij"</string>
+    <string name="controls_media_dismiss_button" msgid="9081375542265132213">"Odbaci"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"Nastavi"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"Podešavanja"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Neaktivno. Vidite aplikaciju"</string>
@@ -1083,4 +1081,11 @@
     <string name="controls_added_tooltip" msgid="4842812921719153085">"Zadržite dugme za uključivanje da biste videli nove kontrole"</string>
     <string name="controls_menu_add" msgid="4447246119229920050">"Dodaj kontrole"</string>
     <string name="controls_menu_edit" msgid="890623986951347062">"Izmeni kontrole"</string>
+    <string name="media_output_dialog_add_output" msgid="5642703238877329518">"Dodajte izlaze"</string>
+    <string name="media_output_dialog_group" msgid="5571251347877452212">"Grupa"</string>
+    <string name="media_output_dialog_single_device" msgid="3102758980643351058">"Izabran je 1 uređaj"</string>
+    <string name="media_output_dialog_multiple_devices" msgid="1093771040315422350">"Izabranih uređaja: <xliff:g id="COUNT">%1$d</xliff:g>"</string>
+    <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (veza je prekinuta)"</string>
+    <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"Povezivanje nije uspelo. Probajte ponovo."</string>
+    <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Upari novi uređaj"</string>
 </resources>

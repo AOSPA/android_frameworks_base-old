@@ -19,20 +19,17 @@
 
 // To make sure cpu_set_t is included from sched.h
 #define _GNU_SOURCE 1
-#include <android-base/properties.h>
-#include <android-base/unique_fd.h>
-#include <binder/ActivityManager.h>
+#include <utils/Log.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
-#include <cutils/sched_policy.h>
 #include <cutils/properties.h>
+#include <utils/String8.h>
+#include <utils/Vector.h>
 #include <meminfo/procmeminfo.h>
 #include <meminfo/sysmeminfo.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/sched_policy.h>
-#include <utils/Log.h>
-#include <utils/String8.h>
-#include <utils/Vector.h>
+#include <android-base/unique_fd.h>
 
 #include <algorithm>
 #include <array>
@@ -87,8 +84,6 @@ static constexpr ssize_t kProcReadMinHeapBufferSize = 4096;
 Mutex gKeyCreateMutex;
 static pthread_key_t gBgKey = -1;
 #endif
-
-static bool boot_completed = false;
 
 // For both of these, err should be in the errno range (positive), not a status_t (negative)
 static void signalExceptionForError(JNIEnv* env, int err, int tid) {
@@ -443,22 +438,6 @@ void android_os_Process_setProcessFrozen(
     }
 }
 
-void android_os_Process_enableFreezer(
-        JNIEnv *env, jobject clazz, jboolean enable)
-{
-    bool success = true;
-
-    if (enable) {
-        success = SetTaskProfiles(0, {"FreezerFrozen"}, true);
-    } else {
-        success = SetTaskProfiles(0, {"FreezerThawed"}, true);
-    }
-
-    if (!success) {
-        jniThrowException(env, "java/lang/RuntimeException", "Unknown error");
-    }
-}
-
 jint android_os_Process_getProcessGroup(JNIEnv* env, jobject clazz, jint pid)
 {
     SchedPolicy sp;
@@ -684,50 +663,12 @@ void android_os_Process_setThreadPriority(JNIEnv* env, jobject clazz,
     }
 #endif
 
-    SchedPolicy policy;
-    bool policy_changed = false;
-    int rc = 0, curr_pri = getpriority(PRIO_PROCESS, pid);
-
-    if (pri == curr_pri) {
-        return;
-    }
-
-    if (!boot_completed) {
-        boot_completed = android::base::GetBoolProperty("sys.boot_completed", false);
-    }
-
-    // Do not change sched policy cgroup after boot complete.
-    rc = androidSetThreadPriority(pid, pri, !boot_completed);
+    int rc = androidSetThreadPriority(pid, pri);
     if (rc != 0) {
         if (rc == INVALID_OPERATION) {
             signalExceptionForPriorityError(env, errno, pid);
         } else {
             signalExceptionForGroupError(env, errno, pid);
-        }
-    }
-
-    // Only use async approach after boot complete.
-    if (!boot_completed) {
-        return;
-    }
-
-    // Change to background sched policy for the thread if setting to low priority.
-    if (pri >= ANDROID_PRIORITY_BACKGROUND) {
-        policy = SP_BACKGROUND;
-        policy_changed = true;
-        // Change to sched policy of the process if thread priority is raising from low priority.
-    } else if (curr_pri >= ANDROID_PRIORITY_BACKGROUND) {
-        // If we cannot get sched policy of the process, use SP_FOREGROUND as default.
-        policy = SP_FOREGROUND;
-        get_sched_policy(getpid(), &policy);
-        policy_changed = true;
-    }
-
-    // Sched policy will only change in above 2 cases.
-    if (policy_changed) {
-        ActivityManager am;
-        if (!am.setSchedPolicyCgroup(pid, policy)) {
-            ALOGE("am.setThreadPriority failed: tid=%d priority=%d policy=%d", pid, pri, policy);
         }
     }
 
@@ -1509,7 +1450,6 @@ static const JNINativeMethod methods[] = {
         {"sendSignal", "(II)V", (void*)android_os_Process_sendSignal},
         {"sendSignalQuiet", "(II)V", (void*)android_os_Process_sendSignalQuiet},
         {"setProcessFrozen", "(IIZ)V", (void*)android_os_Process_setProcessFrozen},
-        {"enableFreezer", "(Z)V", (void*)android_os_Process_enableFreezer},
         {"getFreeMemory", "()J", (void*)android_os_Process_getFreeMemory},
         {"getTotalMemory", "()J", (void*)android_os_Process_getTotalMemory},
         {"readProcLines", "(Ljava/lang/String;[Ljava/lang/String;[J)V",

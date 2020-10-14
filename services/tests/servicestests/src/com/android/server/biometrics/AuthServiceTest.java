@@ -83,7 +83,7 @@ public class AuthServiceTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
-        // Dummy test config
+        // Placeholder test config
         final String[] config = {
                 "0:2:15", // ID0:Fingerprint:Strong
                 "1:4:15", // ID1:Iris:Strong
@@ -267,21 +267,6 @@ public class AuthServiceTest {
         waitForIdle();
         verify(mBiometricService).registerEnabledOnKeyguardCallback(
                 eq(callback), eq(UserHandle.getCallingUserId()));
-    }
-
-    @Test
-    public void testResetLockout_callsBiometricServiceResetLockout() throws
-            Exception {
-        mAuthService = new AuthService(mContext, mInjector);
-        mAuthService.onStart();
-
-        final int userId = 100;
-        final byte[] token = new byte[0];
-
-        mAuthService.mImpl.resetLockout(userId, token);
-
-        waitForIdle();
-        verify(mBiometricService).resetLockout(eq(userId), AdditionalMatchers.aryEq(token));
     }
 
     private static void waitForIdle() {

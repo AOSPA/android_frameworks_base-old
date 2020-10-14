@@ -42,6 +42,8 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
+import android.content.res.TypedArray;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -69,7 +71,6 @@ import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.statusbar.notification.NotificationChannelHelper;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 
@@ -89,7 +90,7 @@ public class NotificationConversationInfo extends LinearLayout implements
     private ShortcutManager mShortcutManager;
     private PackageManager mPm;
     private ConversationIconFactory mIconFactory;
-    private VisualStabilityManager mVisualStabilityManager;
+    private OnUserInteractionCallback mOnUserInteractionCallback;
     private Handler mMainHandler;
     private Handler mBgHandler;
     private BubbleController mBubbleController;
@@ -207,7 +208,7 @@ public class NotificationConversationInfo extends LinearLayout implements
             ShortcutManager shortcutManager,
             PackageManager pm,
             INotificationManager iNotificationManager,
-            VisualStabilityManager visualStabilityManager,
+            OnUserInteractionCallback onUserInteractionCallback,
             String pkg,
             NotificationChannel notificationChannel,
             NotificationEntry entry,
@@ -224,7 +225,7 @@ public class NotificationConversationInfo extends LinearLayout implements
             BubbleController bubbleController) {
         mSelectedAction = -1;
         mINotificationManager = iNotificationManager;
-        mVisualStabilityManager = visualStabilityManager;
+        mOnUserInteractionCallback = onUserInteractionCallback;
         mPackageName = pkg;
         mEntry = entry;
         mSbn = entry.getSbn();
@@ -513,7 +514,7 @@ public class NotificationConversationInfo extends LinearLayout implements
                         mAppUid, mSelectedAction, mNotificationChannel));
         mEntry.markForUserTriggeredMovement(true);
         mMainHandler.postDelayed(
-                mVisualStabilityManager::temporarilyAllowReordering,
+                () -> mOnUserInteractionCallback.onImportanceChanged(mEntry),
                 StackStateAnimator.ANIMATION_DURATION_STANDARD);
     }
 
@@ -539,12 +540,21 @@ public class NotificationConversationInfo extends LinearLayout implements
                 && Settings.Global.getInt(mContext.getContentResolver(),
                         NOTIFICATION_BUBBLES, 0) == 1;
 
+        Drawable person =  mIconFactory.getBaseIconDrawable(mShortcutInfo);
+        if (person == null) {
+            person = mContext.getDrawable(R.drawable.ic_person).mutate();
+            TypedArray ta = mContext.obtainStyledAttributes(new int[]{android.R.attr.colorAccent});
+            int colorAccent = ta.getColor(0, 0);
+            ta.recycle();
+            person.setTint(colorAccent);
+        }
+
         PriorityOnboardingDialogController controller = mBuilderProvider.get()
                 .setContext(mUserContext)
                 .setView(onboardingView)
                 .setIgnoresDnd(ignoreDnd)
                 .setShowsAsBubble(showAsBubble)
-                .setIcon(mIconFactory.getBaseIconDrawable(mShortcutInfo))
+                .setIcon(person)
                 .setBadge(mIconFactory.getAppBadge(
                         mPackageName, UserHandle.getUserId(mSbn.getUid())))
                 .setOnSettingsClick(mOnConversationSettingsClickListener)

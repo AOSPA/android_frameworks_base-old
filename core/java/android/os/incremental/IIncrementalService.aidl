@@ -19,6 +19,7 @@ package android.os.incremental;
 import android.content.pm.DataLoaderParamsParcel;
 import android.content.pm.IDataLoaderStatusListener;
 import android.os.incremental.IncrementalNewFileParams;
+import android.os.incremental.IStorageLoadingProgressListener;
 import android.os.incremental.IStorageHealthListener;
 import android.os.incremental.StorageHealthCheckParams;
 
@@ -90,9 +91,18 @@ interface IIncrementalService {
     int unlink(int storageId, in @utf8InCpp String path);
 
     /**
-     * Checks if a file's certain range is loaded. File is specified by its path.
+     * Checks if a file is fully loaded. File is specified by its path.
+     * 0 - fully loaded
+     * >0 - certain pages missing
+     * <0 - -errcode
      */
-    boolean isFileRangeLoaded(int storageId, in @utf8InCpp String path, long start, long end);
+    int isFileFullyLoaded(int storageId, in @utf8InCpp String path);
+
+    /**
+     * Returns overall loading progress of all the files on a storage, progress value between [0,1].
+     * Returns a negative value on error.
+     */
+    float getLoadingProgress(int storageId);
 
     /**
      * Reads the metadata of a file. File is specified by either its path or 16 byte id.
@@ -124,4 +134,14 @@ interface IIncrementalService {
      * Waits until all native library extraction is done for the storage
      */
     boolean waitForNativeBinariesExtraction(int storageId);
+
+    /**
+     * Register to start listening for loading progress change for a storage.
+     */
+    boolean registerLoadingProgressListener(int storageId, IStorageLoadingProgressListener listener);
+
+    /**
+     * Stop listening for the loading progress change for a storage.
+     */
+    boolean unregisterLoadingProgressListener(int storageId);
 }

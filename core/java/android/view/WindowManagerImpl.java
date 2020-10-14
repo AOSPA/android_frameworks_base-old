@@ -19,17 +19,16 @@ package android.view;
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
 import static android.view.View.SYSTEM_UI_FLAG_VISIBLE;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
 
 import android.annotation.NonNull;
+import android.annotation.UiContext;
 import android.app.ResourcesManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
-import android.graphics.Insets;
-import android.graphics.Point;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.Bundle;
@@ -70,6 +69,7 @@ import java.util.List;
 public final class WindowManagerImpl implements WindowManager {
     @UnsupportedAppUsage
     private final WindowManagerGlobal mGlobal = WindowManagerGlobal.getInstance();
+    @UiContext
     @VisibleForTesting
     public final Context mContext;
     private final Window mParentWindow;
@@ -235,17 +235,16 @@ public final class WindowManagerImpl implements WindowManager {
 
     @Override
     public WindowMetrics getMaximumWindowMetrics() {
-        final Rect maxBounds = getMaximumBounds();
+        final Context context = mParentWindow != null ? mParentWindow.getContext() : mContext;
+        final Rect maxBounds = getMaximumBounds(context);
+
         return new WindowMetrics(maxBounds, computeWindowInsets(maxBounds));
     }
 
-    private Rect getMaximumBounds() {
-        // TODO(b/128338354): Current maximum bound is display size, but it should be displayArea
-        //  bound after displayArea feature is finished.
-        final Display display = mContext.getDisplayNoVerify();
-        final Point displaySize = new Point();
-        display.getRealSize(displaySize);
-        return new Rect(0, 0, displaySize.x, displaySize.y);
+    private static Rect getMaximumBounds(Context context) {
+        synchronized (ResourcesManager.getInstance()) {
+            return context.getResources().getConfiguration().windowConfiguration.getMaxBounds();
+        }
     }
 
     // TODO(b/150095967): Set window type to LayoutParams
@@ -273,21 +272,13 @@ public final class WindowManagerImpl implements WindowManager {
             final boolean alwaysConsumeSystemBars = WindowManagerGlobal.getWindowManagerService()
                     .getWindowInsets(attrs, mContext.getDisplayId(), systemWindowInsets,
                     stableInsets, displayCutout, insetsState);
-            final boolean isScreenRound =
-                    mContext.getResources().getConfiguration().isScreenRound();
-            if (ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_FULL) {
-                return insetsState.calculateInsets(bounds, null /* ignoringVisibilityState*/,
-                        isScreenRound, alwaysConsumeSystemBars, displayCutout.get(),
-                        SOFT_INPUT_ADJUST_NOTHING, attrs.flags,
-                        SYSTEM_UI_FLAG_VISIBLE, null /* typeSideMap */);
-            } else {
-                return new WindowInsets.Builder()
-                        .setAlwaysConsumeSystemBars(alwaysConsumeSystemBars)
-                        .setRound(isScreenRound)
-                        .setSystemWindowInsets(Insets.of(systemWindowInsets))
-                        .setStableInsets(Insets.of(stableInsets))
-                        .setDisplayCutout(displayCutout.get()).build();
-            }
+            final Configuration config = mContext.getResources().getConfiguration();
+            final boolean isScreenRound = config.isScreenRound();
+            final int windowingMode = config.windowConfiguration.getWindowingMode();
+            return insetsState.calculateInsets(bounds, null /* ignoringVisibilityState*/,
+                    isScreenRound, alwaysConsumeSystemBars, displayCutout.get(),
+                    SOFT_INPUT_ADJUST_NOTHING, attrs.flags, SYSTEM_UI_FLAG_VISIBLE, attrs.type,
+                    windowingMode, null /* typeSideMap */);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

@@ -41,10 +41,8 @@ import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.PowerManager.PARTIAL_WAKE_LOCK;
 import static android.os.Process.INVALID_UID;
-import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.Display.TYPE_VIRTUAL;
 
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CLEANUP;
@@ -75,9 +73,9 @@ import static com.android.server.wm.Task.ActivityState.DESTROYED;
 import static com.android.server.wm.Task.ActivityState.PAUSED;
 import static com.android.server.wm.Task.ActivityState.PAUSING;
 import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_PINNED_TASK;
+import static com.android.server.wm.Task.LOCK_TASK_AUTH_ALLOWLISTED;
 import static com.android.server.wm.Task.LOCK_TASK_AUTH_LAUNCHABLE;
 import static com.android.server.wm.Task.LOCK_TASK_AUTH_LAUNCHABLE_PRIV;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_WHITELISTED;
 import static com.android.server.wm.Task.REPARENT_KEEP_STACK_AT_FRONT;
 import static com.android.server.wm.Task.TAG_CLEANUP;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
@@ -133,6 +131,7 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.BoostFramework;
 import com.android.internal.app.procstats.ProcessStats;
+import android.view.Display;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
@@ -805,8 +804,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         false /* markFrozenIfConfigChanged */, true /* deferResume */);
             }
 
-            if (r.getRootTask().checkKeyguardVisibility(r, true /* shouldBeVisible */,
-                    true /* isTop */) && r.allowMoveToFront()) {
+            if (mKeyguardController.checkKeyguardVisibility(r) && r.allowMoveToFront()) {
                 // We only set the visibility to true if the activity is not being launched in
                 // background, and is allowed to be visible based on keyguard state. This avoids
                 // setting this into motion in window manager that is later cancelled due to later
@@ -833,7 +831,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             final LockTaskController lockTaskController = mService.getLockTaskController();
             if (task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE
                     || task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE_PRIV
-                    || (task.mLockTaskAuth == LOCK_TASK_AUTH_WHITELISTED
+                    || (task.mLockTaskAuth == LOCK_TASK_AUTH_ALLOWLISTED
                             && lockTaskController.getLockTaskModeState()
                                     == LOCK_TASK_MODE_LOCKED)) {
                 lockTaskController.startLockTaskMode(task, false, 0 /* blank UID */);
@@ -883,7 +881,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 final ClientTransaction clientTransaction = ClientTransaction.obtain(
                         proc.getThread(), r.appToken);
 
-                final DisplayContent dc = r.getDisplay().mDisplayContent;
+                final DisplayContent dc = r.mDisplayContent;
                 clientTransaction.addCallback(LaunchActivityItem.obtain(new Intent(r.intent),
                         System.identityHashCode(r), r.info,
                         // TODO: Have this take the merged configuration instead of separate global
@@ -936,7 +934,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 // This is the first time we failed -- restart process and
                 // retry.
                 r.launchFailed = true;
-                proc.removeActivity(r);
+                proc.removeActivity(r, true /* keepAssociation */);
                 throw e;
             }
         } finally {
@@ -1139,9 +1137,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         // Check if caller is already present on display
         final boolean uidPresentOnDisplay = displayContent.isUidPresent(callingUid);
 
-        final int displayOwnerUid = displayContent.mDisplay.getOwnerUid();
-        if (displayContent.mDisplay.getType() == TYPE_VIRTUAL && displayOwnerUid != SYSTEM_UID) {
-            // Limit launching on virtual displays, because their contents can be read from Surface
+        final Display display = displayContent.mDisplay;
+        if (!display.isTrusted()) {
+            // Limit launching on untrusted displays because their contents can be read from Surface
             // by apps that created them.
             if ((aInfo.flags & ActivityInfo.FLAG_ALLOW_EMBEDDED) == 0) {
                 if (DEBUG_TASKS) Slog.d(TAG, "Launch on display check:"
@@ -1165,7 +1163,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
 
         // Check if the caller is the owner of the display.
-        if (displayOwnerUid == callingUid) {
+        if (display.getOwnerUid() == callingUid) {
             if (DEBUG_TASKS) Slog.d(TAG, "Launch on display check:"
                     + " allow launch for owner of the display");
             return true;
@@ -1971,7 +1969,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         for (int i = 0; i < numFinishingActivities; i++) {
             final ActivityRecord r = finishingActivities.get(i);
             if (r.isInHistory()) {
-                r.destroyImmediately(true /* removeFromApp */, "finish-" + reason);
+                r.destroyImmediately("finish-" + reason);
             }
         }
     }
@@ -2402,11 +2400,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     /** Ends a batch of visibility updates. */
-    void endActivityVisibilityUpdate() {
-        mVisibilityTransactionDepth--;
-        if (mVisibilityTransactionDepth == 0) {
+    void endActivityVisibilityUpdate(ActivityRecord starting, int configChanges,
+            boolean preserveWindows, boolean notifyClients) {
+        if (mVisibilityTransactionDepth == 1) {
             getKeyguardController().visibilitiesUpdated();
+            // commit visibility to activities
+            mRootWindowContainer.commitActivitiesVisible(starting, configChanges, preserveWindows,
+                    notifyClients);
         }
+        mVisibilityTransactionDepth--;
     }
 
     /** Returns {@code true} if the caller is on the path to update visibility. */
@@ -2616,7 +2618,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     targetActivity.applyOptionsLocked();
                 } finally {
                     mActivityMetricsLogger.notifyActivityLaunched(launchingState,
-                            START_TASK_TO_FRONT, targetActivity);
+                            START_TASK_TO_FRONT, targetActivity, activityOptions);
                 }
 
                 mService.getActivityStartController().postStartActivityProcessingForLastStarter(

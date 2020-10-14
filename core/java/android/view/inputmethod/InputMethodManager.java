@@ -22,6 +22,7 @@ import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITHOUT_CONNECTION;
 import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITH_CONNECTION;
 
+import android.annotation.DisplayContext;
 import android.annotation.DrawableRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -456,9 +457,7 @@ public final class InputMethodManager {
     private int mRequestUpdateCursorAnchorInfoMonitorMode = REQUEST_UPDATE_CURSOR_ANCHOR_INFO_NONE;
 
     /**
-     * When {@link ViewRootImpl#sNewInsetsMode} is set to
-     * >= {@link ViewRootImpl#NEW_INSETS_MODE_IME}, {@link ImeInsetsSourceConsumer} applies the
-     * IME visibility and listens for other state changes.
+     * Applies the IME visibility and listens for other state changes.
      */
     private ImeInsetsSourceConsumer mImeInsetsConsumer;
 
@@ -1193,7 +1192,7 @@ public final class InputMethodManager {
      * @hide
      */
     @NonNull
-    public static InputMethodManager forContext(Context context) {
+    public static InputMethodManager forContext(@DisplayContext Context context) {
         final int displayId = context.getDisplayId();
         // For better backward compatibility, we always use Looper.getMainLooper() for the default
         // display case.

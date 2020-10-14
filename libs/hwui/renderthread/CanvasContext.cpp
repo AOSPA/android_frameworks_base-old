@@ -174,7 +174,10 @@ void CanvasContext::setSurface(ANativeWindow* window, bool enableTimeout) {
     } else {
         mNativeSurface = nullptr;
     }
+    setupPipelineSurface();
+}
 
+void CanvasContext::setupPipelineSurface() {
     bool hasSurface = mRenderPipeline->setSurface(
             mNativeSurface ? mNativeSurface->getNativeWindow() : nullptr, mSwapBehavior);
 
@@ -184,7 +187,7 @@ void CanvasContext::setSurface(ANativeWindow* window, bool enableTimeout) {
 
     mFrameNumber = -1;
 
-    if (window != nullptr && hasSurface) {
+    if (mNativeSurface != nullptr && hasSurface) {
         mHaveNewSurface = true;
         mSwapHistory.clear();
         // Enable frame stats after the surface has been bound to the appropriate graphics API.
@@ -239,9 +242,9 @@ void CanvasContext::setOpaque(bool opaque) {
     mOpaque = opaque;
 }
 
-void CanvasContext::setWideGamut(bool wideGamut) {
-    ColorMode colorMode = wideGamut ? ColorMode::WideColorGamut : ColorMode::SRGB;
-    mRenderPipeline->setSurfaceColorProperties(colorMode);
+void CanvasContext::setColorMode(ColorMode mode) {
+    mRenderPipeline->setSurfaceColorProperties(mode);
+    setupPipelineSurface();
 }
 
 bool CanvasContext::makeCurrent() {
@@ -496,6 +499,14 @@ void CanvasContext::draw() {
 
     waitOnFences();
 
+    if (mNativeSurface) {
+        // TODO(b/165985262): measure performance impact
+        if (const auto vsyncId = mCurrentFrameInfo->get(FrameInfoIndex::FrameTimelineVsyncId);
+                vsyncId != UiFrameInfoBuilder::INVALID_VSYNC_ID) {
+            native_window_set_frame_timeline_vsync(mNativeSurface->getNativeWindow(), vsyncId);
+        }
+    }
+
     bool requireSwap = false;
     int error = OK;
     bool didSwap =
@@ -629,8 +640,11 @@ void CanvasContext::prepareAndDraw(RenderNode* node) {
     ATRACE_CALL();
 
     nsecs_t vsync = mRenderThread.timeLord().computeFrameTimeNanos();
+    int64_t vsyncId = mRenderThread.timeLord().lastVsyncId();
     int64_t frameInfo[UI_THREAD_FRAME_INFO_SIZE];
-    UiFrameInfoBuilder(frameInfo).addFlag(FrameInfoFlags::RTAnimation).setVsync(vsync, vsync);
+    UiFrameInfoBuilder(frameInfo)
+        .addFlag(FrameInfoFlags::RTAnimation)
+        .setVsync(vsync, vsync, vsyncId);
 
     TreeInfo info(TreeInfo::MODE_RT_ONLY, *this);
     prepareTree(info, frameInfo, systemTime(SYSTEM_TIME_MONOTONIC), node);

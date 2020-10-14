@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -28,14 +29,14 @@ import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.SurfaceControl.Transaction;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.AppTransition.MAX_APP_TRANSITION_DURATION;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
 import static com.android.server.wm.IdentifierProto.TITLE;
 import static com.android.server.wm.IdentifierProto.USER_ID;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
@@ -51,7 +52,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.logWithStack;
-import static com.android.server.wm.WindowManagerService.sHierarchicalAnimations;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_AFTER_ANIM;
 
 import android.annotation.CallSuper;
@@ -83,8 +83,8 @@ import android.window.IWindowContainerToken;
 import android.window.WindowContainerToken;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ToBooleanFunction;
-import com.android.server.protolog.common.ProtoLog;
 import com.android.server.wm.SurfaceAnimator.Animatable;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
@@ -320,7 +320,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
         super.onConfigurationChanged(newParentConfig);
-        updateSurfacePosition();
+        updateSurfacePositionNonOrganized();
         scheduleAnimation();
     }
 
@@ -418,7 +418,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         setSurfaceControl(b.setCallsite("WindowContainer.setInitialSurfaceControlProperties").build());
         getSyncTransaction().show(mSurfaceControl);
         onSurfaceShown(getSyncTransaction());
-        updateSurfacePosition();
+        updateSurfacePositionNonOrganized();
     }
 
     /**
@@ -855,6 +855,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             final WindowContainer wc = mChildren.get(i);
             wc.forceWindowsScaleableInTransaction(force);
         }
+    }
+
+    /**
+     * @return {@code true} when an application can override an app transition animation on this
+     * container.
+     */
+    boolean canCustomizeAppTransition() {
+        return !WindowManagerService.sDisableCustomTaskAnimationProperty;
     }
 
     /**
@@ -2022,7 +2030,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     protected void reparentSurfaceControl(Transaction t, SurfaceControl newParent) {
-        mSurfaceAnimator.reparent(t, newParent);
+        // Don't reparent active leashes since the animator won't know about the change.
+        if (mSurfaceFreezer.hasLeash() || mSurfaceAnimator.hasLeash()) return;
+        t.reparent(getSurfaceControl(), newParent);
     }
 
     void assignChildLayers(Transaction t) {
@@ -2364,10 +2374,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         final Rect screenBounds = getAnimationBounds(appStackClipMode);
         mTmpRect.set(screenBounds);
         getAnimationPosition(mTmpPoint);
-        if (!sHierarchicalAnimations) {
-            // Non-hierarchical animation uses position in global coordinates.
-            mTmpPoint.set(mTmpRect.left, mTmpRect.top);
-        }
         mTmpRect.offsetTo(0, 0);
 
         final RemoteAnimationController controller =
@@ -2459,8 +2465,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     private Animation loadAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
                                     boolean isVoiceInteraction) {
-        if (isOrganized()) {
-            // Defer to the task organizer to run animations
+        if (isOrganized()
+                // TODO(b/161711458): Clean-up when moved to shell.
+                && getWindowingMode() != WINDOWING_MODE_FULLSCREEN) {
             return null;
         }
 
@@ -2703,14 +2710,19 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
-    final void updateSurfacePosition() {
+    final void updateSurfacePositionNonOrganized() {
+        // Avoid fighting with the organizer over Surface position.
+        if (isOrganized()) return;
         updateSurfacePosition(getSyncTransaction());
     }
 
+    /**
+     * Only for use internally (see PROTECTED annotation). This should only be used over
+     * {@link #updateSurfacePositionNonOrganized} when the surface position needs to be
+     * updated even if organized (eg. while changing to organized).
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PROTECTED)
     void updateSurfacePosition(Transaction t) {
-        // Avoid fighting with the organizer over Surface position.
-        if (isOrganized()) return;
-
         if (mSurfaceControl == null || mSurfaceAnimator.hasLeash()) {
             return;
         }
@@ -2750,13 +2762,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void getRelativePosition(Point outPos) {
-        // In addition to updateSurfacePosition, we keep other code that sets
-        // position from fighting with the organizer
-        if (isOrganized()) {
-            outPos.set(0, 0);
-            return;
-        }
-
         final Rect dispBounds = getBounds();
         outPos.set(dispBounds.left, dispBounds.top);
         final WindowContainer parent = getParent();

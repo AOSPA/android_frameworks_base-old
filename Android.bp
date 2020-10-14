@@ -366,7 +366,8 @@ filegroup {
         ":framework-tethering-srcs",
         ":framework-wifi-updatable-sources",
         ":updatable-media-srcs",
-    ]
+    ],
+    visibility: ["//visibility:private"],
 }
 
 java_library {
@@ -383,7 +384,31 @@ java_library {
         "framework-wifi.stubs.module_lib",
     ],
     sdk_version: "module_current",
-    visibility: [":__pkg__"],
+    visibility: ["//visibility:private"],
+}
+
+java_library {
+    name: "framework-all",
+    installable: false,
+    static_libs: [
+        "framework-minus-apex",
+        "framework-appsearch",
+        "framework-graphics.impl",
+        "framework-mediaprovider.impl",
+        "framework-permission.impl",
+        "framework-sdkextensions.impl",
+        "framework-statsd.impl",
+        "framework-tethering.impl",
+        "framework-wifi.impl",
+        "updatable-media",
+    ],
+    apex_available: ["//apex_available:platform"],
+    sdk_version: "core_platform",
+    visibility: [
+        // DO NOT ADD ANY MORE ENTRIES TO THIS LIST
+        "//external/robolectric-shadows:__subpackages__",
+        "//frameworks/layoutlib:__subpackages__",
+    ],
 }
 
 filegroup {
@@ -433,7 +458,7 @@ java_library {
         "apex_aidl_interface-java",
         "suspend_control_aidl_interface-java",
         "framework-protos",
-        "game-driver-protos",
+        "updatable-driver-protos",
         "android.hidl.base-V1.0-java",
         "android.hardware.cas-V1.0-java",
         "android.hardware.cas-V1.1-java",
@@ -467,57 +492,11 @@ java_library {
 
         "com.android.sysprop.apex",
         "com.android.sysprop.init",
+        "com.android.sysprop.localization",
         "PlatformProperties",
     ],
     sdk_version: "core_platform",
     installable: false,
-}
-
-java_defaults {
-    name: "framework-defaults",
-    defaults: ["framework-aidl-export-defaults"],
-    installable: true,
-
-    aidl: {
-        generate_get_transaction_name: true,
-    },
-
-    srcs: ["core/java/**/*.logtags"],
-
-    exclude_srcs: [
-        // See comment on framework-atb-backward-compatibility module below
-        "core/java/android/content/pm/AndroidTestBaseUpdater.java",
-    ],
-
-    sdk_version: "core_platform",
-    libs: [
-        "app-compat-annotations",
-        "ext",
-        "unsupportedappusage",
-    ],
-
-    jarjar_rules: ":framework-jarjar-rules",
-
-    static_libs: [
-        "framework-internal-utils",
-    ],
-
-    dxflags: [
-        "--core-library",
-        "--multi-dex",
-    ],
-
-    plugins: [
-        "view-inspector-annotation-processor",
-        "staledataclass-annotation-processor",
-        "error_prone_android_framework",
-    ],
-
-    required: [
-        // TODO: remove gps_debug and protolog.conf.json when the build system propagates "required" properly.
-        "gps_debug.conf",
-        "protolog.conf.json.gz",
-    ],
 }
 
 filegroup {
@@ -559,19 +538,47 @@ filegroup {
 
 java_library {
     name: "framework-minus-apex",
-    defaults: ["framework-defaults"],
-    srcs: [":framework-non-updatable-sources"],
+    defaults: ["framework-aidl-export-defaults"],
+    srcs: [
+        ":framework-non-updatable-sources",
+        "core/java/**/*.logtags",
+    ],
+    // See comment on framework-atb-backward-compatibility module below
+    exclude_srcs: ["core/java/android/content/pm/AndroidTestBaseUpdater.java"],
+    aidl: {
+        generate_get_transaction_name: true,
+    },
+    dxflags: [
+        "--core-library",
+        "--multi-dex",
+    ],
     installable: true,
+    jarjar_rules: ":framework-jarjar-rules",
     javac_shard_size: 150,
+    plugins: [
+        "view-inspector-annotation-processor",
+        "staledataclass-annotation-processor",
+        "error_prone_android_framework",
+    ],
     required: [
         "framework-platform-compat-config",
+        // TODO: remove gps_debug and protolog.conf.json when the build system propagates "required" properly.
+        "gps_debug.conf",
         "libcore-platform-compat-config",
+        "protolog.conf.json.gz",
         "services-platform-compat-config",
         "documents-ui-compat-config",
         "calendar-provider-compat-config",
     ],
-    libs: ["framework-updatable-stubs-module_libs_api"],
+    libs: [
+        "app-compat-annotations",
+        "ext",
+        "framework-updatable-stubs-module_libs_api",
+        "unsupportedappusage",
+    ],
+    sdk_version: "core_platform",
     static_libs: [
+        "framework-internal-utils",
         // If MimeMap ever becomes its own APEX, then this dependency would need to be removed
         // in favor of an API stubs dependency in java_library "framework" below.
         "mimemap",
@@ -612,32 +619,6 @@ java_library {
     ],
     sdk_version: "core_platform",
     apex_available: ["//apex_available:platform"],
-}
-
-java_library {
-    name: "framework-all",
-    defaults: ["framework-defaults"],
-    srcs: [":framework-all-sources"],
-    installable: false,
-    static_libs: [
-        "exoplayer2-extractor",
-        "android.hardware.wifi-V1.0-java-constants",
-        "mediatranscoding_aidl_interface-java",
-
-        // Additional dependencies needed to build the ike API classes.
-        "ike-internals",
-    ],
-    plugins: [
-        "intdef-annotation-processor",
-    ],
-    libs: ["icing-java-proto-lite"],
-    apex_available: ["//apex_available:platform"],
-    visibility: [
-        // DO NOT ADD ANY MORE ENTRIES TO THIS LIST
-        "//external/robolectric-shadows:__subpackages__",
-        "//frameworks/base",
-        "//frameworks/layoutlib:__subpackages__",
-    ],
 }
 
 platform_compat_config {
@@ -1048,6 +1029,7 @@ filegroup {
     name: "incremental_manager_aidl",
     srcs: [
         "core/java/android/os/incremental/IIncrementalService.aidl",
+        "core/java/android/os/incremental/IStorageLoadingProgressListener.aidl",
         "core/java/android/os/incremental/IncrementalNewFileParams.aidl",
         "core/java/android/os/incremental/IStorageHealthListener.aidl",
         "core/java/android/os/incremental/StorageHealthCheckParams.aidl",
@@ -1414,3 +1396,30 @@ filegroup {
     name: "framework-telephony-jarjar-rules",
     srcs: ["telephony/framework-telephony-jarjar-rules.txt"],
 }
+
+// protolog start
+filegroup {
+    name: "protolog-common-src",
+    srcs: [
+        "core/java/com/android/internal/protolog/common/**/*.java",
+    ],
+}
+
+java_library {
+    name: "protolog-lib",
+    platform_apis: true,
+    srcs: [
+        "core/java/com/android/internal/protolog/ProtoLogImpl.java",
+        "core/java/com/android/internal/protolog/ProtoLogViewerConfigReader.java",
+        ":protolog-common-src",
+    ],
+}
+
+java_library {
+    name: "protolog-groups",
+    srcs: [
+        "core/java/com/android/internal/protolog/ProtoLogGroup.java",
+        ":protolog-common-src",
+    ],
+}
+// protolog end

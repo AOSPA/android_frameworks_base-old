@@ -122,9 +122,12 @@ public class WifiSignalController extends
     @Override
     public void notifyListeners(SignalCallback callback) {
         // only show wifi in the cluster if connected or if wifi-only
+        boolean visibleWhenEnabled = mContext.getResources().getBoolean(
+                R.bool.config_showWifiIndicatorWhenEnabled);
         boolean wifiVisible = mCurrentState.enabled && (
                 (mCurrentState.connected && mCurrentState.inetCondition == 1)
-                        || !mHasMobileDataFeature || mWifiTracker.isDefaultNetwork);
+                        || !mHasMobileDataFeature || mCurrentState.isDefault
+                        || visibleWhenEnabled);
         String wifiDesc = mCurrentState.connected ? mCurrentState.ssid : null;
         boolean ssidPresent = wifiVisible && mCurrentState.ssid != null;
         String contentDescription = getTextIfExists(getContentDescription()).toString();
@@ -159,6 +162,7 @@ public class WifiSignalController extends
     public void fetchInitialState() {
         mWifiTracker.fetchInitialState();
         mCurrentState.enabled = mWifiTracker.enabled;
+        mCurrentState.isDefault = mWifiTracker.isDefaultNetwork;
         mCurrentState.connected = mWifiTracker.connected;
         mCurrentState.ssid = mWifiTracker.ssid;
         mCurrentState.rssi = mWifiTracker.rssi;
@@ -173,6 +177,7 @@ public class WifiSignalController extends
     public void handleBroadcast(Intent intent) {
         mWifiTracker.handleBroadcast(intent);
         mCurrentState.enabled = mWifiTracker.enabled;
+        mCurrentState.isDefault = mWifiTracker.isDefaultNetwork;
         mCurrentState.connected = mWifiTracker.connected;
         mCurrentState.ssid = mWifiTracker.ssid;
         mCurrentState.rssi = mWifiTracker.rssi;
@@ -187,6 +192,7 @@ public class WifiSignalController extends
 
     private void handleStatusUpdated() {
         mCurrentState.statusLabel = mWifiTracker.statusLabel;
+        mCurrentState.isDefault = mWifiTracker.isDefaultNetwork;
         notifyListenersIfNecessary();
     }
 
@@ -212,6 +218,7 @@ public class WifiSignalController extends
     static class WifiState extends SignalController.State {
         String ssid;
         boolean isTransient;
+        boolean isDefault;
         String statusLabel;
         int wifiStandard;
         boolean isReady;
@@ -224,6 +231,7 @@ public class WifiSignalController extends
             wifiStandard = state.wifiStandard;
             isReady = state.isReady;
             isTransient = state.isTransient;
+            isDefault = state.isDefault;
             statusLabel = state.statusLabel;
         }
 
@@ -234,6 +242,7 @@ public class WifiSignalController extends
                 .append(",wifiStandard=").append(wifiStandard)
                 .append(",isReady=").append(isReady)
                 .append(",isTransient=").append(isTransient)
+                .append(",isDefault=").append(isDefault)
                 .append(",statusLabel=").append(statusLabel);
         }
 
@@ -247,6 +256,7 @@ public class WifiSignalController extends
                     && other.wifiStandard == wifiStandard
                     && other.isReady == isReady
                     && other.isTransient == isTransient
+                    && other.isDefault == isDefault
                     && TextUtils.equals(other.statusLabel, statusLabel);
         }
     }

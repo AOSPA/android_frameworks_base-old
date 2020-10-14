@@ -103,6 +103,7 @@ import android.location.LocationManager;
 import android.media.AudioManager;
 import android.media.MediaFrameworkInitializer;
 import android.media.MediaRouter;
+import android.media.MediaTranscodeManager;
 import android.media.midi.IMidiManager;
 import android.media.midi.MidiManager;
 import android.media.projection.MediaProjectionManager;
@@ -304,6 +305,15 @@ public final class SystemServiceRegistry {
             public AudioManager createService(ContextImpl ctx) {
                 return new AudioManager(ctx);
             }});
+
+        registerService(Context.MEDIA_TRANSCODING_SERVICE, MediaTranscodeManager.class,
+                new CachedServiceFetcher<MediaTranscodeManager>() {
+                    @Override
+                    public MediaTranscodeManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new MediaTranscodeManager(ctx);
+                    }
+                });
 
         registerService(Context.MEDIA_ROUTER_SERVICE, MediaRouter.class,
                 new CachedServiceFetcher<MediaRouter>() {
@@ -1116,7 +1126,7 @@ public final class SystemServiceRegistry {
                 // Get the services without throwing as this is an optional feature
                 Context outerContext = ctx.getOuterContext();
                 ContentCaptureOptions options = outerContext.getContentCaptureOptions();
-                // Options is null when the service didn't whitelist the activity or package
+                // Options is null when the service didn't allowlist the activity or package
                 if (options != null && (options.lite || options.isWhitelisted(outerContext))) {
                     IBinder b = ServiceManager
                             .getService(Context.CONTENT_CAPTURE_MANAGER_SERVICE);
@@ -1126,7 +1136,7 @@ public final class SystemServiceRegistry {
                         return new ContentCaptureManager(outerContext, service, options);
                     }
                 }
-                // When feature is disabled or app / package not whitelisted, we return a null
+                // When feature is disabled or app / package not allowlisted, we return a null
                 // manager to apps so the performance impact is practically zero
                 return null;
             }});

@@ -17,6 +17,7 @@
 package com.android.server.biometrics.sensors.face;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.Context;
 import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.face.V1_0.IBiometricsFace;
@@ -39,9 +40,10 @@ public class FaceGetFeatureClient extends ClientMonitor<IBiometricsFace> {
 
     private final int mFeature;
     private final int mFaceId;
+    private boolean mValue;
 
     FaceGetFeatureClient(@NonNull Context context, @NonNull LazyDaemon<IBiometricsFace> lazyDaemon,
-            @NonNull IBinder token, @NonNull ClientMonitorCallbackConverter listener, int userId,
+            @NonNull IBinder token, @Nullable ClientMonitorCallbackConverter listener, int userId,
             @NonNull String owner, int sensorId, int feature, int faceId) {
         super(context, lazyDaemon, token, listener, userId, owner, 0 /* cookie */, sensorId,
                 BiometricsProtoEnums.MODALITY_UNKNOWN, BiometricsProtoEnums.ACTION_UNKNOWN,
@@ -54,15 +56,17 @@ public class FaceGetFeatureClient extends ClientMonitor<IBiometricsFace> {
     @Override
     public void unableToStart() {
         try {
-            getListener().onFeatureGet(false /* success */, mFeature, false /* value */);
+            if (getListener() != null) {
+                getListener().onFeatureGet(false /* success */, mFeature, false /* value */);
+            }
         } catch (RemoteException e) {
             Slog.e(TAG, "Unable to send error", e);
         }
     }
 
     @Override
-    public void start(@NonNull FinishCallback finishCallback) {
-        super.start(finishCallback);
+    public void start(@NonNull Callback callback) {
+        super.start(callback);
         startHalOperation();
     }
 
@@ -70,11 +74,18 @@ public class FaceGetFeatureClient extends ClientMonitor<IBiometricsFace> {
     protected void startHalOperation() {
         try {
             final OptionalBool result = getFreshDaemon().getFeature(mFeature, mFaceId);
-            getListener().onFeatureGet(result.status == Status.OK, mFeature, result.value);
-            mFinishCallback.onClientFinished(this, true /* success */);
+            mValue = result.value;
+            if (getListener() != null) {
+                getListener().onFeatureGet(result.status == Status.OK, mFeature, mValue);
+            }
+            mCallback.onClientFinished(this, true /* success */);
         } catch (RemoteException e) {
             Slog.e(TAG, "Unable to getFeature", e);
-            mFinishCallback.onClientFinished(this, false /* success */);
+            mCallback.onClientFinished(this, false /* success */);
         }
+    }
+
+    boolean getValue() {
+        return mValue;
     }
 }

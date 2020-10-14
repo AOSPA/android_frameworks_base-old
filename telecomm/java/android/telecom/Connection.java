@@ -383,15 +383,17 @@ public abstract class Connection extends Conferenceable {
 
     /**
      * When set, indicates that this {@link Connection} supports initiation of a conference call
-     * by directly adding participants using {@link #onAddConferenceParticipants(List)}.
-     * @hide
+     * by directly adding participants using {@link #onAddConferenceParticipants(List)}. When
+     * participants are added to a {@link Connection}, it will be replaced by a {@link Conference}
+     * instance with {@link #PROPERTY_IS_ADHOC_CONFERENCE} set to indicate that it is an adhoc
+     * conference call.
      */
     public static final int CAPABILITY_ADD_PARTICIPANT = 0x04000000;
 
     /**
      * Indicates that this {@code Connection} can be transferred to another
      * number.
-     * Connection supports the blind and assured call transfer feature.
+     * Connection supports the confirmed and unconfirmed call transfer feature.
      * @hide
      */
     public static final int CAPABILITY_TRANSFER = 0x08000000;
@@ -532,10 +534,9 @@ public abstract class Connection extends Conferenceable {
     public static final int PROPERTY_REMOTELY_HOSTED = 1 << 11;
 
     /**
-     * Set by the framework to indicate that it is an adhoc conference call.
+     * Set by the framework to indicate that a call is an adhoc conference call.
      * <p>
-     * This is used for Outgoing and incoming conference calls.
-     * @hide
+     * This is used for outgoing and incoming conference calls.
      */
     public static final int PROPERTY_IS_ADHOC_CONFERENCE = 1 << 12;
 
@@ -3043,7 +3044,6 @@ public abstract class Connection extends Conferenceable {
      * Supports initiation of a conference call by directly adding participants to an ongoing call.
      *
      * @param participants with which conference call will be formed.
-     * @hide
      */
     public void onAddConferenceParticipants(@NonNull List<Uri> participants) {}
 
