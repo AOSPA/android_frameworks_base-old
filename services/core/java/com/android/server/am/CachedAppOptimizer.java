@@ -285,6 +285,10 @@ public final class CachedAppOptimizer {
         }
         Process.setThreadGroupAndCpuset(mCachedAppOptimizerThread.getThreadId(),
                 Process.THREAD_GROUP_SYSTEM);
+        setAppCompactProperties();
+    }
+
+    private void setAppCompactProperties() {
         boolean useCompaction =
                     Boolean.valueOf(mPerf.perfGetProp("vendor.appcompact.enable_app_compact",
                         "false"));
@@ -478,6 +482,12 @@ public final class CachedAppOptimizer {
      */
     @GuardedBy("mPhenotypeFlagLock")
     private void updateUseCompaction() {
+        // If this property is null there must have been some unexpected reset
+        String useCompaction = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_USE_COMPACTION);
+        if (useCompaction == null) {
+            setAppCompactProperties();
+        }
+
         mUseCompaction = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                     KEY_USE_COMPACTION, DEFAULT_USE_COMPACTION);
 
