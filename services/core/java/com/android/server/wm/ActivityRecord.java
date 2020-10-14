@@ -150,6 +150,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_TRANSITION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_USER_LEAVING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_VISIBILITY;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SERVICETRACKER;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_ADD_REMOVE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_APP;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_CONFIGURATION;
@@ -4521,8 +4522,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 aState = ActivityStates.RESTARTING_PROCESS;
                 break;
         }
-
-        Slog.v(TAG, "Calling mServicetracker.OnActivityStateChange with flag " + early_notify + "state" + state);
+        if(DEBUG_SERVICETRACKER) {
+            Slog.v(TAG, "Calling mServicetracker.OnActivityStateChange with flag " + early_notify + " state " + state);
+        }
         try {
             mServicetracker = mAtmService.mStackSupervisor.getServicetrackerInstance();
             if (mServicetracker != null)
