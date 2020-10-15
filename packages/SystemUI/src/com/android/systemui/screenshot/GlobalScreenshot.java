@@ -69,6 +69,7 @@ import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.AnimationUtils;
@@ -104,7 +105,6 @@ public class GlobalScreenshot implements ViewTreeObserver.OnComputeInternalInset
         public Bitmap image;
         public Consumer<Uri> finisher;
         public GlobalScreenshot.ActionsReadyListener mActionsReadyListener;
-        public int errorMsgResId;
 
         void clearImage() {
             image = null;
@@ -184,6 +184,7 @@ public class GlobalScreenshot implements ViewTreeObserver.OnComputeInternalInset
     private final WindowManager.LayoutParams mWindowLayoutParams;
     private final Display mDisplay;
     private final DisplayMetrics mDisplayMetrics;
+    private final AccessibilityManager mAccessibilityManager;
 
     private View mScreenshotLayout;
     private ScreenshotSelectorView mScreenshotSelectorView;
@@ -242,6 +243,7 @@ public class GlobalScreenshot implements ViewTreeObserver.OnComputeInternalInset
         mScreenshotSmartActions = screenshotSmartActions;
         mNotificationsController = screenshotNotificationsController;
         mUiEventLogger = uiEventLogger;
+        mAccessibilityManager = AccessibilityManager.getInstance(mContext);
 
         reloadAssets();
         Configuration config = mContext.getResources().getConfiguration();
@@ -319,8 +321,17 @@ public class GlobalScreenshot implements ViewTreeObserver.OnComputeInternalInset
             Insets visibleInsets, int taskId, int userId, ComponentName topComponent,
             Consumer<Uri> finisher, Runnable onComplete) {
         // TODO: use task Id, userId, topComponent for smart handler
-
         mOnCompleteRunnable = onComplete;
+
+        if (screenshot == null) {
+            Log.e(TAG, "Got null bitmap from screenshot message");
+            mNotificationsController.notifyScreenshotError(
+                    R.string.screenshot_failed_to_capture_text);
+            finisher.accept(null);
+            mOnCompleteRunnable.run();
+            return;
+        }
+
         if (aspectRatiosMatch(screenshot, visibleInsets, screenshotScreenBounds)) {
             saveScreenshot(screenshot, finisher, screenshotScreenBounds, visibleInsets, false);
         } else {
@@ -567,12 +578,30 @@ public class GlobalScreenshot implements ViewTreeObserver.OnComputeInternalInset
                         .build();
         final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
                 SurfaceControl.captureDisplay(captureArgs);
-        final Bitmap screenshot = screenshotBuffer == null ? null : screenshotBuffer.asBitmap();
+        Bitmap screenshot = screenshotBuffer == null ? null : screenshotBuffer.asBitmap();
+
+        if (screenshot == null) {
+            Log.e(TAG, "Screenshot bitmap was null");
+            mNotificationsController.notifyScreenshotError(
+                    R.string.screenshot_failed_to_capture_text);
+            finisher.accept(null);
+            mOnCompleteRunnable.run();
+            return;
+        }
+
         saveScreenshot(screenshot, finisher, screenRect, Insets.NONE, true);
     }
 
     private void saveScreenshot(Bitmap screenshot, Consumer<Uri> finisher, Rect screenRect,
             Insets screenInsets, boolean showFlash) {
+        if (mAccessibilityManager.isEnabled()) {
+            AccessibilityEvent event =
+                    new AccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
+            event.setContentDescription(
+                    mContext.getResources().getString(R.string.screenshot_saving_title));
+            mAccessibilityManager.sendAccessibilityEvent(event);
+        }
+
         if (mScreenshotLayout.isAttachedToWindow()) {
             // if we didn't already dismiss for another reason
             if (mDismissAnimation == null || !mDismissAnimation.isRunning()) {
@@ -582,14 +611,6 @@ public class GlobalScreenshot implements ViewTreeObserver.OnComputeInternalInset
         }
 
         mScreenBitmap = screenshot;
-
-        if (mScreenBitmap == null) {
-            mNotificationsController.notifyScreenshotError(
-                    R.string.screenshot_failed_to_capture_text);
-            finisher.accept(null);
-            mOnCompleteRunnable.run();
-            return;
-        }
 
         if (!isUserSetupComplete()) {
             // User setup isn't complete, so we don't want to show any UI beyond a toast, as editing
@@ -632,7 +653,7 @@ public class GlobalScreenshot implements ViewTreeObserver.OnComputeInternalInset
                 if (imageData.uri == null) {
                     mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_NOT_SAVED);
                     mNotificationsController.notifyScreenshotError(
-                            R.string.screenshot_failed_to_capture_text);
+                            R.string.screenshot_failed_to_save_text);
                 } else {
                     mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_SAVED);
 
@@ -752,7 +773,7 @@ public class GlobalScreenshot implements ViewTreeObserver.OnComputeInternalInset
         if (imageData.uri == null) {
             mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_NOT_SAVED);
             mNotificationsController.notifyScreenshotError(
-                    R.string.screenshot_failed_to_capture_text);
+                    R.string.screenshot_failed_to_save_text);
         } else {
             mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_SAVED);
         }

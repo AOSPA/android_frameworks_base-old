@@ -391,11 +391,11 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             Spline sysToNits = null;
 
             // Load the mapping from nits to HAL brightness range (display-device-config.xml)
-            DisplayDeviceConfig config = DisplayDeviceConfig.create(mPhysicalDisplayId);
-            mDisplayDeviceConfig = config;
-            if (config == null) {
+            mDisplayDeviceConfig = DisplayDeviceConfig.create(mPhysicalDisplayId);
+            if (mDisplayDeviceConfig == null) {
                 return;
             }
+
             final float[] halNits = mDisplayDeviceConfig.getNits();
             final float[] halBrightness = mDisplayDeviceConfig.getBrightness();
             if (halNits == null || halBrightness == null) {
@@ -964,7 +964,8 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             for (int i = 0; i < mSupportedModes.size(); i++) {
                 pw.println("  " + mSupportedModes.valueAt(i));
             }
-            pw.print("mSupportedColorModes=" + mSupportedColorModes.toString());
+            pw.println("mSupportedColorModes=" + mSupportedColorModes.toString());
+            pw.print("mDisplayDeviceConfig=" + mDisplayDeviceConfig);
         }
 
         private int findDisplayConfigIdLocked(int modeId, int configGroup) {
@@ -990,6 +991,10 @@ final class LocalDisplayAdapter extends DisplayAdapter {
         }
 
         private int findMatchingModeIdLocked(int configId) {
+            if (configId < 0 || configId >= mDisplayConfigs.length) {
+                Slog.e(TAG, "Invalid display config index " + configId);
+                return NO_DISPLAY_MODE_ID;
+            }
             SurfaceControl.DisplayConfig config = mDisplayConfigs[configId];
             for (int i = 0; i < mSupportedModes.size(); i++) {
                 DisplayModeRecord record = mSupportedModes.valueAt(i);

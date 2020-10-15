@@ -16,29 +16,58 @@
 
 package com.android.wm.shell;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
+import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
+import android.annotation.IntDef;
 import android.app.ActivityManager.RunningTaskInfo;
+import android.app.WindowConfiguration.WindowingMode;
 import android.util.Log;
-import android.util.Pair;
 import android.util.SparseArray;
 import android.view.SurfaceControl;
 import android.window.ITaskOrganizerController;
+import android.window.TaskAppearedInfo;
 import android.window.TaskOrganizer;
+
+import androidx.annotation.NonNull;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
+import com.android.wm.shell.common.ShellExecutor;
+import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.protolog.ShellProtoLogGroup;
 
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Unified task organizer for all components in the shell.
  * TODO(b/167582004): may consider consolidating this class and TaskOrganizer
  */
 public class ShellTaskOrganizer extends TaskOrganizer {
+
+    // Intentionally using negative numbers here so the positive numbers can be used
+    // for task id specific listeners that will be added later.
+    public static final int TASK_LISTENER_TYPE_UNDEFINED = -1;
+    public static final int TASK_LISTENER_TYPE_FULLSCREEN = -2;
+    public static final int TASK_LISTENER_TYPE_MULTI_WINDOW = -3;
+    public static final int TASK_LISTENER_TYPE_PIP = -4;
+    public static final int TASK_LISTENER_TYPE_SPLIT_SCREEN = -5;
+
+    @IntDef(prefix = {"TASK_LISTENER_TYPE_"}, value = {
+            TASK_LISTENER_TYPE_UNDEFINED,
+            TASK_LISTENER_TYPE_FULLSCREEN,
+            TASK_LISTENER_TYPE_MULTI_WINDOW,
+            TASK_LISTENER_TYPE_PIP,
+            TASK_LISTENER_TYPE_SPLIT_SCREEN,
+    })
+    public @interface TaskListenerType {}
 
     private static final String TAG = "ShellTaskOrganizer";
 
@@ -52,49 +81,63 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         default void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {}
     }
 
-    private final SparseArray<ArrayList<TaskListener>> mListenersByWindowingMode =
-            new SparseArray<>();
+    private final SparseArray<TaskListener> mTaskListenersByType = new SparseArray<>();
 
     // Keeps track of all the tasks reported to this organizer (changes in windowing mode will
     // require us to report to both old and new listeners)
-    private final SparseArray<Pair<RunningTaskInfo, SurfaceControl>> mTasks = new SparseArray<>();
+    private final SparseArray<TaskAppearedInfo> mTasks = new SparseArray<>();
 
-    public ShellTaskOrganizer(TransactionPool transactionPool) {
-        super();
-        addListener(new FullscreenTaskListener(transactionPool), WINDOWING_MODE_FULLSCREEN);
+    // TODO(shell-transitions): move to a more "global" Shell location as this isn't only for Tasks
+    private final Transitions mTransitions;
+
+    public ShellTaskOrganizer(SyncTransactionQueue syncQueue, TransactionPool transactionPool,
+            ShellExecutor mainExecutor, ShellExecutor animExecutor) {
+        this(null, syncQueue, transactionPool, mainExecutor, animExecutor);
     }
 
     @VisibleForTesting
     ShellTaskOrganizer(ITaskOrganizerController taskOrganizerController,
-                       TransactionPool transactionPool) {
+            SyncTransactionQueue syncQueue, TransactionPool transactionPool,
+            ShellExecutor mainExecutor, ShellExecutor animExecutor) {
         super(taskOrganizerController);
-        addListener(new FullscreenTaskListener(transactionPool), WINDOWING_MODE_FULLSCREEN);
+        addListener(new FullscreenTaskListener(syncQueue), TASK_LISTENER_TYPE_FULLSCREEN);
+        mTransitions = new Transitions(this, transactionPool, mainExecutor, animExecutor);
+        if (Transitions.ENABLE_SHELL_TRANSITIONS) registerTransitionPlayer(mTransitions);
+    }
+
+    @Override
+    public List<TaskAppearedInfo> registerOrganizer() {
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Registering organizer");
+        final List<TaskAppearedInfo> taskInfos = super.registerOrganizer();
+        for (int i = 0; i < taskInfos.size(); i++) {
+            final TaskAppearedInfo info = taskInfos.get(i);
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Existing task: id=%d component=%s",
+                    info.getTaskInfo().taskId, info.getTaskInfo().baseIntent);
+            onTaskAppeared(info.getTaskInfo(), info.getLeash());
+        }
+        return taskInfos;
     }
 
     /**
-     * Adds a listener for tasks in a specific windowing mode.
+     * Adds a listener for tasks with given types.
      */
-    public void addListener(TaskListener listener, int... windowingModes) {
-        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Add listener for modes=%s listener=%s",
-                Arrays.toString(windowingModes), listener);
-        for (int winMode : windowingModes) {
-            ArrayList<TaskListener> listeners = mListenersByWindowingMode.get(winMode);
-            if (listeners == null) {
-                listeners = new ArrayList<>();
-                mListenersByWindowingMode.put(winMode, listeners);
+    public void addListener(TaskListener listener, @TaskListenerType int... taskListenerTypes) {
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Add listener for types=%s listener=%s",
+                Arrays.toString(taskListenerTypes), listener);
+        for (int listenerType : taskListenerTypes) {
+            if (mTaskListenersByType.get(listenerType) != null) {
+                throw new IllegalArgumentException("Listener for listenerType=" + listenerType
+                        + " already exists");
             }
-            if (listeners.contains(listener)) {
-                Log.w(TAG, "Listener already exists");
-                return;
-            }
-            listeners.add(listener);
+            mTaskListenersByType.put(listenerType, listener);
 
-            // Notify the listener of all existing tasks in that windowing mode
+            // Notify the listener of all existing tasks with the given type.
             for (int i = mTasks.size() - 1; i >= 0; i--) {
-                Pair<RunningTaskInfo, SurfaceControl> data = mTasks.valueAt(i);
-                int taskWinMode = data.first.configuration.windowConfiguration.getWindowingMode();
-                if (taskWinMode == winMode) {
-                    listener.onTaskAppeared(data.first, data.second);
+                TaskAppearedInfo data = mTasks.valueAt(i);
+                final @TaskListenerType int taskListenerType = getTaskListenerType(
+                        data.getTaskInfo());
+                if (taskListenerType == listenerType) {
+                    listener.onTaskAppeared(data.getTaskInfo(), data.getLeash());
                 }
             }
         }
@@ -105,22 +148,22 @@ public class ShellTaskOrganizer extends TaskOrganizer {
      */
     public void removeListener(TaskListener listener) {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Remove listener=%s", listener);
-        for (int i = 0; i < mListenersByWindowingMode.size(); i++) {
-            mListenersByWindowingMode.valueAt(i).remove(listener);
+        final int index = mTaskListenersByType.indexOfValue(listener);
+        if (index == -1) {
+            Log.w(TAG, "No registered listener found");
+            return;
         }
+        mTaskListenersByType.removeAt(index);
     }
 
     @Override
     public void onTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Task appeared taskId=%d",
                 taskInfo.taskId);
-        mTasks.put(taskInfo.taskId, new Pair<>(taskInfo, leash));
-        ArrayList<TaskListener> listeners = mListenersByWindowingMode.get(
-                getWindowingMode(taskInfo));
-        if (listeners != null) {
-            for (int i = listeners.size() - 1; i >= 0; i--) {
-                listeners.get(i).onTaskAppeared(taskInfo, leash);
-            }
+        mTasks.put(taskInfo.taskId, new TaskAppearedInfo(taskInfo, leash));
+        final TaskListener listener = mTaskListenersByType.get(getTaskListenerType(taskInfo));
+        if (listener != null) {
+            listener.onTaskAppeared(taskInfo, leash);
         }
     }
 
@@ -128,32 +171,26 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     public void onTaskInfoChanged(RunningTaskInfo taskInfo) {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Task info changed taskId=%d",
                 taskInfo.taskId);
-        Pair<RunningTaskInfo, SurfaceControl> data = mTasks.get(taskInfo.taskId);
-        int winMode = getWindowingMode(taskInfo);
-        int prevWinMode = getWindowingMode(data.first);
-        mTasks.put(taskInfo.taskId, new Pair<>(taskInfo, data.second));
-        if (prevWinMode != -1 && prevWinMode != winMode) {
-            // TODO: We currently send vanished/appeared as the task moves between win modes, but
+        final TaskAppearedInfo data = mTasks.get(taskInfo.taskId);
+        final @TaskListenerType int listenerType = getTaskListenerType(taskInfo);
+        final @TaskListenerType int prevListenerType = getTaskListenerType(data.getTaskInfo());
+        mTasks.put(taskInfo.taskId, new TaskAppearedInfo(taskInfo, data.getLeash()));
+        if (prevListenerType != listenerType) {
+            // TODO: We currently send vanished/appeared as the task moves between types, but
             //       we should consider adding a different mode-changed callback
-            ArrayList<TaskListener> listeners = mListenersByWindowingMode.get(prevWinMode);
-            if (listeners != null) {
-                for (int i = listeners.size() - 1; i >= 0; i--) {
-                    listeners.get(i).onTaskVanished(taskInfo);
-                }
+            TaskListener listener = mTaskListenersByType.get(prevListenerType);
+            if (listener != null) {
+                listener.onTaskVanished(taskInfo);
             }
-            listeners = mListenersByWindowingMode.get(winMode);
-            if (listeners != null) {
-                SurfaceControl leash = data.second;
-                for (int i = listeners.size() - 1; i >= 0; i--) {
-                    listeners.get(i).onTaskAppeared(taskInfo, leash);
-                }
+            listener = mTaskListenersByType.get(listenerType);
+            if (listener != null) {
+                SurfaceControl leash = data.getLeash();
+                listener.onTaskAppeared(taskInfo, leash);
             }
         } else {
-            ArrayList<TaskListener> listeners = mListenersByWindowingMode.get(winMode);
-            if (listeners != null) {
-                for (int i = listeners.size() - 1; i >= 0; i--) {
-                    listeners.get(i).onTaskInfoChanged(taskInfo);
-                }
+            final TaskListener listener = mTaskListenersByType.get(listenerType);
+            if (listener != null) {
+                listener.onTaskInfoChanged(taskInfo);
             }
         }
     }
@@ -162,12 +199,9 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Task root back pressed taskId=%d",
                 taskInfo.taskId);
-        ArrayList<TaskListener> listeners = mListenersByWindowingMode.get(
-                getWindowingMode(taskInfo));
-        if (listeners != null) {
-            for (int i = listeners.size() - 1; i >= 0; i--) {
-                listeners.get(i).onBackPressedOnTaskRoot(taskInfo);
-            }
+        final TaskListener listener = mTaskListenersByType.get(getTaskListenerType(taskInfo));
+        if (listener != null) {
+            listener.onBackPressedOnTaskRoot(taskInfo);
         }
     }
 
@@ -175,17 +209,38 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     public void onTaskVanished(RunningTaskInfo taskInfo) {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Task vanished taskId=%d",
                 taskInfo.taskId);
-        int prevWinMode = getWindowingMode(mTasks.get(taskInfo.taskId).first);
+        final @TaskListenerType int prevListenerType =
+                getTaskListenerType(mTasks.get(taskInfo.taskId).getTaskInfo());
         mTasks.remove(taskInfo.taskId);
-        ArrayList<TaskListener> listeners = mListenersByWindowingMode.get(prevWinMode);
-        if (listeners != null) {
-            for (int i = listeners.size() - 1; i >= 0; i--) {
-                listeners.get(i).onTaskVanished(taskInfo);
-            }
+        final TaskListener listener = mTaskListenersByType.get(prevListenerType);
+        if (listener != null) {
+            listener.onTaskVanished(taskInfo);
         }
     }
 
-    private int getWindowingMode(RunningTaskInfo taskInfo) {
+    @TaskListenerType
+    private static int getTaskListenerType(RunningTaskInfo runningTaskInfo) {
+        // Right now it's N:1 mapping but in the future different task listerners
+        // may be triggered by one windowing mode depending on task parameters.
+        switch (getWindowingMode(runningTaskInfo)) {
+            case WINDOWING_MODE_FULLSCREEN:
+                return TASK_LISTENER_TYPE_FULLSCREEN;
+            case WINDOWING_MODE_MULTI_WINDOW:
+                return TASK_LISTENER_TYPE_MULTI_WINDOW;
+            case WINDOWING_MODE_SPLIT_SCREEN_PRIMARY:
+            case WINDOWING_MODE_SPLIT_SCREEN_SECONDARY:
+                return TASK_LISTENER_TYPE_SPLIT_SCREEN;
+            case WINDOWING_MODE_PINNED:
+                return TASK_LISTENER_TYPE_PIP;
+            case WINDOWING_MODE_FREEFORM:
+            case WINDOWING_MODE_UNDEFINED:
+            default:
+                return TASK_LISTENER_TYPE_UNDEFINED;
+        }
+    }
+
+    @WindowingMode
+    private static int getWindowingMode(RunningTaskInfo taskInfo) {
         return taskInfo.configuration.windowConfiguration.getWindowingMode();
     }
 }

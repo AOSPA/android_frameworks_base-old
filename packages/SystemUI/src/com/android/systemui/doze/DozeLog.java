@@ -123,6 +123,14 @@ public class DozeLog implements Dumpable {
     }
 
     /**
+     * Appends dozing event to the logs
+     * @param suppressed true if dozing is suppressed
+     */
+    public void traceDozingSuppressed(boolean suppressed) {
+        mLogger.logDozingSuppressed(suppressed);
+    }
+
+    /**
      * Appends fling event to the logs
      */
     public void traceFling(boolean expand, boolean aboveThreshold, boolean thresholdNeeded,
@@ -195,6 +203,22 @@ public class DozeLog implements Dumpable {
      */
     public void traceState(DozeMachine.State state) {
         mLogger.logDozeStateChanged(state);
+    }
+
+    /**
+     * Appends doze state changed sent to all DozeMachine parts event to the logs
+     * @param state new DozeMachine state
+     */
+    public void traceDozeStateSendComplete(DozeMachine.State state) {
+        mLogger.logStateChangedSent(state);
+    }
+
+    /**
+     * Appends display state changed event to the logs
+     * @param displayState new DozeMachine state
+     */
+    public void traceDisplayState(int displayState) {
+        mLogger.logDisplayStateChanged(displayState);
     }
 
     /**

@@ -283,7 +283,7 @@ public abstract class ActivityTaskManagerInternal {
     /**
      * Cancels any currently running recents animation.
      */
-    public abstract void cancelRecentsAnimation(boolean restoreHomeStackPosition);
+    public abstract void cancelRecentsAnimation(boolean restoreHomeRootTaskPosition);
 
     /**
      * This enforces {@code func} can only be called if either the caller is Recents activity or
@@ -324,7 +324,6 @@ public abstract class ActivityTaskManagerInternal {
     public abstract void onProcessRemoved(String name, int uid);
     public abstract void onCleanUpApplicationRecord(WindowProcessController proc);
     public abstract int getTopProcessState();
-    public abstract boolean isHeavyWeightProcess(WindowProcessController proc);
     public abstract void clearHeavyWeightProcessIfEquals(WindowProcessController proc);
     public abstract void finishHeavyWeightApp();
 
@@ -498,9 +497,6 @@ public abstract class ActivityTaskManagerInternal {
 
     /** @return the process for the top-most resumed activity in the system. */
     public abstract WindowProcessController getTopApp();
-
-    /** Generate oom-score-adjustment rank for all tasks in the system based on z-order. */
-    public abstract void rankTaskLayersIfNeeded();
 
     /** Destroy all activities. */
     public abstract void scheduleDestroyAllActivities(String reason);

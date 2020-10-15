@@ -35,6 +35,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -902,6 +904,14 @@ public class WifiConfiguration implements Parcelable {
     public int carrierId = TelephonyManager.UNKNOWN_CARRIER_ID;
 
     /**
+     * The subscription ID identifies the SIM card for which this network configuration is valid.
+     * See {@link SubscriptionInfo#getSubscriptionId()}
+     * @hide
+     */
+    @SystemApi
+    public int subscriptionId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+
+    /**
      * @hide
      * Auto-join is allowed by user for this network.
      * Default true.
@@ -1011,6 +1021,16 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      */
     public boolean trusted;
+
+    /**
+     * Indicate whether the network is oem paid or not. Networks are considered oem paid
+     * if the corresponding connection is only available to system apps.
+     *
+     * This bit can only be used by suggestion network, see
+     * {@link WifiNetworkSuggestion.Builder#setOemPaid(boolean)}
+     * @hide
+     */
+    public boolean oemPaid;
 
     /**
      * True if this Wifi configuration is created from a {@link WifiNetworkSuggestion},
@@ -1227,10 +1247,16 @@ public class WifiConfiguration implements Parcelable {
 
     /**
      * @hide
-     * The wall clock time of when |mRandomizedMacAddress| should be re-randomized in aggressive
-     * randomization mode.
+     * The wall clock time of when |mRandomizedMacAddress| should be re-randomized in enhanced
+     * MAC randomization mode.
      */
     public long randomizedMacExpirationTimeMs = 0;
+
+    /**
+     * The wall clock time of when |mRandomizedMacAddress| is last modified.
+     * @hide
+     */
+    public long randomizedMacLastModifiedTimeMs = 0;
 
     /**
      * @hide
@@ -2104,7 +2130,8 @@ public class WifiConfiguration implements Parcelable {
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = "RECENT_FAILURE_", value = {
             RECENT_FAILURE_NONE,
-            RECENT_FAILURE_AP_UNABLE_TO_HANDLE_NEW_STA})
+            RECENT_FAILURE_AP_UNABLE_TO_HANDLE_NEW_STA,
+            RECENT_FAILURE_MBO_OCE_DISCONNECT})
     public @interface RecentFailureReason {}
 
     /**
@@ -2120,6 +2147,13 @@ public class WifiConfiguration implements Parcelable {
      */
     @SystemApi
     public static final int RECENT_FAILURE_AP_UNABLE_TO_HANDLE_NEW_STA = 17;
+
+    /**
+     * This network recently disconnected as a result of MBO/OCE.
+     * @hide
+     */
+    @SystemApi
+    public static final int RECENT_FAILURE_MBO_OCE_DISCONNECT = 1001;
 
     /**
      * Get the failure reason for the most recent connection attempt, or
@@ -2189,6 +2223,7 @@ public class WifiConfiguration implements Parcelable {
         ephemeral = false;
         osu = false;
         trusted = true; // Networks are considered trusted by default.
+        oemPaid = false;
         fromWifiNetworkSuggestion = false;
         fromWifiNetworkSpecifier = false;
         meteredHint = false;
@@ -2313,11 +2348,12 @@ public class WifiConfiguration implements Parcelable {
         if (this.ephemeral) sbuf.append(" ephemeral");
         if (this.osu) sbuf.append(" osu");
         if (this.trusted) sbuf.append(" trusted");
+        if (this.oemPaid) sbuf.append(" oemPaid");
         if (this.fromWifiNetworkSuggestion) sbuf.append(" fromWifiNetworkSuggestion");
         if (this.fromWifiNetworkSpecifier) sbuf.append(" fromWifiNetworkSpecifier");
         if (this.meteredHint) sbuf.append(" meteredHint");
         if (this.useExternalScores) sbuf.append(" useExternalScores");
-        if (this.validatedInternetAccess || this.ephemeral || this.trusted
+        if (this.validatedInternetAccess || this.ephemeral || this.trusted || this.oemPaid
                 || this.fromWifiNetworkSuggestion || this.fromWifiNetworkSpecifier
                 || this.meteredHint || this.useExternalScores) {
             sbuf.append("\n");
@@ -2330,6 +2366,9 @@ public class WifiConfiguration implements Parcelable {
         sbuf.append(" randomizedMacExpirationTimeMs: ")
                 .append(randomizedMacExpirationTimeMs == 0 ? "<none>"
                         : logTimeOfDay(randomizedMacExpirationTimeMs)).append("\n");
+        sbuf.append(" randomizedMacLastModifiedTimeMs: ")
+                .append(randomizedMacLastModifiedTimeMs == 0 ? "<none>"
+                        : logTimeOfDay(randomizedMacLastModifiedTimeMs)).append("\n");
         sbuf.append(" KeyMgmt:");
         for (int k = 0; k < this.allowedKeyManagement.size(); k++) {
             if (this.allowedKeyManagement.get(k)) {
@@ -2653,6 +2692,25 @@ public class WifiConfiguration implements Parcelable {
         return key;
     }
 
+    /**
+     * Get a key for this WifiConfig to generate Persist random Mac Address.
+     * @hide
+     */
+    public String getMacRandomKey() {
+        // Passpoint ephemeral networks have their unique identifier set. Return it as is to be
+        // able to match internally.
+        if (mPasspointUniqueId != null) {
+            return mPasspointUniqueId;
+        }
+
+        String key = getSsidAndSecurityTypeString();
+        if (!shared) {
+            key += "-" + UserHandle.getUserHandleForUid(creatorUid).getIdentifier();
+        }
+
+        return key;
+    }
+
     /** @hide
      *  return the SSID + security type in String format.
      */
@@ -2879,6 +2937,7 @@ public class WifiConfiguration implements Parcelable {
             ephemeral = source.ephemeral;
             osu = source.osu;
             trusted = source.trusted;
+            oemPaid = source.oemPaid;
             fromWifiNetworkSuggestion = source.fromWifiNetworkSuggestion;
             fromWifiNetworkSpecifier = source.fromWifiNetworkSpecifier;
             meteredHint = source.meteredHint;
@@ -2910,9 +2969,11 @@ public class WifiConfiguration implements Parcelable {
 
             macRandomizationSetting = source.macRandomizationSetting;
             randomizedMacExpirationTimeMs = source.randomizedMacExpirationTimeMs;
+            randomizedMacLastModifiedTimeMs = source.randomizedMacLastModifiedTimeMs;
             requirePmf = source.requirePmf;
             updateIdentifier = source.updateIdentifier;
             carrierId = source.carrierId;
+            subscriptionId = source.subscriptionId;
             mPasspointUniqueId = source.mPasspointUniqueId;
         }
     }
@@ -2962,6 +3023,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(isLegacyPasspointConfig ? 1 : 0);
         dest.writeInt(ephemeral ? 1 : 0);
         dest.writeInt(trusted ? 1 : 0);
+        dest.writeInt(oemPaid ? 1 : 0);
         dest.writeInt(fromWifiNetworkSuggestion ? 1 : 0);
         dest.writeInt(fromWifiNetworkSpecifier ? 1 : 0);
         dest.writeInt(meteredHint ? 1 : 0);
@@ -2989,8 +3051,10 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(macRandomizationSetting);
         dest.writeInt(osu ? 1 : 0);
         dest.writeLong(randomizedMacExpirationTimeMs);
+        dest.writeLong(randomizedMacLastModifiedTimeMs);
         dest.writeInt(carrierId);
         dest.writeString(mPasspointUniqueId);
+        dest.writeInt(subscriptionId);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -3041,6 +3105,7 @@ public class WifiConfiguration implements Parcelable {
                 config.isLegacyPasspointConfig = in.readInt() != 0;
                 config.ephemeral = in.readInt() != 0;
                 config.trusted = in.readInt() != 0;
+                config.oemPaid = in.readInt() != 0;
                 config.fromWifiNetworkSuggestion =  in.readInt() != 0;
                 config.fromWifiNetworkSpecifier =  in.readInt() != 0;
                 config.meteredHint = in.readInt() != 0;
@@ -3068,8 +3133,10 @@ public class WifiConfiguration implements Parcelable {
                 config.macRandomizationSetting = in.readInt();
                 config.osu = in.readInt() != 0;
                 config.randomizedMacExpirationTimeMs = in.readLong();
+                config.randomizedMacLastModifiedTimeMs = in.readLong();
                 config.carrierId = in.readInt();
                 config.mPasspointUniqueId = in.readString();
+                config.subscriptionId = in.readInt();
                 return config;
             }
 

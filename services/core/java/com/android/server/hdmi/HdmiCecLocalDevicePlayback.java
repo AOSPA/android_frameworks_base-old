@@ -16,6 +16,7 @@
 
 package com.android.server.hdmi;
 
+import android.annotation.CallSuper;
 import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.IHdmiControlCallback;
@@ -58,11 +59,6 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
     // If true, turn off TV upon standby. False by default.
     private boolean mAutoTvOff;
 
-    // Local active port number used for Routing Control.
-    // Default 0 means HOME is the current active path. Temp solution only.
-    // TODO(amyjojo): adding system constants for input ports to TIF mapping.
-    private int mLocalActivePath = 0;
-
     // Determines what action should be taken upon receiving Routing Control messages.
     @VisibleForTesting
     protected HdmiProperties.playback_device_action_on_routing_control_values
@@ -101,7 +97,8 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
         assertRunOnServiceThread();
         if (reason == mService.INITIATED_BY_ENABLE_CEC) {
             mService.setAndBroadcastActiveSource(mService.getPhysicalAddress(),
-                    getDeviceInfo().getDeviceType(), Constants.ADDR_BROADCAST);
+                    getDeviceInfo().getDeviceType(), Constants.ADDR_BROADCAST,
+                    "HdmiCecLocalDevicePlayback#onAddressAllocated()");
         }
         mService.sendCecCommand(HdmiCecMessageBuilder.buildReportPhysicalAddressCommand(
                 mAddress, mService.getPhysicalAddress(), mDeviceType));
@@ -170,7 +167,7 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
     void onHotplug(int portId, boolean connected) {
         assertRunOnServiceThread();
         mCecMessageCache.flushAll();
-        // We'll not clear mIsActiveSource on the hotplug event to pass CETC 11.2.2-2 ~ 3.
+        // We'll not invalidate the active source on the hotplug event to pass CETC 11.2.2-2 ~ 3.
         if (!connected) {
             getWakeLock().release();
         }
@@ -183,13 +180,12 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
         if (!mService.isControlEnabled()) {
             return;
         }
-        if (mIsActiveSource) {
+        if (isActiveSource()) {
             mService.sendCecCommand(HdmiCecMessageBuilder.buildInactiveSource(
                     mAddress, mService.getPhysicalAddress()));
         }
-        boolean wasActiveSource = mIsActiveSource;
+        boolean wasActiveSource = isActiveSource();
         // Invalidate the internal active source record when goes to standby
-        // This set will also update mIsActiveSource
         mService.setActiveSource(Constants.ADDR_INVALID, Constants.INVALID_PHYSICAL_ADDRESS,
                 "HdmiCecLocalDevicePlayback#onStandby()");
         if (initiatedByCec || !mAutoTvOff || !wasActiveSource) {
@@ -234,12 +230,13 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
     }
 
     @Override
+    @CallSuper
     @ServiceThreadOnly
     @VisibleForTesting
-    void setIsActiveSource(boolean on) {
+    protected void setActiveSource(int logicalAddress, int physicalAddress, String caller) {
         assertRunOnServiceThread();
-        super.setIsActiveSource(on);
-        if (on) {
+        super.setActiveSource(logicalAddress, physicalAddress, caller);
+        if (isActiveSource()) {
             getWakeLock().acquire();
         } else {
             getWakeLock().release();
@@ -296,7 +293,7 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
 
     @Override
     protected void wakeUpIfActiveSource() {
-        if (!mIsActiveSource) {
+        if (!isActiveSource()) {
             return;
         }
         // Wake up the device if the power is in standby mode, or its screen is off -
@@ -404,9 +401,16 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
                     "HdmiCecLocalDevicePlayback#handleRoutingChangeAndInformation()");
             return;
         }
+        if (!isActiveSource()) {
+            // If routing is changed to the device while Active Source, don't invalidate the
+            // Active Source
+            setActiveSource(physicalAddress,
+                    "HdmiCecLocalDevicePlayback#handleRoutingChangeAndInformation()");
+        }
         switch (mPlaybackDeviceActionOnRoutingControl) {
             case WAKE_UP_AND_SEND_ACTIVE_SOURCE:
-                setAndBroadcastActiveSource(message, physicalAddress);
+                setAndBroadcastActiveSource(message, physicalAddress,
+                        "HdmiCecLocalDevicePlayback#handleRoutingChangeAndInformation()");
                 break;
             case WAKE_UP_ONLY:
                 mService.wakeUp();
@@ -438,20 +442,10 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
         checkIfPendingActionsCleared();
     }
 
-    private void routeToPort(int portId) {
-        // TODO(AMYJOJO): route to specific input of the port
-        mLocalActivePath = portId;
-    }
-
-    @VisibleForTesting
-    protected int getLocalActivePath() {
-        return mLocalActivePath;
-    }
-
     @Override
     protected void dump(final IndentingPrintWriter pw) {
         super.dump(pw);
-        pw.println("mIsActiveSource: " + mIsActiveSource);
+        pw.println("isActiveSource(): " + isActiveSource());
         pw.println("mAutoTvOff:" + mAutoTvOff);
     }
 
@@ -472,7 +466,7 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
         @Override
         public void acquire() {
             mWakeLock.acquire();
-            HdmiLogger.debug("active source: %b. Wake lock acquired", mIsActiveSource);
+            HdmiLogger.debug("active source: %b. Wake lock acquired", isActiveSource());
         }
 
         @Override

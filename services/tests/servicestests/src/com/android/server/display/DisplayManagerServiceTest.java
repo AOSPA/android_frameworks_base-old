@@ -309,7 +309,8 @@ public class DisplayManagerServiceTest {
                 zeroRect, new Rect(0, 0, 10, 10), zeroRect, zeroRect);
         displayDeviceInfo.flags = DisplayDeviceInfo.FLAG_DEFAULT_DISPLAY;
         displayDevice.setDisplayDeviceInfo(displayDeviceInfo);
-        displayManager.handleDisplayDeviceAdded(displayDevice);
+        displayManager.getDisplayDeviceRepository()
+                .onDisplayDeviceEvent(displayDevice, DisplayAdapter.DISPLAY_DEVICE_EVENT_ADDED);
 
         // Find the display id of the added FakeDisplayDevice
         DisplayManagerService.BinderService bs = displayManager.new BinderService();
@@ -342,7 +343,8 @@ public class DisplayManagerServiceTest {
         displayDeviceInfo2.copyFrom(displayDeviceInfo);
         displayDeviceInfo2.displayCutout = null;
         displayDevice.setDisplayDeviceInfo(displayDeviceInfo2);
-        displayManager.handleDisplayDeviceChanged(displayDevice);
+        displayManager.getDisplayDeviceRepository()
+                .onDisplayDeviceEvent(displayDevice, DisplayAdapter.DISPLAY_DEVICE_EVENT_CHANGED);
 
         handler.runWithScissors(() -> {
         }, 0 /* now */);

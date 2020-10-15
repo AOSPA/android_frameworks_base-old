@@ -144,6 +144,7 @@ import android.net.util.LinkPropertiesUtils.CompareOrUpdateResult;
 import android.net.util.LinkPropertiesUtils.CompareResult;
 import android.net.util.MultinetworkPolicyTracker;
 import android.net.util.NetdService;
+import android.os.BasicShellCommandHandler;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -160,11 +161,8 @@ import android.os.PersistableBundle;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
-import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.ServiceSpecificException;
-import android.os.ShellCallback;
-import android.os.ShellCommand;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -1154,7 +1152,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         // Listen to package add and removal events for all users.
         intentFilter = new IntentFilter();
-        intentFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
         intentFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
         intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
         intentFilter.addDataScheme("package");
@@ -7750,14 +7747,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     @Override
-    public void onShellCommand(@NonNull FileDescriptor in, @NonNull FileDescriptor out,
-            FileDescriptor err, @NonNull String[] args, ShellCallback callback,
-            @NonNull ResultReceiver resultReceiver) {
-        (new ShellCmd()).exec(this, in, out, err, args, callback, resultReceiver);
+    public int handleShellCommand(@NonNull ParcelFileDescriptor in,
+            @NonNull ParcelFileDescriptor out, @NonNull ParcelFileDescriptor err,
+            @NonNull String[] args) {
+        return new ShellCmd().exec(this, in.getFileDescriptor(), out.getFileDescriptor(),
+                err.getFileDescriptor(), args);
     }
 
-    private class ShellCmd extends ShellCommand {
-
+    private class ShellCmd extends BasicShellCommandHandler {
         @Override
         public int onCommand(String cmd) {
             if (cmd == null) {

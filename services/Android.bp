@@ -3,6 +3,13 @@ java_defaults {
     plugins: [
         "error_prone_android_framework",
     ],
+    errorprone: {
+        javacflags: [
+            "-Xep:AndroidFrameworkBinderIdentity:ERROR",
+            "-Xep:AndroidFrameworkCompatChange:ERROR",
+            "-Xep:AndroidFrameworkUid:ERROR",
+        ],
+    },
 }
 
 filegroup {
@@ -28,6 +35,7 @@ filegroup {
         ":services.coverage-sources",
         ":services.devicepolicy-sources",
         ":services.midi-sources",
+        ":services.musicsearch-sources",
         ":services.net-sources",
         ":services.print-sources",
         ":services.profcollect-sources",
@@ -71,6 +79,7 @@ java_library {
         "services.coverage",
         "services.devicepolicy",
         "services.midi",
+        "services.musicsearch",
         "services.net",
         "services.people",
         "services.print",

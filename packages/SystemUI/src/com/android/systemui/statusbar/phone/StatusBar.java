@@ -16,8 +16,6 @@
 
 package com.android.systemui.statusbar.phone;
 
-import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT;
-import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.StatusBarManager.WINDOW_STATE_HIDDEN;
 import static android.app.StatusBarManager.WINDOW_STATE_SHOWING;
 import static android.app.StatusBarManager.WindowType;
@@ -37,7 +35,6 @@ import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_ASL
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_AWAKE;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_WAKING;
 import static com.android.systemui.shared.system.WindowManagerWrapper.NAV_BAR_POS_INVALID;
-import static com.android.systemui.shared.system.WindowManagerWrapper.NAV_BAR_POS_LEFT;
 import static com.android.systemui.statusbar.NotificationLockscreenUserManager.PERMISSION_SELF;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT_TRANSPARENT;
@@ -72,6 +69,7 @@ import android.content.IntentFilter;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.PointF;
@@ -147,6 +145,7 @@ import com.android.systemui.SystemUI;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
+import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.charging.WirelessChargingAnimation;
 import com.android.systemui.classifier.FalsingLog;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
@@ -154,6 +153,7 @@ import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.demomode.DemoMode;
 import com.android.systemui.demomode.DemoModeCommandReceiver;
 import com.android.systemui.demomode.DemoModeController;
+import com.android.systemui.emergency.EmergencyGesture;
 import com.android.systemui.fragments.ExtensionFragmentListener;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
@@ -173,7 +173,6 @@ import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.Snoo
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSFragment;
 import com.android.systemui.qs.QSPanel;
-import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.WindowManagerWrapper;
@@ -649,7 +648,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     protected StatusBarNotificationPresenter mPresenter;
     private NotificationActivityStarter mNotificationActivityStarter;
     private Lazy<NotificationShadeDepthController> mNotificationShadeDepthControllerLazy;
-    private final BubbleController mBubbleController;
+    private final Optional<Bubbles> mBubblesOptional;
     private final BubbleController.BubbleExpandListener mBubbleExpandListener;
 
     private ActivityIntentHelper mActivityIntentHelper;
@@ -698,7 +697,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             WakefulnessLifecycle wakefulnessLifecycle,
             SysuiStatusBarStateController statusBarStateController,
             VibratorHelper vibratorHelper,
-            BubbleController bubbleController,
+            Optional<Bubbles> bubblesOptional,
             VisualStabilityManager visualStabilityManager,
             DeviceProvisionedController deviceProvisionedController,
             NavigationBarController navigationBarController,
@@ -717,7 +716,6 @@ public class StatusBar extends SystemUI implements DemoMode,
             DozeScrimController dozeScrimController,
             VolumeComponent volumeComponent,
             CommandQueue commandQueue,
-            Optional<Recents> recentsOptional,
             Provider<StatusBarComponent.Builder> statusBarComponentBuilder,
             PluginManager pluginManager,
             Optional<SplitScreen> splitScreenOptional,
@@ -778,7 +776,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mWakefulnessLifecycle = wakefulnessLifecycle;
         mStatusBarStateController = statusBarStateController;
         mVibratorHelper = vibratorHelper;
-        mBubbleController = bubbleController;
+        mBubblesOptional = bubblesOptional;
         mVisualStabilityManager = visualStabilityManager;
         mDeviceProvisionedController = deviceProvisionedController;
         mNavigationBarController = navigationBarController;
@@ -798,7 +796,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         mNotificationShadeDepthControllerLazy = notificationShadeDepthControllerLazy;
         mVolumeComponent = volumeComponent;
         mCommandQueue = commandQueue;
-        mRecentsOptional = recentsOptional;
         mStatusBarComponentBuilder = statusBarComponentBuilder;
         mPluginManager = pluginManager;
         mSplitScreenOptional = splitScreenOptional;
@@ -824,7 +821,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                     updateScrimController();
                 };
 
-
+        mActivityIntentHelper = new ActivityIntentHelper(mContext);
         DateTimeView.setReceiverHandler(timeTickHandler);
     }
 
@@ -834,8 +831,9 @@ public class StatusBar extends SystemUI implements DemoMode,
         mWakefulnessLifecycle.addObserver(mWakefulnessObserver);
         mUiModeManager = mContext.getSystemService(UiModeManager.class);
         mBypassHeadsUpNotifier.setUp();
-        mBubbleController.setExpandListener(mBubbleExpandListener);
-        mActivityIntentHelper = new ActivityIntentHelper(mContext);
+        if (mBubblesOptional.isPresent()) {
+            mBubblesOptional.get().setExpandListener(mBubbleExpandListener);
+        }
 
         mColorExtractor.addOnColorsChangedListener(this);
         mStatusBarStateController.addCallback(this,
@@ -1145,7 +1143,8 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         ScrimView scrimBehind = mNotificationShadeWindowView.findViewById(R.id.scrim_behind);
         ScrimView scrimInFront = mNotificationShadeWindowView.findViewById(R.id.scrim_in_front);
-        ScrimView scrimForBubble = mBubbleController.getScrimForBubble();
+        ScrimView scrimForBubble = mBubblesOptional.isPresent()
+                ? mBubblesOptional.get().getScrimForBubble() : null;
 
         mScrimController.setScrimVisibleListener(scrimsVisible -> {
             mNotificationShadeWindowController.setScrimsVisibility(scrimsVisible);
@@ -1341,6 +1340,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         mNotificationsController.initialize(
                 this,
+                mBubblesOptional,
                 mPresenter,
                 mStackScrollerController.getNotificationListContainer(),
                 mNotificationActivityStarter,
@@ -1542,35 +1542,37 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     public boolean toggleSplitScreenMode(int metricsDockAction, int metricsUndockAction) {
-        if (!mRecentsOptional.isPresent()) {
+        if (!mSplitScreenOptional.isPresent()) {
             return false;
         }
 
-        if (mSplitScreenOptional.isPresent()) {
-            SplitScreen splitScreen = mSplitScreenOptional.get();
-            if (splitScreen.isDividerVisible()) {
-                if (splitScreen.isMinimized()
-                        && !splitScreen.isHomeStackResizable()) {
-                    // Undocking from the minimized state is not supported
-                    return false;
-                } else {
-                    splitScreen.onUndockingTask();
-                    if (metricsUndockAction != -1) {
-                        mMetricsLogger.action(metricsUndockAction);
-                    }
-                }
-                return true;
+        final SplitScreen splitScreen = mSplitScreenOptional.get();
+        if (splitScreen.isDividerVisible()) {
+            if (splitScreen.isMinimized() && !splitScreen.isHomeStackResizable()) {
+                // Undocking from the minimized state is not supported
+                return false;
             }
+
+            splitScreen.onUndockingTask();
+            if (metricsUndockAction != -1) {
+                mMetricsLogger.action(metricsUndockAction);
+            }
+            return true;
         }
 
         final int navbarPos = WindowManagerWrapper.getInstance().getNavBarPosition(mDisplayId);
         if (navbarPos == NAV_BAR_POS_INVALID) {
             return false;
         }
-        int createMode = navbarPos == NAV_BAR_POS_LEFT
-                ? SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT
-                : SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
-        return mRecentsOptional.get().splitPrimaryTask(createMode, null, metricsDockAction);
+
+        if (splitScreen.splitPrimaryTask()) {
+            if (metricsDockAction != -1) {
+                mMetricsLogger.action(metricsDockAction);
+            }
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -2491,10 +2493,12 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     /** Temporarily hides Bubbles if the status bar is hidden. */
     private void updateBubblesVisibility() {
-        mBubbleController.onStatusBarVisibilityChanged(
-                mStatusBarMode != MODE_LIGHTS_OUT
-                        && mStatusBarMode != MODE_LIGHTS_OUT_TRANSPARENT
-                        && !mStatusBarWindowHidden);
+        if (mBubblesOptional.isPresent()) {
+            mBubblesOptional.get().onStatusBarVisibilityChanged(
+                    mStatusBarMode != MODE_LIGHTS_OUT
+                            && mStatusBarMode != MODE_LIGHTS_OUT_TRANSPARENT
+                            && !mStatusBarWindowHidden);
+        }
     }
 
     void checkBarMode(@TransitionMode int mode, @WindowVisibleState int windowState,
@@ -2817,8 +2821,8 @@ public class StatusBar extends SystemUI implements DemoMode,
                 if (mRemoteInputManager.getController() != null) {
                     mRemoteInputManager.getController().closeRemoteInputs();
                 }
-                if (mBubbleController.isStackExpanded()) {
-                    mBubbleController.collapseStack();
+                if (mBubblesOptional.isPresent() && mBubblesOptional.get().isStackExpanded()) {
+                    mBubblesOptional.get().collapseStack();
                 }
                 if (mLockscreenUserManager.isCurrentProfile(getSendingUserId())) {
                     int flags = CommandQueue.FLAG_EXCLUDE_NONE;
@@ -2833,9 +2837,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                 if (mNotificationShadeWindowController != null) {
                     mNotificationShadeWindowController.setNotTouchable(false);
                 }
-                if (mBubbleController.isStackExpanded()) {
+                if (mBubblesOptional.isPresent() && mBubblesOptional.get().isStackExpanded()) {
                     // Post to main thread handler, since updating the UI.
-                    mMainThreadHandler.post(() -> mBubbleController.collapseStack());
+                    mMainThreadHandler.post(() -> mBubblesOptional.get().collapseStack());
                 }
                 finishBarAnimations();
                 resetUserExpandedStates();
@@ -3535,8 +3539,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (mState != StatusBarState.KEYGUARD && mState != StatusBarState.SHADE_LOCKED) {
             if (mNotificationPanelViewController.canPanelBeCollapsed()) {
                 mShadeController.animateCollapsePanels();
-            } else {
-                mBubbleController.performBackPressIfNeeded();
             }
             return true;
         }
@@ -3979,6 +3981,27 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
     }
 
+    @Override
+    public void onEmergencyActionLaunchGestureDetected() {
+        // TODO (b/169793384) Polish the panic gesture to be just like its older brother, camera.
+        Intent emergencyIntent = new Intent(EmergencyGesture.ACTION_LAUNCH_EMERGENCY);
+        PackageManager pm = mContext.getPackageManager();
+        ResolveInfo resolveInfo = pm.resolveActivity(emergencyIntent, /*flags=*/0);
+        if (resolveInfo == null) {
+            Log.wtf(TAG, "Couldn't find an app to process the emergency intent.");
+            return;
+        }
+
+        if (mVibrator != null && mVibrator.hasVibrator()) {
+            mVibrator.vibrate(500L);
+        }
+
+        emergencyIntent.setComponent(new ComponentName(resolveInfo.activityInfo.packageName,
+                resolveInfo.activityInfo.name));
+        emergencyIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(emergencyIntent, /*dismissShade=*/true);
+    }
+
     boolean isCameraAllowedByAdmin() {
         if (mDevicePolicyManager.getCameraDisabled(null,
                 mLockscreenUserManager.getCurrentUserId())) {
@@ -4055,7 +4078,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             mScrimController.transitionTo(ScrimState.AOD);
         } else if (mIsKeyguard && !unlocking) {
             mScrimController.transitionTo(ScrimState.KEYGUARD);
-        } else if (mBubbleController.isStackExpanded()) {
+        } else if (mBubblesOptional.isPresent() && mBubblesOptional.get().isStackExpanded()) {
             mScrimController.transitionTo(ScrimState.BUBBLE_EXPANDED, mUnlockScrimCallback);
         } else {
             mScrimController.transitionTo(ScrimState.UNLOCKED, mUnlockScrimCallback);
@@ -4113,8 +4136,6 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     protected Display mDisplay;
     private int mDisplayId;
-
-    private final Optional<Recents> mRecentsOptional;
 
     protected NotificationShelfController mNotificationShelfController;
 
@@ -4283,6 +4304,19 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     public static Bundle getActivityOptions(@Nullable RemoteAnimationAdapter animationAdapter) {
+        return getDefaultActivityOptions(animationAdapter).toBundle();
+    }
+
+    public static Bundle getActivityOptions(@Nullable RemoteAnimationAdapter animationAdapter,
+            boolean isKeyguardShowing, long eventTime) {
+        ActivityOptions options = getDefaultActivityOptions(animationAdapter);
+        options.setSourceInfo(isKeyguardShowing ? ActivityOptions.SourceInfo.TYPE_LOCKSCREEN
+                : ActivityOptions.SourceInfo.TYPE_NOTIFICATION, eventTime);
+        return options.toBundle();
+    }
+
+    public static ActivityOptions getDefaultActivityOptions(
+            @Nullable RemoteAnimationAdapter animationAdapter) {
         ActivityOptions options;
         if (animationAdapter != null) {
             options = ActivityOptions.makeRemoteAnimation(animationAdapter);
@@ -4292,7 +4326,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         // Anything launched from the notification shade should always go into the secondary
         // split-screen windowing mode.
         options.setLaunchWindowingMode(WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY);
-        return options.toBundle();
+        return options;
     }
 
     void visibilityChanged(boolean visible) {

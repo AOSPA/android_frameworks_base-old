@@ -38,7 +38,6 @@ import "frameworks/base/core/proto/android/net/networkcapabilities.proto";
 import "frameworks/base/core/proto/android/os/enums.proto";
 import "frameworks/base/core/proto/android/server/connectivity/data_stall_event.proto";
 import "frameworks/base/core/proto/android/server/enums.proto";
-import "frameworks/base/core/proto/android/stats/hdmi/enums.proto";
 import "frameworks/base/core/proto/android/server/job/enums.proto";
 import "frameworks/base/core/proto/android/server/location/enums.proto";
 import "frameworks/base/core/proto/android/service/procstats_enum.proto";
@@ -51,6 +50,7 @@ import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enum
 import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
 import "frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto";
 import "frameworks/base/core/proto/android/stats/enums.proto";
+import "frameworks/base/core/proto/android/stats/hdmi/enums.proto";
 import "frameworks/base/core/proto/android/stats/intelligence/enums.proto";
 import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
 import "frameworks/base/core/proto/android/stats/location/location_enums.proto";
@@ -266,7 +266,7 @@ message Atom {
                 147 [(module) = "framework", (module) = "statsd"];
         BiometricSystemHealthIssueDetected biometric_system_health_issue_detected =
                 148 [(module) = "framework"];
-        BubbleUIChanged bubble_ui_changed = 149 [(module) = "sysui"];
+        BubbleUIChanged bubble_ui_changed = 149 [(module) = "framework"];
         ScheduledJobConstraintChanged scheduled_job_constraint_changed =
                 150 [(module) = "framework"];
         BluetoothActiveDeviceChanged bluetooth_active_device_changed =
@@ -493,13 +493,15 @@ message Atom {
         WifiConnectionStateChanged wifi_connection_state_changed = 308 [(module) = "wifi"];
         HdmiCecActiveSourceChanged hdmi_cec_active_source_changed = 309 [(module) = "framework"];
         HdmiCecMessageReported hdmi_cec_message_reported = 310 [(module) = "framework"];
+        AirplaneMode airplane_mode = 311 [(module) = "telephony"];
+        ModemRestart modem_restart = 312 [(module) = "telephony"];
 
         // StatsdStats tracks platform atoms with ids upto 500.
         // Update StatsdStats::kMaxPushedAtomId when atom ids here approach that value.
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10084
+    // Next: 10088
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000 [(module) = "framework"];
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001 [(module) = "framework"];
@@ -598,6 +600,8 @@ message Atom {
         DNDModeProto dnd_mode_rule = 10084 [(module) = "framework"];
         GeneralExternalStorageAccessStats general_external_storage_access_stats =
             10085 [(module) = "mediaprovider"];
+        IncomingSms incoming_sms = 10086 [(module) = "telephony"];
+        OutgoingSms outgoing_sms = 10087 [(module) = "telephony"];
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -3191,6 +3195,9 @@ message BackGesture {
     optional int32 end_y = 7;  // Y coordinate for ACTION_MOVE event.
     optional int32 left_boundary = 8;  // left edge width + left inset
     optional int32 right_boundary = 9;  // screen width - (right edge width + right inset)
+    // The score between 0 and 1 which is the prediction output for the Back Gesture model.
+    optional float ml_model_score = 10;
+    optional string package_name = 11;  // The name of the top 100 most used package by all users.
 
     enum WindowHorizontalLocation {
         DEFAULT_LOCATION = 0;
@@ -3346,6 +3353,7 @@ message StyleUIChanged {
     optional int32 wallpaper_id_hash = 8;
     optional int32 color_preference = 9;
     optional android.stats.style.LocationPreference location_preference = 10;
+    optional android.stats.style.DatePreference date_preference = 11;
 }
 
 /**
@@ -3773,6 +3781,7 @@ message AppStartOccurred {
         LAUNCHER = 1;
         NOTIFICATION = 2;
         LOCKSCREEN = 3;
+        RECENTS_ANIMATION = 4;
     }
     // The type of the startup source.
     optional SourceType source_type = 16;
@@ -3825,6 +3834,12 @@ message AppStartFullyDrawn {
     // App startup time (until call to Activity#reportFullyDrawn()).
     optional int64 app_startup_time_millis = 6;
 
+    // The compiler filter used when when the package was optimized.
+    optional int32 package_optimization_compilation_filter = 7;
+
+    // The reason why the package was optimized.
+    optional int32 package_optimization_compilation_reason = 8;
+
     enum SourceType {
         UNAVAILABLE = 0;
         LAUNCHER = 1;
@@ -3832,11 +3847,11 @@ message AppStartFullyDrawn {
         LOCKSCREEN = 3;
     }
     // The type of the startup source.
-    optional SourceType source_type = 7;
+    optional SourceType source_type = 9;
 
     // The time from the startup source to the beginning of handling the startup event.
     // -1 means not available.
-    optional int32 source_event_delay_millis = 8;
+    optional int32 source_event_delay_millis = 10;
 }
 
 /**
@@ -4459,6 +4474,7 @@ message BinaryPushStateChanged {
         // which requires reboot and not eligible for any reboot promotion strategy
         // (e.g. soft restart, notification restart).
         NO_REBOOT_PROMOTION_STRATEGY_ELIGIBLE = 30;
+        REBOOT_TRIGGER_FAILURE = 31;
     }
     optional State state = 6;
     // Possible experiment ids for monitoring this push.
@@ -5259,12 +5275,23 @@ message BlobOpened{
  * Event to track Jank for various system interactions.
  *
  * Logged from:
- *  frameworks/base/core/java/android/os/aot/FrameTracker.java
+ *  frameworks/base/core/java/com/android/internal/jank/FrameTracker.java
  */
 message UIInteractionFrameInfoReported {
     enum InteractionType {
         UNKNOWN = 0;
         NOTIFICATION_SHADE_SWIPE = 1;
+        SHADE_EXPAND_COLLAPSE_LOCK = 2;
+        SHADE_SCROLL_FLING = 3;
+        SHADE_ROW_EXPAND = 4;
+        SHADE_ROW_SWIPE = 5;
+        SHADE_QS_EXPAND_COLLAPSE = 6;
+        SHADE_QS_SCROLL_SWIPE = 7;
+        LAUNCHER_APP_LAUNCH_FROM_RECENTS = 8;
+        LAUNCHER_APP_LAUNCH_FROM_ICON = 9;
+        LAUNCHER_APP_CLOSE_TO_HOME = 10;
+        LAUNCHER_APP_CLOSE_TO_PIP = 11;
+        LAUNCHER_QUICK_SWITCH = 12;
     }
 
     optional InteractionType interaction_type = 1;
@@ -10460,12 +10487,156 @@ message SupportedRadioAccessFamily {
 }
 
 /**
+ * Pulls information for a single incoming SMS.
+ *
+ * Each pull creates multiple atoms, one for each SMS. The sequence is randomized when pulled.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message IncomingSms {
+    // Format of the SMS (3GPP or 3GPP2).
+    optional android.telephony.SmsFormatEnum sms_format = 1;
+
+    // Technology of the SMS (CS or IMS).
+    optional android.telephony.SmsTechEnum sms_tech = 2;
+
+    // Radio access technology (RAT) used for the SMS. It can be IWLAN in case of IMS.
+    optional android.telephony.NetworkTypeEnum rat = 3;
+
+    // Type the SMS.
+    optional android.telephony.SmsTypeEnum sms_type = 4;
+
+    // Number of total parts.
+    optional int32 total_parts = 5;
+
+    // Number of received parts (if smaller than total parts, the SMS was dropped).
+    optional int32 received_parts = 6;
+
+    // Indicates if the incoming SMS was blocked.
+    optional bool blocked = 7;
+
+    // Indicate a specific error handling the SMS
+    optional android.telephony.SmsIncomingErrorEnum error = 8;
+
+    // Whether the SMS was received while roaming.
+    optional bool is_roaming = 9;
+
+    // Index of the SIM is used, 0 for single-SIM devices.
+    optional int32 sim_slot_index = 10;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 11;
+
+    // Whether the message was received with an eSIM profile.
+    optional bool is_esim = 12;
+
+    // Carrier ID of the SIM card used for the SMS.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 13;
+
+    // Random message ID.
+    optional int64 message_id = 14;
+}
+
+/**
+ * Pulls information for a single outgoing SMS.
+ *
+ * Each pull creates multiple atoms, one for each SMS. The sequence is randomized when pulled.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message OutgoingSms {
+    // Format of the SMS (3GPP or 3GPP2).
+    optional android.telephony.SmsFormatEnum sms_format = 1;
+
+    // Technology of the SMS (CS or IMS).
+    optional android.telephony.SmsTechEnum sms_tech = 2;
+
+    // Radio access technology (RAT) used for the SMS. It can be IWLAN in case of IMS.
+    optional android.telephony.NetworkTypeEnum rat = 3;
+
+    // Result of the SMS sending.
+    optional android.telephony.SmsSendResultEnum send_result = 4;
+
+    // Error code
+    // For IMS technology, see @SmsManager.Result in
+    // http://cs/android/frameworks/base/telephony/java/android/telephony/SmsManager.java
+    // For CS technology:
+    //  - GSM format: see GsmSmsErrorCode (3GPP 27.005 clause 3.2.5)
+    //  - CDMA format: see CdmaSmsErrorCode (3GPP2 N.S0005 (IS-41-C) Table 171)
+    optional int32 error_code = 5;
+
+    // Whether the SMS was sent while roaming.
+    optional bool is_roaming = 6;
+
+    // Whether the default SMS application generated the SMS (regardless of which application).
+    optional bool is_from_default_app = 7;
+
+    // Index of the SIM is used, 0 for single-SIM devices.
+    optional int32 sim_slot_index = 8;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 9;
+
+    // Whether the message was sent with an eSIM profile.
+    optional bool is_esim = 10;
+
+    // Carrier ID of the SIM card used for the SMS.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 11;
+
+    // Random message ID.
+    optional int64 message_id = 12;
+
+    // Retry count: 0 for the first attempt and then increasing for each attempt.
+    optional int32 retry_id = 13;
+}
+
+/**
+ * Push information about usage of airplane mode.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/AirplaneModeStats.java
+ */
+message AirplaneMode {
+    // Status of airplane mode
+    optional bool is_enabled = 1;
+
+    // When is_enabled is false, indicates if this was a very short airplane mode toggle
+    // (i.e. airplane mode was disabled after less than 10 seconds from enablement).
+    optional bool short_toggle = 2;
+
+    // Carrier ID of the SIM card.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 3;
+}
+
+/**
+ * Push information about modem restarts.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/ModemRestartStats.java
+ */
+message ModemRestart {
+    // Software version of the modem, as provided by android.os.Build.getRadioVersion().
+    optional string baseband_version = 1;
+
+    // Reason of the modem restart, as provided in the modemReset indication of IRadio HAL.
+    optional string reason = 2;
+
+    // Carrier ID of the first SIM card.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 3;
+}
+
+/**
  * Logs gnss stats from location service provider
  *
  * Pulled from:
  *  frameworks/base/location/java/com/android/internal/location/gnssmetrics/GnssMetrics.java
  */
-
 message GnssStats {
     // Number of location reports since boot
     optional int64 location_reports = 1;

@@ -96,6 +96,7 @@ import android.system.Os;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
+import android.util.IntArray;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -1450,7 +1451,7 @@ class PackageManagerShellCommand extends ShellCommand {
         final PrintWriter pw = getOutPrintWriter();
         final int parentSessionId = Integer.parseInt(getNextArg());
 
-        List<Integer> otherSessionIds = new ArrayList<>();
+        IntArray otherSessionIds = new IntArray();
         String opt;
         while ((opt = getNextArg()) != null) {
             otherSessionIds.add(Integer.parseInt(opt));
@@ -1459,7 +1460,7 @@ class PackageManagerShellCommand extends ShellCommand {
             pw.println("Error: At least two sessions are required.");
             return 1;
         }
-        return doInstallAddSession(parentSessionId, ArrayUtils.convertToIntArray(otherSessionIds),
+        return doInstallAddSession(parentSessionId, otherSessionIds.toArray(),
                 true /*logSuccess*/);
     }
 
@@ -2323,7 +2324,8 @@ class PackageManagerShellCommand extends ShellCommand {
 
     private boolean isVendorApp(String pkg) {
         try {
-            final PackageInfo info = mInterface.getPackageInfo(pkg, 0, UserHandle.USER_SYSTEM);
+            final PackageInfo info = mInterface.getPackageInfo(
+                     pkg, PackageManager.MATCH_ANY_USER, UserHandle.USER_SYSTEM);
             return info != null && info.applicationInfo.isVendor();
         } catch (RemoteException e) {
             return false;
@@ -2332,7 +2334,8 @@ class PackageManagerShellCommand extends ShellCommand {
 
     private boolean isProductApp(String pkg) {
         try {
-            final PackageInfo info = mInterface.getPackageInfo(pkg, 0, UserHandle.USER_SYSTEM);
+            final PackageInfo info = mInterface.getPackageInfo(
+                    pkg, PackageManager.MATCH_ANY_USER, UserHandle.USER_SYSTEM);
             return info != null && info.applicationInfo.isProduct();
         } catch (RemoteException e) {
             return false;
@@ -2341,7 +2344,8 @@ class PackageManagerShellCommand extends ShellCommand {
 
     private boolean isSystemExtApp(String pkg) {
         try {
-            final PackageInfo info = mInterface.getPackageInfo(pkg, 0, UserHandle.USER_SYSTEM);
+            final PackageInfo info = mInterface.getPackageInfo(
+                    pkg, PackageManager.MATCH_ANY_USER, UserHandle.USER_SYSTEM);
             return info != null && info.applicationInfo.isSystemExt();
         } catch (RemoteException e) {
             return false;

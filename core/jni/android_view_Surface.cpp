@@ -32,9 +32,10 @@
 #include "android_os_Parcel.h"
 #include <binder/Parcel.h>
 
+#include <gui/BLASTBufferQueue.h>
 #include <gui/Surface.h>
-#include <gui/view/Surface.h>
 #include <gui/SurfaceControl.h>
+#include <gui/view/Surface.h>
 
 #include <ui/GraphicBuffer.h>
 #include <ui/Rect.h>
@@ -300,6 +301,26 @@ static jlong nativeGetFromSurfaceControl(JNIEnv* env, jclass clazz,
     return reinterpret_cast<jlong>(surface.get());
 }
 
+static jlong nativeGetFromBlastBufferQueue(JNIEnv* env, jclass clazz, jlong nativeObject,
+                                           jlong blastBufferQueueNativeObj) {
+    Surface* self(reinterpret_cast<Surface*>(nativeObject));
+    sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(blastBufferQueueNativeObj);
+    const sp<IGraphicBufferProducer>& bufferProducer = queue->getIGraphicBufferProducer();
+    // If the underlying IGBP's are the same, we don't need to do anything.
+    if (self != nullptr &&
+        IInterface::asBinder(self->getIGraphicBufferProducer()) ==
+                IInterface::asBinder(bufferProducer)) {
+        return nativeObject;
+    }
+
+    sp<Surface> surface(new Surface(bufferProducer, true));
+    if (surface != NULL) {
+        surface->incStrong(&sRefBaseOwner);
+    }
+
+    return reinterpret_cast<jlong>(surface.get());
+}
+
 static jlong nativeReadFromParcel(JNIEnv* env, jclass clazz,
         jlong nativeObject, jobject parcelObj) {
     Parcel* parcel = parcelForJavaObject(env, parcelObj);
@@ -474,6 +495,7 @@ static const JNINativeMethod gSurfaceMethods[] = {
     {"nativeSetSharedBufferModeEnabled", "(JZ)I", (void*)nativeSetSharedBufferModeEnabled},
     {"nativeSetAutoRefreshEnabled", "(JZ)I", (void*)nativeSetAutoRefreshEnabled},
     {"nativeSetFrameRate", "(JFI)I", (void*)nativeSetFrameRate},
+    {"nativeGetFromBlastBufferQueue", "(JJ)J", (void*)nativeGetFromBlastBufferQueue},
 };
 
 int register_android_view_Surface(JNIEnv* env)

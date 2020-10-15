@@ -16,6 +16,8 @@
 
 package com.android.server.hdmi;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.tv.cec.V1_0.CecMessage;
 import android.hardware.tv.cec.V1_0.HotplugEvent;
@@ -28,9 +30,11 @@ import android.os.Handler;
 import android.os.IHwBinder;
 import android.os.Looper;
 import android.os.RemoteException;
+import android.stats.hdmi.HdmiStatsEnums;
 import android.util.Slog;
 import android.util.SparseArray;
 
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.hdmi.HdmiAnnotations.IoThreadOnly;
 import com.android.server.hdmi.HdmiAnnotations.ServiceThreadOnly;
@@ -123,10 +127,14 @@ final class HdmiCecController {
 
     private final NativeWrapper mNativeWrapperImpl;
 
+    private final HdmiCecAtomWriter mHdmiCecAtomWriter;
+
     // Private constructor.  Use HdmiCecController.create().
-    private HdmiCecController(HdmiControlService service, NativeWrapper nativeWrapper) {
+    private HdmiCecController(
+            HdmiControlService service, NativeWrapper nativeWrapper, HdmiCecAtomWriter atomWriter) {
         mService = service;
         mNativeWrapperImpl = nativeWrapper;
+        mHdmiCecAtomWriter = atomWriter;
     }
 
     /**
@@ -134,21 +142,22 @@ final class HdmiCecController {
      * inner device or has no device it will return {@code null}.
      *
      * <p>Declared as package-private, accessed by {@link HdmiControlService} only.
-     * @param service {@link HdmiControlService} instance used to create internal handler
-     *                and to pass callback for incoming message or event.
+     * @param service    {@link HdmiControlService} instance used to create internal handler
+     *                   and to pass callback for incoming message or event.
+     * @param atomWriter {@link HdmiCecAtomWriter} instance for writing atoms for metrics.
      * @return {@link HdmiCecController} if device is initialized successfully. Otherwise,
      *         returns {@code null}.
      */
-    static HdmiCecController create(HdmiControlService service) {
-        return createWithNativeWrapper(service, new NativeWrapperImpl());
+    static HdmiCecController create(HdmiControlService service, HdmiCecAtomWriter atomWriter) {
+        return createWithNativeWrapper(service, new NativeWrapperImpl(), atomWriter);
     }
 
     /**
      * A factory method with injection of native methods for testing.
      */
     static HdmiCecController createWithNativeWrapper(
-            HdmiControlService service, NativeWrapper nativeWrapper) {
-        HdmiCecController controller = new HdmiCecController(service, nativeWrapper);
+            HdmiControlService service, NativeWrapper nativeWrapper, HdmiCecAtomWriter atomWriter) {
+        HdmiCecController controller = new HdmiCecController(service, nativeWrapper, atomWriter);
         String nativePtr = nativeWrapper.nativeInit();
         if (nativePtr == null) {
             HdmiLogger.warning("Couldn't get tv.cec service.");
@@ -619,7 +628,7 @@ final class HdmiCecController {
             public void run() {
                 HdmiLogger.debug("[S]:" + cecMessage);
                 byte[] body = buildBody(cecMessage.getOpcode(), cecMessage.getParams());
-                int i = 0;
+                int retransmissionCount = 0;
                 int errorCode = SendMessageResult.SUCCESS;
                 do {
                     errorCode = mNativeWrapperImpl.nativeSendCecCommand(
@@ -627,20 +636,25 @@ final class HdmiCecController {
                     if (errorCode == SendMessageResult.SUCCESS) {
                         break;
                     }
-                } while (i++ < HdmiConfig.RETRANSMISSION_COUNT);
+                } while (retransmissionCount++ < HdmiConfig.RETRANSMISSION_COUNT);
 
                 final int finalError = errorCode;
                 if (finalError != SendMessageResult.SUCCESS) {
                     Slog.w(TAG, "Failed to send " + cecMessage + " with errorCode=" + finalError);
                 }
-                if (callback != null) {
-                    runOnServiceThread(new Runnable() {
-                        @Override
-                        public void run() {
+                runOnServiceThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mHdmiCecAtomWriter.messageReported(
+                                cecMessage,
+                                FrameworkStatsLog.HDMI_CEC_MESSAGE_REPORTED__DIRECTION__OUTGOING,
+                                finalError
+                        );
+                        if (callback != null) {
                             callback.onSendCompleted(finalError);
                         }
-                    });
-                }
+                    }
+                });
             }
         });
     }
@@ -654,7 +668,36 @@ final class HdmiCecController {
         HdmiCecMessage command = HdmiCecMessageBuilder.of(srcAddress, dstAddress, body);
         HdmiLogger.debug("[R]:" + command);
         addCecMessageToHistory(true /* isReceived */, command);
+
+        mHdmiCecAtomWriter.messageReported(command,
+                incomingMessageDirection(srcAddress, dstAddress));
+
         onReceiveCommand(command);
+    }
+
+    /**
+     * Computes the direction of an incoming message, as implied by the source and
+     * destination addresses. This will usually return INCOMING; if not, it can indicate a bug.
+     */
+    private int incomingMessageDirection(int srcAddress, int dstAddress) {
+        boolean sourceIsLocal = false;
+        boolean destinationIsLocal = false;
+        for (HdmiCecLocalDevice localDevice : getLocalDeviceList()) {
+            int logicalAddress = localDevice.getDeviceInfo().getLogicalAddress();
+            if (logicalAddress == srcAddress) {
+                sourceIsLocal = true;
+            }
+            if (logicalAddress == dstAddress) {
+                destinationIsLocal = true;
+            }
+        }
+
+        if (!sourceIsLocal && destinationIsLocal) {
+            return HdmiStatsEnums.INCOMING;
+        } else if (sourceIsLocal && destinationIsLocal) {
+            return HdmiStatsEnums.TO_SELF;
+        }
+        return HdmiStatsEnums.MESSAGE_DIRECTION_OTHER;
     }
 
     /**
@@ -733,6 +776,7 @@ final class HdmiCecController {
         private IHdmiCec mHdmiCec;
         private final Object mLock = new Object();
         private int mPhysicalAddress = INVALID_PHYSICAL_ADDRESS;
+        @Nullable private HdmiCecCallback mCallback;
 
         @Override
         public String nativeInit() {
@@ -741,7 +785,7 @@ final class HdmiCecController {
 
         boolean connectToHal() {
             try {
-                mHdmiCec = IHdmiCec.getService();
+                mHdmiCec = IHdmiCec.getService(true);
                 try {
                     mHdmiCec.linkToDeath(this, HDMI_CEC_HAL_DEATH_COOKIE);
                 } catch (RemoteException e) {
@@ -755,7 +799,8 @@ final class HdmiCecController {
         }
 
         @Override
-        public void setCallback(HdmiCecCallback callback) {
+        public void setCallback(@NonNull HdmiCecCallback callback) {
+            mCallback = callback;
             try {
                 mHdmiCec.setCallback(callback);
             } catch (RemoteException e) {
@@ -895,6 +940,10 @@ final class HdmiCecController {
             if (cookie == HDMI_CEC_HAL_DEATH_COOKIE) {
                 HdmiLogger.error("Service died cookie : " + cookie + "; reconnecting");
                 connectToHal();
+                // Reconnect the callback
+                if (mCallback != null) {
+                    setCallback(mCallback);
+                }
             }
         }
 

@@ -332,6 +332,7 @@ package android.net.wifi {
     field @Deprecated public static final int RANDOMIZATION_NONE = 0; // 0x0
     field @Deprecated public static final int RANDOMIZATION_PERSISTENT = 1; // 0x1
     field @Deprecated public static final int RECENT_FAILURE_AP_UNABLE_TO_HANDLE_NEW_STA = 17; // 0x11
+    field @Deprecated public static final int RECENT_FAILURE_MBO_OCE_DISCONNECT = 1001; // 0x3e9
     field @Deprecated public static final int RECENT_FAILURE_NONE = 0; // 0x0
     field @Deprecated public boolean allowAutojoin;
     field @Deprecated public int carrierId;
@@ -349,6 +350,7 @@ package android.net.wifi {
     field @Deprecated public int numScorerOverrideAndSwitchedNetwork;
     field @Deprecated public boolean requirePmf;
     field @Deprecated public boolean shared;
+    field @Deprecated public int subscriptionId;
     field @Deprecated public boolean useExternalScores;
   }
 
@@ -507,8 +509,8 @@ package android.net.wifi {
     field public static final int EASY_CONNECT_NETWORK_ROLE_AP = 1; // 0x1
     field public static final int EASY_CONNECT_NETWORK_ROLE_STA = 0; // 0x0
     field public static final String EXTRA_CHANGE_REASON = "changeReason";
-    field public static final String EXTRA_LINK_PROPERTIES = "android.net.wifi.extra.LINK_PROPERTIES";
-    field public static final String EXTRA_MULTIPLE_NETWORKS_CHANGED = "multipleChanges";
+    field @Deprecated public static final String EXTRA_LINK_PROPERTIES = "android.net.wifi.extra.LINK_PROPERTIES";
+    field @Deprecated public static final String EXTRA_MULTIPLE_NETWORKS_CHANGED = "multipleChanges";
     field public static final String EXTRA_OSU_NETWORK = "android.net.wifi.extra.OSU_NETWORK";
     field public static final String EXTRA_PREVIOUS_WIFI_AP_STATE = "previous_wifi_state";
     field public static final String EXTRA_URL = "android.net.wifi.extra.URL";
@@ -516,7 +518,7 @@ package android.net.wifi {
     field public static final String EXTRA_WIFI_AP_INTERFACE_NAME = "android.net.wifi.extra.WIFI_AP_INTERFACE_NAME";
     field public static final String EXTRA_WIFI_AP_MODE = "android.net.wifi.extra.WIFI_AP_MODE";
     field public static final String EXTRA_WIFI_AP_STATE = "wifi_state";
-    field public static final String EXTRA_WIFI_CONFIGURATION = "wifiConfiguration";
+    field @Deprecated public static final String EXTRA_WIFI_CONFIGURATION = "wifiConfiguration";
     field public static final String EXTRA_WIFI_CREDENTIAL_EVENT_TYPE = "et";
     field public static final String EXTRA_WIFI_CREDENTIAL_SSID = "ssid";
     field public static final int IFACE_IP_MODE_CONFIGURATION_ERROR = 0; // 0x0
@@ -607,10 +609,12 @@ package android.net.wifi {
 
   public final class WifiNetworkSuggestion implements android.os.Parcelable {
     method @NonNull public android.net.wifi.WifiConfiguration getWifiConfiguration();
+    method public boolean isOemPaid();
   }
 
   public static final class WifiNetworkSuggestion.Builder {
     method @NonNull @RequiresPermission(android.Manifest.permission.NETWORK_CARRIER_PROVISIONING) public android.net.wifi.WifiNetworkSuggestion.Builder setCarrierId(int);
+    method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setOemPaid(boolean);
   }
 
   public class WifiScanner {

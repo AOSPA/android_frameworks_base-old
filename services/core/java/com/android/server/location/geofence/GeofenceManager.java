@@ -302,7 +302,7 @@ public class GeofenceManager extends
         CallerIdentity callerIdentity = CallerIdentity.fromBinder(mContext, packageName,
                 attributionTag, AppOpsManager.toReceiverId(pendingIntent));
 
-        long identity = Binder.clearCallingIdentity();
+        final long identity = Binder.clearCallingIdentity();
         try {
             addRegistration(new GeofenceKey(pendingIntent, geofence),
                     new GeofenceRegistration(geofence, callerIdentity, pendingIntent));
@@ -315,7 +315,7 @@ public class GeofenceManager extends
      * Removes the geofence associated with the PendingIntent.
      */
     public void removeGeofence(PendingIntent pendingIntent) {
-        long identity = Binder.clearCallingIdentity();
+        final long identity = Binder.clearCallingIdentity();
         try {
             removeRegistrationIf(key -> key.getPendingIntent().equals(pendingIntent));
         } finally {
@@ -327,7 +327,7 @@ public class GeofenceManager extends
     protected boolean isActive(GeofenceRegistration registration) {
         CallerIdentity identity = registration.getIdentity();
         return registration.isPermitted()
-                && mUserInfoHelper.isCurrentUserId(identity.getUserId())
+                && (identity.isSystem() || mUserInfoHelper.isCurrentUserId(identity.getUserId()))
                 && mSettingsHelper.isLocationEnabled(identity.getUserId())
                 && !mSettingsHelper.isLocationPackageBlacklisted(identity.getUserId(),
                 identity.getPackageName());

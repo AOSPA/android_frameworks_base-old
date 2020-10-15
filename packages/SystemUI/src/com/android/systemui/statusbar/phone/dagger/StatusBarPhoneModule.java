@@ -31,7 +31,7 @@ import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.InitController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
-import com.android.systemui.bubbles.BubbleController;
+import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.UiBackground;
@@ -43,7 +43,6 @@ import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.navigationbar.NavigationBarController;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.PluginDependencyProvider;
-import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.CommandQueue;
@@ -156,7 +155,7 @@ public interface StatusBarPhoneModule {
             WakefulnessLifecycle wakefulnessLifecycle,
             SysuiStatusBarStateController statusBarStateController,
             VibratorHelper vibratorHelper,
-            BubbleController bubbleController,
+            Optional<Bubbles> bubblesOptional,
             VisualStabilityManager visualStabilityManager,
             DeviceProvisionedController deviceProvisionedController,
             NavigationBarController navigationBarController,
@@ -175,7 +174,6 @@ public interface StatusBarPhoneModule {
             DozeScrimController dozeScrimController,
             VolumeComponent volumeComponent,
             CommandQueue commandQueue,
-            Optional<Recents> recentsOptional,
             Provider<StatusBarComponent.Builder> statusBarComponentBuilder,
             PluginManager pluginManager,
             Optional<SplitScreen> splitScreenOptional,
@@ -235,7 +233,7 @@ public interface StatusBarPhoneModule {
                 wakefulnessLifecycle,
                 statusBarStateController,
                 vibratorHelper,
-                bubbleController,
+                bubblesOptional,
                 visualStabilityManager,
                 deviceProvisionedController,
                 navigationBarController,
@@ -254,7 +252,6 @@ public interface StatusBarPhoneModule {
                 dozeScrimController,
                 volumeComponent,
                 commandQueue,
-                recentsOptional,
                 statusBarComponentBuilder,
                 pluginManager,
                 splitScreenOptional,

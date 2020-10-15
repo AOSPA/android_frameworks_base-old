@@ -21,13 +21,14 @@ import android.content.Context;
 import android.os.Handler;
 
 import com.android.internal.statusbar.IStatusBarService;
-import com.android.systemui.bubbles.BubbleController;
+import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.ActionClickLogger;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.MediaArtworkProcessor;
 import com.android.systemui.statusbar.NotificationClickNotifier;
 import com.android.systemui.statusbar.NotificationListener;
@@ -39,10 +40,13 @@ import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
+import com.android.systemui.statusbar.commandline.CommandRegistry;
 import com.android.systemui.statusbar.notification.AssistantFeedbackController;
 import com.android.systemui.statusbar.notification.DynamicChildBindController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.collection.NotifCollection;
+import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.inflation.LowPriorityInflationHelper;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
@@ -58,6 +62,8 @@ import com.android.systemui.statusbar.policy.RemoteInputUriController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.concurrency.DelayableExecutor;
+
+import java.util.Optional;
 
 import dagger.Binds;
 import dagger.Lazy;
@@ -108,6 +114,9 @@ public interface StatusBarDependenciesModule {
             NotificationEntryManager notificationEntryManager,
             MediaArtworkProcessor mediaArtworkProcessor,
             KeyguardBypassController keyguardBypassController,
+            NotifPipeline notifPipeline,
+            NotifCollection notifCollection,
+            FeatureFlags featureFlags,
             @Main DelayableExecutor mainExecutor,
             DeviceConfigProxy deviceConfigProxy,
             MediaDataManager mediaDataManager) {
@@ -118,6 +127,9 @@ public interface StatusBarDependenciesModule {
                 notificationEntryManager,
                 mediaArtworkProcessor,
                 keyguardBypassController,
+                notifPipeline,
+                notifCollection,
+                featureFlags,
                 mainExecutor,
                 deviceConfigProxy,
                 mediaDataManager);
@@ -162,7 +174,7 @@ public interface StatusBarDependenciesModule {
             StatusBarStateController statusBarStateController,
             NotificationEntryManager notificationEntryManager,
             KeyguardBypassController bypassController,
-            BubbleController bubbleController,
+            Optional<Bubbles> bubblesOptional,
             DynamicPrivacyController privacyController,
             ForegroundServiceSectionController fgsSectionController,
             DynamicChildBindController dynamicChildBindController,
@@ -177,7 +189,7 @@ public interface StatusBarDependenciesModule {
                 statusBarStateController,
                 notificationEntryManager,
                 bypassController,
-                bubbleController,
+                bubblesOptional,
                 privacyController,
                 fgsSectionController,
                 dynamicChildBindController,
@@ -190,8 +202,11 @@ public interface StatusBarDependenciesModule {
      */
     @Provides
     @SysUISingleton
-    static CommandQueue provideCommandQueue(Context context, ProtoTracer protoTracer) {
-        return new CommandQueue(context, protoTracer);
+    static CommandQueue provideCommandQueue(
+            Context context,
+            ProtoTracer protoTracer,
+            CommandRegistry registry) {
+        return new CommandQueue(context, protoTracer, registry);
     }
 
     /**

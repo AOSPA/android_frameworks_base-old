@@ -27,6 +27,22 @@ package android.telephony {
     field @NonNull public static final android.os.Parcelable.Creator<android.telephony.CallAttributes> CREATOR;
   }
 
+  public final class CallForwardingInfo implements android.os.Parcelable {
+    ctor public CallForwardingInfo(boolean, int, @Nullable String, int);
+    method public int describeContents();
+    method @Nullable public String getNumber();
+    method public int getReason();
+    method public int getTimeoutSeconds();
+    method public boolean isEnabled();
+    field @NonNull public static final android.os.Parcelable.Creator<android.telephony.CallForwardingInfo> CREATOR;
+    field public static final int REASON_ALL = 4; // 0x4
+    field public static final int REASON_ALL_CONDITIONAL = 5; // 0x5
+    field public static final int REASON_BUSY = 1; // 0x1
+    field public static final int REASON_NOT_REACHABLE = 3; // 0x3
+    field public static final int REASON_NO_REPLY = 2; // 0x2
+    field public static final int REASON_UNCONDITIONAL = 0; // 0x0
+  }
+
   public final class CallQuality implements android.os.Parcelable {
     ctor public CallQuality(int, int, int, int, int, int, int, int, int, int, int);
     ctor public CallQuality(int, int, int, int, int, int, int, int, int, int, int, boolean, boolean, boolean);
@@ -209,6 +225,25 @@ package android.telephony {
 
   public class MbmsStreamingSession implements java.lang.AutoCloseable {
     field public static final String MBMS_STREAMING_SERVICE_ACTION = "android.telephony.action.EmbmsStreaming";
+  }
+
+  public final class ModemActivityInfo implements android.os.Parcelable {
+    method public int describeContents();
+    method @NonNull public android.telephony.ModemActivityInfo getDelta(@NonNull android.telephony.ModemActivityInfo);
+    method public long getIdleTimeMillis();
+    method public static int getNumTxPowerLevels();
+    method public long getReceiveTimeMillis();
+    method public long getSleepTimeMillis();
+    method public long getTimestampMillis();
+    method public long getTransmitDurationMillisAtPowerLevel(int);
+    method @NonNull public android.util.Range<java.lang.Integer> getTransmitPowerRange(int);
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.telephony.ModemActivityInfo> CREATOR;
+    field public static final int TX_POWER_LEVEL_0 = 0; // 0x0
+    field public static final int TX_POWER_LEVEL_1 = 1; // 0x1
+    field public static final int TX_POWER_LEVEL_2 = 2; // 0x2
+    field public static final int TX_POWER_LEVEL_3 = 3; // 0x3
+    field public static final int TX_POWER_LEVEL_4 = 4; // 0x4
   }
 
   public final class NetworkRegistrationInfo implements android.os.Parcelable {
@@ -569,7 +604,6 @@ package android.telephony {
     method public boolean disableCellBroadcastRange(int, int, int);
     method public boolean enableCellBroadcastRange(int, int, int);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public int getPremiumSmsConsent(@NonNull String);
-    method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public int getSmsCapacityOnIcc();
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void sendMultipartTextMessageWithoutPersisting(String, String, java.util.List<java.lang.String>, java.util.List<android.app.PendingIntent>, java.util.List<android.app.PendingIntent>);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setPremiumSmsConsent(@NonNull String, int);
     field public static final int PREMIUM_SMS_CONSENT_ALWAYS_ALLOW = 3; // 0x3
@@ -656,6 +690,8 @@ package android.telephony {
     method @Deprecated @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public java.util.List<android.service.carrier.CarrierIdentifier> getAllowedCarriers(int);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public long getAllowedNetworkTypes();
     method @Nullable @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS) public android.content.ComponentName getAndUpdateDefaultRespondViaMessageApplication();
+    method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public void getCallForwarding(int, @NonNull java.util.concurrent.Executor, @NonNull android.telephony.TelephonyManager.CallForwardingInfoCallback);
+    method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public void getCallWaitingStatus(@NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.Integer>);
     method @Nullable @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public android.telephony.ImsiEncryptionInfo getCarrierInfoForImsiEncryption(int);
     method public java.util.List<java.lang.String> getCarrierPackageNamesForIntent(android.content.Intent);
     method public java.util.List<java.lang.String> getCarrierPackageNamesForIntentAndPhone(android.content.Intent, int);
@@ -709,6 +745,7 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) @WorkerThread public boolean isIccLockEnabled();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isIdle();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isLteCdmaEvdoGsmWcdmaEnabled();
+    method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isMobileDataPolicyEnabled(int);
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isOffhook();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isOpportunisticNetworkEnabled();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isPotentialEmergencyNumber(@NonNull String);
@@ -732,11 +769,14 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.CONNECTIVITY_INTERNAL) public void resetSettings();
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int setAllowedCarriers(int, java.util.List<android.service.carrier.CarrierIdentifier>);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean setAllowedNetworkTypes(long);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setCallForwarding(@NonNull android.telephony.CallForwardingInfo, @Nullable java.util.concurrent.Executor, @Nullable java.util.function.Consumer<java.lang.Integer>);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setCallWaitingEnabled(boolean, @Nullable java.util.concurrent.Executor, @Nullable java.util.function.Consumer<java.lang.Integer>);
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setCarrierDataEnabled(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int setCarrierRestrictionRules(@NonNull android.telephony.CarrierRestrictionRules);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataActivationState(int);
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataEnabled(int, boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataRoamingEnabled(boolean);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setMobileDataPolicyEnabledStatus(int, boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setMultiSimCarrierRestriction(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean setOpportunisticNetworkState(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean setPreferredNetworkTypeBitmask(long);
@@ -769,6 +809,10 @@ package android.telephony {
     field public static final String ACTION_SIM_APPLICATION_STATE_CHANGED = "android.telephony.action.SIM_APPLICATION_STATE_CHANGED";
     field public static final String ACTION_SIM_CARD_STATE_CHANGED = "android.telephony.action.SIM_CARD_STATE_CHANGED";
     field public static final String ACTION_SIM_SLOT_STATUS_CHANGED = "android.telephony.action.SIM_SLOT_STATUS_CHANGED";
+    field public static final int CALL_WAITING_STATUS_DISABLED = 2; // 0x2
+    field public static final int CALL_WAITING_STATUS_ENABLED = 1; // 0x1
+    field public static final int CALL_WAITING_STATUS_NOT_SUPPORTED = 4; // 0x4
+    field public static final int CALL_WAITING_STATUS_UNKNOWN_ERROR = 3; // 0x3
     field public static final int CARRIER_PRIVILEGE_STATUS_ERROR_LOADING_RULES = -2; // 0xfffffffe
     field public static final int CARRIER_PRIVILEGE_STATUS_HAS_ACCESS = 1; // 0x1
     field public static final int CARRIER_PRIVILEGE_STATUS_NO_ACCESS = 0; // 0x0
@@ -783,6 +827,8 @@ package android.telephony {
     field public static final int INVALID_EMERGENCY_NUMBER_DB_VERSION = -1; // 0xffffffff
     field public static final int KEY_TYPE_EPDG = 1; // 0x1
     field public static final int KEY_TYPE_WLAN = 2; // 0x2
+    field public static final int MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL = 1; // 0x1
+    field public static final int MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED = 2; // 0x2
     field public static final long NETWORK_TYPE_BITMASK_1xRTT = 64L; // 0x40L
     field public static final long NETWORK_TYPE_BITMASK_CDMA = 8L; // 0x8L
     field public static final long NETWORK_TYPE_BITMASK_EDGE = 2L; // 0x2L
@@ -821,6 +867,15 @@ package android.telephony {
     field public static final int SRVCC_STATE_HANDOVER_FAILED = 2; // 0x2
     field public static final int SRVCC_STATE_HANDOVER_NONE = -1; // 0xffffffff
     field public static final int SRVCC_STATE_HANDOVER_STARTED = 0; // 0x0
+  }
+
+  public static interface TelephonyManager.CallForwardingInfoCallback {
+    method public void onCallForwardingInfoAvailable(@NonNull android.telephony.CallForwardingInfo);
+    method public void onError(int);
+    field public static final int RESULT_ERROR_FDN_CHECK_FAILURE = 2; // 0x2
+    field public static final int RESULT_ERROR_NOT_SUPPORTED = 3; // 0x3
+    field public static final int RESULT_ERROR_UNKNOWN = 1; // 0x1
+    field public static final int RESULT_SUCCESS = 0; // 0x0
   }
 
   public final class UiccAccessRule implements android.os.Parcelable {
@@ -900,11 +955,11 @@ package android.telephony.data {
     method public int getSuggestedRetryTime();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.telephony.data.DataCallResponse> CREATOR;
-    field public static final int HANDOVER_FAILURE_MODE_DO_FALLBACK = 2; // 0x2
-    field public static final int HANDOVER_FAILURE_MODE_LEGACY = 1; // 0x1
-    field public static final int HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER = 3; // 0x3
-    field public static final int HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL = 4; // 0x4
-    field public static final int HANDOVER_FAILURE_MODE_UNKNOWN = 0; // 0x0
+    field public static final int HANDOVER_FAILURE_MODE_DO_FALLBACK = 1; // 0x1
+    field public static final int HANDOVER_FAILURE_MODE_LEGACY = 0; // 0x0
+    field public static final int HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER = 2; // 0x2
+    field public static final int HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL = 3; // 0x3
+    field public static final int HANDOVER_FAILURE_MODE_UNKNOWN = -1; // 0xffffffff
     field public static final int LINK_STATUS_ACTIVE = 2; // 0x2
     field public static final int LINK_STATUS_DORMANT = 1; // 0x1
     field public static final int LINK_STATUS_INACTIVE = 0; // 0x0

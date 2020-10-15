@@ -16,26 +16,32 @@
 
 package android.hardware.input;
 
+import android.Manifest;
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
+import android.compat.annotation.ChangeId;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
-import android.media.AudioAttributes;
 import android.os.Binder;
+import android.os.BlockUntrustedTouchesMode;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.InputEventInjectionSync;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.SystemClock;
+import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.Settings;
@@ -48,8 +54,10 @@ import android.view.InputMonitor;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
 import android.view.VerifiedInputEvent;
+import android.view.WindowManager.LayoutParams;
 
 import com.android.internal.os.SomeArgs;
+import com.android.internal.util.ArrayUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -68,6 +76,13 @@ public final class InputManager {
     private static final int MSG_DEVICE_ADDED = 1;
     private static final int MSG_DEVICE_REMOVED = 2;
     private static final int MSG_DEVICE_CHANGED = 3;
+
+    /** @hide */
+    public static final int[] BLOCK_UNTRUSTED_TOUCHES_MODES = {
+            BlockUntrustedTouchesMode.DISABLED,
+            BlockUntrustedTouchesMode.PERMISSIVE,
+            BlockUntrustedTouchesMode.BLOCK
+    };
 
     private static InputManager sInstance;
 
@@ -168,11 +183,37 @@ public final class InputManager {
     public static final int DEFAULT_POINTER_SPEED = 0;
 
     /**
+     * The maximum allowed obscuring opacity by UID to propagate touches (0 <= x <= 1).
+     * @hide
+     */
+    public static final float DEFAULT_MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH = .8f;
+
+    /**
+     * Default mode of the block untrusted touches mode feature.
+     * @hide
+     */
+    @BlockUntrustedTouchesMode
+    public static final int DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE =
+            BlockUntrustedTouchesMode.DISABLED;
+
+    /**
+     * Prevent touches from being consumed by apps if these touches passed through a non-trusted
+     * window from a different UID and are considered unsafe.
+     *
+     * TODO(b/158002302): Turn the feature on by default
+     *
+     * @hide
+     */
+    @TestApi
+    @ChangeId
+    public static final long BLOCK_UNTRUSTED_TOUCHES = 158002302L;
+
+    /**
      * Input Event Injection Synchronization Mode: None.
      * Never blocks.  Injection is asynchronous and is assumed always to be successful.
      * @hide
      */
-    public static final int INJECT_INPUT_EVENT_MODE_ASYNC = 0; // see InputDispatcher.h
+    public static final int INJECT_INPUT_EVENT_MODE_ASYNC = InputEventInjectionSync.NONE;
 
     /**
      * Input Event Injection Synchronization Mode: Wait for result.
@@ -182,7 +223,8 @@ public final class InputManager {
      * by the application.
      * @hide
      */
-    public static final int INJECT_INPUT_EVENT_MODE_WAIT_FOR_RESULT = 1;  // see InputDispatcher.h
+    public static final int INJECT_INPUT_EVENT_MODE_WAIT_FOR_RESULT =
+            InputEventInjectionSync.WAIT_FOR_RESULT;
 
     /**
      * Input Event Injection Synchronization Mode: Wait for finish.
@@ -190,7 +232,8 @@ public final class InputManager {
      * @hide
      */
     @UnsupportedAppUsage
-    public static final int INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH = 2;  // see InputDispatcher.h
+    public static final int INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH =
+            InputEventInjectionSync.WAIT_FOR_FINISHED;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -832,6 +875,103 @@ public final class InputManager {
     }
 
     /**
+     * Returns the maximum allowed obscuring opacity by UID to propagate touches.
+     *
+     * For certain window types (eg. SAWs), the decision of honoring {@link LayoutParams
+     * #FLAG_NOT_TOUCHABLE} or not depends on the combined obscuring opacity of the windows
+     * above the touch-consuming window.
+     *
+     * @see #setMaximumObscuringOpacityForTouch(Context, float)
+     *
+     * @hide
+     */
+    @TestApi
+    public float getMaximumObscuringOpacityForTouch(@NonNull Context context) {
+        return Settings.Global.getFloat(context.getContentResolver(),
+                Settings.Global.MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH,
+                DEFAULT_MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH);
+    }
+
+    /**
+     * Sets the maximum allowed obscuring opacity by UID to propagate touches.
+     *
+     * For certain window types (eg. SAWs), the decision of honoring {@link LayoutParams
+     * #FLAG_NOT_TOUCHABLE} or not depends on the combined obscuring opacity of the windows
+     * above the touch-consuming window.
+     *
+     * For a certain UID:
+     * <ul>
+     *     <li>If it's the same as the UID of the touch-consuming window, allow it to propagate
+     *     the touch.
+     *     <li>Otherwise take all its windows of eligible window types above the touch-consuming
+     *     window, compute their combined obscuring opacity considering that {@code
+     *     opacity(A, B) = 1 - (1 - opacity(A))*(1 - opacity(B))}. If the computed value is
+     *     lesser than or equal to this setting and there are no other windows preventing the
+     *     touch, allow the UID to propagate the touch.
+     * </ul>
+     *
+     * This value should be between 0 (inclusive) and 1 (inclusive).
+     *
+     * @see #getMaximumObscuringOpacityForTouch(Context)
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+    public void setMaximumObscuringOpacityForTouch(@NonNull Context context, float opacity) {
+        if (opacity < 0 || opacity > 1) {
+            throw new IllegalArgumentException(
+                    "Maximum obscuring opacity for touch should be >= 0 and <= 1");
+        }
+        Settings.Global.putFloat(context.getContentResolver(),
+                Settings.Global.MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH, opacity);
+    }
+
+    /**
+     * Returns the current mode of the block untrusted touches feature, one of:
+     * <ul>
+     *     <li>{@link BlockUntrustedTouchesMode#DISABLED}
+     *     <li>{@link BlockUntrustedTouchesMode#PERMISSIVE}
+     *     <li>{@link BlockUntrustedTouchesMode#BLOCK}
+     * </ul>
+     *
+     * @hide
+     */
+    @TestApi
+    @BlockUntrustedTouchesMode
+    public int getBlockUntrustedTouchesMode(@NonNull Context context) {
+        int mode = Settings.Global.getInt(context.getContentResolver(),
+                Settings.Global.BLOCK_UNTRUSTED_TOUCHES_MODE, DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE);
+        if (!ArrayUtils.contains(BLOCK_UNTRUSTED_TOUCHES_MODES, mode)) {
+            Log.w(TAG, "Unknown block untrusted touches feature mode " + mode + ", using "
+                    + "default " + DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE);
+            return DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE;
+        }
+        return mode;
+    }
+
+    /**
+     * Sets the mode of the block untrusted touches feature to one of:
+     * <ul>
+     *     <li>{@link BlockUntrustedTouchesMode#DISABLED}
+     *     <li>{@link BlockUntrustedTouchesMode#PERMISSIVE}
+     *     <li>{@link BlockUntrustedTouchesMode#BLOCK}
+     * </ul>
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+    public void setBlockUntrustedTouchesMode(@NonNull Context context,
+            @BlockUntrustedTouchesMode int mode) {
+        if (!ArrayUtils.contains(BLOCK_UNTRUSTED_TOUCHES_MODES, mode)) {
+            throw new IllegalArgumentException("Invalid feature mode " + mode);
+        }
+        Settings.Global.putInt(context.getContentResolver(),
+                Settings.Global.BLOCK_UNTRUSTED_TOUCHES_MODE, mode);
+    }
+
+    /**
      * Queries the framework about whether any physical keys exist on the
      * any keyboard attached to the device that are capable of producing the given
      * array of key codes.
@@ -885,9 +1025,9 @@ public final class InputManager {
      *
      * @param event The event to inject.
      * @param mode The synchronization mode.  One of:
-     * {@link #INJECT_INPUT_EVENT_MODE_ASYNC},
-     * {@link #INJECT_INPUT_EVENT_MODE_WAIT_FOR_RESULT}, or
-     * {@link #INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH}.
+     * {@link android.os.InputEventInjectionSync.NONE},
+     * {@link android.os.InputEventInjectionSync.WAIT_FOR_RESULT}, or
+     * {@link android.os.InputEventInjectionSync.WAIT_FOR_FINISHED}.
      * @return True if input event injection succeeded.
      *
      * @hide
@@ -897,9 +1037,9 @@ public final class InputManager {
         if (event == null) {
             throw new IllegalArgumentException("event must not be null");
         }
-        if (mode != INJECT_INPUT_EVENT_MODE_ASYNC
-                && mode != INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH
-                && mode != INJECT_INPUT_EVENT_MODE_WAIT_FOR_RESULT) {
+        if (mode != InputEventInjectionSync.NONE
+                && mode != InputEventInjectionSync.WAIT_FOR_FINISHED
+                && mode != InputEventInjectionSync.WAIT_FOR_RESULT) {
             throw new IllegalArgumentException("mode is invalid");
         }
 
@@ -1295,8 +1435,8 @@ public final class InputManager {
          * @hide
          */
         @Override
-        public void vibrate(int uid, String opPkg, VibrationEffect effect,
-                String reason, AudioAttributes attributes) {
+        public void vibrate(int uid, String opPkg, @NonNull VibrationEffect effect,
+                String reason, @NonNull VibrationAttributes attributes) {
             try {
                 mIm.vibrate(mDeviceId, effect, mToken);
             } catch (RemoteException ex) {

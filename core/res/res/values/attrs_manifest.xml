@@ -344,6 +344,11 @@
              the app is uninstalled.
         -->
         <flag name="immutablyRestricted" value="0x10" />
+        <!--
+             Modifier for permission restriction. This permission cannot
+             be exempted by the installer.
+        -->
+        <flag name="installerExemptIgnored" value="0x20" />
     </attr>
 
     <!-- Specified the name of a group that this permission is associated
@@ -996,6 +1001,8 @@
         <!-- The font scaling factor has changed, that is the user has
              selected a new global font size. -->
         <flag name="fontScale" value="0x40000000" />
+        <!-- The user has enabled or disabled displaying all text in bold -->
+        <flag name="forceBoldText" value="0x10000000" />
     </attr>
 
     <!-- Indicate that the activity can be launched as the embedded child of another
@@ -2007,6 +2014,22 @@
         requested.  If it does support the feature, it will be as if the manifest didn't
         request it at all. -->
         <attr name="requiredNotFeature" format="string" />
+    </declare-styleable>
+
+    <!-- <code>required-feature</code> and <code>required-not-feature</code> elements inside
+         <code>uses-permission<code/> can be used to request the permission based on the fact
+         whether the system supports or does not support certain features.
+         If multiple <code>required-feature</code> and/or <code>required-not-feature</code> elements
+         are present, the permission will be “requested” only if the system supports all of the
+         listed "required-features" and does not support any of the "required-not-features".
+         -->
+    <declare-styleable name="AndroidManifestRequiredFeature">
+        <!-- The name of the feature. -->
+        <attr name="name" />
+    </declare-styleable>
+    <declare-styleable name="AndroidManifestRequiredNotFeature">
+        <!-- The name of the feature. -->
+        <attr name="name" />
     </declare-styleable>
 
     <!-- The <code>uses-configuration</code> tag specifies

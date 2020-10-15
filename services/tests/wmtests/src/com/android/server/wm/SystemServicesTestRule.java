@@ -236,6 +236,7 @@ public class SystemServicesTestRule implements TestRule {
         inputChannels[0].dispose();
         mInputChannel = inputChannels[1];
         doReturn(mInputChannel).when(mImService).monitorInput(anyString(), anyInt());
+        doReturn(mInputChannel).when(mImService).createInputChannel(anyString());
 
         // StatusBarManagerInternal
         final StatusBarManagerInternal sbmi = mock(StatusBarManagerInternal.class);
@@ -318,6 +319,9 @@ public class SystemServicesTestRule implements TestRule {
         display.setDisplayWindowingMode(WINDOWING_MODE_FULLSCREEN);
         spyOn(display);
         final TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
+
+        // Set the default focused TDA.
+        display.setLastFocusedTaskDisplayArea(taskDisplayArea);
         spyOn(taskDisplayArea);
         final Task homeStack = taskDisplayArea.getStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
@@ -334,7 +338,7 @@ public class SystemServicesTestRule implements TestRule {
         // HighRefreshRateBlacklist with DeviceConfig. We need to undo that here to avoid
         // leaking mWmService.
         mWmService.mConstants.dispose();
-        mWmService.mHighRefreshRateBlacklist.dispose();
+        mWmService.mHighRefreshRateDenylist.dispose();
 
         // This makes sure the posted messages without delay are processed, e.g.
         // DisplayPolicy#release, WindowManagerService#setAnimationScale.

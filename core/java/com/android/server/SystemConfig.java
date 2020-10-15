@@ -46,6 +46,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.XmlUtils;
 
 import libcore.io.IoUtils;
+import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -55,7 +56,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -95,7 +95,7 @@ public class SystemConfig {
     private static final String VENDOR_SKU_PROPERTY = "ro.boot.product.vendor.sku";
 
     // Group-ids that are given to all packages as read from etc/permissions/*.xml.
-    int[] mGlobalGids;
+    int[] mGlobalGids = EmptyArray.INT;
 
     // These are the built-in uid -> permission mappings that were read from the
     // system configuration files.
@@ -1520,7 +1520,12 @@ public class SystemConfig {
         readPublicLibrariesListFile(new File("/vendor/etc/public.libraries.txt"));
         String[] dirs = {"/system/etc", "/system_ext/etc", "/product/etc"};
         for (String dir : dirs) {
-            for (File f : (new File(dir)).listFiles()) {
+            File[] files = new File(dir).listFiles();
+            if (files == null) {
+                Slog.w(TAG, "Public libraries file folder missing: " + dir);
+                continue;
+            }
+            for (File f : files) {
                 String name = f.getName();
                 if (name.startsWith("public.libraries-") && name.endsWith(".txt")) {
                     readPublicLibrariesListFile(f);

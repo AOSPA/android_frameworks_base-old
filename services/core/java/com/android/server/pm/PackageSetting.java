@@ -28,7 +28,7 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
-import com.android.server.pm.permission.PermissionsState;
+import com.android.server.pm.permission.LegacyPermissionState;
 import com.android.server.pm.pkg.PackageStateUnserialized;
 
 import java.io.File;
@@ -214,11 +214,12 @@ public class PackageSetting extends PackageSettingBase {
         mimeGroups = updatedMimeGroups;
     }
 
+    @Deprecated
     @Override
-    public PermissionsState getPermissionsState() {
+    public LegacyPermissionState getLegacyPermissionState() {
         return (sharedUser != null)
-                ? sharedUser.getPermissionsState()
-                : super.getPermissionsState();
+                ? sharedUser.getLegacyPermissionState()
+                : super.getLegacyPermissionState();
     }
 
     public int getAppId() {
@@ -333,6 +334,8 @@ public class PackageSetting extends PackageSettingBase {
                     installSource.originatingPackageName);
             proto.end(sourceToken);
         }
+        proto.write(PackageProto.StatesProto.IS_STARTABLE, incrementalStates.isStartable());
+        proto.write(PackageProto.StatesProto.IS_LOADING, incrementalStates.isLoading());
         writeUsersInfoToProto(proto, PackageProto.USERS);
         proto.end(packageToken);
     }

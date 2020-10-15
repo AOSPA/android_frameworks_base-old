@@ -16,11 +16,14 @@
 
 package com.android.systemui.accessibility;
 
+import static android.provider.Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW;
+
 import android.annotation.NonNull;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.PixelFormat;
 import android.graphics.PointF;
+import android.os.Bundle;
 import android.provider.Settings;
 import android.util.MathUtils;
 import android.view.Gravity;
@@ -28,6 +31,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.widget.ImageView;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -41,9 +46,15 @@ import com.android.systemui.R;
  */
 class MagnificationModeSwitch {
 
-    private static final int DURATION_MS = 5000;
-    private static final int START_DELAY_MS = 3000;
-    private final Runnable mAnimationTask;
+    @VisibleForTesting
+    static final long FADING_ANIMATION_DURATION_MS = 300;
+    private static final int DEFAULT_FADE_OUT_ANIMATION_DELAY_MS = 3000;
+    // The button visible duration starting from the last showButton() called.
+    private int mVisibleDuration = DEFAULT_FADE_OUT_ANIMATION_DELAY_MS;
+    private final Runnable mFadeInAnimationTask;
+    private final Runnable mFadeOutAnimationTask;
+    @VisibleForTesting
+    boolean mIsFadeOutAnimating = false;
 
     private final Context mContext;
     private final WindowManager mWindowManager;
@@ -71,14 +82,51 @@ class MagnificationModeSwitch {
         applyResourcesValues();
         mImageView.setImageResource(getIconResId(mMagnificationMode));
         mImageView.setOnTouchListener(this::onTouch);
+        mImageView.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setStateDescription(formatStateDescription());
+                info.setContentDescription(mContext.getResources().getString(
+                        R.string.magnification_mode_switch_description));
+                final AccessibilityAction clickAction = new AccessibilityAction(
+                        AccessibilityAction.ACTION_CLICK.getId(), mContext.getResources().getString(
+                        R.string.magnification_mode_switch_click_label));
+                info.addAction(clickAction);
+                info.setClickable(true);
+            }
 
-        mAnimationTask = () -> {
+            @Override
+            public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                if (action == AccessibilityAction.ACTION_CLICK.getId()) {
+                    handleSingleTap();
+                    return true;
+                }
+                return super.performAccessibilityAction(host, action, args);
+            }
+        });
+
+        mFadeInAnimationTask = () -> {
             mImageView.animate()
-                    .alpha(0f)
-                    .setDuration(DURATION_MS)
-                    .withEndAction(() -> removeButton())
+                    .alpha(1f)
+                    .setDuration(FADING_ANIMATION_DURATION_MS)
                     .start();
         };
+        mFadeOutAnimationTask = () -> {
+            mImageView.animate()
+                    .alpha(0f)
+                    .setDuration(FADING_ANIMATION_DURATION_MS)
+                    .withEndAction(() -> removeButton())
+                    .start();
+            mIsFadeOutAnimating = true;
+        };
+    }
+
+    private CharSequence formatStateDescription() {
+        final int stringId = mMagnificationMode == ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
+                ? R.string.magnification_mode_switch_state_window
+                : R.string.magnification_mode_switch_state_full_screen;
+        return mContext.getResources().getString(stringId);
     }
 
     private void applyResourcesValues() {
@@ -93,7 +141,6 @@ class MagnificationModeSwitch {
         }
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                mImageView.setAlpha(1.0f);
                 mImageView.animate().cancel();
                 mLastDown.set(event.getRawX(), event.getRawY());
                 mLastDrag.set(event.getRawX(), event.getRawY());
@@ -134,9 +181,13 @@ class MagnificationModeSwitch {
         if (!mIsVisible) {
             return;
         }
-        mImageView.animate().cancel();
-        mWindowManager.removeView(mImageView);
         // Reset button status.
+        mImageView.removeCallbacks(mFadeInAnimationTask);
+        mImageView.removeCallbacks(mFadeOutAnimationTask);
+        mImageView.animate().cancel();
+        mIsFadeOutAnimating = false;
+        mImageView.setAlpha(0f);
+        mWindowManager.removeView(mImageView);
         mIsVisible = false;
         mParams.x = 0;
         mParams.y = 0;
@@ -150,14 +201,15 @@ class MagnificationModeSwitch {
         if (!mIsVisible) {
             mWindowManager.addView(mImageView, mParams);
             mIsVisible = true;
+            mImageView.postOnAnimation(mFadeInAnimationTask);
         }
-        mImageView.setAlpha(1.0f);
-        // TODO(b/143852371): use accessibility timeout as a delay.
-        // Dismiss the magnification switch button after the button is displayed for a period of
-        // time.
-        mImageView.animate().cancel();
-        mImageView.removeCallbacks(mAnimationTask);
-        mImageView.postDelayed(mAnimationTask, START_DELAY_MS);
+        if (mIsFadeOutAnimating) {
+            mImageView.animate().cancel();
+            mImageView.setAlpha(1f);
+        }
+        // Refresh the time slot of the fade-out task whenever this method is called.
+        mImageView.removeCallbacks(mFadeOutAnimationTask);
+        mImageView.postOnAnimationDelayed(mFadeOutAnimationTask, mVisibleDuration);
     }
 
     void onConfigurationChanged(int configDiff) {
@@ -187,6 +239,7 @@ class MagnificationModeSwitch {
         imageView.setClickable(true);
         imageView.setFocusable(true);
         imageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        imageView.setAlpha(0f);
         return imageView;
     }
 

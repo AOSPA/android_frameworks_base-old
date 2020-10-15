@@ -1561,6 +1561,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         startActivityAsUser(intent, UserHandle.CURRENT);
     }
 
+    private void toggleNotificationPanel() {
+        IStatusBarService statusBarService = getStatusBarService();
+        if (statusBarService != null) {
+            try {
+                statusBarService.togglePanel();
+            } catch (RemoteException e) {
+                // do nothing.
+            }
+        }
+    }
+
     private void showPictureInPictureMenu(KeyEvent event) {
         if (DEBUG_INPUT) Log.d(TAG, "showPictureInPictureMenu event=" + event);
         mHandler.removeMessages(MSG_SHOW_PICTURE_IN_PICTURE_MENU);
@@ -1705,14 +1716,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     launchAssistAction(null, deviceId);
                     break;
                 case LONG_PRESS_HOME_NOTIFICATION_PANEL:
-                    IStatusBarService statusBarService = getStatusBarService();
-                    if (statusBarService != null) {
-                        try {
-                            statusBarService.togglePanel();
-                        } catch (RemoteException e) {
-                            // do nothing.
-                        }
-                    }
+                    toggleNotificationPanel();
                     break;
                 default:
                     Log.w(TAG, "Undefined long press on home behavior: "
@@ -2814,6 +2818,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 Message msg = mHandler.obtainMessage(MSG_HANDLE_ALL_APPS);
                 msg.setAsynchronous(true);
                 msg.sendToTarget();
+            }
+            return -1;
+        } else if (keyCode == KeyEvent.KEYCODE_NOTIFICATION) {
+            if (!down) {
+                toggleNotificationPanel();
             }
             return -1;
         }
@@ -4507,7 +4516,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     // Called on the DisplayManager's DisplayPowerController thread.
     @Override
-    public void screenTurnedOff() {
+    public void screenTurnedOff(int displayId) {
+        if (displayId != DEFAULT_DISPLAY) {
+            return;
+        }
+
         if (DEBUG_WAKEUP) Slog.i(TAG, "Screen turned off...");
 
         updateScreenOffSleepToken(true);
@@ -4530,7 +4543,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     // Called on the DisplayManager's DisplayPowerController thread.
     @Override
-    public void screenTurningOn(final ScreenOnListener screenOnListener) {
+    public void screenTurningOn(int displayId, final ScreenOnListener screenOnListener) {
+        if (displayId != DEFAULT_DISPLAY) {
+            return;
+        }
+
         if (DEBUG_WAKEUP) Slog.i(TAG, "Screen turning on...");
 
         Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "screenTurningOn", 0 /* cookie */);
@@ -4553,7 +4570,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     // Called on the DisplayManager's DisplayPowerController thread.
     @Override
-    public void screenTurnedOn() {
+    public void screenTurnedOn(int displayId) {
+        if (displayId != DEFAULT_DISPLAY) {
+            return;
+        }
+
         synchronized (mLock) {
             if (mKeyguardDelegate != null) {
                 mKeyguardDelegate.onScreenTurnedOn();
@@ -4563,7 +4584,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     @Override
-    public void screenTurningOff(ScreenOffListener screenOffListener) {
+    public void screenTurningOff(int displayId, ScreenOffListener screenOffListener) {
+        if (displayId != DEFAULT_DISPLAY) {
+            return;
+        }
+
         mWindowManagerFuncs.screenTurningOff(screenOffListener);
         synchronized (mLock) {
             if (mKeyguardDelegate != null) {
@@ -4825,8 +4850,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         startedWakingUp(ON_BECAUSE_OF_UNKNOWN);
         finishedWakingUp(ON_BECAUSE_OF_UNKNOWN);
-        screenTurningOn(null);
-        screenTurnedOn();
+        screenTurningOn(DEFAULT_DISPLAY, null);
+        screenTurnedOn(DEFAULT_DISPLAY);
     }
 
     @Override

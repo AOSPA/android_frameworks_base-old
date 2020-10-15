@@ -153,8 +153,9 @@
     <assign-permission name="android.permission.UPDATE_APP_OPS_STATS" uid="media" />
     <assign-permission name="android.permission.GET_PROCESS_STATE_AND_OOM_SCORE" uid="media" />
     <assign-permission name="android.permission.PACKAGE_USAGE_STATS" uid="media" />
+    <assign-permission name="android.permission.REGISTER_MEDIA_RESOURCE_OBSERVER" uid="media" />
+
     <assign-permission name="android.permission.INTERNET" uid="media" />
-    <assign-permission name="android.permission.INTERACT_ACROSS_USERS" uid="media" />
 
     <assign-permission name="android.permission.INTERNET" uid="shell" />
 
@@ -164,7 +165,6 @@
     <assign-permission name="android.permission.UPDATE_DEVICE_STATS" uid="audioserver" />
     <assign-permission name="android.permission.UPDATE_APP_OPS_STATS" uid="audioserver" />
     <assign-permission name="android.permission.PACKAGE_USAGE_STATS" uid="audioserver" />
-    <assign-permission name="android.permission.INTERACT_ACROSS_USERS" uid="audioserver" />
 
     <assign-permission name="android.permission.MODIFY_AUDIO_SETTINGS" uid="cameraserver" />
     <assign-permission name="android.permission.ACCESS_SURFACE_FLINGER" uid="cameraserver" />
@@ -175,10 +175,8 @@
     <assign-permission name="android.permission.PACKAGE_USAGE_STATS" uid="cameraserver" />
     <assign-permission name="android.permission.WATCH_APPOPS" uid="cameraserver" />
     <assign-permission name="android.permission.MANAGE_APP_OPS_MODES" uid="cameraserver" />
-    <assign-permission name="android.permission.INTERACT_ACROSS_USERS" uid="cameraserver" />
 
     <assign-permission name="android.permission.ACCESS_SURFACE_FLINGER" uid="graphics" />
-    <assign-permission name="android.permission.INTERACT_ACROSS_USERS" uid="graphics" />
 
     <assign-permission name="android.permission.DUMP" uid="incidentd" />
     <assign-permission name="android.permission.PACKAGE_USAGE_STATS" uid="incidentd" />
@@ -193,10 +191,8 @@
     <assign-permission name="android.permission.PACKAGE_USAGE_STATS" uid="statsd" />
     <assign-permission name="android.permission.STATSCOMPANION" uid="statsd" />
     <assign-permission name="android.permission.UPDATE_APP_OPS_STATS" uid="statsd" />
-    <assign-permission name="android.permission.INTERACT_ACROSS_USERS" uid="statsd" />
 
     <assign-permission name="android.permission.REGISTER_STATS_PULL_ATOM" uid="gpu_service" />
-    <assign-permission name="android.permission.INTERACT_ACROSS_USERS" uid="gpu_service" />
 
     <split-permission name="android.permission.ACCESS_FINE_LOCATION">
         <new-permission name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -227,6 +223,15 @@
                       targetSdk="29">
         <new-permission name="android.permission.ACCESS_MEDIA_LOCATION" />
     </split-permission>
+    <split-permission name="android.permission.RECORD_AUDIO"
+                      targetSdk="31">
+        <new-permission name="android.permission.RECORD_BACKGROUND_AUDIO" />
+    </split-permission>
+    <split-permission name="android.permission.CAMERA"
+                      targetSdk="31">
+        <new-permission name="android.permission.BACKGROUND_CAMERA" />
+    </split-permission>
+
 
     <!-- This is a list of all the libraries available for application
          code to link against. -->
@@ -234,8 +239,7 @@
     <library name="android.test.base"
             file="/system/framework/android.test.base.jar" />
     <library name="android.test.mock"
-            file="/system/framework/android.test.mock.jar"
-            dependency="android.test.base" />
+            file="/system/framework/android.test.mock.jar" />
     <library name="android.test.runner"
             file="/system/framework/android.test.runner.jar"
             dependency="android.test.base:android.test.mock" />

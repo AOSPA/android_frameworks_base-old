@@ -32,16 +32,18 @@ import android.annotation.Nullable;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.PermissionInfo;
 import android.content.pm.parsing.component.ParsedPermission;
+import android.os.Build;
 import android.os.UserHandle;
 import android.util.Log;
 import android.util.Slog;
 
-import com.android.internal.util.ArrayUtils;
 import com.android.server.pm.DumpState;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.PackageSettingBase;
 import com.android.server.pm.parsing.PackageInfoUtils;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+
+import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlSerializer;
@@ -95,7 +97,8 @@ public final class BasePermission {
     int uid;
 
     /** Additional GIDs given to apps granted this permission */
-    private int[] gids;
+    @NonNull
+    private int[] gids = EmptyArray.INT;
 
     /**
      * Flag indicating that {@link #gids} should be adjusted based on the
@@ -132,7 +135,7 @@ public final class BasePermission {
     public int getUid() {
         return uid;
     }
-    public void setGids(int[] gids, boolean perUser) {
+    public void setGids(@NonNull int[] gids, boolean perUser) {
         this.gids = gids;
         this.perUser = perUser;
     }
@@ -141,18 +144,20 @@ public final class BasePermission {
     }
 
     public boolean hasGids() {
-        return !ArrayUtils.isEmpty(gids);
+        return gids.length != 0;
     }
 
+    @NonNull
     public int[] computeGids(int userId) {
         if (perUser) {
             final int[] userGids = new int[gids.length];
             for (int i = 0; i < gids.length; i++) {
-                userGids[i] = UserHandle.getUid(userId, gids[i]);
+                final int gid = gids[i];
+                userGids[i] = UserHandle.getUid(userId, gid);
             }
             return userGids;
         } else {
-            return gids;
+            return gids.length != 0 ? gids.clone() : gids;
         }
     }
 
@@ -204,6 +209,11 @@ public final class BasePermission {
 
     public boolean isImmutablyRestricted() {
         return perm != null && (perm.getFlags() & PermissionInfo.FLAG_IMMUTABLY_RESTRICTED) != 0;
+    }
+
+    public boolean isInstallerExemptIgnored() {
+        return perm != null
+                && (perm.getFlags() & PermissionInfo.FLAG_INSTALLER_EXEMPT_IGNORED) != 0;
     }
 
     public boolean isSignature() {
@@ -286,7 +296,8 @@ public final class BasePermission {
             pendingPermissionInfo.packageName = newPackageName;
         }
         uid = 0;
-        setGids(null, false);
+        gids = EmptyArray.INT;
+        perUser = false;
     }
 
     public boolean addToTree(@ProtectionLevel int protectionLevel,
@@ -423,19 +434,6 @@ public final class BasePermission {
         throw new SecurityException("No permission tree found for " + permName);
     }
 
-    public void enforceDeclaredUsedAndRuntimeOrDevelopment(AndroidPackage pkg,
-            UidPermissionState uidState) {
-        int index = pkg.getRequestedPermissions().indexOf(name);
-        if (!uidState.hasRequestedPermission(name) && index == -1) {
-            throw new SecurityException("Package " + pkg.getPackageName()
-                    + " has not requested permission " + name);
-        }
-        if (!isRuntime() && !isDevelopment()) {
-            throw new SecurityException("Permission " + name + " requested by "
-                    + pkg.getPackageName() + " is not a changeable permission type");
-        }
-    }
-
     private static BasePermission findPermissionTree(
             Collection<BasePermission> permissionTrees, String permName) {
         for (BasePermission bp : permissionTrees) {
@@ -448,36 +446,38 @@ public final class BasePermission {
         return null;
     }
 
-    public @Nullable PermissionInfo generatePermissionInfo(@NonNull String groupName, int flags) {
-        if (groupName == null) {
-            if (perm == null || perm.getGroup() == null) {
-                return generatePermissionInfo(protectionLevel, flags);
-            }
-        } else {
-            if (perm != null && groupName.equals(perm.getGroup())) {
-                return PackageInfoUtils.generatePermissionInfo(perm, flags);
-            }
-        }
-        return null;
+    @Nullable
+    public String getGroup() {
+        return perm != null ? perm.getGroup() : null;
     }
 
-    public @NonNull PermissionInfo generatePermissionInfo(int adjustedProtectionLevel, int flags) {
+    @NonNull
+    public PermissionInfo generatePermissionInfo(int flags) {
+        return generatePermissionInfo(flags, Build.VERSION_CODES.CUR_DEVELOPMENT);
+    }
+
+    @NonNull
+    public PermissionInfo generatePermissionInfo(int flags, int targetSdkVersion) {
         PermissionInfo permissionInfo;
         if (perm != null) {
-            final boolean protectionLevelChanged = protectionLevel != adjustedProtectionLevel;
             permissionInfo = PackageInfoUtils.generatePermissionInfo(perm, flags);
-            if (protectionLevelChanged) {
-                // if we return different protection level, don't use the cached info
-                permissionInfo = new PermissionInfo(permissionInfo);
-                permissionInfo.protectionLevel = adjustedProtectionLevel;
-            }
-            return permissionInfo;
+        } else {
+            permissionInfo = new PermissionInfo();
+            permissionInfo.name = name;
+            permissionInfo.packageName = sourcePackageName;
+            permissionInfo.nonLocalizedLabel = name;
         }
-        permissionInfo = new PermissionInfo();
-        permissionInfo.name = name;
-        permissionInfo.packageName = sourcePackageName;
-        permissionInfo.nonLocalizedLabel = name;
-        permissionInfo.protectionLevel = protectionLevel;
+        if (targetSdkVersion >= Build.VERSION_CODES.O) {
+            permissionInfo.protectionLevel = protectionLevel;
+        } else {
+            final int protection = protectionLevel & PermissionInfo.PROTECTION_MASK_BASE;
+            if (protection == PermissionInfo.PROTECTION_SIGNATURE) {
+                // Signature permission's protection flags are always reported.
+                permissionInfo.protectionLevel = protectionLevel;
+            } else {
+                permissionInfo.protectionLevel = protection;
+            }
+        }
         return permissionInfo;
     }
 

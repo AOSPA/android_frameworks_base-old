@@ -346,3 +346,25 @@ int AImageDecoder_decodeImage(AImageDecoder* decoder,
 void AImageDecoder_delete(AImageDecoder* decoder) {
     delete toDecoder(decoder);
 }
+
+bool AImageDecoder_isAnimated(AImageDecoder* decoder) {
+    if (!decoder) return false;
+
+    ImageDecoder* imageDecoder = toDecoder(decoder);
+    return imageDecoder->mCodec->codec()->getFrameCount() > 1;
+}
+
+int32_t AImageDecoder_getRepeatCount(AImageDecoder* decoder) {
+    if (!decoder) return ANDROID_IMAGE_DECODER_BAD_PARAMETER;
+
+    ImageDecoder* imageDecoder = toDecoder(decoder);
+    const int count = imageDecoder->mCodec->codec()->getRepetitionCount();
+
+    // Skia should not report anything out of range, but defensively treat
+    // negative and too big as INFINITE.
+    if (count == SkCodec::kRepetitionCountInfinite || count < 0
+        || count > std::numeric_limits<int32_t>::max()) {
+        return ANDROID_IMAGE_DECODER_INFINITE;
+    }
+    return count;
+}

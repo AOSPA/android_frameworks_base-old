@@ -16,6 +16,8 @@
 
 package android.view;
 
+import static android.view.InsetsStateProto.DISPLAY_FRAME;
+import static android.view.InsetsStateProto.SOURCES;
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
 import static android.view.WindowInsets.Type.MANDATORY_SYSTEM_GESTURES;
 import static android.view.WindowInsets.Type.SYSTEM_GESTURES;
@@ -41,6 +43,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.ArraySet;
 import android.util.SparseIntArray;
+import android.util.proto.ProtoOutputStream;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
@@ -76,6 +79,10 @@ public class InsetsState implements Parcelable {
             ITYPE_BOTTOM_GESTURES,
             ITYPE_LEFT_GESTURES,
             ITYPE_RIGHT_GESTURES,
+            ITYPE_TOP_MANDATORY_GESTURES,
+            ITYPE_BOTTOM_MANDATORY_GESTURES,
+            ITYPE_LEFT_MANDATORY_GESTURES,
+            ITYPE_RIGHT_MANDATORY_GESTURES,
             ITYPE_TOP_TAPPABLE_ELEMENT,
             ITYPE_BOTTOM_TAPPABLE_ELEMENT,
             ITYPE_LEFT_DISPLAY_CUTOUT,
@@ -104,20 +111,27 @@ public class InsetsState implements Parcelable {
     public static final int ITYPE_BOTTOM_GESTURES = 4;
     public static final int ITYPE_LEFT_GESTURES = 5;
     public static final int ITYPE_RIGHT_GESTURES = 6;
-    public static final int ITYPE_TOP_TAPPABLE_ELEMENT = 7;
-    public static final int ITYPE_BOTTOM_TAPPABLE_ELEMENT = 8;
 
-    public static final int ITYPE_LEFT_DISPLAY_CUTOUT = 9;
-    public static final int ITYPE_TOP_DISPLAY_CUTOUT = 10;
-    public static final int ITYPE_RIGHT_DISPLAY_CUTOUT = 11;
-    public static final int ITYPE_BOTTOM_DISPLAY_CUTOUT = 12;
+    /** Additional gesture inset types that map into {@link Type.MANDATORY_SYSTEM_GESTURES}. */
+    public static final int ITYPE_TOP_MANDATORY_GESTURES = 7;
+    public static final int ITYPE_BOTTOM_MANDATORY_GESTURES = 8;
+    public static final int ITYPE_LEFT_MANDATORY_GESTURES = 9;
+    public static final int ITYPE_RIGHT_MANDATORY_GESTURES = 10;
+
+    public static final int ITYPE_TOP_TAPPABLE_ELEMENT = 11;
+    public static final int ITYPE_BOTTOM_TAPPABLE_ELEMENT = 12;
+
+    public static final int ITYPE_LEFT_DISPLAY_CUTOUT = 13;
+    public static final int ITYPE_TOP_DISPLAY_CUTOUT = 14;
+    public static final int ITYPE_RIGHT_DISPLAY_CUTOUT = 15;
+    public static final int ITYPE_BOTTOM_DISPLAY_CUTOUT = 16;
 
     /** Input method window. */
-    public static final int ITYPE_IME = 13;
+    public static final int ITYPE_IME = 17;
 
     /** Additional system decorations inset type. */
-    public static final int ITYPE_CLIMATE_BAR = 14;
-    public static final int ITYPE_EXTRA_NAVIGATION_BAR = 15;
+    public static final int ITYPE_CLIMATE_BAR = 18;
+    public static final int ITYPE_EXTRA_NAVIGATION_BAR = 19;
 
     static final int LAST_TYPE = ITYPE_EXTRA_NAVIGATION_BAR;
     public static final int SIZE = LAST_TYPE + 1;
@@ -447,9 +461,11 @@ public class InsetsState implements Parcelable {
         final ArraySet<Integer> result = new ArraySet<>();
         if ((types & Type.STATUS_BARS) != 0) {
             result.add(ITYPE_STATUS_BAR);
+            result.add(ITYPE_CLIMATE_BAR);
         }
         if ((types & Type.NAVIGATION_BARS) != 0) {
             result.add(ITYPE_NAVIGATION_BAR);
+            result.add(ITYPE_EXTRA_NAVIGATION_BAR);
         }
         if ((types & Type.CAPTION_BAR) != 0) {
             result.add(ITYPE_CAPTION_BAR);
@@ -485,6 +501,10 @@ public class InsetsState implements Parcelable {
                 return Type.IME;
             case ITYPE_TOP_GESTURES:
             case ITYPE_BOTTOM_GESTURES:
+            case ITYPE_TOP_MANDATORY_GESTURES:
+            case ITYPE_BOTTOM_MANDATORY_GESTURES:
+            case ITYPE_LEFT_MANDATORY_GESTURES:
+            case ITYPE_RIGHT_MANDATORY_GESTURES:
                 return Type.MANDATORY_SYSTEM_GESTURES;
             case ITYPE_LEFT_GESTURES:
             case ITYPE_RIGHT_GESTURES:
@@ -528,6 +548,16 @@ public class InsetsState implements Parcelable {
         }
     }
 
+    void dumpDebug(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        InsetsSource source = mSources[ITYPE_IME];
+        if (source != null) {
+            source.dumpDebug(proto, SOURCES);
+        }
+        mDisplayFrame.dumpDebug(proto, DISPLAY_FRAME);
+        proto.end(token);
+    }
+
     public static String typeToString(@InternalInsetsType int type) {
         switch (type) {
             case ITYPE_STATUS_BAR:
@@ -544,6 +574,14 @@ public class InsetsState implements Parcelable {
                 return "ITYPE_LEFT_GESTURES";
             case ITYPE_RIGHT_GESTURES:
                 return "ITYPE_RIGHT_GESTURES";
+            case ITYPE_TOP_MANDATORY_GESTURES:
+                return "ITYPE_TOP_MANDATORY_GESTURES";
+            case ITYPE_BOTTOM_MANDATORY_GESTURES:
+                return "ITYPE_BOTTOM_MANDATORY_GESTURES";
+            case ITYPE_LEFT_MANDATORY_GESTURES:
+                return "ITYPE_LEFT_MANDATORY_GESTURES";
+            case ITYPE_RIGHT_MANDATORY_GESTURES:
+                return "ITYPE_RIGHT_MANDATORY_GESTURES";
             case ITYPE_TOP_TAPPABLE_ELEMENT:
                 return "ITYPE_TOP_TAPPABLE_ELEMENT";
             case ITYPE_BOTTOM_TAPPABLE_ELEMENT:

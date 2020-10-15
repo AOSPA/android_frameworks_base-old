@@ -16,6 +16,7 @@
 
 package com.android.location.timezone.provider;
 
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 
 import com.android.internal.location.timezone.LocationTimeZoneProviderRequest;
@@ -27,20 +28,34 @@ import java.util.Objects;
  *
  * <p>IMPORTANT: This class is effectively a public API for unbundled code, and must remain API
  * stable.
- *
- * @hide
  */
 public final class LocationTimeZoneProviderRequestUnbundled {
 
     private final LocationTimeZoneProviderRequest mRequest;
 
+    /** @hide */
     public LocationTimeZoneProviderRequestUnbundled(
             @NonNull LocationTimeZoneProviderRequest request) {
         mRequest = Objects.requireNonNull(request);
     }
 
+    /**
+     * Returns {@code true} if the provider should report events related to the device's current
+     * time zone, {@code false} otherwise.
+     */
     public boolean getReportLocationTimeZone() {
         return mRequest.getReportLocationTimeZone();
+    }
+
+    /**
+     * Returns the maximum time that the provider is allowed to initialize before it is expected to
+     * send an event of any sort. Only valid when {@link #getReportLocationTimeZone()} is {@code
+     * true}. Failure to send an event in this time (with some fuzz) may be interpreted as if the
+     * provider is uncertain of the time zone, and/or it could lead to the provider being disabled.
+     */
+    @IntRange(from = 0)
+    public long getInitializationTimeoutMillis() {
+        return mRequest.getInitializationTimeoutMillis();
     }
 
     @Override

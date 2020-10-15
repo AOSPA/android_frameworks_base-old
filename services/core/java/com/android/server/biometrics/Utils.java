@@ -48,8 +48,11 @@ import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.BiometricPrompt.AuthenticationResultType;
 import android.hardware.biometrics.IBiometricService;
 import android.hardware.biometrics.PromptInfo;
+import android.hardware.biometrics.SensorProperties;
+import android.hardware.biometrics.SensorPropertiesInternal;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
@@ -443,5 +446,23 @@ public class Utils {
             Slog.w(TAG, "am.getRunningAppProcesses() failed");
         }
         return false;
+    }
+
+    /**
+     * Converts from {@link BiometricManager.Authenticators} biometric strength to the internal
+     * {@link SensorPropertiesInternal} strength.
+     */
+    public static @SensorProperties.Strength int authenticatorStrengthToPropertyStrength(
+            @BiometricManager.Authenticators.Types int strength) {
+        switch (strength) {
+            case BiometricManager.Authenticators.BIOMETRIC_CONVENIENCE:
+                return SensorProperties.STRENGTH_CONVENIENCE;
+            case BiometricManager.Authenticators.BIOMETRIC_WEAK:
+                return SensorProperties.STRENGTH_WEAK;
+            case BiometricManager.Authenticators.BIOMETRIC_STRONG:
+                return SensorProperties.STRENGTH_STRONG;
+            default:
+                throw new IllegalArgumentException("Unknown strength: " + strength);
+        }
     }
 }

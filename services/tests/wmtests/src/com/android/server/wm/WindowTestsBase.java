@@ -265,6 +265,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
         return activity;
     }
 
+    /** Creates an {@link ActivityRecord} and adds it to the specified {@link Task}. */
+    static ActivityRecord createActivityRecordInTask(Task task) {
+        return createActivityRecordInTask(task.getDisplayContent(), task);
+    }
+
     static ActivityRecord createTestActivityRecord(DisplayContent dc) {
         final ActivityRecord activity = new ActivityBuilder(dc.mWmService.mAtmService).build();
         postCreateActivitySetup(activity, dc);
@@ -360,7 +365,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         attrs.setTitle(name);
 
         final WindowState w = new WindowState(service, session, iWindow, token, parent,
-                OP_NONE, 0, attrs, VISIBLE, ownerId, userId,
+                OP_NONE, attrs, VISIBLE, ownerId, userId,
                 ownerCanAddInternalSystemWindow,
                 powerManagerWrapper);
         // TODO: Probably better to make this call in the WindowState ctor to avoid errors with
@@ -1088,7 +1093,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
         TestWindowState(WindowManagerService service, Session session, IWindow window,
                 WindowManager.LayoutParams attrs, WindowToken token) {
-            super(service, session, window, token, null, OP_NONE, 0, attrs, 0, 0, 0,
+            super(service, session, window, token, null, OP_NONE, attrs, 0, 0, 0,
                     false /* ownerCanAddInternalSystemWindow */);
         }
 

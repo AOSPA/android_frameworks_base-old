@@ -879,20 +879,13 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"తక్కువ ప్రాధాన్యత నోటిఫికేషన్ చిహ్నాలను చూపించు"</string>
     <string name="other" msgid="429768510980739978">"ఇతరం"</string>
-    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
-    <skip />
+    <string name="accessibility_qs_edit_remove_tile_action" msgid="775511891457193480">"టైల్‌ను తీసివేయండి"</string>
+    <string name="accessibility_qs_edit_tile_add_action" msgid="5051211910345301833">"ముగించడానికి టైల్‌ను జోడించండి"</string>
+    <string name="accessibility_qs_edit_tile_start_move" msgid="2009373939914517817">"టైల్‌ను తరలించండి"</string>
+    <string name="accessibility_qs_edit_tile_start_add" msgid="7560798153975555772">"టైల్‌ను జోడించండి"</string>
+    <string name="accessibility_qs_edit_tile_move_to_position" msgid="5198161544045930556">"<xliff:g id="POSITION">%1$d</xliff:g>కు తరలించండి"</string>
+    <string name="accessibility_qs_edit_tile_add_to_position" msgid="9029163095148274690">"<xliff:g id="POSITION">%1$d</xliff:g> స్థానానికి జోడించండి"</string>
+    <string name="accessibility_qs_edit_position" msgid="4509277359815711830">"స్థానం <xliff:g id="POSITION">%1$d</xliff:g>"</string>
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"శీఘ్ర సెట్టింగ్‌ల ఎడిటర్."</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"<xliff:g id="ID_1">%1$s</xliff:g> నోటిఫికేషన్: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"సెట్టింగ్‌లను తెరవండి."</string>
@@ -1019,6 +1012,16 @@
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"సెట్టింగ్‌లు"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"మాగ్నిఫికేషన్ విండో"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"మాగ్నిఫికేషన్ నియంత్రణల విండో"</string>
+    <string name="accessibility_control_zoom_in" msgid="1189272315480097417">"దగ్గరగా జూమ్ చేయండి"</string>
+    <string name="accessibility_control_zoom_out" msgid="69578832020304084">"దూరంగా జూమ్ చేయండి"</string>
+    <string name="accessibility_control_move_up" msgid="6622825494014720136">"పైకి పంపండి"</string>
+    <string name="accessibility_control_move_down" msgid="5390922476900974512">"కిందకి పంపండి"</string>
+    <string name="accessibility_control_move_left" msgid="8156206978511401995">"ఎడమవైపుగా జరపండి"</string>
+    <string name="accessibility_control_move_right" msgid="8926821093629582888">"కుడివైపుగా జరపండి"</string>
+    <string name="magnification_mode_switch_description" msgid="2698364322069934733">"మాగ్నిఫికేషన్ స్విచ్"</string>
+    <string name="magnification_mode_switch_state_full_screen" msgid="2882507327576770574">"స్క్రీన్ మొత్తాన్ని మాగ్నిఫై చేయండి"</string>
+    <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"స్క్రీన్‌లో భాగాన్ని మాగ్నిఫై చేయండి"</string>
+    <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"స్విచ్ చేయి"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"పరికరం నియంత్రణలు"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"మీ కనెక్ట్ అయిన పరికరాలకు నియంత్రణలను జోడించండి"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"పరికరం నియంత్రణలను సెటప్ చేయడం"</string>
@@ -1082,4 +1085,6 @@
     <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (డిస్‌కనెక్ట్ అయ్యింది)"</string>
     <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"కనెక్ట్ చేయడం సాధ్యపడలేదు. మళ్లీ ట్రై చేయండి."</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"కొత్త పరికరాన్ని పెయిర్ చేయండి"</string>
+    <string name="build_number_clip_data_label" msgid="3623176728412560914">"బిల్డ్ నంబర్"</string>
+    <string name="build_number_copy_toast" msgid="877720921605503046">"బిల్డ్ నంబర్, క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది."</string>
 </resources>

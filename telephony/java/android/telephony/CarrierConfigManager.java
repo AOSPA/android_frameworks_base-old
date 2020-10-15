@@ -68,7 +68,7 @@ public class CarrierConfigManager {
             SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX;
 
     /**
-     * Service class flag if not specify a service class.
+     * Service class flag if no specific service class is specified.
      * Reference: 3GPP TS 27.007 Section 7.4 Facility lock +CLCK
      */
     public static final int SERVICE_CLASS_NONE = ImsSsData.SERVICE_CLASS_NONE;
@@ -78,6 +78,30 @@ public class CarrierConfigManager {
      * Reference: 3GPP TS 27.007 Section 7.4 Facility lock +CLCK
      */
     public static final int SERVICE_CLASS_VOICE = ImsSsData.SERVICE_CLASS_VOICE;
+
+    /**
+     * Only send USSD over IMS while CS is out of service, otherwise send USSD over CS.
+     * {@link #KEY_CARRIER_USSD_METHOD_INT}
+     */
+    public static final int USSD_OVER_CS_PREFERRED   = 0;
+
+    /**
+     * Send USSD over IMS or CS while IMS is out of service or silent redial over CS if needed.
+     * {@link #KEY_CARRIER_USSD_METHOD_INT}
+     */
+    public static final int USSD_OVER_IMS_PREFERRED  = 1;
+
+    /**
+     * Only send USSD over CS.
+     * {@link #KEY_CARRIER_USSD_METHOD_INT}
+     */
+    public static final int USSD_OVER_CS_ONLY        = 2;
+
+    /**
+     * Only send USSD over IMS and disallow silent redial over CS.
+     * {@link #KEY_CARRIER_USSD_METHOD_INT}
+     */
+    public static final int USSD_OVER_IMS_ONLY       = 3;
 
     private final Context mContext;
 
@@ -582,6 +606,20 @@ public class CarrierConfigManager {
      * If true: then depends on carrier provisioning, availability, etc.
      */
     public static final String KEY_CARRIER_VT_AVAILABLE_BOOL = "carrier_vt_available_bool";
+
+    /**
+     * Specify the method of selection for UE sending USSD requests. The default value is
+     * {@link #USSD_OVER_CS_PREFERRED}.
+     * <p> Available options:
+     * <ul>
+     *   <li>0: {@link #USSD_OVER_CS_PREFERRED} </li>
+     *   <li>1: {@link #USSD_OVER_IMS_PREFERRED} </li>
+     *   <li>2: {@link #USSD_OVER_CS_ONLY} </li>
+     *   <li>3: {@link #USSD_OVER_IMS_ONLY} </li>
+     * </ul>
+     */
+    public static final String KEY_CARRIER_USSD_METHOD_INT =
+            "carrier_ussd_method_int";
 
     /**
      * Flag specifying whether to show an alert dialog for 5G disable when the user disables VoLTE.
@@ -3974,6 +4012,16 @@ public class CarrierConfigManager {
     public static final String KEY_DEFAULT_PREFERRED_APN_NAME_STRING =
             "default_preferred_apn_name_string";
 
+    /**
+     * For Android 11, provide a temporary solution for OEMs to use the lower of the two MTU values
+     * for IPv4 and IPv6 if both are sent.
+     * TODO: remove in later release
+     *
+     * @hide
+     */
+    public static final String KEY_USE_LOWER_MTU_VALUE_IF_BOTH_RECEIVED =
+            "use_lower_mtu_value_if_both_received";
+
      /**
      * Flag indicating whether carrier supports multianchor conference.
      * In multianchor conference, a participant of a conference can add
@@ -4013,6 +4061,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_SETTINGS_ENABLE_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_AVAILABLE_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VT_AVAILABLE_BOOL, false);
+        sDefaults.putInt(KEY_CARRIER_USSD_METHOD_INT, USSD_OVER_CS_PREFERRED);
         sDefaults.putBoolean(KEY_VOLTE_5G_LIMITED_ALERT_DIALOG_BOOL, false);
         sDefaults.putBoolean(KEY_NOTIFY_HANDOVER_VIDEO_FROM_WIFI_TO_LTE_BOOL, false);
         sDefaults.putBoolean(KEY_ALLOW_MERGING_RTT_CALLS_BOOL, false);
@@ -4538,6 +4587,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_DISABLE_DUN_APN_WHILE_ROAMING_WITH_PRESET_APN_BOOL, false);
         sDefaults.putString(KEY_DEFAULT_PREFERRED_APN_NAME_STRING, "");
+        sDefaults.putBoolean(KEY_USE_LOWER_MTU_VALUE_IF_BOTH_RECEIVED, false);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
         sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);
     }

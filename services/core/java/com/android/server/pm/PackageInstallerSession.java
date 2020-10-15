@@ -28,6 +28,8 @@ import static android.content.pm.PackageManager.INSTALL_FAILED_INVALID_APK;
 import static android.content.pm.PackageManager.INSTALL_FAILED_MEDIA_UNAVAILABLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_MISSING_SPLIT;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_CERTIFICATE_ENCODING;
+import static android.content.pm.PackageManager.INSTALL_STAGED;
+import static android.content.pm.PackageManager.INSTALL_SUCCEEDED;
 import static android.content.pm.PackageParser.APEX_FILE_EXTENSION;
 import static android.content.pm.PackageParser.APK_FILE_EXTENSION;
 import static android.system.OsConstants.O_CREAT;
@@ -52,6 +54,7 @@ import static com.android.server.pm.PackageInstallerService.prepareStageDir;
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.AppOpsManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.admin.DevicePolicyEventLogger;
@@ -141,6 +144,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.dex.DexManager;
@@ -154,6 +158,7 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileFilter;
@@ -168,6 +173,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static final String TAG = "PackageInstallerSession";
@@ -241,6 +247,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static final String ATTR_SIGNATURE = "signature";
     private static final String ATTR_CHECKSUM_KIND = "checksumKind";
     private static final String ATTR_CHECKSUM_VALUE = "checksumValue";
+    private static final String ATTR_CHECKSUM_PACKAGE = "checksumPackage";
     private static final String ATTR_CHECKSUM_CERTIFICATE = "checksumCertificate";
 
     private static final String PROPERTY_NAME_INHERIT_NATIVE = "pi.inherit_native_on_dont_kill";
@@ -402,15 +409,22 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     static class CertifiedChecksum {
         final @NonNull Checksum mChecksum;
+        final @NonNull String mPackageName;
         final @NonNull byte[] mCertificate;
 
-        CertifiedChecksum(@NonNull Checksum checksum, @NonNull byte[] certificate) {
+        CertifiedChecksum(@NonNull Checksum checksum, @NonNull String packageName,
+                @NonNull byte[] certificate) {
             mChecksum = checksum;
+            mPackageName = packageName;
             mCertificate = certificate;
         }
 
         Checksum getChecksum() {
             return mChecksum;
+        }
+
+        String getPackageName() {
+            return mPackageName;
         }
 
         byte[] getCertificate() {
@@ -687,7 +701,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 stagedSessionErrorMessage != null ? stagedSessionErrorMessage : "";
 
         if (isDataLoaderInstallation()) {
-            if (isApexInstallation()) {
+            if (isApexSession()) {
                 throw new IllegalArgumentException(
                         "DataLoader installation of APEX modules is not allowed.");
             }
@@ -959,23 +973,26 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return;
         }
 
-        final PackageManagerInternal pmi = LocalServices.getService(
-                PackageManagerInternal.class);
-        final AndroidPackage callingInstaller = pmi.getPackage(Binder.getCallingUid());
+        final String initiatingPackageName = mInstallSource.initiatingPackageName;
 
+        final AppOpsManager appOps = mContext.getSystemService(AppOpsManager.class);
+        appOps.checkPackage(Binder.getCallingUid(), initiatingPackageName);
+
+        final PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
+        final AndroidPackage callingInstaller = pmi.getPackage(initiatingPackageName);
         if (callingInstaller == null) {
             throw new IllegalStateException("Can't obtain calling installer's package.");
         }
 
         // Obtaining array of certificates used for signing the installer package.
-        // According to V2/V3 signing schema, the first certificate corresponds to public key
-        // in the signing block.
-        Signature[] certs = callingInstaller.getSigningDetails().signatures;
+        final Signature[] certs = callingInstaller.getSigningDetails().signatures;
         if (certs == null || certs.length == 0 || certs[0] == null) {
             throw new IllegalStateException(
                     "Can't obtain calling installer package's certificates.");
         }
-        byte[] mainCertificateBytes = certs[0].toByteArray();
+        // According to V2/V3 signing schema, the first certificate corresponds to the public key
+        // in the signing block.
+        final byte[] mainCertificateBytes = certs[0].toByteArray();
 
         synchronized (mLock) {
             assertCallerIsOwnerOrRootLocked();
@@ -987,7 +1004,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     fileChecksums = new ArrayList<>();
                     mChecksums.put(name, fileChecksums);
                 }
-                fileChecksums.add(new CertifiedChecksum(checksum, mainCertificateBytes));
+                fileChecksums.add(new CertifiedChecksum(checksum, initiatingPackageName,
+                        mainCertificateBytes));
             }
         }
     }
@@ -1087,6 +1105,23 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
+    private ParcelFileDescriptor openTargetInternal(String path, int flags, int mode)
+            throws IOException, ErrnoException {
+        // TODO: this should delegate to DCS so the system process avoids
+        // holding open FDs into containers.
+        final FileDescriptor fd = Os.open(path, flags, mode);
+        return new ParcelFileDescriptor(fd);
+    }
+
+    private ParcelFileDescriptor createRevocableFdInternal(RevocableFileDescriptor fd,
+            ParcelFileDescriptor pfd) throws IOException {
+        int releasedFdInt = pfd.detachFd();
+        FileDescriptor releasedFd = new FileDescriptor();
+        releasedFd.setInt$(releasedFdInt);
+        fd.init(mContext, releasedFd);
+        return fd.getRevocableFileDescriptor();
+    }
+
     private ParcelFileDescriptor doWriteInternal(String name, long offsetBytes, long lengthBytes,
             ParcelFileDescriptor incomingFd) throws IOException {
         // Quick validity check of state, and allocate a pipe for ourselves. We
@@ -1119,21 +1154,20 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 Binder.restoreCallingIdentity(identity);
             }
 
-            // TODO: this should delegate to DCS so the system process avoids
-            // holding open FDs into containers.
-            final FileDescriptor targetFd = Os.open(target.getAbsolutePath(),
+            ParcelFileDescriptor targetPfd = openTargetInternal(target.getAbsolutePath(),
                     O_CREAT | O_WRONLY, 0644);
             Os.chmod(target.getAbsolutePath(), 0644);
 
             // If caller specified a total length, allocate it for them. Free up
             // cache space to grow, if needed.
             if (stageDir != null && lengthBytes > 0) {
-                mContext.getSystemService(StorageManager.class).allocateBytes(targetFd, lengthBytes,
+                mContext.getSystemService(StorageManager.class).allocateBytes(
+                        targetPfd.getFileDescriptor(), lengthBytes,
                         PackageHelper.translateAllocateFlags(params.installFlags));
             }
 
             if (offsetBytes > 0) {
-                Os.lseek(targetFd, offsetBytes, OsConstants.SEEK_SET);
+                Os.lseek(targetPfd.getFileDescriptor(), offsetBytes, OsConstants.SEEK_SET);
             }
 
             if (incomingFd != null) {
@@ -1143,8 +1177,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 // inserted above to hold the session active.
                 try {
                     final Int64Ref last = new Int64Ref(0);
-                    FileUtils.copy(incomingFd.getFileDescriptor(), targetFd, lengthBytes, null,
-                            Runnable::run, (long progress) -> {
+                    FileUtils.copy(incomingFd.getFileDescriptor(), targetPfd.getFileDescriptor(),
+                            lengthBytes, null, Runnable::run,
+                            (long progress) -> {
                                 if (params.sizeBytes > 0) {
                                     final long delta = progress - last.value;
                                     last.value = progress;
@@ -1155,7 +1190,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                                 }
                             });
                 } finally {
-                    IoUtils.closeQuietly(targetFd);
+                    IoUtils.closeQuietly(targetPfd);
                     IoUtils.closeQuietly(incomingFd);
 
                     // We're done here, so remove the "bridge" that was holding
@@ -1171,12 +1206,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 }
                 return null;
             } else if (PackageInstaller.ENABLE_REVOCABLE_FD) {
-                fd.init(mContext, targetFd);
-                return fd.getRevocableFileDescriptor();
+                return createRevocableFdInternal(fd, targetPfd);
             } else {
-                bridge.setTargetFile(targetFd);
+                bridge.setTargetFile(targetPfd);
                 bridge.start();
-                return new ParcelFileDescriptor(bridge.getClientSocket());
+                return bridge.getClientSocket();
             }
 
         } catch (ErrnoException e) {
@@ -1446,7 +1480,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     mChildSessionsRemaining.removeAt(sessionIndex);
                     if (mChildSessionsRemaining.size() == 0) {
                         destroyInternal();
-                        dispatchSessionFinished(PackageManager.INSTALL_SUCCEEDED,
+                        dispatchSessionFinished(INSTALL_SUCCEEDED,
                                 "Session installed", null);
                     }
                 } else if (PackageInstaller.STATUS_PENDING_USER_ACTION == status) {
@@ -1521,7 +1555,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         synchronized (mLock) {
             assertCallerIsOwnerOrRootLocked();
-            assertPreparedAndNotDestroyedLocked("commit");
+            assertPreparedAndNotDestroyedLocked("commit of session " + sessionId);
             assertNoWriteFileTransfersOpenLocked();
 
             final boolean isSecureFrpEnabled =
@@ -1582,19 +1616,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         return false;
                     }
 
-                    if (isApexInstallation()) {
+                    if (isApexSession()) {
                         validateApexInstallLocked();
                     } else {
                         validateApkInstallLocked();
                     }
                 }
-            }
-
-            if (params.isStaged) {
-                mStagingManager.checkNonOverlappingWithStagedSessions(this);
-            }
-
-            synchronized (mLock) {
                 if (mDestroyed) {
                     throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
                             "Session destroyed");
@@ -1651,7 +1678,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             throws PackageManagerException {
         try {
             assertNoWriteFileTransfersOpenLocked();
-            assertPreparedAndNotDestroyedLocked("sealing of session");
+            assertPreparedAndNotDestroyedLocked("sealing of session " + sessionId);
             mSealed = true;
         } catch (Throwable e) {
             // Convert all exceptions into package manager exceptions as only those are handled
@@ -1689,20 +1716,32 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
-    private void onStorageUnhealthy() {
+    private void onSessionInstallationFailure(int error, String detailedMessage) {
+        Slog.e(TAG, "Install of session " + sessionId + " failed: " + detailedMessage);
+        destroyInternal();
+        dispatchSessionFinished(error, detailedMessage, null);
+    }
+
+    private void onStorageHealthStatusChanged(int status) {
         final String packageName = getPackageName();
         if (TextUtils.isEmpty(packageName)) {
             // The package has not been installed.
             return;
         }
-        final PackageManagerService packageManagerService = mPm;
-        mHandler.post(() -> {
-            if (packageManagerService.deletePackageX(packageName,
-                    PackageManager.VERSION_CODE_HIGHEST, UserHandle.USER_SYSTEM,
-                    PackageManager.DELETE_ALL_USERS) != PackageManager.DELETE_SUCCEEDED) {
-                Slog.e(TAG, "Failed to uninstall package with failed dataloader: " + packageName);
-            }
-        });
+        mHandler.post(PooledLambda.obtainRunnable(
+                PackageManagerService::onStorageHealthStatusChanged,
+                mPm, packageName, status, userId).recycleOnUse());
+    }
+
+    private void onStreamHealthStatusChanged(int status) {
+        final String packageName = getPackageName();
+        if (TextUtils.isEmpty(packageName)) {
+            // The package has not been installed.
+            return;
+        }
+        mHandler.post(PooledLambda.obtainRunnable(
+                PackageManagerService::onStreamStatusChanged,
+                mPm, packageName, status, userId).recycleOnUse());
     }
 
     /**
@@ -1739,15 +1778,18 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             try {
                 sealLocked();
 
-                if (isApexInstallation()) {
-                    // APEX installations rely on certain fields to be populated after reboot.
-                    // E.g. mPackageName.
-                    validateApexInstallLocked();
-                } else {
-                    // Populate mPackageName for this APK session which is required by the staging
-                    // manager to check duplicate apk-in-apex.
-                    PackageInstallerSession parent = allSessions.get(mParentSessionId);
-                    if (parent != null && parent.isStagedSessionReady()) {
+                // Session that are staged, ready and not multi package will be installed during
+                // this boot. As such, we need populate all the fields for successful installation.
+                if (isMultiPackage()) {
+                    return;
+                }
+                final PackageInstallerSession root = hasParentSessionId()
+                        ? allSessions.get(getParentSessionId())
+                        : this;
+                if (root != null && root.isStagedSessionReady()) {
+                    if (isApexSession()) {
+                        validateApexInstallLocked();
+                    } else {
                         validateApkInstallLocked();
                     }
                 }
@@ -1811,11 +1853,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mStagingManager.commitSession(this);
             // TODO(b/136257624): CTS test fails if we don't send session finished broadcast, even
             //  though ideally, we just need to send session committed broadcast.
-            dispatchSessionFinished(PackageManager.INSTALL_SUCCEEDED, "Session staged", null);
+            dispatchSessionFinished(INSTALL_SUCCEEDED, "Session staged", null);
             return;
         }
 
-        if (isApexInstallation()) {
+        if (isApexSession()) {
             destroyInternal();
             dispatchSessionFinished(PackageManager.INSTALL_FAILED_INTERNAL_ERROR,
                     "APEX packages can only be installed using staged sessions.", null);
@@ -1893,12 +1935,53 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
+    /**
+     * Installs apks of staged session while skipping the verification process for a committed and
+     * ready session.
+     */
+    void installStagedSession(IntentSender statusReceiver) {
+        assertCallerIsOwnerOrRootOrSystemLocked();
+        Preconditions.checkArgument(!hasParentSessionId()); // Don't allow installing child sessions
+        Preconditions.checkArgument(isCommitted() && isStagedSessionReady());
+
+        // Since staged sessions are installed during boot, the original reference to status
+        // receiver from the owner has already been lost. We can safely replace it with a
+        // status receiver from the system without effecting the flow.
+        updateRemoteStatusReceiver(statusReceiver);
+        install();
+    }
+
+    private void updateRemoteStatusReceiver(IntentSender remoteStatusReceiver) {
+        synchronized (mLock) {
+            mRemoteStatusReceiver = remoteStatusReceiver;
+            if (isMultiPackage()) {
+                final IntentSender childIntentSender =
+                        new ChildStatusIntentReceiver(mChildSessions.clone(), remoteStatusReceiver)
+                                .getIntentSender();
+                for (int i = mChildSessions.size() - 1; i >= 0; --i) {
+                    mChildSessions.valueAt(i).mRemoteStatusReceiver = childIntentSender;
+                }
+            }
+        }
+    }
+
+    private void install() {
+        try {
+            installNonStaged();
+        } catch (PackageManagerException e) {
+            final String completeMsg = ExceptionUtils.getCompleteMessage(e);
+            onSessionInstallationFailure(e.error, completeMsg);
+        }
+    }
+
     private void installNonStaged()
             throws PackageManagerException {
-        final PackageManagerService.InstallParams installingSession =
-                makeInstallParams();
+        Preconditions.checkArgument(containsApkSession());
+
+        final PackageManagerService.InstallParams installingSession = makeInstallParams();
         if (installingSession == null) {
-            return;
+            throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
+                    "Session should contain at least one apk session for installation");
         }
         if (isMultiPackage()) {
             final List<PackageInstallerSession> childSessions;
@@ -1992,7 +2075,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         // TODO(b/136257624): Some logic in this if block probably belongs in
         //  makeInstallParams().
-        if (!params.isMultiPackage && !isApexInstallation()) {
+        if (!params.isMultiPackage && !isApexSession()) {
             Objects.requireNonNull(mPackageName);
             Objects.requireNonNull(mSigningDetails);
             Objects.requireNonNull(mResolvedBaseFile);
@@ -2066,7 +2149,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 @Override
                 public void onPackageInstalled(String basePackageName, int returnCode, String msg,
                         Bundle extras) {
-                    if (returnCode == PackageManager.INSTALL_SUCCEEDED) {
+                    if (returnCode == INSTALL_SUCCEEDED) {
                         onVerificationComplete();
                     } else {
                         onSessionVerificationFailure(returnCode, msg);
@@ -2086,7 +2169,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         mRelinquished = true;
 
-        return mPm.new VerificationParams(user, stageDir, localObserver, params,
+        // TODO(b/169375643): Remove this workaround once b/161121612 is fixed.
+        PackageInstaller.SessionParams copiedParams = params.copy();
+        if (params.isStaged) {
+            // This is called by the pre-reboot verification. Don't enable rollback here since
+            // it has been enabled when pre-reboot verification starts.
+            copiedParams.installFlags &= ~PackageManager.INSTALL_ENABLE_ROLLBACK;
+        }
+        return mPm.new VerificationParams(user, stageDir, localObserver, copiedParams,
                 mInstallSource, mInstallerUid, mSigningDetails, sessionId);
     }
 
@@ -2101,20 +2191,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return;
         }
 
-        try {
-            installNonStaged();
-        } catch (PackageManagerException e) {
-            final String completeMsg = ExceptionUtils.getCompleteMessage(e);
-            Slog.e(TAG, "Commit of session " + sessionId + " failed: " + completeMsg);
-            destroyInternal();
-            dispatchSessionFinished(e.error, completeMsg, null);
-        }
+        install();
     }
 
     /**
      * Stages this session for install and returns a
      * {@link PackageManagerService.InstallParams} representing this new staged state.
      */
+    @Nullable
     private PackageManagerService.InstallParams makeInstallParams()
             throws PackageManagerException {
         synchronized (mLock) {
@@ -2128,8 +2212,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
         }
 
-        // We've reached point of no return; call into PMS to install the stage.
-        // Regardless of success or failure we always destroy session.
+        // Do not try to install apex session. Parent session will have at least one apk session.
+        if (!isMultiPackage() && isApexSession()) {
+            sendUpdateToRemoteStatusReceiver(INSTALL_SUCCEEDED,
+                    "Apex package should have been installed by apexd", null);
+            return null;
+        }
+
         final IPackageInstallObserver2 localObserver = new IPackageInstallObserver2.Stub() {
             @Override
             public void onUserActionRequired(Intent intent) {
@@ -2139,8 +2228,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             @Override
             public void onPackageInstalled(String basePackageName, int returnCode, String msg,
                     Bundle extras) {
-                destroyInternal();
-                dispatchSessionFinished(returnCode, msg, extras);
+                if (isStaged()) {
+                    sendUpdateToRemoteStatusReceiver(returnCode, msg, extras);
+                } else {
+                    // We've reached point of no return; call into PMS to install the stage.
+                    // Regardless of success or failure we always destroy session.
+                    destroyInternal();
+                    dispatchSessionFinished(returnCode, msg, extras);
+                }
             }
         };
 
@@ -2149,6 +2244,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             user = UserHandle.ALL;
         } else {
             user = new UserHandle(userId);
+        }
+
+        if (params.isStaged) {
+            params.installFlags |= INSTALL_STAGED;
         }
 
         synchronized (mLock) {
@@ -2221,8 +2320,32 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     /**
      * Returns true if the session is installing an APEX package.
      */
-    private boolean isApexInstallation() {
+    boolean isApexSession() {
         return (params.installFlags & PackageManager.INSTALL_APEX) != 0;
+    }
+
+    boolean sessionContains(Predicate<PackageInstallerSession> filter) {
+        if (!isMultiPackage()) {
+            return filter.test(this);
+        }
+        final List<PackageInstallerSession> childSessions;
+        synchronized (mLock) {
+            childSessions = getChildSessionsLocked();
+        }
+        for (PackageInstallerSession child: childSessions) {
+            if (filter.test(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    boolean containsApexSession() {
+        return sessionContains((s) -> s.isApexSession());
+    }
+
+    boolean containsApkSession() {
+        return sessionContains((s) -> !s.isApexSession());
     }
 
     /**
@@ -2653,7 +2776,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         for (int i = 0, size = checksums.size(); i < size; ++i) {
             CertifiedChecksum checksum = checksums.get(i);
             result[i] = new ApkChecksum(splitName, checksum.getChecksum(),
-                    checksum.getCertificate());
+                    checksum.getPackageName(), checksum.getCertificate());
         }
         return result;
     }
@@ -2671,11 +2794,17 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return;
         }
 
-        final File targetDigestsFile = new File(stageDir,
-                ApkChecksums.buildDigestsPathForApk(targetFile.getName()));
-        try {
-            ApkChecksums.writeChecksums(targetDigestsFile,
-                    createApkChecksums(splitName, checksums));
+        final String targetDigestsPath = ApkChecksums.buildDigestsPathForApk(targetFile.getName());
+        final File targetDigestsFile = new File(stageDir, targetDigestsPath);
+        try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            ApkChecksums.writeChecksums(os, createApkChecksums(splitName, checksums));
+            final byte[] checksumsBytes = os.toByteArray();
+
+            if (!isIncrementalInstallation() || mIncrementalFileStorages == null) {
+                FileUtils.bytesToFile(targetDigestsFile.getAbsolutePath(), checksumsBytes);
+            } else {
+                mIncrementalFileStorages.makeFile(targetDigestsPath, checksumsBytes);
+            }
         } catch (CertificateException e) {
             throw new PackageManagerException(INSTALL_PARSE_FAILED_CERTIFICATE_ENCODING,
                     "Failed to encode certificate for " + mPackageName, e);
@@ -2897,7 +3026,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             handle = NativeLibraryHelper.Handle.create(packageDir);
             final int res = NativeLibraryHelper.copyNativeBinariesWithOverride(handle, libDir,
                     abiOverride, isIncrementalInstallation());
-            if (res != PackageManager.INSTALL_SUCCEEDED) {
+            if (res != INSTALL_SUCCEEDED) {
                 throw new PackageManagerException(res,
                         "Failed to extract native libraries, res=" + res);
             }
@@ -3218,7 +3347,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 if (isDestroyedOrDataLoaderFinished) {
                     switch (status) {
                         case IDataLoaderStatusListener.DATA_LOADER_UNRECOVERABLE:
-                            onStorageUnhealthy();
+                            // treat as unhealthy storage
+                            onStorageHealthStatusChanged(
+                                    IStorageHealthListener.HEALTH_STATUS_UNHEALTHY);
                             return;
                     }
                     return;
@@ -3315,6 +3446,16 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     sendPendingStreaming(mContext, statusReceiver, sessionId, e.getMessage());
                 }
             }
+            @Override
+            public void reportStreamHealth(int dataLoaderId, int streamStatus) {
+                synchronized (mLock) {
+                    if (!mDestroyed && !mDataLoaderFinished) {
+                        // ignore streaming status if package isn't installed
+                        return;
+                    }
+                }
+                onStreamHealthStatusChanged(streamStatus);
+            }
         };
 
         if (!manualStartAndDestroy) {
@@ -3334,11 +3475,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     }
                     if (isDestroyedOrDataLoaderFinished) {
                         // App's installed.
-                        switch (status) {
-                            case IStorageHealthListener.HEALTH_STATUS_UNHEALTHY:
-                                onStorageUnhealthy();
-                                return;
-                        }
+                        onStorageHealthStatusChanged(status);
                         return;
                     }
 
@@ -3528,31 +3665,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     private void dispatchSessionFinished(int returnCode, String msg, Bundle extras) {
-        final IntentSender statusReceiver;
-        final String packageName;
+        sendUpdateToRemoteStatusReceiver(returnCode, msg, extras);
+
         synchronized (mLock) {
             mFinalStatus = returnCode;
             mFinalMessage = msg;
-
-            statusReceiver = mRemoteStatusReceiver;
-            packageName = mPackageName;
         }
 
-        if (statusReceiver != null) {
-            // Execute observer.onPackageInstalled on different thread as we don't want callers
-            // inside the system server have to worry about catching the callbacks while they are
-            // calling into the session
-            final SomeArgs args = SomeArgs.obtain();
-            args.arg1 = packageName;
-            args.arg2 = msg;
-            args.arg3 = extras;
-            args.arg4 = statusReceiver;
-            args.argi1 = returnCode;
-
-            mHandler.obtainMessage(MSG_ON_PACKAGE_INSTALLED, args).sendToTarget();
-        }
-
-        final boolean success = (returnCode == PackageManager.INSTALL_SUCCEEDED);
+        final boolean success = (returnCode == INSTALL_SUCCEEDED);
 
         // Send broadcast to default launcher only if it's a new install
         // TODO(b/144270665): Secure the usage of this broadcast.
@@ -3564,6 +3684,27 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mCallback.onSessionFinished(this, success);
         if (isDataLoaderInstallation()) {
             logDataLoaderInstallationSession(returnCode);
+        }
+    }
+
+    private void sendUpdateToRemoteStatusReceiver(int returnCode, String msg, Bundle extras) {
+        final IntentSender statusReceiver;
+        final String packageName;
+        synchronized (mLock) {
+            statusReceiver = mRemoteStatusReceiver;
+            packageName = mPackageName;
+        }
+        if (statusReceiver != null) {
+            // Execute observer.onPackageInstalled on different thread as we don't want callers
+            // inside the system server have to worry about catching the callbacks while they are
+            // calling into the session
+            final SomeArgs args = SomeArgs.obtain();
+            args.arg1 = packageName;
+            args.arg2 = msg;
+            args.arg3 = extras;
+            args.arg4 = statusReceiver;
+            args.argi1 = returnCode;
+            mHandler.obtainMessage(MSG_ON_PACKAGE_INSTALLED, args).sendToTarget();
         }
     }
 
@@ -3776,7 +3917,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static void sendOnPackageInstalled(Context context, IntentSender target, int sessionId,
             boolean showNotification, int userId, String basePackageName, int returnCode,
             String msg, Bundle extras) {
-        if (PackageManager.INSTALL_SUCCEEDED == returnCode && showNotification) {
+        if (INSTALL_SUCCEEDED == returnCode && showNotification) {
             boolean update = (extras != null) && extras.getBoolean(Intent.EXTRA_REPLACING);
             Notification notification = PackageInstallerService.buildSuccessNotification(context,
                     context.getResources()
@@ -3997,9 +4138,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     CertifiedChecksum checksum = checksums.get(j);
                     out.startTag(null, TAG_SESSION_CHECKSUM);
                     writeStringAttribute(out, ATTR_NAME, fileName);
-                    writeIntAttribute(out, ATTR_CHECKSUM_KIND, checksum.getChecksum().getKind());
+                    writeIntAttribute(out, ATTR_CHECKSUM_KIND, checksum.getChecksum().getType());
                     writeByteArrayAttribute(out, ATTR_CHECKSUM_VALUE,
                             checksum.getChecksum().getValue());
+                    writeStringAttribute(out, ATTR_CHECKSUM_PACKAGE, checksum.getPackageName());
                     writeByteArrayAttribute(out, ATTR_CHECKSUM_CERTIFICATE,
                             checksum.getCertificate());
                     out.endTag(null, TAG_SESSION_CHECKSUM);
@@ -4152,6 +4294,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 final CertifiedChecksum certifiedChecksum = new CertifiedChecksum(
                         new Checksum(readIntAttribute(in, ATTR_CHECKSUM_KIND, 0),
                                 readByteArrayAttribute(in, ATTR_CHECKSUM_VALUE)),
+                        readStringAttribute(in, ATTR_CHECKSUM_PACKAGE),
                         readByteArrayAttribute(in, ATTR_CHECKSUM_CERTIFICATE));
 
                 List<CertifiedChecksum> certifiedChecksums = checksums.get(fileName);

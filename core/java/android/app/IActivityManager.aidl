@@ -25,7 +25,6 @@ import android.app.GrantedUriPermission;
 import android.app.IApplicationThread;
 import android.app.IActivityController;
 import android.app.IAppTask;
-import android.app.IAssistDataReceiver;
 import android.app.IInstrumentationWatcher;
 import android.app.IProcessObserver;
 import android.app.IServiceConnection;
@@ -70,7 +69,6 @@ import android.os.RemoteCallback;
 import android.os.StrictMode;
 import android.os.WorkSource;
 import android.service.voice.IVoiceInteractionSession;
-import android.view.IRecentsAnimationRunner;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationAdapter;
 import com.android.internal.app.IVoiceInteractor;
@@ -156,8 +154,7 @@ interface IActivityManager {
     boolean refContentProvider(in IBinder connection, int stableDelta, int unstableDelta);
     PendingIntent getRunningServiceControlPanel(in ComponentName service);
     ComponentName startService(in IApplicationThread caller, in Intent service,
-            in String resolvedType, boolean requireForeground,
-            boolean hideForegroundNotification, in String callingPackage,
+            in String resolvedType, boolean requireForeground, in String callingPackage,
             in String callingFeatureId, int userId);
     @UnsupportedAppUsage
     int stopService(in IApplicationThread caller, in Intent service,
@@ -450,9 +447,8 @@ interface IActivityManager {
     void hang(in IBinder who, boolean allowRestart);
 
     List<ActivityTaskManager.RootTaskInfo> getAllRootTaskInfos();
-    @UnsupportedAppUsage
-    void moveTaskToStack(int taskId, int stackId, boolean toTop);
-    void setFocusedStack(int stackId);
+    void moveTaskToRootTask(int taskId, int rootTaskId, boolean toTop);
+    void setFocusedRootTask(int taskId);
     ActivityTaskManager.RootTaskInfo getFocusedRootTaskInfo();
     @UnsupportedAppUsage
     void restart();
@@ -470,11 +466,6 @@ interface IActivityManager {
     boolean startUserInBackground(int userid);
     @UnsupportedAppUsage
     boolean isInLockTaskMode();
-    @UnsupportedAppUsage
-    void startRecentsActivity(in Intent intent, in IAssistDataReceiver assistDataReceiver,
-            in IRecentsAnimationRunner recentsAnimationRunner);
-    @UnsupportedAppUsage
-    void cancelRecentsAnimation(boolean restoreHomeStackPosition);
     @UnsupportedAppUsage
     int startActivityFromRecents(int taskId, in Bundle options);
     @UnsupportedAppUsage
@@ -513,24 +504,14 @@ interface IActivityManager {
     // descriptor.
     @UnsupportedAppUsage
     boolean stopBinderTrackingAndDump(in ParcelFileDescriptor fd);
-    /**
-     * Try to place task to provided position. The final position might be different depending on
-     * current user and stacks state. The task will be moved to target stack if it's currently in
-     * different stack.
-     */
-    @UnsupportedAppUsage
-    void positionTaskInStack(int taskId, int stackId, int position);
     @UnsupportedAppUsage
     void suppressResizeConfigChanges(boolean suppress);
-    @UnsupportedAppUsage
-    boolean moveTopActivityToPinnedStack(int stackId, in Rect bounds);
+    boolean moveTopActivityToPinnedRootTask(int rootTaskId, in Rect bounds);
     boolean isAppStartModeDisabled(int uid, in String packageName);
     @UnsupportedAppUsage
     boolean unlockUser(int userid, in byte[] token, in byte[] secret,
             in IProgressListener listener);
     void killPackageDependents(in String packageName, int userId);
-    @UnsupportedAppUsage
-    void removeStack(int stackId);
     void makePackageIdle(String packageName, int userId);
     int getMemoryTrimLevel();
     boolean isVrModePackageEnabled(in ComponentName packageName);
@@ -704,4 +685,10 @@ interface IActivityManager {
      * @param enable set it to true to enable the app freezer, false to disable it.
      */
     boolean enableAppFreezer(in boolean enable);
+
+    /**
+     * Holds the AM lock for the specified amount of milliseconds.
+     * This is intended for use by the tests that need to imitate lock contention.
+     */
+    void holdLock(in int durationMs);
 }

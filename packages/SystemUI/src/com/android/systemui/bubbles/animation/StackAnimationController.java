@@ -36,9 +36,9 @@ import androidx.dynamicanimation.animation.SpringForce;
 
 import com.android.systemui.R;
 import com.android.systemui.bubbles.BubbleStackView;
-import com.android.systemui.util.FloatingContentCoordinator;
-import com.android.systemui.util.animation.PhysicsAnimator;
-import com.android.systemui.util.magnetictarget.MagnetizedObject;
+import com.android.wm.shell.animation.PhysicsAnimator;
+import com.android.wm.shell.common.FloatingContentCoordinator;
+import com.android.wm.shell.common.magnetictarget.MagnetizedObject;
 
 import com.google.android.collect.Sets;
 
@@ -72,9 +72,9 @@ public class StackAnimationController extends
     /**
      * Values to use for the default {@link SpringForce} provided to the physics animation layout.
      */
-    public static final int DEFAULT_STIFFNESS = 12000;
+    public static final int SPRING_TO_TOUCH_STIFFNESS = 12000;
     public static final float IME_ANIMATION_STIFFNESS = SpringForce.STIFFNESS_LOW;
-    private static final int FLING_FOLLOW_STIFFNESS = 20000;
+    private static final int CHAIN_STIFFNESS = 600;
     public static final float DEFAULT_BOUNCINESS = 0.9f;
 
     private final PhysicsAnimator.SpringConfig mAnimateOutSpringConfig =
@@ -629,7 +629,7 @@ public class StackAnimationController extends
     public void moveStackFromTouch(float x, float y) {
         // Begin the spring-to-touch catch up animation if needed.
         if (mSpringToTouchOnNextMotionEvent) {
-            springStack(x, y, DEFAULT_STIFFNESS);
+            springStack(x, y, SPRING_TO_TOUCH_STIFFNESS);
             mSpringToTouchOnNextMotionEvent = false;
             mFirstBubbleSpringingToTouch = true;
         } else if (mFirstBubbleSpringingToTouch) {
@@ -744,15 +744,13 @@ public class StackAnimationController extends
 
     @Override
     float getOffsetForChainedPropertyAnimation(DynamicAnimation.ViewProperty property) {
-        if (property.equals(DynamicAnimation.TRANSLATION_X)) {
+        if (property.equals(DynamicAnimation.TRANSLATION_Y)) {
             // If we're in the dismiss target, have the bubbles pile on top of each other with no
             // offset.
             if (isStackStuckToTarget()) {
                 return 0f;
             } else {
-                // Offset to the left if we're on the left, or the right otherwise.
-                return mLayout.isFirstChildXLeftOfCenter(mStackPosition.x)
-                        ? -mStackOffset : mStackOffset;
+                return mStackOffset;
             }
         } else {
             return 0f;
@@ -762,14 +760,12 @@ public class StackAnimationController extends
     @Override
     SpringForce getSpringForce(DynamicAnimation.ViewProperty property, View view) {
         final ContentResolver contentResolver = mLayout.getContext().getContentResolver();
-        final float stiffness = Settings.Secure.getFloat(contentResolver, "bubble_stiffness",
-                mIsMovingFromFlinging ? FLING_FOLLOW_STIFFNESS : DEFAULT_STIFFNESS /* default */);
         final float dampingRatio = Settings.Secure.getFloat(contentResolver, "bubble_damping",
                 DEFAULT_BOUNCINESS);
 
         return new SpringForce()
                 .setDampingRatio(dampingRatio)
-                .setStiffness(stiffness);
+                .setStiffness(CHAIN_STIFFNESS);
     }
 
     @Override

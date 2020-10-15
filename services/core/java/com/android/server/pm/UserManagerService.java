@@ -221,10 +221,12 @@ public class UserManagerService extends IUserManager.Stub {
 
     private static final int ALLOWED_FLAGS_FOR_CREATE_USERS_PERMISSION =
             UserInfo.FLAG_MANAGED_PROFILE
+            | UserInfo.FLAG_PROFILE
             | UserInfo.FLAG_EPHEMERAL
             | UserInfo.FLAG_RESTRICTED
             | UserInfo.FLAG_GUEST
-            | UserInfo.FLAG_DEMO;
+            | UserInfo.FLAG_DEMO
+            | UserInfo.FLAG_FULL;
 
     @VisibleForTesting
     static final int MIN_USER_ID = UserHandle.MIN_SECONDARY_USER_ID;
@@ -1658,7 +1660,7 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
         if (changed) {
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 sendUserInfoChangedBroadcast(userId);
             } finally {
@@ -1727,6 +1729,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     public void makeInitialized(@UserIdInt int userId) {
+        if (DBG) Slog.d(LOG_TAG, "makeInitialized(" + userId + ")");
         checkManageUsersPermission("makeInitialized");
         boolean scheduleWriteUser = false;
         UserData userData;
@@ -3551,8 +3554,7 @@ public class UserManagerService extends IUserManager.Stub {
                 // Must start user (which will be stopped right away, through
                 // UserController.finishUserUnlockedCompleted) so services can properly
                 // intialize it.
-                // TODO(b/143092698): in the long-term, it might be better to add a onCreateUser()
-                // callback on SystemService instead.
+                // NOTE: user will be stopped on UserController.finishUserUnlockedCompleted().
                 Slog.i(LOG_TAG, "starting pre-created user " + userInfo.toFullString());
                 final IActivityManager am = ActivityManager.getService();
                 try {
@@ -3767,7 +3769,7 @@ public class UserManagerService extends IUserManager.Stub {
         if (user == null) {
             return null;
         }
-        long identity = Binder.clearCallingIdentity();
+        final long identity = Binder.clearCallingIdentity();
         try {
             setUserRestriction(UserManager.DISALLOW_MODIFY_ACCOUNTS, true, user.id);
             // Change the setting before applying the DISALLOW_SHARE_LOCATION restriction, otherwise
@@ -3820,7 +3822,7 @@ public class UserManagerService extends IUserManager.Stub {
             return false;
         }
 
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             final UserData userData;
             synchronized (mPackagesLock) {
@@ -3881,7 +3883,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     private boolean removeUserUnchecked(@UserIdInt int userId) {
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             final UserData userData;
             int currentUser = ActivityManager.getCurrentUser();
@@ -3989,7 +3991,7 @@ public class UserManagerService extends IUserManager.Stub {
 
         // Let other services shutdown any activity and clean up their state before completely
         // wiping the user's system directory and removing from the user list
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             Intent removedIntent = new Intent(Intent.ACTION_USER_REMOVED);
             removedIntent.putExtra(Intent.EXTRA_USER_HANDLE, userId);
@@ -4151,7 +4153,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     private int getUidForPackage(String packageName) {
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             return mContext.getPackageManager().getApplicationInfo(packageName,
                     PackageManager.MATCH_ANY_USER).uid;
@@ -4706,9 +4708,12 @@ public class UserManagerService extends IUserManager.Stub {
                 final UserInfo user = users.get(i);
                 final boolean running = am.isUserRunning(user.id, 0);
                 final boolean current = user.id == currentUser;
+                final boolean hasParent = user.profileGroupId != user.id
+                        && user.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID;
                 if (verbose) {
-                    pw.printf("%d: id=%d, name=%s, flags=%s%s%s%s%s\n", i, user.id, user.name,
+                    pw.printf("%d: id=%d, name=%s, flags=%s%s%s%s%s%s%s\n", i, user.id, user.name,
                             UserInfo.flagsToString(user.flags),
+                            hasParent ? " (parentId=" + user.profileGroupId + ")" : "",
                             running ? " (running)" : "",
                             user.partial ? " (partial)" : "",
                             user.preCreated ? " (pre-created)" : "",
@@ -4789,6 +4794,11 @@ public class UserManagerService extends IUserManager.Stub {
                     pw.print("  "); pw.print(userInfo);
                     pw.print(" serialNo="); pw.print(userInfo.serialNumber);
                     pw.print(" isPrimary="); pw.print(userInfo.isPrimary());
+                    if (userInfo.profileGroupId != userInfo.id
+                            &&  userInfo.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID) {
+                        pw.print(" parentId="); pw.print(userInfo.profileGroupId);
+                    }
+
                     if (mRemovingUserIds.get(userId)) {
                         pw.print(" <removing> ");
                     }
@@ -4963,6 +4973,9 @@ public class UserManagerService extends IUserManager.Stub {
                         UserData userData = getUserDataNoChecks(userId);
                         if (userData != null) {
                             writeUserLP(userData);
+                        } else {
+                            Slog.i(LOG_TAG, "handle(WRITE_USER_MSG): no data for user " + userId
+                                    + ", it was probably removed before handler could handle it");
                         }
                     }
             }
@@ -5062,7 +5075,7 @@ public class UserManagerService extends IUserManager.Stub {
 
         @Override
         public void setUserIcon(@UserIdInt int userId, Bitmap bitmap) {
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 synchronized (mPackagesLock) {
                     UserData userData = getUserDataNoChecks(userId);

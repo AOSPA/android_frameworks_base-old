@@ -66,6 +66,8 @@ import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.plugins.PluginManagerImpl;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
+import com.android.systemui.shared.system.TaskStackChangeListeners;
+import com.android.systemui.shared.system.WindowManagerWrapper;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.phone.AutoHideController;
@@ -262,6 +264,13 @@ public class DependencyProvider {
         return ActivityManagerWrapper.getInstance();
     }
 
+    /** */
+    @Provides
+    @SysUISingleton
+    public TaskStackChangeListeners provideTaskStackChangeListeners() {
+        return TaskStackChangeListeners.getInstance();
+    }
+
     /** Provides and initializes the {#link BroadcastDispatcher} for SystemUI */
     @Provides
     @SysUISingleton
@@ -313,6 +322,13 @@ public class DependencyProvider {
 
     /** */
     @Provides
+    public WindowManagerWrapper providesWindowManagerWrapper() {
+        return WindowManagerWrapper.getInstance();
+    }
+
+    /** */
+    @Provides
+    @SysUISingleton
     public SystemActions providesSystemActions(Context context) {
         return new SystemActions(context);
     }

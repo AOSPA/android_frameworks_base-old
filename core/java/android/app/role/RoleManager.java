@@ -413,7 +413,7 @@ public final class RoleManager {
             @NonNull Consumer<Boolean> callback) {
         return new RemoteCallback(result -> executor.execute(() -> {
             boolean successful = result != null;
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 callback.accept(successful);
             } finally {
@@ -634,7 +634,9 @@ public final class RoleManager {
      * @hide
      */
     @Nullable
-    public String getDefaultSmsPackage(@UserIdInt int userId) {
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
+    public String getSmsRoleHolder(@UserIdInt int userId) {
         try {
             return mService.getDefaultSmsPackage(userId);
         } catch (RemoteException e) {
@@ -658,7 +660,7 @@ public final class RoleManager {
 
         @Override
         public void onRoleHoldersChanged(@NonNull String roleName, @UserIdInt int userId) {
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 mExecutor.execute(PooledLambda.obtainRunnable(
                         OnRoleHoldersChangedListener::onRoleHoldersChanged, mListener, roleName,

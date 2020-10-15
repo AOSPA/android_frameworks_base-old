@@ -205,6 +205,7 @@ public class DozeMachine {
     }
 
     void onScreenState(int state) {
+        mDozeLog.traceDisplayState(state);
         for (Part part : mParts) {
             part.onScreenState(state);
         }
@@ -308,6 +309,7 @@ public class DozeMachine {
         for (Part p : mParts) {
             p.transitionTo(oldState, newState);
         }
+        mDozeLog.traceDozeStateSendComplete(newState);
 
         switch (newState) {
             case FINISH:
@@ -411,6 +413,7 @@ public class DozeMachine {
         pw.print(" state="); pw.println(mState);
         pw.print(" wakeLockHeldForCurrentState="); pw.println(mWakeLockHeldForCurrentState);
         pw.print(" wakeLock="); pw.println(mWakeLock);
+        pw.print(" isDozeSuppressed="); pw.println(mDozeHost.isDozeSuppressed());
         pw.println("Parts:");
         for (Part p : mParts) {
             p.dump(pw);

@@ -620,6 +620,7 @@ import java.util.TimeZone;
  *     <li> {@link #EXTRA_PHONE_NUMBER}
  *     <li> {@link #EXTRA_REFERRER}
  *     <li> {@link #EXTRA_REMOTE_INTENT_TOKEN}
+ *     <li> {@link #EXTRA_REMOVED_BY_SYSTEM}
  *     <li> {@link #EXTRA_REPLACING}
  *     <li> {@link #EXTRA_SHORTCUT_ICON}
  *     <li> {@link #EXTRA_SHORTCUT_ICON_RESOURCE}
@@ -2464,6 +2465,8 @@ public class Intent implements Parcelable, Cloneable {
      * application -- data and code -- is being removed.
      * <li> {@link #EXTRA_REPLACING} is set to true if this will be followed
      * by an {@link #ACTION_PACKAGE_ADDED} broadcast for the same package.
+     * <li> {@link #EXTRA_REMOVED_BY_SYSTEM} containing boolean field to to signal that the
+     * application was removed automatically without the user-initiated action.
      * </ul>
      *
      * <p class="note">This is a protected intent that can only be sent
@@ -2730,6 +2733,52 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_MY_PACKAGE_UNSUSPENDED = "android.intent.action.MY_PACKAGE_UNSUSPENDED";
+
+    /**
+     * Broadcast Action: Sent to indicate that the package becomes startable.
+     * The intent will have the following extra values:
+     * <ul>
+     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the package. </li>
+     * <li> {@link #EXTRA_PACKAGE_NAME} containing the package name. </li>
+     * </li>
+     * </ul>
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PACKAGE_STARTABLE = "android.intent.action.PACKAGE_STARTABLE";
+
+    /**
+     * Broadcast Action: Sent to indicate that the package becomes unstartable.
+     * The intent will have the following extra values:
+     * <ul>
+     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the package. </li>
+     * <li> {@link #EXTRA_PACKAGE_NAME} containing the package name. </li>
+     * <li> {@link #EXTRA_UNSTARTABLE_REASON} containing the integer indicating the reason for
+     * the state change,
+     * @see PackageManager.UnstartableReason
+     * </li>
+     * </ul>
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PACKAGE_UNSTARTABLE =
+            "android.intent.action.PACKAGE_UNSTARTABLE";
+
+    /**
+     * Broadcast Action: Sent to indicate that the package is fully loaded.
+     * <ul>
+     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the package. </li>
+     * <li> {@link #EXTRA_PACKAGE_NAME} containing the package name. </li>
+     * </li>
+     * </ul>
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PACKAGE_FULLY_LOADED =
+            "android.intent.action.PACKAGE_FULLY_LOADED";
 
     /**
      * Broadcast Action: A user ID has been removed from the system.  The user
@@ -5521,6 +5570,14 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_DONT_KILL_APP = "android.intent.extra.DONT_KILL_APP";
 
     /**
+     * Used as a boolean extra field in {@link android.content.Intent#ACTION_PACKAGE_REMOVED}
+     * intents to signal that the application was removed automatically without the user-initiated
+     * action.
+     */
+    public static final String EXTRA_REMOVED_BY_SYSTEM =
+            "android.intent.extra.REMOVED_BY_SYSTEM";
+
+    /**
      * A String holding the phone number originally entered in
      * {@link android.content.Intent#ACTION_NEW_OUTGOING_CALL}, or the actual
      * number to call in a {@link android.content.Intent#ACTION_CALL}.
@@ -5967,6 +6024,13 @@ public class Intent implements Parcelable, Cloneable {
      * </p>
      */
     public static final String EXTRA_LOCUS_ID = "android.intent.extra.LOCUS_ID";
+
+    /**
+     * Intent extra: the reason that the package associated with this intent has become unstartable.
+     *
+     * <p>Type: String
+     */
+    public static final String EXTRA_UNSTARTABLE_REASON = "android.intent.extra.UNSTARTABLE_REASON";
 
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------

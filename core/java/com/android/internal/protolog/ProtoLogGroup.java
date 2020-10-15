@@ -48,6 +48,10 @@ public enum ProtoLogGroup implements IProtoLogGroup {
             Consts.TAG_WM),
     WM_DEBUG_LOCKTASK(Consts.ENABLE_DEBUG, Consts.ENABLE_LOG_TO_PROTO_DEBUG, false,
             Consts.TAG_WM),
+    WM_DEBUG_STATES(Consts.ENABLE_DEBUG, Consts.ENABLE_LOG_TO_PROTO_DEBUG, false,
+            Consts.TAG_WM),
+    WM_DEBUG_TASKS(Consts.ENABLE_DEBUG, Consts.ENABLE_LOG_TO_PROTO_DEBUG, false,
+            Consts.TAG_WM),
     WM_DEBUG_STARTING_WINDOW(Consts.ENABLE_DEBUG, Consts.ENABLE_LOG_TO_PROTO_DEBUG, false,
             Consts.TAG_WM),
     WM_SHOW_TRANSACTIONS(Consts.ENABLE_DEBUG, Consts.ENABLE_LOG_TO_PROTO_DEBUG, false,
@@ -72,7 +76,11 @@ public enum ProtoLogGroup implements IProtoLogGroup {
             Consts.TAG_WM),
     WM_DEBUG_WINDOW_ORGANIZER(Consts.ENABLE_DEBUG, Consts.ENABLE_LOG_TO_PROTO_DEBUG, false,
             Consts.TAG_WM),
-    TEST_GROUP(true, true, false, "WindowManagetProtoLogTest");
+    WM_DEBUG_SYNC_ENGINE(Consts.ENABLE_DEBUG, Consts.ENABLE_LOG_TO_PROTO_DEBUG, false,
+            Consts.TAG_WM),
+    WM_DEBUG_WINDOW_TRANSITIONS(Consts.ENABLE_DEBUG, Consts.ENABLE_LOG_TO_PROTO_DEBUG, true,
+            Consts.TAG_WM),
+    TEST_GROUP(true, true, false, "WindowManagerProtoLogTest");
 
     private final boolean mEnabled;
     private volatile boolean mLogToProto;

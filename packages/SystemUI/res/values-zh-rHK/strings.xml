@@ -879,20 +879,13 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"顯示低優先順序通知圖示"</string>
     <string name="other" msgid="429768510980739978">"其他"</string>
-    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
-    <skip />
+    <string name="accessibility_qs_edit_remove_tile_action" msgid="775511891457193480">"移除圖塊"</string>
+    <string name="accessibility_qs_edit_tile_add_action" msgid="5051211910345301833">"將圖塊加到最尾"</string>
+    <string name="accessibility_qs_edit_tile_start_move" msgid="2009373939914517817">"移動圖塊"</string>
+    <string name="accessibility_qs_edit_tile_start_add" msgid="7560798153975555772">"加圖塊"</string>
+    <string name="accessibility_qs_edit_tile_move_to_position" msgid="5198161544045930556">"移去 <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_tile_add_to_position" msgid="9029163095148274690">"加去位置 <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_position" msgid="4509277359815711830">"位置 <xliff:g id="POSITION">%1$d</xliff:g>"</string>
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"快速設定編輯工具。"</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"<xliff:g id="ID_1">%1$s</xliff:g> 通知：<xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"開啟設定。"</string>
@@ -975,7 +968,7 @@
     <string name="auto_saver_enabled_text" msgid="7889491183116752719">"省電模式將會在電量低於 <xliff:g id="PERCENTAGE">%d</xliff:g>%% 時自動開啟。"</string>
     <string name="open_saver_setting_action" msgid="2111461909782935190">"設定"</string>
     <string name="auto_saver_okay_action" msgid="7815925750741935386">"知道了"</string>
-    <string name="heap_dump_tile_name" msgid="2464189856478823046">"轉儲 SysUI 堆"</string>
+    <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
     <string name="ongoing_privacy_chip_content_single_app" msgid="2969750601815230385">"「<xliff:g id="APP">%1$s</xliff:g>」正在使用<xliff:g id="TYPES_LIST">%2$s</xliff:g>。"</string>
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"有多個應用程式正在使用<xliff:g id="TYPES_LIST">%s</xliff:g>。"</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">"、 "</string>
@@ -1019,6 +1012,16 @@
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"設定"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"放大視窗"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"放大視窗控制項"</string>
+    <string name="accessibility_control_zoom_in" msgid="1189272315480097417">"放大"</string>
+    <string name="accessibility_control_zoom_out" msgid="69578832020304084">"縮細"</string>
+    <string name="accessibility_control_move_up" msgid="6622825494014720136">"向上移"</string>
+    <string name="accessibility_control_move_down" msgid="5390922476900974512">"向下移"</string>
+    <string name="accessibility_control_move_left" msgid="8156206978511401995">"向左移"</string>
+    <string name="accessibility_control_move_right" msgid="8926821093629582888">"向右移"</string>
+    <string name="magnification_mode_switch_description" msgid="2698364322069934733">"放大開關"</string>
+    <string name="magnification_mode_switch_state_full_screen" msgid="2882507327576770574">"放大整個螢幕畫面"</string>
+    <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"放大部分螢幕畫面"</string>
+    <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"切換"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"裝置控制"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"為連接的裝置新增控制選項"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"設定裝置控制"</string>
@@ -1082,4 +1085,6 @@
     <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (已中斷連線)"</string>
     <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"無法連線，請再試一次。"</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"配對新裝置"</string>
+    <string name="build_number_clip_data_label" msgid="3623176728412560914">"版本號碼"</string>
+    <string name="build_number_copy_toast" msgid="877720921605503046">"版本號碼已複製到剪貼簿。"</string>
 </resources>

@@ -263,6 +263,7 @@
   <java-symbol type="attr" name="searchDialogTheme" />
   <java-symbol type="attr" name="textAppearanceAutoCorrectionSuggestion" />
   <java-symbol type="attr" name="textAppearanceEasyCorrectSuggestion" />
+  <java-symbol type="attr" name="textAppearanceGrammarErrorSuggestion" />
   <java-symbol type="attr" name="textAppearanceMisspelledSuggestion" />
   <java-symbol type="attr" name="textColorSearchUrl" />
   <java-symbol type="attr" name="timePickerStyle" />
@@ -287,7 +288,6 @@
   <java-symbol type="bool" name="config_duplicate_port_omadm_wappush" />
   <java-symbol type="bool" name="config_disableTransitionAnimation" />
   <java-symbol type="bool" name="config_enableAutoPowerModes" />
-  <java-symbol type="bool" name="config_useWebViewPacProcessor" />
   <java-symbol type="integer" name="config_autoPowerModeThresholdAngle" />
   <java-symbol type="integer" name="config_autoPowerModeAnyMotionSensor" />
   <java-symbol type="bool" name="config_autoPowerModePreferWristTilt" />
@@ -2176,6 +2176,10 @@
   <java-symbol type="string" name="config_defaultNetworkScorerPackageName" />
   <java-symbol type="string" name="config_persistentDataPackageName" />
   <java-symbol type="string" name="config_deviceConfiguratorPackageName" />
+  <java-symbol type="bool" name="config_enablePrimaryLocationTimeZoneOverlay" />
+  <java-symbol type="string" name="config_primaryLocationTimeZoneProviderPackageName" />
+  <java-symbol type="bool" name="config_enableSecondaryLocationTimeZoneOverlay" />
+  <java-symbol type="string" name="config_secondaryLocationTimeZoneProviderPackageName" />
   <java-symbol type="string" name="config_optionalPackageVerifierName" />
 
   <java-symbol type="layout" name="resolver_list" />
@@ -3263,6 +3267,7 @@
   <java-symbol type="string" name="accessibility_shortcut_disabling_service" />
   <java-symbol type="string" name="color_inversion_feature_name" />
   <java-symbol type="string" name="color_correction_feature_name" />
+  <java-symbol type="string" name="reduce_bright_colors_feature_name" />
   <java-symbol type="string" name="config_defaultAccessibilityService" />
   <java-symbol type="string" name="accessibility_shortcut_spoken_feedback" />
 
@@ -3468,6 +3473,7 @@
   <java-symbol type="string" name="config_defaultAugmentedAutofillService" />
   <java-symbol type="string" name="config_defaultAppPredictionService" />
   <java-symbol type="string" name="config_defaultContentSuggestionsService" />
+  <java-symbol type="string" name="config_defaultMusicRecognitionService" />
   <java-symbol type="string" name="config_defaultAttentionService" />
   <java-symbol type="string" name="config_defaultSystemCaptionsService" />
   <java-symbol type="string" name="config_defaultSystemCaptionsManagerService" />
@@ -3562,6 +3568,7 @@
   <java-symbol type="id" name="bubble_button" />
   <java-symbol type="dimen" name="bubble_visible_padding_end" />
   <java-symbol type="dimen" name="bubble_gone_padding_end" />
+  <java-symbol type="dimen" name="text_size_body_2_material" />
   <java-symbol type="dimen" name="messaging_avatar_size" />
   <java-symbol type="dimen" name="messaging_group_sending_progress_size" />
   <java-symbol type="dimen" name="messaging_image_rounding" />

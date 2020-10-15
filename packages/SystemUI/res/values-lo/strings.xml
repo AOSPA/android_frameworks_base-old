@@ -879,20 +879,13 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"ສະແດງໄອຄອນການແຈ້ງເຕືອນຄວາມສຳຄັນຕ່ຳ"</string>
     <string name="other" msgid="429768510980739978">"ອື່ນໆ"</string>
-    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
-    <skip />
+    <string name="accessibility_qs_edit_remove_tile_action" msgid="775511891457193480">"ລຶບແຜ່ນອອກ"</string>
+    <string name="accessibility_qs_edit_tile_add_action" msgid="5051211910345301833">"ເພີ່ມແຜ່ນໃສ່ທ້າຍ"</string>
+    <string name="accessibility_qs_edit_tile_start_move" msgid="2009373939914517817">"ຍ້າຍແຜ່ນ"</string>
+    <string name="accessibility_qs_edit_tile_start_add" msgid="7560798153975555772">"ເພີ່ມແຜ່ນ"</string>
+    <string name="accessibility_qs_edit_tile_move_to_position" msgid="5198161544045930556">"ຍ້າຍໄປ <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_tile_add_to_position" msgid="9029163095148274690">"ເພີ່ມໃສ່ຕຳແໜ່ງ <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_position" msgid="4509277359815711830">"ຕຳແໜ່ງ <xliff:g id="POSITION">%1$d</xliff:g>"</string>
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"ຕົວແກ້ໄຂການຕັ້ງຄ່າດ່ວນ"</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"ການແຈ້ງເຕືອນ <xliff:g id="ID_1">%1$s</xliff:g>: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"ເປີດການຕັ້ງຄ່າ."</string>
@@ -1019,6 +1012,16 @@
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ການຕັ້ງຄ່າ"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"ໜ້າຈໍການຂະຫຍາຍ"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"ການຄວບຄຸມໜ້າຈໍການຂະຫຍາຍ"</string>
+    <string name="accessibility_control_zoom_in" msgid="1189272315480097417">"ຊູມເຂົ້າ"</string>
+    <string name="accessibility_control_zoom_out" msgid="69578832020304084">"ຊູມອອກ"</string>
+    <string name="accessibility_control_move_up" msgid="6622825494014720136">"ຍ້າຍຂຶ້ນ"</string>
+    <string name="accessibility_control_move_down" msgid="5390922476900974512">"ຍ້າຍລົງ"</string>
+    <string name="accessibility_control_move_left" msgid="8156206978511401995">"ຍ້າຍໄປຊ້າຍ"</string>
+    <string name="accessibility_control_move_right" msgid="8926821093629582888">"ຍ້າຍໄປຂວາ"</string>
+    <string name="magnification_mode_switch_description" msgid="2698364322069934733">"ສະຫຼັບການຂະຫຍາຍ"</string>
+    <string name="magnification_mode_switch_state_full_screen" msgid="2882507327576770574">"ຂະຫຍາຍທັງໜ້າຈໍ"</string>
+    <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"ຂະຫຍາຍບາງສ່ວນຂອງໜ້າຈໍ"</string>
+    <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"ສະຫຼັບ"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"ການຄວບຄຸມອຸປະກອນ"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"ເພີ່ມການຄວບຄຸມສຳລັບອຸປະກອນທີ່ເຊື່ອມຕໍ່ແລ້ວຂອງທ່ານ"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"ຕັ້ງຄ່າການຄວບຄຸມອຸປະກອນ"</string>
@@ -1082,4 +1085,6 @@
     <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (ຕັດການເຊື່ອມຕໍ່ແລ້ວ)"</string>
     <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"ບໍ່ສາມາດເຊື່ອມຕໍ່ໄດ້. ລອງໃໝ່."</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"ຈັບຄູ່ອຸປະກອນໃໝ່"</string>
+    <string name="build_number_clip_data_label" msgid="3623176728412560914">"ໝາຍເລກສ້າງ"</string>
+    <string name="build_number_copy_toast" msgid="877720921605503046">"ສຳເນົາໝາຍເລກສ້າງໄປໃສ່ຄລິບບອດແລ້ວ."</string>
 </resources>

@@ -32,8 +32,8 @@ import androidx.dynamicanimation.animation.SpringForce;
 
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.util.animation.PhysicsAnimator;
-import com.android.systemui.util.magnetictarget.MagnetizedObject;
+import com.android.wm.shell.animation.PhysicsAnimator;
+import com.android.wm.shell.common.magnetictarget.MagnetizedObject;
 
 import com.google.android.collect.Sets;
 
@@ -57,6 +57,9 @@ public class ExpandedAnimationController
 
     /** Duration of the expand/collapse target path animation. */
     public static final int EXPAND_COLLAPSE_TARGET_ANIM_DURATION = 175;
+
+    /** Damping ratio for expand/collapse spring. */
+    private static final float DAMPING_RATIO_MEDIUM_LOW_BOUNCY = 0.65f;
 
     /** Stiffness for the expand/collapse path-following animation. */
     private static final int EXPAND_COLLAPSE_ANIM_STIFFNESS = 1000;
@@ -271,16 +274,14 @@ public class ExpandedAnimationController
                 // Then, draw a line across the screen to the bubble's resting position.
                 path.lineTo(getBubbleLeft(index), expandedY);
             } else {
-                final float sideMultiplier =
-                        mLayout.isFirstChildXLeftOfCenter(mCollapsePoint.x) ? -1 : 1;
-                final float stackedX = mCollapsePoint.x + (sideMultiplier * index * mStackOffsetPx);
+                final float stackedX = mCollapsePoint.x;
 
                 // If we're collapsing, draw a line from the bubble's current position to the side
                 // of the screen where the bubble will be stacked.
                 path.lineTo(stackedX, expandedY);
 
                 // Then, draw a line down to the stack position.
-                path.lineTo(stackedX, mCollapsePoint.y);
+                path.lineTo(stackedX, mCollapsePoint.y + index * mStackOffsetPx);
             }
 
             // The lead bubble should be the bubble with the longest distance to travel when we're
@@ -510,7 +511,7 @@ public class ExpandedAnimationController
     @Override
     SpringForce getSpringForce(DynamicAnimation.ViewProperty property, View view) {
         return new SpringForce()
-                .setDampingRatio(SpringForce.DAMPING_RATIO_LOW_BOUNCY)
+                .setDampingRatio(DAMPING_RATIO_MEDIUM_LOW_BOUNCY)
                 .setStiffness(SpringForce.STIFFNESS_LOW);
     }
 

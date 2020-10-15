@@ -108,6 +108,7 @@ import com.android.server.connectivity.IpConnectivityMetrics;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.coverage.CoverageService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
+import com.android.server.devicestate.DeviceStateManagerService;
 import com.android.server.display.DisplayManagerService;
 import com.android.server.display.color.ColorDisplayService;
 import com.android.server.dreams.DreamManagerService;
@@ -283,6 +284,8 @@ public final class SystemServer {
             "com.android.server.autofill.AutofillManagerService";
     private static final String CONTENT_CAPTURE_MANAGER_SERVICE_CLASS =
             "com.android.server.contentcapture.ContentCaptureManagerService";
+    private static final String MUSIC_RECOGNITION_MANAGER_SERVICE_CLASS =
+            "com.android.server.musicrecognition.MusicRecognitionManagerService";
     private static final String SYSTEM_CAPTIONS_MANAGER_SERVICE_CLASS =
             "com.android.server.systemcaptions.SystemCaptionsManagerService";
     private static final String TIME_ZONE_RULES_MANAGER_SERVICE_CLASS =
@@ -1263,6 +1266,10 @@ public final class SystemServer {
             mSystemServiceManager.startService(AppIntegrityManagerService.class);
             t.traceEnd();
 
+            t.traceBegin("DeviceStateManagerService");
+            mSystemServiceManager.startService(DeviceStateManagerService.class);
+            t.traceEnd();
+
         } catch (Throwable e) {
             Slog.e("System", "******************************************");
             Slog.e("System", "************ Failure starting core service");
@@ -1418,6 +1425,17 @@ public final class SystemServer {
                 }
                 t.traceEnd();
             }
+
+            if (deviceHasConfigString(context,
+                    R.string.config_defaultMusicRecognitionService)) {
+                t.traceBegin("StartMusicRecognitionManagerService");
+                mSystemServiceManager.startService(MUSIC_RECOGNITION_MANAGER_SERVICE_CLASS);
+                t.traceEnd();
+            } else {
+                Slog.d(TAG,
+                        "MusicRecognitionManagerService not defined by OEM or disabled by flag");
+            }
+
 
             startContentCaptureService(context, t);
             startAttentionService(context, t);

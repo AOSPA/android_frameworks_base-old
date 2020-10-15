@@ -283,6 +283,20 @@ public class RecentsAnimationController implements DeathRecipient {
         public void hideCurrentInputMethod() {
             final long token = Binder.clearCallingIdentity();
             try {
+                synchronized (mService.getWindowManagerLock()) {
+                    // Make sure to update the correct IME parent in case that the IME parent may
+                    // be computed as display layer when re-layout window happens during rotation
+                    // but there is intermediate state that the bounds of task and the IME
+                    // target's activity is not the same during rotating.
+                    mDisplayContent.updateImeParent();
+
+                    // Ignore hiding IME if IME window is attached to app.
+                    // Since we would like to snapshot Task with IME window while transitioning
+                    // to recents.
+                    if (mDisplayContent.isImeAttachedToApp()) {
+                        return;
+                    }
+                }
                 final InputMethodManagerInternal inputMethodManagerInternal =
                         LocalServices.getService(InputMethodManagerInternal.class);
                 if (inputMethodManagerInternal != null) {
@@ -375,9 +389,7 @@ public class RecentsAnimationController implements DeathRecipient {
         final int taskCount = visibleTasks.size();
         for (int i = 0; i < taskCount; i++) {
             final Task task = visibleTasks.get(i);
-            final WindowConfiguration config = task.getWindowConfiguration();
-            if (config.tasksAreFloating()
-                    || config.getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
+            if (skipAnimation(task)) {
                 continue;
             }
             addAnimation(task, !recentTaskIds.get(task.mTaskId));
@@ -419,6 +431,19 @@ public class RecentsAnimationController implements DeathRecipient {
             mStatusBar.onRecentsAnimationStateChanged(true /* running */);
         }
     }
+
+
+    /**
+     * Whether a task should be filtered from the recents animation. This can be true for tasks
+     * being displayed outside of recents.
+     */
+    private boolean skipAnimation(Task task) {
+        final WindowConfiguration config = task.getWindowConfiguration();
+        return task.isAlwaysOnTop()
+                || config.tasksAreFloating()
+                || config.getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
+    }
+
 
     @VisibleForTesting
     AnimationAdapter addAnimation(Task task, boolean isRecentTaskInvisible) {
@@ -515,8 +540,9 @@ public class RecentsAnimationController implements DeathRecipient {
 
     void addTaskToTargets(Task task, OnAnimationFinishedCallback finishedCallback) {
         if (mRunner != null) {
-            // No need to send task appeared when the task target already exists.
-            if (isAnimatingTask(task)) {
+            // No need to send task appeared when the task target already exists, or when the
+            // task is being managed as a multi-window mode outside of recents (e.g. bubbles).
+            if (isAnimatingTask(task) || skipAnimation(task)) {
                 return;
             }
             final RemoteAnimationTarget target = createTaskRemoteAnimation(task, finishedCallback);
@@ -813,15 +839,13 @@ public class RecentsAnimationController implements DeathRecipient {
                 && !isTargetApp(activity) && isAnimatingApp(activity);
     }
 
-    boolean updateInputConsumerForApp(InputWindowHandle inputWindowHandle,
-            boolean focusable) {
+    boolean updateInputConsumerForApp(InputWindowHandle inputWindowHandle) {
         // Update the input consumer touchable region to match the target app main window
         final WindowState targetAppMainWindow = mTargetActivityRecord != null
                 ? mTargetActivityRecord.findMainWindow()
                 : null;
         if (targetAppMainWindow != null) {
             targetAppMainWindow.getBounds(mTmpRect);
-            inputWindowHandle.focusable = focusable;
             inputWindowHandle.touchableRegion.set(mTmpRect);
             return true;
         }
@@ -929,10 +953,10 @@ public class RecentsAnimationController implements DeathRecipient {
                     ? MODE_OPENING
                     : MODE_CLOSING;
             mTarget = new RemoteAnimationTarget(mTask.mTaskId, mode, mCapturedLeash,
-                    !topApp.fillsParent(), mainWindow.mWinAnimator.mLastClipRect,
+                    !topApp.fillsParent(), new Rect(),
                     insets, mTask.getPrefixOrderIndex(), new Point(mBounds.left, mBounds.top),
                     mLocalBounds, mBounds, mTask.getWindowConfiguration(),
-                    mIsRecentTaskInvisible, null, null);
+                    mIsRecentTaskInvisible, null, null, mTask.getPictureInPictureParams());
             return mTarget;
         }
 
