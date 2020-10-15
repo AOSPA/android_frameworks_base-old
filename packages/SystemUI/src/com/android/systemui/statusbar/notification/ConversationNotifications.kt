@@ -24,15 +24,15 @@ import android.service.notification.NotificationListenerService.Ranking
 import android.service.notification.NotificationListenerService.RankingMap
 import com.android.internal.statusbar.NotificationVisibility
 import com.android.internal.widget.ConversationLayout
+import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.statusbar.notification.collection.NotificationEntry
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.row.NotificationContentView
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator
-import com.android.systemui.statusbar.phone.NotificationGroupManager
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /** Populates additional information in conversation notifications */
 class ConversationNotificationProcessor @Inject constructor(
@@ -61,10 +61,10 @@ class ConversationNotificationProcessor @Inject constructor(
  * Tracks state related to conversation notifications, and updates the UI of existing notifications
  * when necessary.
  */
-@Singleton
+@SysUISingleton
 class ConversationNotificationManager @Inject constructor(
     private val notificationEntryManager: NotificationEntryManager,
-    private val notificationGroupManager: NotificationGroupManager,
+    private val notificationGroupManager: NotificationGroupManagerLegacy,
     private val context: Context,
     @Main private val mainHandler: Handler
 ) {

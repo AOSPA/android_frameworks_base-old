@@ -37,6 +37,7 @@ import android.annotation.Nullable;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.backup.BackupAgent;
+import android.app.backup.BackupManager;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ActivityLifecycleItem.LifecycleState;
 import android.app.servertransaction.ActivityRelaunchItem;
@@ -290,6 +291,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     private final Object mNetworkPolicyLock = new Object();
 
+    private static final String DEFAULT_FULL_BACKUP_AGENT = "android.app.backup.FullBackupAgent";
+
     /**
      * Denotes the sequence number of the process state change for which the main thread needs
      * to block until the network rules are updated for it.
@@ -422,9 +425,14 @@ public final class ActivityThread extends ClientTransactionHandler {
         final String authority;
         final int userId;
 
+        @GuardedBy("mLock")
+        ContentProviderHolder mHolder; // Temp holder to be used between notifier and waiter
+        Object mLock; // The lock to be used to get notified when the provider is ready
+
         public ProviderKey(String authority, int userId) {
             this.authority = authority;
             this.userId = userId;
+            this.mLock = new Object();
         }
 
         @Override
@@ -438,7 +446,11 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         @Override
         public int hashCode() {
-            return ((authority != null) ? authority.hashCode() : 0) ^ userId;
+            return hashCode(authority, userId);
+        }
+
+        public static int hashCode(final String auth, final int userIdent) {
+            return ((auth != null) ? auth.hashCode() : 0) ^ userIdent;
         }
     }
 
@@ -459,9 +471,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     // Mitigation for b/74523247: Used to serialize calls to AM.getContentProvider().
     // Note we never removes items from this map but that's okay because there are only so many
     // users and so many authorities.
-    // TODO Remove it once we move CPR.wait() from AMS to the client side.
-    @GuardedBy("mGetProviderLocks")
-    final ArrayMap<ProviderKey, Object> mGetProviderLocks = new ArrayMap<>();
+    @GuardedBy("mGetProviderKeys")
+    final SparseArray<ProviderKey> mGetProviderKeys = new SparseArray<>();
 
     final ArrayMap<Activity, ArrayList<OnActivityPausedListener>> mOnPauseListeners
         = new ArrayMap<Activity, ArrayList<OnActivityPausedListener>>();
@@ -738,6 +749,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         CompatibilityInfo compatInfo;
         int backupMode;
         int userId;
+        int operationType;
         public String toString() {
             return "CreateBackupAgentData{appInfo=" + appInfo
                     + " backupAgent=" + appInfo.backupAgentName
@@ -958,12 +970,13 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         public final void scheduleCreateBackupAgent(ApplicationInfo app,
-                CompatibilityInfo compatInfo, int backupMode, int userId) {
+                CompatibilityInfo compatInfo, int backupMode, int userId, int operationType) {
             CreateBackupAgentData d = new CreateBackupAgentData();
             d.appInfo = app;
             d.compatInfo = compatInfo;
             d.backupMode = backupMode;
             d.userId = userId;
+            d.operationType = operationType;
 
             sendMessage(H.CREATE_BACKUP_AGENT, d);
         }
@@ -1752,6 +1765,16 @@ public final class ActivityThread extends ClientTransactionHandler {
                     ActivityThread.this, activityToken, actionId, arguments,
                     cancellationSignal, resultCallback));
         }
+
+        @Override
+        public void notifyContentProviderPublishStatus(@NonNull ContentProviderHolder holder,
+                @NonNull String auth, int userId, boolean published) {
+            final ProviderKey key = getGetProviderKey(auth, userId);
+            synchronized (key.mLock) {
+                key.mHolder = holder;
+                key.mLock.notifyAll();
+            }
+        }
     }
 
     private @NonNull SafeCancellationTransport createSafeCancellationTransport(
@@ -2220,9 +2243,9 @@ public final class ActivityThread extends ClientTransactionHandler {
      * Resources if one has already been created.
      */
     Resources getTopLevelResources(String resDir, String[] splitResDirs, String[] overlayDirs,
-            String[] libDirs, int displayId, LoadedApk pkgInfo) {
+            String[] libDirs, LoadedApk pkgInfo) {
         return mResourcesManager.getResources(null, resDir, splitResDirs, overlayDirs, libDirs,
-                displayId, null, pkgInfo.getCompatibilityInfo(), pkgInfo.getClassLoader(), null);
+                null, null, pkgInfo.getCompatibilityInfo(), pkgInfo.getClassLoader(), null);
     }
 
     @UnsupportedAppUsage
@@ -4052,7 +4075,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     private void handleCreateBackupAgent(CreateBackupAgentData data) {
         if (DEBUG_BACKUP) Slog.v(TAG, "handleCreateBackupAgent: " + data);
 
-        // Sanity check the requested target package's uid against ours
+        // Validity check the requested target package's uid against ours
         try {
             PackageInfo requestedPackage = getPackageManager().getPackageInfo(
                     data.appInfo.packageName, 0, UserHandle.myUserId());
@@ -4076,12 +4099,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             return;
         }
 
-        String classname = data.appInfo.backupAgentName;
-        // full backup operation but no app-supplied agent?  use the default implementation
-        if (classname == null && (data.backupMode == ApplicationThreadConstants.BACKUP_MODE_FULL
-                || data.backupMode == ApplicationThreadConstants.BACKUP_MODE_RESTORE_FULL)) {
-            classname = "android.app.backup.FullBackupAgent";
-        }
+        String classname = getBackupAgentName(data);
 
         try {
             IBinder binder = null;
@@ -4105,7 +4123,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     context.setOuterContext(agent);
                     agent.attach(context);
 
-                    agent.onCreate(UserHandle.of(data.userId));
+                    agent.onCreate(UserHandle.of(data.userId), data.operationType);
                     binder = agent.onBind();
                     backupAgents.put(packageName, agent);
                 } catch (Exception e) {
@@ -4131,6 +4149,23 @@ public final class ActivityThread extends ClientTransactionHandler {
             throw new RuntimeException("Unable to create BackupAgent "
                     + classname + ": " + e.toString(), e);
         }
+    }
+
+    private String getBackupAgentName(CreateBackupAgentData data) {
+        String agentName = data.appInfo.backupAgentName;
+        if (!UserHandle.isCore(data.appInfo.uid)
+                && data.operationType == BackupManager.OperationType.MIGRATION) {
+            // If this is a migration, use the default backup agent regardless of the app's
+            // preferences.
+            agentName = DEFAULT_FULL_BACKUP_AGENT;
+        } else {
+            // full backup operation but no app-supplied agent?  use the default implementation
+            if (agentName == null && (data.backupMode == ApplicationThreadConstants.BACKUP_MODE_FULL
+                    || data.backupMode == ApplicationThreadConstants.BACKUP_MODE_RESTORE_FULL)) {
+                agentName = DEFAULT_FULL_BACKUP_AGENT;
+            }
+        }
+        return agentName;
     }
 
     // Tear down a BackupAgent
@@ -5112,6 +5147,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 }
             }
             r.setState(ON_DESTROY);
+            mLastReportedWindowingMode.remove(r.activity.getActivityToken());
         }
         schedulePurgeIdler();
         // updatePendingActivityConfiguration() reads from mActivities to update
@@ -5354,16 +5390,8 @@ public final class ActivityThread extends ClientTransactionHandler {
             throw e.rethrowFromSystemServer();
         }
 
-        // Save the current windowing mode to be restored and compared to the new configuration's
-        // windowing mode (needed because we update the last reported windowing mode when launching
-        // an activity and we can't tell inside performLaunchActivity whether we are relaunching)
-        final int oldWindowingMode = mLastReportedWindowingMode.getOrDefault(
-                r.activity.getActivityToken(), WINDOWING_MODE_UNDEFINED);
         handleRelaunchActivityInner(r, configChanges, tmp.pendingResults, tmp.pendingIntents,
                 pendingActions, tmp.startsNotResumed, tmp.overrideConfig, "handleRelaunchActivity");
-        mLastReportedWindowingMode.put(r.activity.getActivityToken(), oldWindowingMode);
-        handleWindowingModeChangeIfNeeded(r.activity, r.activity.mCurrentConfig);
-
         if (pendingActions != null) {
             // Only report a successful relaunch to WindowManager.
             pendingActions.setReportRelaunchToWindowManager(true);
@@ -5391,12 +5419,11 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         final int prevState = r.getLifecycleState();
 
-        if (prevState < ON_RESUME || prevState > ON_STOP) {
-            Log.w(TAG, "Activity state must be in [ON_RESUME..ON_STOP] in order to be relaunched,"
+        if (prevState < ON_START || prevState > ON_STOP) {
+            Log.w(TAG, "Activity state must be in [ON_START..ON_STOP] in order to be relaunched,"
                     + "current state is " + prevState);
             return;
         }
-
 
         // Initialize a relaunch request.
         final MergedConfiguration mergedConfiguration = new MergedConfiguration(
@@ -5629,8 +5656,9 @@ public final class ActivityThread extends ClientTransactionHandler {
             throw new IllegalArgumentException("Activity token not set. Is the activity attached?");
         }
 
-        // multi-window / pip mode changes, if any, should be sent before the configuration change
-        // callback, see also PinnedStackTests#testConfigurationChangeOrderDuringTransition
+        // WindowConfiguration differences aren't considered as public, check it separately.
+        // multi-window / pip mode changes, if any, should be sent before the configuration
+        // change callback, see also PinnedStackTests#testConfigurationChangeOrderDuringTransition
         handleWindowingModeChangeIfNeeded(activity, newConfig);
 
         final boolean movedToDifferentDisplay = isDifferentDisplay(activity, displayId);
@@ -5669,8 +5697,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         // many places.
         final Configuration finalOverrideConfig = createNewConfigAndUpdateIfNotNull(
                 amOverrideConfig, contextThemeWrapperOverrideConfig);
-        mResourcesManager.updateResourcesForActivity(activityToken, finalOverrideConfig,
-                displayId, movedToDifferentDisplay);
+        mResourcesManager.updateResourcesForActivity(activityToken, finalOverrideConfig, displayId);
 
         activity.mConfigChangeFlags = 0;
         activity.mCurrentConfig = new Configuration(newConfig);
@@ -5986,6 +6013,11 @@ public final class ActivityThread extends ClientTransactionHandler {
             r.mPendingOverrideConfig = null;
         }
 
+        if (displayId == INVALID_DISPLAY) {
+            // If INVALID_DISPLAY is passed assume that the activity should keep its current
+            // display.
+            displayId = r.activity.getDisplayId();
+        }
         final boolean movedToDifferentDisplay = isDifferentDisplay(r.activity, displayId);
         if (r.overrideConfig != null && !r.overrideConfig.isOtherSeqNewer(overrideConfig)
                 && !movedToDifferentDisplay) {
@@ -6837,13 +6869,33 @@ public final class ActivityThread extends ClientTransactionHandler {
         // provider since it might take a long time to run and it could also potentially
         // be re-entrant in the case where the provider is in the same process.
         ContentProviderHolder holder = null;
+        final ProviderKey key = getGetProviderKey(auth, userId);
         try {
-            synchronized (getGetProviderLock(auth, userId)) {
+            synchronized (key) {
                 holder = ActivityManager.getService().getContentProvider(
                         getApplicationThread(), c.getOpPackageName(), auth, userId, stable);
+                // If the returned holder is non-null but its provider is null and it's not
+                // local, we'll need to wait for the publishing of the provider.
+                if (holder != null && holder.provider == null && !holder.mLocal) {
+                    synchronized (key.mLock) {
+                        key.mLock.wait(ContentResolver.CONTENT_PROVIDER_READY_TIMEOUT_MILLIS);
+                        holder = key.mHolder;
+                    }
+                    if (holder != null && holder.provider == null) {
+                        // probably timed out
+                        holder = null;
+                    }
+                }
             }
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
+        } catch (InterruptedException e) {
+            holder = null;
+        } finally {
+            // Clear the holder from the key since the key itself is never cleared.
+            synchronized (key.mLock) {
+                key.mHolder = null;
+            }
         }
         if (holder == null) {
             if (UserManager.get(c).isUserUnlocked(userId)) {
@@ -6861,13 +6913,13 @@ public final class ActivityThread extends ClientTransactionHandler {
         return holder.provider;
     }
 
-    private Object getGetProviderLock(String auth, int userId) {
-        final ProviderKey key = new ProviderKey(auth, userId);
-        synchronized (mGetProviderLocks) {
-            Object lock = mGetProviderLocks.get(key);
+    private ProviderKey getGetProviderKey(String auth, int userId) {
+        final int key = ProviderKey.hashCode(auth, userId);
+        synchronized (mGetProviderKeys) {
+            ProviderKey lock = mGetProviderKeys.get(key);
             if (lock == null) {
-                lock = key;
-                mGetProviderLocks.put(key, lock);
+                lock = new ProviderKey(auth, userId);
+                mGetProviderKeys.put(key, lock);
             }
             return lock;
         }

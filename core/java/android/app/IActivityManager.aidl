@@ -17,6 +17,7 @@
 package android.app;
 
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.app.ApplicationErrorReport;
 import android.app.ApplicationExitInfo;
 import android.app.ContentProviderHolder;
@@ -99,7 +100,6 @@ interface IActivityManager {
     void unregisterUidObserver(in IUidObserver observer);
     boolean isUidActive(int uid, String callingPackage);
     int getUidProcessState(int uid, in String callingPackage);
-    boolean setSchedPolicyCgroup(int tid, int group);
     // =============== End of transactions used on native side as well ============================
 
     // Special low-level communication with activity manager.
@@ -123,8 +123,8 @@ interface IActivityManager {
             in IIntentReceiver receiver, in IntentFilter filter,
             in String requiredPermission, int userId, int flags);
     Intent registerReceiverWithFeature(in IApplicationThread caller, in String callerPackage,
-            in String callingFeatureId, in IIntentReceiver receiver, in IntentFilter filter,
-            in String requiredPermission, int userId, int flags);
+            in String callingFeatureId, in String receiverId, in IIntentReceiver receiver,
+            in IntentFilter filter, in String requiredPermission, int userId, int flags);
     @UnsupportedAppUsage
     void unregisterReceiver(in IIntentReceiver receiver);
     /** @deprecated Use {@link #broadcastIntentWithFeature} instead */
@@ -156,7 +156,8 @@ interface IActivityManager {
     boolean refContentProvider(in IBinder connection, int stableDelta, int unstableDelta);
     PendingIntent getRunningServiceControlPanel(in ComponentName service);
     ComponentName startService(in IApplicationThread caller, in Intent service,
-            in String resolvedType, boolean requireForeground, in String callingPackage,
+            in String resolvedType, boolean requireForeground,
+            boolean hideForegroundNotification, in String callingPackage,
             in String callingFeatureId, int userId);
     @UnsupportedAppUsage
     int stopService(in IApplicationThread caller, in Intent service,
@@ -288,7 +289,8 @@ interface IActivityManager {
     void stopAppSwitches();
     @UnsupportedAppUsage
     void resumeAppSwitches();
-    boolean bindBackupAgent(in String packageName, int backupRestoreMode, int targetUserId);
+    boolean bindBackupAgent(in String packageName, int backupRestoreMode, int targetUserId,
+            int operationType);
     void backupAgentCreated(in String packageName, in IBinder agent, int userId);
     void unbindBackupAgent(in ApplicationInfo appInfo);
     int getUidForIntentSender(in IIntentSender sender);
@@ -447,12 +449,11 @@ interface IActivityManager {
     @UnsupportedAppUsage
     void hang(in IBinder who, boolean allowRestart);
 
-    @UnsupportedAppUsage
-    List<ActivityManager.StackInfo> getAllStackInfos();
+    List<ActivityTaskManager.RootTaskInfo> getAllRootTaskInfos();
     @UnsupportedAppUsage
     void moveTaskToStack(int taskId, int stackId, boolean toTop);
     void setFocusedStack(int stackId);
-    ActivityManager.StackInfo getFocusedStackInfo();
+    ActivityTaskManager.RootTaskInfo getFocusedRootTaskInfo();
     @UnsupportedAppUsage
     void restart();
     void performIdleMaintenance();
@@ -460,7 +461,7 @@ interface IActivityManager {
     @UnsupportedAppUsage
     Rect getTaskBounds(int taskId);
     @UnsupportedAppUsage
-    boolean setProcessMemoryTrimLevel(in String process, int uid, int level);
+    boolean setProcessMemoryTrimLevel(in String process, int userId, int level);
 
 
     // Start of L transactions
@@ -693,4 +694,14 @@ interface IActivityManager {
      * android.permission.RESET_APP_ERRORS.
      */
     void resetAppErrors();
+
+    /**
+     * Control the app freezer state. Returns true in case of success, false if the operation
+     * didn't succeed (for example, when the app freezer isn't supported). 
+     * Handling the freezer state via this method is reentrant, that is it can be 
+     * disabled and re-enabled multiple times in parallel. As long as there's a 1:1 disable to
+     * enable match, the freezer is re-enabled at last enable only.
+     * @param enable set it to true to enable the app freezer, false to disable it.
+     */
+    boolean enableAppFreezer(in boolean enable);
 }

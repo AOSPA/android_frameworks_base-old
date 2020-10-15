@@ -44,6 +44,7 @@ import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.SuperStatusBarViewFactory;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
@@ -51,6 +52,7 @@ import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.InjectionInflationController;
@@ -82,6 +84,7 @@ public class NotificationShadeWindowViewController {
     private final NotificationShadeWindowView mView;
     private final ShadeController mShadeController;
     private final NotificationShadeDepthController mDepthController;
+    private final NotificationStackScrollLayoutController mNotificationStackScrollLayoutController;
 
     private GestureDetector mGestureDetector;
     private View mBrightnessMirror;
@@ -129,7 +132,8 @@ public class NotificationShadeWindowViewController {
             NotificationShadeDepthController depthController,
             NotificationShadeWindowView notificationShadeWindowView,
             NotificationPanelViewController notificationPanelViewController,
-            SuperStatusBarViewFactory statusBarViewFactory) {
+            SuperStatusBarViewFactory statusBarViewFactory,
+            NotificationStackScrollLayoutController notificationStackScrollLayoutController) {
         mInjectionInflationController = injectionInflationController;
         mCoordinator = coordinator;
         mPulseExpansionHandler = pulseExpansionHandler;
@@ -151,6 +155,7 @@ public class NotificationShadeWindowViewController {
         mNotificationPanelViewController = notificationPanelViewController;
         mDepthController = depthController;
         mStatusBarViewFactory = statusBarViewFactory;
+        mNotificationStackScrollLayoutController = notificationStackScrollLayoutController;
 
         // This view is not part of the newly inflated expanded status bar.
         mBrightnessMirror = mView.findViewById(R.id.brightness_mirror);
@@ -244,7 +249,7 @@ public class NotificationShadeWindowViewController {
                     }
                 }
                 if (isDown) {
-                    mStackScrollLayout.closeControlsIfOutsideTouch(ev);
+                    mNotificationStackScrollLayoutController.closeControlsIfOutsideTouch(ev);
                 }
                 if (mStatusBarStateController.isDozing()) {
                     mService.mDozeScrimController.extendPulse();

@@ -21,6 +21,7 @@ import android.annotation.CallbackExecutor;
 import android.annotation.CheckResult;
 import android.annotation.ColorInt;
 import android.annotation.ColorRes;
+import android.annotation.DisplayContext;
 import android.annotation.DrawableRes;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -33,6 +34,7 @@ import android.annotation.StyleableRes;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.annotation.UiContext;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.IApplicationThread;
@@ -3382,6 +3384,7 @@ public abstract class Context {
     /** @hide */
     @StringDef(suffix = { "_SERVICE" }, value = {
             POWER_SERVICE,
+            //@hide: POWER_STATS_SERVICE,
             WINDOW_SERVICE,
             LAYOUT_INFLATER_SERVICE,
             ACCOUNT_SERVICE,
@@ -3494,6 +3497,7 @@ public abstract class Context {
             //@hide: TIME_ZONE_DETECTOR_SERVICE,
             PERMISSION_SERVICE,
             LIGHTS_SERVICE,
+            //@hide: PEOPLE_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -3723,6 +3727,16 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.os.PowerStatsService} for accessing power stats
+     * service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String POWER_STATS_SERVICE = "power_stats";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.os.RecoverySystem} for accessing the recovery system
      * service.
      *
@@ -3750,6 +3764,7 @@ public abstract class Context {
      * @see #getSystemService(String)
      * @see android.view.WindowManager
      */
+    @UiContext
     public static final String WINDOW_SERVICE = "window";
 
     /**
@@ -3760,6 +3775,7 @@ public abstract class Context {
      * @see #getSystemService(String)
      * @see android.view.LayoutInflater
      */
+    @UiContext
     public static final String LAYOUT_INFLATER_SERVICE = "layout_inflater";
 
     /**
@@ -3932,6 +3948,7 @@ public abstract class Context {
      *
      * @see #getSystemService(String)
      */
+    @UiContext
     public static final String WALLPAPER_SERVICE = "wallpaper";
 
     /**
@@ -4187,6 +4204,17 @@ public abstract class Context {
      * @see android.media.AudioManager
      */
     public static final String AUDIO_SERVICE = "audio";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link
+     * android.media.MediaTranscodeManager} for transcoding media.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     * @see android.media.MediaTranscodeManager
+     */
+    @SystemApi
+    public static final String MEDIA_TRANSCODING_SERVICE = "media_transcoding";
 
     /**
      * AuthService orchestrates biometric and PIN/pattern/password authentication.
@@ -5174,6 +5202,24 @@ public abstract class Context {
     public static final String DREAM_SERVICE = "dream";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.telephony.SmsManager} for accessing Sms functionality.
+     *
+     * @see #getSystemService(String)
+
+     * @hide
+     */
+    public static final String SMS_SERVICE = "sms";
+
+    /**
+     * Use with {@link #getSystemService(String)} to access people service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String PEOPLE_SERVICE = "people";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
@@ -5779,6 +5825,7 @@ public abstract class Context {
      *
      * @return A {@link Context} for the display.
      */
+    @DisplayContext
     public abstract Context createDisplayContext(@NonNull Display display);
 
     /**
@@ -5843,7 +5890,9 @@ public abstract class Context {
      * the current number of window contexts without adding any view by
      * {@link WindowManager#addView} <b>exceeds five</b>.
      */
-    public @NonNull Context createWindowContext(@WindowType int type, @Nullable Bundle options)  {
+    @UiContext
+    @NonNull
+    public Context createWindowContext(@WindowType int type, @Nullable Bundle options)  {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -6090,7 +6139,7 @@ public abstract class Context {
     }
 
     /**
-     * Gets the Content Capture options for this context, or {@code null} if it's not whitelisted.
+     * Gets the Content Capture options for this context, or {@code null} if it's not allowlisted.
      *
      * @hide
      */

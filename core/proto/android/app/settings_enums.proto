@@ -744,6 +744,41 @@ enum Action {
     // CATEGORY: SETTINGS
     // OS: R
     ACTION_CONFIRM_SIM_DELETION_OFF = 1739;
+
+    // ACTION: Settings > System > Gestures > Double tap > Toggle on Double tap
+    // CATEGORY: SETTINGS
+    // OS: S
+    ACTION_COLUMBUS_ENABLED = 1740;
+
+    // ACTION: Settings > System > Gestures > Double tap > Toggle off Double tap
+    // CATEGORY: SETTINGS
+    // OS: S
+    ACTION_COLUMBUS_DISABLED = 1741;
+
+    // ACTION: Settings > System > Gestures > Double tap > Invoke Assistant
+    // CATEGORY: SETTINGS
+    // OS: S
+    ACTION_COLUMBUS_ACTION_ASSISTANT = 1742;
+
+    // ACTION: Settings > System > Gestures > Double tap > Take screenshot
+    // CATEGORY: SETTINGS
+    // OS: S
+    ACTION_COLUMBUS_ACTION_SCREENSHOT = 1743;
+
+    // ACTION: Settings > System > Gestures > Double tap > Play and pause
+    // CATEGORY: SETTINGS
+    // OS: S
+    ACTION_COLUMBUS_ACTION_PLAY_PAUSE = 1744;
+
+    // ACTION: Settings > System > Gestures > Double tap > Open app overview
+    // CATEGORY: SETTINGS
+    // OS: S
+    ACTION_COLUMBUS_ACTION_OVERVIEW = 1745;
+
+    // ACTION: Settings > System > Gestures > Double tap > Open notification shade
+    // CATEGORY: SETTINGS
+    // OS: S
+    ACTION_COLUMBUS_ACTION_NOTIFICATION_SHADE = 1746;
 }
 
 /**
@@ -2310,10 +2345,10 @@ enum PageId {
     // OS: Q
     ZEN_CUSTOM_SETTINGS_DIALOG = 1612;
 
-    // OPEN: Settings > Developer Options > Game Driver Preferences
+    // OPEN: Settings > Developer Options > Graphics Driver Preferences
     // CATEGORY: SETTINGS
     // OS: Q
-    SETTINGS_GAME_DRIVER_DASHBOARD = 1613;
+    SETTINGS_GRAPHICS_DRIVER_DASHBOARD = 1613;
 
     // OPEN: Settings > Accessibility > Vibration > Ring vibration
     // CATEGORY: SETTINGS
@@ -2693,4 +2728,27 @@ enum PageId {
     // CATEGORY: SETTINGS
     // OS: R QPR
     SETTINGS_SWIPE_BOTTOM_TO_NOTIFICATION = 1846;
+
+    // OPEN: Settings > System > Gestures > Emergency SOS Gesture
+    // CATEGORY: SETTINGS
+    // OS: S
+    EMERGENCY_SOS_GESTURE_SETTINGS = 1847;
+
+    // OPEN: Settings > System > Gestures > Double tap
+    // CATEGORY: SETTINGS
+    // OS: S
+    SETTINGS_COLUMBUS = 1848;
+
+    // OPEN: Settings > Accessibility > Magnification > Settings > Magnification area > Magnification switch shortcut dialog
+    // CATEGORY: SETTINGS
+    // OS: S
+    DIALOG_MAGNIFICATION_SWITCH_SHORTCUT = 1849;
+
+    // OPEN: Settings > Network & internet > Adaptive connectivity
+    // CATEGORY: SETTINGS
+    // OS: R QPR
+    ADAPTIVE_CONNECTIVITY_CATEGORY = 1850;
+
+    // OS: R QPR2
+    BLUETOOTH_PAIRING_RECEIVER = 1851;
 }

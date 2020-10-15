@@ -19,6 +19,8 @@
     <string name="keyboard_layout_swiss_german_label" msgid="2305520941993314258">"Tiếng Đức Thụy Sĩ"</string>
     <string name="keyboard_layout_belgian" msgid="2011984572838651558">"Tiếng Bỉ"</string>
     <string name="keyboard_layout_bulgarian" msgid="8951224309972028398">"Tiếng Bungary"</string>
+    <!-- no translation found for keyboard_layout_bulgarian_phonetic (7568914730360106653) -->
+    <skip />
     <string name="keyboard_layout_italian" msgid="6497079660449781213">"Tiếng Ý"</string>
     <string name="keyboard_layout_danish" msgid="8036432066627127851">"Tiếng Đan Mạch"</string>
     <string name="keyboard_layout_norwegian" msgid="9090097917011040937">"Tiếng Na Uy"</string>
@@ -26,6 +28,7 @@
     <string name="keyboard_layout_finnish" msgid="5585659438924315466">"Tiếng Phần Lan"</string>
     <string name="keyboard_layout_croatian" msgid="4172229471079281138">"Tiếng Croatia"</string>
     <string name="keyboard_layout_czech" msgid="1349256901452975343">"Tiếng Séc"</string>
+    <string name="keyboard_layout_czech_qwerty" msgid="3331402534128515501">"Kiểu QWERTY tiếng Séc"</string>
     <string name="keyboard_layout_estonian" msgid="8775830985185665274">"Tiếng Estonia"</string>
     <string name="keyboard_layout_hungarian" msgid="4154963661406035109">"Tiếng Hungary"</string>
     <string name="keyboard_layout_icelandic" msgid="5836645650912489642">"Tiếng Ai-xơ-len"</string>

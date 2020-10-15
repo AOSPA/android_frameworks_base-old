@@ -16,7 +16,7 @@
 
 package com.android.systemui.car.navigationbar;
 
-import android.app.ActivityManager;
+import android.app.ActivityTaskManager.RootTaskInfo;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -26,13 +26,14 @@ import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
 
+import com.android.systemui.dagger.SysUISingleton;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * CarNavigationButtons can optionally have selection state that toggles certain visual indications
@@ -42,7 +43,7 @@ import javax.inject.Singleton;
  * This class controls the selection state of CarNavigationButtons that have opted in to have such
  * selection state-dependent visual indications.
  */
-@Singleton
+@SysUISingleton
 public class ButtonSelectionStateController {
 
     private final Set<CarNavigationButton> mRegisteredViews = new HashSet<>();
@@ -96,27 +97,27 @@ public class ButtonSelectionStateController {
      * The StackInfo is expected to be supplied in order of recency and StackInfo will only be used
      * for consideration if it has the same displayId as the CarNavigationButton.
      *
-     * @param stackInfoList of the currently running application
+     * @param taskInfoList of the currently running application
      * @param validDisplay index of the valid display
      */
 
-    protected void taskChanged(List<ActivityManager.StackInfo> stackInfoList, int validDisplay) {
-        ActivityManager.StackInfo validStackInfo = null;
-        for (ActivityManager.StackInfo stackInfo : stackInfoList) {
+    protected void taskChanged(List<RootTaskInfo> taskInfoList, int validDisplay) {
+        RootTaskInfo validTaskInfo = null;
+        for (RootTaskInfo taskInfo : taskInfoList) {
             // Find the first stack info with a topActivity in the primary display.
             // TODO: We assume that CarFacetButton will launch an app only in the primary display.
             // We need to extend the functionality to handle the multiple display properly.
-            if (stackInfo.topActivity != null && stackInfo.displayId == validDisplay) {
-                validStackInfo = stackInfo;
+            if (taskInfo.topActivity != null && taskInfo.displayId == validDisplay) {
+                validTaskInfo = taskInfo;
                 break;
             }
         }
 
-        if (validStackInfo == null) {
+        if (validTaskInfo == null) {
             // No stack was found that was on the same display as the buttons thus return
             return;
         }
-        int displayId = validStackInfo.displayId;
+        int displayId = validTaskInfo.displayId;
 
         mSelectedButtons.forEach(carNavigationButton -> {
             if (carNavigationButton.getDisplayId() == displayId) {
@@ -125,7 +126,7 @@ public class ButtonSelectionStateController {
         });
         mSelectedButtons.clear();
 
-        HashSet<CarNavigationButton> selectedButtons = findSelectedButtons(validStackInfo);
+        HashSet<CarNavigationButton> selectedButtons = findSelectedButtons(validTaskInfo);
 
         if (selectedButtons != null) {
             selectedButtons.forEach(carNavigationButton -> {
@@ -140,10 +141,10 @@ public class ButtonSelectionStateController {
     /**
      * Defaults to Display.DEFAULT_DISPLAY when no parameter is provided for the validDisplay.
      *
-     * @param stackInfoList
+     * @param taskInfoList
      */
-    protected void taskChanged(List<ActivityManager.StackInfo> stackInfoList) {
-        taskChanged(stackInfoList, Display.DEFAULT_DISPLAY);
+    protected void taskChanged(List<RootTaskInfo> taskInfoList) {
+        taskChanged(taskInfoList, Display.DEFAULT_DISPLAY);
     }
 
     /**
@@ -170,12 +171,11 @@ public class ButtonSelectionStateController {
         mRegisteredViews.add(carNavigationButton);
     }
 
-    private HashSet<CarNavigationButton> findSelectedButtons(
-            ActivityManager.StackInfo validStackInfo) {
-        String packageName = validStackInfo.topActivity.getPackageName();
+    private HashSet<CarNavigationButton> findSelectedButtons(RootTaskInfo validTaskInfo) {
+        String packageName = validTaskInfo.topActivity.getPackageName();
 
         HashSet<CarNavigationButton> selectedButtons =
-                findButtonsByComponentName(validStackInfo.topActivity);
+                findButtonsByComponentName(validTaskInfo.topActivity);
         if (selectedButtons == null) {
             selectedButtons = mButtonsByPackage.get(packageName);
         }

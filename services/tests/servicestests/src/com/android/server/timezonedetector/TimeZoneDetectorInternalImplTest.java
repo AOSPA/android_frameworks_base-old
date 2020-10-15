@@ -16,6 +16,7 @@
 
 package com.android.server.timezonedetector;
 
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import android.content.Context;
@@ -73,6 +74,28 @@ public class TimeZoneDetectorInternalImplTest {
 
         mTestHandler.waitForMessagesToBeProcessed();
         mFakeTimeZoneDetectorStrategy.verifySuggestGeolocationTimeZoneCalled(timeZoneSuggestion);
+    }
+
+    @Test
+    public void testAddDumpable() throws Exception {
+        Dumpable stubbedDumpable = mock(Dumpable.class);
+
+        mTimeZoneDetectorInternal.addDumpable(stubbedDumpable);
+        mTestHandler.assertTotalMessagesEnqueued(0);
+
+        mFakeTimeZoneDetectorStrategy.verifyHasDumpable(stubbedDumpable);
+    }
+
+    @Test
+    public void testAddConfigurationListener() throws Exception {
+        boolean[] changeCalled = new boolean[2];
+        mTimeZoneDetectorInternal.addConfigurationListener(() -> changeCalled[0] = true);
+        mTimeZoneDetectorInternal.addConfigurationListener(() -> changeCalled[1] = true);
+
+        mFakeTimeZoneDetectorStrategy.simulateConfigurationChangeForTests();
+
+        assertTrue(changeCalled[0]);
+        assertTrue(changeCalled[1]);
     }
 
     private static GeolocationTimeZoneSuggestion createGeolocationTimeZoneSuggestion() {

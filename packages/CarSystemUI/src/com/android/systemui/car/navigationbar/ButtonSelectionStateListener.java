@@ -19,16 +19,16 @@ package com.android.systemui.car.navigationbar;
 import android.app.ActivityTaskManager;
 import android.util.Log;
 
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * An implementation of TaskStackChangeListener, that listens for changes in the system
  * task stack and notifies the navigation bar.
  */
-@Singleton
+@SysUISingleton
 class ButtonSelectionStateListener extends TaskStackChangeListener {
     private static final String TAG = ButtonSelectionStateListener.class.getSimpleName();
 
@@ -43,9 +43,9 @@ class ButtonSelectionStateListener extends TaskStackChangeListener {
     public void onTaskStackChanged() {
         try {
             mButtonSelectionStateController.taskChanged(
-                    ActivityTaskManager.getService().getAllStackInfos());
+                    ActivityTaskManager.getService().getAllRootTaskInfos());
         } catch (Exception e) {
-            Log.e(TAG, "Getting StackInfo from activity manager failed", e);
+            Log.e(TAG, "Getting RootTaskInfo from activity task manager failed", e);
         }
     }
 
@@ -53,9 +53,9 @@ class ButtonSelectionStateListener extends TaskStackChangeListener {
     public void onTaskDisplayChanged(int taskId, int newDisplayId) {
         try {
             mButtonSelectionStateController.taskChanged(
-                    ActivityTaskManager.getService().getAllStackInfos());
+                    ActivityTaskManager.getService().getAllRootTaskInfos());
         } catch (Exception e) {
-            Log.e(TAG, "Getting StackInfo from activity manager failed", e);
+            Log.e(TAG, "Getting RootTaskInfo from activity task manager failed", e);
         }
 
     }

@@ -16,12 +16,21 @@
 
 package com.android.server.wm.flicker.pip
 
+import android.view.Surface
 import androidx.test.filters.FlakyTest
-import androidx.test.filters.LargeTest
-import com.android.server.wm.flicker.CommonTransitions
-import com.android.server.wm.flicker.TransitionRunner
-import com.android.server.wm.flicker.WmTraceSubject
-import com.android.server.wm.flicker.helpers.PipAppHelper
+import androidx.test.filters.RequiresDevice
+import com.android.server.wm.flicker.dsl.flicker
+import com.android.server.wm.flicker.focusChanges
+import com.android.server.wm.flicker.helpers.closePipWindow
+import com.android.server.wm.flicker.helpers.hasPipWindow
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerRotatesAndScales
+import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.noUncoveredRegions
+import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,29 +41,88 @@ import org.junit.runners.Parameterized
  * Test Pip launch.
  * To run this test: `atest FlickerTests:PipToHomeTest`
  */
-@LargeTest
+@RequiresDevice
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @FlakyTest(bugId = 152738416)
 class PipToHomeTest(
-    beginRotationName: String,
-    beginRotation: Int
-) : PipTestBase(beginRotationName, beginRotation) {
-    override val transitionToRun: TransitionRunner
-        get() = CommonTransitions.exitPipModeToHome(testApp as PipAppHelper, instrumentation,
-                uiDevice, beginRotation)
-                .includeJankyRuns().build()
-
+    rotationName: String,
+    rotation: Int
+) : PipTestBase(rotationName, rotation) {
     @Test
-    fun checkVisibility_backgroundWindowVisibleBehindPipLayer() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAppWindowOnTop(sPipWindowTitle)
-                    .then()
-                    .showsBelowAppWindow("Wallpaper")
-                    .then()
-                    .showsAppWindowOnTop("Wallpaper")
-                    .forAllEntries()
+    fun test() {
+        flicker(instrumentation) {
+            withTag { buildTestTag("exitPipModeToApp", testApp, rotation) }
+            repeat { 1 }
+            setup {
+                test {
+                    device.wakeUpAndGoToHomeScreen()
+                    device.pressHome()
+                }
+                eachRun {
+                    testApp.open()
+                    this.setRotation(rotation)
+                    testApp.clickEnterPipButton(device)
+                    device.hasPipWindow()
+                }
+            }
+            teardown {
+                eachRun {
+                    this.setRotation(Surface.ROTATION_0)
+                    if (device.hasPipWindow()) {
+                        device.closePipWindow()
+                    }
+                }
+                test {
+                    if (device.hasPipWindow()) {
+                        device.closePipWindow()
+                    }
+                    testApp.exit()
+                }
+            }
+            transitions {
+                testApp.closePipWindow(device)
+            }
+            assertions {
+                windowManagerTrace {
+                    navBarWindowIsAlwaysVisible()
+                    statusBarWindowIsAlwaysVisible()
+
+                    all("pipWindowBecomesInvisible") {
+                        this.showsAppWindow(sPipWindowTitle)
+                                .then()
+                                .hidesAppWindow(sPipWindowTitle)
+                    }
+                }
+
+                layersTrace {
+                    navBarLayerIsAlwaysVisible()
+                    statusBarLayerIsAlwaysVisible()
+                    // The final state is the launcher, so always in portrait mode
+                    noUncoveredRegions(rotation, Surface.ROTATION_0, allStates = false)
+                    navBarLayerRotatesAndScales(rotation)
+                    statusBarLayerRotatesScales(rotation)
+
+                    all("pipLayerBecomesInvisible") {
+                        this.showsLayer(sPipWindowTitle)
+                                .then()
+                                .hidesLayer(sPipWindowTitle)
+                    }
+                }
+
+                eventLog {
+                    focusChanges(testApp.launcherName, "NexusLauncherActivity", bugId = 151179149)
+                }
+            }
+        }
+    }
+
+    companion object {
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): Collection<Array<Any>> {
+            val supportedRotations = intArrayOf(Surface.ROTATION_0)
+            return supportedRotations.map { arrayOf(Surface.rotationToString(it), it) }
         }
     }
 }

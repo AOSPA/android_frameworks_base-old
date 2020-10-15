@@ -46,20 +46,39 @@ public abstract class ActivityManagerInternal {
 
 
     // Access modes for handleIncomingUser.
+    /**
+     * Allows access to a caller with {@link android.Manifest.permission#INTERACT_ACROSS_USERS} or
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL}.
+     */
     public static final int ALLOW_NON_FULL = 0;
     /**
      * Allows access to a caller with {@link android.Manifest.permission#INTERACT_ACROSS_USERS}
-     * if in the same profile group.
+     * or {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} if in the same profile
+     * group.
      * Otherwise, {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} is required.
      */
-    public static final int ALLOW_NON_FULL_IN_PROFILE = 1;
+    public static final int ALLOW_NON_FULL_IN_PROFILE_OR_FULL = 1;
+    /**
+     * Allows access to a caller with {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL}
+     * only.
+     */
     public static final int ALLOW_FULL_ONLY = 2;
     /**
      * Allows access to a caller with {@link android.Manifest.permission#INTERACT_ACROSS_PROFILES}
-     * or {@link android.Manifest.permission#INTERACT_ACROSS_USERS} if in the same profile group.
+     * or {@link android.Manifest.permission#INTERACT_ACROSS_USERS} or
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} if in the same profile group.
      * Otherwise, {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} is required.
      */
-    public static final int ALLOW_ALL_PROFILE_PERMISSIONS_IN_PROFILE = 3;
+    public static final int ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_FULL = 3;
+    /**
+     * Requires {@link android.Manifest.permission#INTERACT_ACROSS_PROFILES},
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS}, or
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} if in same profile group,
+     * otherwise {@link android.Manifest.permission#INTERACT_ACROSS_USERS} or
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL}. (so this is an extension
+     * to {@link #ALLOW_NON_FULL})
+     */
+    public static final int ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_NON_FULL = 4;
 
     /**
      * Verify that calling app has access to the given provider.
@@ -318,12 +337,14 @@ public abstract class ActivityManagerInternal {
             int uid, int realCallingUid, int realCallingPid, Intent intent, String resolvedType,
             IIntentReceiver resultTo, int resultCode, String resultData, Bundle resultExtras,
             String requiredPermission, Bundle bOptions, boolean serialized, boolean sticky,
-            @UserIdInt int userId, boolean allowBackgroundActivityStarts);
+            @UserIdInt int userId, boolean allowBackgroundActivityStarts,
+            @Nullable IBinder backgroundActivityStartsToken);
 
     public abstract ComponentName startServiceInPackage(int uid, Intent service,
             String resolvedType, boolean fgRequired, String callingPackage,
             @Nullable String callingFeatureId, @UserIdInt int userId,
-            boolean allowBackgroundActivityStarts) throws TransactionTooLargeException;
+            boolean allowBackgroundActivityStarts,
+            @Nullable IBinder backgroundActivityStartsToken) throws TransactionTooLargeException;
 
     public abstract void disconnectActivityFromServices(Object connectionHolder);
     public abstract void cleanUpServices(@UserIdInt int userId, ComponentName component,
@@ -339,7 +360,8 @@ public abstract class ActivityManagerInternal {
     /** @see com.android.server.am.ActivityManagerService#monitor */
     public abstract void monitor();
 
-    /** Input dispatch timeout to a window, start the ANR process. */
+    /** Input dispatch timeout to a window, start the ANR process. Return the timeout extension,
+     * in milliseconds, or 0 to abort dispatch. */
     public abstract long inputDispatchingTimedOut(int pid, boolean aboveSystem, String reason);
     public abstract boolean inputDispatchingTimedOut(Object proc, String activityShortComponentName,
             ApplicationInfo aInfo, String parentShortComponentName, Object parentProc,
@@ -446,7 +468,7 @@ public abstract class ActivityManagerInternal {
     public abstract int broadcastIntent(Intent intent,
             IIntentReceiver resultTo,
             String[] requiredPermissions, boolean serialized,
-            int userId, int[] appIdWhitelist);
+            int userId, int[] appIdAllowList);
 
     /**
      * Add uid to the ActivityManagerService PendingStartActivityUids list.

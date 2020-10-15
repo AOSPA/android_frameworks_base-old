@@ -22,6 +22,10 @@ java_library {
     proto: {
         type: "nano",
     },
+
+    libs: [
+        "WindowManager-Shell-proto",
+    ],
 }
 
 java_library {
@@ -195,6 +199,9 @@ android_app {
     kotlincflags: ["-Xjvm-default=enable"],
 
     dxflags: ["--multi-dex"],
-    required: ["privapp_whitelist_com.android.systemui"],
+    required: [
+        "privapp_whitelist_com.android.systemui",
+        "checked-wm_shell_protolog.json",
+    ],
 
 }

@@ -143,11 +143,10 @@ static jlong android_view_ThreadedRenderer_createRootRenderNode(JNIEnv* env, job
 }
 
 static jlong android_view_ThreadedRenderer_createProxy(JNIEnv* env, jobject clazz,
-        jboolean translucent, jboolean isWideGamut, jlong rootRenderNodePtr) {
+        jboolean translucent, jlong rootRenderNodePtr) {
     RootRenderNode* rootRenderNode = reinterpret_cast<RootRenderNode*>(rootRenderNodePtr);
     ContextFactoryImpl factory(rootRenderNode);
     RenderProxy* proxy = new RenderProxy(translucent, rootRenderNode, &factory);
-    proxy->setWideGamut(isWideGamut);
     return (jlong) proxy;
 }
 
@@ -185,7 +184,9 @@ static void android_view_ThreadedRenderer_setSurface(JNIEnv* env, jobject clazz,
         proxy->setSwapBehavior(SwapBehavior::kSwap_discardBuffer);
     }
     proxy->setSurface(window, enableTimeout);
-    ANativeWindow_release(window);
+    if (window) {
+        ANativeWindow_release(window);
+    }
 }
 
 static jboolean android_view_ThreadedRenderer_pause(JNIEnv* env, jobject clazz,
@@ -218,10 +219,15 @@ static void android_view_ThreadedRenderer_setOpaque(JNIEnv* env, jobject clazz,
     proxy->setOpaque(opaque);
 }
 
-static void android_view_ThreadedRenderer_setWideGamut(JNIEnv* env, jobject clazz,
-        jlong proxyPtr, jboolean wideGamut) {
+static void android_view_ThreadedRenderer_setColorMode(JNIEnv* env, jobject clazz,
+        jlong proxyPtr, jint colorMode) {
     RenderProxy* proxy = reinterpret_cast<RenderProxy*>(proxyPtr);
-    proxy->setWideGamut(wideGamut);
+    proxy->setColorMode(static_cast<ColorMode>(colorMode));
+}
+
+static void android_view_ThreadedRenderer_setSdrWhitePoint(JNIEnv* env, jobject clazz,
+        jlong proxyPtr, jfloat sdrWhitePoint) {
+    Properties::defaultSdrWhitePoint = sdrWhitePoint;
 }
 
 static int android_view_ThreadedRenderer_syncAndDrawFrame(JNIEnv* env, jobject clazz,
@@ -508,7 +514,7 @@ static jobject android_view_ThreadedRenderer_createHardwareBitmapFromRenderNode(
         proxy.setLightGeometry((Vector3){0, 0, 0}, 0);
         nsecs_t vsync = systemTime(SYSTEM_TIME_MONOTONIC);
         UiFrameInfoBuilder(proxy.frameInfo())
-                .setVsync(vsync, vsync)
+                .setVsync(vsync, vsync, UiFrameInfoBuilder::INVALID_VSYNC_ID)
                 .addFlag(FrameInfoFlags::SurfaceCanvas);
         proxy.syncAndDrawFrame();
     }
@@ -659,7 +665,7 @@ static const JNINativeMethod gMethods[] = {
          (void*)android_view_ThreadedRenderer_setProcessStatsBuffer},
         {"nGetRenderThreadTid", "(J)I", (void*)android_view_ThreadedRenderer_getRenderThreadTid},
         {"nCreateRootRenderNode", "()J", (void*)android_view_ThreadedRenderer_createRootRenderNode},
-        {"nCreateProxy", "(ZZJ)J", (void*)android_view_ThreadedRenderer_createProxy},
+        {"nCreateProxy", "(ZJ)J", (void*)android_view_ThreadedRenderer_createProxy},
         {"nDeleteProxy", "(J)V", (void*)android_view_ThreadedRenderer_deleteProxy},
         {"nLoadSystemProperties", "(J)Z",
          (void*)android_view_ThreadedRenderer_loadSystemProperties},
@@ -671,7 +677,8 @@ static const JNINativeMethod gMethods[] = {
         {"nSetLightAlpha", "(JFF)V", (void*)android_view_ThreadedRenderer_setLightAlpha},
         {"nSetLightGeometry", "(JFFFF)V", (void*)android_view_ThreadedRenderer_setLightGeometry},
         {"nSetOpaque", "(JZ)V", (void*)android_view_ThreadedRenderer_setOpaque},
-        {"nSetWideGamut", "(JZ)V", (void*)android_view_ThreadedRenderer_setWideGamut},
+        {"nSetColorMode", "(JI)V", (void*)android_view_ThreadedRenderer_setColorMode},
+        {"nSetSdrWhitePoint", "(JF)V", (void*)android_view_ThreadedRenderer_setSdrWhitePoint},
         {"nSyncAndDrawFrame", "(J[JI)I", (void*)android_view_ThreadedRenderer_syncAndDrawFrame},
         {"nDestroy", "(JJ)V", (void*)android_view_ThreadedRenderer_destroy},
         {"nRegisterAnimatingRenderNode", "(JJ)V",

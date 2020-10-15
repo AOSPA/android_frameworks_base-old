@@ -16,8 +16,6 @@
 
 package com.android.systemui.statusbar.phone;
 
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
-import static android.view.ViewRootImpl.sNewInsetsMode;
 import static android.view.WindowInsets.Type.navigationBars;
 
 import static com.android.systemui.plugins.ActivityStarter.OnDismissAction;
@@ -46,15 +44,16 @@ import com.android.keyguard.KeyguardViewController;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.settingslib.animation.AppearAnimationUtils;
 import com.android.systemui.DejankUtils;
-import com.android.systemui.SystemUIFactory;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dock.DockManager;
-import com.android.systemui.keyguard.DismissCallbackRegistry;
-import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.keyguard.FaceAuthScreenBrightnessController;
+import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.NotificationMediaManager;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
@@ -65,9 +64,9 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Optional;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Manages creating, showing, hiding and resetting the keyguard within the status bar. Calls back
@@ -75,7 +74,7 @@ import javax.inject.Singleton;
  * which is in turn, reported to this class by the current
  * {@link com.android.keyguard.KeyguardViewBase}.
  */
-@Singleton
+@SysUISingleton
 public class StatusBarKeyguardViewManager implements RemoteInputController.Callback,
         StatusBarStateController.StateListener, ConfigurationController.ConfigurationListener,
         PanelExpansionListener, NavigationModeController.ModeChangedListener,
@@ -101,6 +100,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private final ConfigurationController mConfigurationController;
     private final NavigationModeController mNavigationModeController;
     private final NotificationShadeWindowController mNotificationShadeWindowController;
+    private final Optional<FaceAuthScreenBrightnessController> mFaceAuthScreenBrightnessController;
+    private final KeyguardBouncer.Factory mKeyguardBouncerFactory;
     private final BouncerExpansionCallback mExpansionCallback = new BouncerExpansionCallback() {
         @Override
         public void onFullyShown() {
@@ -210,7 +211,9 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             DockManager dockManager,
             NotificationShadeWindowController notificationShadeWindowController,
             KeyguardStateController keyguardStateController,
-            NotificationMediaManager notificationMediaManager) {
+            Optional<FaceAuthScreenBrightnessController> faceAuthScreenBrightnessController,
+            NotificationMediaManager notificationMediaManager,
+            KeyguardBouncer.Factory keyguardBouncerFactory) {
         mContext = context;
         mViewMediatorCallback = callback;
         mLockPatternUtils = lockPatternUtils;
@@ -222,6 +225,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mKeyguardUpdateManager = keyguardUpdateMonitor;
         mStatusBarStateController = sysuiStatusBarStateController;
         mDockManager = dockManager;
+        mFaceAuthScreenBrightnessController = faceAuthScreenBrightnessController;
+        mKeyguardBouncerFactory = keyguardBouncerFactory;
     }
 
     @Override
@@ -229,9 +234,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             ViewGroup container,
             NotificationPanelViewController notificationPanelViewController,
             BiometricUnlockController biometricUnlockController,
-            DismissCallbackRegistry dismissCallbackRegistry,
             ViewGroup lockIconContainer, View notificationContainer,
-            KeyguardBypassController bypassController, FalsingManager falsingManager) {
+            KeyguardBypassController bypassController) {
         mStatusBar = statusBar;
         mContainer = container;
         mLockIconContainer = lockIconContainer;
@@ -239,13 +243,16 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             mLastLockVisible = mLockIconContainer.getVisibility() == View.VISIBLE;
         }
         mBiometricUnlockController = biometricUnlockController;
-        mBouncer = SystemUIFactory.getInstance().createKeyguardBouncer(mContext,
-                mViewMediatorCallback, mLockPatternUtils, container, dismissCallbackRegistry,
-                mExpansionCallback, mKeyguardStateController, falsingManager, bypassController);
+        mBouncer = mKeyguardBouncerFactory.create(container, mExpansionCallback);
         mNotificationPanelViewController = notificationPanelViewController;
         notificationPanelViewController.addExpansionListener(this);
         mBypassController = bypassController;
         mNotificationContainer = notificationContainer;
+        mFaceAuthScreenBrightnessController.ifPresent((it) -> {
+            View overlay = new View(mContext);
+            container.addView(overlay);
+            it.attach(overlay);
+        });
 
         registerListeners();
     }
@@ -794,12 +801,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private Runnable mMakeNavigationBarVisibleRunnable = new Runnable() {
         @Override
         public void run() {
-            if (ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_FULL) {
-                mStatusBar.getNotificationShadeWindowView().getWindowInsetsController()
-                        .show(navigationBars());
-            } else {
-                mStatusBar.getNavigationBarView().getRootView().setVisibility(View.VISIBLE);
-            }
+            mStatusBar.getNotificationShadeWindowView().getWindowInsetsController()
+                    .show(navigationBars());
         }
     };
 
@@ -867,12 +870,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 }
             } else {
                 mContainer.removeCallbacks(mMakeNavigationBarVisibleRunnable);
-                if (sNewInsetsMode == NEW_INSETS_MODE_FULL) {
-                    mStatusBar.getNotificationShadeWindowView().getWindowInsetsController()
-                            .hide(navigationBars());
-                } else {
-                    mStatusBar.getNavigationBarView().getRootView().setVisibility(View.GONE);
-                }
+                mStatusBar.getNotificationShadeWindowView().getWindowInsetsController()
+                        .hide(navigationBars());
             }
         }
     }

@@ -33,6 +33,7 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.car.CarSystemUiTest;
 import com.android.systemui.car.hvac.HvacController;
+import com.android.systemui.car.statusbar.UserNameViewController;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 
@@ -48,6 +49,10 @@ import org.mockito.MockitoAnnotations;
 @SmallTest
 public class CarNavigationBarControllerTest extends SysuiTestCase {
 
+    private static final String TOP_NOTIFICATION_PANEL =
+            "com.android.systemui.car.notification.TopNotificationPanelViewMediator";
+    private static final String BOTTOM_NOTIFICATION_PANEL =
+            "com.android.systemui.car.notification.BottomNotificationPanelViewMediator";
     private CarNavigationBarController mCarNavigationBar;
     private NavigationBarViewFactory mNavigationBarViewFactory;
     private TestableResources mTestableResources;
@@ -58,6 +63,8 @@ public class CarNavigationBarControllerTest extends SysuiTestCase {
     private ButtonRoleHolderController mButtonRoleHolderController;
     @Mock
     private HvacController mHvacController;
+    @Mock
+    private UserNameViewController mUserNameViewController;
 
     @Before
     public void setUp() throws Exception {
@@ -73,7 +80,8 @@ public class CarNavigationBarControllerTest extends SysuiTestCase {
     private CarNavigationBarController createNavigationBarController() {
         return new CarNavigationBarController(mContext, mNavigationBarViewFactory,
                 mButtonSelectionStateController, () -> mHvacController,
-                mButtonRoleHolderController);
+                () -> mUserNameViewController, mButtonRoleHolderController,
+                new SystemBarConfigs(mTestableResources.getResources()));
     }
 
     @Test
@@ -116,6 +124,11 @@ public class CarNavigationBarControllerTest extends SysuiTestCase {
     @Test
     public void testGetTopWindow_topDisabled_returnsNull() {
         mTestableResources.addOverride(R.bool.config_enableTopNavigationBar, false);
+        mTestableResources.addOverride(R.bool.config_enableBottomNavigationBar, true);
+        // If Top Notification Panel is used but top navigation bar is not enabled, SystemUI is
+        // expected to crash.
+        mTestableResources.addOverride(R.string.config_notificationPanelViewMediator,
+                BOTTOM_NOTIFICATION_PANEL);
         mCarNavigationBar = createNavigationBarController();
 
         ViewGroup window = mCarNavigationBar.getTopWindow();
@@ -147,6 +160,11 @@ public class CarNavigationBarControllerTest extends SysuiTestCase {
     @Test
     public void testGetBottomWindow_bottomDisabled_returnsNull() {
         mTestableResources.addOverride(R.bool.config_enableBottomNavigationBar, false);
+        mTestableResources.addOverride(R.bool.config_enableTopNavigationBar, true);
+        // If Bottom Notification Panel is used but bottom navigation bar is not enabled,
+        // SystemUI is expected to crash.
+        mTestableResources.addOverride(R.string.config_notificationPanelViewMediator,
+                TOP_NOTIFICATION_PANEL);
         mCarNavigationBar = createNavigationBarController();
 
         ViewGroup window = mCarNavigationBar.getBottomWindow();
@@ -233,6 +251,28 @@ public class CarNavigationBarControllerTest extends SysuiTestCase {
         ViewGroup window2 = mCarNavigationBar.getRightWindow();
 
         assertThat(window1).isEqualTo(window2);
+    }
+
+    @Test
+    public void testSetTopWindowVisibility_setTrue_isVisible() {
+        mTestableResources.addOverride(R.bool.config_enableTopNavigationBar, true);
+        mCarNavigationBar = createNavigationBarController();
+
+        ViewGroup window = mCarNavigationBar.getTopWindow();
+        mCarNavigationBar.setTopWindowVisibility(View.VISIBLE);
+
+        assertThat(window.getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    @Test
+    public void testSetTopWindowVisibility_setFalse_isGone() {
+        mTestableResources.addOverride(R.bool.config_enableTopNavigationBar, true);
+        mCarNavigationBar = createNavigationBarController();
+
+        ViewGroup window = mCarNavigationBar.getTopWindow();
+        mCarNavigationBar.setTopWindowVisibility(View.GONE);
+
+        assertThat(window.getVisibility()).isEqualTo(View.GONE);
     }
 
     @Test

@@ -23,16 +23,14 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.view.SurfaceControl;
 
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.wm.shell.R;
-
-import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Abstracts the common operations on {@link SurfaceControl.Transaction} for PiP transition.
  */
-@Singleton
+@SysUISingleton
 public class PipSurfaceTransactionHelper implements ConfigurationController.ConfigurationListener {
 
     private final Context mContext;
@@ -46,7 +44,6 @@ public class PipSurfaceTransactionHelper implements ConfigurationController.Conf
     private final RectF mTmpDestinationRectF = new RectF();
     private final Rect mTmpDestinationRect = new Rect();
 
-    @Inject
     public PipSurfaceTransactionHelper(Context context, ConfigurationController configController) {
         final Resources res = context.getResources();
         mContext = context;

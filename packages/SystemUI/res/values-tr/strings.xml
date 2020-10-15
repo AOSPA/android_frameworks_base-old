@@ -108,10 +108,8 @@
     <string name="screenrecord_resume_label" msgid="4972223043729555575">"Devam ettir"</string>
     <string name="screenrecord_cancel_label" msgid="7850926573274483294">"İptal"</string>
     <string name="screenrecord_share_label" msgid="5025590804030086930">"Paylaş"</string>
-    <string name="screenrecord_delete_label" msgid="1376347010553987058">"Sil"</string>
     <string name="screenrecord_cancel_success" msgid="1775448688137393901">"Ekran kaydı iptal edildi"</string>
     <string name="screenrecord_save_message" msgid="490522052388998226">"Ekran kaydı tamamlandı, görüntülemek için dokunun"</string>
-    <string name="screenrecord_delete_description" msgid="1604522770162810570">"Ekran kaydı silindi"</string>
     <string name="screenrecord_delete_error" msgid="2870506119743013588">"Ekran kaydı silinirken hata oluştu"</string>
     <string name="screenrecord_permission_error" msgid="7856841237023137686">"İzinler alınamadı"</string>
     <string name="screenrecord_start_error" msgid="2200660692479682368">"Ekran kaydı başlatılırken hata oluştu"</string>
@@ -881,29 +879,22 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"Düşük öncelikli bildirim simgelerini göster"</string>
     <string name="other" msgid="429768510980739978">"Diğer"</string>
-    <string name="accessibility_divider" msgid="2830785970889237307">"Bölünmüş ekran ayırıcı"</string>
-    <string name="accessibility_action_divider_left_full" msgid="7598733539422375847">"Solda tam ekran"</string>
-    <string name="accessibility_action_divider_left_70" msgid="4919312892541727761">"Solda %70"</string>
-    <string name="accessibility_action_divider_left_50" msgid="3664701169564893826">"Solda %50"</string>
-    <string name="accessibility_action_divider_left_30" msgid="4358145268046362088">"Solda %30"</string>
-    <string name="accessibility_action_divider_right_full" msgid="8576057422864896305">"Sağda tam ekran"</string>
-    <string name="accessibility_action_divider_top_full" msgid="4243901660795169777">"Üstte tam ekran"</string>
-    <string name="accessibility_action_divider_top_70" msgid="6941226213260515072">"Üstte %70"</string>
-    <string name="accessibility_action_divider_top_50" msgid="6275211443706497621">"Üstte %50"</string>
-    <string name="accessibility_action_divider_top_30" msgid="5780597635887574916">"Üstte %30"</string>
-    <string name="accessibility_action_divider_bottom_full" msgid="7352434720610115395">"Altta tam ekran"</string>
-    <string name="accessibility_qs_edit_tile_label" msgid="9079791448815232967">"<xliff:g id="POSITION">%1$d</xliff:g>. konum, <xliff:g id="TILE_NAME">%2$s</xliff:g>. Düzenlemek için iki kez dokunun."</string>
-    <string name="accessibility_qs_edit_add_tile_label" msgid="8292218072049068613">"<xliff:g id="TILE_NAME">%1$s</xliff:g>. Eklemek için iki kez dokunun."</string>
-    <string name="accessibility_qs_edit_move_tile" msgid="6027997446473163426">"<xliff:g id="TILE_NAME">%1$s</xliff:g> kutusunu taşı"</string>
-    <string name="accessibility_qs_edit_remove_tile" msgid="3406781901949899624">"<xliff:g id="TILE_NAME">%1$s</xliff:g> kutusunu kaldır"</string>
-    <string name="accessibility_qs_edit_tile_add" msgid="6289879620154587233">"<xliff:g id="TILE_NAME">%1$s</xliff:g> öğesini <xliff:g id="POSITION">%2$d</xliff:g> konumuna ekle"</string>
-    <string name="accessibility_qs_edit_tile_move" msgid="4841770637244326837">"<xliff:g id="TILE_NAME">%1$s</xliff:g> öğesini <xliff:g id="POSITION">%2$d</xliff:g> konumuna taşı"</string>
+    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
+    <skip />
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"Hızlı ayar düzenleyicisi."</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"<xliff:g id="ID_1">%1$s</xliff:g> bildirimi: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
-    <string name="dock_forced_resizable" msgid="4689301323912928801">"Uygulama bölünmüş ekranda çalışmayabilir."</string>
-    <string name="dock_non_resizeble_failed_to_dock_text" msgid="7284915968096153808">"Uygulama bölünmüş ekranı desteklemiyor."</string>
-    <string name="forced_resizable_secondary_display" msgid="522558907654394940">"Uygulama ikincil ekranda çalışmayabilir."</string>
-    <string name="activity_launch_on_secondary_display_failed_text" msgid="8446727617187998208">"Uygulama ikincil ekranlarda başlatılmayı desteklemiyor."</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"Ayarları aç."</string>
     <string name="accessibility_quick_settings_expand" msgid="2609275052412521467">"Hızlı ayarları aç."</string>
     <string name="accessibility_quick_settings_collapse" msgid="4674876336725041982">"Hızlı ayarları kapat."</string>
@@ -985,6 +976,13 @@
     <string name="open_saver_setting_action" msgid="2111461909782935190">"Ayarlar"</string>
     <string name="auto_saver_okay_action" msgid="7815925750741935386">"Anladım"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"SysUI Yığın Dökümü"</string>
+    <string name="ongoing_privacy_chip_content_single_app" msgid="2969750601815230385">"<xliff:g id="APP">%1$s</xliff:g> şunları kullanıyor: <xliff:g id="TYPES_LIST">%2$s</xliff:g>."</string>
+    <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Uygulamalar şunları kullanıyor: <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
+    <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
+    <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" ve "</string>
+    <string name="privacy_type_camera" msgid="7974051382167078332">"kamera"</string>
+    <string name="privacy_type_location" msgid="7991481648444066703">"konum"</string>
+    <string name="privacy_type_microphone" msgid="9136763906797732428">"mikrofon"</string>
     <string name="sensor_privacy_mode" msgid="4462866919026513692">"Sensörler kapalı"</string>
     <string name="device_services" msgid="1549944177856658705">"Cihaz Hizmetleri"</string>
     <string name="music_controls_no_title" msgid="4166497066552290938">"Başlıksız"</string>
@@ -1062,7 +1060,7 @@
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Öneriler yükleniyor"</string>
     <string name="controls_media_title" msgid="1746947284862928133">"Medya"</string>
     <string name="controls_media_close_session" msgid="3957093425905475065">"Mevcut oturumu gizle."</string>
-    <string name="controls_media_dismiss_button" msgid="4485675693008031646">"Gizle"</string>
+    <string name="controls_media_dismiss_button" msgid="9081375542265132213">"Kapat"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"Devam ettir"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"Ayarlar"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Devre dışı, uygulamaya bakın"</string>
@@ -1077,4 +1075,11 @@
     <string name="controls_added_tooltip" msgid="4842812921719153085">"Yeni kontrolleri görmek için Güç düğmesini basılı tutun"</string>
     <string name="controls_menu_add" msgid="4447246119229920050">"Denetim ekle"</string>
     <string name="controls_menu_edit" msgid="890623986951347062">"Denetimleri düzenle"</string>
+    <string name="media_output_dialog_add_output" msgid="5642703238877329518">"Çıkışlar ekleyin"</string>
+    <string name="media_output_dialog_group" msgid="5571251347877452212">"Grup"</string>
+    <string name="media_output_dialog_single_device" msgid="3102758980643351058">"1 cihaz seçildi"</string>
+    <string name="media_output_dialog_multiple_devices" msgid="1093771040315422350">"<xliff:g id="COUNT">%1$d</xliff:g> cihaz seçildi"</string>
+    <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (bağlı değil)"</string>
+    <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"Bağlanılamadı. Tekrar deneyin."</string>
+    <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Yeni cihaz eşle"</string>
 </resources>

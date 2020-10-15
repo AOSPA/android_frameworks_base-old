@@ -25,6 +25,7 @@ import android.util.SparseIntArray;
 
 import dalvik.system.CloseGuard;
 
+import java.io.PrintWriter;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 
@@ -54,6 +55,7 @@ public abstract class InputEventReceiver {
     private static native void nativeFinishInputEvent(long receiverPtr, int seq, boolean handled);
     private static native boolean nativeConsumeBatchedInputEvents(long receiverPtr,
             long frameTimeNanos);
+    private static native String nativeDump(long receiverPtr, String prefix);
 
     /**
      * Creates an input event receiver bound to the specified input channel.
@@ -234,6 +236,18 @@ public abstract class InputEventReceiver {
             Log.e(TAG, "cannot invoke setMotionEventInfo.");
         }
     }
+    /**
+     * Dump the state of this InputEventReceiver to the writer.
+     * @param prefix the prefix (typically whitespace padding) to append in front of each line
+     * @param writer the writer where the dump should be written
+     */
+    public void dump(String prefix, PrintWriter writer) {
+        writer.println(prefix + getClass().getName());
+        writer.println(prefix + " mInputChannel: " + mInputChannel);
+        writer.println(prefix + " mSeqMap: " + mSeqMap);
+        writer.println(prefix + " mReceiverPtr:\n" + nativeDump(mReceiverPtr, prefix + "  "));
+    }
+
     /**
      * Factory for InputEventReceiver
      */

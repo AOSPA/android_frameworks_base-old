@@ -24,9 +24,7 @@ import android.testing.TestableLooper.RunWithLooper;
 import android.view.LayoutInflater;
 
 import com.android.systemui.R;
-import com.android.systemui.SystemUIFactory;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.util.InjectionInflationController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -40,7 +38,8 @@ import org.mockito.Mock;
 public class KeyguardStatusViewTest extends SysuiTestCase {
 
     @Mock
-    KeyguardSliceView mKeyguardSlice;
+    KeyguardSliceViewController mKeyguardSliceViewController;
+
     @Mock
     KeyguardClockSwitch mClockView;
     @InjectMocks
@@ -49,11 +48,7 @@ public class KeyguardStatusViewTest extends SysuiTestCase {
     @Before
     public void setUp() {
         allowTestableLooperAsMainThread();
-        mDependency.injectMockDependency(KeyguardUpdateMonitor.class);
-        InjectionInflationController inflationController = new InjectionInflationController(
-                SystemUIFactory.getInstance().getRootComponent());
-        LayoutInflater layoutInflater = inflationController
-                .injectable(LayoutInflater.from(getContext()));
+        LayoutInflater layoutInflater = LayoutInflater.from(getContext());
         mKeyguardStatusView =
                 (KeyguardStatusView) layoutInflater.inflate(R.layout.keyguard_status_view, null);
         org.mockito.MockitoAnnotations.initMocks(this);
@@ -62,7 +57,7 @@ public class KeyguardStatusViewTest extends SysuiTestCase {
     @Test
     public void dozeTimeTick_updatesSlice() {
         mKeyguardStatusView.dozeTimeTick();
-        verify(mKeyguardSlice).refresh();
+        verify(mKeyguardSliceViewController).refresh();
     }
 
     @Test

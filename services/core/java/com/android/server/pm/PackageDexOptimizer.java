@@ -193,13 +193,13 @@ public class PackageDexOptimizer {
         String[] classLoaderContexts = DexoptUtils.getClassLoaderContexts(
                 pkg, sharedLibraries, pathsWithCode);
 
-        // Sanity check that we do not call dexopt with inconsistent data.
+        // Validity check that we do not call dexopt with inconsistent data.
         if (paths.size() != classLoaderContexts.length) {
             String[] splitCodePaths = pkg.getSplitCodePaths();
             throw new IllegalStateException("Inconsistent information "
                 + "between PackageParser.Package and its ApplicationInfo. "
                 + "pkg.getAllCodePaths=" + paths
-                + " pkg.getBaseCodePath=" + pkg.getBaseCodePath()
+                + " pkg.getBaseCodePath=" + pkg.getBaseApkPath()
                 + " pkg.getSplitCodePaths="
                 + (splitCodePaths == null ? "null" : Arrays.toString(splitCodePaths)));
         }
@@ -676,7 +676,7 @@ public class PackageDexOptimizer {
         int profileFlag = isProfileGuidedFilter ? DEXOPT_PROFILE_GUIDED : 0;
         // Some apps are executed with restrictions on hidden API usage. If this app is one
         // of them, pass a flag to dexopt to enable the same restrictions during compilation.
-        // TODO we should pass the actual flag value to dexopt, rather than assuming blacklist
+        // TODO we should pass the actual flag value to dexopt, rather than assuming denylist
         // TODO(b/135203078): This flag is no longer set as part of AndroidPackage
         //  and may not be preserved
         int hiddenApiFlag = hiddenApiEnforcementPolicy == HIDDEN_API_ENFORCEMENT_DISABLED
@@ -772,7 +772,7 @@ public class PackageDexOptimizer {
         if (!AndroidPackageUtils.canHaveOatDir(pkg, isUpdatedSystemApp)) {
             return null;
         }
-        File codePath = new File(pkg.getCodePath());
+        File codePath = new File(pkg.getPath());
         if (!codePath.isDirectory()) {
             return null;
         }

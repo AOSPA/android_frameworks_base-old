@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.app.ActivityTaskManager.RESIZE_MODE_USER;
 import static android.app.ActivityTaskManager.RESIZE_MODE_USER_FORCED;
+import static android.os.IInputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 
 import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_BOTTOM;
@@ -25,8 +26,8 @@ import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_LEFT;
 import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_NONE;
 import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_RIGHT;
 import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_TOP;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_POSITIONING;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
@@ -58,7 +59,7 @@ import android.view.WindowManager;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.TaskResizingAlgorithm;
 import com.android.internal.policy.TaskResizingAlgorithm.CtrlType;
-import com.android.server.protolog.common.ProtoLog;
+import com.android.internal.protolog.common.ProtoLog;
 
 class TaskPositioner implements IBinder.DeathRecipient {
     private static final boolean DEBUG_ORIENTATION_VIOLATIONS = false;
@@ -230,8 +231,8 @@ class TaskPositioner implements IBinder.DeathRecipient {
 
         mDragApplicationHandle = new InputApplicationHandle(new Binder());
         mDragApplicationHandle.name = TAG;
-        mDragApplicationHandle.dispatchingTimeoutNanos =
-                WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
+        mDragApplicationHandle.dispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
+
 
         mDragWindowHandle = new InputWindowHandle(mDragApplicationHandle,
                 displayContent.getDisplayId());
@@ -239,11 +240,10 @@ class TaskPositioner implements IBinder.DeathRecipient {
         mDragWindowHandle.token = mServerChannel.getToken();
         mDragWindowHandle.layoutParamsFlags = 0;
         mDragWindowHandle.layoutParamsType = WindowManager.LayoutParams.TYPE_DRAG;
-        mDragWindowHandle.dispatchingTimeoutNanos =
-                WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
+        mDragWindowHandle.dispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
         mDragWindowHandle.visible = true;
-        mDragWindowHandle.canReceiveKeys = false;
-        mDragWindowHandle.hasFocus = true;
+        // When dragging the window around, we do not want to steal focus for the window.
+        mDragWindowHandle.focusable = false;
         mDragWindowHandle.hasWallpaper = false;
         mDragWindowHandle.paused = false;
         mDragWindowHandle.ownerPid = Process.myPid();
@@ -299,7 +299,7 @@ class TaskPositioner implements IBinder.DeathRecipient {
         }
 
         mService.mTaskPositioningController.hideInputSurface(mDisplayContent.getDisplayId());
-        mService.mInputManager.unregisterInputChannel(mServerChannel);
+        mService.mInputManager.unregisterInputChannel(mServerChannel.getToken());
 
         mInputEventReceiver.dispose();
         mInputEventReceiver = null;

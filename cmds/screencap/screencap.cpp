@@ -30,8 +30,9 @@
 
 #include <binder/ProcessState.h>
 
-#include <gui/SurfaceComposerClient.h>
 #include <gui/ISurfaceComposer.h>
+#include <gui/SurfaceComposerClient.h>
+#include <gui/SyncScreenCaptureListener.h>
 
 #include <ui/DisplayInfo.h>
 #include <ui/GraphicTypes.h>
@@ -51,12 +52,11 @@ static void usage(const char* pname, PhysicalDisplayId displayId)
             "usage: %s [-hp] [-d display-id] [FILENAME]\n"
             "   -h: this message\n"
             "   -p: save the file as a png.\n"
-            "   -d: specify the physical display ID to capture (default: %"
-                    ANDROID_PHYSICAL_DISPLAY_ID_FORMAT ")\n"
+            "   -d: specify the physical display ID to capture (default: %s)\n"
             "       see \"dumpsys SurfaceFlinger --display-id\" for valid display IDs.\n"
             "If FILENAME ends with .png it will be saved as a png.\n"
             "If FILENAME is not given, the results will be printed to stdout.\n",
-            pname, displayId);
+            pname, to_string(displayId).c_str());
 }
 
 static int32_t flinger2bitmapFormat(PixelFormat f)
@@ -137,7 +137,7 @@ int main(int argc, char** argv)
                 png = true;
                 break;
             case 'd':
-                displayId = atoll(optarg);
+                displayId = PhysicalDisplayId(atoll(optarg));
                 break;
             case '?':
             case 'h':
@@ -182,16 +182,22 @@ int main(int argc, char** argv)
     ProcessState::self()->setThreadPoolMaxThreadCount(0);
     ProcessState::self()->startThreadPool();
 
-    ui::Dataspace outDataspace;
-    sp<GraphicBuffer> outBuffer;
-
-    status_t result = ScreenshotClient::capture(*displayId, &outDataspace, &outBuffer);
+    sp<SyncScreenCaptureListener> captureListener = new SyncScreenCaptureListener();
+    status_t result = ScreenshotClient::captureDisplay(displayId->value, captureListener);
     if (result != NO_ERROR) {
         close(fd);
         return 1;
     }
 
-    result = outBuffer->lock(GraphicBuffer::USAGE_SW_READ_OFTEN, &base);
+    ScreenCaptureResults captureResults = captureListener->waitForResults();
+    if (captureResults.result != NO_ERROR) {
+        close(fd);
+        return 1;
+    }
+    ui::Dataspace dataspace = captureResults.capturedDataspace;
+    sp<GraphicBuffer> buffer = captureResults.buffer;
+
+    result = buffer->lock(GraphicBuffer::USAGE_SW_READ_OFTEN, &base);
 
     if (base == nullptr || result != NO_ERROR) {
         String8 reason;
@@ -207,13 +213,13 @@ int main(int argc, char** argv)
 
     if (png) {
         AndroidBitmapInfo info;
-        info.format = flinger2bitmapFormat(outBuffer->getPixelFormat());
+        info.format = flinger2bitmapFormat(buffer->getPixelFormat());
         info.flags = ANDROID_BITMAP_FLAGS_ALPHA_PREMUL;
-        info.width = outBuffer->getWidth();
-        info.height = outBuffer->getHeight();
-        info.stride = outBuffer->getStride() * bytesPerPixel(outBuffer->getPixelFormat());
+        info.width = buffer->getWidth();
+        info.height = buffer->getHeight();
+        info.stride = buffer->getStride() * bytesPerPixel(buffer->getPixelFormat());
 
-        int result = AndroidBitmap_compress(&info, static_cast<int32_t>(outDataspace), base,
+        int result = AndroidBitmap_compress(&info, static_cast<int32_t>(dataspace), base,
                                             ANDROID_BITMAP_COMPRESS_FORMAT_PNG, 100, &fd,
                                             [](void* fdPtr, const void* data, size_t size) -> bool {
                                                 int bytesWritten = write(*static_cast<int*>(fdPtr),
@@ -229,11 +235,11 @@ int main(int argc, char** argv)
             notifyMediaScanner(fn);
         }
     } else {
-        uint32_t w = outBuffer->getWidth();
-        uint32_t h = outBuffer->getHeight();
-        uint32_t s = outBuffer->getStride();
-        uint32_t f = outBuffer->getPixelFormat();
-        uint32_t c = dataSpaceToInt(outDataspace);
+        uint32_t w = buffer->getWidth();
+        uint32_t h = buffer->getHeight();
+        uint32_t s = buffer->getStride();
+        uint32_t f = buffer->getPixelFormat();
+        uint32_t c = dataSpaceToInt(dataspace);
 
         write(fd, &w, 4);
         write(fd, &h, 4);

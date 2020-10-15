@@ -39,6 +39,7 @@ import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
@@ -47,6 +48,8 @@ import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.navigationbar.NavigationBarController;
+import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.PluginDependencyProvider;
@@ -62,22 +65,21 @@ import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
 import com.android.systemui.shared.system.PackageManagerWrapper;
-import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationEntryManager.KeyguardEnvironment;
 import com.android.systemui.statusbar.notification.NotificationFilter;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
+import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
-import com.android.systemui.statusbar.notification.row.NotificationBlockingHelperManager;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.phone.AutoHideController;
 import com.android.systemui.statusbar.phone.DozeParameters;
@@ -85,10 +87,7 @@ import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
-import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper;
-import com.android.systemui.statusbar.phone.NotificationGroupManager;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
@@ -133,7 +132,6 @@ import javax.inject.Inject;
 import javax.inject.Named;
 
 import dagger.Lazy;
-import dagger.Subcomponent;
 
 /**
  * Class to handle ugly dependencies throughout sysui until we determine the
@@ -150,6 +148,7 @@ import dagger.Subcomponent;
  * they have no clients they should not have any registered resources like bound
  * services, registered receivers, etc.
  */
+@SysUISingleton
 public class Dependency {
     /**
      * Key for getting a the main looper.
@@ -276,11 +275,10 @@ public class Dependency {
     @Inject Lazy<StatusBarStateController> mStatusBarStateController;
     @Inject Lazy<NotificationLockscreenUserManager> mNotificationLockscreenUserManager;
     @Inject Lazy<NotificationGroupAlertTransferHelper> mNotificationGroupAlertTransferHelper;
-    @Inject Lazy<NotificationGroupManager> mNotificationGroupManager;
+    @Inject Lazy<NotificationGroupManagerLegacy> mNotificationGroupManager;
     @Inject Lazy<VisualStabilityManager> mVisualStabilityManager;
     @Inject Lazy<NotificationGutsManager> mNotificationGutsManager;
     @Inject Lazy<NotificationMediaManager> mNotificationMediaManager;
-    @Inject Lazy<NotificationBlockingHelperManager> mNotificationBlockingHelperManager;
     @Inject Lazy<NotificationRemoteInputManager> mNotificationRemoteInputManager;
     @Inject Lazy<SmartReplyConstants> mSmartReplyConstants;
     @Inject Lazy<NotificationListener> mNotificationListener;
@@ -323,7 +321,6 @@ public class Dependency {
     @Inject Lazy<DisplayImeController> mDisplayImeController;
     @Inject Lazy<RecordingController> mRecordingController;
     @Inject Lazy<ProtoTracer> mProtoTracer;
-    @Inject Lazy<Divider> mDivider;
 
     @Inject
     public Dependency() {
@@ -469,13 +466,11 @@ public class Dependency {
         mProviders.put(NotificationLockscreenUserManager.class,
                 mNotificationLockscreenUserManager::get);
         mProviders.put(VisualStabilityManager.class, mVisualStabilityManager::get);
-        mProviders.put(NotificationGroupManager.class, mNotificationGroupManager::get);
+        mProviders.put(NotificationGroupManagerLegacy.class, mNotificationGroupManager::get);
         mProviders.put(NotificationGroupAlertTransferHelper.class,
                 mNotificationGroupAlertTransferHelper::get);
         mProviders.put(NotificationMediaManager.class, mNotificationMediaManager::get);
         mProviders.put(NotificationGutsManager.class, mNotificationGutsManager::get);
-        mProviders.put(NotificationBlockingHelperManager.class,
-                mNotificationBlockingHelperManager::get);
         mProviders.put(NotificationRemoteInputManager.class,
                 mNotificationRemoteInputManager::get);
         mProviders.put(SmartReplyConstants.class, mSmartReplyConstants::get);
@@ -520,9 +515,13 @@ public class Dependency {
         mProviders.put(AutoHideController.class, mAutoHideController::get);
 
         mProviders.put(RecordingController.class, mRecordingController::get);
-        mProviders.put(Divider.class, mDivider::get);
 
-        sDependency = this;
+        Dependency.setInstance(this);
+    }
+
+    @VisibleForTesting
+    public static void setInstance(Dependency dependency) {
+        sDependency = dependency;
     }
 
     protected final <T> T getDependency(Class<T> cls) {
@@ -549,7 +548,7 @@ public class Dependency {
     }
 
     @VisibleForTesting
-    protected <T> T createDependency(Object cls) {
+    public <T> T createDependency(Object cls) {
         Preconditions.checkArgument(cls instanceof DependencyKey<?> || cls instanceof Class<?>);
 
         @SuppressWarnings("unchecked")
@@ -637,10 +636,5 @@ public class Dependency {
         public String toString() {
             return mDisplayName;
         }
-    }
-
-    @Subcomponent
-    public interface DependencyInjector {
-        void createSystemUI(Dependency dependency);
     }
 }

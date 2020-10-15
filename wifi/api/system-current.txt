@@ -292,6 +292,7 @@ package android.net.wifi {
     method public int getBandwidth();
     method @Nullable public android.net.MacAddress getBssid();
     method public int getFrequency();
+    method public int getWifiStandard();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field public static final int CHANNEL_WIDTH_160MHZ = 6; // 0x6
     field public static final int CHANNEL_WIDTH_20MHZ = 2; // 0x2
@@ -326,6 +327,8 @@ package android.net.wifi {
     field @Deprecated public static final int METERED_OVERRIDE_METERED = 1; // 0x1
     field @Deprecated public static final int METERED_OVERRIDE_NONE = 0; // 0x0
     field @Deprecated public static final int METERED_OVERRIDE_NOT_METERED = 2; // 0x2
+    field @Deprecated public static final int RANDOMIZATION_AUTO = 3; // 0x3
+    field @Deprecated public static final int RANDOMIZATION_ENHANCED = 2; // 0x2
     field @Deprecated public static final int RANDOMIZATION_NONE = 0; // 0x0
     field @Deprecated public static final int RANDOMIZATION_PERSISTENT = 1; // 0x1
     field @Deprecated public static final int RECENT_FAILURE_AP_UNABLE_TO_HANDLE_NEW_STA = 17; // 0x11
@@ -447,6 +450,7 @@ package android.net.wifi {
     method @Deprecated @Nullable @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public android.net.wifi.WifiConfiguration getWifiApConfiguration();
     method @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public int getWifiApState();
     method @NonNull @RequiresPermission(anyOf={android.Manifest.permission.NETWORK_SETTINGS, android.Manifest.permission.NETWORK_SETUP_WIZARD}) public java.util.List<android.net.wifi.WifiConfiguration> getWifiConfigForMatchedNetworkSuggestionsSharedWithUser(@NonNull java.util.List<android.net.wifi.ScanResult>);
+    method public boolean is60GHzBandSupported();
     method public boolean isApMacRandomizationSupported();
     method public boolean isConnectedMacRandomizationSupported();
     method @Deprecated public boolean isDeviceToDeviceRttSupported();
@@ -649,6 +653,7 @@ package android.net.wifi {
     field public static final int WIFI_BAND_5_GHZ = 2; // 0x2
     field public static final int WIFI_BAND_5_GHZ_DFS_ONLY = 4; // 0x4
     field public static final int WIFI_BAND_5_GHZ_WITH_DFS = 6; // 0x6
+    field public static final int WIFI_BAND_60_GHZ = 16; // 0x10
     field public static final int WIFI_BAND_6_GHZ = 8; // 0x8
     field public static final int WIFI_BAND_BOTH = 3; // 0x3
     field public static final int WIFI_BAND_BOTH_WITH_DFS = 7; // 0x7

@@ -120,6 +120,7 @@ import static com.android.server.pm.InstructionSets.getDexCodeInstructionSet;
 import static com.android.server.pm.InstructionSets.getDexCodeInstructionSets;
 import static com.android.server.pm.InstructionSets.getPreferredInstructionSet;
 import static com.android.server.pm.PackageManagerServiceCompilerMapping.getDefaultCompilerFilter;
+import static com.android.server.pm.PackageManagerServiceUtils.comparePackageSignatures;
 import static com.android.server.pm.PackageManagerServiceUtils.compareSignatures;
 import static com.android.server.pm.PackageManagerServiceUtils.compressedFileExists;
 import static com.android.server.pm.PackageManagerServiceUtils.decompressFile;
@@ -163,6 +164,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.AuxiliaryResolveInfo;
 import android.content.pm.ChangedPackages;
+import android.content.pm.Checksum;
 import android.content.pm.ComponentInfo;
 import android.content.pm.DataLoaderType;
 import android.content.pm.FallbackCategoryProvider;
@@ -174,6 +176,7 @@ import android.content.pm.IPackageDeleteObserver;
 import android.content.pm.IPackageDeleteObserver2;
 import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.IPackageInstaller;
+import android.content.pm.IPackageLoadingProgressCallback;
 import android.content.pm.IPackageManager;
 import android.content.pm.IPackageManagerNative;
 import android.content.pm.IPackageMoveObserver;
@@ -247,10 +250,13 @@ import android.os.Debug;
 import android.os.Environment;
 import android.os.FileUtils;
 import android.os.Handler;
+import android.os.HandlerExecutor;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Parcel;
+import android.os.ParcelableException;
 import android.os.PatternMatcher;
 import android.os.PersistableBundle;
 import android.os.Process;
@@ -332,6 +338,7 @@ import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.permission.persistence.RuntimePermissionsPersistence;
 import com.android.server.AttributeCache;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.EventLogTags;
@@ -364,7 +371,6 @@ import com.android.server.pm.parsing.pkg.ParsedPackage;
 import com.android.server.pm.permission.BasePermission;
 import com.android.server.pm.permission.PermissionManagerService;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
-import com.android.server.pm.permission.PermissionsState;
 import com.android.server.policy.PermissionPolicyInternal;
 import com.android.server.rollback.RollbackManagerInternal;
 import com.android.server.security.VerityUtils;
@@ -392,6 +398,7 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -402,7 +409,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -417,7 +427,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -922,6 +934,8 @@ public class PackageManagerService extends IPackageManager.Stub
         private final Object mLock;
         private final Installer mInstaller;
         private final Object mInstallLock;
+        private final Handler mBackgroundHandler;
+        private final Executor mBackgroundExecutor;
 
         // ----- producers -----
         private final Singleton<ComponentResolver> mComponentResolverProducer;
@@ -943,6 +957,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         Injector(Context context, Object lock, Installer installer,
                 Object installLock, PackageAbiHelper abiHelper,
+                Handler backgroundHandler,
                 Producer<ComponentResolver> componentResolverProducer,
                 Producer<PermissionManagerServiceInternal> permissionManagerProducer,
                 Producer<UserManagerService> userManagerProducer,
@@ -964,6 +979,8 @@ public class PackageManagerService extends IPackageManager.Stub
             mInstaller = installer;
             mAbiHelper = abiHelper;
             mInstallLock = installLock;
+            mBackgroundHandler = backgroundHandler;
+            mBackgroundExecutor = new HandlerExecutor(backgroundHandler);
             mComponentResolverProducer = new Singleton<>(componentResolverProducer);
             mPermissionManagerProducer = new Singleton<>(permissionManagerProducer);
             mUserManagerProducer = new Singleton<>(userManagerProducer);
@@ -1077,6 +1094,14 @@ public class PackageManagerService extends IPackageManager.Stub
         public PlatformCompat getCompatibility() {
             return mPlatformCompatProducer.get(this, mPackageManager);
         }
+
+        public Handler getBackgroundHandler() {
+            return mBackgroundHandler;
+        }
+
+        public Executor getBackgroundExecutor() {
+            return mBackgroundExecutor;
+        }
     }
 
     @VisibleForTesting(visibility = Visibility.PRIVATE)
@@ -1129,6 +1154,7 @@ public class PackageManagerService extends IPackageManager.Stub
         public @Nullable String storageManagerPackage;
         public @Nullable String defaultTextClassifierPackage;
         public @Nullable String systemTextClassifierPackage;
+        public @Nullable String overlayConfigSignaturePackage;
         public ViewCompiler viewCompiler;
         public @Nullable String wellbeingPackage;
         public @Nullable String retailDemoPackage;
@@ -1161,7 +1187,7 @@ public class PackageManagerService extends IPackageManager.Stub
     final SparseArray<PackageVerificationState> mPendingVerification = new SparseArray<>();
 
     /** List of packages waiting for rollback to be enabled. */
-    final SparseArray<InstallParams> mPendingEnableRollback = new SparseArray<>();
+    final SparseArray<VerificationParams> mPendingEnableRollback = new SparseArray<>();
 
     final PackageInstallerService mInstallerService;
 
@@ -1662,6 +1688,7 @@ public class PackageManagerService extends IPackageManager.Stub
     final @Nullable String mServicesExtensionPackageName;
     final @Nullable String mSharedSystemSharedLibraryPackageName;
     final @Nullable String mRetailDemoPackage;
+    final @Nullable String mOverlayConfigSignaturePackage;
 
     private final PackageUsage mPackageUsage = new PackageUsage();
     private final CompilerStats mCompilerStats = new CompilerStats();
@@ -1806,7 +1833,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     synchronized (mLock) {
                         removeMessages(WRITE_SETTINGS);
                         removeMessages(WRITE_PACKAGE_RESTRICTIONS);
-                        mSettings.writeLPr();
+                        writeSettingsLPrTEMP();
                         mDirtyUsers.clear();
                     }
                     Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
@@ -1826,6 +1853,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     Process.setThreadPriority(Process.THREAD_PRIORITY_DEFAULT);
                     synchronized (mLock) {
                         removeMessages(WRITE_PACKAGE_LIST);
+                        mPermissionManager.writeStateToPackageSettingsTEMP();
                         mSettings.writePackageListLPr(msg.arg1);
                     }
                     Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
@@ -1836,7 +1864,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
                     if ((state != null) && !state.isVerificationComplete()
                             && !state.timeoutExtended()) {
-                        final InstallParams params = state.getInstallParams();
+                        final VerificationParams params = state.getVerificationParams();
                         final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                         Slog.i(TAG, "Verification timed out for " + originUri);
@@ -1877,7 +1905,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     final PackageVerificationState state = mPendingVerification.get(verificationId);
 
                     if (state != null && !state.isIntegrityVerificationComplete()) {
-                        final InstallParams params = state.getInstallParams();
+                        final VerificationParams params = state.getVerificationParams();
                         final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                         Slog.i(TAG, "Integrity verification timed out for " + originUri);
@@ -1922,7 +1950,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     state.setVerifierResponse(response.callerUid, response.code);
 
                     if (state.isVerificationComplete()) {
-                        final InstallParams params = state.getInstallParams();
+                        final VerificationParams params = state.getVerificationParams();
                         final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                         if (state.isInstallAllowed()) {
@@ -1956,7 +1984,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
 
                     final int response = (Integer) msg.obj;
-                    final InstallParams params = state.getInstallParams();
+                    final VerificationParams params = state.getVerificationParams();
                     final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                     state.setIntegrityVerificationResult(response);
@@ -2040,7 +2068,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 case ENABLE_ROLLBACK_STATUS: {
                     final int enableRollbackToken = msg.arg1;
                     final int enableRollbackCode = msg.arg2;
-                    InstallParams params = mPendingEnableRollback.get(enableRollbackToken);
+                    final VerificationParams params =
+                            mPendingEnableRollback.get(enableRollbackToken);
                     if (params == null) {
                         Slog.w(TAG, "Invalid rollback enabled token "
                                 + enableRollbackToken + " received");
@@ -2064,7 +2093,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 case ENABLE_ROLLBACK_TIMEOUT: {
                     final int enableRollbackToken = msg.arg1;
                     final int sessionId = msg.arg2;
-                    final InstallParams params = mPendingEnableRollback.get(enableRollbackToken);
+                    final VerificationParams params =
+                            mPendingEnableRollback.get(enableRollbackToken);
                     if (params != null) {
                         final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
@@ -2116,7 +2146,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 res.removedInfo.sendPackageRemovedBroadcasts(killApp);
             }
 
-            // Whitelist any restricted permissions first as some may be runtime
+            // Allowlist any restricted permissions first as some may be runtime
             // that the installer requested to be granted at install time.
             if (whitelistedRestrictedPermissions != null
                     && !whitelistedRestrictedPermissions.isEmpty()) {
@@ -2195,7 +2225,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // Send installed broadcasts if the package is not a static shared lib.
             if (res.pkg.getStaticSharedLibName() == null) {
                 mProcessLoggingHandler.invalidateProcessLoggingBaseApkHash(
-                        res.pkg.getBaseCodePath());
+                        res.pkg.getBaseApkPath());
 
                 // Send added for users that see the package for the first time
                 // sendPackageAddedForNewUsers also deals with system apps
@@ -2213,23 +2243,23 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
                 extras.putInt(PackageInstaller.EXTRA_DATA_LOADER_TYPE, dataLoaderType);
                 // Send to all running apps.
-                final SparseArray<int[]> newBroadcastWhitelist;
+                final SparseArray<int[]> newBroadcastAllowList;
 
                 synchronized (mLock) {
-                    newBroadcastWhitelist = mAppsFilter.getVisibilityWhitelist(
+                    newBroadcastAllowList = mAppsFilter.getVisibilityAllowList(
                             getPackageSettingInternal(res.name, Process.SYSTEM_UID),
                             updateUserIds, mSettings.mPackages);
                 }
                 sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
                         extras, 0 /*flags*/,
                         null /*targetPackage*/, null /*finishedReceiver*/,
-                        updateUserIds, instantUserIds, newBroadcastWhitelist);
+                        updateUserIds, instantUserIds, newBroadcastAllowList);
                 if (installerPackageName != null) {
                     // Send to the installer, even if it's not running.
                     sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
                             extras, 0 /*flags*/,
                             installerPackageName, null /*finishedReceiver*/,
-                            updateUserIds, instantUserIds, null /* broadcastWhitelist */);
+                            updateUserIds, instantUserIds, null /* broadcastAllowList */);
                 }
                 // if the required verifier is defined, but, is not the installer of record
                 // for the package, it gets notified
@@ -2239,7 +2269,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
                             extras, 0 /*flags*/,
                             mRequiredVerifierPackage, null /*finishedReceiver*/,
-                            updateUserIds, instantUserIds, null /* broadcastWhitelist */);
+                            updateUserIds, instantUserIds, null /* broadcastAllowList */);
                 }
                 // If package installer is defined, notify package installer about new
                 // app installed
@@ -2247,7 +2277,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
                             extras, Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND /*flags*/,
                             mRequiredInstallerPackage, null /*finishedReceiver*/,
-                            firstUserIds, instantUserIds, null /* broadcastWhitelist */);
+                            firstUserIds, instantUserIds, null /* broadcastAllowList */);
                 }
 
                 // Send replaced for users that don't see the package for the first time
@@ -2255,24 +2285,24 @@ public class PackageManagerService extends IPackageManager.Stub
                     sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED,
                             packageName, extras, 0 /*flags*/,
                             null /*targetPackage*/, null /*finishedReceiver*/,
-                            updateUserIds, instantUserIds, res.removedInfo.broadcastWhitelist);
+                            updateUserIds, instantUserIds, res.removedInfo.broadcastAllowList);
                     if (installerPackageName != null) {
                         sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED, packageName,
                                 extras, 0 /*flags*/,
                                 installerPackageName, null /*finishedReceiver*/,
-                                updateUserIds, instantUserIds, null /*broadcastWhitelist*/);
+                                updateUserIds, instantUserIds, null /*broadcastAllowList*/);
                     }
                     if (notifyVerifier) {
                         sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED, packageName,
                                 extras, 0 /*flags*/,
                                 mRequiredVerifierPackage, null /*finishedReceiver*/,
-                                updateUserIds, instantUserIds, null /*broadcastWhitelist*/);
+                                updateUserIds, instantUserIds, null /*broadcastAllowList*/);
                     }
                     sendPackageBroadcast(Intent.ACTION_MY_PACKAGE_REPLACED,
                             null /*package*/, null /*extras*/, 0 /*flags*/,
                             packageName /*targetPackage*/,
                             null /*finishedReceiver*/, updateUserIds, instantUserIds,
-                            null /*broadcastWhitelist*/);
+                            null /*broadcastAllowList*/);
                 } else if (launchedForRestore && !res.pkg.isSystem()) {
                     // First-install and we did a restore, so we're responsible for the
                     // first-launch broadcast.
@@ -2386,9 +2416,12 @@ public class PackageManagerService extends IPackageManager.Stub
         final int callingUserId = UserHandle.getUserId(callingUid);
 
         for (String packageName : packages) {
-            PackageSetting setting = mSettings.mPackages.get(packageName);
-            if (setting != null
-                    && !shouldFilterApplicationLocked(setting, callingUid, callingUserId)) {
+            final boolean filterApp;
+            synchronized (mLock) {
+                final PackageSetting ps = mSettings.getPackageLPr(packageName);
+                filterApp = shouldFilterApplicationLocked(ps, callingUid, callingUserId);
+            }
+            if (!filterApp) {
                 notifyInstallObserver(packageName);
             }
         }
@@ -2427,6 +2460,68 @@ public class PackageManagerService extends IPackageManager.Stub
         mNoKillInstallObservers.put(packageName, Pair.create(info, observer));
         Message message = mHandler.obtainMessage(DEFERRED_NO_KILL_INSTALL_OBSERVER, packageName);
         mHandler.sendMessageDelayed(message, DEFERRED_NO_KILL_INSTALL_OBSERVER_DELAY_MS);
+    }
+
+    @Override
+    public void getChecksums(@NonNull String packageName, boolean includeSplits,
+            @Checksum.Kind int optional,
+            @Checksum.Kind int required, @Nullable List trustedInstallers,
+            @NonNull IntentSender statusReceiver, int userId) {
+        Objects.requireNonNull(packageName);
+        Objects.requireNonNull(statusReceiver);
+
+        final ApplicationInfo applicationInfo = getApplicationInfoInternal(packageName, 0,
+                Binder.getCallingUid(), userId);
+        if (applicationInfo == null) {
+            throw new ParcelableException(new PackageManager.NameNotFoundException(packageName));
+        }
+
+        List<Pair<String, File>> filesToChecksum = new ArrayList<>();
+
+        // Adding base split.
+        filesToChecksum.add(Pair.create(null, new File(applicationInfo.sourceDir)));
+
+        // Adding other splits.
+        if (includeSplits && applicationInfo.splitNames != null) {
+            for (int i = 0, size = applicationInfo.splitNames.length; i < size; ++i) {
+                filesToChecksum.add(Pair.create(applicationInfo.splitNames[i],
+                        new File(applicationInfo.splitSourceDirs[i])));
+            }
+        }
+
+        for (int i = 0, size = filesToChecksum.size(); i < size; ++i) {
+            final File file = filesToChecksum.get(i).second;
+            if (!file.exists()) {
+                throw new IllegalStateException("File not found: " + file.getPath());
+            }
+        }
+
+        final Certificate[] trustedCerts = (trustedInstallers != null) ? decodeCertificates(
+                trustedInstallers) : null;
+
+        mInjector.getBackgroundExecutor().execute(() -> {
+            ApkChecksums.Injector injector = new ApkChecksums.Injector(
+                    () -> mContext,
+                    () -> mInjector.getBackgroundHandler(),
+                    () -> mContext.getSystemService(IncrementalManager.class));
+            ApkChecksums.getChecksums(filesToChecksum, optional, required, trustedCerts,
+                    statusReceiver, injector);
+        });
+    }
+
+    private static @NonNull Certificate[] decodeCertificates(@NonNull List certs) {
+        try {
+            final CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            final Certificate[] result = new Certificate[certs.size()];
+            for (int i = 0, size = certs.size(); i < size; ++i) {
+                final InputStream is = new ByteArrayInputStream((byte[]) certs.get(i));
+                final X509Certificate cert = (X509Certificate) cf.generateCertificate(is);
+                result[i] = cert;
+            }
+            return result;
+        } catch (CertificateException e) {
+            throw ExceptionUtils.propagate(e);
+        }
     }
 
     /**
@@ -2504,7 +2599,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
 
                 mSettings.onVolumeForgotten(fsUuid);
-                mSettings.writeLPr();
+                writeSettingsLPrTEMP();
             }
         }
     };
@@ -2577,21 +2672,25 @@ public class PackageManagerService extends IPackageManager.Stub
         t.traceBegin("create package manager");
         final Object lock = new Object();
         final Object installLock = new Object();
+        HandlerThread backgroundThread = new HandlerThread("PackageManagerBg");
+        backgroundThread.start();
+        Handler backgroundHandler = new Handler(backgroundThread.getLooper());
 
         Injector injector = new Injector(
                 context, lock, installer, installLock, new PackageAbiHelperImpl(),
+                backgroundHandler,
                 (i, pm) ->
                         new ComponentResolver(i.getUserManagerService(), pm.mPmInternal, lock),
                 (i, pm) ->
-                        PermissionManagerService.create(context, lock),
+                PermissionManagerService.create(context, lock),
                 (i, pm) ->
-                        new UserManagerService(context, pm,
-                                new UserDataPreparer(installer, installLock, context, onlyCore),
-                                lock),
+                new UserManagerService(context, pm,
+                        new UserDataPreparer(installer, installLock, context, onlyCore),
+                        lock),
                 (i, pm) ->
                         new Settings(Environment.getDataDirectory(),
                                 i.getPermissionManagerServiceInternal().getPermissionSettings(),
-                                lock),
+                                RuntimePermissionsPersistence.createInstance(), lock),
                 new Injector.LocalServicesProducer<>(ActivityTaskManagerInternal.class),
                 new Injector.LocalServicesProducer<>(ActivityManagerInternal.class),
                 new Injector.LocalServicesProducer<>(DeviceIdleInternal.class),
@@ -2818,6 +2917,7 @@ public class PackageManagerService extends IPackageManager.Stub
         mIncidentReportApproverPackage = testParams.incidentReportApproverPackage;
         mServicesExtensionPackageName = testParams.servicesExtensionPackageName;
         mSharedSystemSharedLibraryPackageName = testParams.sharedSystemSharedLibraryPackageName;
+        mOverlayConfigSignaturePackage = testParams.overlayConfigSignaturePackage;
 
         mResolveComponentName = testParams.resolveComponentName;
         mPackages.putAll(testParams.packages);
@@ -2967,13 +3067,12 @@ public class PackageManagerService extends IPackageManager.Stub
             mHandler = new PackageHandler(mHandlerThread.getLooper());
             mProcessLoggingHandler = new ProcessLoggingHandler();
             Watchdog.getInstance().addThread(mHandler, WATCHDOG_TIMEOUT);
-            mInstantAppRegistry = new InstantAppRegistry(this);
+            mInstantAppRegistry = new InstantAppRegistry(this, mPermissionManager);
 
             ArrayMap<String, SystemConfig.SharedLibraryEntry> libConfig
                     = systemConfig.getSharedLibraries();
             final int builtInLibCount = libConfig.size();
             for (int i = 0; i < builtInLibCount; i++) {
-                SystemConfig.SharedLibraryEntry entry = libConfig.valueAt(i);
                 addBuiltInSharedLibraryLocked(libConfig.valueAt(i));
             }
 
@@ -3000,7 +3099,10 @@ public class PackageManagerService extends IPackageManager.Stub
             t.traceEnd();
 
             t.traceBegin("read user settings");
-            mFirstBoot = !mSettings.readLPw(mInjector.getUserManagerInternal().getUsers(false));
+            mFirstBoot = !mSettings.readLPw(mInjector.getUserManagerInternal().getUsers(
+                    /* excludePartial= */ true,
+                    /* excludeDying= */ false,
+                    /* excludePreCreated= */ false));
             t.traceEnd();
 
             // Clean up orphaned packages for which the code path doesn't exist
@@ -3008,7 +3110,7 @@ public class PackageManagerService extends IPackageManager.Stub
             final int packageSettingCount = mSettings.mPackages.size();
             for (int i = packageSettingCount - 1; i >= 0; i--) {
                 PackageSetting ps = mSettings.mPackages.valueAt(i);
-                if (!isExternal(ps) && (ps.codePath == null || !ps.codePath.exists())
+                if (!isExternal(ps) && (ps.getPath() == null || !ps.getPath().exists())
                         && mSettings.getDisabledSystemPkgLPr(ps.name) != null) {
                     mSettings.mPackages.removeAt(i);
                     mSettings.enableSystemPackageLPw(ps.name);
@@ -3173,11 +3275,11 @@ public class PackageManagerService extends IPackageManager.Stub
                             logCriticalInfo(Log.WARN,
                                     "Expecting better updated system app for " + ps.name
                                     + "; removing system app.  Last known"
-                                    + " codePath=" + ps.codePathString
+                                    + " codePath=" + ps.getPathString()
                                     + ", versionCode=" + ps.versionCode
                                     + "; scanned versionCode=" + scannedPkg.getLongVersionCode());
                             removePackageLI(scannedPkg, true);
-                            mExpectingBetter.put(ps.name, ps.codePath);
+                            mExpectingBetter.put(ps.name, ps.getPath());
                         }
 
                         continue;
@@ -3200,14 +3302,14 @@ public class PackageManagerService extends IPackageManager.Stub
                         // code path, but, changes the package name.
                         final PackageSetting disabledPs =
                                 mSettings.getDisabledSystemPkgLPr(ps.name);
-                        if (disabledPs.codePath == null || !disabledPs.codePath.exists()
+                        if (disabledPs.getPath() == null || !disabledPs.getPath().exists()
                                 || disabledPs.pkg == null) {
                             possiblyDeletedUpdatedSystemApps.add(ps.name);
                         } else {
                             // We're expecting that the system app should remain disabled, but add
                             // it to expecting better to recover in case the data version cannot
                             // be scanned.
-                            mExpectingBetter.put(disabledPs.name, disabledPs.codePath);
+                            mExpectingBetter.put(disabledPs.name, disabledPs.getPath());
                         }
                     }
                 }
@@ -3251,6 +3353,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 // Remove disable package settings for updated system apps that were
                 // removed via an OTA. If the update is no longer present, remove the
                 // app completely. Otherwise, revoke their system privileges.
+                final int[] userIds = mUserManager.getUserIds();
                 for (int i = possiblyDeletedUpdatedSystemApps.size() - 1; i >= 0; --i) {
                     final String packageName = possiblyDeletedUpdatedSystemApps.get(i);
                     final AndroidPackage pkg = mPackages.get(packageName);
@@ -3279,7 +3382,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         // special privileges
                         removePackageLI(pkg, true);
                         try {
-                            final File codePath = new File(pkg.getCodePath());
+                            final File codePath = new File(pkg.getPath());
                             scanPackageTracedLI(codePath, 0, scanFlags, 0, null);
                         } catch (PackageManagerException e) {
                             Slog.e(TAG, "Failed to parse updated, ex-system package: "
@@ -3293,7 +3396,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     // partition], completely remove the package data.
                     final PackageSetting ps = mSettings.mPackages.get(packageName);
                     if (ps != null && mPackages.get(packageName) == null) {
-                        removePackageDataLIF(ps, null, null, 0, false);
+                        removePackageDataLIF(ps, userIds, null, 0, false);
 
                     }
                     logCriticalInfo(Log.WARN, msg);
@@ -3384,6 +3487,7 @@ public class PackageManagerService extends IPackageManager.Stub
             mAppPredictionServicePackage = getAppPredictionServicePackageName();
             mIncidentReportApproverPackage = getIncidentReportApproverPackageName();
             mRetailDemoPackage = getRetailDemoPackageName();
+            mOverlayConfigSignaturePackage = getOverlayConfigSignaturePackageName();
 
             // Now that we know all of the shared libraries, update all clients to have
             // the correct library paths.
@@ -3424,6 +3528,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     + ((SystemClock.uptimeMillis()-startTime)/1000f)
                     + " seconds");
 
+            mPermissionManager.readStateFromPackageSettingsTEMP();
             // If the platform SDK has changed since the last time we booted,
             // we need to re-grant app permission to catch any new ones that
             // appear.  This is really a hack, and means that apps can in some
@@ -3478,6 +3583,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     return;
                 }
                 int count = 0;
+                final Installer.Batch batch = new Installer.Batch();
                 for (String pkgName : deferPackages) {
                     AndroidPackage pkg = null;
                     synchronized (mLock) {
@@ -3487,12 +3593,13 @@ public class PackageManagerService extends IPackageManager.Stub
                         }
                     }
                     if (pkg != null) {
-                        synchronized (mInstallLock) {
-                            prepareAppDataAndMigrateLIF(pkg, UserHandle.USER_SYSTEM, storageFlags,
-                                    true /* maybeMigrateAppData */);
-                        }
+                        prepareAppDataAndMigrate(batch, pkg, UserHandle.USER_SYSTEM, storageFlags,
+                                true /* maybeMigrateAppData */);
                         count++;
                     }
+                }
+                synchronized (mInstallLock) {
+                    executeBatchLI(batch);
                 }
                 traceLog.traceEnd();
                 Slog.i(TAG, "Deferred reconcileAppsData finished " + count + " packages");
@@ -3518,7 +3625,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 ver.fingerprint = Build.FINGERPRINT;
             }
 
-            // Grandfather existing (installed before Q) non-system apps to hide
+            // Legacy existing (installed before Q) non-system apps to hide
             // their icons in launcher.
             if (!mOnlyCore && mIsPreQUpgrade) {
                 Slog.i(TAG, "Whitelisting all existing apps to hide their icons");
@@ -3541,7 +3648,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             // can downgrade to reader
             t.traceBegin("write settings");
-            mSettings.writeLPr();
+            writeSettingsLPrTEMP();
             t.traceEnd();
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_READY,
                     SystemClock.uptimeMillis());
@@ -3747,7 +3854,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         Slog.e(TAG, "updateAllSharedLibrariesLPw failed: ", e);
                     }
                     mPermissionManager.updatePermissions(pkg.getPackageName(), pkg);
-                    mSettings.writeLPr();
+                    writeSettingsLPrTEMP();
                 }
             } catch (PackageManagerException e) {
                 // Whoops! Something went very wrong; roll back to the stub and disable the package
@@ -3758,9 +3865,9 @@ public class PackageManagerService extends IPackageManager.Stub
                         // If we don't, installing the system package fails during scan
                         enableSystemPackageLPw(stubPkg);
                     }
-                    installPackageFromSystemLIF(stubPkg.getCodePath(),
-                            null /*allUserHandles*/, null /*origUserHandles*/,
-                            null /*origPermissionsState*/, true /*writeSettings*/);
+                    installPackageFromSystemLIF(stubPkg.getPath(),
+                            mUserManager.getUserIds() /*allUserHandles*/, null /*origUserHandles*/,
+                            true /*writeSettings*/);
                 } catch (PackageManagerException pme) {
                     // Serious WTF; we have to be able to install the stub
                     Slog.wtf(TAG, "Failed to restore system package:" + stubPkg.getPackageName(),
@@ -3774,7 +3881,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             stubPs.setEnabled(COMPONENT_ENABLED_STATE_DISABLED,
                                     UserHandle.USER_SYSTEM, "android");
                         }
-                        mSettings.writeLPr();
+                        writeSettingsLPrTEMP();
                     }
                 }
                 return false;
@@ -3782,7 +3889,7 @@ public class PackageManagerService extends IPackageManager.Stub
             clearAppDataLIF(pkg, UserHandle.USER_ALL, FLAG_STORAGE_DE | FLAG_STORAGE_CE
                     | FLAG_STORAGE_EXTERNAL | Installer.FLAG_CLEAR_CODE_CACHE_ONLY);
             mDexManager.notifyPackageUpdated(pkg.getPackageName(),
-                    pkg.getBaseCodePath(), pkg.getSplitCodePaths());
+                    pkg.getBaseApkPath(), pkg.getSplitCodePaths());
         }
         return true;
     }
@@ -3794,10 +3901,10 @@ public class PackageManagerService extends IPackageManager.Stub
             Slog.i(TAG, "Uncompressing system stub; pkg: " + stubPkg.getPackageName());
         }
         // uncompress the binary to its eventual destination on /data
-        final File scanFile = decompressPackage(stubPkg.getPackageName(), stubPkg.getCodePath());
+        final File scanFile = decompressPackage(stubPkg.getPackageName(), stubPkg.getPath());
         if (scanFile == null) {
             throw new PackageManagerException(
-                    "Unable to decompress stub at " + stubPkg.getCodePath());
+                    "Unable to decompress stub at " + stubPkg.getPath());
         }
         synchronized (mLock) {
             mSettings.disableSystemPackageLPw(stubPkg.getPackageName(), true /*replaced*/);
@@ -4239,13 +4346,9 @@ public class PackageManagerService extends IPackageManager.Stub
         Iterator<ResolveInfo> iter = matches.iterator();
         while (iter.hasNext()) {
             final ResolveInfo rInfo = iter.next();
-            final PackageSetting ps = mSettings.mPackages.get(rInfo.activityInfo.packageName);
-            if (ps != null) {
-                final PermissionsState permissionsState = ps.getPermissionsState();
-                if (permissionsState.hasPermission(Manifest.permission.INSTALL_PACKAGES, 0)
-                        || Build.IS_ENG) {
-                    continue;
-                }
+            if (checkPermission(Manifest.permission.INSTALL_PACKAGES,
+                    rInfo.activityInfo.packageName, 0) == PERMISSION_GRANTED || Build.IS_ENG) {
+                continue;
             }
             iter.remove();
         }
@@ -4415,14 +4518,13 @@ public class PackageManagerService extends IPackageManager.Stub
         final PackageUserState state = ps.readUserState(userId);
         AndroidPackage p = ps.pkg;
         if (p != null) {
-            final PermissionsState permissionsState = ps.getPermissionsState();
-
             // Compute GIDs only if requested
             final int[] gids = (flags & PackageManager.GET_GIDS) == 0
-                    ? EMPTY_INT_ARRAY : permissionsState.computeGids(userId);
+                    ? EMPTY_INT_ARRAY : mPermissionManager.getPackageGids(ps.name, userId);
             // Compute granted permissions only if package has requested permissions
             final Set<String> permissions = ArrayUtils.isEmpty(p.getRequestedPermissions())
-                    ? Collections.emptySet() : permissionsState.getPermissions(userId);
+                    ? Collections.emptySet()
+                    : mPermissionManager.getGrantedPermissions(ps.name, userId);
 
             PackageInfo packageInfo = PackageInfoUtils.generate(p, gids, flags,
                     ps.firstInstallTime, ps.lastUpdateTime, permissions, state, userId, ps);
@@ -4893,13 +4995,13 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
                 // TODO: Shouldn't this be checking for package installed state for userId and
                 // return null?
-                return ps.getPermissionsState().computeGids(userId);
+                return mPermissionManager.getPackageGids(packageName, userId);
             }
             if ((flags & MATCH_KNOWN_PACKAGES) != 0) {
                 final PackageSetting ps = mSettings.mPackages.get(packageName);
                 if (ps != null && ps.isMatch(flags)
                         && !shouldFilterApplicationLocked(ps, callingUid, userId)) {
-                    return ps.getPermissionsState().computeGids(userId);
+                    return mPermissionManager.getPackageGids(packageName, userId);
                 }
             }
         }
@@ -5355,6 +5457,23 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
         return updateFlagsForComponent(flags, userId);
+    }
+
+    @Override
+    public int getTargetSdkVersion(String packageName)  {
+        synchronized (mLock) {
+            final AndroidPackage pkg = mPackages.get(packageName);
+            if (pkg == null) {
+                return -1;
+            }
+
+            final PackageSetting ps = getPackageSetting(pkg.getPackageName());
+            if (shouldFilterApplicationLocked(ps, Binder.getCallingUid(),
+                    UserHandle.getCallingUserId())) {
+                return -1;
+            }
+            return pkg.getTargetSdkVersion();
+        }
     }
 
     @Override
@@ -5820,10 +5939,6 @@ public class PackageManagerService extends IPackageManager.Stub
     private void updateSequenceNumberLP(PackageSetting pkgSetting, int[] userList) {
         for (int i = userList.length - 1; i >= 0; --i) {
             final int userId = userList[i];
-            // don't add instant app to the list of updates
-            if (pkgSetting.getInstantApp(userId)) {
-                continue;
-            }
             SparseArray<String> changedPackages = mChangedPackages.get(userId);
             if (changedPackages == null) {
                 changedPackages = new SparseArray<>();
@@ -5868,6 +5983,11 @@ public class PackageManagerService extends IPackageManager.Stub
             for (int i = sequenceNumber; i < mChangedPackagesSequenceNumber; i++) {
                 final String packageName = changedPackages.get(i);
                 if (packageName != null) {
+                    // Filter out the changes if the calling package should not be able to see it.
+                    final PackageSetting ps = mSettings.mPackages.get(packageName);
+                    if (shouldFilterApplicationLocked(ps, callingUid, userId)) {
+                        continue;
+                    }
                     packageNames.add(packageName);
                 }
             }
@@ -7415,7 +7535,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             } else {
                 // we have an instant application locally, but, we can't admit that since
-                // callers shouldn't be able to determine prior browsing. create a dummy
+                // callers shouldn't be able to determine prior browsing. create a placeholder
                 // auxiliary response so the downstream code behaves as if there's an
                 // instant application available externally. when it comes time to start
                 // the instant application, we'll do the right thing.
@@ -7850,7 +7970,7 @@ public class PackageManagerService extends IPackageManager.Stub
     // low 'int'-sized word: relative priority among 'always' results.
     private long getDomainVerificationStatusLPr(PackageSetting ps, int userId) {
         long result = ps.getDomainVerificationStatusForUser(userId);
-        // if none available, get the master status
+        // if none available, get the status
         if (result >> 32 == INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED) {
             if (ps.getIntentFilterVerificationInfo() != null) {
                 result = ((long)ps.getIntentFilterVerificationInfo().getStatus()) << 32;
@@ -8581,6 +8701,15 @@ public class PackageManagerService extends IPackageManager.Stub
             if (listUninstalled) {
                 list = new ArrayList<>(mSettings.mPackages.size());
                 for (PackageSetting ps : mSettings.mPackages.values()) {
+                    if (listFactory) {
+                        if (!ps.isSystem()) {
+                            continue;
+                        }
+                        PackageSetting psDisabled = mSettings.getDisabledSystemPkgLPr(ps);
+                        if (psDisabled != null) {
+                            ps = psDisabled;
+                        }
+                    }
                     if (filterSharedLibPackageLPr(ps, callingUid, userId, flags)) {
                         continue;
                     }
@@ -8595,7 +8724,16 @@ public class PackageManagerService extends IPackageManager.Stub
             } else {
                 list = new ArrayList<>(mPackages.size());
                 for (AndroidPackage p : mPackages.values()) {
-                    final PackageSetting ps = getPackageSetting(p.getPackageName());
+                    PackageSetting ps = getPackageSetting(p.getPackageName());
+                    if (listFactory) {
+                        if (!p.isSystem()) {
+                            continue;
+                        }
+                        PackageSetting psDisabled = mSettings.getDisabledSystemPkgLPr(ps);
+                        if (psDisabled != null) {
+                            ps = psDisabled;
+                        }
+                    }
                     if (filterSharedLibPackageLPr(ps, callingUid, userId, flags)) {
                         continue;
                     }
@@ -8625,10 +8763,9 @@ public class PackageManagerService extends IPackageManager.Stub
     private void addPackageHoldingPermissions(ArrayList<PackageInfo> list, PackageSetting ps,
             String[] permissions, boolean[] tmp, int flags, int userId) {
         int numMatch = 0;
-        final PermissionsState permissionsState = ps.getPermissionsState();
         for (int i=0; i<permissions.length; i++) {
             final String permission = permissions[i];
-            if (permissionsState.hasPermission(permission, userId)) {
+            if (checkPermission(permission, ps.name, userId) == PERMISSION_GRANTED) {
                 tmp[i] = true;
                 numMatch++;
             } else {
@@ -8960,10 +9097,10 @@ public class PackageManagerService extends IPackageManager.Stub
         if (providerInfo == null) {
             return null;
         }
-        if (!mSettings.isEnabledAndMatchLPr(providerInfo, flags, userId)) {
-            return null;
-        }
         synchronized (mLock) {
+            if (!mSettings.isEnabledAndMatchLPr(providerInfo, flags, userId)) {
+                return null;
+            }
             final PackageSetting ps = mSettings.mPackages.get(providerInfo.packageName);
             final ComponentName component =
                     new ComponentName(providerInfo.packageName, providerInfo.name);
@@ -9050,9 +9187,11 @@ public class PackageManagerService extends IPackageManager.Stub
             String targetPackage, int flags) {
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
-        final PackageSetting ps = mSettings.mPackages.get(targetPackage);
-        if (shouldFilterApplicationLocked(ps, callingUid, callingUserId)) {
-            return ParceledListSlice.emptyList();
+        synchronized (mLock) {
+            final PackageSetting ps = mSettings.getPackageLPr(targetPackage);
+            if (shouldFilterApplicationLocked(ps, callingUid, callingUserId)) {
+                return ParceledListSlice.emptyList();
+            }
         }
         return new ParceledListSlice<>(queryInstrumentationInternal(targetPackage, flags,
                 callingUserId));
@@ -9177,11 +9316,11 @@ public class PackageManagerService extends IPackageManager.Stub
         // When upgrading from pre-N MR1, verify the package time stamp using the package
         // directory and not the APK file.
         final long lastModifiedTime = mIsPreNMR1Upgrade
-                ? new File(parsedPackage.getCodePath()).lastModified()
+                ? new File(parsedPackage.getPath()).lastModified()
                 : getLastModifiedTime(parsedPackage);
         final VersionInfo settingsVersionForPackage = getSettingsVersionForPackage(parsedPackage);
         if (ps != null && !forceCollect
-                && ps.codePathString.equals(parsedPackage.getCodePath())
+                && ps.getPathString().equals(parsedPackage.getPath())
                 && ps.timeStamp == lastModifiedTime
                 && !isCompatSignatureUpdateNeeded(settingsVersionForPackage)
                 && !isRecoverSignatureUpdateNeeded(settingsVersionForPackage)) {
@@ -9199,8 +9338,8 @@ public class PackageManagerService extends IPackageManager.Stub
             Slog.w(TAG, "PackageSetting for " + ps.name
                     + " is missing signatures.  Collecting certs again to recover them.");
         } else {
-            Slog.i(TAG, parsedPackage.getCodePath() + " changed; collecting certs" +
-                    (forceCollect ? " (forced)" : ""));
+            Slog.i(TAG, parsedPackage.getPath() + " changed; collecting certs"
+                    + (forceCollect ? " (forced)" : ""));
         }
 
         try {
@@ -9284,7 +9423,7 @@ public class PackageManagerService extends IPackageManager.Stub
      * Returns if forced apk verification can be skipped for the whole package, including splits.
      */
     private boolean canSkipForcedPackageVerification(AndroidPackage pkg) {
-        if (!canSkipForcedApkVerification(pkg.getBaseCodePath())) {
+        if (!canSkipForcedApkVerification(pkg.getBaseApkPath())) {
             return false;
         }
         // TODO: Allow base and splits to be verified individually.
@@ -9414,8 +9553,8 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
 
-        final boolean newPkgChangedPaths =
-                pkgAlreadyExists && !pkgSetting.codePathString.equals(parsedPackage.getCodePath());
+        final boolean newPkgChangedPaths = pkgAlreadyExists
+                && !pkgSetting.getPathString().equals(parsedPackage.getPath());
         final boolean newPkgVersionGreater =
                 pkgAlreadyExists && parsedPackage.getLongVersionCode() > pkgSetting.versionCode;
         final boolean isSystemPkgBetter = scanSystemPartition && isSystemPkgUpdated
@@ -9434,11 +9573,11 @@ public class PackageManagerService extends IPackageManager.Stub
                     "System package updated;"
                     + " name: " + pkgSetting.name
                     + "; " + pkgSetting.versionCode + " --> " + parsedPackage.getLongVersionCode()
-                    + "; " + pkgSetting.codePathString + " --> " + parsedPackage.getCodePath());
+                    + "; " + pkgSetting.getPathString()
+                            + " --> " + parsedPackage.getPath());
 
             final InstallArgs args = createInstallArgsForExisting(
-                    pkgSetting.codePathString,
-                    pkgSetting.resourcePathString, getAppDexInstructionSets(
+                    pkgSetting.getPathString(), getAppDexInstructionSets(
                             pkgSetting.primaryCpuAbiString, pkgSetting.secondaryCpuAbiString));
             args.cleanUpResourcesLI();
             synchronized (mLock) {
@@ -9446,12 +9585,18 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
 
+        // The version of the application on the /system partition is less than or
+        // equal to the version on the /data partition. Throw an exception and use
+        // the application already installed on the /data partition.
         if (scanSystemPartition && isSystemPkgUpdated && !isSystemPkgBetter) {
-            // The version of the application on the /system partition is less than or
-            // equal to the version on the /data partition. Throw an exception and use
-            // the application already installed on the /data partition.
+            // In the case of a skipped package, commitReconciledScanResultLocked is not called to
+            // add the object to the "live" data structures, so this is the final mutation step
+            // for the package. Which means it needs to be finalized here to cache derived fields.
+            // This is relevant for cases where the disabled system package is used for flags or
+            // other metadata.
+            ((ParsedPackage) parsedPackage).hideAsFinal();
             throw new PackageManagerException(Log.WARN, "Package " + parsedPackage.getPackageName()
-                    + " at " + parsedPackage.getCodePath() + " ignored: updated version "
+                    + " at " + parsedPackage.getPath() + " ignored: updated version "
                     + pkgSetting.versionCode + " better than this "
                     + parsedPackage.getLongVersionCode());
         }
@@ -9500,8 +9645,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 try (@SuppressWarnings("unused") PackageFreezer freezer = freezePackage(
                         parsedPackage.getPackageName(),
                         "scanPackageInternalLI")) {
-                    deletePackageLIF(parsedPackage.getPackageName(), null, true, null, 0, null,
-                            false, null);
+                    deletePackageLIF(parsedPackage.getPackageName(), null, true,
+                            mUserManager.getUserIds(), 0, null, false, null);
                 }
                 pkgSetting = null;
             } else if (newPkgVersionGreater) {
@@ -9513,11 +9658,10 @@ public class PackageManagerService extends IPackageManager.Stub
                                 + " name: " + pkgSetting.name
                                 + "; " + pkgSetting.versionCode + " --> "
                                 + parsedPackage.getLongVersionCode()
-                                + "; " + pkgSetting.codePathString + " --> "
-                                + parsedPackage.getCodePath());
+                                + "; " + pkgSetting.getPathString() + " --> "
+                                + parsedPackage.getPath());
                 InstallArgs args = createInstallArgsForExisting(
-                        pkgSetting.codePathString,
-                        pkgSetting.resourcePathString, getAppDexInstructionSets(
+                        pkgSetting.getPathString(), getAppDexInstructionSets(
                                 pkgSetting.primaryCpuAbiString, pkgSetting.secondaryCpuAbiString));
                 synchronized (mInstallLock) {
                     args.cleanUpResourcesLI();
@@ -9530,10 +9674,10 @@ public class PackageManagerService extends IPackageManager.Stub
                 logCriticalInfo(Log.INFO,
                         "System package disabled;"
                                 + " name: " + pkgSetting.name
-                                + "; old: " + pkgSetting.codePathString + " @ "
+                                + "; old: " + pkgSetting.getPathString() + " @ "
                                 + pkgSetting.versionCode
-                                + "; new: " + parsedPackage.getCodePath() + " @ "
-                                + parsedPackage.getCodePath());
+                                + "; new: " + parsedPackage.getPath() + " @ "
+                                + parsedPackage.getPath());
             }
         }
 
@@ -9714,7 +9858,7 @@ public class PackageManagerService extends IPackageManager.Stub
      * Return the prebuilt profile path given a package base code path.
      */
     private static String getPrebuildProfilePath(AndroidPackage pkg) {
-        return pkg.getBaseCodePath() + ".prof";
+        return pkg.getBaseApkPath() + ".prof";
     }
 
     /**
@@ -10366,6 +10510,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 mInstaller.rmPackageDir(codePath.getAbsolutePath());
                 if (codePathParent.getName().startsWith(RANDOM_DIR_PREFIX)) {
                     mInstaller.rmPackageDir(codePathParent.getAbsolutePath());
+                    removeCachedResult(codePathParent);
                 }
             } catch (InstallerException e) {
                 Slog.w(TAG, "Failed to remove code path", e);
@@ -10375,13 +10520,22 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
+    private void removeCachedResult(@NonNull File codePath) {
+        if (mCacheDir == null) {
+            return;
+        }
+
+        final PackageCacher cacher = new PackageCacher(mCacheDir);
+        // Find and delete the cached result belong to the given codePath.
+        cacher.cleanCachedResult(codePath);
+    }
+
     private int[] resolveUserIds(int userId) {
         return (userId == UserHandle.USER_ALL) ? mUserManager.getUserIds() : new int[] { userId };
     }
 
     private void clearAppDataLIF(AndroidPackage pkg, int userId, int flags) {
         if (pkg == null) {
-            Slog.wtf(TAG, "Package was null!", new Throwable());
             return;
         }
         clearAppDataLeafLIF(pkg, userId, flags);
@@ -11006,7 +11160,7 @@ public class PackageManagerService extends IPackageManager.Stub
             if (sharedUserSetting != null && sharedUserSetting.isPrivileged()) {
                 // Exempt SharedUsers signed with the platform key.
                 // TODO(b/72378145) Fix this exemption. Force signature apps
-                // to whitelist their privileged permissions just like other
+                // to allowlist their privileged permissions just like other
                 // priv-apps.
                 synchronized (mLock) {
                     PackageSetting platformPkgSetting = mSettings.mPackages.get("android");
@@ -11356,7 +11510,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         if (changedAbiCodePath == null) {
                             changedAbiCodePath = new ArrayList<>();
                         }
-                        changedAbiCodePath.add(ps.codePathString);
+                        changedAbiCodePath.add(ps.getPathString());
                     }
                 }
             }
@@ -11451,8 +11605,7 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         // Initialize package source and resource directories
-        final File destCodeFile = new File(parsedPackage.getCodePath());
-        final File destResourceFile = new File(parsedPackage.getCodePath());
+        final File destCodeFile = new File(parsedPackage.getPath());
 
         // We keep references to the derived CPU Abis from settings in oder to reuse
         // them in the case where we're not upgrading or booting for the first time.
@@ -11510,7 +11663,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // REMOVE SharedUserSetting from method; update in a separate call
             pkgSetting = Settings.createNewSetting(parsedPackage.getPackageName(),
                     originalPkgSetting, disabledPkgSetting, realPkgName, sharedUserSetting,
-                    destCodeFile, destResourceFile, parsedPackage.getNativeLibraryRootDir(),
+                    destCodeFile, parsedPackage.getNativeLibraryRootDir(),
                     AndroidPackageUtils.getRawPrimaryCpuAbi(parsedPackage),
                     AndroidPackageUtils.getRawSecondaryCpuAbi(parsedPackage),
                     parsedPackage.getVersionCode(), pkgFlags, pkgPrivateFlags, user,
@@ -11528,7 +11681,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // secondaryCpuAbi are not known at this point so we always update them
             // to null here, only to reset them at a later point.
             Settings.updatePackageSetting(pkgSetting, disabledPkgSetting, sharedUserSetting,
-                    destCodeFile, destResourceFile, parsedPackage.getNativeLibraryDir(),
+                    destCodeFile, parsedPackage.getNativeLibraryDir(),
                     AndroidPackageUtils.getPrimaryCpuAbi(parsedPackage, pkgSetting),
                     AndroidPackageUtils.getSecondaryCpuAbi(parsedPackage, pkgSetting),
                     PackageInfoUtils.appInfoFlags(parsedPackage, pkgSetting),
@@ -11574,7 +11727,7 @@ public class PackageManagerService extends IPackageManager.Stub
             configurePackageComponents(parsedPackage);
         }
 
-        final String cpuAbiOverride = deriveAbiOverride(request.cpuAbiOverride, pkgSetting);
+        final String cpuAbiOverride = deriveAbiOverride(request.cpuAbiOverride);
         final boolean isUpdatedSystemApp = pkgSetting.getPkgState().isUpdatedSystemApp();
 
         if ((scanFlags & SCAN_NEW_INSTALL) == 0) {
@@ -11668,8 +11821,9 @@ public class PackageManagerService extends IPackageManager.Stub
 
         if (DEBUG_ABI_SELECTION) {
             Slog.d(TAG, "Resolved nativeLibraryRoot for " + parsedPackage.getPackageName()
-                    + " to root=" + parsedPackage.getNativeLibraryRootDir() + ", isa="
-                    + parsedPackage.isNativeLibraryRootRequiresIsa());
+                    + " to root=" + parsedPackage.getNativeLibraryRootDir()
+                    + ", to dir=" + parsedPackage.getNativeLibraryDir()
+                    + ", isa=" + parsedPackage.isNativeLibraryRootRequiresIsa());
         }
 
         // Push the derived path down into PackageSettings so we know what to
@@ -11677,9 +11831,10 @@ public class PackageManagerService extends IPackageManager.Stub
         pkgSetting.legacyNativeLibraryPathString = parsedPackage.getNativeLibraryRootDir();
 
         if (DEBUG_ABI_SELECTION) {
-            Log.d(TAG, "Abis for package[" + parsedPackage.getPackageName() + "] are" +
-                    " primary=" + AndroidPackageUtils.getRawPrimaryCpuAbi(parsedPackage) +
-                    " secondary=" + AndroidPackageUtils.getRawSecondaryCpuAbi(parsedPackage));
+            Log.d(TAG, "Abis for package[" + parsedPackage.getPackageName() + "] are"
+                    + " primary=" + pkgSetting.primaryCpuAbiString
+                    + " secondary=" + pkgSetting.primaryCpuAbiString
+                    + " abiOverride=" + pkgSetting.cpuAbiOverrideString);
         }
 
         if ((scanFlags & SCAN_BOOTING) == 0 && pkgSetting.sharedUser != null) {
@@ -11788,9 +11943,9 @@ public class PackageManagerService extends IPackageManager.Stub
     private static void assertCodePolicy(AndroidPackage pkg)
             throws PackageManagerException {
         final boolean shouldHaveCode = pkg.isHasCode();
-        if (shouldHaveCode && !apkHasCode(pkg.getBaseCodePath())) {
+        if (shouldHaveCode && !apkHasCode(pkg.getBaseApkPath())) {
             throw new PackageManagerException(INSTALL_FAILED_INVALID_APK,
-                    "Package " + pkg.getBaseCodePath() + " code is missing");
+                    "Package " + pkg.getBaseApkPath() + " code is missing");
         }
 
         if (!ArrayUtils.isEmpty(pkg.getSplitCodePaths())) {
@@ -11822,7 +11977,7 @@ public class PackageManagerService extends IPackageManager.Stub
             if (parsedPackage.isDirectBootAware()) {
                 parsedPackage.setAllComponentsDirectBootAware(true);
             }
-            if (compressedFileExists(parsedPackage.getCodePath())) {
+            if (compressedFileExists(parsedPackage.getPath())) {
                 parsedPackage.setStub(true);
             }
         } else {
@@ -11913,7 +12068,7 @@ public class PackageManagerService extends IPackageManager.Stub
             assertCodePolicy(pkg);
         }
 
-        if (pkg.getCodePath() == null) {
+        if (pkg.getPath() == null) {
             // Bail out. The resource and code paths haven't been set.
             throw new PackageManagerException(INSTALL_FAILED_INVALID_APK,
                     "Code and resource paths haven't been set correctly");
@@ -11940,7 +12095,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (mAndroidApplication != null) {
                     Slog.w(TAG, "*************************************************");
                     Slog.w(TAG, "Core android package being redefined.  Skipping.");
-                    Slog.w(TAG, " codePath=" + pkg.getCodePath());
+                    Slog.w(TAG, " codePath=" + pkg.getPath());
                     Slog.w(TAG, "*************************************************");
                     throw new PackageManagerException(INSTALL_FAILED_DUPLICATE_PACKAGE,
                             "Core android package being redefined.  Skipping.");
@@ -12096,16 +12251,14 @@ public class PackageManagerService extends IPackageManager.Stub
                     PackageSetting known = mSettings.getPackageLPr(pkg.getPackageName());
                     if (known != null) {
                         if (DEBUG_PACKAGE_SCANNING) {
-                            Log.d(TAG, "Examining " + pkg.getCodePath()
-                                    + " and requiring known paths " + known.codePathString
-                                    + " & " + known.resourcePathString);
+                            Log.d(TAG, "Examining " + pkg.getPath()
+                                    + " and requiring known path " + known.getPathString());
                         }
-                        if (!pkg.getCodePath().equals(known.codePathString)
-                                || !pkg.getCodePath().equals(known.resourcePathString)) {
+                        if (!pkg.getPath().equals(known.getPathString())) {
                             throw new PackageManagerException(INSTALL_FAILED_PACKAGE_CHANGED,
                                     "Application package " + pkg.getPackageName()
-                                    + " found at " + pkg.getCodePath()
-                                    + " but expected at " + known.codePathString
+                                    + " found at " + pkg.getPath()
+                                    + " but expected at " + known.getPathString()
                                     + "; ignoring.");
                         }
                     } else {
@@ -12153,12 +12306,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (sharedUserSetting != null && sharedUserSetting.isPrivileged()) {
                     // Exempt SharedUsers signed with the platform key.
                     PackageSetting platformPkgSetting = mSettings.mPackages.get("android");
-                    if ((platformPkgSetting.signatures.mSigningDetails
-                            != PackageParser.SigningDetails.UNKNOWN)
-                            && (compareSignatures(
-                                    platformPkgSetting.signatures.mSigningDetails.signatures,
-                            pkg.getSigningDetails().signatures)
-                                            != PackageManager.SIGNATURE_MATCH)) {
+                    if (!comparePackageSignatures(platformPkgSetting,
+                            pkg.getSigningDetails().signatures)) {
                         throw new PackageManagerException("Apps that share a user with a " +
                                 "privileged app must themselves be marked as privileged. " +
                                 pkg.getPackageName() + " shares privileged user " +
@@ -12205,12 +12354,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     if (pkg.getTargetSdkVersion() < Build.VERSION_CODES.Q) {
                         final PackageSetting platformPkgSetting =
                                 mSettings.getPackageLPr("android");
-                        if ((platformPkgSetting.signatures.mSigningDetails
-                                    != PackageParser.SigningDetails.UNKNOWN)
-                                && (compareSignatures(
-                                        platformPkgSetting.signatures.mSigningDetails.signatures,
-                                pkg.getSigningDetails().signatures)
-                                    != PackageManager.SIGNATURE_MATCH)) {
+                        if (!comparePackageSignatures(platformPkgSetting,
+                                pkg.getSigningDetails().signatures)) {
                             throw new PackageManagerException("Overlay "
                                     + pkg.getPackageName()
                                     + " must target Q or later, "
@@ -12219,24 +12364,35 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
 
                     // A non-preloaded overlay package, without <overlay android:targetName>, will
-                    // only be used if it is signed with the same certificate as its target. If the
-                    // target is already installed, check this here to augment the last line of
-                    // defence which is OMS.
+                    // only be used if it is signed with the same certificate as its target OR if
+                    // it is signed with the same certificate as a reference package declared
+                    // in 'config-signature' tag of SystemConfig.
+                    // If the target is already installed or 'config-signature' tag in SystemConfig
+                    // is set, check this here to augment the last line of defence which is OMS.
                     if (pkg.getOverlayTargetName() == null) {
                         final PackageSetting targetPkgSetting =
                                 mSettings.getPackageLPr(pkg.getOverlayTarget());
                         if (targetPkgSetting != null) {
-                            if ((targetPkgSetting.signatures.mSigningDetails
-                                        != PackageParser.SigningDetails.UNKNOWN)
-                                    && (compareSignatures(
-                                            targetPkgSetting.signatures.mSigningDetails.signatures,
-                                    pkg.getSigningDetails().signatures)
-                                        != PackageManager.SIGNATURE_MATCH)) {
-                                throw new PackageManagerException("Overlay "
-                                        + pkg.getPackageName() + " and target "
-                                        + pkg.getOverlayTarget() + " signed with"
-                                        + " different certificates, and the overlay lacks"
-                                        + " <overlay android:targetName>");
+                            if (!comparePackageSignatures(targetPkgSetting,
+                                    pkg.getSigningDetails().signatures)) {
+                                // check reference signature
+                                if (mOverlayConfigSignaturePackage == null) {
+                                    throw new PackageManagerException("Overlay "
+                                            + pkg.getPackageName() + " and target "
+                                            + pkg.getOverlayTarget() + " signed with"
+                                            + " different certificates, and the overlay lacks"
+                                            + " <overlay android:targetName>");
+                                }
+                                final PackageSetting refPkgSetting =
+                                        mSettings.getPackageLPr(mOverlayConfigSignaturePackage);
+                                if (!comparePackageSignatures(refPkgSetting,
+                                        pkg.getSigningDetails().signatures)) {
+                                    throw new PackageManagerException("Overlay "
+                                            + pkg.getPackageName() + " signed with a different "
+                                            + "certificate than both the reference package and "
+                                            + "target " + pkg.getOverlayTarget() + ", and the "
+                                            + "overlay lacks <overlay android:targetName>");
+                                }
                             }
                         }
                     }
@@ -12706,7 +12862,7 @@ public class PackageManagerService extends IPackageManager.Stub
     public void sendPackageBroadcast(final String action, final String pkg, final Bundle extras,
             final int flags, final String targetPkg, final IIntentReceiver finishedReceiver,
             final int[] userIds, int[] instantUserIds,
-            @Nullable SparseArray<int[]> broadcastWhitelist) {
+            @Nullable SparseArray<int[]> broadcastAllowList) {
         mHandler.post(() -> {
             try {
                 final IActivityManager am = ActivityManager.getService();
@@ -12718,7 +12874,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     resolvedUserIds = userIds;
                 }
                 doSendBroadcast(am, action, pkg, extras, flags, targetPkg, finishedReceiver,
-                        resolvedUserIds, false, broadcastWhitelist);
+                        resolvedUserIds, false, broadcastAllowList);
                 if (instantUserIds != null && instantUserIds != EMPTY_INT_ARRAY) {
                     doSendBroadcast(am, action, pkg, extras, flags, targetPkg, finishedReceiver,
                             instantUserIds, true, null);
@@ -12791,7 +12947,7 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     private void doSendBroadcast(IActivityManager am, String action, String pkg, Bundle extras,
             int flags, String targetPkg, IIntentReceiver finishedReceiver,
-            int[] userIds, boolean isInstantApp, @Nullable SparseArray<int[]> broadcastWhitelist) {
+            int[] userIds, boolean isInstantApp, @Nullable SparseArray<int[]> broadcastAllowList) {
         for (int id : userIds) {
             final Intent intent = new Intent(action,
                     pkg != null ? Uri.fromParts(PACKAGE_SCHEME, pkg, null) : null);
@@ -12821,7 +12977,7 @@ public class PackageManagerService extends IPackageManager.Stub
             mInjector.getActivityManagerInternal().broadcastIntent(
                     intent, finishedReceiver, requiredPermissions,
                     finishedReceiver != null, id,
-                    broadcastWhitelist == null ? null : broadcastWhitelist.get(id));
+                    broadcastAllowList == null ? null : broadcastAllowList.get(id));
         }
     }
 
@@ -12884,15 +13040,8 @@ public class PackageManagerService extends IPackageManager.Stub
         return installReason;
     }
 
-    void installStage(ActiveInstallSession activeInstallSession) {
-        if (DEBUG_INSTANT) {
-            if ((activeInstallSession.getSessionParams().installFlags
-                    & PackageManager.INSTALL_INSTANT_APP) != 0) {
-                Slog.d(TAG, "Ephemeral install of " + activeInstallSession.getPackageName());
-            }
-        }
+    void installStage(InstallParams params) {
         final Message msg = mHandler.obtainMessage(INIT_COPY);
-        final InstallParams params = new InstallParams(activeInstallSession);
         params.setTraceMethod("installStage").setTraceCookie(System.identityHashCode(params));
         msg.obj = params;
 
@@ -12904,11 +13053,11 @@ public class PackageManagerService extends IPackageManager.Stub
         mHandler.sendMessage(msg);
     }
 
-    void installStage(ActiveInstallSession parent, List<ActiveInstallSession> children)
+    void installStage(InstallParams parent, List<InstallParams> children)
             throws PackageManagerException {
         final Message msg = mHandler.obtainMessage(INIT_COPY);
         final MultiPackageInstallParams params =
-                new MultiPackageInstallParams(UserHandle.ALL, parent, children);
+                new MultiPackageInstallParams(parent, children);
         params.setTraceMethod("installStageMultiPackage")
                 .setTraceCookie(System.identityHashCode(params));
         msg.obj = params;
@@ -12918,6 +13067,21 @@ public class PackageManagerService extends IPackageManager.Stub
         Trace.asyncTraceBegin(TRACE_TAG_PACKAGE_MANAGER, "queueInstall",
                 System.identityHashCode(msg.obj));
         mHandler.sendMessage(msg);
+    }
+
+    void verifyStage(VerificationParams params) {
+        mHandler.post(()-> {
+            params.startCopy();
+        });
+    }
+
+    void verifyStage(VerificationParams parent, List<VerificationParams> children)
+            throws PackageManagerException {
+        final MultiPackageVerificationParams params =
+                new MultiPackageVerificationParams(parent, children);
+        mHandler.post(()-> {
+            params.startCopy();
+        });
     }
 
     private void sendPackageAddedForUser(String packageName, PackageSetting pkgSetting,
@@ -12953,7 +13117,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED,
                 packageName, extras, 0, null, null, userIds, instantUserIds,
-                mAppsFilter.getVisibilityWhitelist(
+                mAppsFilter.getVisibilityAllowList(
                         getPackageSettingInternal(packageName, Process.SYSTEM_UID),
                         userIds, mSettings.mPackages));
         if (sendBootCompleted && !ArrayUtils.isEmpty(userIds)) {
@@ -13071,7 +13235,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 return true;
             }
             if (sendRemoved) {
-                killApplication(packageName, UserHandle.getUid(userId, pkgSetting.appId),
+                killApplication(packageName, pkgSetting.appId, userId,
                         "hiding pkg");
                 sendApplicationHiddenForUser(packageName, pkgSetting, userId);
                 return true;
@@ -13769,7 +13933,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final boolean isCallerOwner = isCallerDeviceOrProfileOwner(userId);
         final long callingId = Binder.clearCallingIdentity();
         try {
-            final String activeLauncherPackageName = getActiveLauncherPackageName(userId);
+            final String activeLauncherPackageName = mPermissionManager.getDefaultHome(userId);
             final String dialerPackageName = mPermissionManager.getDefaultDialer(userId);
             for (int i = 0; i < packageNames.length; i++) {
                 canSuspend[i] = false;
@@ -13843,18 +14007,6 @@ public class PackageManagerService extends IPackageManager.Stub
             Binder.restoreCallingIdentity(callingId);
         }
         return canSuspend;
-    }
-
-    private String getActiveLauncherPackageName(int userId) {
-        Intent intent = new Intent(Intent.ACTION_MAIN);
-        intent.addCategory(Intent.CATEGORY_HOME);
-        ResolveInfo resolveInfo = resolveIntent(
-                intent,
-                intent.resolveTypeIfNeeded(mContext.getContentResolver()),
-                PackageManager.MATCH_DEFAULT_ONLY,
-                userId);
-
-        return resolveInfo == null ? null : resolveInfo.activityInfo.packageName;
     }
 
     @Override
@@ -14440,13 +14592,11 @@ public class PackageManagerService extends IPackageManager.Stub
             Log.v(TAG, "restoreAndPostInstall userId=" + userId + " package=" + res.pkg);
         }
 
-        // A restore should be performed at this point if (a) the install
-        // succeeded, (b) the operation is not an update, and (c) the new
-        // package has not opted out of backup participation.
+        // A restore should be requested at this point if (a) the install
+        // succeeded, (b) the operation is not an update.
         final boolean update = res.removedInfo != null
                 && res.removedInfo.removedPackage != null;
-        boolean allowBackup = res.pkg != null && res.pkg.isAllowBackup();
-        boolean doRestore = !update && allowBackup;
+        boolean doRestore = !update && res.pkg != null;
 
         // Set up the post-install work request bookkeeping.  This will be used
         // and cleaned up by the post-install event handling regardless of whether
@@ -14548,7 +14698,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final PackageSetting ps;
         int appId = -1;
         long ceDataInode = -1;
-        synchronized (mSettings) {
+        synchronized (mLock) {
             ps = mSettings.getPackageLPr(packageName);
             if (ps != null) {
                 appId = ps.appId;
@@ -14623,7 +14773,7 @@ public class PackageManagerService extends IPackageManager.Stub
     private void sendFirstLaunchBroadcast(String pkgName, String installerPkg,
             int[] userIds, int[] instantUserIds) {
         sendPackageBroadcast(Intent.ACTION_PACKAGE_FIRST_LAUNCH, pkgName, null, 0,
-                installerPkg, null, userIds, instantUserIds, null /* broadcastWhitelist */);
+                installerPkg, null, userIds, instantUserIds, null /* broadcastAllowList */);
     }
 
     private abstract class HandlerParams {
@@ -14780,32 +14930,21 @@ public class PackageManagerService extends IPackageManager.Stub
      * committed together.
      */
     class MultiPackageInstallParams extends HandlerParams {
-        private final IPackageInstallObserver2 mVerificationObserver;
-        @NonNull
-        private final ArrayList<InstallParams> mChildParams;
-        // TODO(samiul): mCurrentState will relocated to a install-specific class in future
-        @NonNull
+        private final List<InstallParams> mChildParams;
         private final Map<InstallArgs, Integer> mCurrentState;
-        private final Map<InstallParams, Integer> mVerificationState;
 
-        MultiPackageInstallParams(
-                @NonNull UserHandle user,
-                @NonNull ActiveInstallSession parent,
-                @NonNull List<ActiveInstallSession> activeInstallSessions)
+        MultiPackageInstallParams(InstallParams parent, List<InstallParams> childParams)
                 throws PackageManagerException {
-            super(user);
-            if (activeInstallSessions.size() == 0) {
+            super(parent.getUser());
+            if (childParams.size() == 0) {
                 throw new PackageManagerException("No child sessions found!");
             }
-            mChildParams = new ArrayList<>(activeInstallSessions.size());
-            for (int i = 0; i < activeInstallSessions.size(); i++) {
-                final InstallParams childParams = new InstallParams(activeInstallSessions.get(i));
-                childParams.mParentInstallParams = this;
-                this.mChildParams.add(childParams);
+            mChildParams = childParams;
+            for (int i = 0; i < childParams.size(); i++) {
+                final InstallParams childParam = childParams.get(i);
+                childParam.mParentInstallParams = this;
             }
             this.mCurrentState = new ArrayMap<>(mChildParams.size());
-            this.mVerificationState = new ArrayMap<>(mChildParams.size());
-            mVerificationObserver = parent.getVerificationObserver();
         }
 
         @Override
@@ -14822,7 +14961,6 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
 
-        // TODO(samiul): this method will relocated to a install-specific class in future
         void tryProcessInstallRequest(InstallArgs args, int currentStatus) {
             mCurrentState.put(args, currentStatus);
             if (mCurrentState.size() != mChildParams.size()) {
@@ -14846,122 +14984,67 @@ public class PackageManagerService extends IPackageManager.Stub
                     completeStatus == PackageManager.INSTALL_SUCCEEDED,
                     installRequests);
         }
-
-        void trySendVerificationCompleteNotification(InstallParams child, int currentStatus) {
-            mVerificationState.put(child, currentStatus);
-            if (mVerificationState.size() != mChildParams.size()) {
-                return;
-            }
-            int completeStatus = PackageManager.INSTALL_SUCCEEDED;
-            for (Integer status : mVerificationState.values()) {
-                if (status == PackageManager.INSTALL_UNKNOWN) {
-                    return;
-                } else if (status != PackageManager.INSTALL_SUCCEEDED) {
-                    completeStatus = status;
-                    break;
-                }
-            }
-            try {
-                mVerificationObserver.onPackageInstalled(null, completeStatus,
-                        "Package Verification Result", new Bundle());
-            } catch (RemoteException e) {
-                Slog.i(TAG, "Observer no longer exists.");
-            }
-        }
     }
 
     class InstallParams extends HandlerParams {
-        // TODO: see if we can collapse this into ActiveInstallSession
-
         final OriginInfo origin;
         final MoveInfo move;
-        final IPackageInstallObserver2 mInstallObserver;
-        private final IPackageInstallObserver2 mVerificationObserver;
+        final IPackageInstallObserver2 observer;
         int installFlags;
         @NonNull final InstallSource installSource;
         final String volumeUuid;
-        private boolean mWaitForVerificationToComplete;
-        private boolean mWaitForIntegrityVerificationToComplete;
-        private boolean mWaitForEnableRollbackToComplete;
         int mRet;
         final String packageAbiOverride;
         final String[] grantedRuntimePermissions;
         final List<String> whitelistedRestrictedPermissions;
         final int autoRevokePermissionsMode;
-        final VerificationInfo verificationInfo;
         final PackageParser.SigningDetails signingDetails;
         final int installReason;
-        @Nullable
-        MultiPackageInstallParams mParentInstallParams;
-        final long requiredInstalledVersionCode;
+        @Nullable MultiPackageInstallParams mParentInstallParams;
         final boolean forceQueryableOverride;
         final int mDataLoaderType;
-        final int mSessionId;
 
-        InstallParams(OriginInfo origin, MoveInfo move, IPackageInstallObserver2 installObserver,
+        InstallParams(OriginInfo origin, MoveInfo move, IPackageInstallObserver2 observer,
                 int installFlags, InstallSource installSource, String volumeUuid,
-                VerificationInfo verificationInfo, UserHandle user, String packageAbiOverride,
-                String[] grantedPermissions, List<String> whitelistedRestrictedPermissions,
-                int autoRevokePermissionsMode,
-                SigningDetails signingDetails, int installReason,
-                long requiredInstalledVersionCode, int dataLoaderType) {
+                UserHandle user, String packageAbiOverride) {
             super(user);
             this.origin = origin;
             this.move = move;
-            this.mInstallObserver = installObserver;
-            this.mVerificationObserver = null;
+            this.observer = observer;
             this.installFlags = installFlags;
             this.installSource = Preconditions.checkNotNull(installSource);
             this.volumeUuid = volumeUuid;
-            this.verificationInfo = verificationInfo;
             this.packageAbiOverride = packageAbiOverride;
-            this.grantedRuntimePermissions = grantedPermissions;
-            this.whitelistedRestrictedPermissions = whitelistedRestrictedPermissions;
-            this.autoRevokePermissionsMode = autoRevokePermissionsMode;
-            this.signingDetails = signingDetails;
-            this.installReason = installReason;
-            this.requiredInstalledVersionCode = requiredInstalledVersionCode;
+
+            this.grantedRuntimePermissions = null;
+            this.whitelistedRestrictedPermissions = null;
+            this.autoRevokePermissionsMode = MODE_DEFAULT;
+            this.signingDetails = PackageParser.SigningDetails.UNKNOWN;
+            this.installReason = PackageManager.INSTALL_REASON_UNKNOWN;
             this.forceQueryableOverride = false;
-            this.mDataLoaderType = dataLoaderType;
-            this.mSessionId = -1;
+            this.mDataLoaderType = DataLoaderType.NONE;
         }
 
-        InstallParams(ActiveInstallSession activeInstallSession) {
-            super(activeInstallSession.getUser());
-            final PackageInstaller.SessionParams sessionParams =
-                    activeInstallSession.getSessionParams();
-            if (DEBUG_INSTANT) {
-                if ((sessionParams.installFlags
-                        & PackageManager.INSTALL_INSTANT_APP) != 0) {
-                    Slog.d(TAG, "Ephemeral install of " + activeInstallSession.getPackageName());
-                }
-            }
-            verificationInfo = new VerificationInfo(
-                    sessionParams.originatingUri,
-                    sessionParams.referrerUri,
-                    sessionParams.originatingUid,
-                    activeInstallSession.getInstallerUid());
-            origin = OriginInfo.fromStagedFile(activeInstallSession.getStagedDir());
+        InstallParams(File stagedDir, IPackageInstallObserver2 observer,
+                PackageInstaller.SessionParams sessionParams, InstallSource installSource,
+                UserHandle user, SigningDetails signingDetails, int installerUid) {
+            super(user);
+            origin = OriginInfo.fromStagedFile(stagedDir);
             move = null;
             installReason = fixUpInstallReason(
-                    activeInstallSession.getInstallSource().installerPackageName,
-                    activeInstallSession.getInstallerUid(),
-                    sessionParams.installReason);
-            mInstallObserver = activeInstallSession.getInstallObserver();
-            mVerificationObserver = activeInstallSession.getVerificationObserver();
+                    installSource.installerPackageName, installerUid, sessionParams.installReason);
+            this.observer = observer;
             installFlags = sessionParams.installFlags;
-            installSource = activeInstallSession.getInstallSource();
+            this.installSource = installSource;
             volumeUuid = sessionParams.volumeUuid;
             packageAbiOverride = sessionParams.abiOverride;
             grantedRuntimePermissions = sessionParams.grantedRuntimePermissions;
             whitelistedRestrictedPermissions = sessionParams.whitelistedRestrictedPermissions;
             autoRevokePermissionsMode = sessionParams.autoRevokePermissionsMode;
-            signingDetails = activeInstallSession.getSigningDetails();
-            requiredInstalledVersionCode = sessionParams.requiredInstalledVersionCode;
+            this.signingDetails = signingDetails;
             forceQueryableOverride = sessionParams.forceQueryableOverride;
             mDataLoaderType = (sessionParams.dataLoaderParams != null)
                     ? sessionParams.dataLoaderParams.getType() : DataLoaderType.NONE;
-            mSessionId = activeInstallSession.getSessionId();
         }
 
         @Override
@@ -15108,12 +15191,153 @@ public class PackageManagerService extends IPackageManager.Stub
         public void handleStartCopy() {
             PackageInfoLite pkgLite = PackageManagerServiceUtils.getMinimalPackageInfo(mContext,
                     origin.resolvedPath, installFlags, packageAbiOverride);
+            mRet = overrideInstallLocation(pkgLite);
+        }
+
+        @Override
+        void handleReturnCode() {
+            processPendingInstall();
+        }
+
+        private void processPendingInstall() {
+            InstallArgs args = createInstallArgs(this);
+            if (mRet == PackageManager.INSTALL_SUCCEEDED) {
+                mRet = args.copyApk();
+            }
+            if (mParentInstallParams != null) {
+                mParentInstallParams.tryProcessInstallRequest(args, mRet);
+            } else {
+                PackageInstalledInfo res = createPackageInstalledInfo(mRet);
+                processInstallRequestsAsync(
+                        res.returnCode == PackageManager.INSTALL_SUCCEEDED,
+                        Collections.singletonList(new InstallRequest(args, res)));
+
+            }
+        }
+    }
+
+    /**
+     * Container for a multi-package install which refers to all install sessions and args being
+     * committed together.
+     */
+    class MultiPackageVerificationParams extends HandlerParams {
+        private final IPackageInstallObserver2 mObserver;
+        private final List<VerificationParams> mChildParams;
+        private final Map<VerificationParams, Integer> mVerificationState;
+
+        MultiPackageVerificationParams(
+                VerificationParams parent,
+                List<VerificationParams> children)
+                throws PackageManagerException {
+            super(parent.getUser());
+            if (children.size() == 0) {
+                throw new PackageManagerException("No child sessions found!");
+            }
+            mChildParams = children;
+            // Provide every child with reference to this object as parent
+            for (int i = 0; i < children.size(); i++) {
+                final VerificationParams childParams = children.get(i);
+                childParams.mParentVerificationParams = this;
+            }
+            this.mVerificationState = new ArrayMap<>(mChildParams.size());
+            mObserver = parent.observer;
+        }
+
+        @Override
+        void handleStartCopy() {
+            for (VerificationParams params : mChildParams) {
+                params.handleStartCopy();
+            }
+        }
+
+        @Override
+        void handleReturnCode() {
+            for (VerificationParams params : mChildParams) {
+                params.handleReturnCode();
+            }
+        }
+
+        void trySendVerificationCompleteNotification(VerificationParams child, int currentStatus) {
+            mVerificationState.put(child, currentStatus);
+            if (mVerificationState.size() != mChildParams.size()) {
+                return;
+            }
+            int completeStatus = PackageManager.INSTALL_SUCCEEDED;
+            for (Integer status : mVerificationState.values()) {
+                if (status == PackageManager.INSTALL_UNKNOWN) {
+                    return;
+                } else if (status != PackageManager.INSTALL_SUCCEEDED) {
+                    completeStatus = status;
+                    break;
+                }
+            }
+            try {
+                mObserver.onPackageInstalled(null, completeStatus,
+                        "Package Verification Result", new Bundle());
+            } catch (RemoteException e) {
+                Slog.i(TAG, "Observer no longer exists.");
+            }
+        }
+    }
+
+    class VerificationParams extends HandlerParams {
+        final OriginInfo origin;
+        final IPackageInstallObserver2 observer;
+        final int installFlags;
+        @NonNull final InstallSource installSource;
+        final String packageAbiOverride;
+        final VerificationInfo verificationInfo;
+        final PackageParser.SigningDetails signingDetails;
+        @Nullable MultiPackageVerificationParams mParentVerificationParams;
+        final long requiredInstalledVersionCode;
+        final int mDataLoaderType;
+        final int mSessionId;
+
+        private boolean mWaitForVerificationToComplete;
+        private boolean mWaitForIntegrityVerificationToComplete;
+        private boolean mWaitForEnableRollbackToComplete;
+        private int mRet;
+
+        VerificationParams(UserHandle user, File stagedDir, IPackageInstallObserver2 observer,
+                PackageInstaller.SessionParams sessionParams, InstallSource installSource,
+                int installerUid, SigningDetails signingDetails, int sessionId) {
+            super(user);
+            origin = OriginInfo.fromStagedFile(stagedDir);
+            this.observer = observer;
+            installFlags = sessionParams.installFlags;
+            this.installSource = installSource;
+            packageAbiOverride = sessionParams.abiOverride;
+            verificationInfo = new VerificationInfo(
+                    sessionParams.originatingUri,
+                    sessionParams.referrerUri,
+                    sessionParams.originatingUid,
+                    installerUid
+            );
+            this.signingDetails = signingDetails;
+            requiredInstalledVersionCode = sessionParams.requiredInstalledVersionCode;
+            mDataLoaderType = (sessionParams.dataLoaderParams != null)
+                    ? sessionParams.dataLoaderParams.getType() : DataLoaderType.NONE;
+            mSessionId = sessionId;
+        }
+
+        @Override
+        public String toString() {
+            return "InstallParams{" + Integer.toHexString(System.identityHashCode(this))
+                    + " file=" + origin.file + "}";
+        }
+
+        public void handleStartCopy() {
+            if ((installFlags & PackageManager.INSTALL_APEX) != 0) {
+                // Apex packages get verified in StagingManager currently.
+                // TODO(b/136257624): Move apex verification logic out of StagingManager
+                mRet = INSTALL_SUCCEEDED;
+                return;
+            }
+
+            PackageInfoLite pkgLite = PackageManagerServiceUtils.getMinimalPackageInfo(mContext,
+                    origin.resolvedPath, installFlags, packageAbiOverride);
 
             mRet = verifyReplacingVersionCode(pkgLite);
-
-            if (mRet == INSTALL_SUCCEEDED) {
-                mRet = overrideInstallLocation(pkgLite);
-            }
 
             // Perform package verification and enable rollback (unless we are simply moving the
             // package).
@@ -15276,7 +15500,7 @@ public class PackageManagerService extends IPackageManager.Stub
             final long idleDuration = getVerificationTimeout();
 
             idleController.addPowerSaveTempWhitelistAppDirect(Process.myUid(),
-                     idleDuration,
+                    idleDuration,
                     false, "integrity component");
             final BroadcastOptions options = BroadcastOptions.makeBasic();
             options.setTemporaryAppWhitelistDuration(idleDuration);
@@ -15541,44 +15765,16 @@ public class PackageManagerService extends IPackageManager.Stub
                     || mWaitForEnableRollbackToComplete) {
                 return;
             }
-
-            if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
-                try {
-                    mInstallObserver.onPackageInstalled(null, mRet, "Dry run", new Bundle());
-                } catch (RemoteException e) {
-                    Slog.i(TAG, "Observer no longer exists.");
-                }
-                return;
-            }
             sendVerificationCompleteNotification();
-
-            // TODO(samiul): In future return once verification is complete
-            processPendingInstall();
-        }
-
-        private void processPendingInstall() {
-            InstallArgs args = createInstallArgs(this);
-            if (mRet == PackageManager.INSTALL_SUCCEEDED) {
-                mRet = args.copyApk();
-            }
-            if (mParentInstallParams != null) {
-                mParentInstallParams.tryProcessInstallRequest(args, mRet);
-            } else {
-                PackageInstalledInfo res = createPackageInstalledInfo(mRet);
-                processInstallRequestsAsync(
-                        res.returnCode == PackageManager.INSTALL_SUCCEEDED,
-                        Collections.singletonList(new InstallRequest(args, res)));
-
-            }
         }
 
         private void sendVerificationCompleteNotification() {
-            if (mParentInstallParams != null) {
-                mParentInstallParams.trySendVerificationCompleteNotification(this, mRet);
+            if (mParentVerificationParams != null) {
+                mParentVerificationParams.trySendVerificationCompleteNotification(this, mRet);
             } else {
                 try {
-                    mVerificationObserver.onPackageInstalled(null, mRet,
-                            "Package Verification Result", new Bundle());
+                    observer.onPackageInstalled(null, mRet, "Package Verification Result",
+                            new Bundle());
                 } catch (RemoteException e) {
                     Slog.i(TAG, "Observer no longer exists.");
                 }
@@ -15598,9 +15794,8 @@ public class PackageManagerService extends IPackageManager.Stub
      * Create args that describe an existing installed package. Typically used
      * when cleaning up old installs, or used as a move source.
      */
-    private InstallArgs createInstallArgsForExisting(String codePath,
-            String resourcePath, String[] instructionSets) {
-        return new FileInstallArgs(codePath, resourcePath, instructionSets);
+    private InstallArgs createInstallArgsForExisting(String codePath, String[] instructionSets) {
+        return new FileInstallArgs(codePath, instructionSets);
     }
 
     static abstract class InstallArgs {
@@ -15662,7 +15857,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         /** New install */
         InstallArgs(InstallParams params) {
-            this(params.origin, params.move, params.mInstallObserver, params.installFlags,
+            this(params.origin, params.move, params.observer, params.installFlags,
                     params.installSource, params.volumeUuid,
                     params.getUser(), null /*instructionSets*/, params.packageAbiOverride,
                     params.grantedRuntimePermissions, params.whitelistedRestrictedPermissions,
@@ -15681,10 +15876,8 @@ public class PackageManagerService extends IPackageManager.Stub
         abstract boolean doRename(int status, ParsedPackage parsedPackage);
         abstract int doPostInstall(int status, int uid);
 
-        /** @see PackageSettingBase#codePathString */
+        /** @see PackageSettingBase#getPath() */
         abstract String getCodePath();
-        /** @see PackageSettingBase#resourcePathString */
-        abstract String getResourcePath();
 
         // Need installer lock especially for dex file removal.
         abstract void cleanUpResourcesLI();
@@ -15755,14 +15948,13 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         /** Existing install */
-        FileInstallArgs(String codePath, String resourcePath, String[] instructionSets) {
+        FileInstallArgs(String codePath, String[] instructionSets) {
             super(OriginInfo.fromNothing(), null, null, 0, InstallSource.EMPTY,
                     null, null, instructionSets, null, null, null, MODE_DEFAULT, null, 0,
                     PackageParser.SigningDetails.UNKNOWN,
                     PackageManager.INSTALL_REASON_UNKNOWN, false,
                     DataLoaderType.NONE);
             this.codeFile = (codePath != null) ? new File(codePath) : null;
-            this.resourceFile = (resourcePath != null) ? new File(resourcePath) : null;
         }
 
         int copyApk() {
@@ -15778,7 +15970,6 @@ public class PackageManagerService extends IPackageManager.Stub
             if (origin.staged) {
                 if (DEBUG_INSTALL) Slog.d(TAG, origin.file + " already staged; skipping copy");
                 codeFile = origin.file;
-                resourceFile = origin.file;
                 return PackageManager.INSTALL_SUCCEEDED;
             }
 
@@ -15787,7 +15978,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 final File tempDir =
                         mInstallerService.allocateStageDirLegacy(volumeUuid, isEphemeral);
                 codeFile = tempDir;
-                resourceFile = tempDir;
             } catch (IOException e) {
                 Slog.w(TAG, "Failed to create copy file: " + e);
                 return PackageManager.INSTALL_FAILED_INSUFFICIENT_STORAGE;
@@ -15858,7 +16048,6 @@ public class PackageManagerService extends IPackageManager.Stub
 
             // Reflect the rename internally
             codeFile = afterCodeFile;
-            resourceFile = afterCodeFile;
 
             // Reflect the rename in scanned details
             try {
@@ -15868,7 +16057,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 return false;
             }
             parsedPackage.setBaseCodePath(FileUtils.rewriteAfterRename(beforeCodeFile,
-                    afterCodeFile, parsedPackage.getBaseCodePath()));
+                    afterCodeFile, parsedPackage.getBaseApkPath()));
             parsedPackage.setSplitCodePaths(FileUtils.rewriteAfterRename(beforeCodeFile,
                     afterCodeFile, parsedPackage.getSplitCodePaths()));
 
@@ -15887,11 +16076,6 @@ public class PackageManagerService extends IPackageManager.Stub
             return (codeFile != null) ? codeFile.getAbsolutePath() : null;
         }
 
-        @Override
-        String getResourcePath() {
-            return (resourceFile != null) ? resourceFile.getAbsolutePath() : null;
-        }
-
         private boolean cleanUp() {
             if (codeFile == null || !codeFile.exists()) {
                 return false;
@@ -15899,14 +16083,10 @@ public class PackageManagerService extends IPackageManager.Stub
 
             String codePath = codeFile.getAbsolutePath();
             if (mIncrementalManager != null && isIncrementalPath(codePath)) {
-                mIncrementalManager.closeStorage(codePath);
+                mIncrementalManager.onPackageRemoved(codePath);
             }
 
             removeCodePathLI(codeFile);
-
-            if (resourceFile != null && !FileUtils.contains(codeFile, resourceFile)) {
-                resourceFile.delete();
-            }
 
             return true;
         }
@@ -15939,7 +16119,6 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     class MoveInstallArgs extends InstallArgs {
         private File codeFile;
-        private File resourceFile;
 
         /** New install */
         MoveInstallArgs(InstallParams params) {
@@ -15962,7 +16141,6 @@ public class PackageManagerService extends IPackageManager.Stub
 
             final String toPathName = new File(move.fromCodePath).getName();
             codeFile = new File(Environment.getDataAppDirectory(move.toUuid), toPathName);
-            resourceFile = codeFile;
             if (DEBUG_INSTALL) Slog.d(TAG, "codeFile after move is " + codeFile);
 
             return PackageManager.INSTALL_SUCCEEDED;
@@ -15997,11 +16175,6 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         String getCodePath() {
             return (codeFile != null) ? codeFile.getAbsolutePath() : null;
-        }
-
-        @Override
-        String getResourcePath() {
-            return (resourceFile != null) ? resourceFile.getAbsolutePath() : null;
         }
 
         private boolean cleanUp(String volumeUuid) {
@@ -16151,7 +16324,7 @@ public class PackageManagerService extends IPackageManager.Stub
         InstallSource installSource = installArgs.installSource;
         final String installerPackageName = installSource.installerPackageName;
 
-        if (DEBUG_INSTALL) Slog.d(TAG, "New package installed in " + pkg.getCodePath());
+        if (DEBUG_INSTALL) Slog.d(TAG, "New package installed in " + pkg.getPath());
         if (pkgName != null)
             acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 0);
         synchronized (mLock) {
@@ -16276,7 +16449,7 @@ public class PackageManagerService extends IPackageManager.Stub
             res.setReturnCode(PackageManager.INSTALL_SUCCEEDED);
             //to update install status
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "writeSettings");
-            mSettings.writeLPr();
+            writeSettingsLPrTEMP();
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
 
@@ -16308,9 +16481,11 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     private static class CommitRequest {
         final Map<String, ReconciledPackage> reconciledPackages;
+        @NonNull
         final int[] mAllUsers;
 
-        private CommitRequest(Map<String, ReconciledPackage> reconciledPackages, int[] allUsers) {
+        private CommitRequest(Map<String, ReconciledPackage> reconciledPackages,
+                @NonNull int[] allUsers) {
             this.reconciledPackages = reconciledPackages;
             this.mAllUsers = allUsers;
         }
@@ -16378,7 +16553,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     /**
      * A container of all data needed to commit a package to in-memory data structures and to disk.
-     * TODO: move most of the data contained her into a PackageSetting for commit.
+     * TODO: move most of the data contained here into a PackageSetting for commit.
      */
     private static class ReconciledPackage {
         public final ReconcileRequest request;
@@ -16780,7 +16955,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 reconciledPkg.pkgSetting.firstInstallTime = deletedPkgSetting.firstInstallTime;
                 reconciledPkg.pkgSetting.lastUpdateTime = System.currentTimeMillis();
 
-                res.removedInfo.broadcastWhitelist = mAppsFilter.getVisibilityWhitelist(
+                res.removedInfo.broadcastAllowList = mAppsFilter.getVisibilityAllowList(
                                 reconciledPkg.pkgSetting, request.mAllUsers, mSettings.mPackages);
                 if (reconciledPkg.prepareResult.system) {
                     // Remove existing system package
@@ -16790,8 +16965,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         // which means we are replacing another update that is already
                         // installed.  We need to make sure to delete the older one's .apk.
                         res.removedInfo.args = createInstallArgsForExisting(
-                                oldPackage.getCodePath(),
-                                oldPackage.getCodePath(),
+                                oldPackage.getPath(),
                                 getAppDexInstructionSets(
                                         AndroidPackageUtils.getPrimaryCpuAbi(oldPackage,
                                                 deletedPkgSetting),
@@ -16834,7 +17008,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         if (ps1.mOldCodePaths == null) {
                             ps1.mOldCodePaths = new ArraySet<>();
                         }
-                        Collections.addAll(ps1.mOldCodePaths, oldPackage.getBaseCodePath());
+                        Collections.addAll(ps1.mOldCodePaths, oldPackage.getBaseApkPath());
                         if (oldPackage.getSplitCodePaths() != null) {
                             Collections.addAll(ps1.mOldCodePaths, oldPackage.getSplitCodePaths());
                         }
@@ -16999,7 +17173,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     // For incremental installs, we bypass the verifier prior to install. Now
                     // that we know the package is valid, send a notice to the verifier with
                     // the root hash of the base.apk.
-                    final String baseCodePath = request.installResult.pkg.getBaseCodePath();
+                    final String baseCodePath = request.installResult.pkg.getBaseApkPath();
                     final String[] splitCodePaths = request.installResult.pkg.getSplitCodePaths();
                     final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
                     final int verificationId = mPendingVerificationToken++;
@@ -17043,10 +17217,11 @@ public class PackageManagerService extends IPackageManager.Stub
                             & PackageManagerService.SCAN_AS_INSTANT_APP) != 0);
             final AndroidPackage pkg = reconciledPkg.pkgSetting.pkg;
             final String packageName = pkg.getPackageName();
+            final String codePath = pkg.getPath();
             final boolean onIncremental = mIncrementalManager != null
-                    && isIncrementalPath(pkg.getCodePath());
+                    && isIncrementalPath(codePath);
             if (onIncremental) {
-                IncrementalStorage storage = mIncrementalManager.openStorage(pkg.getCodePath());
+                IncrementalStorage storage = mIncrementalManager.openStorage(codePath);
                 if (storage == null) {
                     throw new IllegalArgumentException(
                             "Install: null storage for incremental package " + packageName);
@@ -17060,7 +17235,7 @@ public class PackageManagerService extends IPackageManager.Stub
             }
             if (reconciledPkg.prepareResult.replace) {
                 mDexManager.notifyPackageUpdated(pkg.getPackageName(),
-                        pkg.getBaseCodePath(), pkg.getSplitCodePaths());
+                        pkg.getBaseApkPath(), pkg.getSplitCodePaths());
             }
 
             // Prepare the application profiles for the new code paths.
@@ -17149,7 +17324,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             // Notify BackgroundDexOptService that the package has been changed.
             // If this is an update of a package which used to fail to compile,
-            // BackgroundDexOptService will remove it from its blacklist.
+            // BackgroundDexOptService will remove it from its denylist.
             // TODO: Layering violation
             BackgroundDexOptService.notifyPackageChanged(packageName);
 
@@ -17293,7 +17468,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         if (DEBUG_INSTALL) Slog.d(TAG, "installPackageLI: path=" + tmpPackageFile);
 
-        // Sanity check
+        // Validity check
         if (instantApp && onExternal) {
             Slog.i(TAG, "Incompatible ephemeral install; external=" + onExternal);
             throw new PrepareFailure(PackageManager.INSTALL_FAILED_SESSION_INVALID);
@@ -17442,7 +17617,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
                 }
 
-                // Quick sanity check that we're signed correctly if updating;
+                // Quick validity check that we're signed correctly if updating;
                 // we'll check this again later when scanning, but we want to
                 // bail early here before tripping over redefined permissions.
                 final KeySetManagerService ksms = mSettings.mKeySetManagerService;
@@ -17610,11 +17785,9 @@ public class PackageManagerService extends IPackageManager.Stub
                 synchronized (mLock) {
                     pkgSetting = mSettings.getPackageLPr(pkgName);
                 }
-                String abiOverride =
-                        (pkgSetting == null || TextUtils.isEmpty(pkgSetting.cpuAbiOverrideString)
-                        ? args.abiOverride : pkgSetting.cpuAbiOverrideString);
                 boolean isUpdatedSystemAppFromExistingSetting = pkgSetting != null
                         && pkgSetting.getPkgState().isUpdatedSystemApp();
+                final String abiOverride = deriveAbiOverride(args.abiOverride);
                 AndroidPackage oldPackage = mPackages.get(pkgName);
                 boolean isUpdatedSystemAppInferred = oldPackage != null && oldPackage.isSystem();
                 final Pair<PackageAbiHelper.Abis, PackageAbiHelper.NativeLibraryPaths>
@@ -17663,12 +17836,10 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (parsedPackage.isStaticSharedLibrary()) {
                     // Static libs have a synthetic package name containing the version
                     // and cannot be updated as an update would get a new package name,
-                    // unless this is the exact same version code which is useful for
-                    // development.
+                    // unless this is installed from adb which is useful for development.
                     AndroidPackage existingPkg = mPackages.get(parsedPackage.getPackageName());
                     if (existingPkg != null
-                            && existingPkg.getLongVersionCode()
-                            != parsedPackage.getLongVersionCode()) {
+                            && (installFlags & PackageManager.INSTALL_FROM_ADB) == 0) {
                         throw new PrepareFailure(INSTALL_FAILED_DUPLICATE_PACKAGE,
                                 "Packages declaring "
                                         + "static-shared libs cannot be updated");
@@ -17687,7 +17858,6 @@ public class PackageManagerService extends IPackageManager.Stub
                     oldPackage = mPackages.get(pkgName11);
                     existingPackage = oldPackage;
                     if (DEBUG_INSTALL) {
-                        // TODO(b/135203078): PackageImpl.toString()
                         Slog.d(TAG,
                                 "replacePackageLI: new=" + parsedPackage + ", old=" + oldPackage);
                     }
@@ -17721,7 +17891,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         final byte[] digestBytes;
                         try {
                             final MessageDigest digest = MessageDigest.getInstance("SHA-512");
-                            updateDigest(digest, new File(parsedPackage.getBaseCodePath()));
+                            updateDigest(digest, new File(parsedPackage.getBaseApkPath()));
                             if (!ArrayUtils.isEmpty(parsedPackage.getSplitCodePaths())) {
                                 for (String path : parsedPackage.getSplitCodePaths()) {
                                     updateDigest(digest, new File(path));
@@ -17901,7 +18071,7 @@ public class PackageManagerService extends IPackageManager.Stub
             synchronized (mLock) {
                 final PackageSetting ps = mSettings.mPackages.get(pkg.getPackageName());
                 if (ps != null && ps.isPrivileged()) {
-                    fsverityCandidates.put(pkg.getBaseCodePath(), null);
+                    fsverityCandidates.put(pkg.getBaseApkPath(), null);
                     if (pkg.getSplitCodePaths() != null) {
                         for (String splitPath : pkg.getSplitCodePaths()) {
                             fsverityCandidates.put(splitPath, null);
@@ -17912,11 +18082,11 @@ public class PackageManagerService extends IPackageManager.Stub
         } else {
             // NB: These files will become only accessible if the signing key is loaded in kernel's
             // .fs-verity keyring.
-            fsverityCandidates.put(pkg.getBaseCodePath(),
-                    VerityUtils.getFsveritySignatureFilePath(pkg.getBaseCodePath()));
+            fsverityCandidates.put(pkg.getBaseApkPath(),
+                    VerityUtils.getFsveritySignatureFilePath(pkg.getBaseApkPath()));
 
             final String dmPath = DexMetadataHelper.buildDexMetadataPathForApk(
-                    pkg.getBaseCodePath());
+                    pkg.getBaseApkPath());
             if (new File(dmPath).exists()) {
                 fsverityCandidates.put(dmPath, VerityUtils.getFsveritySignatureFilePath(dmPath));
             }
@@ -18577,7 +18747,6 @@ public class PackageManagerService extends IPackageManager.Stub
         // user handle installed state
         int[] allUsers;
         /** enabled state of the uninstalled application */
-        final int origEnabledState;
         synchronized (mLock) {
             uninstalledPs = mSettings.mPackages.get(packageName);
             if (uninstalledPs == null) {
@@ -18593,10 +18762,6 @@ public class PackageManagerService extends IPackageManager.Stub
             }
 
             disabledSystemPs = mSettings.getDisabledSystemPkgLPr(packageName);
-            // Save the enabled state before we delete the package. When deleting a stub
-            // application we always set the enabled state to 'disabled'.
-            origEnabledState = uninstalledPs == null
-                    ? COMPONENT_ENABLED_STATE_DEFAULT : uninstalledPs.getEnabled(userId);
             // Static shared libs can be declared by any package, so let us not
             // allow removing a package if it provides a lib others depend on.
             pkg = mPackages.get(packageName);
@@ -18675,20 +18840,32 @@ public class PackageManagerService extends IPackageManager.Stub
             if (stubPkg != null && stubPkg.isStub()) {
                 final PackageSetting stubPs;
                 synchronized (mLock) {
-                    // restore the enabled state of the stub; the state is overwritten when
-                    // the stub is uninstalled
                     stubPs = mSettings.getPackageLPr(stubPkg.getPackageName());
-                    if (stubPs != null) {
-                        stubPs.setEnabled(origEnabledState, userId, "android");
-                    }
                 }
-                if (origEnabledState == COMPONENT_ENABLED_STATE_DEFAULT
-                        || origEnabledState == COMPONENT_ENABLED_STATE_ENABLED) {
-                    if (DEBUG_COMPRESSION) {
-                        Slog.i(TAG, "Enabling system stub after removal; pkg: "
-                                + stubPkg.getPackageName());
+
+                if (stubPs != null) {
+                    boolean enable = false;
+                    for (int aUserId : allUsers) {
+                        if (stubPs.getInstalled(aUserId)) {
+                            int enabled = stubPs.getEnabled(aUserId);
+                            if (enabled == COMPONENT_ENABLED_STATE_DEFAULT
+                                    || enabled == COMPONENT_ENABLED_STATE_ENABLED) {
+                                enable = true;
+                                break;
+                            }
+                        }
                     }
-                    enableCompressedPackage(stubPkg, stubPs);
+
+                    if (enable) {
+                        if (DEBUG_COMPRESSION) {
+                            Slog.i(TAG, "Enabling system stub after removal; pkg: "
+                                    + stubPkg.getPackageName());
+                        }
+                        enableCompressedPackage(stubPkg, stubPs);
+                    } else if (DEBUG_COMPRESSION) {
+                        Slog.i(TAG, "System stub disabled for all users, leaving uncompressed "
+                                + "after removal; pkg: " + stubPkg.getPackageName());
+                    }
                 }
             }
         }
@@ -18725,7 +18902,7 @@ public class PackageManagerService extends IPackageManager.Stub
         boolean isStaticSharedLib;
         // a two dimensional array mapping userId to the set of appIds that can receive notice
         // of package changes
-        SparseArray<int[]> broadcastWhitelist;
+        SparseArray<int[]> broadcastAllowList;
         // Clean up resources deleted packages.
         InstallArgs args = null;
 
@@ -18748,18 +18925,18 @@ public class PackageManagerService extends IPackageManager.Stub
             extras.putInt(Intent.EXTRA_UID, removedAppId >= 0 ? removedAppId : uid);
             extras.putBoolean(Intent.EXTRA_REPLACING, true);
             packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, removedPackage, extras,
-                    0, null /*targetPackage*/, null, null, null, broadcastWhitelist);
+                    0, null /*targetPackage*/, null, null, null, broadcastAllowList);
             packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED, removedPackage,
-                    extras, 0, null /*targetPackage*/, null, null, null, broadcastWhitelist);
+                    extras, 0, null /*targetPackage*/, null, null, null, broadcastAllowList);
             packageSender.sendPackageBroadcast(Intent.ACTION_MY_PACKAGE_REPLACED, null, null, 0,
-                    removedPackage, null, null, null, null /* broadcastWhitelist */);
+                    removedPackage, null, null, null, null /* broadcastAllowList */);
             if (installerPackageName != null) {
                 packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED,
                         removedPackage, extras, 0 /*flags*/,
-                        installerPackageName, null, null, null, null /* broadcastWhitelist */);
+                        installerPackageName, null, null, null, null /* broadcastAllowList */);
                 packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED,
                         removedPackage, extras, 0 /*flags*/,
-                        installerPackageName, null, null, null, null /* broadcastWhitelist */);
+                        installerPackageName, null, null, null, null /* broadcastAllowList */);
             }
         }
 
@@ -18782,7 +18959,7 @@ public class PackageManagerService extends IPackageManager.Stub
             if (removedPackage != null) {
                 packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_REMOVED,
                     removedPackage, extras, 0, null /*targetPackage*/, null,
-                    broadcastUsers, instantUserIds, broadcastWhitelist);
+                    broadcastUsers, instantUserIds, broadcastAllowList);
                 if (installerPackageName != null) {
                     packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_REMOVED,
                             removedPackage, extras, 0 /*flags*/,
@@ -18791,7 +18968,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (dataRemoved && !isRemovedPackageSystemUpdate) {
                     packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_FULLY_REMOVED,
                             removedPackage, extras, Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND, null,
-                            null, broadcastUsers, instantUserIds, broadcastWhitelist);
+                            null, broadcastUsers, instantUserIds, broadcastAllowList);
                     packageSender.notifyPackageRemoved(removedPackage, removedUid);
                 }
             }
@@ -18804,7 +18981,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
                 packageSender.sendPackageBroadcast(Intent.ACTION_UID_REMOVED,
                         null, extras, Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND,
-                        null, null, broadcastUsers, instantUserIds, broadcastWhitelist);
+                        null, null, broadcastUsers, instantUserIds, broadcastAllowList);
             }
         }
 
@@ -18834,7 +19011,7 @@ public class PackageManagerService extends IPackageManager.Stub
      * make sure this flag is set for partially installed apps. If not its meaningless to
      * delete a partially installed application.
      */
-    private void removePackageDataLIF(final PackageSetting deletedPs, int[] allUserHandles,
+    private void removePackageDataLIF(final PackageSetting deletedPs, @NonNull int[] allUserHandles,
             PackageRemovedInfo outInfo, int flags, boolean writeSettings) {
         String packageName = deletedPs.name;
         if (DEBUG_REMOVE) Slog.d(TAG, "removePackageDataLI: " + deletedPs);
@@ -18885,6 +19062,10 @@ public class PackageManagerService extends IPackageManager.Stub
                     if (outInfo != null) {
                         outInfo.removedAppId = removedAppId;
                     }
+                    if ((deletedPs.sharedUser == null || deletedPs.sharedUser.packages.size() == 0)
+                            && !isUpdatedSystemApp(deletedPs)) {
+                        mPermissionManager.removePermissionsStateTEMP(removedAppId);
+                    }
                     mPermissionManager.updatePermissions(deletedPs.name, null);
                     if (deletedPs.sharedUser != null) {
                         // Remove permissions associated with package. Since runtime
@@ -18894,10 +19075,10 @@ public class PackageManagerService extends IPackageManager.Stub
                         // package is successful and this causes a change in gids.
                         boolean shouldKill = false;
                         for (int userId : UserManagerService.getInstance().getUserIds()) {
-                            final int userIdToKill = mSettings.updateSharedUserPermsLPw(deletedPs,
-                                    userId);
-                            shouldKill |= userIdToKill == UserHandle.USER_ALL
-                                    || userIdToKill >= UserHandle.USER_SYSTEM;
+                            final int userIdToKill = mPermissionManager
+                                    .revokeSharedUserPermissionsForDeletedPackageTEMP(deletedPs,
+                                            userId);
+                            shouldKill |= userIdToKill != UserHandle.USER_NULL;
                         }
                         // If gids changed, kill all affected packages.
                         if (shouldKill) {
@@ -18918,7 +19099,7 @@ public class PackageManagerService extends IPackageManager.Stub
             }
             // make sure to preserve per-user disabled state if this removal was just
             // a downgrade of a system app to the factory package
-            if (allUserHandles != null && outInfo != null && outInfo.origUsers != null) {
+            if (outInfo != null && outInfo.origUsers != null) {
                 if (DEBUG_REMOVE) {
                     Slog.d(TAG, "Propagating install state across downgrade");
                 }
@@ -18941,7 +19122,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // can downgrade to reader
             if (writeSettings) {
                 // Save settings now
-                mSettings.writeLPr();
+                writeSettingsLPrTEMP();
             }
             if (installedStateChanged) {
                 mSettings.writeKernelMappingLPr(deletedPs);
@@ -18971,11 +19152,10 @@ public class PackageManagerService extends IPackageManager.Stub
      * Tries to delete system package.
      */
     private void deleteSystemPackageLIF(DeletePackageAction action, PackageSetting deletedPs,
-            int[] allUserHandles, int flags, @Nullable PackageRemovedInfo outInfo,
+            @NonNull int[] allUserHandles, int flags, @Nullable PackageRemovedInfo outInfo,
             boolean writeSettings)
             throws SystemDeleteException {
-        final boolean applyUserRestrictions =
-                (allUserHandles != null) && outInfo != null && (outInfo.origUsers != null);
+        final boolean applyUserRestrictions = outInfo != null && (outInfo.origUsers != null);
         final AndroidPackage deletedPkg = deletedPs.pkg;
         // Confirm if the system package has been updated
         // An updated system app can be deleted. This will also have to restore
@@ -19027,9 +19207,8 @@ public class PackageManagerService extends IPackageManager.Stub
         // Install the system package
         if (DEBUG_REMOVE) Slog.d(TAG, "Re-installing system package: " + disabledPs);
         try {
-            installPackageFromSystemLIF(disabledPs.codePathString, allUserHandles,
-                    outInfo == null ? null : outInfo.origUsers, deletedPs.getPermissionsState(),
-                    writeSettings);
+            installPackageFromSystemLIF(disabledPs.getPathString(), allUserHandles,
+                    outInfo == null ? null : outInfo.origUsers, writeSettings);
         } catch (PackageManagerException e) {
             Slog.w(TAG, "Failed to restore system package:" + deletedPkg.getPackageName() + ": "
                     + e.getMessage());
@@ -19042,8 +19221,15 @@ public class PackageManagerService extends IPackageManager.Stub
                 // and re-enable it afterward.
                 final PackageSetting stubPs = mSettings.mPackages.get(deletedPkg.getPackageName());
                 if (stubPs != null) {
-                    stubPs.setEnabled(
-                            COMPONENT_ENABLED_STATE_DISABLED, UserHandle.USER_SYSTEM, "android");
+                    int userId = action.user == null
+                            ? UserHandle.USER_ALL : action.user.getIdentifier();
+                    if (userId == UserHandle.USER_ALL) {
+                        for (int aUserId : allUserHandles) {
+                            stubPs.setEnabled(COMPONENT_ENABLED_STATE_DISABLED, aUserId, "android");
+                        }
+                    } else if (userId >= UserHandle.USER_SYSTEM) {
+                        stubPs.setEnabled(COMPONENT_ENABLED_STATE_DISABLED, userId, "android");
+                    }
                 }
             }
         }
@@ -19053,9 +19239,8 @@ public class PackageManagerService extends IPackageManager.Stub
      * Installs a package that's already on the system partition.
      */
     private AndroidPackage installPackageFromSystemLIF(@NonNull String codePathString,
-            @Nullable int[] allUserHandles, @Nullable int[] origUserHandles,
-            @Nullable PermissionsState origPermissionState, boolean writeSettings)
-                    throws PackageManagerException {
+            @NonNull int[] allUserHandles, @Nullable int[] origUserHandles, boolean writeSettings)
+            throws PackageManagerException {
         final File codePath = new File(codePathString);
         @ParseFlags int parseFlags =
                 mDefParseFlags
@@ -19092,16 +19277,11 @@ public class PackageManagerService extends IPackageManager.Stub
         synchronized (mLock) {
             PackageSetting ps = mSettings.mPackages.get(pkg.getPackageName());
 
-            // Propagate the permissions state as we do not want to drop on the floor
-            // runtime permissions. The update permissions method below will take
-            // care of removing obsolete permissions and grant install permissions.
-            if (origPermissionState != null) {
-                ps.getPermissionsState().copyFrom(origPermissionState);
-            }
+            // The update permissions method below will take care of removing obsolete permissions
+            // and granting install permissions.
             mPermissionManager.updatePermissions(pkg.getPackageName(), pkg);
 
-            final boolean applyUserRestrictions
-                    = (allUserHandles != null) && (origUserHandles != null);
+            final boolean applyUserRestrictions = origUserHandles != null;
             if (applyUserRestrictions) {
                 boolean installedStateChanged = false;
                 if (DEBUG_REMOVE) {
@@ -19131,14 +19311,14 @@ public class PackageManagerService extends IPackageManager.Stub
             }
             // can downgrade to reader here
             if (writeSettings) {
-                mSettings.writeLPr();
+                writeSettingsLPrTEMP();
             }
         }
         return pkg;
     }
 
     private void deleteInstalledPackageLIF(PackageSetting ps,
-            boolean deleteCodeAndResources, int flags, int[] allUserHandles,
+            boolean deleteCodeAndResources, int flags, @NonNull int[] allUserHandles,
             PackageRemovedInfo outInfo, boolean writeSettings) {
         synchronized (mLock) {
             if (outInfo != null) {
@@ -19152,7 +19332,7 @@ public class PackageManagerService extends IPackageManager.Stub
         // Delete application code and resources only for parent packages
         if (deleteCodeAndResources && (outInfo != null)) {
             outInfo.args = createInstallArgsForExisting(
-                    ps.codePathString, ps.resourcePathString, getAppDexInstructionSets(
+                    ps.getPathString(), getAppDexInstructionSets(
                             ps.primaryCpuAbiString, ps.secondaryCpuAbiString));
             if (DEBUG_SD_INSTALL) Slog.i(TAG, "args=" + outInfo.args);
         }
@@ -19205,7 +19385,7 @@ public class PackageManagerService extends IPackageManager.Stub
             } else {
                 ps.pkgPrivateFlags &= ~ApplicationInfo.PRIVATE_FLAG_REQUIRED_FOR_SYSTEM_USER;
             }
-            mSettings.writeLPr();
+            writeSettingsLPrTEMP();
         }
         return true;
     }
@@ -19258,7 +19438,7 @@ public class PackageManagerService extends IPackageManager.Stub
      * This method handles package deletion in general
      */
     private boolean deletePackageLIF(@NonNull String packageName, UserHandle user,
-            boolean deleteCodeAndResources, int[] allUserHandles, int flags,
+            boolean deleteCodeAndResources, @NonNull int[] allUserHandles, int flags,
             PackageRemovedInfo outInfo, boolean writeSettings,
             ParsedPackage replacingPackage) {
         final DeletePackageAction action;
@@ -19295,13 +19475,20 @@ public class PackageManagerService extends IPackageManager.Stub
     /** Deletes a package. Only throws when install of a disabled package fails. */
     private void executeDeletePackageLIF(DeletePackageAction action,
             String packageName, boolean deleteCodeAndResources,
-            int[] allUserHandles, boolean writeSettings,
+            @NonNull int[] allUserHandles, boolean writeSettings,
             ParsedPackage replacingPackage) throws SystemDeleteException {
         final PackageSetting ps = action.deletingPs;
         final PackageRemovedInfo outInfo = action.outInfo;
         final UserHandle user = action.user;
         final int flags = action.flags;
         final boolean systemApp = isSystemApp(ps);
+
+        // We need to get the permission state before package state is (potentially) destroyed.
+        final SparseBooleanArray hadSuspendAppsPermission = new SparseBooleanArray();
+        for (int userId : allUserHandles) {
+            hadSuspendAppsPermission.put(userId, checkPermission(Manifest.permission.SUSPEND_APPS,
+                    packageName, userId) == PERMISSION_GRANTED);
+        }
 
         final int userId = user == null ? UserHandle.USER_ALL : user.getIdentifier();
 
@@ -19369,8 +19556,7 @@ public class PackageManagerService extends IPackageManager.Stub
             affectedUserIds = resolveUserIds(userId);
         }
         for (final int affectedUserId : affectedUserIds) {
-            if (ps.getPermissionsState().hasPermission(Manifest.permission.SUSPEND_APPS,
-                    affectedUserId)) {
+            if (hadSuspendAppsPermission.get(affectedUserId)) {
                 unsuspendForSuspendingPackage(packageName, affectedUserId);
                 removeAllDistractingPackageRestrictions(affectedUserId);
             }
@@ -19439,6 +19625,9 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         if (outInfo != null) {
+            if ((flags & PackageManager.DELETE_KEEP_DATA) == 0) {
+                outInfo.dataRemoved = true;
+            }
             outInfo.removedPackage = ps.name;
             outInfo.installerPackageName = ps.installSource.installerPackageName;
             outInfo.isStaticSharedLib = pkg != null && pkg.getStaticSharedLibName() != null;
@@ -19474,9 +19663,11 @@ public class PackageManagerService extends IPackageManager.Stub
         mPermissionManager.enforceCrossUserPermission(callingUid, userId,
                 true /* requireFullPermission */, false /* checkShell */, "clear application data");
 
-        final PackageSetting ps = mSettings.getPackageLPr(packageName);
-        final boolean filterApp =
-                (ps != null && shouldFilterApplicationLocked(ps, callingUid, userId));
+        final boolean filterApp;
+        synchronized (mLock) {
+            final PackageSetting ps = mSettings.getPackageLPr(packageName);
+            filterApp = shouldFilterApplicationLocked(ps, callingUid, userId);
+        }
         if (!filterApp && mProtectedPackages.isPackageDataProtected(userId, packageName)) {
             throw new SecurityException("Cannot clear data for a protected package: "
                     + packageName);
@@ -19683,7 +19874,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         final String[] packageNames = { packageName };
         final long[] ceDataInodes = { ps.getCeDataInode(userId) };
-        final String[] codePaths = { ps.codePathString };
+        final String[] codePaths = { ps.getPathString() };
 
         try {
             mInstaller.getAppSize(ps.volumeUuid, packageNames, userId, 0,
@@ -19756,11 +19947,13 @@ public class PackageManagerService extends IPackageManager.Stub
         if (mContext.checkCallingOrSelfPermission(
                 android.Manifest.permission.SET_PREFERRED_APPLICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
-            if (getUidTargetSdkVersionLockedLPr(callingUid)
-                    < Build.VERSION_CODES.FROYO) {
-                Slog.w(TAG, "Ignoring addPreferredActivity() from uid "
-                        + callingUid);
-                return;
+            synchronized (mLock) {
+                if (getUidTargetSdkVersionLockedLPr(callingUid)
+                        < Build.VERSION_CODES.FROYO) {
+                    Slog.w(TAG, "Ignoring addPreferredActivity() from uid "
+                            + callingUid);
+                    return;
+                }
             }
             mContext.enforceCallingOrSelfPermission(
                     android.Manifest.permission.SET_PREFERRED_APPLICATIONS, null);
@@ -19778,7 +19971,7 @@ public class PackageManagerService extends IPackageManager.Stub
             final PreferredIntentResolver pir = mSettings.editPreferredActivitiesLPw(userId);
             final ArrayList<PreferredActivity> existing = pir.findFilters(filter);
             if (removeExisting && existing != null) {
-                removeFiltersLocked(pir, filter, existing);
+                Settings.removeFilters(pir, filter, existing);
             }
             pir.addFilter(new PreferredActivity(filter, match, set, activity, always));
             scheduleWritePackageRestrictionsLocked(userId);
@@ -19879,28 +20072,12 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
                 }
                 if (existing != null) {
-                    removeFiltersLocked(pir, filter, existing);
+                    Settings.removeFilters(pir, filter, existing);
                 }
             }
         }
         addPreferredActivityInternal(filter, match, set, activity, true, userId,
                 "Replacing preferred", false);
-    }
-
-    private void removeFiltersLocked(@NonNull PreferredIntentResolver pir,
-            @NonNull IntentFilter filter, @NonNull List<PreferredActivity> existing) {
-        if (DEBUG_PREFERRED) {
-            Slog.i(TAG, existing.size() + " preferred matches for:");
-            filter.dump(new LogPrinter(Log.INFO, TAG), "  ");
-        }
-        for (int i = existing.size() - 1; i >= 0; --i) {
-            final PreferredActivity pa = existing.get(i);
-            if (DEBUG_PREFERRED) {
-                Slog.i(TAG, "Removing preferred activity " + pa.mPref.mComponent + ":");
-                pa.dump(new LogPrinter(Log.INFO, TAG), "  ");
-            }
-            pir.removeFilter(pa);
-        }
     }
 
     @Override
@@ -19940,8 +20117,9 @@ public class PackageManagerService extends IPackageManager.Stub
     /** This method takes a specific user id as well as UserHandle.USER_ALL. */
     private void clearPackagePreferredActivities(String packageName, int userId) {
         final SparseBooleanArray changedUsers = new SparseBooleanArray();
-
-        clearPackagePreferredActivitiesLPw(packageName, changedUsers, userId);
+        synchronized (mLock) {
+            clearPackagePreferredActivitiesLPw(packageName, changedUsers, userId);
+        }
         if (changedUsers.size() > 0) {
             updateDefaultHomeNotLocked(changedUsers);
             postPreferredActivityChangedBroadcast(userId);
@@ -20063,7 +20241,9 @@ public class PackageManagerService extends IPackageManager.Stub
         // writer
         try {
             final SparseBooleanArray changedUsers = new SparseBooleanArray();
-            clearPackagePreferredActivitiesLPw(null, changedUsers, userId);
+            synchronized (mLock) {
+                clearPackagePreferredActivitiesLPw(null, changedUsers, userId);
+            }
             if (changedUsers.size() > 0) {
                 postPreferredActivityChangedBroadcast(userId);
             }
@@ -20391,7 +20571,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     (parser1, userId1) -> {
                         synchronized (mLock) {
                             mSettings.readAllDomainVerificationsLPr(parser1, userId1);
-                            mSettings.writeLPr();
+                            writeSettingsLPrTEMP();
                         }
                     });
         } catch (Exception e) {
@@ -20531,6 +20711,9 @@ public class PackageManagerService extends IPackageManager.Stub
         if (cn != null) {
             return cn;
         }
+        // TODO: This should not happen since there should always be a default package set for
+        //  ROLE_HOME in RoleManager. Continue with a warning log for now.
+        Slog.w(TAG, "Default package for ROLE_HOME is not set in RoleManager");
 
         // Find the launcher with the highest priority and return that component if there are no
         // other home activity with the same priority.
@@ -20579,6 +20762,7 @@ public class PackageManagerService extends IPackageManager.Stub
         if (packageName == null) {
             return null;
         }
+
         int resolveInfosSize = resolveInfos.size();
         for (int i = 0; i < resolveInfosSize; i++) {
             ResolveInfo resolveInfo = resolveInfos.get(i);
@@ -20636,6 +20820,11 @@ public class PackageManagerService extends IPackageManager.Stub
         if (callingPackages != null && ArrayUtils.contains(callingPackages,
                 mRequiredPermissionControllerPackage)) {
             // PermissionController manages default home directly.
+            return false;
+        }
+
+        if (packageName == null) {
+            // Keep the default home package in RoleManager.
             return false;
         }
         mPermissionManager.setDefaultHome(packageName, userId, (successful) -> {
@@ -20835,6 +21024,11 @@ public class PackageManagerService extends IPackageManager.Stub
             return null;
         }
         return ensureSystemPackageName(contentCaptureServiceComponentName.getPackageName());
+    }
+
+    public String getOverlayConfigSignaturePackageName() {
+        return ensureSystemPackageName(SystemConfig.getInstance()
+                .getOverlayConfigSignaturePackage());
     }
 
     @Nullable
@@ -21068,15 +21262,19 @@ public class PackageManagerService extends IPackageManager.Stub
         // Limit who can change which apps
         if (!UserHandle.isSameApp(callingUid, pkgSetting.appId)) {
             // Don't allow apps that don't have permission to modify other apps
-            if (!allowedByPermission
-                    || shouldFilterApplicationLocked(pkgSetting, callingUid, userId)) {
+            final boolean filterApp;
+            synchronized (mLock) {
+                filterApp = (!allowedByPermission
+                        || shouldFilterApplicationLocked(pkgSetting, callingUid, userId));
+            }
+            if (filterApp) {
                 throw new SecurityException(
                         "Attempt to change component state; "
-                        + "pid=" + Binder.getCallingPid()
-                        + ", uid=" + callingUid
-                        + (className == null
+                                + "pid=" + Binder.getCallingPid()
+                                + ", uid=" + callingUid
+                                + (className == null
                                 ? ", package=" + packageName
-                                : ", component=" + packageName + "/" + className));
+                                        : ", component=" + packageName + "/" + className));
             }
             // Don't allow changing protected packages.
             if (mProtectedPackages.isPackageStateProtected(userId, packageName)) {
@@ -21143,8 +21341,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 pkgSetting.setEnabled(newState, userId, callingPackage);
                 if ((newState == COMPONENT_ENABLED_STATE_DISABLED_USER
                         || newState == COMPONENT_ENABLED_STATE_DISABLED)
-                        && pkgSetting.getPermissionsState().hasPermission(
-                                Manifest.permission.SUSPEND_APPS, userId)) {
+                        && checkPermission(Manifest.permission.SUSPEND_APPS, packageName, userId)
+                        == PERMISSION_GRANTED) {
                     // This app should not generally be allowed to get disabled by the UI, but if it
                     // ever does, we don't want to end up with some of the user's apps permanently
                     // suspended.
@@ -21296,17 +21494,17 @@ public class PackageManagerService extends IPackageManager.Stub
         final boolean isInstantApp = isInstantApp(packageName, userId);
         final int[] userIds = isInstantApp ? EMPTY_INT_ARRAY : new int[] { userId };
         final int[] instantUserIds = isInstantApp ? new int[] { userId } : EMPTY_INT_ARRAY;
-        final SparseArray<int[]> broadcastWhitelist;
+        final SparseArray<int[]> broadcastAllowList;
         synchronized (mLock) {
             PackageSetting setting = getPackageSettingInternal(packageName, Process.SYSTEM_UID);
             if (setting == null) {
                 return;
             }
-            broadcastWhitelist = isInstantApp ? null : mAppsFilter.getVisibilityWhitelist(setting,
+            broadcastAllowList = isInstantApp ? null : mAppsFilter.getVisibilityAllowList(setting,
                     userIds, mSettings.mPackages);
         }
         sendPackageBroadcast(Intent.ACTION_PACKAGE_CHANGED,  packageName, extras, flags, null, null,
-                userIds, instantUserIds, broadcastWhitelist);
+                userIds, instantUserIds, broadcastAllowList);
     }
 
     @Override
@@ -21565,7 +21763,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // had been set as a preferred activity.  We try to clean this up
             // the next time we encounter that preferred activity, but it is
             // possible for the user flow to never be able to return to that
-            // situation so here we do a sanity check to make sure we haven't
+            // situation so here we do a validity check to make sure we haven't
             // left any junk around.
             ArrayList<PreferredActivity> removed = new ArrayList<>();
             for (int i=0; i<mSettings.mPreferredActivities.size(); i++) {
@@ -21737,6 +21935,8 @@ public class PackageManagerService extends IPackageManager.Stub
     @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpAndUsageStatsPermission(mContext, TAG, pw)) return;
+
+        mPermissionManager.writeStateToPackageSettingsTEMP();
 
         DumpState dumpState = new DumpState();
         boolean fullPreferred = false;
@@ -21933,7 +22133,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 dumpState.setDump(DumpState.DUMP_SERVICE_PERMISSIONS);
             } else if ("write".equals(cmd)) {
                 synchronized (mLock) {
-                    mSettings.writeLPr();
+                    writeSettingsLPrTEMP();
                     pw.println("Settings written.");
                     return;
                 }
@@ -22601,11 +22801,11 @@ public class PackageManagerService extends IPackageManager.Stub
             synchronized (mInstallLock) {
                 final AndroidPackage pkg;
                 try {
-                    pkg = scanPackageTracedLI(ps.codePath, parseFlags, SCAN_INITIAL, 0, null);
+                    pkg = scanPackageTracedLI(ps.getPath(), parseFlags, SCAN_INITIAL, 0, null);
                     loaded.add(pkg);
 
                 } catch (PackageManagerException e) {
-                    Slog.w(TAG, "Failed to scan " + ps.codePath + ": " + e.getMessage());
+                    Slog.w(TAG, "Failed to scan " + ps.getPath() + ": " + e.getMessage());
                 }
 
                 if (!Build.FINGERPRINT.equals(ver.fingerprint)) {
@@ -22654,7 +22854,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // Yay, everything is now upgraded
             ver.forceCurrent();
 
-            mSettings.writeLPr();
+            writeSettingsLPrTEMP();
         }
 
         for (PackageFreezer freezer : freezers) {
@@ -22677,35 +22877,36 @@ public class PackageManagerService extends IPackageManager.Stub
             return;
         }
 
+        final int[] userIds = mUserManager.getUserIds();
         final ArrayList<AndroidPackage> unloaded = new ArrayList<>();
         synchronized (mInstallLock) {
-        synchronized (mLock) {
-            final List<PackageSetting> packages = mSettings.getVolumePackagesLPr(volumeUuid);
-            for (PackageSetting ps : packages) {
-                if (ps.pkg == null) continue;
+            synchronized (mLock) {
+                final List<PackageSetting> packages = mSettings.getVolumePackagesLPr(volumeUuid);
+                for (PackageSetting ps : packages) {
+                    if (ps.pkg == null) continue;
 
-                final AndroidPackage pkg = ps.pkg;
-                final int deleteFlags = PackageManager.DELETE_KEEP_DATA;
-                final PackageRemovedInfo outInfo = new PackageRemovedInfo(this);
+                    final AndroidPackage pkg = ps.pkg;
+                    final int deleteFlags = PackageManager.DELETE_KEEP_DATA;
+                    final PackageRemovedInfo outInfo = new PackageRemovedInfo(this);
 
-                try (PackageFreezer freezer = freezePackageForDelete(ps.name, deleteFlags,
-                        "unloadPrivatePackagesInner")) {
-                    if (deletePackageLIF(ps.name, null, false, null, deleteFlags, outInfo,
-                            false, null)) {
-                        unloaded.add(pkg);
-                    } else {
-                        Slog.w(TAG, "Failed to unload " + ps.codePath);
+                    try (PackageFreezer freezer = freezePackageForDelete(ps.name, deleteFlags,
+                            "unloadPrivatePackagesInner")) {
+                        if (deletePackageLIF(ps.name, null, false, userIds, deleteFlags, outInfo,
+                                false, null)) {
+                            unloaded.add(pkg);
+                        } else {
+                            Slog.w(TAG, "Failed to unload " + ps.getPath());
+                        }
                     }
+
+                    // Try very hard to release any references to this package
+                    // so we don't risk the system server being killed due to
+                    // open FDs
+                    AttributeCache.instance().removePackage(ps.name);
                 }
 
-                // Try very hard to release any references to this package
-                // so we don't risk the system server being killed due to
-                // open FDs
-                AttributeCache.instance().removePackage(ps.name);
+                writeSettingsLPrTEMP();
             }
-
-            mSettings.writeLPr();
-        }
         }
 
         if (DEBUG_INSTALL) Slog.d(TAG, "Unloaded packages " + unloaded);
@@ -22748,9 +22949,17 @@ public class PackageManagerService extends IPackageManager.Stub
             final int packageCount = mSettings.mPackages.size();
             for (int i = 0; i < packageCount; i++) {
                 final PackageSetting ps = mSettings.mPackages.valueAt(i);
-                codePaths.add(ps.codePath.getAbsolutePath());
+                codePaths.add(ps.getPath().getAbsolutePath());
             }
             return codePaths;
+        }
+    }
+
+    private void executeBatchLI(@NonNull Installer.Batch batch) {
+        try {
+            batch.execute(mInstaller);
+        } catch (InstallerException e) {
+            Slog.w(TAG, "Failed to execute pending operations", e);
         }
     }
 
@@ -22893,6 +23102,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
         // Ensure that data directories are ready to roll for all packages
         // installed for this volume and user
+        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "prepareAppDataAndMigrate");
+        Installer.Batch batch = new Installer.Batch();
         final List<PackageSetting> packages;
         synchronized (mLock) {
             packages = mSettings.getVolumePackagesLPr(volumeUuid);
@@ -22913,10 +23124,12 @@ public class PackageManagerService extends IPackageManager.Stub
             }
 
             if (ps.getInstalled(userId)) {
-                prepareAppDataAndMigrateLIF(ps.pkg, userId, flags, migrateAppData);
+                prepareAppDataAndMigrate(batch, ps.pkg, userId, flags, migrateAppData);
                 preparedCount++;
             }
         }
+        executeBatchLI(batch);
+        Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
 
         Slog.v(TAG, "reconcileAppsData finished " + preparedCount + " packages");
         return result;
@@ -22941,6 +23154,7 @@ public class PackageManagerService extends IPackageManager.Stub
             mSettings.writeKernelMappingLPr(ps);
         }
 
+        Installer.Batch batch = new Installer.Batch();
         UserManagerInternal umInternal = mInjector.getUserManagerInternal();
         StorageManagerInternal smInternal = mInjector.getStorageManagerInternal();
         for (UserInfo user : mUserManager.getUsers(false /*excludeDying*/)) {
@@ -22955,16 +23169,20 @@ public class PackageManagerService extends IPackageManager.Stub
 
             if (ps.getInstalled(user.id)) {
                 // TODO: when user data is locked, mark that we're still dirty
-                prepareAppDataLIF(pkg, user.id, flags);
-
-                if (umInternal.isUserUnlockingOrUnlocked(user.id)) {
-                    // Prepare app data on external storage; currently this is used to
-                    // setup any OBB dirs that were created by the installer correctly.
-                    int uid = UserHandle.getUid(user.id, UserHandle.getAppId(pkg.getUid()));
-                    smInternal.prepareAppDataAfterInstall(pkg.getPackageName(), uid);
-                }
+                prepareAppData(batch, pkg, user.id, flags).thenRun(() -> {
+                    // Note: this code block is executed with the Installer lock
+                    // already held, since it's invoked as a side-effect of
+                    // executeBatchLI()
+                    if (umInternal.isUserUnlockingOrUnlocked(user.id)) {
+                        // Prepare app data on external storage; currently this is used to
+                        // setup any OBB dirs that were created by the installer correctly.
+                        int uid = UserHandle.getUid(user.id, UserHandle.getAppId(pkg.getUid()));
+                        smInternal.prepareAppDataAfterInstall(pkg.getPackageName(), uid);
+                    }
+                });
             }
         }
+        executeBatchLI(batch);
     }
 
     /**
@@ -22975,26 +23193,33 @@ public class PackageManagerService extends IPackageManager.Stub
      * will try recovering system apps by wiping data; third-party app data is
      * left intact.
      */
-    private void prepareAppDataLIF(AndroidPackage pkg, int userId, int flags) {
+    private @NonNull CompletableFuture<?> prepareAppData(@NonNull Installer.Batch batch,
+            @Nullable AndroidPackage pkg, int userId, int flags) {
         if (pkg == null) {
             Slog.wtf(TAG, "Package was null!", new Throwable());
-            return;
+            return CompletableFuture.completedFuture(null);
         }
-        prepareAppDataLeafLIF(pkg, userId, flags);
+        return prepareAppDataLeaf(batch, pkg, userId, flags);
     }
 
-    private void prepareAppDataAndMigrateLIF(AndroidPackage pkg, int userId, int flags,
-            boolean maybeMigrateAppData) {
-        prepareAppDataLIF(pkg, userId, flags);
-
-        if (maybeMigrateAppData && maybeMigrateAppDataLIF(pkg, userId)) {
-            // We may have just shuffled around app data directories, so
-            // prepare them one more time
-            prepareAppDataLIF(pkg, userId, flags);
-        }
+    private @NonNull CompletableFuture<?> prepareAppDataAndMigrate(@NonNull Installer.Batch batch,
+            @NonNull AndroidPackage pkg, int userId, int flags, boolean maybeMigrateAppData) {
+        return prepareAppData(batch, pkg, userId, flags).thenRun(() -> {
+            // Note: this code block is executed with the Installer lock
+            // already held, since it's invoked as a side-effect of
+            // executeBatchLI()
+            if (maybeMigrateAppData && maybeMigrateAppDataLIF(pkg, userId)) {
+                // We may have just shuffled around app data directories, so
+                // prepare them one more time
+                final Installer.Batch batchInner = new Installer.Batch();
+                prepareAppData(batchInner, pkg, userId, flags);
+                executeBatchLI(batchInner);
+            }
+        });
     }
 
-    private void prepareAppDataLeafLIF(AndroidPackage pkg, int userId, int flags) {
+    private @NonNull CompletableFuture<?> prepareAppDataLeaf(@NonNull Installer.Batch batch,
+            @NonNull AndroidPackage pkg, int userId, int flags) {
         if (DEBUG_APP_DATA) {
             Slog.v(TAG, "prepareAppData for " + pkg.getPackageName() + " u" + userId + " 0x"
                     + Integer.toHexString(flags));
@@ -23014,57 +23239,67 @@ public class PackageManagerService extends IPackageManager.Stub
         Preconditions.checkNotNull(pkgSeInfo);
 
         final String seInfo = pkgSeInfo + (pkg.getSeInfoUser() != null ? pkg.getSeInfoUser() : "");
-        long ceDataInode = -1;
-        try {
-            ceDataInode = mInstaller.createAppData(volumeUuid, packageName, userId, flags,
-                    appId, seInfo, pkg.getTargetSdkVersion());
-        } catch (InstallerException e) {
-            if (pkg.isSystem()) {
-                logCriticalInfo(Log.ERROR, "Failed to create app data for " + packageName
-                        + ", but trying to recover: " + e);
-                destroyAppDataLeafLIF(pkg, userId, flags);
-                try {
-                    ceDataInode = mInstaller.createAppData(volumeUuid, packageName, userId, flags,
-                            appId, seInfo, pkg.getTargetSdkVersion());
-                    logCriticalInfo(Log.DEBUG, "Recovery succeeded!");
-                } catch (InstallerException e2) {
-                    logCriticalInfo(Log.DEBUG, "Recovery failed!");
-                }
-            } else {
-                Slog.e(TAG, "Failed to create app data for " + packageName + ": " + e);
-            }
-        }
-        // Prepare the application profiles only for upgrades and first boot (so that we don't
-        // repeat the same operation at each boot).
-        // We only have to cover the upgrade and first boot here because for app installs we
-        // prepare the profiles before invoking dexopt (in installPackageLI).
-        //
-        // We also have to cover non system users because we do not call the usual install package
-        // methods for them.
-        //
-        // NOTE: in order to speed up first boot time we only create the current profile and do not
-        // update the content of the reference profile. A system image should already be configured
-        // with the right profile keys and the profiles for the speed-profile prebuilds should
-        // already be copied. That's done in #performDexOptUpgrade.
-        //
-        // TODO(calin, mathieuc): We should use .dm files for prebuilds profiles instead of
-        // manually copying them in #performDexOptUpgrade. When we do that we should have a more
-        // granular check here and only update the existing profiles.
-        if (mIsUpgrade || mFirstBoot || (userId != UserHandle.USER_SYSTEM)) {
-            mArtManagerService.prepareAppProfiles(pkg, userId,
-                /* updateReferenceProfileContent= */ false);
-        }
+        final int targetSdkVersion = pkg.getTargetSdkVersion();
 
-        if ((flags & StorageManager.FLAG_STORAGE_CE) != 0 && ceDataInode != -1) {
-            // TODO: mark this structure as dirty so we persist it!
-            synchronized (mLock) {
-                if (ps != null) {
-                    ps.setCeDataInode(ceDataInode, userId);
-                }
-            }
-        }
+        return batch.createAppData(volumeUuid, packageName, userId, flags, appId, seInfo,
+                targetSdkVersion).whenComplete((ceDataInode, e) -> {
+                    // Note: this code block is executed with the Installer lock
+                    // already held, since it's invoked as a side-effect of
+                    // executeBatchLI()
+                    if ((e != null) && pkg.isSystem()) {
+                        logCriticalInfo(Log.ERROR, "Failed to create app data for " + packageName
+                                + ", but trying to recover: " + e);
+                        destroyAppDataLeafLIF(pkg, userId, flags);
+                        try {
+                            ceDataInode = mInstaller.createAppData(volumeUuid, packageName, userId,
+                                    flags, appId, seInfo, pkg.getTargetSdkVersion());
+                            logCriticalInfo(Log.DEBUG, "Recovery succeeded!");
+                        } catch (InstallerException e2) {
+                            logCriticalInfo(Log.DEBUG, "Recovery failed!");
+                        }
+                    } else if (e != null) {
+                        Slog.e(TAG, "Failed to create app data for " + packageName + ": " + e);
+                    }
 
-        prepareAppDataContentsLeafLIF(pkg, ps, userId, flags);
+                    // Prepare the application profiles only for upgrades and
+                    // first boot (so that we don't repeat the same operation at
+                    // each boot).
+                    //
+                    // We only have to cover the upgrade and first boot here
+                    // because for app installs we prepare the profiles before
+                    // invoking dexopt (in installPackageLI).
+                    //
+                    // We also have to cover non system users because we do not
+                    // call the usual install package methods for them.
+                    //
+                    // NOTE: in order to speed up first boot time we only create
+                    // the current profile and do not update the content of the
+                    // reference profile. A system image should already be
+                    // configured with the right profile keys and the profiles
+                    // for the speed-profile prebuilds should already be copied.
+                    // That's done in #performDexOptUpgrade.
+                    //
+                    // TODO(calin, mathieuc): We should use .dm files for
+                    // prebuilds profiles instead of manually copying them in
+                    // #performDexOptUpgrade. When we do that we should have a
+                    // more granular check here and only update the existing
+                    // profiles.
+                    if (mIsUpgrade || mFirstBoot || (userId != UserHandle.USER_SYSTEM)) {
+                        mArtManagerService.prepareAppProfiles(pkg, userId,
+                            /* updateReferenceProfileContent= */ false);
+                    }
+
+                    if ((flags & StorageManager.FLAG_STORAGE_CE) != 0 && ceDataInode != -1) {
+                        // TODO: mark this structure as dirty so we persist it!
+                        synchronized (mLock) {
+                            if (ps != null) {
+                                ps.setCeDataInode(ceDataInode, userId);
+                            }
+                        }
+                    }
+
+                    prepareAppDataContentsLeafLIF(pkg, ps, userId, flags);
+                });
     }
 
     private void prepareAppDataContentsLIF(AndroidPackage pkg, @Nullable PackageSetting pkgSetting,
@@ -23290,7 +23525,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             currentVolumeUuid = ps.volumeUuid;
 
-            final File probe = new File(pkg.getCodePath());
+            final File probe = new File(pkg.getPath());
             final File probeOat = new File(probe, "oat");
             if (!probe.isDirectory() || !probeOat.isDirectory()) {
                 throw new PackageManagerException(MOVE_FAILED_INTERNAL_ERROR,
@@ -23312,7 +23547,7 @@ public class PackageManagerService extends IPackageManager.Stub
             }
 
             isCurrentLocationExternal = pkg.isExternalStorage();
-            codeFile = new File(pkg.getCodePath());
+            codeFile = new File(pkg.getPath());
             installSource = ps.installSource;
             packageAbiOverride = ps.cpuAbiOverrideString;
             appId = UserHandle.getAppId(pkg.getUid());
@@ -23463,12 +23698,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final Message msg = mHandler.obtainMessage(INIT_COPY);
         final OriginInfo origin = OriginInfo.fromExistingFile(codeFile);
         final InstallParams params = new InstallParams(origin, move, installObserver, installFlags,
-                installSource, volumeUuid, null /*verificationInfo*/, user,
-                packageAbiOverride, null /*grantedPermissions*/,
-                null /*whitelistedRestrictedPermissions*/, MODE_DEFAULT /* autoRevokePermissions */,
-                PackageParser.SigningDetails.UNKNOWN,
-                PackageManager.INSTALL_REASON_UNKNOWN, PackageManager.VERSION_CODE_HIGHEST,
-                DataLoaderType.NONE);
+                installSource, volumeUuid, user, packageAbiOverride);
         params.setTraceMethod("movePackage").setTraceCookie(System.identityHashCode(params));
         msg.obj = params;
 
@@ -23588,6 +23818,8 @@ public class PackageManagerService extends IPackageManager.Stub
         synchronized (mLock) {
             mDirtyUsers.remove(userId);
             mUserNeedsBadging.delete(userId);
+            mPermissionManager.onUserRemoved(userId);
+            mPermissionManager.writeStateToPackageSettingsTEMP();
             mSettings.removeUserLPw(userId);
             mPendingBroadcasts.remove(userId);
             mInstantAppRegistry.onUserRemovedLPw(userId);
@@ -23670,13 +23902,27 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
-    void onNewUserCreated(final int userId) {
-        mPermissionManager.onNewUserCreated(userId);
+    void onNewUserCreated(@UserIdInt int userId, boolean convertedFromPreCreated) {
+        if (DEBUG_PERMISSIONS) {
+            Slog.d(TAG, "onNewUserCreated(id=" + userId
+                    + ", convertedFromPreCreated=" + convertedFromPreCreated + ")");
+        }
+        if (!convertedFromPreCreated) {
+            mPermissionManager.onNewUserCreated(userId);
+            return;
+        }
+        if (!readPermissionStateForUser(userId)) {
+            // Could not read the existing permissions, re-grant them.
+            Slog.i(TAG, "re-granting permissions for pre-created user " + userId);
+            mPermissionManager.onNewUserCreated(userId);
+        }
     }
 
     boolean readPermissionStateForUser(@UserIdInt int userId) {
         synchronized (mPackages) {
+            mPermissionManager.writeStateToPackageSettingsTEMP();
             mSettings.readPermissionStateForUserSyncLPr(userId);
+            mPermissionManager.readStateFromPackageSettingsTEMP();
             return mPmInternal.isPermissionUpgradeNeeded(userId);
         }
     }
@@ -24065,15 +24311,13 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
-        public int getTargetSdkVersionForPackage(String packageName)
-                throws RemoteException {
-            int callingUser = UserHandle.getUserId(Binder.getCallingUid());
-            ApplicationInfo info = getApplicationInfo(packageName, 0, callingUser);
-            if (info == null) {
-                throw new RemoteException(
-                        "Couldn't get ApplicationInfo for package " + packageName);
+        public int getTargetSdkVersionForPackage(String packageName) throws RemoteException {
+            int targetSdk = getTargetSdkVersion(packageName);
+            if (targetSdk != -1) {
+                return targetSdk;
             }
-            return info.targetSdkVersion;
+
+            throw new RemoteException("Couldn't get targetSdkVersion for package " + packageName);
         }
 
         @Override
@@ -24361,6 +24605,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     return TextUtils.isEmpty(mRetailDemoPackage)
                             ? ArrayUtils.emptyArray(String.class)
                             : new String[] {mRetailDemoPackage};
+                case PackageManagerInternal.PACKAGE_OVERLAY_CONFIG_SIGNATURE:
+                    return filterOnlySystemPackages(getOverlayConfigSignaturePackageName());
                 default:
                     return ArrayUtils.emptyArray(String.class);
             }
@@ -24547,12 +24793,6 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         public int getPackageUid(String packageName, int flags, int userId) {
             return PackageManagerService.this
-                    .getPackageUid(packageName, flags, userId);
-        }
-
-        @Override
-        public int getPackageUidInternal(String packageName, int flags, int userId) {
-            return PackageManagerService.this
                     .getPackageUidInternal(packageName, flags, userId, Process.SYSTEM_UID);
         }
 
@@ -24736,7 +24976,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             mApexManager.getApksInApex(apexPackages.get(i).packageName);
                     for (int j = 0, apksInApex = apkNames.size(); j < apksInApex; j++) {
                         final AndroidPackage pkg = getPackage(apkNames.get(j));
-                        cacher.cleanCachedResult(new File(pkg.getCodePath()));
+                        cacher.cleanCachedResult(new File(pkg.getPath()));
                     }
                 }
             }
@@ -24812,7 +25052,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             Slog.e(TAG, "failed to find package " + packageName);
                             return false;
                         }
-                        overlayPaths.add(pkg.getBaseCodePath());
+                        overlayPaths.add(pkg.getBaseApkPath());
                     }
                 }
 
@@ -24957,9 +25197,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public int[] getPermissionGids(String permissionName, int userId) {
-            synchronized (mLock) {
-                return getPermissionGidsLocked(permissionName, userId);
-            }
+            return mPermissionManager.getPermissionGids(permissionName, userId);
         }
 
         @Override
@@ -25132,7 +25370,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (async) {
                     scheduleWriteSettingsLocked();
                 } else {
-                    mSettings.writeLPr();
+                    writeSettingsLPrTEMP();
                 }
             }
         }
@@ -25179,7 +25417,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     return;
                 }
                 mSettings.mReadExternalStorageEnforced = enforced ? Boolean.TRUE : Boolean.FALSE;
-                mSettings.writeLPr();
+                writeSettingsLPrTEMP();
             }
         }
 
@@ -25231,6 +25469,56 @@ public class PackageManagerService extends IPackageManager.Stub
         public boolean isSuspendingAnyPackages(String suspendingPackage, int userId) {
             return PackageManagerService.this.isSuspendingAnyPackages(suspendingPackage, userId);
         }
+
+        @Override
+        public boolean registerInstalledLoadingProgressCallback(String packageName,
+                PackageManagerInternal.InstalledLoadingProgressCallback callback, int userId) {
+            final int callingUid = Binder.getCallingUid();
+            mPermissionManager.enforceCrossUserPermission(
+                    callingUid, userId, true, false,
+                    "registerLoadingProgressCallback");
+            final PackageSetting ps;
+            synchronized (mLock) {
+                ps = mSettings.mPackages.get(packageName);
+                if (ps == null) {
+                    Slog.w(TAG, "Failed registering loading progress callback. Package "
+                            + packageName + " is not installed");
+                    return false;
+                }
+                if (shouldFilterApplicationLocked(ps, callingUid, userId)) {
+                    Slog.w(TAG, "Failed registering loading progress callback. Package "
+                            + packageName + " is not visible to the calling app");
+                    return false;
+                }
+                // TODO(b/165841827): return false if package is fully loaded
+            }
+            if (mIncrementalManager == null) {
+                Slog.w(TAG,
+                        "Failed registering loading progress callback. Incremental is not enabled");
+                return false;
+            }
+            return mIncrementalManager.registerCallback(ps.getPathString(),
+                    (IPackageLoadingProgressCallback) callback.getBinder());
+        }
+
+        @Override
+        public boolean unregisterInstalledLoadingProgressCallback(String packageName,
+                PackageManagerInternal.InstalledLoadingProgressCallback callback) {
+            final PackageSetting ps;
+            synchronized (mLock) {
+                ps = mSettings.mPackages.get(packageName);
+                if (ps == null) {
+                    Slog.w(TAG, "Failed unregistering loading progress callback. Package "
+                            + packageName + " is not installed");
+                    return false;
+                }
+            }
+            if (mIncrementalManager == null) {
+                return false;
+            }
+            return mIncrementalManager.unregisterCallback(ps.getPathString(),
+                    (IPackageLoadingProgressCallback) callback.getBinder());
+        }
     }
 
     @GuardedBy("mLock")
@@ -25276,16 +25564,6 @@ public class PackageManagerService extends IPackageManager.Stub
         } else if (obj instanceof PackageSetting) {
             final PackageSetting ps = (PackageSetting) obj;
             return PackageInfoUtils.generateProcessInfo(ps.pkg.getProcesses(), 0);
-        }
-        return null;
-    }
-
-    @GuardedBy("mLock")
-    public int[] getPermissionGidsLocked(String permissionName, int userId) {
-        BasePermission perm
-                = mPermissionManager.getPermissionSettings().getPermission(permissionName);
-        if (perm != null) {
-            return perm.computeGids(userId);
         }
         return null;
     }
@@ -25423,18 +25701,7 @@ public class PackageManagerService extends IPackageManager.Stub
         int mode = mInjector.getAppOpsManager().checkOpNoThrow(
                 AppOpsManager.OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
                 Binder.getCallingUid(), packageName);
-        if (mode == MODE_ALLOWED) {
-            return false;
-        } else if (mode == MODE_IGNORED) {
-            return true;
-        } else {
-            synchronized (mLock) {
-                boolean manifestWhitelisted =
-                        mPackages.get(packageName).getAutoRevokePermissions()
-                                == ApplicationInfo.AUTO_REVOKE_DISALLOWED;
-                return manifestWhitelisted;
-            }
-        }
+        return mode == MODE_IGNORED;
     }
 
     @Override
@@ -25551,7 +25818,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 pkgSetting.getPkgState().isUpdatedSystemApp())) {
             return null;
         }
-        File codePath = new File(pkg.getCodePath());
+        File codePath = new File(pkg.getPath());
         if (codePath.isDirectory()) {
             return PackageDexOptimizer.getOatDir(codePath).getAbsolutePath();
         }
@@ -25715,77 +25982,15 @@ public class PackageManagerService extends IPackageManager.Stub
         return mSettings.mPackages.get(packageName).getMimeGroup(mimeGroup);
     }
 
-    static class ActiveInstallSession {
-        private final String mPackageName;
-        private final File mStagedDir;
-        private final IPackageInstallObserver2 mInstallObserver;
-        // TODO(samiul): We are temporarily assigning two observer to ActiveInstallSession. One for
-        // installation and one for verification. This will be fixed within next few CLs.
-        private final IPackageInstallObserver2 mVerificationObserver;
-        private final int mSessionId;
-        private final PackageInstaller.SessionParams mSessionParams;
-        private final int mInstallerUid;
-        @NonNull private final InstallSource mInstallSource;
-        private final UserHandle mUser;
-        private final SigningDetails mSigningDetails;
-
-        ActiveInstallSession(String packageName, File stagedDir,
-                IPackageInstallObserver2 installObserver,
-                IPackageInstallObserver2 verificationObserver,
-                int sessionId, PackageInstaller.SessionParams sessionParams, int installerUid,
-                InstallSource installSource, UserHandle user, SigningDetails signingDetails) {
-            mPackageName = packageName;
-            mStagedDir = stagedDir;
-            mInstallObserver = installObserver;
-            mVerificationObserver = verificationObserver;
-            mSessionId = sessionId;
-            mSessionParams = sessionParams;
-            mInstallerUid = installerUid;
-            mInstallSource = Preconditions.checkNotNull(installSource);
-            mUser = user;
-            mSigningDetails = signingDetails;
-        }
-
-        public String getPackageName() {
-            return mPackageName;
-        }
-
-        public File getStagedDir() {
-            return mStagedDir;
-        }
-
-        public IPackageInstallObserver2 getInstallObserver() {
-            return mInstallObserver;
-        }
-
-        public IPackageInstallObserver2 getVerificationObserver() {
-            return mVerificationObserver;
-        }
-
-        public int getSessionId() {
-            return mSessionId;
-        }
-
-        public PackageInstaller.SessionParams getSessionParams() {
-            return mSessionParams;
-        }
-
-        public int getInstallerUid() {
-            return mInstallerUid;
-        }
-
-        @NonNull
-        public InstallSource getInstallSource() {
-            return mInstallSource;
-        }
-
-        public UserHandle getUser() {
-            return mUser;
-        }
-
-        public SigningDetails getSigningDetails() {
-            return mSigningDetails;
-        }
+    /**
+     * Temporary method that wraps mSettings.writeLPr() and calls
+     * mPermissionManager.writeStateToPackageSettingsTEMP() beforehand.
+     *
+     * TODO(zhanghai): This should be removed once we finish migration of permission storage.
+     */
+    private void writeSettingsLPrTEMP() {
+        mPermissionManager.writeStateToPackageSettingsTEMP();
+        mSettings.writeLPr();
     }
 }
 
@@ -25795,9 +26000,9 @@ interface PackageSender {
      * @param instantUserIds User IDs where the action occurred on an instant application
      */
     void sendPackageBroadcast(final String action, final String pkg,
-        final Bundle extras, final int flags, final String targetPkg,
-        final IIntentReceiver finishedReceiver, final int[] userIds, int[] instantUserIds,
-        @Nullable SparseArray<int[]> broadcastWhitelist);
+            final Bundle extras, final int flags, final String targetPkg,
+            final IIntentReceiver finishedReceiver, final int[] userIds, int[] instantUserIds,
+            @Nullable SparseArray<int[]> broadcastAllowList);
     void sendPackageAddedForNewUsers(String packageName, boolean sendBootCompleted,
             boolean includeStopped, int appId, int[] userIds, int[] instantUserIds,
             int dataLoaderType);

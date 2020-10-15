@@ -99,6 +99,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -165,13 +166,15 @@ public class MockingOomAdjusterTests {
         setFieldValue(ActivityManagerService.class, sService, "mHandler",
                 mock(ActivityManagerService.MainHandler.class));
         setFieldValue(ActivityManagerService.class, sService, "mProcessStats",
-                mock(ProcessStatsService.class));
+                new ProcessStatsService(sService, new File(sContext.getFilesDir(), "procstats")));
         setFieldValue(ActivityManagerService.class, sService, "mBackupTargets",
                 mock(SparseArray.class));
         setFieldValue(ActivityManagerService.class, sService, "mOomAdjProfiler",
                 mock(OomAdjProfiler.class));
         setFieldValue(ActivityManagerService.class, sService, "mUserController",
                 mock(UserController.class));
+        setFieldValue(ActivityManagerService.class, sService, "mAppProfiler",
+                mock(AppProfiler.class));
         doReturn(new ActivityManagerService.ProcessChangeItem()).when(sService)
                 .enqueueProcessChangeItemLocked(anyInt(), anyInt());
         sService.mOomAdjuster = new OomAdjuster(sService, sService.mProcessList,
@@ -500,7 +503,7 @@ public class MockingOomAdjusterTests {
     public void testUpdateOomAdj_DoOne_Backup() {
         ProcessRecord app = spy(makeDefaultProcessRecord(MOCKAPP_PID, MOCKAPP_UID,
                 MOCKAPP_PROCESSNAME, MOCKAPP_PACKAGENAME, true));
-        BackupRecord backupTarget = new BackupRecord(null, 0, 0);
+        BackupRecord backupTarget = new BackupRecord(null, 0, 0, 0);
         backupTarget.app = app;
         doReturn(backupTarget).when(sService.mBackupTargets).get(anyInt());
         sService.mWakefulness = PowerManagerInternal.WAKEFULNESS_AWAKE;
@@ -802,7 +805,7 @@ public class MockingOomAdjusterTests {
         ProcessRecord client = spy(makeDefaultProcessRecord(MOCKAPP2_PID, MOCKAPP2_UID,
                 MOCKAPP2_PROCESSNAME, MOCKAPP2_PACKAGENAME, false));
         bindService(app, client, null, Context.BIND_ABOVE_CLIENT, mock(IBinder.class));
-        BackupRecord backupTarget = new BackupRecord(null, 0, 0);
+        BackupRecord backupTarget = new BackupRecord(null, 0, 0, 0);
         backupTarget.app = client;
         doReturn(backupTarget).when(sService.mBackupTargets).get(anyInt());
         sService.mWakefulness = PowerManagerInternal.WAKEFULNESS_AWAKE;

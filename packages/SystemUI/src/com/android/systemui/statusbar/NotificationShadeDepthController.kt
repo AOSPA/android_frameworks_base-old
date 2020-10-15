@@ -32,27 +32,26 @@ import androidx.dynamicanimation.animation.SpringForce
 import com.android.internal.util.IndentingPrintWriter
 import com.android.systemui.Dumpable
 import com.android.systemui.Interpolators
+import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator
 import com.android.systemui.statusbar.phone.BiometricUnlockController
 import com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_AND_UNLOCK
 import com.android.systemui.statusbar.phone.DozeParameters
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController
 import com.android.systemui.statusbar.phone.PanelExpansionListener
 import com.android.systemui.statusbar.phone.ScrimController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import java.io.FileDescriptor
 import java.io.PrintWriter
 import javax.inject.Inject
-import javax.inject.Singleton
 import kotlin.math.max
 import kotlin.math.sign
 
 /**
  * Controller responsible for statusbar window blur.
  */
-@Singleton
+@SysUISingleton
 class NotificationShadeDepthController @Inject constructor(
     private val statusBarStateController: StatusBarStateController,
     private val blurUtils: BlurUtils,

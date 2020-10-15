@@ -7,6 +7,11 @@ package android.app {
 
   public class NotificationManager {
     method public boolean hasEnabledNotificationListener(@NonNull String, @NonNull android.os.UserHandle);
+    field public static final String ACTION_NOTIFICATION_LISTENER_ENABLED_CHANGED = "android.app.action.NOTIFICATION_LISTENER_ENABLED_CHANGED";
+  }
+
+  public class StatusBarManager {
+    method @RequiresPermission(android.Manifest.permission.STATUS_BAR) public void setDisabledForSimNetworkLock(boolean);
   }
 
 }
@@ -31,10 +36,56 @@ package android.graphics {
 
 }
 
+package android.media {
+
+  public class AudioManager {
+    method public void adjustStreamVolumeForUid(int, int, int, @NonNull String, int, int, int);
+    method public void adjustSuggestedStreamVolumeForUid(int, int, int, @NonNull String, int, int, int);
+    method public void setStreamVolumeForUid(int, int, int, @NonNull String, int, int, int);
+    field public static final int FLAG_FROM_KEY = 4096; // 0x1000
+  }
+
+  public static final class MediaMetadata.Builder {
+    ctor public MediaMetadata.Builder(@NonNull android.media.MediaMetadata, @IntRange(from=1) int);
+  }
+
+}
+
+package android.media.session {
+
+  public static final class MediaController.PlaybackInfo implements android.os.Parcelable {
+    ctor public MediaController.PlaybackInfo(int, int, @IntRange(from=0) int, @IntRange(from=0) int, @NonNull android.media.AudioAttributes, @Nullable String);
+  }
+
+  public final class MediaSession {
+    field public static final int FLAG_EXCLUSIVE_GLOBAL_PRIORITY = 65536; // 0x10000
+  }
+
+  public static final class MediaSession.Token implements android.os.Parcelable {
+    method public int getUid();
+  }
+
+  public final class MediaSessionManager {
+    method public void dispatchMediaKeyEventAsSystemService(@NonNull android.view.KeyEvent);
+    method public boolean dispatchMediaKeyEventAsSystemService(@NonNull android.media.session.MediaSession.Token, @NonNull android.view.KeyEvent);
+    method public void dispatchVolumeKeyEventAsSystemService(@NonNull android.view.KeyEvent, int);
+    method public void dispatchVolumeKeyEventAsSystemService(@NonNull android.media.session.MediaSession.Token, @NonNull android.view.KeyEvent);
+    field public static final int RESULT_MEDIA_KEY_HANDLED = 1; // 0x1
+    field public static final int RESULT_MEDIA_KEY_NOT_HANDLED = 0; // 0x0
+  }
+
+}
+
 package android.os {
 
   public class Binder implements android.os.IBinder {
     method public final void markVintfStability();
+  }
+
+  public interface Parcelable {
+    method public default int getStability();
+    field public static final int PARCELABLE_STABILITY_LOCAL = 0; // 0x0
+    field public static final int PARCELABLE_STABILITY_VINTF = 1; // 0x1
   }
 
   public class StatsServiceManager {
@@ -50,6 +101,14 @@ package android.os {
   public static final class StatsServiceManager.ServiceRegisterer {
     method @Nullable public android.os.IBinder get();
     method @Nullable public android.os.IBinder getOrThrow() throws android.os.StatsServiceManager.ServiceNotFoundException;
+  }
+
+}
+
+package android.provider {
+
+  public final class DeviceConfig {
+    field public static final String NAMESPACE_DEVICE_IDLE = "device_idle";
   }
 
 }

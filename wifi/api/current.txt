@@ -144,6 +144,7 @@ package android.net.wifi {
 
   @Deprecated public static class WifiConfiguration.GroupCipher {
     field @Deprecated public static final int CCMP = 3; // 0x3
+    field @Deprecated public static final int GCMP_128 = 7; // 0x7
     field @Deprecated public static final int GCMP_256 = 5; // 0x5
     field @Deprecated public static final int SMS4 = 6; // 0x6
     field @Deprecated public static final int TKIP = 2; // 0x2
@@ -173,6 +174,7 @@ package android.net.wifi {
 
   @Deprecated public static class WifiConfiguration.PairwiseCipher {
     field @Deprecated public static final int CCMP = 2; // 0x2
+    field @Deprecated public static final int GCMP_128 = 5; // 0x5
     field @Deprecated public static final int GCMP_256 = 3; // 0x3
     field @Deprecated public static final int NONE = 0; // 0x0
     field @Deprecated public static final int SMS4 = 4; // 0x4
@@ -487,6 +489,7 @@ package android.net.wifi {
     method @Nullable public String getPassphrase();
     method @Nullable public android.net.wifi.hotspot2.PasspointConfiguration getPasspointConfig();
     method @IntRange(from=0) public int getPriority();
+    method public int getPriorityGroup();
     method @Nullable public String getSsid();
     method public boolean isAppInteractionRequired();
     method public boolean isCredentialSharedWithUser();
@@ -506,6 +509,7 @@ package android.net.wifi {
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setBssid(@NonNull android.net.MacAddress);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setCredentialSharedWithUser(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setIsAppInteractionRequired(boolean);
+    method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setIsEnhancedMacRandomizationEnabled(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setIsEnhancedOpen(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setIsHiddenSsid(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setIsInitialAutojoinEnabled(boolean);
@@ -513,6 +517,7 @@ package android.net.wifi {
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setIsUserInteractionRequired(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setPasspointConfig(@NonNull android.net.wifi.hotspot2.PasspointConfiguration);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setPriority(@IntRange(from=0) int);
+    method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setPriorityGroup(int);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setSsid(@NonNull String);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setUntrusted(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setWapiEnterpriseConfig(@NonNull android.net.wifi.WifiEnterpriseConfig);
@@ -576,6 +581,7 @@ package android.net.wifi.aware {
     method public void onPublishStarted(@NonNull android.net.wifi.aware.PublishDiscoverySession);
     method public void onServiceDiscovered(android.net.wifi.aware.PeerHandle, byte[], java.util.List<byte[]>);
     method public void onServiceDiscoveredWithinRange(android.net.wifi.aware.PeerHandle, byte[], java.util.List<byte[]>, int);
+    method public void onServiceLost(@NonNull android.net.wifi.aware.PeerHandle);
     method public void onSessionConfigFailed();
     method public void onSessionConfigUpdated();
     method public void onSessionTerminated();
@@ -651,6 +657,7 @@ package android.net.wifi.aware {
     method public void attach(@NonNull android.net.wifi.aware.AttachCallback, @NonNull android.net.wifi.aware.IdentityChangedListener, @Nullable android.os.Handler);
     method public android.net.wifi.aware.Characteristics getCharacteristics();
     method public boolean isAvailable();
+    method public boolean isDeviceAttached();
     field public static final String ACTION_WIFI_AWARE_STATE_CHANGED = "android.net.wifi.aware.action.WIFI_AWARE_STATE_CHANGED";
     field public static final int WIFI_AWARE_DATA_PATH_ROLE_INITIATOR = 0; // 0x0
     field public static final int WIFI_AWARE_DATA_PATH_ROLE_RESPONDER = 1; // 0x1

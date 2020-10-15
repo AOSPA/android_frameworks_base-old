@@ -147,6 +147,19 @@ public final class AudioDeviceInfo {
     // {@link android.media.audiopolicy.AudioMix#ROUTE_FLAG_LOOP_BACK} flag.
     public static final int TYPE_REMOTE_SUBMIX = 25;
 
+    /**
+     * A device type describing a Bluetooth Low Energy (BLE) audio headset or headphones.
+     * Headphones are grouped with headsets when the device is a sink:
+     * the features of headsets and headphones with regard to playback are the same.
+     */
+    public static final int TYPE_BLE_HEADSET   = 26;
+
+    /**
+     * A device type describing a Bluetooth Low Energy (BLE) audio speaker.
+     */
+    public static final int TYPE_BLE_SPEAKER   = 27;
+
+
     /** @hide */
     @IntDef(flag = false, prefix = "TYPE", value = {
             TYPE_BUILTIN_EARPIECE,
@@ -171,7 +184,9 @@ public final class AudioDeviceInfo {
             TYPE_HEARING_AID,
             TYPE_BUILTIN_MIC,
             TYPE_FM_TUNER,
-            TYPE_TV_TUNER }
+            TYPE_TV_TUNER,
+            TYPE_BLE_HEADSET,
+            TYPE_BLE_SPEAKER}
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface AudioDeviceType {}
@@ -193,7 +208,8 @@ public final class AudioDeviceInfo {
             TYPE_LINE_ANALOG,
             TYPE_LINE_DIGITAL,
             TYPE_IP,
-            TYPE_BUS }
+            TYPE_BUS,
+            TYPE_BLE_HEADSET}
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface AudioDeviceTypeIn {}
@@ -219,7 +235,9 @@ public final class AudioDeviceInfo {
             TYPE_AUX_LINE,
             TYPE_IP,
             TYPE_BUS,
-            TYPE_HEARING_AID }
+            TYPE_HEARING_AID,
+            TYPE_BLE_HEADSET,
+            TYPE_BLE_SPEAKER}
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface AudioDeviceTypeOut {}
@@ -248,7 +266,8 @@ public final class AudioDeviceInfo {
             case TYPE_BUS:
             case TYPE_HEARING_AID:
             case TYPE_BUILTIN_SPEAKER_SAFE:
-            case TYPE_REMOTE_SUBMIX:
+            case TYPE_BLE_HEADSET:
+            case TYPE_BLE_SPEAKER:
                 return true;
             default:
                 return false;
@@ -275,6 +294,7 @@ public final class AudioDeviceInfo {
             case TYPE_IP:
             case TYPE_BUS:
             case TYPE_REMOTE_SUBMIX:
+            case TYPE_BLE_HEADSET:
                 return true;
             default:
                 return false;
@@ -328,6 +348,14 @@ public final class AudioDeviceInfo {
      */
     public AudioDevicePort getPort() {
         return mPort;
+    }
+
+    /**
+     * @hide
+     * @return the internal device tyoe
+     */
+    public int getInternalType() {
+        return mPort.type();
     }
 
     /**
@@ -493,9 +521,20 @@ public final class AudioDeviceInfo {
         return INT_TO_EXT_DEVICE_MAPPING.get(intDevice, TYPE_UNKNOWN);
     }
 
+    /** @hide */
+    public static int convertDeviceTypeToInternalInputDevice(int deviceType) {
+        return EXT_TO_INT_INPUT_DEVICE_MAPPING.get(deviceType, AudioSystem.DEVICE_NONE);
+    }
+
     private static final SparseIntArray INT_TO_EXT_DEVICE_MAPPING;
 
     private static final SparseIntArray EXT_TO_INT_DEVICE_MAPPING;
+
+    /**
+     * EXT_TO_INT_INPUT_DEVICE_MAPPING aims at mapping external device type to internal input device
+     * type.
+     */
+    private static final SparseIntArray EXT_TO_INT_INPUT_DEVICE_MAPPING;
 
     static {
         INT_TO_EXT_DEVICE_MAPPING = new SparseIntArray();
@@ -527,6 +566,8 @@ public final class AudioDeviceInfo {
         INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_OUT_SPEAKER_SAFE,
                 TYPE_BUILTIN_SPEAKER_SAFE);
         INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_OUT_REMOTE_SUBMIX, TYPE_REMOTE_SUBMIX);
+        INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_OUT_BLE_HEADSET, TYPE_BLE_HEADSET);
+        INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_OUT_BLE_SPEAKER, TYPE_BLE_SPEAKER);
 
         INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_IN_BUILTIN_MIC, TYPE_BUILTIN_MIC);
         INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_IN_BLUETOOTH_SCO_HEADSET, TYPE_BLUETOOTH_SCO);
@@ -547,6 +588,7 @@ public final class AudioDeviceInfo {
         INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_IN_IP, TYPE_IP);
         INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_IN_BUS, TYPE_BUS);
         INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_IN_REMOTE_SUBMIX, TYPE_REMOTE_SUBMIX);
+        INT_TO_EXT_DEVICE_MAPPING.put(AudioSystem.DEVICE_IN_BLE_HEADSET, TYPE_BLE_HEADSET);
 
         // privileges mapping to output device
         EXT_TO_INT_DEVICE_MAPPING = new SparseIntArray();
@@ -576,6 +618,34 @@ public final class AudioDeviceInfo {
         EXT_TO_INT_DEVICE_MAPPING.put(TYPE_BUILTIN_SPEAKER_SAFE,
                 AudioSystem.DEVICE_OUT_SPEAKER_SAFE);
         EXT_TO_INT_DEVICE_MAPPING.put(TYPE_REMOTE_SUBMIX, AudioSystem.DEVICE_OUT_REMOTE_SUBMIX);
+        EXT_TO_INT_DEVICE_MAPPING.put(TYPE_BLE_HEADSET, AudioSystem.DEVICE_OUT_BLE_HEADSET);
+        EXT_TO_INT_DEVICE_MAPPING.put(TYPE_BLE_SPEAKER, AudioSystem.DEVICE_OUT_BLE_SPEAKER);
+
+        // privileges mapping to input device
+        EXT_TO_INT_INPUT_DEVICE_MAPPING = new SparseIntArray();
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_BUILTIN_MIC, AudioSystem.DEVICE_IN_BUILTIN_MIC);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(
+                TYPE_BLUETOOTH_SCO, AudioSystem.DEVICE_IN_BLUETOOTH_SCO_HEADSET);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(
+                TYPE_WIRED_HEADSET, AudioSystem.DEVICE_IN_WIRED_HEADSET);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_HDMI, AudioSystem.DEVICE_IN_HDMI);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_TELEPHONY, AudioSystem.DEVICE_IN_TELEPHONY_RX);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_DOCK, AudioSystem.DEVICE_IN_ANLG_DOCK_HEADSET);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(
+                TYPE_USB_ACCESSORY, AudioSystem.DEVICE_IN_USB_ACCESSORY);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_USB_DEVICE, AudioSystem.DEVICE_IN_USB_DEVICE);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_USB_HEADSET, AudioSystem.DEVICE_IN_USB_HEADSET);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_FM_TUNER, AudioSystem.DEVICE_IN_FM_TUNER);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_TV_TUNER, AudioSystem.DEVICE_IN_TV_TUNER);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_LINE_ANALOG, AudioSystem.DEVICE_IN_LINE);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_LINE_DIGITAL, AudioSystem.DEVICE_IN_SPDIF);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(
+                TYPE_BLUETOOTH_A2DP, AudioSystem.DEVICE_IN_BLUETOOTH_A2DP);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_IP, AudioSystem.DEVICE_IN_IP);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_BUS, AudioSystem.DEVICE_IN_BUS);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(
+                TYPE_REMOTE_SUBMIX, AudioSystem.DEVICE_IN_REMOTE_SUBMIX);
+        EXT_TO_INT_INPUT_DEVICE_MAPPING.put(TYPE_BLE_HEADSET, AudioSystem.DEVICE_IN_BLE_HEADSET);
     }
 }
 

@@ -26,6 +26,7 @@ import static android.net.NetworkStatsHistory.DataStreamUtils.writeVarLongArray;
 import static android.net.NetworkStatsHistory.Entry.UNKNOWN;
 import static android.net.NetworkStatsHistory.ParcelUtils.readLongArray;
 import static android.net.NetworkStatsHistory.ParcelUtils.writeLongArray;
+import static android.net.NetworkUtils.multiplySafeByRational;
 import static android.text.format.DateUtils.SECOND_IN_MILLIS;
 
 import static com.android.internal.util.ArrayUtils.total;
@@ -392,11 +393,12 @@ public class NetworkStatsHistory implements Parcelable {
             if (overlap <= 0) continue;
 
             // integer math each time is faster than floating point
-            final long fracRxBytes = multiplySafe(rxBytes, overlap, duration);
-            final long fracRxPackets = multiplySafe(rxPackets, overlap, duration);
-            final long fracTxBytes = multiplySafe(txBytes, overlap, duration);
-            final long fracTxPackets = multiplySafe(txPackets, overlap, duration);
-            final long fracOperations = multiplySafe(operations, overlap, duration);
+            final long fracRxBytes = multiplySafeByRational(rxBytes, overlap, duration);
+            final long fracRxPackets = multiplySafeByRational(rxPackets, overlap, duration);
+            final long fracTxBytes = multiplySafeByRational(txBytes, overlap, duration);
+            final long fracTxPackets = multiplySafeByRational(txPackets, overlap, duration);
+            final long fracOperations = multiplySafeByRational(operations, overlap, duration);
+
 
             addLong(activeTime, i, overlap);
             addLong(this.rxBytes, i, fracRxBytes); rxBytes -= fracRxBytes;
@@ -596,18 +598,24 @@ public class NetworkStatsHistory implements Parcelable {
             if (overlap <= 0) continue;
 
             // integer math each time is faster than floating point
-            if (activeTime != null)
-                entry.activeTime += multiplySafe(activeTime[i], overlap, bucketSpan);
-            if (rxBytes != null)
-                entry.rxBytes += multiplySafe(rxBytes[i], overlap, bucketSpan);
-            if (rxPackets != null)
-                entry.rxPackets += multiplySafe(rxPackets[i], overlap, bucketSpan);
-            if (txBytes != null)
-                entry.txBytes += multiplySafe(txBytes[i], overlap, bucketSpan);
-            if (txPackets != null)
-                entry.txPackets += multiplySafe(txPackets[i], overlap, bucketSpan);
-            if (operations != null)
-                entry.operations += multiplySafe(operations[i], overlap, bucketSpan);
+            if (activeTime != null) {
+                entry.activeTime += multiplySafeByRational(activeTime[i], overlap, bucketSpan);
+            }
+            if (rxBytes != null) {
+                entry.rxBytes += multiplySafeByRational(rxBytes[i], overlap, bucketSpan);
+            }
+            if (rxPackets != null) {
+                entry.rxPackets += multiplySafeByRational(rxPackets[i], overlap, bucketSpan);
+            }
+            if (txBytes != null) {
+                entry.txBytes += multiplySafeByRational(txBytes[i], overlap, bucketSpan);
+            }
+            if (txPackets != null) {
+                entry.txPackets += multiplySafeByRational(txPackets[i], overlap, bucketSpan);
+            }
+            if (operations != null) {
+                entry.operations += multiplySafeByRational(operations[i], overlap, bucketSpan);
+            }
         }
         return entry;
     }

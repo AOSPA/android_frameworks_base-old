@@ -103,13 +103,6 @@
     <item type="id" name="contains_transformed_view" />
     <item type="id" name="is_clicked_heads_up_tag" />
 
-    <!-- Accessibility actions for the docked stack divider -->
-    <item type="id" name="action_move_tl_full" />
-    <item type="id" name="action_move_tl_70" />
-    <item type="id" name="action_move_tl_50" />
-    <item type="id" name="action_move_tl_30" />
-    <item type="id" name="action_move_rb_full" />
-
     <item type="id" name="bottom_roundess_animator_tag"/>
     <item type="id" name="bottom_roundess_animator_start_tag"/>
     <item type="id" name="bottom_roundess_animator_end_tag"/>
@@ -176,6 +169,9 @@
 
     <item type="id" name="accessibility_action_controls_move_before" />
     <item type="id" name="accessibility_action_controls_move_after" />
+
+    <item type="id" name="accessibility_action_qs_move_to_position" />
+    <item type="id" name="accessibility_action_qs_add_to_position" />
 
     <!-- Accessibility actions for PIP -->
     <item type="id" name="action_pip_resize" />

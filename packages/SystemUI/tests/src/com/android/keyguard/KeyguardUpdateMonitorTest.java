@@ -182,7 +182,8 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         // IBiometricsFace@1.0 does not support detection, only authentication.
         when(mFaceSensorProperties.isEmpty()).thenReturn(false);
         when(mFaceSensorProperties.get(anyInt())).thenReturn(new FaceSensorProperties(0 /* id */,
-                false /* supportsFaceDetection */));
+                false /* supportsFaceDetection */, true /* supportsSelfIllumination */,
+                1 /* maxTemplatesAllowed */));
 
         when(mFingerprintManager.isHardwareDetected()).thenReturn(true);
         when(mFingerprintManager.hasEnrolledTemplates(anyInt())).thenReturn(true);
@@ -777,7 +778,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
 
     private Intent putPhoneInfo(Intent intent, Bundle data, Boolean simInited) {
         int subscription = simInited
-                ? 1/* mock subid=1 */ : SubscriptionManager.DUMMY_SUBSCRIPTION_ID_BASE;
+                ? 1/* mock subid=1 */ : SubscriptionManager.PLACEHOLDER_SUBSCRIPTION_ID_BASE;
         if (data != null) intent.putExtras(data);
 
         intent.putExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, subscription);

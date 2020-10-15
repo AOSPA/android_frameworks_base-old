@@ -16,6 +16,7 @@
 
 package com.android.systemui.recents;
 
+import static android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE;
 import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 import static android.view.MotionEvent.ACTION_CANCEL;
 import static android.view.MotionEvent.ACTION_DOWN;
@@ -61,15 +62,21 @@ import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.accessibility.AccessibilityManager;
 
+import androidx.annotation.NonNull;
+
 import com.android.internal.accessibility.dialog.AccessibilityButtonChooserActivity;
 import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.util.ScreenshotHelper;
 import com.android.systemui.Dumpable;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.model.SysUiState;
-import com.android.systemui.onehanded.OneHandedUI;
+import com.android.systemui.navigationbar.NavigationBar;
+import com.android.systemui.navigationbar.NavigationBarController;
+import com.android.systemui.navigationbar.NavigationBarView;
+import com.android.systemui.navigationbar.NavigationModeController;
+import com.android.systemui.pip.Pip;
 import com.android.systemui.pip.PipAnimationController;
-import com.android.systemui.pip.PipUI;
 import com.android.systemui.recents.OverviewProxyService.OverviewProxyListener;
 import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.shared.recents.IOverviewProxy;
@@ -79,32 +86,30 @@ import com.android.systemui.shared.recents.model.Task;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.InputMonitorCompat;
 import com.android.systemui.shared.system.QuickStepContract;
-import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.NavigationBarController;
-import com.android.systemui.statusbar.phone.NavigationBarFragment;
-import com.android.systemui.statusbar.phone.NavigationBarView;
-import com.android.systemui.statusbar.phone.NavigationModeController;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarWindowCallback;
 import com.android.systemui.statusbar.policy.CallbackController;
+import com.android.wm.shell.onehanded.OneHanded;
+import com.android.wm.shell.onehanded.OneHandedEvents;
+import com.android.wm.shell.splitscreen.SplitScreen;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 import dagger.Lazy;
 
 /**
  * Class to send information from overview to launcher with a binder.
  */
-@Singleton
+@SysUISingleton
 public class OverviewProxyService extends CurrentUserTracker implements
         CallbackController<OverviewProxyListener>, NavigationModeController.ModeChangedListener,
         Dumpable {
@@ -119,19 +124,19 @@ public class OverviewProxyService extends CurrentUserTracker implements
     private static final long MAX_BACKOFF_MILLIS = 10 * 60 * 1000;
 
     private final Context mContext;
-    private final PipUI mPipUI;
+    private final Optional<Pip> mPipOptional;
     private final Optional<Lazy<StatusBar>> mStatusBarOptionalLazy;
-    private final Optional<Divider> mDividerOptional;
+    private final Optional<SplitScreen> mSplitScreenOptional;
     private SysUiState mSysUiState;
     private final Handler mHandler;
-    private final NavigationBarController mNavBarController;
+    private final Lazy<NavigationBarController> mNavBarControllerLazy;
     private final NotificationShadeWindowController mStatusBarWinController;
     private final Runnable mConnectionRunnable = this::internalConnectToCurrentUser;
     private final ComponentName mRecentsComponentName;
     private final List<OverviewProxyListener> mConnectionCallbacks = new ArrayList<>();
     private final Intent mQuickStepIntent;
     private final ScreenshotHelper mScreenshotHelper;
-    private final OneHandedUI mOneHandedUI;
+    private final Optional<OneHanded> mOneHandedOptional;
     private final CommandQueue mCommandQueue;
 
     private Region mActiveNavBarRegion;
@@ -140,6 +145,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
     private int mConnectionBackoffAttempts;
     private boolean mBound;
     private boolean mIsEnabled;
+    private boolean mHasPipFeature;
     private int mCurrentBoundedUserId = -1;
     private float mNavBarButtonAlpha;
     private boolean mInputFocusTransferStarted;
@@ -230,7 +236,9 @@ public class OverviewProxyService extends CurrentUserTracker implements
             }
             long token = Binder.clearCallingIdentity();
             try {
-                mDividerOptional.ifPresent(Divider::onDockedFirstAnimationFrame);
+                mSplitScreenOptional.ifPresent(splitScreen -> {
+                    splitScreen.onDockedFirstAnimationFrame();
+                });
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -260,8 +268,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
             }
             long token = Binder.clearCallingIdentity();
             try {
-                return mDividerOptional.map(
-                        divider -> divider.getView().getNonMinimizedSplitScreenSecondaryBounds())
+                return mSplitScreenOptional.map(splitScreen ->
+                        splitScreen.getDividerView().getNonMinimizedSplitScreenSecondaryBounds())
                         .orElse(null);
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -378,12 +386,15 @@ public class OverviewProxyService extends CurrentUserTracker implements
 
         @Override
         public void setShelfHeight(boolean visible, int shelfHeight) {
-            if (!verifyCaller("setShelfHeight")) {
+            if (!verifyCaller("setShelfHeight") || !mHasPipFeature) {
+                Log.w(TAG_OPS,
+                        "ByPass setShelfHeight, FEATURE_PICTURE_IN_PICTURE:" + mHasPipFeature);
                 return;
             }
             long token = Binder.clearCallingIdentity();
             try {
-                mPipUI.setShelfHeight(visible, shelfHeight);
+                mPipOptional.ifPresent(
+                        pip -> pip.setShelfHeight(visible, shelfHeight));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -397,20 +408,22 @@ public class OverviewProxyService extends CurrentUserTracker implements
 
         @Override
         public void setSplitScreenMinimized(boolean minimized) {
-            Divider divider = mDividerOptional.get();
-            if (divider != null) {
-                divider.setMinimized(minimized);
-            }
+            mSplitScreenOptional.ifPresent(
+                    splitScreen -> splitScreen.setMinimized(minimized));
         }
 
         @Override
         public void notifySwipeToHomeFinished() {
-            if (!verifyCaller("notifySwipeToHomeFinished")) {
+            if (!verifyCaller("notifySwipeToHomeFinished") || !mHasPipFeature) {
+                Log.w(TAG_OPS, "ByPass notifySwipeToHomeFinished, FEATURE_PICTURE_IN_PICTURE:"
+                        + mHasPipFeature);
                 return;
             }
             long token = Binder.clearCallingIdentity();
             try {
-                mPipUI.setPinnedStackAnimationType(PipAnimationController.ANIM_TYPE_ALPHA);
+                mPipOptional.ifPresent(
+                        pip -> pip.setPinnedStackAnimationType(
+                                PipAnimationController.ANIM_TYPE_ALPHA));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -418,12 +431,15 @@ public class OverviewProxyService extends CurrentUserTracker implements
 
         @Override
         public void setPinnedStackAnimationListener(IPinnedStackAnimationListener listener) {
-            if (!verifyCaller("setPinnedStackAnimationListener")) {
+            if (!verifyCaller("setPinnedStackAnimationListener") || !mHasPipFeature) {
+                Log.w(TAG_OPS, "ByPass setPinnedStackAnimationListener, FEATURE_PICTURE_IN_PICTURE:"
+                        + mHasPipFeature);
                 return;
             }
             long token = Binder.clearCallingIdentity();
             try {
-                mPipUI.setPinnedStackAnimationListener(listener);
+                mPipOptional.ifPresent(
+                        pip -> pip.setPinnedStackAnimationListener(listener));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -449,9 +465,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
             }
             long token = Binder.clearCallingIdentity();
             try {
-                if (mOneHandedUI != null) {
-                    mOneHandedUI.startOneHanded();
-                }
+                mOneHandedOptional.ifPresent(oneHanded -> oneHanded.startOneHanded());
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -464,9 +478,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
             }
             long token = Binder.clearCallingIdentity();
             try {
-                if (mOneHandedUI != null) {
-                    mOneHandedUI.stopOneHanded();
-                }
+                mOneHandedOptional.ifPresent(oneHanded -> oneHanded.stopOneHanded(
+                                OneHandedEvents.EVENT_ONE_HANDED_TRIGGER_GESTURE_OUT));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -590,6 +603,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
     };
 
     private final StatusBarWindowCallback mStatusBarWindowCallback = this::onStatusBarStateChanged;
+    private final BiConsumer<Rect, Rect> mSplitScreenBoundsChangeListener =
+            this::notifySplitScreenBoundsChanged;
 
     // This is the death handler for the binder from the launcher service
     private final IBinder.DeathRecipient mOverviewServiceDeathRcpt
@@ -598,20 +613,23 @@ public class OverviewProxyService extends CurrentUserTracker implements
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     @Inject
     public OverviewProxyService(Context context, CommandQueue commandQueue,
-            NavigationBarController navBarController, NavigationModeController navModeController,
+            Lazy<NavigationBarController> navBarControllerLazy,
+            NavigationModeController navModeController,
             NotificationShadeWindowController statusBarWinController, SysUiState sysUiState,
-            PipUI pipUI, Optional<Divider> dividerOptional,
-            Optional<Lazy<StatusBar>> statusBarOptionalLazy, OneHandedUI oneHandedUI,
+            Optional<Pip> pipOptional,
+            Optional<SplitScreen> splitScreenOptional,
+            Optional<Lazy<StatusBar>> statusBarOptionalLazy,
+            Optional<OneHanded> oneHandedOptional,
             BroadcastDispatcher broadcastDispatcher) {
         super(broadcastDispatcher);
         mContext = context;
-        mPipUI = pipUI;
+        mPipOptional = pipOptional;
+        mHasPipFeature = mContext.getPackageManager().hasSystemFeature(FEATURE_PICTURE_IN_PICTURE);
         mStatusBarOptionalLazy = statusBarOptionalLazy;
         mHandler = new Handler();
-        mNavBarController = navBarController;
+        mNavBarControllerLazy = navBarControllerLazy;
         mStatusBarWinController = statusBarWinController;
         mConnectionBackoffAttempts = 0;
-        mDividerOptional = dividerOptional;
         mRecentsComponentName = ComponentName.unflattenFromString(context.getString(
                 com.android.internal.R.string.config_recentsComponentName));
         mQuickStepIntent = new Intent(ACTION_QUICKSTEP)
@@ -621,7 +639,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
                 .supportsRoundedCornersOnWindows(mContext.getResources());
         mSysUiState = sysUiState;
         mSysUiState.addCallback(this::notifySystemUiStateFlags);
-        mOneHandedUI = oneHandedUI;
+        mOneHandedOptional = oneHandedOptional;
 
         // Assumes device always starts with back button until launcher tells it that it does not
         mNavBarButtonAlpha = 1.0f;
@@ -651,6 +669,10 @@ public class OverviewProxyService extends CurrentUserTracker implements
         });
         mCommandQueue = commandQueue;
 
+        splitScreenOptional.ifPresent(splitScreen ->
+                splitScreen.registerBoundsChangeListener(mSplitScreenBoundsChangeListener));
+        mSplitScreenOptional = splitScreenOptional;
+
         // Listen for user setup
         startTracking();
 
@@ -677,10 +699,10 @@ public class OverviewProxyService extends CurrentUserTracker implements
     }
 
     private void updateSystemUiStateFlags() {
-        final NavigationBarFragment navBarFragment =
-                mNavBarController.getDefaultNavigationBarFragment();
+        final NavigationBar navBarFragment =
+                mNavBarControllerLazy.get().getDefaultNavigationBar();
         final NavigationBarView navBarView =
-                mNavBarController.getNavigationBarView(mContext.getDisplayId());
+                mNavBarControllerLazy.get().getNavigationBarView(mContext.getDisplayId());
         if (SysUiState.DEBUG) {
             Log.d(TAG_OPS, "Updating sysui state flags: navBarFragment=" + navBarFragment
                     + " navBarView=" + navBarView);
@@ -753,10 +775,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
         startConnectionToCurrentUser();
 
         // Clean up the minimized state if launcher dies
-        Divider divider = mDividerOptional.get();
-        if (divider != null) {
-            divider.setMinimized(false);
-        }
+        mSplitScreenOptional.ifPresent(
+                splitScreen -> splitScreen.setMinimized(false));
     }
 
     public void startConnectionToCurrentUser() {
@@ -808,7 +828,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
     }
 
     @Override
-    public void addCallback(OverviewProxyListener listener) {
+    public void addCallback(@NonNull OverviewProxyListener listener) {
         if (!mConnectionCallbacks.contains(listener)) {
             mConnectionCallbacks.add(listener);
         }
@@ -817,7 +837,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
     }
 
     @Override
-    public void removeCallback(OverviewProxyListener listener) {
+    public void removeCallback(@NonNull OverviewProxyListener listener) {
         mConnectionCallbacks.remove(listener);
     }
 
@@ -910,6 +930,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
 
     /**
      * Notifies the Launcher of split screen size changes
+     *
      * @param secondaryWindowBounds Bounds of the secondary window including the insets
      * @param secondaryWindowInsets stable insets received by the secondary window
      */

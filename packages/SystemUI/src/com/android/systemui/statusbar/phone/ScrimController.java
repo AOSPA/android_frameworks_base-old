@@ -46,6 +46,7 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.BlurUtils;
 import com.android.systemui.statusbar.ScrimView;
@@ -62,13 +63,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Controls both the scrim behind the notifications and in front of the notifications (when a
  * security method gets shown).
  */
-@Singleton
+@SysUISingleton
 public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnColorsChangedListener,
         Dumpable {
 
@@ -140,6 +140,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     private ScrimView mScrimInFront;
     private ScrimView mScrimBehind;
     private ScrimView mScrimForBubble;
+
+    private Runnable mScrimBehindChangeRunnable;
 
     private final KeyguardStateController mKeyguardStateController;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
@@ -240,6 +242,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         mScrimBehind = scrimBehind;
         mScrimInFront = scrimInFront;
         mScrimForBubble = scrimForBubble;
+
+        if (mScrimBehindChangeRunnable != null) {
+            mScrimBehind.setChangeRunnable(mScrimBehindChangeRunnable);
+            mScrimBehindChangeRunnable = null;
+        }
 
         final ScrimState[] states = ScrimState.values();
         for (int i = 0; i < states.length; i++) {
@@ -934,7 +941,13 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     }
 
     public void setScrimBehindChangeRunnable(Runnable changeRunnable) {
-        mScrimBehind.setChangeRunnable(changeRunnable);
+        // TODO: remove this. This is necessary because of an order-of-operations limitation.
+        // The fix is to move more of these class into @StatusBarScope
+        if (mScrimBehind == null) {
+            mScrimBehindChangeRunnable = changeRunnable;
+        } else {
+            mScrimBehind.setChangeRunnable(changeRunnable);
+        }
     }
 
     public void setCurrentUser(int currentUser) {

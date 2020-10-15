@@ -25,8 +25,8 @@ import static android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.WindowManager.TRANSIT_NONE;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_RECENTS_ANIMATIONS;
 import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_RECENTS_ANIMATIONS;
 import static com.android.server.wm.RecentsAnimationController.REORDER_KEEP_IN_PLACE;
 import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_ORIGINAL_POSITION;
 import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_TOP;
@@ -41,9 +41,9 @@ import android.os.Trace;
 import android.util.Slog;
 import android.view.IRecentsAnimationRunner;
 
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
-import com.android.server.protolog.common.ProtoLog;
 import com.android.server.wm.ActivityMetricsLogger.LaunchingState;
 import com.android.server.wm.RecentsAnimationController.RecentsAnimationCallbacks;
 
@@ -250,7 +250,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
             mService.mRootWindowContainer.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS);
 
             mStackSupervisor.getActivityMetricsLogger().notifyActivityLaunched(launchingState,
-                    START_TASK_TO_FRONT, targetActivity);
+                    START_TASK_TO_FRONT, targetActivity, null /* options */);
 
             // Register for stack order changes
             mDefaultTaskDisplayArea.registerStackOrderChangedListener(this);

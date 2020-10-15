@@ -79,8 +79,11 @@ import com.android.internal.util.ArrayUtils;
 import dalvik.system.VMRuntime;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -785,7 +788,6 @@ public abstract class PackageManager {
             INSTALL_ENABLE_ROLLBACK,
             INSTALL_ALLOW_DOWNGRADE,
             INSTALL_STAGED,
-            INSTALL_DRY_RUN,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallFlags {}
@@ -962,14 +964,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_STAGED = 0x00200000;
-
-    /**
-     * Flag parameter for {@link #installPackage} to indicate that package should only be verified
-     * but not installed.
-     *
-     * @hide
-     */
-    public static final int INSTALL_DRY_RUN = 0x00800000;
 
     /** @hide */
     @IntDef(flag = true, value = {
@@ -1161,7 +1155,8 @@ public abstract class PackageManager {
 
     /**
      * Installation return code: this is passed in the {@link PackageInstaller#EXTRA_LEGACY_STATUS}
-     * if the new package uses a shared library that is not available.
+     * when the package being replaced is a system app and the caller didn't provide the
+     * {@link #DELETE_SYSTEM_APP} flag.
      *
      * @hide
      */
@@ -3305,6 +3300,13 @@ public abstract class PackageManager {
     public static final String EXTRA_FAILURE_EXISTING_PERMISSION
             = "android.content.pm.extra.FAILURE_EXISTING_PERMISSION";
 
+    /**
+     * Extra field name for the ID of a package pending verification. Passed to
+     * a package verifier and is used to call back to
+     * @see #getChecksums
+     */
+    public static final String EXTRA_CHECKSUMS = "android.content.pm.extra.CHECKSUMS";
+
    /**
     * Permission flag: The permission is set in its current state
     * by the user and apps can still request it at runtime.
@@ -3373,6 +3375,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final int FLAG_PERMISSION_GRANTED_BY_DEFAULT =  1 << 5;
 
     /**
@@ -4093,6 +4096,15 @@ public abstract class PackageManager {
             @ApplicationInfoFlags int flags, @NonNull UserHandle user)
             throws NameNotFoundException {
         return getApplicationInfoAsUser(packageName, flags, user.getIdentifier());
+    }
+
+    /**
+     * @return The target SDK version for the given package name.
+     * @throws NameNotFoundException if a package with the given name cannot be found on the system.
+     */
+    @IntRange(from = 0)
+    public int getTargetSdkVersion(@NonNull String packageName) throws NameNotFoundException {
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -7841,6 +7853,46 @@ public abstract class PackageManager {
     }
 
     /**
+     * Trust any Installer to provide checksums for the package.
+     * @see #getChecksums
+     */
+    public static final @Nullable List<Certificate> TRUST_ALL = null;
+
+    /**
+     * Don't trust any Installer to provide checksums for the package.
+     * This effectively disables optimized Installer-enforced checksums.
+     * @see #getChecksums
+     */
+    public static final @NonNull List<Certificate> TRUST_NONE = Collections.emptyList();
+
+    /**
+     * Returns the checksums for APKs within a package.
+     *
+     * By default returns all readily available checksums:
+     * - enforced by platform,
+     * - enforced by installer.
+     * If caller needs a specific checksum kind, they can specify it as required.
+     *
+     * @param packageName whose checksums to return.
+     * @param includeSplits whether to include checksums for non-base splits.
+     * @param required explicitly request the checksum kinds. Will incur significant
+     *                 CPU/memory/disk usage.
+     * @param trustedInstallers for checksums enforced by Installer, which ones to be trusted.
+     *                          {@link #TRUST_ALL} will return checksums from any Installer,
+     *                          {@link #TRUST_NONE} disables optimized Installer-enforced checksums.
+     * @param statusReceiver called once when the results are available as
+     *                       {@link #EXTRA_CHECKSUMS} of type ApkChecksum[].
+     * @throws CertificateEncodingException if an encoding error occurs for trustedInstallers.
+     * @throws NameNotFoundException if a package with the given name cannot be found on the system.
+     */
+    public void getChecksums(@NonNull String packageName, boolean includeSplits,
+            @Checksum.Kind int required, @Nullable List<Certificate> trustedInstallers,
+            @NonNull IntentSender statusReceiver)
+            throws CertificateEncodingException, IOException, NameNotFoundException {
+        throw new UnsupportedOperationException("getChecksums not implemented in subclass");
+    }
+
+    /**
      * @return the default text classifier package name, or null if there's none.
      *
      * @hide
@@ -8089,7 +8141,8 @@ public abstract class PackageManager {
     private static final PropertyInvalidatedCache<ApplicationInfoQuery, ApplicationInfo>
             sApplicationInfoCache =
             new PropertyInvalidatedCache<ApplicationInfoQuery, ApplicationInfo>(
-                    16, PermissionManager.CACHE_KEY_PACKAGE_INFO) {
+                    16, PermissionManager.CACHE_KEY_PACKAGE_INFO,
+                    "getApplicationInfo") {
                 @Override
                 protected ApplicationInfo recompute(ApplicationInfoQuery query) {
                     return getApplicationInfoAsUserUncached(
@@ -8190,7 +8243,8 @@ public abstract class PackageManager {
     private static final PropertyInvalidatedCache<PackageInfoQuery, PackageInfo>
             sPackageInfoCache =
             new PropertyInvalidatedCache<PackageInfoQuery, PackageInfo>(
-                    32, PermissionManager.CACHE_KEY_PACKAGE_INFO) {
+                    32, PermissionManager.CACHE_KEY_PACKAGE_INFO,
+                    "getPackageInfo") {
                 @Override
                 protected PackageInfo recompute(PackageInfoQuery query) {
                     return getPackageInfoAsUserUncached(

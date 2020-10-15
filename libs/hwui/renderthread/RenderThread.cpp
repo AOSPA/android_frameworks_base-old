@@ -51,8 +51,10 @@ static JVMAttachHook gOnStartHook = nullptr;
 
 void RenderThread::frameCallback(int64_t frameTimeNanos, void* data) {
     RenderThread* rt = reinterpret_cast<RenderThread*>(data);
+    int64_t vsyncId = AChoreographer_getVsyncId(rt->mChoreographer);
     rt->mVsyncRequested = false;
-    if (rt->timeLord().vsyncReceived(frameTimeNanos) && !rt->mFrameCallbackTaskPending) {
+    if (rt->timeLord().vsyncReceived(frameTimeNanos, frameTimeNanos, vsyncId) &&
+            !rt->mFrameCallbackTaskPending) {
         ATRACE_NAME("queue mFrameCallbackTask");
         rt->mFrameCallbackTaskPending = true;
         nsecs_t runAt = (frameTimeNanos + rt->mDispatchFrameDelay);
@@ -131,8 +133,7 @@ RenderThread::RenderThread()
         , mFrameCallbackTaskPending(false)
         , mRenderState(nullptr)
         , mEglManager(nullptr)
-        , mFunctorManager(WebViewFunctorManager::instance())
-        , mVkManager(nullptr) {
+        , mFunctorManager(WebViewFunctorManager::instance()) {
     Properties::load();
     start("RenderThread");
 }
@@ -166,7 +167,7 @@ void RenderThread::initThreadLocals() {
     initializeChoreographer();
     mEglManager = new EglManager();
     mRenderState = new RenderState(*this);
-    mVkManager = new VulkanManager();
+    mVkManager = VulkanManager::getInstance();
     mCacheManager = new CacheManager();
 }
 
@@ -190,13 +191,14 @@ void RenderThread::requireGlContext() {
     auto glesVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     auto size = glesVersion ? strlen(glesVersion) : -1;
     cacheManager().configureContext(&options, glesVersion, size);
-    sk_sp<GrContext> grContext(GrContext::MakeGL(std::move(glInterface), options));
+    sk_sp<GrDirectContext> grContext(GrDirectContext::MakeGL(std::move(glInterface), options));
     LOG_ALWAYS_FATAL_IF(!grContext.get());
     setGrContext(grContext);
 }
 
 void RenderThread::requireVkContext() {
-    if (mVkManager->hasVkContext()) {
+    // the getter creates the context in the event it had been destroyed by destroyRenderingContext
+    if (vulkanManager().hasVkContext()) {
         return;
     }
     mVkManager->initialize();
@@ -204,7 +206,7 @@ void RenderThread::requireVkContext() {
     initGrContextOptions(options);
     auto vkDriverVersion = mVkManager->getDriverVersion();
     cacheManager().configureContext(&options, &vkDriverVersion, sizeof(vkDriverVersion));
-    sk_sp<GrContext> grContext = mVkManager->createContext(options);
+    sk_sp<GrDirectContext> grContext = mVkManager->createContext(options);
     LOG_ALWAYS_FATAL_IF(!grContext.get());
     setGrContext(grContext);
 }
@@ -222,11 +224,16 @@ void RenderThread::destroyRenderingContext() {
             mEglManager->destroy();
         }
     } else {
-        if (vulkanManager().hasVkContext()) {
-            setGrContext(nullptr);
-            vulkanManager().destroy();
-        }
+        setGrContext(nullptr);
+        mVkManager.clear();
     }
+}
+
+VulkanManager& RenderThread::vulkanManager() {
+    if (!mVkManager.get()) {
+        mVkManager = VulkanManager::getInstance();
+    }
+    return *mVkManager.get();
 }
 
 void RenderThread::dumpGraphicsMemory(int fd) {
@@ -263,7 +270,7 @@ Readback& RenderThread::readback() {
     return *mReadback;
 }
 
-void RenderThread::setGrContext(sk_sp<GrContext> context) {
+void RenderThread::setGrContext(sk_sp<GrDirectContext> context) {
     mCacheManager->reset(context);
     if (mGrContext) {
         mRenderState->onContextDestroyed();

@@ -166,6 +166,7 @@ import com.android.internal.util.FastXmlSerializer;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.UiServiceTestCase;
 import com.android.server.lights.LightsManager;
 import com.android.server.lights.LogicalLight;
@@ -178,7 +179,6 @@ import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -385,7 +385,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         MockitoAnnotations.initMocks(this);
 
         DeviceIdleInternal deviceIdleInternal = mock(DeviceIdleInternal.class);
-        when(deviceIdleInternal.getNotificationWhitelistDuration()).thenReturn(3000L);
+        when(deviceIdleInternal.getNotificationAllowlistDuration()).thenReturn(3000L);
         ActivityManagerInternal activityManagerInternal = mock(ActivityManagerInternal.class);
 
         LocalServices.removeServiceForTest(UriGrantsManagerInternal.class);
@@ -1086,12 +1086,18 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     /**
-     * Confirm the system user on automotive devices can use car categories
+     * Confirm an application with the SEND_CATEGORY_CAR_NOTIFICATIONS permission on automotive
+     * devices can use car categories.
      */
     @Test
-    public void testEnqueuedRestrictedNotifications_asSystem() throws Exception {
+    public void testEnqueuedRestrictedNotifications_hasPermission() throws Exception {
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, 0))
                 .thenReturn(true);
+        // SEND_CATEGORY_CAR_NOTIFICATIONS is a system-level permission that this test cannot
+        // obtain. Mocking out enforce permission call to ensure notifications can be created when
+        // permitted.
+        doNothing().when(mContext).enforceCallingPermission(
+                eq("android.permission.SEND_CATEGORY_CAR_NOTIFICATIONS"), anyString());
         List<String> categories = Arrays.asList(Notification.CATEGORY_CAR_EMERGENCY,
                 Notification.CATEGORY_CAR_WARNING,
                 Notification.CATEGORY_CAR_INFORMATION);
@@ -1114,7 +1120,6 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
      */
     @Test
     public void testEnqueuedRestrictedNotifications_notAutomotive() throws Exception {
-        mService.isSystemUid = false;
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, 0))
                 .thenReturn(false);
         List<String> categories = Arrays.asList(Notification.CATEGORY_CAR_EMERGENCY,
@@ -1134,12 +1139,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     /**
-     * Confirm if a non-system user tries to use the car categories on a automotive device that
-     * they will get a security exception
+     * Confirm if an application tries to use the car categories on a automotive device without the
+     * SEND_CATEGORY_CAR_NOTIFICATIONS permission that a security exception will be thrown.
      */
     @Test
-    public void testEnqueuedRestrictedNotifications_badUser() throws Exception {
-        mService.isSystemUid = false;
+    public void testEnqueuedRestrictedNotifications_noPermission() throws Exception {
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, 0))
                 .thenReturn(true);
         List<String> categories = Arrays.asList(Notification.CATEGORY_CAR_EMERGENCY,
@@ -3774,6 +3778,27 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testEnqueuedAdjustmentAppliesAdjustments_MultiNotifications() throws Exception {
+        final NotificationRecord r1 = generateNotificationRecord(mTestNotificationChannel);
+        final NotificationRecord r2 = generateNotificationRecord(mTestNotificationChannel);
+        mService.addEnqueuedNotification(r1);
+        mService.addEnqueuedNotification(r2);
+        when(mAssistants.isSameUser(eq(null), anyInt())).thenReturn(true);
+
+        Bundle signals = new Bundle();
+        signals.putInt(Adjustment.KEY_IMPORTANCE,
+                IMPORTANCE_HIGH);
+        Adjustment adjustment = new Adjustment(
+                r1.getSbn().getPackageName(), r1.getKey(), signals,
+                "", r1.getUser().getIdentifier());
+
+        mBinderService.applyEnqueuedAdjustmentFromAssistant(null, adjustment);
+
+        assertEquals(IMPORTANCE_HIGH, r1.getImportance());
+        assertEquals(IMPORTANCE_HIGH, r2.getImportance());
+    }
+
+    @Test
     public void testRestore() throws Exception {
         int systemChecks = mService.countSystemChecks;
         mBinderService.applyRestore(null, USER_SYSTEM);
@@ -3865,7 +3890,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.updateUriPermissions(recordB, recordA, mContext.getPackageName(),
                 USER_SYSTEM);
         verify(mUgmInternal, times(1)).revokeUriPermissionFromOwner(any(),
-                eq(message1.getDataUri()), anyInt(), anyInt());
+                eq(message1.getDataUri()), anyInt(), anyInt(), eq(null), eq(-1));
 
         // Update back means we grant access to first again
         reset(mUgm);
@@ -4835,6 +4860,70 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void backgroundSystemCustomToast_callsSetProcessImportantAsForegroundForToast() throws
+            Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = true;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        // notifications from this package are blocked by the user
+        mService.setPreferencesHelper(mPreferencesHelper);
+        when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_NONE);
+
+        setAppInForegroundForToasts(mUid, false);
+
+        // enqueue toast -> toast should still enqueue
+        ((INotificationManager) mService.mService).enqueueToast(testPackage, new Binder(),
+                new TestableToastCallback(), 2000, 0);
+        assertEquals(1, mService.mToastQueue.size());
+        verify(mAm).setProcessImportant(any(), anyInt(), eq(true), any());
+    }
+
+    @Test
+    public void foregroundTextToast_callsSetProcessImportantAsNotForegroundForToast() throws
+            Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        setAppInForegroundForToasts(mUid, true);
+
+        // enqueue toast -> toast should still enqueue
+        ((INotificationManager) mService.mService).enqueueTextToast(testPackage, new Binder(),
+                "Text", 2000, 0, null);
+        assertEquals(1, mService.mToastQueue.size());
+        verify(mAm).setProcessImportant(any(), anyInt(), eq(false), any());
+    }
+
+    @Test
+    public void backgroundTextToast_callsSetProcessImportantAsNotForegroundForToast() throws
+            Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        setAppInForegroundForToasts(mUid, false);
+
+        // enqueue toast -> toast should still enqueue
+        ((INotificationManager) mService.mService).enqueueTextToast(testPackage, new Binder(),
+                "Text", 2000, 0, null);
+        assertEquals(1, mService.mToastQueue.size());
+        verify(mAm).setProcessImportant(any(), anyInt(), eq(false), any());
+    }
+
+    @Test
     public void testTextToastsCallStatusBar() throws Exception {
         final String testPackage = "testPackageName";
         assertEquals(0, mService.mToastQueue.size());
@@ -4973,7 +5062,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 10, 10, r.getKey(), actionIndex, action, notificationVisibility,
                 generatedByAssistant);
         verify(mAssistants).notifyAssistantActionClicked(
-                eq(r.getSbn()), eq(actionIndex), eq(action), eq(generatedByAssistant));
+                eq(r.getSbn()), eq(action), eq(generatedByAssistant));
 
         assertEquals(1, mNotificationRecordLogger.numCalls());
         assertEquals(
@@ -4997,7 +5086,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 10, 10, r.getKey(), actionIndex, action, notificationVisibility,
                 generatedByAssistant);
         verify(mAssistants).notifyAssistantActionClicked(
-                eq(r.getSbn()), eq(actionIndex), eq(action), eq(generatedByAssistant));
+                eq(r.getSbn()), eq(action), eq(generatedByAssistant));
 
         assertEquals(1, mNotificationRecordLogger.numCalls());
         assertEquals(
@@ -6434,7 +6523,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testOnUnlockUser() {
         UserInfo ui = new UserInfo();
         ui.id = 10;
-        mService.onUnlockUser(ui);
+        mService.onUserUnlocking(new TargetUser(ui));
         waitForIdle();
 
         verify(mHistoryManager, timeout(MAX_POST_DELAY).times(1)).onUserUnlocked(ui.id);
@@ -6444,7 +6533,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testOnStopUser() {
         UserInfo ui = new UserInfo();
         ui.id = 10;
-        mService.onStopUser(ui);
+        mService.onUserStopping(new TargetUser(ui));
         waitForIdle();
 
         verify(mHistoryManager, timeout(MAX_POST_DELAY).times(1)).onUserStopped(ui.id);
@@ -6863,4 +6952,63 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertEquals(NotificationManagerService.MAX_PACKAGE_NOTIFICATIONS + 1,
                 mService.getNotificationRecordCount());
     }
+
+    @Test
+    public void testIsVisibleToListener_notEnabled() {
+        StatusBarNotification sbn = mock(StatusBarNotification.class);
+        when(sbn.getUserId()).thenReturn(10);
+        ManagedServices.ManagedServiceInfo info = mock(ManagedServices.ManagedServiceInfo.class);
+        ManagedServices.ManagedServiceInfo assistant = mock(ManagedServices.ManagedServiceInfo.class);
+        info.userid = 10;
+        when(info.isSameUser(anyInt())).thenReturn(true);
+        when(assistant.isSameUser(anyInt())).thenReturn(true);
+        when(info.enabledAndUserMatches(info.userid)).thenReturn(false);
+        when(mAssistants.checkServiceTokenLocked(any())).thenReturn(assistant);
+
+        assertFalse(mService.isVisibleToListener(sbn, info));
+    }
+
+    @Test
+    public void testIsVisibleToListener_noAssistant() {
+        StatusBarNotification sbn = mock(StatusBarNotification.class);
+        when(sbn.getUserId()).thenReturn(10);
+        ManagedServices.ManagedServiceInfo info = mock(ManagedServices.ManagedServiceInfo.class);
+        info.userid = 10;
+        when(info.isSameUser(anyInt())).thenReturn(true);
+        when(info.enabledAndUserMatches(info.userid)).thenReturn(true);
+        when(mAssistants.checkServiceTokenLocked(any())).thenReturn(null);
+
+        assertTrue(mService.isVisibleToListener(sbn, info));
+    }
+
+    @Test
+    public void testIsVisibleToListener_assistant_differentUser() {
+        StatusBarNotification sbn = mock(StatusBarNotification.class);
+        when(sbn.getUserId()).thenReturn(10);
+        ManagedServices.ManagedServiceInfo info = mock(ManagedServices.ManagedServiceInfo.class);
+        ManagedServices.ManagedServiceInfo assistant = mock(ManagedServices.ManagedServiceInfo.class);
+        info.userid = 0;
+        when(info.isSameUser(anyInt())).thenReturn(true);
+        when(assistant.isSameUser(anyInt())).thenReturn(true);
+        when(info.enabledAndUserMatches(info.userid)).thenReturn(true);
+        when(mAssistants.checkServiceTokenLocked(any())).thenReturn(assistant);
+
+        assertFalse(mService.isVisibleToListener(sbn, info));
+    }
+
+    @Test
+    public void testIsVisibleToListener_assistant_sameUser() {
+        StatusBarNotification sbn = mock(StatusBarNotification.class);
+        when(sbn.getUserId()).thenReturn(10);
+        ManagedServices.ManagedServiceInfo info = mock(ManagedServices.ManagedServiceInfo.class);
+        ManagedServices.ManagedServiceInfo assistant = mock(ManagedServices.ManagedServiceInfo.class);
+        info.userid = 10;
+        when(info.isSameUser(anyInt())).thenReturn(true);
+        when(assistant.isSameUser(anyInt())).thenReturn(true);
+        when(info.enabledAndUserMatches(info.userid)).thenReturn(true);
+        when(mAssistants.checkServiceTokenLocked(any())).thenReturn(assistant);
+
+        assertTrue(mService.isVisibleToListener(sbn, info));
+    }
+
 }

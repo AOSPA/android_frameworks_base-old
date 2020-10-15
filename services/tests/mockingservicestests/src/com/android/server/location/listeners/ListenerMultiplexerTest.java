@@ -16,6 +16,8 @@
 
 package com.android.server.location.listeners;
 
+import static com.android.internal.util.ConcurrentUtils.DIRECT_EXECUTOR;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -27,13 +29,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.testng.Assert.assertThrows;
 
-import android.location.util.identity.CallerIdentity;
-import android.os.Process;
 import android.platform.test.annotations.Presubmit;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.internal.listeners.ListenerExecutor.ListenerOperation;
 import com.android.server.location.listeners.ListenerMultiplexer.UpdateServiceLock;
 
 import org.junit.Before;
@@ -43,7 +44,6 @@ import org.mockito.InOrder;
 
 import java.util.Collection;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 
 @SuppressWarnings("unchecked")
 @Presubmit
@@ -319,21 +319,22 @@ public class ListenerMultiplexerTest {
     }
 
     private static class TestListenerRegistration extends
-            ListenerRegistration<Integer, Consumer<TestListenerRegistration>> {
+            RequestListenerRegistration<Integer, Consumer<TestListenerRegistration>,
+                    ListenerOperation<Consumer<TestListenerRegistration>>> {
 
         boolean mActive = true;
 
         protected TestListenerRegistration(Integer integer,
-                Consumer<TestListenerRegistration> consumer,
-                boolean outOfProcess) {
-            super(integer, CallerIdentity.forTest(Process.myUid(),
-                    Process.myPid() + (outOfProcess ? 1 : 0), "test", "test"), consumer);
+                Consumer<TestListenerRegistration> consumer) {
+            super(DIRECT_EXECUTOR, integer, consumer);
         }
     }
 
     private static class TestMultiplexer extends
-            ListenerMultiplexer<Consumer<TestListenerRegistration>, Integer,
-                    Consumer<TestListenerRegistration>, TestListenerRegistration, Integer> {
+            ListenerMultiplexer<Consumer<TestListenerRegistration>,
+                    Consumer<TestListenerRegistration>,
+                    ListenerOperation<Consumer<TestListenerRegistration>>, TestListenerRegistration,
+                    Integer> {
 
         boolean mRegistered;
         int mMergedRequest;
@@ -344,8 +345,13 @@ public class ListenerMultiplexerTest {
             mCallbacks = callbacks;
         }
 
+        @Override
+        public String getTag() {
+            return "TestMultiplexer";
+        }
+
         public void addListener(Integer request, Consumer<TestListenerRegistration> consumer) {
-            addRegistration(consumer, new TestListenerRegistration(request, consumer, true));
+            addRegistration(consumer, new TestListenerRegistration(request, consumer));
         }
 
         public void removeListener(Consumer<TestListenerRegistration> consumer) {
@@ -355,10 +361,6 @@ public class ListenerMultiplexerTest {
         public void removeListener(Consumer<TestListenerRegistration> consumer,
                 TestListenerRegistration registration) {
             removeRegistration(consumer, registration);
-        }
-
-        public void removeListenerIf(Predicate<Consumer<TestListenerRegistration>> predicate) {
-            removeRegistrationIf(predicate);
         }
 
         public void setActive(Integer request, boolean active) {
@@ -376,7 +378,8 @@ public class ListenerMultiplexerTest {
         }
 
         @Override
-        protected boolean registerWithService(Integer mergedRequest) {
+        protected boolean registerWithService(Integer mergedRequest,
+                Collection<TestListenerRegistration> registrations) {
             mRegistered = true;
             mMergedRequest = mergedRequest;
             return true;
@@ -425,7 +428,8 @@ public class ListenerMultiplexerTest {
         }
 
         @Override
-        protected Integer mergeRequests(Collection<TestListenerRegistration> testRegistrations) {
+        protected Integer mergeRegistrations(
+                Collection<TestListenerRegistration> testRegistrations) {
             int max = Integer.MIN_VALUE;
             for (TestListenerRegistration registration : testRegistrations) {
                 if (registration.getRequest() > max) {

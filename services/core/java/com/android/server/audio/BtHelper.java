@@ -575,19 +575,35 @@ public class BtHelper {
         // and this must be done on behalf of system server to make sure permissions are granted.
         final long ident = Binder.clearCallingIdentity();
         if (client != null) {
-            AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(eventSource));
-            client.requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
-                    SCO_MODE_VIRTUAL_CALL);
-            // If a disconnection is pending, the client will be removed whne clearAllScoClients()
-            // is called form receiveBtEvent()
-            if (mScoAudioState != SCO_STATE_DEACTIVATE_REQ
-                    && mScoAudioState != SCO_STATE_DEACTIVATING) {
-                client.remove(false /*stop */, true /*unregister*/);
-            }
+            stopAndRemoveClient(client, eventSource);
         }
         Binder.restoreCallingIdentity(ident);
     }
 
+    // @GuardedBy("AudioDeviceBroker.mSetModeLock")
+    @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
+    /*package*/ synchronized void stopBluetoothScoForPid(int pid) {
+        ScoClient client = getScoClientForPid(pid);
+        if (client == null) {
+            return;
+        }
+        final String eventSource = new StringBuilder("stopBluetoothScoForPid(")
+                .append(pid).append(")").toString();
+        stopAndRemoveClient(client, eventSource);
+    }
+
+    @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
+    private void stopAndRemoveClient(ScoClient client, @NonNull String eventSource) {
+        AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(eventSource));
+        client.requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                SCO_MODE_VIRTUAL_CALL);
+        // If a disconnection is pending, the client will be removed when clearAllScoClients()
+        // is called form receiveBtEvent()
+        if (mScoAudioState != SCO_STATE_DEACTIVATE_REQ
+                && mScoAudioState != SCO_STATE_DEACTIVATING) {
+            client.remove(false /*stop */, true /*unregister*/);
+        }
+    }
 
     /*package*/ synchronized void setHearingAidVolume(int index, int streamType) {
         if (mHearingAid == null) {
@@ -786,11 +802,17 @@ public class BtHelper {
         return result;
     }
 
+    // Return `(null)` if given BluetoothDevice is null. Otherwise, return the anonymized address.
+    private String getAnonymizedAddress(BluetoothDevice btDevice) {
+        return btDevice == null ? "(null)" : btDevice.getAnonymizedAddress();
+    }
+
     // @GuardedBy("AudioDeviceBroker.mSetModeLock")
     //@GuardedBy("AudioDeviceBroker.mDeviceStateLock")
     @GuardedBy("BtHelper.this")
     private void setBtScoActiveDevice(BluetoothDevice btDevice) {
-        Log.i(TAG, "setBtScoActiveDevice: " + mBluetoothHeadsetDevice + " -> " + btDevice);
+        Log.i(TAG, "setBtScoActiveDevice: " + getAnonymizedAddress(mBluetoothHeadsetDevice)
+                + " -> " + getAnonymizedAddress(btDevice));
         final BluetoothDevice previousActiveDevice = mBluetoothHeadsetDevice;
         if (mBluetoothHeadsetDevice != null && mBluetoothHeadsetDevice.isTwsPlusDevice()
            && btDevice != null
@@ -803,29 +825,15 @@ public class BtHelper {
         if (Objects.equals(btDevice, previousActiveDevice)) {
             return;
         }
-        String DummyAddress = "00:00:00:00:00:00";
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter == null) {
-            Log.i(TAG, "adapter is null, returning from setBtScoActiveDevice");
-            return;
+        if (!handleBtScoActiveDeviceChange(previousActiveDevice, false)) {
+            Log.w(TAG, "setBtScoActiveDevice() failed to remove previous device "
+                    + getAnonymizedAddress(previousActiveDevice));
         }
-        final BluetoothDevice dummyActiveDevice = adapter.getRemoteDevice(DummyAddress);
-        if (mBluetoothHeadsetDevice == null && btDevice != null) {
-            //SCO device entry is added to mConnectedDevices hash map only when active
-            //device connects for the first time.
-            if (!handleBtScoActiveDeviceChange(dummyActiveDevice, true)) {
-                Log.e(TAG, "setBtScoActiveDevice() failed to add new device " + btDevice);
-                // set mBluetoothHeadsetDevice to null when failing to add new device
-                btDevice = null;
-            }
-        }
-        if (mBluetoothHeadsetDevice != null && btDevice == null) {
-            //SCO device entry is removed from mConnectedDevices hash map only when active
-            //device is disconnected.
-            if (!handleBtScoActiveDeviceChange(dummyActiveDevice, false)) {
-                Log.w(TAG, "setBtScoActiveDevice() failed to remove previous device "
-                        + previousActiveDevice);
-            }
+        if (!handleBtScoActiveDeviceChange(btDevice, true)) {
+            Log.e(TAG, "setBtScoActiveDevice() failed to add new device "
+                    + getAnonymizedAddress(btDevice));
+            // set mBluetoothHeadsetDevice to null when failing to add new device
+            btDevice = null;
         }
         mBluetoothHeadsetDevice = btDevice;
         if (mBluetoothHeadsetDevice == null) {
@@ -1012,7 +1020,8 @@ public class BtHelper {
                                 mBluetoothHeadsetDevice, mScoAudioMode)) {
                             mScoAudioState = SCO_STATE_ACTIVE_INTERNAL;
                         } else {
-                            Log.w(TAG, "requestScoState: connect to " + mBluetoothHeadsetDevice
+                            Log.w(TAG, "requestScoState: connect to "
+                                    + getAnonymizedAddress(mBluetoothHeadsetDevice)
                                     + " failed, mScoAudioMode=" + mScoAudioMode);
                             broadcastScoConnectionState(
                                     AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
@@ -1190,6 +1199,16 @@ public class BtHelper {
             newClient.registerDeathRecipient();
             mScoClients.add(newClient);
             return newClient;
+        }
+        return null;
+    }
+
+    @GuardedBy("BtHelper.this")
+    private ScoClient getScoClientForPid(int pid) {
+        for (ScoClient cl : mScoClients) {
+            if (cl.getPid() == pid) {
+                return cl;
+            }
         }
         return null;
     }

@@ -28,13 +28,10 @@ import com.android.systemui.car.window.SystemUIOverlayWindowManager;
 import com.android.systemui.globalactions.GlobalActionsComponent;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
-import com.android.systemui.onehanded.OneHandedUI;
-import com.android.systemui.pip.PipUI;
 import com.android.systemui.power.PowerUI;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsModule;
 import com.android.systemui.shortcut.ShortcutKeyDispatcher;
-import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.dagger.StatusBarModule;
 import com.android.systemui.statusbar.notification.InstantAppNotifier;
 import com.android.systemui.statusbar.notification.dagger.NotificationsModule;
@@ -42,6 +39,7 @@ import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.theme.ThemeOverlayController;
 import com.android.systemui.toast.ToastUI;
 import com.android.systemui.util.leak.GarbageMonitor;
+import com.android.systemui.wmshell.WMShell;
 
 import dagger.Binds;
 import dagger.Module;
@@ -58,12 +56,6 @@ public abstract class CarSystemUIBinder {
     @IntoMap
     @ClassKey(AuthController.class)
     public abstract SystemUI bindAuthController(AuthController sysui);
-
-    /** Inject into Divider. */
-    @Binds
-    @IntoMap
-    @ClassKey(Divider.class)
-    public abstract SystemUI bindDivider(Divider sysui);
 
     /** Inject Car Navigation Bar. */
     @Binds
@@ -100,18 +92,6 @@ public abstract class CarSystemUIBinder {
     @IntoMap
     @ClassKey(LatencyTester.class)
     public abstract SystemUI bindLatencyTester(LatencyTester sysui);
-
-    /** Inject into OneHandedUI. */
-    @Binds
-    @IntoMap
-    @ClassKey(OneHandedUI.class)
-    public abstract SystemUI bindOneHandedUI(OneHandedUI sysui);
-
-    /** Inject into PipUI. */
-    @Binds
-    @IntoMap
-    @ClassKey(PipUI.class)
-    public abstract SystemUI bindPipUI(PipUI sysui);
 
     /** Inject into PowerUI. */
     @Binds
@@ -192,4 +172,10 @@ public abstract class CarSystemUIBinder {
     @IntoMap
     @ClassKey(SideLoadedAppController.class)
     public abstract SystemUI bindSideLoadedAppController(SideLoadedAppController sysui);
+
+    /** Inject into WMShell. */
+    @Binds
+    @IntoMap
+    @ClassKey(WMShell.class)
+    public abstract SystemUI bindWMShell(WMShell sysui);
 }

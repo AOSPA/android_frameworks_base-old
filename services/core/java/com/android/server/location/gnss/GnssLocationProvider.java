@@ -45,12 +45,11 @@ import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
-import android.os.PowerManager.ServiceType;
-import android.os.PowerSaveState;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -87,7 +86,9 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A GNSS implementation of LocationProvider used by LocationManager.
@@ -183,7 +184,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private static final int INJECT_NTP_TIME = 5;
     // PSDS stands for Predicted Satellite Data Service
     private static final int DOWNLOAD_PSDS_DATA = 6;
-    private static final int DOWNLOAD_PSDS_DATA_FINISHED = 11;
     private static final int INITIALIZE_HANDLER = 13;
     private static final int REQUEST_LOCATION = 16;
     private static final int REPORT_LOCATION = 17; // HAL reports location
@@ -274,7 +274,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     // if the fix interval is below this we leave GPS on,
     // if above then we cycle the GPS driver.
-    // Typical hot TTTF is ~5 seconds, so 10 seconds seems sane.
+    // Typical hot TTTF is ~5 seconds, so 10 seconds seems valid.
     private static final int GPS_POLLING_THRESHOLD_INTERVAL = 10 * 1000;
 
     // how long to wait if we have a network error in NTP or PSDS downloading
@@ -290,6 +290,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private static final long DOWNLOAD_PSDS_DATA_TIMEOUT_MS = 60 * 1000;
     private static final long WAKELOCK_TIMEOUT_MILLIS = 30 * 1000;
 
+    @GuardedBy("mLock")
     private final ExponentialBackOff mPsdsBackOff = new ExponentialBackOff(RETRY_INTERVAL,
             MAX_RETRY_INTERVAL);
 
@@ -299,14 +300,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     private boolean mShutdown;
 
-    // states for injecting ntp and downloading psds data
-    private static final int STATE_PENDING_NETWORK = 0;
-    private static final int STATE_DOWNLOADING = 1;
-    private static final int STATE_IDLE = 2;
-
-    // flags to trigger NTP or PSDS data download when network becomes available
-    // initialized to true so we do NTP and PSDS when the network comes up after booting
-    private int mDownloadPsdsDataPending = STATE_PENDING_NETWORK;
+    @GuardedBy("mLock")
+    private Set<Integer> mPendingDownloadPsdsTypes = new HashSet<>();
 
     // true if GPS is navigating
     private boolean mNavigating;
@@ -486,10 +481,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                         deviceIdleService.unregisterStationaryListener(
                                 mDeviceIdleStationaryListener);
                     }
-                    // Intentional fall-through.
-                case PowerManager.ACTION_POWER_SAVE_MODE_CHANGED:
-                case Intent.ACTION_SCREEN_OFF:
-                case Intent.ACTION_SCREEN_ON:
                     // Call updateLowPowerMode on handler thread so it's always called from the
                     // same thread.
                     mHandler.sendEmptyMessage(UPDATE_LOW_POWER_MODE);
@@ -554,15 +545,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private void updateLowPowerMode() {
         // Disable GPS if we are in device idle mode and the device is stationary.
         boolean disableGpsForPowerManager = mPowerManager.isDeviceIdleMode() && mIsDeviceStationary;
-        final PowerSaveState result = mPowerManager.getPowerSaveState(ServiceType.LOCATION);
-        switch (result.locationMode) {
-            case PowerManager.LOCATION_MODE_GPS_DISABLED_WHEN_SCREEN_OFF:
-            case PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF:
-                // If we are in battery saver mode and the screen is off, disable GPS.
-                disableGpsForPowerManager |=
-                        result.batterySaverEnabled && !mPowerManager.isInteractive();
-                break;
-        }
         if (disableGpsForPowerManager != mDisableGpsForPowerManager) {
             mDisableGpsForPowerManager = disableGpsForPowerManager;
             updateEnabled();
@@ -625,6 +607,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mNIHandler = new GpsNetInitiatedHandler(context,
                 mNetInitiatedListener,
                 mSuplEsEnabled);
+        // Trigger PSDS data download when the network comes up after booting.
+        mPendingDownloadPsdsTypes.add(GnssPsdsDownloader.LONG_TERM_PSDS_SERVER_INDEX);
         mNetworkConnectivityHandler = new GnssNetworkConnectivityHandler(context,
                 GnssLocationProvider.this::onNetworkAvailable, mLooper, mNIHandler);
 
@@ -685,10 +669,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
      */
     private void onNetworkAvailable() {
         mNtpTimeHelper.onNetworkAvailable();
-        if (mDownloadPsdsDataPending == STATE_PENDING_NETWORK) {
-            if (mSupportsPsds) {
-                // Download only if supported, (prevents an unnecessary on-boot download)
-                psdsDownloadRequest(/* psdsType= */ GnssPsdsDownloader.LONG_TERM_PSDS_SERVER_INDEX);
+        // Download only if supported, (prevents an unnecessary on-boot download)
+        if (mSupportsPsds) {
+            synchronized (mLock) {
+                for (int psdsType : mPendingDownloadPsdsTypes) {
+                    downloadPsdsData(psdsType);
+                }
+                mPendingDownloadPsdsTypes.clear();
             }
         }
     }
@@ -714,9 +701,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 Context.LOCATION_SERVICE);
         String provider;
         LocationChangeListener locationListener;
-        LocationRequest locationRequest = new LocationRequest()
-                .setInterval(LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS)
-                .setFastestInterval(LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS);
+        LocationRequest.Builder locationRequest = new LocationRequest.Builder(
+                LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS);
 
         if (independentFromGnss) {
             // For fast GNSS TTFF
@@ -729,8 +715,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             locationListener = mFusedLocationListener;
             locationRequest.setQuality(LocationRequest.ACCURACY_FINE);
         }
-
-        locationRequest.setProvider(provider);
 
         // Ignore location settings if in emergency mode. This is only allowed for
         // isUserEmergency request (introduced in HAL v2.0), or HAL v1.1.
@@ -749,8 +733,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                         provider, durationMillis));
 
         try {
-            locationManager.requestLocationUpdates(locationRequest,
-                    locationListener, mHandler.getLooper());
+            locationManager.requestLocationUpdates(provider, locationRequest.build(),
+                    new HandlerExecutor(mHandler), locationListener);
             locationListener.mNumLocationUpdateRequest++;
             mHandler.postDelayed(() -> {
                 if (--locationListener.mNumLocationUpdateRequest == 0) {
@@ -814,17 +798,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             Log.d(TAG, "handleDownloadPsdsData() called when PSDS not supported");
             return;
         }
-        if (mDownloadPsdsDataPending == STATE_DOWNLOADING) {
-            // already downloading data
-            return;
-        }
         if (!mNetworkConnectivityHandler.isDataNetworkConnected()) {
             // try again when network is up
-            mDownloadPsdsDataPending = STATE_PENDING_NETWORK;
+            synchronized (mLock) {
+                mPendingDownloadPsdsTypes.add(psdsType);
+            }
             return;
         }
-        mDownloadPsdsDataPending = STATE_DOWNLOADING;
-
         synchronized (mLock) {
             // hold wake lock while task runs
             mDownloadPsdsWakeLock.acquire(DOWNLOAD_PSDS_DATA_TIMEOUT_MS);
@@ -835,20 +815,24 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                     mGnssConfiguration.getProperties());
             byte[] data = psdsDownloader.downloadPsdsData(psdsType);
             if (data != null) {
-                if (DEBUG) Log.d(TAG, "calling native_inject_psds_data");
-                native_inject_psds_data(data, data.length);
-                mPsdsBackOff.reset();
-            }
-
-            sendMessage(DOWNLOAD_PSDS_DATA_FINISHED, 0, null);
-
-            if (data == null) {
-                // try again later
-                // since this is delayed and not urgent we do not hold a wake lock here
-                // the arg2 below should not be 1 otherwise the wakelock will be under-locked.
+                mHandler.post(() -> {
+                    if (DEBUG) Log.d(TAG, "calling native_inject_psds_data");
+                    native_inject_psds_data(data, data.length, psdsType);
+                    synchronized (mLock) {
+                        mPsdsBackOff.reset();
+                    }
+                });
+            } else {
+                // Try download PSDS data again later according to backoff time.
+                // Since this is delayed and not urgent, we do not hold a wake lock here.
+                // The arg2 below should not be 1 otherwise the wakelock will be under-locked.
+                long backoffMillis;
+                synchronized (mLock) {
+                    backoffMillis = mPsdsBackOff.nextBackoffMillis();
+                }
                 mHandler.sendMessageDelayed(
                         mHandler.obtainMessage(DOWNLOAD_PSDS_DATA, psdsType, 0, null),
-                        mPsdsBackOff.nextBackoffMillis());
+                        backoffMillis);
             }
 
             // Release wake lock held by task, synchronize on mLock in case multiple
@@ -972,8 +956,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         enabled &= !mDisableGpsForPowerManager;
 
         // .. but enable anyway, if there's an active settings-ignored request (e.g. ELS)
-        enabled |= (mProviderRequest != null && mProviderRequest.reportLocation
-                && mProviderRequest.locationSettingsIgnored);
+        enabled |= (mProviderRequest != null
+                && mProviderRequest.isActive()
+                && mProviderRequest.isLocationSettingsIgnored());
 
         // ... and, finally, disable anyway, if device is being shut down
         enabled &= !mShutdown;
@@ -1008,20 +993,20 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     // Called when the requirements for GPS may have changed
     private void updateRequirements() {
-        if (mProviderRequest == null || mProviderRequest.workSource == null) {
+        if (mProviderRequest == null || mProviderRequest.getWorkSource() == null) {
             return;
         }
 
         if (DEBUG) Log.d(TAG, "setRequest " + mProviderRequest);
-        if (mProviderRequest.reportLocation && isGpsEnabled()) {
+        if (mProviderRequest.isActive() && isGpsEnabled()) {
             // update client uids
-            updateClientUids(mProviderRequest.workSource);
+            updateClientUids(mProviderRequest.getWorkSource());
 
-            mFixInterval = (int) mProviderRequest.interval;
-            mLowPowerMode = mProviderRequest.lowPowerMode;
+            mFixInterval = (int) mProviderRequest.getIntervalMillis();
+            mLowPowerMode = mProviderRequest.isLowPower();
             // check for overflow
-            if (mFixInterval != mProviderRequest.interval) {
-                Log.w(TAG, "interval overflow: " + mProviderRequest.interval);
+            if (mFixInterval != mProviderRequest.getIntervalMillis()) {
+                Log.w(TAG, "interval overflow: " + mProviderRequest.getIntervalMillis());
                 mFixInterval = Integer.MAX_VALUE;
             }
 
@@ -1143,7 +1128,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 requestUtcTime();
             } else if ("force_psds_injection".equals(command)) {
                 if (mSupportsPsds) {
-                    psdsDownloadRequest(/* psdsType= */
+                    downloadPsdsData(/* psdsType= */
                             GnssPsdsDownloader.LONG_TERM_PSDS_SERVER_INDEX);
                 }
             } else {
@@ -1221,7 +1206,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             }
 
             int interval = (hasCapability(GPS_CAPABILITY_SCHEDULING) ? mFixInterval : 1000);
-            mLowPowerMode = mProviderRequest.lowPowerMode;
+            mLowPowerMode = mProviderRequest.isLowPower();
             if (!setPositionMode(mPositionMode, GPS_POSITION_RECURRENCE_PERIODIC,
                     interval, 0, 0, mLowPowerMode)) {
                 setStarted(false);
@@ -1596,8 +1581,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         reportLocation(locations);
     }
 
-    void psdsDownloadRequest(int psdsType) {
-        if (DEBUG) Log.d(TAG, "psdsDownloadRequest. psdsType: " + psdsType);
+    void downloadPsdsData(int psdsType) {
+        if (DEBUG) Log.d(TAG, "downloadPsdsData. psdsType: " + psdsType);
         sendMessage(DOWNLOAD_PSDS_DATA, psdsType, null);
     }
 
@@ -1911,9 +1896,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 case DOWNLOAD_PSDS_DATA:
                     handleDownloadPsdsData(msg.arg1);
                     break;
-                case DOWNLOAD_PSDS_DATA_FINISHED:
-                    mDownloadPsdsDataPending = STATE_IDLE;
-                    break;
                 case INITIALIZE_HANDLER:
                     handleInitialize();
                     break;
@@ -1959,10 +1941,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             IntentFilter intentFilter = new IntentFilter();
             intentFilter.addAction(ALARM_WAKEUP);
             intentFilter.addAction(ALARM_TIMEOUT);
-            intentFilter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
             intentFilter.addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED);
-            intentFilter.addAction(Intent.ACTION_SCREEN_OFF);
-            intentFilter.addAction(Intent.ACTION_SCREEN_ON);
             intentFilter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
             intentFilter.addAction(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
             mContext.registerReceiver(mBroadcastReceiver, intentFilter, null, this);
@@ -1972,20 +1951,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             // listen for PASSIVE_PROVIDER updates
             LocationManager locManager =
                     (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
-            long minTime = 0;
-            float minDistance = 0;
-            LocationRequest request = LocationRequest.createFromDeprecatedProvider(
-                    LocationManager.PASSIVE_PROVIDER,
-                    minTime,
-                    minDistance,
-                    false);
-            // Don't keep track of this request since it's done on behalf of other clients
-            // (which are kept track of separately).
-            request.setHideFromAppOps(true);
             locManager.requestLocationUpdates(
-                    request,
-                    new NetworkLocationListener(),
-                    getLooper());
+                    LocationManager.PASSIVE_PROVIDER,
+                    new LocationRequest.Builder(0)
+                            .setHiddenFromAppOps(true)
+                            .build(),
+                    new HandlerExecutor(this),
+                    new NetworkLocationListener());
 
             updateEnabled();
         }
@@ -2025,8 +1997,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 return "REQUEST_LOCATION";
             case DOWNLOAD_PSDS_DATA:
                 return "DOWNLOAD_PSDS_DATA";
-            case DOWNLOAD_PSDS_DATA_FINISHED:
-                return "DOWNLOAD_PSDS_DATA_FINISHED";
             case INITIALIZE_HANDLER:
                 return "INITIALIZE_HANDLER";
             case REPORT_LOCATION:
@@ -2040,6 +2010,21 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        boolean dumpAll = false;
+
+        int opti = 0;
+        while (opti < args.length) {
+            String opt = args[opti];
+            if (opt == null || opt.length() <= 0 || opt.charAt(0) != '-') {
+                break;
+            }
+            opti++;
+            if ("-a".equals(opt)) {
+                dumpAll = true;
+                break;
+            }
+        }
+
         StringBuilder s = new StringBuilder();
         s.append("mStarted=").append(mStarted).append("   (changed ");
         TimeUtils.formatDuration(SystemClock.elapsedRealtime()
@@ -2071,9 +2056,11 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             s.append("]\n");
         }
         s.append(mGnssMetrics.dumpGnssMetricsAsText());
-        s.append("native internal state: \n");
-        s.append("  ").append(native_get_internal_state());
-        s.append("\n");
+        if (dumpAll) {
+            s.append("native internal state: \n");
+            s.append("  ").append(native_get_internal_state());
+            s.append("\n");
+        }
         pw.append(s);
     }
 
@@ -2112,7 +2099,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     private native boolean native_supports_psds();
 
-    private native void native_inject_psds_data(byte[] data, int length);
+    private native void native_inject_psds_data(byte[] data, int length, int psdsType);
 
     // DEBUG Support
     private native String native_get_internal_state();

@@ -50,6 +50,7 @@ import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
@@ -95,7 +96,7 @@ import java.io.Reader;
 @MediumTest
 @Presubmit
 @RunWith(WindowTestRunner.class)
-public class TaskRecordTests extends ActivityTestsBase {
+public class TaskRecordTests extends WindowTestsBase {
 
     private static final String TASK_TAG = "task";
 
@@ -172,10 +173,10 @@ public class TaskRecordTests extends ActivityTestsBase {
     @Test
     public void testFitWithinBounds() {
         final Rect parentBounds = new Rect(10, 10, 200, 200);
-        TaskDisplayArea taskDisplayArea = mService.mRootWindowContainer.getDefaultTaskDisplayArea();
+        TaskDisplayArea taskDisplayArea = mAtm.mRootWindowContainer.getDefaultTaskDisplayArea();
         Task stack = taskDisplayArea.createStack(WINDOWING_MODE_FREEFORM,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        Task task = new TaskBuilder(mSupervisor).setStack(stack).build();
+        Task task = new TaskBuilder(mSupervisor).setParentTask(stack).build();
         final Configuration parentConfig = stack.getConfiguration();
         parentConfig.windowConfiguration.setBounds(parentBounds);
         parentConfig.densityDpi = DisplayMetrics.DENSITY_DEFAULT;
@@ -210,8 +211,8 @@ public class TaskRecordTests extends ActivityTestsBase {
     /** Tests that the task bounds adjust properly to changes between FULLSCREEN and FREEFORM */
     @Test
     public void testBoundsOnModeChangeFreeformToFullscreen() {
-        DisplayContent display = mService.mRootWindowContainer.getDefaultDisplay();
-        Task stack = new StackBuilder(mRootWindowContainer).setDisplay(display)
+        DisplayContent display = mAtm.mRootWindowContainer.getDefaultDisplay();
+        Task stack = new TaskBuilder(mSupervisor).setDisplay(display).setCreateActivity(true)
                 .setWindowingMode(WINDOWING_MODE_FREEFORM).build();
         Task task = stack.getBottomMostTask();
         task.getRootActivity().setOrientation(SCREEN_ORIENTATION_UNSPECIFIED);
@@ -243,19 +244,19 @@ public class TaskRecordTests extends ActivityTestsBase {
     public void testFullscreenBoundsForcedOrientation() {
         final Rect fullScreenBounds = new Rect(0, 0, 1920, 1080);
         final Rect fullScreenBoundsPort = new Rect(0, 0, 1080, 1920);
-        final DisplayContent display = new TestDisplayContent.Builder(mService,
+        final DisplayContent display = new TestDisplayContent.Builder(mAtm,
                 fullScreenBounds.width(), fullScreenBounds.height()).setCanRotate(false).build();
-        assertTrue(mRootWindowContainer.getDisplayContent(display.mDisplayId) != null);
+        assertNotNull(mRootWindowContainer.getDisplayContent(display.mDisplayId));
         // Fix the display orientation to landscape which is the natural rotation (0) for the test
         // display.
         final DisplayRotation dr = display.mDisplayContent.getDisplayRotation();
         dr.setFixedToUserRotation(FIXED_TO_USER_ROTATION_ENABLED);
         dr.setUserRotation(USER_ROTATION_FREE, ROTATION_0);
 
-        Task stack = new StackBuilder(mRootWindowContainer)
+        final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true)
                 .setWindowingMode(WINDOWING_MODE_FULLSCREEN).setDisplay(display).build();
-        Task task = stack.getBottomMostTask();
-        ActivityRecord root = task.getTopNonFinishingActivity();
+        final Task task = stack.getBottomMostTask();
+        final ActivityRecord root = task.getTopNonFinishingActivity();
 
         assertEquals(fullScreenBounds, task.getBounds());
 
@@ -267,7 +268,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         assertEquals(fullScreenBounds.height(), task.getBounds().height());
 
         // Top activity gets used
-        ActivityRecord top = new ActivityBuilder(mService).setTask(task).setStack(stack).build();
+        final ActivityRecord top = new ActivityBuilder(mAtm).setTask(task).setStack(stack).build();
         assertEquals(top, task.getTopNonFinishingActivity());
         top.setRequestedOrientation(SCREEN_ORIENTATION_LANDSCAPE);
         assertThat(task.getBounds().width()).isGreaterThan(task.getBounds().height());
@@ -304,16 +305,43 @@ public class TaskRecordTests extends ActivityTestsBase {
     }
 
     @Test
+    public void testReportsOrientationRequestInLetterboxForOrientation() {
+        final Rect fullScreenBounds = new Rect(0, 0, 1920, 1080);
+        final Rect fullScreenBoundsPort = new Rect(0, 0, 1080, 1920);
+        final DisplayContent display = new TestDisplayContent.Builder(mAtm,
+                fullScreenBounds.width(), fullScreenBounds.height()).setCanRotate(false).build();
+        assertNotNull(mRootWindowContainer.getDisplayContent(display.mDisplayId));
+        // Fix the display orientation to landscape which is the natural rotation (0) for the test
+        // display.
+        final DisplayRotation dr = display.mDisplayContent.getDisplayRotation();
+        dr.setFixedToUserRotation(FIXED_TO_USER_ROTATION_ENABLED);
+        dr.setUserRotation(USER_ROTATION_FREE, ROTATION_0);
+
+        final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true)
+                .setWindowingMode(WINDOWING_MODE_FULLSCREEN).setDisplay(display).build();
+        final Task task = stack.getBottomMostTask();
+        ActivityRecord root = task.getTopNonFinishingActivity();
+
+        assertEquals(fullScreenBounds, task.getBounds());
+
+        // Setting app to fixed portrait fits within parent
+        root.setRequestedOrientation(SCREEN_ORIENTATION_PORTRAIT);
+        assertThat(task.getBounds().width()).isLessThan(task.getBounds().height());
+
+        assertEquals(SCREEN_ORIENTATION_PORTRAIT, task.getOrientation());
+    }
+
+    @Test
     public void testIgnoresForcedOrientationWhenParentHandles() {
         final Rect fullScreenBounds = new Rect(0, 0, 1920, 1080);
         DisplayContent display = new TestDisplayContent.Builder(
-                mService, fullScreenBounds.width(), fullScreenBounds.height()).build();
+                mAtm, fullScreenBounds.width(), fullScreenBounds.height()).build();
 
         display.getRequestedOverrideConfiguration().orientation =
                 Configuration.ORIENTATION_LANDSCAPE;
         display.onRequestedOverrideConfigurationChanged(
                 display.getRequestedOverrideConfiguration());
-        Task stack = new StackBuilder(mRootWindowContainer)
+        Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true)
                 .setWindowingMode(WINDOWING_MODE_FULLSCREEN).setDisplay(display).build();
         Task task = stack.getBottomMostTask();
         ActivityRecord root = task.getTopNonFinishingActivity();
@@ -339,7 +367,7 @@ public class TaskRecordTests extends ActivityTestsBase {
     public void testComputeConfigResourceOverrides() {
         final Rect fullScreenBounds = new Rect(0, 0, 1080, 1920);
         TestDisplayContent display = new TestDisplayContent.Builder(
-                mService, fullScreenBounds.width(), fullScreenBounds.height()).build();
+                mAtm, fullScreenBounds.width(), fullScreenBounds.height()).build();
         final Task task = new TaskBuilder(mSupervisor).setDisplay(display).build();
         final Configuration inOutConfig = new Configuration();
         final Configuration parentConfig = new Configuration();
@@ -404,6 +432,31 @@ public class TaskRecordTests extends ActivityTestsBase {
     }
 
     @Test
+    public void testComputeConfigResourceLayoutOverrides() {
+        final Rect fullScreenBounds = new Rect(0, 0, 1000, 2500);
+        TestDisplayContent display = new TestDisplayContent.Builder(
+                mAtm, fullScreenBounds.width(), fullScreenBounds.height()).build();
+        final Task task = new TaskBuilder(mSupervisor).setDisplay(display).build();
+        final Configuration inOutConfig = new Configuration();
+        final Configuration parentConfig = new Configuration();
+        final Rect nonLongBounds = new Rect(0, 0, 1000, 1250);
+        parentConfig.windowConfiguration.setBounds(fullScreenBounds);
+        parentConfig.windowConfiguration.setAppBounds(fullScreenBounds);
+        parentConfig.densityDpi = 400;
+        parentConfig.screenHeightDp = (fullScreenBounds.bottom * 160) / parentConfig.densityDpi;
+        parentConfig.screenWidthDp = (fullScreenBounds.right * 160) / parentConfig.densityDpi;
+        parentConfig.windowConfiguration.setRotation(ROTATION_0);
+
+        // Set BOTH screenW/H to an override value
+        inOutConfig.screenWidthDp = nonLongBounds.width() * 160 / parentConfig.densityDpi;
+        inOutConfig.screenHeightDp = nonLongBounds.height() * 160 / parentConfig.densityDpi;
+        task.computeConfigResourceOverrides(inOutConfig, parentConfig);
+
+        // screenLayout should honor override when both screenW/H are set.
+        assertTrue((inOutConfig.screenLayout & Configuration.SCREENLAYOUT_LONG_NO) != 0);
+    }
+
+    @Test
     public void testComputeNestedConfigResourceOverrides() {
         final Task task = new TaskBuilder(mSupervisor).build();
         assertTrue(task.getResolvedOverrideBounds().isEmpty());
@@ -438,13 +491,13 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     @Test
     public void testInsetDisregardedWhenFreeformOverlapsNavBar() {
-        TaskDisplayArea taskDisplayArea = mService.mRootWindowContainer.getDefaultTaskDisplayArea();
+        TaskDisplayArea taskDisplayArea = mAtm.mRootWindowContainer.getDefaultTaskDisplayArea();
         Task stack = taskDisplayArea.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
         DisplayInfo displayInfo = new DisplayInfo();
-        mService.mContext.getDisplay().getDisplayInfo(displayInfo);
+        mAtm.mContext.getDisplay().getDisplayInfo(displayInfo);
         final int displayHeight = displayInfo.logicalHeight;
-        final Task task = new TaskBuilder(mSupervisor).setStack(stack).build();
+        final Task task = new TaskBuilder(mSupervisor).setParentTask(stack).build();
         final Configuration inOutConfig = new Configuration();
         final Configuration parentConfig = new Configuration();
         final int longSide = 1200;
@@ -514,23 +567,23 @@ public class TaskRecordTests extends ActivityTestsBase {
         info.packageName = DEFAULT_COMPONENT_PACKAGE_NAME;
         info.targetActivity = targetClassName;
 
-        final Task task = new Task(mService, 1 /* taskId */, info, intent,
+        final Task task = new Task(mAtm, 1 /* taskId */, info, intent,
                 null /* voiceSession */, null /* voiceInteractor */, null /* taskDescriptor */,
                 null /*stack*/);
         assertEquals("The alias activity component should be saved in task intent.", aliasClassName,
                 task.intent.getComponent().getClassName());
 
-        ActivityRecord aliasActivity = new ActivityBuilder(mService).setComponent(
+        ActivityRecord aliasActivity = new ActivityBuilder(mAtm).setComponent(
                 aliasComponent).setTargetActivity(targetClassName).build();
         assertEquals("Should be the same intent filter.", true,
                 task.isSameIntentFilter(aliasActivity));
 
-        ActivityRecord targetActivity = new ActivityBuilder(mService).setComponent(
+        ActivityRecord targetActivity = new ActivityBuilder(mAtm).setComponent(
                 targetComponent).build();
         assertEquals("Should be the same intent filter.", true,
                 task.isSameIntentFilter(targetActivity));
 
-        ActivityRecord defaultActivity = new ActivityBuilder(mService).build();
+        ActivityRecord defaultActivity = new ActivityBuilder(mAtm).build();
         assertEquals("Should not be the same intent filter.", false,
                 task.isSameIntentFilter(defaultActivity));
     }
@@ -540,7 +593,7 @@ public class TaskRecordTests extends ActivityTestsBase {
     public void testFindRootIndex() {
         final Task task = getTestTask();
         // Add an extra activity on top of the root one
-        new ActivityBuilder(mService).setTask(task).build();
+        new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals("The root activity in the task must be reported.", task.getChildAt(0),
                 task.getRootActivity(
@@ -557,9 +610,9 @@ public class TaskRecordTests extends ActivityTestsBase {
         // Add extra two activities and mark the two on the bottom as finishing.
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.finishing = true;
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         activity1.finishing = true;
-        new ActivityBuilder(mService).setTask(task).build();
+        new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals("The first non-finishing activity in the task must be reported.",
                 task.getChildAt(2), task.getRootActivity(
@@ -574,7 +627,7 @@ public class TaskRecordTests extends ActivityTestsBase {
     public void testFindRootIndex_effectiveRoot() {
         final Task task = getTestTask();
         // Add an extra activity on top of the root one
-        new ActivityBuilder(mService).setTask(task).build();
+        new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals("The root activity in the task must be reported.",
                 task.getChildAt(0), task.getRootActivity(
@@ -592,9 +645,9 @@ public class TaskRecordTests extends ActivityTestsBase {
         // one above as finishing.
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.info.flags |= FLAG_RELINQUISH_TASK_IDENTITY;
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         activity1.finishing = true;
-        new ActivityBuilder(mService).setTask(task).build();
+        new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals("The first non-finishing activity and non-relinquishing task identity "
                 + "must be reported.", task.getChildAt(2), task.getRootActivity(
@@ -626,7 +679,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         // Set relinquishTaskIdentity for all activities in the task
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.info.flags |= FLAG_RELINQUISH_TASK_IDENTITY;
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         activity1.info.flags |= FLAG_RELINQUISH_TASK_IDENTITY;
 
         assertEquals("The topmost activity in the task must be reported.",
@@ -639,7 +692,7 @@ public class TaskRecordTests extends ActivityTestsBase {
     public void testGetRootActivity() {
         final Task task = getTestTask();
         // Add an extra activity on top of the root one
-        new ActivityBuilder(mService).setTask(task).build();
+        new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals("The root activity in the task must be reported.",
                 task.getBottomMostActivity(), task.getRootActivity());
@@ -652,7 +705,7 @@ public class TaskRecordTests extends ActivityTestsBase {
     public void testGetRootActivity_finishing() {
         final Task task = getTestTask();
         // Add an extra activity on top of the root one
-        new ActivityBuilder(mService).setTask(task).build();
+        new ActivityBuilder(mAtm).setTask(task).build();
         // Mark the root as finishing
         task.getBottomMostActivity().finishing = true;
 
@@ -670,7 +723,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.info.flags |= FLAG_RELINQUISH_TASK_IDENTITY;
         // Add an extra activity on top of the root one.
-        new ActivityBuilder(mService).setTask(task).build();
+        new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals("The root activity in the task must be reported.",
                 task.getBottomMostActivity(), task.getRootActivity());
@@ -687,7 +740,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.finishing = true;
         // Add an extra activity on top of the root one and mark it as finishing
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         activity1.finishing = true;
 
         assertNull("No activity must be reported if all are finishing", task.getRootActivity());
@@ -703,7 +756,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.finishing = true;
         // Add an extra activity on top of the root one.
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
 
         assertFalse("Finishing activity must not be the root of task", activity0.isRootOfTask());
         assertTrue("Non-finishing activity must be the root of task", activity1.isRootOfTask());
@@ -720,7 +773,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.finishing = true;
         // Add an extra activity on top of the root one and mark it as finishing
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         activity1.finishing = true;
 
         assertTrue("Bottom activity must be the root of task", activity0.isRootOfTask());
@@ -756,9 +809,9 @@ public class TaskRecordTests extends ActivityTestsBase {
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.finishing = true;
         // Add an extra activity on top - this will be the new root
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         // Add one more on top
-        final ActivityRecord activity2 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity2 = new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals(task.mTaskId,
                 ActivityRecord.getTaskForActivityLocked(activity0.appToken, true /* onlyRoot */));
@@ -779,9 +832,9 @@ public class TaskRecordTests extends ActivityTestsBase {
         final ActivityRecord activity0 = task.getBottomMostActivity();
         activity0.info.flags |= FLAG_RELINQUISH_TASK_IDENTITY;
         // Add an extra activity on top - this will be the new root
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         // Add one more on top
-        final ActivityRecord activity2 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity2 = new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals(task.mTaskId,
                 ActivityRecord.getTaskForActivityLocked(activity0.appToken, true /* onlyRoot */));
@@ -803,11 +856,11 @@ public class TaskRecordTests extends ActivityTestsBase {
         activity0.finishing = true;
 
         // Add an extra activity on top of the root one and make it relinquish task identity
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         activity1.info.flags |= FLAG_RELINQUISH_TASK_IDENTITY;
 
         // Add one more activity on top
-        final ActivityRecord activity2 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity2 = new ActivityBuilder(mAtm).setTask(task).build();
 
         assertEquals(task.mTaskId,
                 ActivityRecord.getTaskForActivityLocked(activity0.appToken, false /* onlyRoot */));
@@ -843,7 +896,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         // Mark the bottom-most activity as finishing.
         activity0.finishing = true;
         // Add an extra activity on top of the root one
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
 
         spyOn(task);
         task.updateEffectiveIntent();
@@ -863,7 +916,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         // Mark the bottom-most activity as finishing.
         activity0.finishing = true;
         // Add an extra activity on top of the root one and make it relinquish task identity
-        final ActivityRecord activity1 = new ActivityBuilder(mService).setTask(task).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setTask(task).build();
         activity1.finishing = true;
 
         // Task must still update the intent using the root activity (preserving legacy behavior).
@@ -874,7 +927,7 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     @Test
     public void testSaveLaunchingStateWhenConfigurationChanged() {
-        LaunchParamsPersister persister = mService.mStackSupervisor.mLaunchParamsPersister;
+        LaunchParamsPersister persister = mAtm.mStackSupervisor.mLaunchParamsPersister;
         spyOn(persister);
 
         final Task task = getTestTask();
@@ -890,7 +943,7 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     @Test
     public void testSaveLaunchingStateWhenClearingParent() {
-        LaunchParamsPersister persister = mService.mStackSupervisor.mLaunchParamsPersister;
+        LaunchParamsPersister persister = mAtm.mStackSupervisor.mLaunchParamsPersister;
         spyOn(persister);
 
         final Task task = getTestTask();
@@ -915,7 +968,7 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     @Test
     public void testNotSaveLaunchingStateNonFreeformDisplay() {
-        LaunchParamsPersister persister = mService.mStackSupervisor.mLaunchParamsPersister;
+        LaunchParamsPersister persister = mAtm.mStackSupervisor.mLaunchParamsPersister;
         spyOn(persister);
 
         final Task task = getTestTask();
@@ -930,7 +983,7 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     @Test
     public void testNotSaveLaunchingStateWhenNotFullscreenOrFreeformWindow() {
-        LaunchParamsPersister persister = mService.mStackSupervisor.mLaunchParamsPersister;
+        LaunchParamsPersister persister = mAtm.mStackSupervisor.mLaunchParamsPersister;
         spyOn(persister);
 
         final Task task = getTestTask();
@@ -976,17 +1029,17 @@ public class TaskRecordTests extends ActivityTestsBase {
     }
 
     private Task getTestTask() {
-        final Task stack = new StackBuilder(mRootWindowContainer).build();
+        final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         return stack.getBottomMostTask();
     }
 
     private void testStackBoundsConfiguration(int windowingMode, Rect parentBounds, Rect bounds,
             Rect expectedConfigBounds) {
 
-        TaskDisplayArea taskDisplayArea = mService.mRootWindowContainer.getDefaultTaskDisplayArea();
+        TaskDisplayArea taskDisplayArea = mAtm.mRootWindowContainer.getDefaultTaskDisplayArea();
         Task stack = taskDisplayArea.createStack(windowingMode, ACTIVITY_TYPE_STANDARD,
                 true /* onTop */);
-        Task task = new TaskBuilder(mSupervisor).setStack(stack).build();
+        Task task = new TaskBuilder(mSupervisor).setParentTask(stack).build();
 
         final Configuration parentConfig = stack.getConfiguration();
         parentConfig.windowConfiguration.setAppBounds(parentBounds);
@@ -1019,12 +1072,12 @@ public class TaskRecordTests extends ActivityTestsBase {
             parser.setInput(reader);
             assertEquals(XmlPullParser.START_TAG, parser.next());
             assertEquals(TASK_TAG, parser.getName());
-            return Task.restoreFromXml(parser, mService.mStackSupervisor);
+            return Task.restoreFromXml(parser, mAtm.mStackSupervisor);
         }
     }
 
     private Task createTask(int taskId) {
-        return new Task(mService, taskId, new Intent(), null, null, null,
+        return new Task(mAtm, taskId, new Intent(), null, null, null,
                 ActivityBuilder.getDefaultComponent(), null, false, false, false, 0, 10050, null,
                 0, false, null, 0, 0, 0, 0, null, null, 0, false, false, false, 0,
                 0, null /*ActivityInfo*/, null /*_voiceSession*/, null /*_voiceInteractor*/,

@@ -33,10 +33,10 @@ import static com.android.internal.widget.LockPatternUtils.SYNTHETIC_PASSWORD_HA
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_LOCKOUT;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_FOR_UNATTENDED_UPDATE;
 import static com.android.internal.widget.LockPatternUtils.USER_FRP;
+import static com.android.internal.widget.LockPatternUtils.VERIFY_FLAG_REQUEST_GK_PW_HANDLE;
 import static com.android.internal.widget.LockPatternUtils.frpCredentialEnabled;
 import static com.android.internal.widget.LockPatternUtils.userOwnsFrpCredential;
 
-import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -104,6 +104,7 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.EventLog;
+import android.util.LongSparseArray;
 import android.util.Slog;
 import android.util.SparseArray;
 
@@ -154,6 +155,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -185,19 +187,13 @@ public class LockSettingsService extends ILockSettings.Stub {
     private static final String SYNTHETIC_PASSWORD_UPDATE_TIME_KEY = "sp-handle-ts";
     private static final String USER_SERIAL_NUMBER_KEY = "serial-number";
 
-    // No challenge provided
-    private static final int CHALLENGE_NONE = 0;
-    // Challenge was provided from the external caller (non-LockSettingsService)
-    private static final int CHALLENGE_FROM_CALLER = 1;
-    // Challenge was generated from within LockSettingsService, for resetLockout. When challenge
-    // type is set to internal, LSS will revokeChallenge after all profiles for that user are
-    // unlocked.
-    private static final int CHALLENGE_INTERNAL = 2;
-
-    @IntDef({CHALLENGE_NONE,
-            CHALLENGE_FROM_CALLER,
-            CHALLENGE_INTERNAL})
-    @interface ChallengeType {}
+    // Duration that LockSettingsService will store the gatekeeper password for. This allows
+    // multiple biometric enrollments without prompting the user to enter their password via
+    // ConfirmLockPassword/ConfirmLockPattern multiple times. This needs to be at least the duration
+    // from the start of the first biometric sensor's enrollment to the start of the last biometric
+    // sensor's enrollment. If biometric enrollment requests a password handle that has expired, the
+    // user's credential must be presented again, e.g. via ConfirmLockPattern/ConfirmLockPassword.
+    private static final int GK_PW_HANDLE_STORE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 
     // Order of holding lock: mSeparateChallengeLock -> mSpManager -> this
     // Do not call into ActivityManager while holding mSpManager lock.
@@ -215,6 +211,9 @@ public class LockSettingsService extends ILockSettings.Stub {
     protected final LockSettingsStorage mStorage;
     private final LockSettingsStrongAuth mStrongAuth;
     private final SynchronizedStrongAuthTracker mStrongAuthTracker;
+    private final BiometricDeferredQueue mBiometricDeferredQueue;
+    private final LongSparseArray<byte[]> mGatekeeperPasswords;
+    private final Random mRandom;
 
     private final NotificationManager mNotificationManager;
     private final UserManager mUserManager;
@@ -277,18 +276,18 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
 
         @Override
-        public void onStartUser(int userHandle) {
-            mLockSettingsService.onStartUser(userHandle);
+        public void onUserStarting(@NonNull TargetUser user) {
+            mLockSettingsService.onStartUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onUnlockUser(int userHandle) {
-            mLockSettingsService.onUnlockUser(userHandle);
+        public void onUserUnlocking(@NonNull TargetUser user) {
+            mLockSettingsService.onUnlockUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onCleanupUser(int userHandle) {
-            mLockSettingsService.onCleanupUser(userHandle);
+        public void onUserStopped(@NonNull TargetUser user) {
+            mLockSettingsService.onCleanupUser(user.getUserIdentifier());
         }
     }
 
@@ -315,15 +314,6 @@ public class LockSettingsService extends ILockSettings.Stub {
 
         void register(LockSettingsStrongAuth strongAuth) {
             strongAuth.registerStrongAuthTracker(getStub());
-        }
-    }
-
-    private class PendingResetLockout {
-        final int mUserId;
-        final byte[] mHAT;
-        PendingResetLockout(int userId, byte[] hat) {
-            mUserId = userId;
-            mHAT = hat;
         }
     }
 
@@ -582,9 +572,12 @@ public class LockSettingsService extends ILockSettings.Stub {
         mStorageManager = injector.getStorageManager();
         mStrongAuthTracker = injector.getStrongAuthTracker();
         mStrongAuthTracker.register(mStrongAuth);
+        mGatekeeperPasswords = new LongSparseArray<>();
+        mRandom = new SecureRandom();
 
         mSpManager = injector.getSyntheticPasswordManager(mStorage);
         mManagedProfilePasswordCache = injector.getManagedProfilePasswordCache();
+        mBiometricDeferredQueue = new BiometricDeferredQueue(mContext, mSpManager, mHandler);
 
         mRebootEscrowManager = injector.getRebootEscrowManager(new RebootEscrowCallbacks(),
                 mStorage);
@@ -737,8 +730,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             // If boot took too long and the password in vold got expired, parent keystore will
             // be still locked, we ignore this case since the user will be prompted to unlock
             // the device after boot.
-            unlockChildProfile(userId, true /* ignoreUserNotAuthenticated */,
-                    CHALLENGE_NONE, 0 /* challenge */, null /* resetLockouts */);
+            unlockChildProfile(userId, true /* ignoreUserNotAuthenticated */);
         }
     }
 
@@ -827,6 +819,8 @@ public class LockSettingsService extends ILockSettings.Stub {
         mRebootEscrowManager.loadRebootEscrowDataIfAvailable();
         // TODO: maybe skip this for split system user mode.
         mStorage.prefetchUser(UserHandle.USER_SYSTEM);
+        mBiometricDeferredQueue.systemReady(mInjector.getFingerprintManager(),
+                mInjector.getFaceManager());
     }
 
     private void getAuthSecretHal() {
@@ -845,7 +839,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         if (getString("migrated", null, 0) == null) {
             final ContentResolver cr = mContext.getContentResolver();
             for (String validSetting : VALID_SETTINGS) {
-                String value = Settings.Secure.getString(cr, validSetting);
+                String value = Settings.Secure.getStringForUser(cr, validSetting, cr.getUserId());
                 if (value != null) {
                     setString(validSetting, value, 0);
                 }
@@ -1038,7 +1032,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         mContext.enforceCallingOrSelfPermission(PERMISSION, "LockSettingsWrite");
     }
 
-    private final void checkPasswordReadPermission(int userId) {
+    private final void checkPasswordReadPermission() {
         mContext.enforceCallingOrSelfPermission(PERMISSION, "LockSettingsRead");
     }
 
@@ -1098,7 +1092,9 @@ public class LockSettingsService extends ILockSettings.Stub {
     public void setSeparateProfileChallengeEnabled(int userId, boolean enabled,
             LockscreenCredential managedUserPassword) {
         checkWritePermission(userId);
-        if (!mHasSecureLockScreen) {
+        if (!mHasSecureLockScreen
+                && managedUserPassword != null
+                && managedUserPassword.getType() != CREDENTIAL_TYPE_NONE) {
             throw new UnsupportedOperationException(
                     "This operation requires secure lock screen feature.");
         }
@@ -1342,13 +1338,10 @@ public class LockSettingsService extends ILockSettings.Stub {
         return credential;
     }
 
-    private void unlockChildProfile(int profileHandle, boolean ignoreUserNotAuthenticated,
-            @ChallengeType int challengeType, long challenge,
-            @Nullable ArrayList<PendingResetLockout> resetLockouts) {
+    private void unlockChildProfile(int profileHandle, boolean ignoreUserNotAuthenticated) {
         try {
             doVerifyCredential(getDecryptedPasswordForTiedProfile(profileHandle),
-                    challengeType, challenge, profileHandle, null /* progressCallback */,
-                    resetLockouts);
+                    profileHandle, null /* progressCallback */, 0 /* flags */);
         } catch (UnrecoverableKeyException | InvalidKeyException | KeyStoreException
                 | NoSuchAlgorithmException | NoSuchPaddingException
                 | InvalidAlgorithmParameterException | IllegalBlockSizeException
@@ -1363,10 +1356,6 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
     }
 
-    private void unlockUser(int userId, byte[] token, byte[] secret) {
-        unlockUser(userId, token, secret, CHALLENGE_NONE, 0 /* challenge */, null);
-    }
-
     /**
      * Unlock the user (both storage and user state) and its associated managed profiles
      * synchronously.
@@ -1375,9 +1364,7 @@ public class LockSettingsService extends ILockSettings.Stub {
      * can end up calling into other system services to process user unlock request (via
      * {@link com.android.server.SystemServiceManager#unlockUser} </em>
      */
-    private void unlockUser(int userId, byte[] token, byte[] secret,
-            @ChallengeType int challengeType, long challenge,
-            @Nullable ArrayList<PendingResetLockout> resetLockouts) {
+    private void unlockUser(int userId, byte[] token, byte[] secret) {
         Slog.i(TAG, "Unlocking user " + userId + " with secret only, length "
                 + (secret != null ? secret.length : 0));
         // TODO: make this method fully async so we can update UI with progress strings
@@ -1414,6 +1401,9 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
 
         if (mUserManager.getUserInfo(userId).isManagedProfile()) {
+            if (!hasUnifiedChallenge(userId)) {
+                mBiometricDeferredQueue.processPendingLockoutResets();
+            }
             return;
         }
 
@@ -1424,10 +1414,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             if (hasUnifiedChallenge(profile.id)) {
                 if (mUserManager.isUserRunning(profile.id)) {
                     // Unlock managed profile with unified lock
-                    // Must pass the challenge on for resetLockout, so it's not over-written, which
-                    // causes LockSettingsService to revokeChallenge inappropriately.
-                    unlockChildProfile(profile.id, false /* ignoreUserNotAuthenticated */,
-                            challengeType, challenge, resetLockouts);
+                    unlockChildProfile(profile.id, false /* ignoreUserNotAuthenticated */);
                 } else {
                     try {
                         // Profile not ready for unlock yet, but decrypt the unified challenge now
@@ -1448,22 +1435,9 @@ public class LockSettingsService extends ILockSettings.Stub {
                     restoreCallingIdentity(ident);
                 }
             }
-
         }
 
-        if (resetLockouts != null && !resetLockouts.isEmpty()) {
-            mHandler.post(() -> {
-                final BiometricManager bm = mContext.getSystemService(BiometricManager.class);
-                final PackageManager pm = mContext.getPackageManager();
-                for (int i = 0; i < resetLockouts.size(); i++) {
-                    bm.resetLockout(resetLockouts.get(i).mUserId, resetLockouts.get(i).mHAT);
-                }
-                if (challengeType == CHALLENGE_INTERNAL
-                        && pm.hasSystemFeature(PackageManager.FEATURE_FACE)) {
-                    mContext.getSystemService(FaceManager.class).revokeChallenge();
-                }
-            });
-        }
+        mBiometricDeferredQueue.processPendingLockoutResets();
     }
 
     private boolean hasUnifiedChallenge(int userId) {
@@ -1629,7 +1603,8 @@ public class LockSettingsService extends ILockSettings.Stub {
     public boolean setLockCredential(LockscreenCredential credential,
             LockscreenCredential savedCredential, int userId) {
 
-        if (!mHasSecureLockScreen) {
+        if (!mHasSecureLockScreen
+                && credential != null && credential.getType() != CREDENTIAL_TYPE_NONE) {
             throw new UnsupportedOperationException(
                     "This operation requires secure lock screen feature");
         }
@@ -1648,8 +1623,8 @@ public class LockSettingsService extends ILockSettings.Stub {
             // Verify the parent credential again, to make sure we have a fresh enough
             // auth token such that getDecryptedPasswordForTiedProfile() inside
             // setLockCredentialInternal() can function correctly.
-            verifyCredential(savedCredential, /* challenge */ 0,
-                    mUserManager.getProfileParent(userId).id);
+            verifyCredential(savedCredential, mUserManager.getProfileParent(userId).id,
+                    0 /* flags */);
             savedCredential.zeroize();
             savedCredential = LockscreenCredential.createNone();
         }
@@ -1763,8 +1738,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         setUserKeyProtection(userId, credential, convertResponse(gkResponse));
         fixateNewestUserKeyAuth(userId);
         // Refresh the auth token
-        doVerifyCredential(credential, CHALLENGE_FROM_CALLER, 0, userId,
-                null /* progressCallback */);
+        doVerifyCredential(credential, userId, null /* progressCallback */, 0 /* flags */);
         synchronizeUnifiedWorkChallengeForProfiles(userId, null);
         sendCredentialsOnChangeIfRequired(credential, userId, isLockTiedToParent);
         return true;
@@ -1875,7 +1849,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             throw new IllegalArgumentException("Non-OK response verifying a credential we just set "
                     + vcr.getResponseCode());
         }
-        byte[] token = vcr.getPayload();
+        byte[] token = vcr.getGatekeeperHAT();
         if (token == null) {
             throw new IllegalArgumentException("Empty payload verifying a credential we just set");
         }
@@ -2006,10 +1980,10 @@ public class LockSettingsService extends ILockSettings.Stub {
     @Override
     public VerifyCredentialResponse checkCredential(LockscreenCredential credential, int userId,
             ICheckCredentialProgressCallback progressCallback) {
-        checkPasswordReadPermission(userId);
+        checkPasswordReadPermission();
         try {
-            VerifyCredentialResponse response = doVerifyCredential(credential, CHALLENGE_NONE,
-                                                 0, userId, progressCallback);
+            VerifyCredentialResponse response = doVerifyCredential(credential,
+                                                  userId, progressCallback, 0 /* flags */);
             if ((response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) &&
                                                (userId == UserHandle.USER_OWNER)) {
                 //TODO(b/127810705): Update to credentials to use LockscreenCredential
@@ -2023,38 +1997,60 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @Override
+    @Nullable
     public VerifyCredentialResponse verifyCredential(LockscreenCredential credential,
-            long challenge, int userId) {
-        checkPasswordReadPermission(userId);
-        @ChallengeType int challengeType = CHALLENGE_FROM_CALLER;
-        if (challenge == 0) {
-            Slog.w(TAG, "VerifyCredential called with challenge=0");
-            challengeType = CHALLENGE_NONE;
-
-        }
+            int userId, int flags) {
+        checkPasswordReadPermission();
         try {
-            return doVerifyCredential(credential, challengeType, challenge, userId,
-                    null /* progressCallback */);
+            return doVerifyCredential(credential, userId, null /* progressCallback */, flags);
         } finally {
             scheduleGc();
         }
     }
 
-    private VerifyCredentialResponse doVerifyCredential(LockscreenCredential credential,
-            @ChallengeType int challengeType, long challenge, int userId,
-            ICheckCredentialProgressCallback progressCallback) {
-        return doVerifyCredential(credential, challengeType, challenge, userId,
-                progressCallback, null /* resetLockouts */);
+    @Override
+    public VerifyCredentialResponse verifyGatekeeperPasswordHandle(long gatekeeperPasswordHandle,
+            long challenge, int userId) {
+        checkPasswordReadPermission();
+
+        final VerifyCredentialResponse response;
+        final byte[] gatekeeperPassword;
+
+        synchronized (mGatekeeperPasswords) {
+            gatekeeperPassword = mGatekeeperPasswords.get(gatekeeperPasswordHandle);
+        }
+
+        synchronized (mSpManager) {
+            if (gatekeeperPassword == null) {
+                response = VerifyCredentialResponse.ERROR;
+            } else {
+                response = mSpManager.verifyChallengeInternal(getGateKeeperService(),
+                        gatekeeperPassword, challenge, userId);
+            }
+        }
+        return response;
     }
 
-    /**
+    @Override
+    public void removeGatekeeperPasswordHandle(long gatekeeperPasswordHandle) {
+        checkPasswordReadPermission();
+        synchronized (mGatekeeperPasswords) {
+            mGatekeeperPasswords.remove(gatekeeperPasswordHandle);
+        }
+    }
+
+    /*
      * Verify user credential and unlock the user. Fix pattern bug by deprecating the old base zero
      * format.
+     * @param credential User's lockscreen credential
+     * @param userId User to verify the credential for
+     * @param progressCallback Receive progress callbacks
+     * @param flags See {@link LockPatternUtils.VerifyFlag}
+     * @return See {@link VerifyCredentialResponse}
      */
     private VerifyCredentialResponse doVerifyCredential(LockscreenCredential credential,
-            @ChallengeType int challengeType, long challenge, int userId,
-            ICheckCredentialProgressCallback progressCallback,
-            @Nullable ArrayList<PendingResetLockout> resetLockouts) {
+            int userId, ICheckCredentialProgressCallback progressCallback,
+            @LockPatternUtils.VerifyFlag int flags) {
         if (credential == null || credential.isNone()) {
             throw new IllegalArgumentException("Credential can't be null or empty");
         }
@@ -2063,9 +2059,10 @@ public class LockSettingsService extends ILockSettings.Stub {
             Slog.e(TAG, "FRP credential can only be verified prior to provisioning.");
             return VerifyCredentialResponse.ERROR;
         }
-        VerifyCredentialResponse response = null;
-        response = spBasedDoVerifyCredential(credential, challengeType, challenge,
-                userId, progressCallback, resetLockouts);
+
+        VerifyCredentialResponse response = spBasedDoVerifyCredential(credential, userId,
+                progressCallback, flags);
+
         // The user employs synthetic password based credential.
         if (response != null) {
             if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
@@ -2086,8 +2083,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             return VerifyCredentialResponse.ERROR;
         }
 
-        response = verifyCredential(userId, storedHash, credential,
-                challengeType, challenge, progressCallback);
+        response = verifyCredential(userId, storedHash, credential, progressCallback);
 
         if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
             mStrongAuth.reportSuccessfulStrongAuthUnlock(userId);
@@ -2098,8 +2094,8 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @Override
     public VerifyCredentialResponse verifyTiedProfileChallenge(LockscreenCredential credential,
-            long challenge, int userId) {
-        checkPasswordReadPermission(userId);
+            int userId, @LockPatternUtils.VerifyFlag int flags) {
+        checkPasswordReadPermission();
         if (!isManagedProfileWithUnifiedLock(userId)) {
             throw new IllegalArgumentException("User id must be managed profile with unified lock");
         }
@@ -2107,10 +2103,9 @@ public class LockSettingsService extends ILockSettings.Stub {
         // Unlock parent by using parent's challenge
         final VerifyCredentialResponse parentResponse = doVerifyCredential(
                 credential,
-                CHALLENGE_FROM_CALLER,
-                challenge,
                 parentProfileId,
-                null /* progressCallback */);
+                null /* progressCallback */,
+                flags);
         if (parentResponse.getResponseCode() != VerifyCredentialResponse.RESPONSE_OK) {
             // Failed, just return parent's response
             return parentResponse;
@@ -2119,9 +2114,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         try {
             // Unlock work profile, and work profile with unified lock must use password only
             return doVerifyCredential(getDecryptedPasswordForTiedProfile(userId),
-                    CHALLENGE_FROM_CALLER,
-                    challenge,
-                    userId, null /* progressCallback */);
+                    userId, null /* progressCallback */, flags);
         } catch (UnrecoverableKeyException | InvalidKeyException | KeyStoreException
                 | NoSuchAlgorithmException | NoSuchPaddingException
                 | InvalidAlgorithmParameterException | IllegalBlockSizeException
@@ -2139,8 +2132,7 @@ public class LockSettingsService extends ILockSettings.Stub {
      * hash to GK.
      */
     private VerifyCredentialResponse verifyCredential(int userId, CredentialHash storedHash,
-            LockscreenCredential credential, @ChallengeType int challengeType, long challenge,
-            ICheckCredentialProgressCallback progressCallback) {
+            LockscreenCredential credential, ICheckCredentialProgressCallback progressCallback) {
         if ((storedHash == null || storedHash.hash.length == 0) && credential.isNone()) {
             // don't need to pass empty credentials to GateKeeper
             return VerifyCredentialResponse.OK;
@@ -2157,7 +2149,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         GateKeeperResponse gateKeeperResponse;
         try {
             gateKeeperResponse = getGateKeeperService().verifyChallenge(
-                    userId, challenge, storedHash.hash, credential.getCredential());
+                    userId, 0L /* challenge */, storedHash.hash, credential.getCredential());
         } catch (RemoteException e) {
             Slog.e(TAG, "gatekeeper verify failed", e);
             gateKeeperResponse = GateKeeperResponse.ERROR;
@@ -2180,8 +2172,8 @@ public class LockSettingsService extends ILockSettings.Stub {
             unlockKeystore(credential.getCredential(), userId);
 
             Slog.i(TAG, "Unlocking user " + userId + " with token length "
-                    + response.getPayload().length);
-            unlockUser(userId, response.getPayload(), secretFromCredential(credential));
+                    + response.getGatekeeperHAT().length);
+            unlockUser(userId, response.getGatekeeperHAT(), secretFromCredential(credential));
 
             if (isManagedProfileWithSeparatedLock(userId)) {
                 setDeviceUnlockedForUser(userId);
@@ -2270,7 +2262,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
         mFirstCallToVold = false;
 
-        checkPasswordReadPermission(userId);
+        checkPasswordReadPermission();
 
         // There's no guarantee that this will safely connect, but if it fails
         // we will simply show the lock screen when we shouldn't, so relatively
@@ -2360,13 +2352,13 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @Override
     public void registerStrongAuthTracker(IStrongAuthTracker tracker) {
-        checkPasswordReadPermission(UserHandle.USER_ALL);
+        checkPasswordReadPermission();
         mStrongAuth.registerStrongAuthTracker(tracker);
     }
 
     @Override
     public void unregisterStrongAuthTracker(IStrongAuthTracker tracker) {
-        checkPasswordReadPermission(UserHandle.USER_ALL);
+        checkPasswordReadPermission();
         mStrongAuth.unregisterStrongAuthTracker(tracker);
     }
 
@@ -2396,7 +2388,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @Override
     public int getStrongAuthForUser(int userId) {
-        checkPasswordReadPermission(userId);
+        checkPasswordReadPermission();
         return mStrongAuthTracker.getStrongAuthForUser(userId);
     }
 
@@ -2638,11 +2630,11 @@ public class LockSettingsService extends ILockSettings.Stub {
      *     make it consistent with current behaviour. It also allows ActivityManager to call
      *     unlockUser() with empty secret.
      * 3. Once a user is migrated to have synthetic password, its value will never change, no matter
-     *     whether the user changes his lockscreen PIN or clear/reset it. When the user clears its
+     *     whether the user changes their lockscreen PIN or clear/reset it. When the user clears its
      *     lockscreen PIN, we still maintain the existing synthetic password in a password blob
      *     protected by a default PIN.
      * 4. The user SID is linked with synthetic password, but its cleared/re-created when the user
-     *     clears/re-creates his lockscreen PIN.
+     *     clears/re-creates their lockscreen PIN.
      *
      *
      * Different cases of calling this method:
@@ -2730,29 +2722,17 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     private VerifyCredentialResponse spBasedDoVerifyCredential(LockscreenCredential userCredential,
-            @ChallengeType int challengeType, long challenge,
             int userId, ICheckCredentialProgressCallback progressCallback,
-            @Nullable ArrayList<PendingResetLockout> resetLockouts) {
-
+            @LockPatternUtils.VerifyFlag int flags) {
         final boolean hasEnrolledBiometrics = mInjector.hasEnrolledBiometrics(userId);
 
-        Slog.d(TAG, "spBasedDoVerifyCredential: user=" + userId + " challengeType=" + challengeType
+        Slog.d(TAG, "spBasedDoVerifyCredential: user=" + userId
                 + " hasEnrolledBiometrics=" + hasEnrolledBiometrics);
-
-        final PackageManager pm = mContext.getPackageManager();
-        // TODO: When lockout is handled under the HAL for all biometrics (fingerprint),
-        // we need to generate challenge for each one, have it signed by GK and reset lockout
-        // for each modality.
-        if (challengeType == CHALLENGE_NONE && pm.hasSystemFeature(PackageManager.FEATURE_FACE)
-                && hasEnrolledBiometrics) {
-            // If there are multiple profiles in the same account, ensure we only generate the
-            // challenge once.
-            challengeType = CHALLENGE_INTERNAL;
-            challenge = mContext.getSystemService(FaceManager.class).generateChallengeBlocking();
-        }
 
         final AuthenticationResult authResult;
         VerifyCredentialResponse response;
+        final boolean requestGkPw = (flags & VERIFY_FLAG_REQUEST_GK_PW_HANDLE) != 0;
+
         synchronized (mSpManager) {
             if (!isSyntheticPasswordBasedCredentialLocked(userId)) {
                 return null;
@@ -2765,14 +2745,17 @@ public class LockSettingsService extends ILockSettings.Stub {
             long handle = getSyntheticPasswordHandleLocked(userId);
             authResult = mSpManager.unwrapPasswordBasedSyntheticPassword(
                     getGateKeeperService(), handle, userCredential, userId, progressCallback);
-
             response = authResult.gkResponse;
+
             // credential has matched
             if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
+                mBiometricDeferredQueue.addPendingLockoutResetForUser(userId,
+                        authResult.authToken.deriveGkPassword());
+
                 // perform verifyChallenge with synthetic password which generates the real GK auth
                 // token and response for the current user
                 response = mSpManager.verifyChallenge(getGateKeeperService(), authResult.authToken,
-                        challenge, userId);
+                        0L /* challenge */, userId);
                 if (response.getResponseCode() != VerifyCredentialResponse.RESPONSE_OK) {
                     // This shouldn't really happen: the unwrapping of SP succeeds, but SP doesn't
                     // match the recorded GK password handle.
@@ -2782,15 +2765,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             }
         }
         if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
-            // Do resetLockout / revokeChallenge when all profiles are unlocked
-            if (hasEnrolledBiometrics) {
-                if (resetLockouts == null) {
-                    resetLockouts = new ArrayList<>();
-                }
-                resetLockouts.add(new PendingResetLockout(userId, response.getPayload()));
-            }
-
-            onCredentialVerified(authResult.authToken, challengeType, challenge, resetLockouts,
+            onCredentialVerified(authResult.authToken,
                     PasswordMetrics.computeForCredential(userCredential), userId);
         } else if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_RETRY) {
             if (response.getTimeout() > 0) {
@@ -2798,12 +2773,44 @@ public class LockSettingsService extends ILockSettings.Stub {
             }
         }
 
-        return response;
+        if (response.isMatched() && requestGkPw) {
+            final long handle = storeGatekeeperPasswordTemporarily(
+                    authResult.authToken.deriveGkPassword());
+            return new VerifyCredentialResponse.Builder().setGatekeeperPasswordHandle(handle)
+                    .build();
+        } else {
+            return response;
+        }
     }
 
-    private void onCredentialVerified(AuthenticationToken authToken,
-            @ChallengeType int challengeType, long challenge,
-            @Nullable ArrayList<PendingResetLockout> resetLockouts, PasswordMetrics metrics,
+    /**
+     * Stores the gatekeeper password temporarily.
+     * @param gatekeeperPassword unlocked upon successful Synthetic Password
+     * @return non-zero handle to the gatekeeper password, which can be used for a set amount of
+     *         time.
+     */
+    private long storeGatekeeperPasswordTemporarily(byte[] gatekeeperPassword) {
+        long handle = 0L;
+
+        synchronized (mGatekeeperPasswords) {
+            while (handle == 0L || mGatekeeperPasswords.get(handle) != null) {
+                handle = mRandom.nextLong();
+            }
+            mGatekeeperPasswords.put(handle, gatekeeperPassword);
+        }
+
+        final long finalHandle = handle;
+        mHandler.postDelayed(() -> {
+            synchronized (mGatekeeperPasswords) {
+                Slog.d(TAG, "Removing handle: " + finalHandle);
+                mGatekeeperPasswords.remove(finalHandle);
+            }
+        }, GK_PW_HANDLE_STORE_DURATION_MS);
+
+        return handle;
+    }
+
+    private void onCredentialVerified(AuthenticationToken authToken, PasswordMetrics metrics,
             int userId) {
 
         if (metrics != null) {
@@ -2818,7 +2825,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
         {
             final byte[] secret = authToken.deriveDiskEncryptionKey();
-            unlockUser(userId, null, secret, challengeType, challenge, resetLockouts);
+            unlockUser(userId, null, secret);
             Arrays.fill(secret, (byte) 0);
         }
         activateEscrowTokens(authToken, userId);
@@ -3040,7 +3047,7 @@ public class LockSettingsService extends ILockSettings.Stub {
      */
     @Override
     public byte[] getHashFactor(LockscreenCredential currentCredential, int userId) {
-        checkPasswordReadPermission(userId);
+        checkPasswordReadPermission();
         try {
             if (isManagedProfileWithUnifiedLock(userId)) {
                 try {
@@ -3118,7 +3125,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @Override
     public boolean hasPendingEscrowToken(int userId) {
-        checkPasswordReadPermission(userId);
+        checkPasswordReadPermission();
         synchronized (mSpManager) {
             return !mSpManager.getPendingTokensForUser(userId).isEmpty();
         }
@@ -3205,11 +3212,8 @@ public class LockSettingsService extends ILockSettings.Stub {
                 return false;
             }
         }
-        // TODO: Reset biometrics lockout here. Ideally that should be self-contained inside
-        // onCredentialVerified(), which will require some refactoring on the current lockout
-        // reset logic.
 
-        onCredentialVerified(authResult.authToken, CHALLENGE_NONE, 0, null,
+        onCredentialVerified(authResult.authToken,
                 loadPasswordMetrics(authResult.authToken, userId), userId);
         return true;
     }
@@ -3220,7 +3224,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             if (cred == null) {
                 return false;
             }
-            return doVerifyCredential(cred, CHALLENGE_NONE, 0, userId, null /* progressCallback */)
+            return doVerifyCredential(cred, userId, null /* progressCallback */, 0 /* flags */)
                     .getResponseCode() == VerifyCredentialResponse.RESPONSE_OK;
         }
     }
@@ -3307,6 +3311,8 @@ public class LockSettingsService extends ILockSettings.Stub {
         mRebootEscrowManager.dump(pw);
         pw.println();
         pw.decreaseIndent();
+
+        pw.println("PasswordHandleCount: " + mGatekeeperPasswords.size());
     }
 
     /**
@@ -3469,7 +3475,8 @@ public class LockSettingsService extends ILockSettings.Stub {
         @Override
         public boolean setLockCredentialWithToken(LockscreenCredential credential, long tokenHandle,
                 byte[] token, int userId) {
-            if (!mHasSecureLockScreen) {
+        if (!mHasSecureLockScreen
+                && credential != null && credential.getType() != CREDENTIAL_TYPE_NONE) {
                 throw new UnsupportedOperationException(
                         "This operation requires secure lock screen feature.");
             }
@@ -3543,8 +3550,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             SyntheticPasswordManager.AuthenticationToken
                     authToken = new SyntheticPasswordManager.AuthenticationToken(spVersion);
             authToken.recreateDirectly(syntheticPassword);
-            onCredentialVerified(authToken, CHALLENGE_NONE, 0, null,
-                    loadPasswordMetrics(authToken, userId), userId);
+            onCredentialVerified(authToken, loadPasswordMetrics(authToken, userId), userId);
         }
     }
 }

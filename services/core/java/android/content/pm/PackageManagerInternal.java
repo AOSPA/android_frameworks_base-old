@@ -32,11 +32,16 @@ import android.content.pm.PackageManager.PackageInfoFlags;
 import android.content.pm.PackageManager.ResolveInfoFlags;
 import android.content.pm.parsing.component.ParsedMainComponent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerExecutor;
+import android.os.IBinder;
+import android.os.Looper;
 import android.os.PersistableBundle;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.SparseArray;
 
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.pm.PackageList;
 import com.android.server.pm.PackageSetting;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
@@ -46,6 +51,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
@@ -69,6 +75,7 @@ public abstract class PackageManagerInternal {
     public static final int PACKAGE_WIFI = 13;
     public static final int PACKAGE_COMPANION = 14;
     public static final int PACKAGE_RETAIL_DEMO = 15;
+    public static final int PACKAGE_OVERLAY_CONFIG_SIGNATURE = 16;
 
     @IntDef(flag = true, prefix = "RESOLVE_", value = {
             RESOLVE_NON_BROWSER_ONLY,
@@ -301,24 +308,11 @@ public abstract class PackageManagerInternal {
             String packageName, int userId);
 
     /**
-     * Do a straight uid lookup for the given package/application in the given user. This enforces
-     * app visibility rules and permissions. Call {@link #getPackageUidInternal} for the internal
-     * implementation.
-     * @deprecated Use {@link PackageManager#getPackageUid(String, int)}
-     * @return The app's uid, or < 0 if the package was not found in that user
-     */
-    @Deprecated
-    public abstract int getPackageUid(String packageName,
-            @PackageInfoFlags int flags, int userId);
-
-    /**
      * Do a straight uid lookup for the given package/application in the given user.
      * @see PackageManager#getPackageUidAsUser(String, int, int)
      * @return The app's uid, or < 0 if the package was not found in that user
-     * TODO(b/148235092): rename this to getPackageUid
      */
-    public abstract int getPackageUidInternal(String packageName,
-            @PackageInfoFlags int flags, int userId);
+    public abstract int getPackageUid(String packageName, @PackageInfoFlags int flags, int userId);
 
     /**
      * Retrieve all of the information we know about a particular package/application.
@@ -998,4 +992,72 @@ public abstract class PackageManagerInternal {
      * Returns {@code true} if the package is suspending any packages for the user.
      */
     public abstract boolean isSuspendingAnyPackages(String suspendingPackage, int userId);
+
+    /**
+     * Register to listen for loading progress of an installed package.
+     * @param packageName The name of the installed package
+     * @param callback To loading reporting progress
+     * @param userId The user under which to check.
+     * @return Whether the registration was successful. It can fail if the package has not been
+     *          installed yet.
+     */
+    public abstract boolean registerInstalledLoadingProgressCallback(@NonNull String packageName,
+            @NonNull InstalledLoadingProgressCallback callback, int userId);
+
+    /**
+     * Unregister to stop listening to loading progress of an installed package
+     * @param packageName The name of the installed package
+     * @param callback To unregister
+     * @return True if the callback is removed from registered callback list. False is the callback
+     *         does not exist on the registered callback list, which can happen if the callback has
+     *         already been unregistered.
+     */
+    public abstract boolean unregisterInstalledLoadingProgressCallback(@NonNull String packageName,
+            @NonNull InstalledLoadingProgressCallback callback);
+
+    /**
+     * Callback to listen for loading progress of a package installed on Incremental File System.
+     */
+    public abstract static class InstalledLoadingProgressCallback {
+        final LoadingProgressCallbackBinder mBinder = new LoadingProgressCallbackBinder();
+        final Executor mExecutor;
+        /**
+         * Default constructor that should always be called on subclass instantiation
+         * @param handler To dispatch callback events through. If null, the main thread
+         *                handler will be used.
+         */
+        public InstalledLoadingProgressCallback(@Nullable Handler handler) {
+            if (handler == null) {
+                handler = new Handler(Looper.getMainLooper());
+            }
+            mExecutor = new HandlerExecutor(handler);
+        }
+
+        /**
+         * Binder used by Package Manager Service to register as a callback
+         * @return the binder object of IPackageLoadingProgressCallback
+         */
+        public final @NonNull IBinder getBinder() {
+            return mBinder;
+        }
+
+        /**
+         * Report loading progress of an installed package.
+         *
+         * @param progress    Loading progress between [0, 1] for the registered package.
+         */
+        public abstract void onLoadingProgressChanged(float progress);
+
+        private class LoadingProgressCallbackBinder extends
+                android.content.pm.IPackageLoadingProgressCallback.Stub {
+            @Override
+            public void onPackageLoadingProgressChanged(float progress) {
+                mExecutor.execute(PooledLambda.obtainRunnable(
+                        InstalledLoadingProgressCallback::onLoadingProgressChanged,
+                        InstalledLoadingProgressCallback.this,
+                        progress).recycleOnUse());
+            }
+        }
+    }
+
 }

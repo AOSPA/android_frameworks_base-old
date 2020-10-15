@@ -41,7 +41,6 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.InstanceId;
-import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 
 import java.io.FileDescriptor;
@@ -92,8 +91,9 @@ class Bubble implements BubbleViewProvider {
     }
 
     private FlyoutMessage mFlyoutMessage;
-    private Drawable mBadgedAppIcon;
-    private Bitmap mBadgedImage;
+    private Drawable mBadgeDrawable;
+    // Bitmap with no badge, no dot
+    private Bitmap mBubbleBitmap;
     private int mDotColor;
     private Path mDotPath;
     private int mFlags;
@@ -199,12 +199,13 @@ class Bubble implements BubbleViewProvider {
     }
 
     @Override
-    public Bitmap getBadgedImage() {
-        return mBadgedImage;
+    public Bitmap getBubbleIcon() {
+        return mBubbleBitmap;
     }
 
-    public Drawable getBadgedAppIcon() {
-        return mBadgedAppIcon;
+    @Override
+    public Drawable getAppBadge() {
+        return mBadgeDrawable;
     }
 
     @Override
@@ -253,19 +254,26 @@ class Bubble implements BubbleViewProvider {
     }
 
     /**
-     * Call when the views should be removed, ensure this is called to clean up ActivityView
-     * content.
+     * Cleanup expanded view for bubbles going into overflow.
      */
-    void cleanupViews() {
+    void cleanupExpandedView() {
         if (mExpandedView != null) {
             mExpandedView.cleanUpExpandedState();
             mExpandedView = null;
         }
-        mIconView = null;
         if (mIntent != null) {
             mIntent.unregisterCancelListener(mIntentCancelListener);
         }
         mIntentActive = false;
+    }
+
+    /**
+     * Call when the views should be removed, ensure this is called to clean up ActivityView
+     * content.
+     */
+    void cleanupViews() {
+        cleanupExpandedView();
+        mIconView = null;
     }
 
     void setPendingIntentCanceled() {
@@ -327,7 +335,6 @@ class Bubble implements BubbleViewProvider {
             return;
         }
         mInflationTask.cancel(true /* mayInterruptIfRunning */);
-        cleanupViews();
     }
 
     void setViewInfo(BubbleViewInfoTask.BubbleViewInfo info) {
@@ -340,8 +347,9 @@ class Bubble implements BubbleViewProvider {
         mAppName = info.appName;
         mFlyoutMessage = info.flyoutMessage;
 
-        mBadgedAppIcon = info.badgedAppIcon;
-        mBadgedImage = info.badgedBubbleImage;
+        mBadgeDrawable = info.badgeDrawable;
+        mBubbleBitmap = info.bubbleBitmap;
+
         mDotColor = info.dotColor;
         mDotPath = info.dotPath;
 
@@ -694,9 +702,13 @@ class Bubble implements BubbleViewProvider {
         pw.print("  showInShade:   "); pw.println(showInShade());
         pw.print("  showDot:       "); pw.println(showDot());
         pw.print("  showFlyout:    "); pw.println(showFlyout());
+        pw.print("  lastActivity:  "); pw.println(getLastActivity());
         pw.print("  desiredHeight: "); pw.println(getDesiredHeightString());
         pw.print("  suppressNotif: "); pw.println(shouldSuppressNotification());
         pw.print("  autoExpand:    "); pw.println(shouldAutoExpand());
+        if (mExpandedView != null) {
+            mExpandedView.dump(fd, pw, args);
+        }
     }
 
     @Override

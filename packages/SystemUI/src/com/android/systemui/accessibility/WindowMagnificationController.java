@@ -48,6 +48,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
 import com.android.systemui.R;
 import com.android.systemui.shared.system.WindowManagerWrapper;
@@ -65,9 +66,10 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     private final Point mDisplaySize = new Point();
     private final int mDisplayId;
     @Surface.Rotation
-    private int mRotation;
+    @VisibleForTesting
+    int mRotation;
     private final Rect mMagnificationFrame = new Rect();
-    private final SurfaceControl.Transaction mTransaction = new SurfaceControl.Transaction();
+    private final SurfaceControl.Transaction mTransaction;
 
     private final WindowManager mWm;
 
@@ -75,6 +77,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
 
     private final Rect mTmpRect = new Rect();
     private final Rect mMirrorViewBounds = new Rect();
+    private final Rect mSourceBounds = new Rect();
 
     // The root of the mirrored content
     private SurfaceControl mMirrorSurface;
@@ -96,27 +99,20 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     private SurfaceView mMirrorSurfaceView;
     private int mMirrorSurfaceMargin;
     private int mBorderDragSize;
+    private int mDragViewSize;
     private int mOuterBorderSize;
     // The boundary of magnification frame.
     private final Rect mMagnificationFrameBoundary = new Rect();
 
     private final SfVsyncFrameCallbackProvider mSfVsyncFrameProvider;
-    private final Choreographer.FrameCallback mMirrorViewGeometryVsyncCallback =
-            l -> {
-                if (mMirrorView != null) {
-                    final Rect sourceBounds = getSourceBounds(mMagnificationFrame, mScale);
-                    mTransaction.setGeometry(mMirrorSurface, sourceBounds, mTmpRect,
-                            Surface.ROTATION_0).apply();
-                }
-            };
+    private Choreographer.FrameCallback mMirrorViewGeometryVsyncCallback;
 
     @Nullable
     private MirrorWindowControl mMirrorWindowControl;
 
-    WindowMagnificationController(Context context,
-            @NonNull Handler handler,
+    WindowMagnificationController(Context context, @NonNull Handler handler,
             SfVsyncFrameCallbackProvider sfVsyncFrameProvider,
-            MirrorWindowControl mirrorWindowControl,
+            MirrorWindowControl mirrorWindowControl, SurfaceControl.Transaction transaction,
             @NonNull WindowMagnifierCallback callback) {
         mContext = context;
         mHandler = handler;
@@ -137,6 +133,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         if (mMirrorWindowControl != null) {
             mMirrorWindowControl.setWindowDelegate(this);
         }
+        mTransaction = transaction;
         setInitialStartBounds();
 
         // Initialize listeners.
@@ -153,6 +150,20 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         mMirrorSurfaceViewLayoutChangeListener =
                 (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom)
                         -> applyTapExcludeRegion();
+
+        mMirrorViewGeometryVsyncCallback =
+                l -> {
+                    if (isWindowVisible() && mMirrorSurface != null) {
+                        calculateSourceBounds(mMagnificationFrame, mScale);
+                        // The final destination for the magnification surface should be at 0,0
+                        // since the ViewRootImpl's position will change
+                        mTmpRect.set(0, 0, mMagnificationFrame.width(),
+                                mMagnificationFrame.height());
+                        mTransaction.setGeometry(mMirrorSurface, mSourceBounds, mTmpRect,
+                                Surface.ROTATION_0).apply();
+                        mWindowMagnifierCallback.onSourceBoundsChanged(mDisplayId, mSourceBounds);
+                    }
+                };
     }
 
     private void updateDimensions() {
@@ -160,6 +171,8 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
                 R.dimen.magnification_mirror_surface_margin);
         mBorderDragSize = mResources.getDimensionPixelSize(
                 R.dimen.magnification_border_drag_size);
+        mDragViewSize = mResources.getDimensionPixelSize(
+                R.dimen.magnification_drag_view_size);
         mOuterBorderSize = mResources.getDimensionPixelSize(
                 R.dimen.magnification_outer_border_margin);
     }
@@ -197,8 +210,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     void onConfigurationChanged(int configDiff) {
         if ((configDiff & ActivityInfo.CONFIG_DENSITY) != 0) {
             updateDimensions();
-            // TODO(b/145780606): update toggle button UI.
-            if (mMirrorView != null) {
+            if (isWindowVisible()) {
                 mWm.removeView(mMirrorView);
                 createMirrorWindow();
             }
@@ -209,16 +221,20 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
 
     /** Handles MirrorWindow position when the device rotation changed. */
     private void onRotate() {
-        Display display = mContext.getDisplay();
+        final Display display = mContext.getDisplay();
+        final int oldRotation = mRotation;
         display.getRealSize(mDisplaySize);
         setMagnificationFrameBoundary();
+        mRotation = display.getRotation();
 
+        if (!isWindowVisible()) {
+            return;
+        }
         // Keep MirrorWindow position on the screen unchanged when device rotates 90°
         // clockwise or anti-clockwise.
-        final int rotationDegree = getDegreeFromRotation(display.getRotation(), mRotation);
+        final int rotationDegree = getDegreeFromRotation(mRotation, oldRotation);
         final Matrix matrix = new Matrix();
         matrix.setRotate(rotationDegree);
-        mRotation = display.getRotation();
         if (rotationDegree == 90) {
             matrix.postTranslate(mDisplaySize.x, 0);
         } else if (rotationDegree == 270) {
@@ -299,6 +315,10 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         Region regionInsideDragBorder = new Region(mBorderDragSize, mBorderDragSize,
                 mMirrorView.getWidth() - mBorderDragSize,
                 mMirrorView.getHeight() - mBorderDragSize);
+        Rect dragArea = new Rect(mMirrorView.getWidth() - mDragViewSize - mBorderDragSize,
+                mMirrorView.getHeight() - mDragViewSize - mBorderDragSize,
+                mMirrorView.getWidth(), mMirrorView.getHeight());
+        regionInsideDragBorder.op(dragArea, Region.Op.DIFFERENCE);
         return regionInsideDragBorder;
     }
 
@@ -350,13 +370,9 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
      * Modifies the placement of the mirrored content when the position of mMirrorView is updated.
      */
     private void modifyWindowMagnification(SurfaceControl.Transaction t) {
-        // The final destination for the magnification surface should be at 0,0 since the
-        // ViewRootImpl's position will change
-        mTmpRect.set(0, 0, mMagnificationFrame.width(), mMagnificationFrame.height());
-
+        mSfVsyncFrameProvider.postFrameCallback(mMirrorViewGeometryVsyncCallback);
         updateMirrorViewLayout();
 
-        mSfVsyncFrameProvider.postFrameCallback(mMirrorViewGeometryVsyncCallback);
     }
 
     /**
@@ -420,14 +436,14 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
      * Calculates the desired source bounds. This will be the area under from the center of  the
      * displayFrame, factoring in scale.
      */
-    private Rect getSourceBounds(Rect displayFrame, float scale) {
+    private void calculateSourceBounds(Rect displayFrame, float scale) {
         int halfWidth = displayFrame.width() / 2;
         int halfHeight = displayFrame.height() / 2;
         int left = displayFrame.left + (halfWidth - (int) (halfWidth / scale));
         int right = displayFrame.right - (halfWidth - (int) (halfWidth / scale));
         int top = displayFrame.top + (halfHeight - (int) (halfHeight / scale));
         int bottom = displayFrame.bottom - (halfHeight - (int) (halfHeight / scale));
-        return new Rect(left, top, right, bottom);
+        mSourceBounds.set(left, top, right, bottom);
     }
 
     private void setMagnificationFrameBoundary() {
@@ -498,7 +514,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     /**
      * Enables window magnification with specified parameters.
      *
-     * @param scale   the target scale
+     * @param scale   the target scale, or {@link Float#NaN} to leave unchanged
      * @param centerX the screen-relative X coordinate around which to center,
      *                or {@link Float#NaN} to leave unchanged.
      * @param centerY the screen-relative Y coordinate around which to center,
@@ -509,10 +525,10 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
                 : centerX - mMagnificationFrame.exactCenterX();
         final float offsetY = Float.isNaN(centerY) ? 0
                 : centerY - mMagnificationFrame.exactCenterY();
-        mScale = scale;
+        mScale = Float.isNaN(scale) ? mScale : scale;
         setMagnificationFrameBoundary();
         updateMagnificationFramePosition((int) offsetX, (int) offsetY);
-        if (mMirrorView == null) {
+        if (!isWindowVisible()) {
             createMirrorWindow();
             showControls();
         } else {
@@ -523,10 +539,10 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     /**
      * Sets the scale of the magnified region if it's visible.
      *
-     * @param scale the target scale
+     * @param scale the target scale, or {@link Float#NaN} to leave unchanged
      */
     void setScale(float scale) {
-        if (mMirrorView == null || mScale == scale) {
+        if (!isWindowVisible() || mScale == scale) {
             return;
         }
         enableWindowMagnification(scale, Float.NaN, Float.NaN);
@@ -547,5 +563,37 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         if (updateMagnificationFramePosition((int) offsetX, (int) offsetY)) {
             modifyWindowMagnification(mTransaction);
         }
+    }
+
+    /**
+     * Gets the scale.
+     *
+     * @return {@link Float#NaN} if the window is invisible.
+     */
+    float getScale() {
+        return isWindowVisible() ? mScale : Float.NaN;
+    }
+
+    /**
+     * Returns the screen-relative X coordinate of the center of the magnified bounds.
+     *
+     * @return the X coordinate. {@link Float#NaN} if the window is invisible.
+     */
+    float getCenterX() {
+        return isWindowVisible() ? mMagnificationFrame.exactCenterX() : Float.NaN;
+    }
+
+    /**
+     * Returns the screen-relative Y coordinate of the center of the magnified bounds.
+     *
+     * @return the Y coordinate. {@link Float#NaN} if the window is invisible.
+     */
+    float getCenterY() {
+        return isWindowVisible() ? mMagnificationFrame.exactCenterY() : Float.NaN;
+    }
+
+    //The window is visible when it is existed.
+    private boolean isWindowVisible() {
+        return mMirrorView != null;
     }
 }

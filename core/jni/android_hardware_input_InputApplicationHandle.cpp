@@ -30,7 +30,7 @@ namespace android {
 static struct {
     jfieldID ptr;
     jfieldID name;
-    jfieldID dispatchingTimeoutNanos;
+    jfieldID dispatchingTimeoutMillis;
     jfieldID token;
 } gInputApplicationHandleClassInfo;
 
@@ -61,8 +61,8 @@ bool NativeInputApplicationHandle::updateInfo() {
 
     mInfo.name = getStringField(env, obj, gInputApplicationHandleClassInfo.name, "<null>");
 
-    mInfo.dispatchingTimeout = decltype(mInfo.dispatchingTimeout)(
-            env->GetLongField(obj, gInputApplicationHandleClassInfo.dispatchingTimeoutNanos));
+    mInfo.dispatchingTimeoutMillis =
+            env->GetLongField(obj, gInputApplicationHandleClassInfo.dispatchingTimeoutMillis);
 
     jobject tokenObj = env->GetObjectField(obj,
             gInputApplicationHandleClassInfo.token);
@@ -77,31 +77,27 @@ bool NativeInputApplicationHandle::updateInfo() {
     return mInfo.token.get() != nullptr;
 }
 
-
 // --- Global functions ---
 
-sp<InputApplicationHandle> android_view_InputApplicationHandle_getHandle(
+std::shared_ptr<InputApplicationHandle> android_view_InputApplicationHandle_getHandle(
         JNIEnv* env, jobject inputApplicationHandleObj) {
     if (!inputApplicationHandleObj) {
         return NULL;
     }
 
     AutoMutex _l(gHandleMutex);
-
     jlong ptr = env->GetLongField(inputApplicationHandleObj, gInputApplicationHandleClassInfo.ptr);
-    NativeInputApplicationHandle* handle;
+    std::shared_ptr<NativeInputApplicationHandle>* handle;
     if (ptr) {
-        handle = reinterpret_cast<NativeInputApplicationHandle*>(ptr);
+        handle = reinterpret_cast<std::shared_ptr<NativeInputApplicationHandle>*>(ptr);
     } else {
         jweak objWeak = env->NewWeakGlobalRef(inputApplicationHandleObj);
-        handle = new NativeInputApplicationHandle(objWeak);
-        handle->incStrong((void*)android_view_InputApplicationHandle_getHandle);
+        handle = new std::shared_ptr(std::make_shared<NativeInputApplicationHandle>(objWeak));
         env->SetLongField(inputApplicationHandleObj, gInputApplicationHandleClassInfo.ptr,
                 reinterpret_cast<jlong>(handle));
     }
-    return handle;
+    return *handle;
 }
-
 
 // --- JNI ---
 
@@ -112,8 +108,9 @@ static void android_view_InputApplicationHandle_nativeDispose(JNIEnv* env, jobje
     if (ptr) {
         env->SetLongField(obj, gInputApplicationHandleClassInfo.ptr, 0);
 
-        NativeInputApplicationHandle* handle = reinterpret_cast<NativeInputApplicationHandle*>(ptr);
-        handle->decStrong((void*)android_view_InputApplicationHandle_getHandle);
+        std::shared_ptr<NativeInputApplicationHandle>* handle =
+                reinterpret_cast<std::shared_ptr<NativeInputApplicationHandle>*>(ptr);
+        delete handle;
     }
 }
 
@@ -147,9 +144,8 @@ int register_android_view_InputApplicationHandle(JNIEnv* env) {
     GET_FIELD_ID(gInputApplicationHandleClassInfo.name, clazz,
             "name", "Ljava/lang/String;");
 
-    GET_FIELD_ID(gInputApplicationHandleClassInfo.dispatchingTimeoutNanos,
-            clazz,
-            "dispatchingTimeoutNanos", "J");
+    GET_FIELD_ID(gInputApplicationHandleClassInfo.dispatchingTimeoutMillis, clazz,
+                 "dispatchingTimeoutMillis", "J");
 
     GET_FIELD_ID(gInputApplicationHandleClassInfo.token, clazz,
             "token", "Landroid/os/IBinder;");

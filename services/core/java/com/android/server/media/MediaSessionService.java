@@ -25,21 +25,23 @@ import static com.android.server.media.MediaKeyDispatcher.isLongPressOverridden;
 import static com.android.server.media.MediaKeyDispatcher.isSingleTapOverridden;
 import static com.android.server.media.MediaKeyDispatcher.isTripleTapOverridden;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.UserInfo;
-import android.database.ContentObserver;
 import android.media.AudioManager;
-import android.media.AudioManagerInternal;
 import android.media.AudioPlaybackConfiguration;
 import android.media.AudioSystem;
 import android.media.IRemoteVolumeController;
@@ -56,7 +58,6 @@ import android.media.session.ISessionManager;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.MediaSessionManager;
-import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -83,8 +84,8 @@ import android.view.ViewConfiguration;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.DumpUtils;
-import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.Watchdog;
 import com.android.server.Watchdog.Monitor;
 
@@ -133,9 +134,8 @@ public class MediaSessionService extends SystemService implements Monitor {
             new ArrayList<>();
 
     private KeyguardManager mKeyguardManager;
-    private AudioManagerInternal mAudioManagerInternal;
+    private AudioManager mAudioManager;
     private ContentResolver mContentResolver;
-    private SettingsObserver mSettingsObserver;
     private boolean mHasFeatureLeanback;
 
     // The FullUserRecord of the current users. (i.e. The foreground user that isn't a profile)
@@ -160,6 +160,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         PowerManager pm = mContext.getSystemService(PowerManager.class);
         mMediaEventWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "handleMediaEvent");
         mNotificationManager = mContext.getSystemService(NotificationManager.class);
+        mAudioManager = mContext.getSystemService(AudioManager.class);
     }
 
     @Override
@@ -167,7 +168,6 @@ public class MediaSessionService extends SystemService implements Monitor {
         publishBinderService(Context.MEDIA_SESSION_SERVICE, mSessionManagerImpl);
         Watchdog.getInstance().addMonitor(this);
         mKeyguardManager = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
-        mAudioManagerInternal = LocalServices.getService(AudioManagerInternal.class);
         mAudioPlayerStateMonitor = AudioPlayerStateMonitor.getInstance(mContext);
         mAudioPlayerStateMonitor.registerListener(
                 (config, isRemoved) -> {
@@ -189,8 +189,6 @@ public class MediaSessionService extends SystemService implements Monitor {
                     }
                 }, null /* handler */);
         mContentResolver = mContext.getContentResolver();
-        mSettingsObserver = new SettingsObserver();
-        mSettingsObserver.observe();
         mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_LEANBACK);
 
@@ -199,7 +197,19 @@ public class MediaSessionService extends SystemService implements Monitor {
         instantiateCustomProvider(null);
         instantiateCustomDispatcher(null);
         mRecordThread.start();
+
+        final IntentFilter filter = new IntentFilter(
+                NotificationManager.ACTION_NOTIFICATION_LISTENER_ENABLED_CHANGED);
+        mContext.registerReceiver(mNotificationListenerEnabledChangedReceiver, filter);
     }
+
+    private final BroadcastReceiver mNotificationListenerEnabledChangedReceiver =
+            new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    updateActiveSessionListeners();
+                }
+    };
 
     private boolean isGlobalPriorityActiveLocked() {
         return mGlobalPrioritySession != null && mGlobalPrioritySession.isActive();
@@ -333,19 +343,21 @@ public class MediaSessionService extends SystemService implements Monitor {
     }
 
     @Override
-    public void onStartUser(int userId) {
-        if (DEBUG) Log.d(TAG, "onStartUser: " + userId);
+    public void onUserStarting(@NonNull TargetUser user) {
+        if (DEBUG) Log.d(TAG, "onStartUser: " + user);
         updateUser();
     }
 
     @Override
-    public void onSwitchUser(int userId) {
-        if (DEBUG) Log.d(TAG, "onSwitchUser: " + userId);
+    public void onUserSwitching(@Nullable TargetUser from, @NonNull TargetUser to) {
+        if (DEBUG) Log.d(TAG, "onSwitchUser: " + to);
         updateUser();
     }
 
     @Override
-    public void onCleanupUser(int userId) {
+    public void onUserStopped(@NonNull TargetUser targetUser) {
+        int userId = targetUser.getUserIdentifier();
+
         if (DEBUG) Log.d(TAG, "onCleanupUser: " + userId);
         synchronized (mLock) {
             FullUserRecord user = getFullUserRecordLocked(userId);
@@ -813,7 +825,7 @@ public class MediaSessionService extends SystemService implements Monitor {
      * Information about a full user and its corresponding managed profiles.
      *
      * <p>Since the full user runs together with its managed profiles, a user wouldn't differentiate
-     * them when he/she presses a media/volume button. So keeping media sessions for them in one
+     * them when they press a media/volume button. So keeping media sessions for them in one
      * place makes more sense and increases the readability.</p>
      * <p>The contents of this object is guarded by {@link #mLock}.
      */
@@ -1074,25 +1086,6 @@ public class MediaSessionService extends SystemService implements Monitor {
             synchronized (mLock) {
                 mSession2TokensListenerRecords.remove(this);
             }
-        }
-    }
-
-    final class SettingsObserver extends ContentObserver {
-        private final Uri mSecureSettingsUri = Settings.Secure.getUriFor(
-                Settings.Secure.ENABLED_NOTIFICATION_LISTENERS);
-
-        private SettingsObserver() {
-            super(null);
-        }
-
-        private void observe() {
-            mContentResolver.registerContentObserver(mSecureSettingsUri,
-                    false, this, ALL.getIdentifier());
-        }
-
-        @Override
-        public void onChange(boolean selfChange, Uri uri) {
-            updateActiveSessionListeners();
         }
     }
 
@@ -1923,7 +1916,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
             final long token = Binder.clearCallingIdentity();
             try {
-                // Don't perform sanity check between controllerPackageName and controllerUid.
+                // Don't perform check between controllerPackageName and controllerUid.
                 // When an (activity|service) runs on the another apps process by specifying
                 // android:process in the AndroidManifest.xml, then PID and UID would have the
                 // running process' information instead of the (activity|service) that has created
@@ -1932,7 +1925,8 @@ public class MediaSessionService extends SystemService implements Monitor {
                 // Context#getPackageName() for getting package name that matches with the PID/UID,
                 // but it doesn't tell which package has created the MediaController, so useless.
                 return hasMediaControlPermission(controllerPid, controllerUid)
-                        || hasEnabledNotificationListener(userId, controllerPackageName, uid);
+                        || hasEnabledNotificationListener(
+                                userId, controllerPackageName, controllerUid);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1996,21 +1990,21 @@ public class MediaSessionService extends SystemService implements Monitor {
             return resolvedUserId;
         }
 
-        private boolean hasEnabledNotificationListener(int resolvedUserId, String packageName,
-                int uid) {
-            // TODO: revisit this checking code
-            // You may not access another user's content as an enabled listener.
-            final int userId = UserHandle.getUserHandleForUid(resolvedUserId).getIdentifier();
-            if (resolvedUserId != userId) {
+        private boolean hasEnabledNotificationListener(int callingUserId,
+                String controllerPackageName, int controllerUid) {
+            int controllerUserId = UserHandle.getUserHandleForUid(controllerUid).getIdentifier();
+            if (callingUserId != controllerUserId) {
+                // Enabled notification listener only works within the same user.
                 return false;
             }
-            if (mNotificationManager.hasEnabledNotificationListener(packageName,
-                    UserHandle.getUserHandleForUid(uid))) {
+
+            if (mNotificationManager.hasEnabledNotificationListener(controllerPackageName,
+                    UserHandle.getUserHandleForUid(controllerUid))) {
                 return true;
             }
             if (DEBUG) {
-                Log.d(TAG, packageName + " (uid=" + uid + ") doesn't have an enabled "
-                        + "notification listener");
+                Log.d(TAG, controllerPackageName + " (uid=" + controllerUid
+                        + ") doesn't have an enabled notification listener");
             }
             return false;
         }
@@ -2061,8 +2055,9 @@ public class MediaSessionService extends SystemService implements Monitor {
                             callingPid = pid;
                         }
                         try {
-                            mAudioManagerInternal.adjustSuggestedStreamVolumeForUid(suggestedStream,
-                                    direction, flags, callingOpPackageName, callingUid, callingPid);
+                            mAudioManager.adjustSuggestedStreamVolumeForUid(suggestedStream,
+                                    direction, flags, callingOpPackageName, callingUid, callingPid,
+                                    getContext().getApplicationInfo().targetSdkVersion);
                         } catch (SecurityException | IllegalArgumentException e) {
                             Log.e(TAG, "Cannot adjust volume: direction=" + direction
                                     + ", suggestedStream=" + suggestedStream + ", flags=" + flags
@@ -2704,5 +2699,4 @@ public class MediaSessionService extends SystemService implements Monitor {
             obtainMessage(msg, userIdInteger).sendToTarget();
         }
     }
-
 }

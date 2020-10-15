@@ -29,6 +29,7 @@ import com.android.keyguard.KeyguardViewController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.dock.DockManagerImpl;
 import com.android.systemui.doze.DozeHost;
@@ -40,16 +41,17 @@ import com.android.systemui.qs.dagger.QSModule;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsImplementation;
-import com.android.systemui.stackdivider.DividerModule;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManagerImpl;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.collection.render.GroupMembershipManager;
 import com.android.systemui.statusbar.phone.DozeServiceHost;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.KeyguardEnvironmentImpl;
-import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.NotificationShadeWindowControllerImpl;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.ShadeControllerImpl;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
@@ -59,10 +61,9 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedControllerImpl;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
-import com.android.systemui.wmshell.WindowManagerShellModule;
+import com.android.systemui.wmshell.WMShellModule;
 
 import javax.inject.Named;
-import javax.inject.Singleton;
 
 import dagger.Binds;
 import dagger.Module;
@@ -72,10 +73,13 @@ import dagger.Provides;
  * A dagger module for injecting default implementations of components of System UI that may be
  * overridden by the System UI implementation.
  */
-@Module(includes = {DividerModule.class, QSModule.class, WindowManagerShellModule.class})
+@Module(includes = {
+            QSModule.class,
+            WMShellModule.class
+        })
 public abstract class SystemUIDefaultModule {
 
-    @Singleton
+    @SysUISingleton
     @Provides
     @Named(LEAK_REPORT_EMAIL_NAME)
     @Nullable
@@ -91,19 +95,29 @@ public abstract class SystemUIDefaultModule {
             NotificationLockscreenUserManagerImpl notificationLockscreenUserManager);
 
     @Provides
-    @Singleton
-    static BatteryController provideBatteryController(Context context,
-            EnhancedEstimates enhancedEstimates, PowerManager powerManager,
-            BroadcastDispatcher broadcastDispatcher, @Main Handler mainHandler,
+    @SysUISingleton
+    static BatteryController provideBatteryController(
+            Context context,
+            EnhancedEstimates enhancedEstimates,
+            PowerManager powerManager,
+            BroadcastDispatcher broadcastDispatcher,
+            DemoModeController demoModeController,
+            @Main Handler mainHandler,
             @Background Handler bgHandler) {
-        BatteryController bC = new BatteryControllerImpl(context, enhancedEstimates, powerManager,
-                broadcastDispatcher, mainHandler, bgHandler);
+        BatteryController bC = new BatteryControllerImpl(
+                context,
+                enhancedEstimates,
+                powerManager,
+                broadcastDispatcher,
+                demoModeController,
+                mainHandler,
+                bgHandler);
         bC.init();
         return bC;
     }
 
     @Binds
-    @Singleton
+    @SysUISingleton
     public abstract QSFactory bindQSFactory(QSFactoryImpl qsFactoryImpl);
 
     @Binds
@@ -116,20 +130,20 @@ public abstract class SystemUIDefaultModule {
     @Binds
     abstract ShadeController provideShadeController(ShadeControllerImpl shadeController);
 
-    @Singleton
+    @SysUISingleton
     @Provides
     @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME)
     static boolean provideAllowNotificationLongPress() {
         return true;
     }
 
-    @Singleton
+    @SysUISingleton
     @Provides
     static HeadsUpManagerPhone provideHeadsUpManagerPhone(
             Context context,
             StatusBarStateController statusBarStateController,
             KeyguardBypassController bypassController,
-            NotificationGroupManager groupManager,
+            GroupMembershipManager groupManager,
             ConfigurationController configurationController) {
         return new HeadsUpManagerPhone(context, statusBarStateController, bypassController,
                 groupManager, configurationController);
@@ -139,7 +153,7 @@ public abstract class SystemUIDefaultModule {
     abstract HeadsUpManager bindHeadsUpManagerPhone(HeadsUpManagerPhone headsUpManagerPhone);
 
     @Provides
-    @Singleton
+    @SysUISingleton
     static Recents provideRecents(Context context, RecentsImplementation recentsImplementation,
             CommandQueue commandQueue) {
         return new Recents(context, recentsImplementation, commandQueue);
@@ -152,6 +166,10 @@ public abstract class SystemUIDefaultModule {
     @Binds
     abstract KeyguardViewController bindKeyguardViewController(
             StatusBarKeyguardViewManager statusBarKeyguardViewManager);
+
+    @Binds
+    abstract NotificationShadeWindowController bindNotificationShadeController(
+            NotificationShadeWindowControllerImpl notificationShadeWindowController);
 
     @Binds
     abstract DozeHost provideDozeHost(DozeServiceHost dozeServiceHost);

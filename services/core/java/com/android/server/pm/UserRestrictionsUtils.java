@@ -139,6 +139,11 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_CONFIG_PRIVATE_DNS
     });
 
+    public static final Set<String> DEPRECATED_USER_RESTRICTIONS = Sets.newArraySet(
+            UserManager.DISALLOW_ADD_MANAGED_PROFILE,
+            UserManager.DISALLOW_REMOVE_MANAGED_PROFILE
+    );
+
     /**
      * Set of user restriction which we don't want to persist.
      */
@@ -721,7 +726,7 @@ public class UserRestrictionsUtils {
             case android.provider.Settings.Secure.ALWAYS_ON_VPN_APP:
             case android.provider.Settings.Secure.ALWAYS_ON_VPN_LOCKDOWN:
             case android.provider.Settings.Secure.ALWAYS_ON_VPN_LOCKDOWN_WHITELIST:
-                // Whitelist system uid (ConnectivityService) and root uid to change always-on vpn
+                // Allowlist system uid (ConnectivityService) and root uid to change always-on vpn
                 final int appId = UserHandle.getAppId(callingUid);
                 if (appId == Process.SYSTEM_UID || appId == Process.ROOT_UID) {
                     return false;

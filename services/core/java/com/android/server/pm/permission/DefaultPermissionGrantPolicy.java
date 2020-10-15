@@ -414,17 +414,14 @@ public final class DefaultPermissionGrantPolicy {
             if (pkg == null
                     || !doesPackageSupportRuntimePermissions(pkg)
                     || ArrayUtils.isEmpty(pkg.requestedPermissions)
-                    || !pkg.applicationInfo.isPrivilegedApp()) {
+                    || !pm.isGranted(Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
+                            pkg, UserHandle.of(userId))) {
                 continue;
             }
-            for (String permission : pkg.requestedPermissions) {
-                if (Manifest.permission.READ_PRIVILEGED_PHONE_STATE.equals(permission)) {
-                    grantRuntimePermissions(pm, pkg,
-                            Collections.singleton(Manifest.permission.READ_PHONE_STATE),
-                            true, // systemFixed
-                            userId);
-                }
-            }
+            grantRuntimePermissions(pm, pkg,
+                    Collections.singleton(Manifest.permission.READ_PHONE_STATE),
+                    true, // systemFixed
+                    userId);
         }
 
     }
@@ -1271,10 +1268,10 @@ public final class DefaultPermissionGrantPolicy {
                         continue;
                     }
 
-                    // Preserve whitelisting flags.
+                    // Preserve allowlisting flags.
                     newFlags |= (flags & PackageManager.FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT);
 
-                    // If we are whitelisting the permission, update the exempt flag before grant.
+                    // If we are allowlisting the permission, update the exempt flag before grant.
                     if (whitelistRestrictedPermissions && pm.isPermissionRestricted(permission)) {
                         pm.updatePermissionFlags(permission, pkg,
                                 PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT,

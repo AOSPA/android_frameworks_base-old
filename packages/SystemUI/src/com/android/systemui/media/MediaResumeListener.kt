@@ -29,20 +29,20 @@ import android.provider.Settings
 import android.service.media.MediaBrowserService
 import android.util.Log
 import com.android.systemui.broadcast.BroadcastDispatcher
+import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.tuner.TunerService
 import com.android.systemui.util.Utils
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executor
 import javax.inject.Inject
-import javax.inject.Singleton
 
 private const val TAG = "MediaResumeListener"
 
 private const val MEDIA_PREFERENCES = "media_control_prefs"
 private const val MEDIA_PREFERENCE_KEY = "browser_components_"
 
-@Singleton
+@SysUISingleton
 class MediaResumeListener @Inject constructor(
     private val context: Context,
     private val broadcastDispatcher: BroadcastDispatcher,
@@ -52,6 +52,7 @@ class MediaResumeListener @Inject constructor(
 
     private var useMediaResumption: Boolean = Utils.useMediaResumption(context)
     private val resumeComponents: ConcurrentLinkedQueue<ComponentName> = ConcurrentLinkedQueue()
+    private var blockedApps: MutableSet<String> = Utils.getBlockedMediaApps(context)
 
     private lateinit var mediaDataManager: MediaDataManager
 
@@ -114,9 +115,15 @@ class MediaResumeListener @Inject constructor(
                 mediaDataManager.setMediaResumptionEnabled(useMediaResumption)
             }
         }, Settings.Secure.MEDIA_CONTROLS_RESUME)
-    }
 
-    fun isResumptionEnabled() = useMediaResumption
+        // Listen to changes in which apps are allowed to persist
+        tunerService.addTunable(object : TunerService.Tunable {
+            override fun onTuningChanged(key: String?, newValue: String?) {
+                blockedApps = Utils.getBlockedMediaApps(context)
+                mediaDataManager.appsBlockedFromResume = blockedApps
+            }
+        }, Settings.Secure.MEDIA_CONTROLS_RESUME_BLOCKED)
+    }
 
     private fun loadSavedComponents() {
         // Make sure list is empty (if we switched users)
@@ -144,8 +151,10 @@ class MediaResumeListener @Inject constructor(
         }
 
         resumeComponents.forEach {
-            val browser = ResumeMediaBrowser(context, mediaBrowserCallback, it)
-            browser.findRecentMedia()
+            if (!blockedApps.contains(it.packageName)) {
+                val browser = ResumeMediaBrowser(context, mediaBrowserCallback, it)
+                browser.findRecentMedia()
+            }
         }
     }
 
@@ -154,7 +163,8 @@ class MediaResumeListener @Inject constructor(
             // If this had been started from a resume state, disconnect now that it's live
             mediaBrowser?.disconnect()
             // If we don't have a resume action, check if we haven't already
-            if (data.resumeAction == null && !data.hasCheckedForResume) {
+            if (data.resumeAction == null && !data.hasCheckedForResume &&
+                    !blockedApps.contains(data.packageName)) {
                 // TODO also check for a media button receiver intended for restarting (b/154127084)
                 Log.d(TAG, "Checking for service component for " + data.packageName)
                 val pm = context.packageManager

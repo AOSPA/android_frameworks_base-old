@@ -30,6 +30,7 @@ import com.android.settingslib.Utils
 import com.android.systemui.Gefingerpoken
 import com.android.systemui.qs.PageIndicator
 import com.android.systemui.R
+import com.android.systemui.classifier.Classifier.NOTIFICATION_DISMISS
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.util.animation.PhysicsAnimator
 import com.android.systemui.util.concurrency.DelayableExecutor
@@ -56,6 +57,7 @@ class MediaCarouselScrollHandler(
     private val mainExecutor: DelayableExecutor,
     private val dismissCallback: () -> Unit,
     private var translationChangedListener: () -> Unit,
+    private val closeGuts: () -> Unit,
     private val falsingManager: FalsingManager
 ) {
     /**
@@ -314,7 +316,8 @@ class MediaCarouselScrollHandler(
         return false
     }
 
-    private fun isFalseTouch() = falsingProtectionNeeded && falsingManager.isFalseTouch
+    private fun isFalseTouch() = falsingProtectionNeeded &&
+            falsingManager.isFalseTouch(NOTIFICATION_DISMISS)
 
     private fun getMaxTranslation() = if (showsSettingsButton) {
             settingsButton.width
@@ -452,6 +455,7 @@ class MediaCarouselScrollHandler(
         val nowScrolledIn = scrollIntoCurrentMedia != 0
         if (newIndex != activeMediaIndex || wasScrolledIn != nowScrolledIn) {
             activeMediaIndex = newIndex
+            closeGuts()
             updatePlayerVisibilities()
         }
         val relativeLocation = activeMediaIndex.toFloat() + if (playerWidthPlusPadding > 0)

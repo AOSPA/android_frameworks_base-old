@@ -5,6 +5,14 @@
 #include "SkShader.h"
 #include "SkBlendMode.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "shader/Shader.h"
+#include "shader/BitmapShader.h"
+#include "shader/BlurShader.h"
+#include "shader/ComposeShader.h"
+#include "shader/LinearGradientShader.h"
+#include "shader/RadialGradientShader.h"
+#include "shader/RuntimeShader.h"
+#include "shader/SweepGradientShader.h"
 
 #include <vector>
 
@@ -50,7 +58,7 @@ static jint Color_HSVToColor(JNIEnv* env, jobject, jint alpha, jfloatArray hsvAr
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-static void Shader_safeUnref(SkShader* shader) {
+static void Shader_safeUnref(Shader* shader) {
     SkSafeUnref(shader);
 }
 
@@ -74,15 +82,15 @@ static jlong BitmapShader_constructor(JNIEnv* env, jobject o, jlong matrixPtr, j
         SkBitmap bitmap;
         image = SkMakeImageFromRasterBitmap(bitmap, kNever_SkCopyPixelsMode);
     }
-    sk_sp<SkShader> shader = image->makeShader(
-            (SkTileMode)tileModeX, (SkTileMode)tileModeY);
-    ThrowIAE_IfNull(env, shader.get());
 
-    if (matrix) {
-        shader = shader->makeWithLocalMatrix(*matrix);
-    }
+    auto* shader = new BitmapShader(
+            image,
+            static_cast<SkTileMode>(tileModeX),
+            static_cast<SkTileMode>(tileModeY),
+            matrix
+        );
 
-    return reinterpret_cast<jlong>(shader.release());
+    return reinterpret_cast<jlong>(shader);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -118,17 +126,18 @@ static jlong LinearGradient_create(JNIEnv* env, jobject, jlong matrixPtr,
     #error Need to convert float array to SkScalar array before calling the following function.
 #endif
 
-    sk_sp<SkShader> shader(SkGradientShader::MakeLinear(pts, &colors[0],
-                GraphicsJNI::getNativeColorSpace(colorSpaceHandle), pos, colors.size(),
-                static_cast<SkTileMode>(tileMode), sGradientShaderFlags, nullptr));
-    ThrowIAE_IfNull(env, shader);
+    auto* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
+    auto* shader = new LinearGradientShader(
+                pts,
+                colors,
+                GraphicsJNI::getNativeColorSpace(colorSpaceHandle),
+                pos,
+                static_cast<SkTileMode>(tileMode),
+                sGradientShaderFlags,
+                matrix
+            );
 
-    const SkMatrix* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
-    if (matrix) {
-        shader = shader->makeWithLocalMatrix(*matrix);
-    }
-
-    return reinterpret_cast<jlong>(shader.release());
+    return reinterpret_cast<jlong>(shader);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -148,17 +157,20 @@ static jlong RadialGradient_create(JNIEnv* env, jobject, jlong matrixPtr, jfloat
     #error Need to convert float array to SkScalar array before calling the following function.
 #endif
 
-    sk_sp<SkShader> shader = SkGradientShader::MakeRadial(center, radius, &colors[0],
-            GraphicsJNI::getNativeColorSpace(colorSpaceHandle), pos, colors.size(),
-            static_cast<SkTileMode>(tileMode), sGradientShaderFlags, nullptr);
-    ThrowIAE_IfNull(env, shader);
+    auto* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
 
-    const SkMatrix* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
-    if (matrix) {
-        shader = shader->makeWithLocalMatrix(*matrix);
-    }
+    auto* shader = new RadialGradientShader(
+                center,
+                radius,
+                colors,
+                GraphicsJNI::getNativeColorSpace(colorSpaceHandle),
+                pos,
+                static_cast<SkTileMode>(tileMode),
+                sGradientShaderFlags,
+                matrix
+            );
 
-    return reinterpret_cast<jlong>(shader.release());
+    return reinterpret_cast<jlong>(shader);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -174,74 +186,93 @@ static jlong SweepGradient_create(JNIEnv* env, jobject, jlong matrixPtr, jfloat 
     #error Need to convert float array to SkScalar array before calling the following function.
 #endif
 
-    sk_sp<SkShader> shader = SkGradientShader::MakeSweep(x, y, &colors[0],
-            GraphicsJNI::getNativeColorSpace(colorSpaceHandle), pos, colors.size(),
-            sGradientShaderFlags, nullptr);
-    ThrowIAE_IfNull(env, shader);
+    auto* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
 
-    const SkMatrix* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
-    if (matrix) {
-        shader = shader->makeWithLocalMatrix(*matrix);
-    }
+    auto* shader = new SweepGradientShader(
+                x,
+                y,
+                colors,
+                GraphicsJNI::getNativeColorSpace(colorSpaceHandle),
+                pos,
+                sGradientShaderFlags,
+                matrix
+            );
 
-    return reinterpret_cast<jlong>(shader.release());
+    return reinterpret_cast<jlong>(shader);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 static jlong ComposeShader_create(JNIEnv* env, jobject o, jlong matrixPtr,
         jlong shaderAHandle, jlong shaderBHandle, jint xfermodeHandle) {
-    const SkMatrix* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
-    SkShader* shaderA = reinterpret_cast<SkShader *>(shaderAHandle);
-    SkShader* shaderB = reinterpret_cast<SkShader *>(shaderBHandle);
-    SkBlendMode mode = static_cast<SkBlendMode>(xfermodeHandle);
-    sk_sp<SkShader> baseShader(SkShaders::Blend(mode,
-            sk_ref_sp(shaderA), sk_ref_sp(shaderB)));
+    auto* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
+    auto* shaderA = reinterpret_cast<Shader*>(shaderAHandle);
+    auto* shaderB = reinterpret_cast<Shader*>(shaderBHandle);
 
-    SkShader* shader;
+    auto mode = static_cast<SkBlendMode>(xfermodeHandle);
 
-    if (matrix) {
-        shader = baseShader->makeWithLocalMatrix(*matrix).release();
-    } else {
-        shader = baseShader.release();
-    }
-    return reinterpret_cast<jlong>(shader);
+    auto* composeShader = new ComposeShader(
+            *shaderA,
+            *shaderB,
+            mode,
+            matrix
+        );
+
+    return reinterpret_cast<jlong>(composeShader);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+static jlong BlurShader_create(JNIEnv* env , jobject o, jlong matrixPtr, jfloat sigmaX,
+        jfloat sigmaY, jlong shaderHandle) {
+    auto* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
+    auto* inputShader = reinterpret_cast<Shader*>(shaderHandle);
+
+    auto* blurShader = new BlurShader(
+                sigmaX,
+                sigmaY,
+                inputShader,
+                matrix
+            );
+    return reinterpret_cast<jlong>(blurShader);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 static jlong RuntimeShader_create(JNIEnv* env, jobject, jlong shaderFactory, jlong matrixPtr,
         jbyteArray inputs, jlong colorSpaceHandle, jboolean isOpaque) {
-    SkRuntimeEffect* effect = reinterpret_cast<SkRuntimeEffect*>(shaderFactory);
+    auto* effect = reinterpret_cast<SkRuntimeEffect*>(shaderFactory);
     AutoJavaByteArray arInputs(env, inputs);
 
-    sk_sp<SkData> fData;
-    fData = SkData::MakeWithCopy(arInputs.ptr(), arInputs.length());
-    const SkMatrix* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
-    sk_sp<SkShader> shader = effect->makeShader(fData, nullptr, 0, matrix, isOpaque == JNI_TRUE);
-    ThrowIAE_IfNull(env, shader);
+    auto data = SkData::MakeWithCopy(arInputs.ptr(), arInputs.length());
+    auto* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
 
-    return reinterpret_cast<jlong>(shader.release());
+    auto* shader = new RuntimeShader(
+            *effect,
+            std::move(data),
+            isOpaque == JNI_TRUE,
+            matrix
+        );
+    return reinterpret_cast<jlong>(shader);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 static jlong RuntimeShader_createShaderFactory(JNIEnv* env, jobject, jstring sksl) {
     ScopedUtfChars strSksl(env, sksl);
-    sk_sp<SkRuntimeEffect> effect = std::get<0>(SkRuntimeEffect::Make(SkString(strSksl.c_str())));
-    ThrowIAE_IfNull(env, effect);
-
+    auto result = SkRuntimeEffect::Make(SkString(strSksl.c_str()));
+    sk_sp<SkRuntimeEffect> effect = std::get<0>(result);
+    if (!effect) {
+        const auto& err = std::get<1>(result);
+        doThrowIAE(env, err.c_str());
+    }
     return reinterpret_cast<jlong>(effect.release());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-static void Effect_safeUnref(SkRuntimeEffect* effect) {
-    SkSafeUnref(effect);
-}
-
 static jlong RuntimeShader_getNativeFinalizer(JNIEnv*, jobject) {
-    return static_cast<jlong>(reinterpret_cast<uintptr_t>(&Effect_safeUnref));
+    return static_cast<jlong>(reinterpret_cast<uintptr_t>(&Shader_safeUnref));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -257,6 +288,10 @@ static const JNINativeMethod gShaderMethods[] = {
 
 static const JNINativeMethod gBitmapShaderMethods[] = {
     { "nativeCreate",      "(JJII)J",  (void*)BitmapShader_constructor },
+};
+
+static const JNINativeMethod gBlurShaderMethods[] = {
+    { "nativeCreate",      "(JFFJ)J", (void*)BlurShader_create }
 };
 
 static const JNINativeMethod gLinearGradientMethods[] = {
@@ -290,6 +325,8 @@ int register_android_graphics_Shader(JNIEnv* env)
                                   NELEM(gShaderMethods));
     android::RegisterMethodsOrDie(env, "android/graphics/BitmapShader", gBitmapShaderMethods,
                                   NELEM(gBitmapShaderMethods));
+    android::RegisterMethodsOrDie(env, "android/graphics/BlurShader", gBlurShaderMethods,
+                                  NELEM(gBlurShaderMethods));
     android::RegisterMethodsOrDie(env, "android/graphics/LinearGradient", gLinearGradientMethods,
                                   NELEM(gLinearGradientMethods));
     android::RegisterMethodsOrDie(env, "android/graphics/RadialGradient", gRadialGradientMethods,

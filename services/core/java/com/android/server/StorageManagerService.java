@@ -55,6 +55,7 @@ import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
 import static org.xmlpull.v1.XmlPullParser.START_TAG;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -152,6 +153,7 @@ import com.android.internal.util.HexDump;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.pm.Installer;
 import com.android.server.storage.AppFuseBridge;
 import com.android.server.storage.StorageSessionController;
@@ -260,23 +262,23 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         @Override
-        public void onSwitchUser(int userHandle) {
-            mStorageManagerService.mCurrentUserId = userHandle;
+        public void onUserSwitching(@Nullable TargetUser from, @NonNull TargetUser to) {
+            mStorageManagerService.mCurrentUserId = to.getUserIdentifier();
         }
 
         @Override
-        public void onUnlockUser(int userHandle) {
-            mStorageManagerService.onUnlockUser(userHandle);
+        public void onUserUnlocking(@NonNull TargetUser user) {
+            mStorageManagerService.onUnlockUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onCleanupUser(int userHandle) {
-            mStorageManagerService.onCleanupUser(userHandle);
+        public void onUserStopped(@NonNull TargetUser user) {
+            mStorageManagerService.onCleanupUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onStopUser(int userHandle) {
-            mStorageManagerService.onStopUser(userHandle);
+        public void onUserStopping(@NonNull TargetUser user) {
+            mStorageManagerService.onStopUser(user.getUserIdentifier());
         }
 
         @Override
@@ -1075,7 +1077,7 @@ class StorageManagerService extends IStorageManager.Stub
             }
 
             try {
-                // TODO(b/135341433): Remove paranoid logging when FUSE is stable
+                // TODO(b/135341433): Remove cautious logging when FUSE is stable
                 Slog.i(TAG, "Resetting vold...");
                 mVold.reset();
                 Slog.i(TAG, "Reset vold");
@@ -1140,13 +1142,6 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     private void completeUnlockUser(int userId) {
-        // If user 0 has completed unlock, perform a one-time migration of legacy obb data
-        // to its new location. This may take time depending on the size of the data to be copied
-        // so it's done on the StorageManager handler thread.
-        if (userId == 0) {
-            mPmInternal.migrateLegacyObbData();
-        }
-
         onKeyguardStateChanged(false);
 
         // Record user as started so newly mounted volumes kick off events
@@ -1539,9 +1534,21 @@ class StorageManagerService extends IStorageManager.Stub
                 mFuseMountedUser.remove(vol.getMountUserId());
             } else if (mVoldAppDataIsolationEnabled){
                 final int userId = vol.getMountUserId();
-                mFuseMountedUser.add(userId);
                 // Async remount app storage so it won't block the main thread.
                 new Thread(() -> {
+
+                    // If user 0 has completed unlock, perform a one-time migration of legacy
+                    // obb data to its new location. This may take time depending on the size of
+                    // the data to be copied so it's done on the StorageManager worker thread.
+                    // This needs to be finished before start mounting obb directories.
+                    if (userId == 0) {
+                        mPmInternal.migrateLegacyObbData();
+                    }
+
+                    // Add fuse mounted user after migration to prevent ProcessList tries to
+                    // create obb directory before migration is done.
+                    mFuseMountedUser.add(userId);
+
                     Map<Integer, String> pidPkgMap = null;
                     // getProcessesWithPendingBindMounts() could fail when a new app process is
                     // starting and it's not planning to mount storage dirs in zygote, but it's
@@ -2154,7 +2161,7 @@ class StorageManagerService extends IStorageManager.Stub
             Slog.i(TAG, "Remounting storage for pid: " + pid);
             final String[] sharedPackages =
                     mPmInternal.getSharedUserPackagesForPackage(packageName, userId);
-            final int uid = mPmInternal.getPackageUidInternal(packageName, 0, userId);
+            final int uid = mPmInternal.getPackageUid(packageName, 0 /* flags */, userId);
             final String[] packages =
                     sharedPackages.length != 0 ? sharedPackages : new String[]{packageName};
             try {
@@ -2167,7 +2174,7 @@ class StorageManagerService extends IStorageManager.Stub
 
     private void mount(VolumeInfo vol) {
         try {
-            // TODO(b/135341433): Remove paranoid logging when FUSE is stable
+            // TODO(b/135341433): Remove cautious logging when FUSE is stable
             Slog.i(TAG, "Mounting volume " + vol);
             mVold.mount(vol.id, vol.mountFlags, vol.mountUserId, new IVoldMountCallback.Stub() {
                 @Override
@@ -2898,7 +2905,7 @@ class StorageManagerService extends IStorageManager.Stub
         return 0;
     }
 
-    /** Set the password for encrypting the master key.
+    /** Set the password for encrypting the main key.
      *  @param type One of the CRYPTO_TYPE_XXX consts defined in StorageManager.
      *  @param password The password to set.
      */
@@ -2976,7 +2983,7 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     /**
-     * Get the type of encryption used to encrypt the master key.
+     * Get the type of encryption used to encrypt the main key.
      * @return The type, one of the CRYPT_TYPE_XXX consts from StorageManager.
      */
     @Override
@@ -3295,7 +3302,7 @@ class StorageManagerService extends IStorageManager.Stub
         final UserManagerInternal umInternal =
                 LocalServices.getService(UserManagerInternal.class);
 
-        for (UserInfo user : um.getUsers(false /* includeDying */)) {
+        for (UserInfo user : um.getUsers()) {
             final int flags;
             if (umInternal.isUserUnlockingOrUnlocked(user.id)) {
                 flags = StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE;
@@ -4695,14 +4702,19 @@ class StorageManagerService extends IStorageManager.Stub
             }
         }
 
-        public void onAppOpsChanged(int code, int uid, @Nullable String packageName, int mode) {
+        public void onAppOpsChanged(int code, int uid, @Nullable String packageName, int mode,
+                int previousMode) {
             final long token = Binder.clearCallingIdentity();
             try {
                 // When using FUSE, we may need to kill the app if the op changes
                 switch(code) {
                     case OP_REQUEST_INSTALL_PACKAGES:
-                        // Always kill regardless of op change, to remount apps /storage
-                        killAppForOpChange(code, uid);
+                        if (previousMode == MODE_ALLOWED || mode == MODE_ALLOWED) {
+                            // If we transition to/from MODE_ALLOWED, kill the app to make
+                            // sure it has the correct view of /storage. Changing between
+                            // MODE_DEFAULT / MODE_ERRORED is a no-op
+                            killAppForOpChange(code, uid);
+                        }
                         return;
                     case OP_MANAGE_EXTERNAL_STORAGE:
                         if (mode != MODE_ALLOWED) {

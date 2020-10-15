@@ -162,7 +162,7 @@ public class AudioPolicyConfig implements Parcelable {
 
     public String toLogFriendlyString () {
         String textDump = new String("android.media.audiopolicy.AudioPolicyConfig:\n");
-        textDump += mMixes.size() + " AudioMix: "+ mRegistrationId + "\n";
+        textDump += mMixes.size() + " AudioMix, reg:" + mRegistrationId + "\n";
         for(AudioMix mix : mMixes) {
             // write mix route flags
             textDump += "* route flags=0x" + Integer.toHexString(mix.getRouteFlags()) + "\n";
@@ -218,6 +218,38 @@ public class AudioPolicyConfig implements Parcelable {
             }
         }
         return textDump;
+    }
+
+    /**
+     * Very short dump of configuration
+     * @return a condensed dump of configuration, uniquely identifies a policy in a log
+     */
+    public String toCompactLogString() {
+        String compactDump = "reg:" + mRegistrationId;
+        int mixNum = 0;
+        for (AudioMix mix : mMixes) {
+            compactDump += " Mix:" + mixNum + "-Typ:" + mixTypePrefix(mix.getMixType())
+                    + "-Rul:" + mix.getRule().getCriteria().size();
+            mixNum++;
+        }
+        return compactDump;
+    }
+
+    private static String mixTypePrefix(int mixType) {
+        switch (mixType) {
+            case AudioMix.MIX_TYPE_PLAYERS:
+                return "p";
+            case AudioMix.MIX_TYPE_RECORDERS:
+                return "r";
+            case AudioMix.MIX_TYPE_INVALID:
+            default:
+                return "#";
+
+        }
+    }
+
+    protected void reset() {
+        mMixCounter = 0;
     }
 
     protected void setRegistration(String regId) {

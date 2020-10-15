@@ -40,6 +40,7 @@ import android.testing.TestableLooper;
 import androidx.asynclayoutinflater.view.AsyncLayoutInflater;
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.NotificationMessagingUtil;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
@@ -66,6 +67,7 @@ import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationRankingManager;
 import com.android.systemui.statusbar.notification.collection.inflation.LowPriorityInflationHelper;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
 import com.android.systemui.statusbar.notification.icon.IconBuilder;
 import com.android.systemui.statusbar.notification.icon.IconManager;
@@ -76,7 +78,6 @@ import com.android.systemui.statusbar.notification.row.dagger.ExpandableNotifica
 import com.android.systemui.statusbar.notification.row.dagger.NotificationRowComponent;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
-import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.SmartReplyConstants;
 import com.android.systemui.util.concurrency.FakeExecutor;
@@ -129,7 +130,8 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
     @Mock private KeyguardBypassController mKeyguardBypassController;
     @Mock private StatusBarStateController mStatusBarStateController;
 
-    @Mock private NotificationGroupManager mGroupManager;
+    @Mock private NotificationGroupManagerLegacy mGroupMembershipManager;
+    @Mock private NotificationGroupManagerLegacy mGroupExpansionManager;
     @Mock private FeatureFlags mFeatureFlags;
     @Mock private LeakDetector mLeakDetector;
 
@@ -169,10 +171,10 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
 
         mEntryManager = new NotificationEntryManager(
                 mock(NotificationEntryManagerLogger.class),
-                mGroupManager,
+                mGroupMembershipManager,
                 new NotificationRankingManager(
                         () -> mock(NotificationMediaManager.class),
-                        mGroupManager,
+                        mGroupMembershipManager,
                         mHeadsUpManager,
                         mock(NotificationFilter.class),
                         mock(NotificationEntryManagerLogger.class),
@@ -185,8 +187,7 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
                 () -> mRemoteInputManager,
                 mLeakDetector,
                 mock(ForegroundServiceDismissalFeatureController.class),
-                mock(HeadsUpManager.class),
-                mock(StatusBarStateController.class)
+                mock(IStatusBarService.class)
         );
 
         NotifRemoteViewCache cache = new NotifRemoteViewCacheImpl(mEntryManager);
@@ -221,13 +222,15 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
                 .thenAnswer((Answer<ExpandableNotificationRowController>) invocation ->
                         new ExpandableNotificationRowController(
                                 viewCaptor.getValue(),
+                                mListContainer,
                                 mock(ActivatableNotificationViewController.class),
                                 mNotificationMediaManager,
                                 mock(PluginManager.class),
                                 new FakeSystemClock(),
                                 "FOOBAR", "FOOBAR",
                                 mKeyguardBypassController,
-                                mGroupManager,
+                                mGroupMembershipManager,
+                                mGroupExpansionManager,
                                 mRowContentBindStage,
                                 mock(NotificationLogger.class),
                                 mHeadsUpManager,
@@ -252,7 +255,6 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
                 mLockscreenUserManager,
                 pipeline,
                 mRowContentBindStage,
-                mNotificationInterruptionStateProvider,
                 RowInflaterTask::new,
                 mExpandableNotificationRowComponentBuilder,
                 new IconManager(

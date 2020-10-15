@@ -81,6 +81,12 @@ public final class ScanResult implements Parcelable {
     public String capabilities;
 
     /**
+     * The interface name on which the scan result was received.
+     * @hide
+     */
+    public String ifaceName;
+
+    /**
      * @hide
      * No security protocol.
      */
@@ -586,12 +592,39 @@ public final class ScanResult implements Parcelable {
      * 6 GHz band frequency of first channel in MHz
      * @hide
      */
-    public static final int BAND_6_GHZ_START_FREQ_MHZ = 5945;
+    public static final int BAND_6_GHZ_START_FREQ_MHZ = 5955;
     /**
      * 6 GHz band frequency of last channel in MHz
      * @hide
      */
-    public static final int BAND_6_GHZ_END_FREQ_MHZ = 7105;
+    public static final int BAND_6_GHZ_END_FREQ_MHZ = 7115;
+
+    /**
+     * 6 GHz band operating class 136 channel 2 center frequency in MHz
+     * @hide
+     */
+    public static final int BAND_6_GHZ_OP_CLASS_136_CH_2_FREQ_MHZ = 5935;
+
+    /**
+     * 60 GHz band first channel number
+     * @hide
+     */
+    public static final int BAND_60_GHZ_FIRST_CH_NUM = 1;
+    /**
+     * 60 GHz band last channel number
+     * @hide
+     */
+    public static final int BAND_60_GHZ_LAST_CH_NUM = 6;
+    /**
+     * 60 GHz band frequency of first channel in MHz
+     * @hide
+     */
+    public static final int BAND_60_GHZ_START_FREQ_MHZ = 58320;
+    /**
+     * 60 GHz band frequency of last channel in MHz
+     * @hide
+     */
+    public static final int BAND_60_GHZ_END_FREQ_MHZ = 70200;
 
     /**
      * Utility function to check if a frequency within 2.4 GHz band
@@ -623,7 +656,21 @@ public final class ScanResult implements Parcelable {
      * @hide
      */
     public static boolean is6GHz(int freqMhz) {
-        return freqMhz >= BAND_6_GHZ_START_FREQ_MHZ && freqMhz <= BAND_6_GHZ_END_FREQ_MHZ;
+        if (freqMhz == BAND_6_GHZ_OP_CLASS_136_CH_2_FREQ_MHZ) {
+            return true;
+        }
+        return (freqMhz >= BAND_6_GHZ_START_FREQ_MHZ && freqMhz <= BAND_6_GHZ_END_FREQ_MHZ);
+    }
+
+    /**
+     * Utility function to check if a frequency within 60 GHz band
+     * @param freqMhz
+     * @return true if within 60GHz, false otherwise
+     *
+     * @hide
+     */
+    public static boolean is60GHz(int freqMhz) {
+        return freqMhz >= BAND_60_GHZ_START_FREQ_MHZ && freqMhz <= BAND_60_GHZ_END_FREQ_MHZ;
     }
 
     /**
@@ -654,6 +701,9 @@ public final class ScanResult implements Parcelable {
         }
         if (band == WifiScanner.WIFI_BAND_6_GHZ) {
             if (channel >= BAND_6_GHZ_FIRST_CH_NUM && channel <= BAND_6_GHZ_LAST_CH_NUM) {
+                if (channel == 2) {
+                    return BAND_6_GHZ_OP_CLASS_136_CH_2_FREQ_MHZ;
+                }
                 return ((channel - BAND_6_GHZ_FIRST_CH_NUM) * 5) + BAND_6_GHZ_START_FREQ_MHZ;
             } else {
                 return UNSPECIFIED;
@@ -678,6 +728,9 @@ public final class ScanResult implements Parcelable {
         } else if (is5GHz(freqMhz)) {
             return ((freqMhz - BAND_5_GHZ_START_FREQ_MHZ) / 5) + BAND_5_GHZ_FIRST_CH_NUM;
         } else if (is6GHz(freqMhz)) {
+            if (freqMhz == BAND_6_GHZ_OP_CLASS_136_CH_2_FREQ_MHZ) {
+                return 2;
+            }
             return ((freqMhz - BAND_6_GHZ_START_FREQ_MHZ) / 5) + BAND_6_GHZ_FIRST_CH_NUM;
         }
 
@@ -710,14 +763,6 @@ public final class ScanResult implements Parcelable {
      */
     public boolean is60GHz() {
         return ScanResult.is60GHz(frequency);
-    }
-
-    /**
-     * @hide
-     * TODO: makes real freq boundaries
-     */
-    public static boolean is60GHz(int freq) {
-        return freq >= 58320 && freq <= 70200;
     }
 
     /**
@@ -959,6 +1004,7 @@ public final class ScanResult implements Parcelable {
             flags = source.flags;
             radioChainInfos = source.radioChainInfos;
             this.mWifiStandard = source.mWifiStandard;
+            this.ifaceName = source.ifaceName;
         }
     }
 
@@ -997,6 +1043,7 @@ public final class ScanResult implements Parcelable {
         sb.append(", 80211mcResponder: ");
         sb.append(((flags & FLAG_80211mc_RESPONDER) != 0) ? "is supported" : "is not supported");
         sb.append(", Radio Chain Infos: ").append(Arrays.toString(radioChainInfos));
+        sb.append(", interface name: ").append(ifaceName);
         return sb.toString();
     }
 
@@ -1076,6 +1123,7 @@ public final class ScanResult implements Parcelable {
         } else {
             dest.writeInt(0);
         }
+        dest.writeString((ifaceName != null) ? ifaceName.toString() : "");
     }
 
     /** Implement the Parcelable interface */
@@ -1154,6 +1202,7 @@ public final class ScanResult implements Parcelable {
                         sr.radioChainInfos[i].level = in.readInt();
                     }
                 }
+                sr.ifaceName = in.readString();
                 return sr;
             }
 

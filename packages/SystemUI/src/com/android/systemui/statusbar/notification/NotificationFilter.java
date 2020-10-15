@@ -29,25 +29,22 @@ import android.service.notification.StatusBarNotification;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dependency;
 import com.android.systemui.ForegroundServiceController;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.media.MediaFeatureFlag;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ShadeController;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /** Component which manages the various reasons a notification might be filtered out.*/
 // TODO: delete NotificationFilter.java after migrating to new NotifPipeline b/145659174.
 //  Notification filtering is taken care of across the different Coordinators (mostly
 //  KeyguardCoordinator.java)
-@Singleton
+@SysUISingleton
 public class NotificationFilter {
 
-    private final NotificationGroupManager mGroupManager = Dependency.get(
-            NotificationGroupManager.class);
     private final StatusBarStateController mStatusBarStateController;
     private final Boolean mIsMediaFlagEnabled;
 

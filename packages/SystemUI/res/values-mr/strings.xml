@@ -108,10 +108,8 @@
     <string name="screenrecord_resume_label" msgid="4972223043729555575">"पुन्हा सुरू करा"</string>
     <string name="screenrecord_cancel_label" msgid="7850926573274483294">"रद्द करा"</string>
     <string name="screenrecord_share_label" msgid="5025590804030086930">"शेअर करा"</string>
-    <string name="screenrecord_delete_label" msgid="1376347010553987058">"हटवा"</string>
     <string name="screenrecord_cancel_success" msgid="1775448688137393901">"स्क्रीन रेकॉर्डिंग रद्द केले"</string>
     <string name="screenrecord_save_message" msgid="490522052388998226">"स्क्रीन रेकॉर्डिंग सेव्ह केली, पाहण्यासाठी टॅप करा"</string>
-    <string name="screenrecord_delete_description" msgid="1604522770162810570">"स्क्रीन रेकॉर्डिंग हटवले"</string>
     <string name="screenrecord_delete_error" msgid="2870506119743013588">"स्क्रीन रेकॉर्डिंग हटवताना एरर आली"</string>
     <string name="screenrecord_permission_error" msgid="7856841237023137686">"परवानग्या मिळवता आल्या नाहीत"</string>
     <string name="screenrecord_start_error" msgid="2200660692479682368">"स्क्रीन रेकॉर्डिंग सुरू करताना एरर आली"</string>
@@ -125,7 +123,7 @@
     <string name="accessibility_accessibility_button" msgid="4089042473497107709">"अ‍ॅक्सेसिबिलिटी"</string>
     <string name="accessibility_rotate_button" msgid="1238584767612362586">"स्क्रीन फिरवा"</string>
     <string name="accessibility_recent" msgid="901641734769533575">"अवलोकन"</string>
-    <string name="accessibility_search_light" msgid="524741790416076988">"शोधा"</string>
+    <string name="accessibility_search_light" msgid="524741790416076988">"Search"</string>
     <string name="accessibility_camera_button" msgid="2938898391716647247">"कॅमेरा"</string>
     <string name="accessibility_phone_button" msgid="4256353121703100427">"फोन"</string>
     <string name="accessibility_voice_assist_button" msgid="6497706615649754510">"व्हॉइस सहाय्य"</string>
@@ -441,7 +439,7 @@
     <string name="expanded_header_battery_charging_with_time" msgid="757991461445765011">"<xliff:g id="CHARGING_TIME">%s</xliff:g> पूर्ण होईपर्यंत"</string>
     <string name="expanded_header_battery_not_charging" msgid="809409140358955848">"चार्ज होत नाही"</string>
     <string name="ssl_ca_cert_warning" msgid="8373011375250324005">"नेटवर्कचे परीक्षण\nकेले जाऊ शकते"</string>
-    <string name="description_target_search" msgid="3875069993128855865">"शोध"</string>
+    <string name="description_target_search" msgid="3875069993128855865">"Search"</string>
     <string name="description_direction_up" msgid="3632251507574121434">"<xliff:g id="TARGET_DESCRIPTION">%s</xliff:g> साठी वर स्लाइड करा."</string>
     <string name="description_direction_left" msgid="4762708739096907741">"<xliff:g id="TARGET_DESCRIPTION">%s</xliff:g> साठी डावीकडे स्लाइड करा."</string>
     <string name="zen_priority_introduction" msgid="3159291973383796646">"अलार्म, रिमाइंडर, इव्‍हेंट आणि तुम्ही निश्चित केलेल्या कॉलर व्यतिरिक्त तुम्हाला कोणत्याही आवाज आणि कंपनांचा व्यत्त्यय आणला जाणार नाही. तरीही तुम्ही प्ले करायचे ठरवलेले कोणतेही संगीत, व्हिडिओ आणि गेमचे आवाज ऐकू शकतात."</string>
@@ -504,8 +502,8 @@
     <string name="battery_saver_notification_action_text" msgid="6022091913807026887">"बॅटरी सेव्हर बंद करा"</string>
     <string name="media_projection_dialog_text" msgid="1755705274910034772">"तुमच्या स्क्रीनवर दृश्यमान असलेल्या किंवा रेकॉर्ड किंवा कास्ट करताना तुमच्या डिव्हाइसमधून प्ले केलेल्या सर्व माहितीचा अ‍ॅक्सेस <xliff:g id="APP_SEEKING_PERMISSION">%s</xliff:g> ला असेल. यामध्ये पासवर्ड, पेमेंट तपशील, फोटो, मेसेज आणि तुम्ही प्ले केलेला ऑडिओ यासारख्या माहितीचा समावेश असतो."</string>
     <string name="media_projection_dialog_service_text" msgid="958000992162214611">"हे कार्य पुरवठा करणाऱ्या सेवेस तुमच्या स्क्रीनवर दृश्यमान असलेल्या किंवा रेकॉर्ड किंवा कास्ट करताना तुमच्या डिव्हाइसमधून प्ले केलेल्या सर्व माहितीचा अ‍ॅक्सेस असेल. यामध्ये पासवर्ड, पेमेंट तपशील, फोटो, मेसेज आणि तुम्ही प्ले केलेला ऑडिओ यासारख्या माहितीचा समावेश असतो."</string>
-    <string name="media_projection_dialog_service_title" msgid="2888507074107884040">"रेकॉर्ड किंवा कास्ट करणे सुरू करायचे आहे का ?"</string>
-    <string name="media_projection_dialog_title" msgid="3316063622495360646">"<xliff:g id="APP_SEEKING_PERMISSION">%s</xliff:g> ने रेकॉर्ड करणे किंवा कास्ट करणे सुरू करा?"</string>
+    <string name="media_projection_dialog_service_title" msgid="2888507074107884040">"रेकॉर्ड करणे किंवा कास्ट करणे सुरू करायचे का ?"</string>
+    <string name="media_projection_dialog_title" msgid="3316063622495360646">"<xliff:g id="APP_SEEKING_PERMISSION">%s</xliff:g> ने रेकॉर्ड करणे किंवा कास्ट करणे सुरू करायचे का?"</string>
     <string name="media_projection_remember_text" msgid="6896767327140422951">"पुन्हा दर्शवू नका"</string>
     <string name="clear_all_notifications_text" msgid="348312370303046130">"सर्व साफ करा"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"व्यवस्थापित करा"</string>
@@ -881,29 +879,22 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"कमी प्राधान्य सूचना आयकन दर्शवा"</string>
     <string name="other" msgid="429768510980739978">"अन्य"</string>
-    <string name="accessibility_divider" msgid="2830785970889237307">"विभाजित-स्क्रीन विभाजक"</string>
-    <string name="accessibility_action_divider_left_full" msgid="7598733539422375847">"डावी फुल स्क्रीन"</string>
-    <string name="accessibility_action_divider_left_70" msgid="4919312892541727761">"डावी 70%"</string>
-    <string name="accessibility_action_divider_left_50" msgid="3664701169564893826">"डावी 50%"</string>
-    <string name="accessibility_action_divider_left_30" msgid="4358145268046362088">"डावी 30%"</string>
-    <string name="accessibility_action_divider_right_full" msgid="8576057422864896305">"उजवी फुल स्क्रीन"</string>
-    <string name="accessibility_action_divider_top_full" msgid="4243901660795169777">"शीर्ष फुल स्क्रीन"</string>
-    <string name="accessibility_action_divider_top_70" msgid="6941226213260515072">"शीर्ष 70%"</string>
-    <string name="accessibility_action_divider_top_50" msgid="6275211443706497621">"शीर्ष 50%"</string>
-    <string name="accessibility_action_divider_top_30" msgid="5780597635887574916">"शीर्ष 10"</string>
-    <string name="accessibility_action_divider_bottom_full" msgid="7352434720610115395">"तळाशी फुल स्क्रीन"</string>
-    <string name="accessibility_qs_edit_tile_label" msgid="9079791448815232967">"स्थिती <xliff:g id="POSITION">%1$d</xliff:g>, <xliff:g id="TILE_NAME">%2$s</xliff:g>. संपादित करण्यासाठी दोनदा टॅप करा."</string>
-    <string name="accessibility_qs_edit_add_tile_label" msgid="8292218072049068613">"<xliff:g id="TILE_NAME">%1$s</xliff:g> . जोडण्यासाठी दोनदा टॅप करा."</string>
-    <string name="accessibility_qs_edit_move_tile" msgid="6027997446473163426">"<xliff:g id="TILE_NAME">%1$s</xliff:g> हलवा"</string>
-    <string name="accessibility_qs_edit_remove_tile" msgid="3406781901949899624">"<xliff:g id="TILE_NAME">%1$s</xliff:g> काढा"</string>
-    <string name="accessibility_qs_edit_tile_add" msgid="6289879620154587233">"<xliff:g id="TILE_NAME">%1$s</xliff:g> <xliff:g id="POSITION">%2$d</xliff:g> स्थानावर जोडा"</string>
-    <string name="accessibility_qs_edit_tile_move" msgid="4841770637244326837">"<xliff:g id="TILE_NAME">%1$s</xliff:g> <xliff:g id="POSITION">%2$d</xliff:g> स्थानावर हलवा"</string>
+    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
+    <skip />
+    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
+    <skip />
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"द्रुत सेटिंग्ज संपादक."</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"<xliff:g id="ID_1">%1$s</xliff:g> सूचना: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
-    <string name="dock_forced_resizable" msgid="4689301323912928801">"अ‍ॅप कदाचित विभाजित-स्क्रीनसह कार्य करू शकत नाही."</string>
-    <string name="dock_non_resizeble_failed_to_dock_text" msgid="7284915968096153808">"अ‍ॅप स्क्रीन-विभाजनास समर्थन देत नाही."</string>
-    <string name="forced_resizable_secondary_display" msgid="522558907654394940">"दुसऱ्या डिस्प्लेवर अ‍ॅप कदाचित चालणार नाही."</string>
-    <string name="activity_launch_on_secondary_display_failed_text" msgid="8446727617187998208">"दुसऱ्या डिस्प्लेवर अ‍ॅप लाँच होणार नाही."</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"सेटिंग्ज उघडा."</string>
     <string name="accessibility_quick_settings_expand" msgid="2609275052412521467">"जलद सेटिंग्ज उघडा."</string>
     <string name="accessibility_quick_settings_collapse" msgid="4674876336725041982">"जलद सेटिंग्ज बंद करा."</string>
@@ -985,6 +976,13 @@
     <string name="open_saver_setting_action" msgid="2111461909782935190">"सेटिंग्ज"</string>
     <string name="auto_saver_okay_action" msgid="7815925750741935386">"समजले"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"SysUI हीप डंप करा"</string>
+    <string name="ongoing_privacy_chip_content_single_app" msgid="2969750601815230385">"<xliff:g id="APP">%1$s</xliff:g> तुमचे <xliff:g id="TYPES_LIST">%2$s</xliff:g> वापरत आहे."</string>
+    <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"ॲप्लिकेशन्स तुमचे <xliff:g id="TYPES_LIST">%s</xliff:g> वापरत आहे."</string>
+    <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
+    <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" आणि "</string>
+    <string name="privacy_type_camera" msgid="7974051382167078332">"कॅमेरा"</string>
+    <string name="privacy_type_location" msgid="7991481648444066703">"स्थान"</string>
+    <string name="privacy_type_microphone" msgid="9136763906797732428">"मायक्रोफोन"</string>
     <string name="sensor_privacy_mode" msgid="4462866919026513692">"सेन्सर बंद आहेत"</string>
     <string name="device_services" msgid="1549944177856658705">"डिव्हाइस सेवा"</string>
     <string name="music_controls_no_title" msgid="4166497066552290938">"शीर्षक नाही"</string>
@@ -1062,7 +1060,7 @@
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"शिफारशी लोड करत आहे"</string>
     <string name="controls_media_title" msgid="1746947284862928133">"मीडिया"</string>
     <string name="controls_media_close_session" msgid="3957093425905475065">"सध्याचे सेशन लपवा."</string>
-    <string name="controls_media_dismiss_button" msgid="4485675693008031646">"लपवा"</string>
+    <string name="controls_media_dismiss_button" msgid="9081375542265132213">"डिसमिस करा"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"पुन्हा सुरू करा"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"सेटिंग्ज"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"निष्क्रिय, ॲप तपासा"</string>
@@ -1077,4 +1075,11 @@
     <string name="controls_added_tooltip" msgid="4842812921719153085">"नवीन नियंत्रणे पाहण्यासाठी पॉवर बटण धरून ठेवा"</string>
     <string name="controls_menu_add" msgid="4447246119229920050">"नियंत्रणे जोडा"</string>
     <string name="controls_menu_edit" msgid="890623986951347062">"नियंत्रणे व्यवस्थापित करा"</string>
+    <string name="media_output_dialog_add_output" msgid="5642703238877329518">"आउटपुट जोडा"</string>
+    <string name="media_output_dialog_group" msgid="5571251347877452212">"गट"</string>
+    <string name="media_output_dialog_single_device" msgid="3102758980643351058">"एक डिव्हाइस निवडले"</string>
+    <string name="media_output_dialog_multiple_devices" msgid="1093771040315422350">"<xliff:g id="COUNT">%1$d</xliff:g> डिव्हाइस निवडली आहेत"</string>
+    <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (डिस्कनेक्ट केले)"</string>
+    <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"कनेक्ट करू शकलो नाही. पुन्हा प्रयत्न करा."</string>
+    <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"नवीन डिव्हाइससोबत पेअर करा"</string>
 </resources>

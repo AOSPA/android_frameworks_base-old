@@ -210,6 +210,7 @@ public class SyncManager {
     private static final String HANDLE_SYNC_ALARM_WAKE_LOCK = "SyncManagerHandleSyncAlarm";
     private static final String SYNC_LOOP_WAKE_LOCK = "SyncLoopWakeLock";
 
+    private static final boolean USE_WTF_FOR_ACCOUNT_ERROR = false;
 
     private static final int SYNC_OP_STATE_VALID = 0;
     // "1" used to include errors 3, 4 and 5 but now it's split up.
@@ -366,7 +367,7 @@ public class SyncManager {
     }
 
     private void removeStaleAccounts() {
-        for (UserInfo user : mUserManager.getUsers(true)) {
+        for (UserInfo user : mUserManager.getAliveUsers()) {
             // Skip any partially created/removed users
             if (user.partial) continue;
             Account[] accountsForUser = AccountManagerService.getSingleton().getAccounts(
@@ -728,7 +729,7 @@ public class SyncManager {
         // Sync adapters were able to access the synced account without the accounts
         // permission which circumvents our permission model. Therefore, we require
         // sync adapters that don't have access to the account to get user consent.
-        // This can be noisy, therefore we will white-list sync adapters installed
+        // This can be noisy, therefore we will allowlist sync adapters installed
         // before we started checking for account access because they already know
         // the account (they run before) which is the genie is out of the bottle.
         whiteListExistingSyncAdaptersIfNeeded();
@@ -776,7 +777,7 @@ public class SyncManager {
         if (!mSyncStorageEngine.shouldGrantSyncAdaptersAccountAccess()) {
             return;
         }
-        List<UserInfo> users = mUserManager.getUsers(true);
+        List<UserInfo> users = mUserManager.getAliveUsers();
         final int userCount = users.size();
         for (int i = 0; i < userCount; i++) {
             UserHandle userHandle = users.get(i).getUserHandle();
@@ -3446,7 +3447,7 @@ public class SyncManager {
                 if (isLoggable) {
                     Slog.v(TAG, "    Dropping sync operation: account doesn't exist.");
                 }
-                Slog.wtf(TAG, "SYNC_OP_STATE_INVALID: account doesn't exist.");
+                logAccountError("SYNC_OP_STATE_INVALID: account doesn't exist.");
                 return SYNC_OP_STATE_INVALID_NO_ACCOUNT;
             }
             // Drop this sync request if it isn't syncable.
@@ -3456,14 +3457,14 @@ public class SyncManager {
                     Slog.v(TAG, "    Dropping sync operation: "
                             + "isSyncable == SYNCABLE_NO_ACCOUNT_ACCESS");
                 }
-                Slog.wtf(TAG, "SYNC_OP_STATE_INVALID_NO_ACCOUNT_ACCESS");
+                logAccountError("SYNC_OP_STATE_INVALID_NO_ACCOUNT_ACCESS");
                 return SYNC_OP_STATE_INVALID_NO_ACCOUNT_ACCESS;
             }
             if (state == AuthorityInfo.NOT_SYNCABLE) {
                 if (isLoggable) {
                     Slog.v(TAG, "    Dropping sync operation: isSyncable == NOT_SYNCABLE");
                 }
-                Slog.wtf(TAG, "SYNC_OP_STATE_INVALID: NOT_SYNCABLE");
+                logAccountError("SYNC_OP_STATE_INVALID: NOT_SYNCABLE");
                 return SYNC_OP_STATE_INVALID_NOT_SYNCABLE;
             }
 
@@ -3482,10 +3483,18 @@ public class SyncManager {
                 if (isLoggable) {
                     Slog.v(TAG, "    Dropping sync operation: disallowed by settings/network.");
                 }
-                Slog.wtf(TAG, "SYNC_OP_STATE_INVALID: disallowed by settings/network");
+                logAccountError("SYNC_OP_STATE_INVALID: disallowed by settings/network");
                 return SYNC_OP_STATE_INVALID_SYNC_DISABLED;
             }
             return SYNC_OP_STATE_VALID;
+        }
+
+        private void logAccountError(String message) {
+            if (USE_WTF_FOR_ACCOUNT_ERROR) {
+                Slog.wtf(TAG, message);
+            } else {
+                Slog.e(TAG, message);
+            }
         }
 
         private boolean dispatchSyncOperation(SyncOperation op) {

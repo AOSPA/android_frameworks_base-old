@@ -28,6 +28,7 @@ import static android.net.NetworkStats.SET_DEFAULT;
 import static android.net.NetworkStats.TAG_NONE;
 import static android.net.NetworkStats.UID_ALL;
 import static android.net.TrafficStats.UID_REMOVED;
+import static android.net.NetworkUtils.multiplySafeByRational;
 import static android.text.format.DateUtils.WEEK_IN_MILLIS;
 
 import static com.android.server.net.NetworkStatsService.TAG;
@@ -282,11 +283,13 @@ public class NetworkStatsCollection implements FileRotator.Reader {
             }
 
             final long rawBytes = entry.rxBytes + entry.txBytes;
-            final long rawRxBytes = entry.rxBytes;
-            final long rawTxBytes = entry.txBytes;
+            final long rawRxBytes = entry.rxBytes == 0 ? 1 : entry.rxBytes;
+            final long rawTxBytes = entry.txBytes == 0 ? 1 : entry.txBytes;
             final long targetBytes = augmentPlan.getDataUsageBytes();
-            final long targetRxBytes = combined.multiplySafe(targetBytes, rawRxBytes, rawBytes);
-            final long targetTxBytes = combined.multiplySafe(targetBytes, rawTxBytes, rawBytes);
+
+            final long targetRxBytes = multiplySafeByRational(targetBytes, rawRxBytes, rawBytes);
+            final long targetTxBytes = multiplySafeByRational(targetBytes, rawTxBytes, rawBytes);
+
 
             // Scale all matching buckets to reach anchor target
             final long beforeTotal = combined.getTotalBytes();
@@ -294,8 +297,10 @@ public class NetworkStatsCollection implements FileRotator.Reader {
                 combined.getValues(i, entry);
                 if (entry.bucketStart >= augmentStart
                         && entry.bucketStart + entry.bucketDuration <= augmentEnd) {
-                    entry.rxBytes = combined.multiplySafe(targetRxBytes, entry.rxBytes, rawRxBytes);
-                    entry.txBytes = combined.multiplySafe(targetTxBytes, entry.txBytes, rawTxBytes);
+                    entry.rxBytes = multiplySafeByRational(
+                            targetRxBytes, entry.rxBytes, rawRxBytes);
+                    entry.txBytes = multiplySafeByRational(
+                            targetTxBytes, entry.txBytes, rawTxBytes);
                     // We purposefully clear out packet counters to indicate
                     // that this data has been augmented.
                     entry.rxPackets = 0;

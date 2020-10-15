@@ -19,6 +19,7 @@ package android.telephony.ims.stub;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.os.Bundle;
@@ -267,6 +268,7 @@ public class ImsUtImplBase {
     /**
      * Retrieves the configuration of the call forward for specified service class.
      */
+    @SuppressLint("AcronymName")
     public int queryCFForServiceClass(int condition, String number,
             int serviceClass) {
         return -1;

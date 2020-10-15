@@ -66,8 +66,9 @@ public:
                             int32_t destStorageId, const std::string& destPath,
                             int32_t* _aidl_return) final;
     binder::Status unlink(int32_t storageId, const std::string& path, int32_t* _aidl_return) final;
-    binder::Status isFileRangeLoaded(int32_t storageId, const std::string& path, int64_t start,
-                                     int64_t end, bool* _aidl_return) final;
+    binder::Status isFileFullyLoaded(int32_t storageId, const std::string& path,
+                                     int32_t* _aidl_return) final;
+    binder::Status getLoadingProgress(int32_t storageId, float* _aidl_return) final;
     binder::Status getMetadataByPath(int32_t storageId, const std::string& path,
                                      std::vector<uint8_t>* _aidl_return) final;
     binder::Status getMetadataById(int32_t storageId, const std::vector<uint8_t>& id,
@@ -80,6 +81,12 @@ public:
                                            const std::string& abi, bool extractNativeLibs,
                                            bool* _aidl_return) final;
     binder::Status waitForNativeBinariesExtraction(int storageId, bool* _aidl_return) final;
+    binder::Status registerLoadingProgressListener(
+            int32_t storageId,
+            const ::android::sp<::android::os::incremental::IStorageLoadingProgressListener>&
+                    progressListener,
+            bool* _aidl_return) final;
+    binder::Status unregisterLoadingProgressListener(int32_t storageId, bool* _aidl_return) final;
 
 private:
     android::incremental::IncrementalService mImpl;

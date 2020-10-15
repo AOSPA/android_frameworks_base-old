@@ -123,9 +123,14 @@ public final class SystemUiDeviceConfigFlags {
     // Flag related to Privacy Indicators
 
     /**
-     * Whether the Permissions Hub is showing.
+     * Whether to show the complete ongoing app ops chip.
      */
     public static final String PROPERTY_PERMISSIONS_HUB_ENABLED = "permissions_hub_2_enabled";
+
+    /**
+     * Whether to show app ops chip for just microphone + camera.
+     */
+    public static final String PROPERTY_MIC_CAMERA_ENABLED = "camera_mic_icons_enabled";
 
     // Flags related to Assistant
 
@@ -385,9 +390,14 @@ public final class SystemUiDeviceConfigFlags {
     public static final String CHOOSER_TARGET_RANKING_ENABLED = "chooser_target_ranking_enabled";
 
     /**
-     * (boolean) Whether to enable user-drag resizing for PIP.
+     * (boolean) Whether to enable pinch resizing for PIP.
      */
-    public static final String PIP_USER_RESIZE = "pip_user_resize";
+    public static final String PIP_PINCH_RESIZE = "pip_pinch_resize";
+
+    /**
+     * (boolean) Whether to enable stashing for PIP.
+     */
+    public static final String PIP_STASHING = "pip_stashing";
 
     /**
      * (float) Bottom height in DP for Back Gesture.
@@ -403,6 +413,22 @@ public final class SystemUiDeviceConfigFlags {
      * (float) Slop multiplier for Back Gesture.
      */
     public static final String BACK_GESTURE_SLOP_MULTIPLIER = "back_gesture_slop_multiplier";
+
+    /**
+     * (long) Screenshot keychord delay (how long the buttons must be pressed), in ms
+     */
+    public static final String SCREENSHOT_KEYCHORD_DELAY = "screenshot_keychord_delay";
+
+    /**
+     * (boolean) Whether to use an ML model for the Back Gesture.
+     */
+    public static final String USE_BACK_GESTURE_ML_MODEL = "use_back_gesture_ml_model";
+
+    /**
+     * (float) Threshold for Back Gesture ML model prediction.
+     */
+    public static final String BACK_GESTURE_ML_MODEL_THRESHOLD = "back_gesture_ml_model_threshold";
+
 
     private SystemUiDeviceConfigFlags() {
     }

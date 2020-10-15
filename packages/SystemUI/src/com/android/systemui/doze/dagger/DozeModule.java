@@ -33,7 +33,6 @@ import com.android.systemui.doze.DozeScreenBrightness;
 import com.android.systemui.doze.DozeScreenState;
 import com.android.systemui.doze.DozeScreenStatePreventingAdapter;
 import com.android.systemui.doze.DozeSensors;
-import com.android.systemui.doze.DozeService;
 import com.android.systemui.doze.DozeSuspendScreenStatePreventingAdapter;
 import com.android.systemui.doze.DozeTriggers;
 import com.android.systemui.doze.DozeUi;
@@ -42,6 +41,8 @@ import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.util.sensors.AsyncSensorManager;
 import com.android.systemui.util.wakelock.DelayedWakeLock;
 import com.android.systemui.util.wakelock.WakeLock;
+
+import java.util.Optional;
 
 import dagger.Module;
 import dagger.Provides;
@@ -52,9 +53,9 @@ public abstract class DozeModule {
     @Provides
     @DozeScope
     @WrappedService
-    static DozeMachine.Service providesWrappedService(DozeService dozeService, DozeHost dozeHost,
-            DozeParameters dozeParameters) {
-        DozeMachine.Service wrappedService = dozeService;
+    static DozeMachine.Service providesWrappedService(DozeMachine.Service dozeMachineService,
+            DozeHost dozeHost, DozeParameters dozeParameters) {
+        DozeMachine.Service wrappedService = dozeMachineService;
         wrappedService = new DozeBrightnessHostForwarder(wrappedService, dozeHost);
         wrappedService = DozeScreenStatePreventingAdapter.wrapIfNeeded(
                 wrappedService, dozeParameters);
@@ -92,8 +93,9 @@ public abstract class DozeModule {
 
     @Provides
     @BrightnessSensor
-    static Sensor providesBrightnessSensor(AsyncSensorManager sensorManager, Context context) {
-        return DozeSensors.findSensorWithType(sensorManager,
-                context.getString(R.string.doze_brightness_sensor_type));
+    static Optional<Sensor> providesBrightnessSensor(
+            AsyncSensorManager sensorManager, Context context) {
+        return Optional.ofNullable(DozeSensors.findSensorWithType(sensorManager,
+                context.getString(R.string.doze_brightness_sensor_type)));
     }
 }

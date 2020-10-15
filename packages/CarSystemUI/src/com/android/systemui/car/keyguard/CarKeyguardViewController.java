@@ -18,7 +18,6 @@ package com.android.systemui.car.keyguard;
 
 import android.car.Car;
 import android.car.user.CarUserManager;
-import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
@@ -28,28 +27,25 @@ import android.view.ViewRootImpl;
 
 import androidx.annotation.VisibleForTesting;
 
-import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardViewController;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.R;
-import com.android.systemui.SystemUIFactory;
 import com.android.systemui.car.CarServiceProvider;
 import com.android.systemui.car.navigationbar.CarNavigationBarController;
 import com.android.systemui.car.window.OverlayViewController;
 import com.android.systemui.car.window.OverlayViewGlobalStateController;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
-import com.android.systemui.keyguard.DismissCallbackRegistry;
-import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.KeyguardBouncer;
+import com.android.systemui.statusbar.phone.KeyguardBouncer.Factory;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 import dagger.Lazy;
 
@@ -57,24 +53,20 @@ import dagger.Lazy;
  * Automotive implementation of the {@link KeyguardViewController}. It controls the Keyguard View
  * that is mounted to the SystemUIOverlayWindow.
  */
-@Singleton
+@SysUISingleton
 public class CarKeyguardViewController extends OverlayViewController implements
         KeyguardViewController {
     private static final String TAG = "CarKeyguardViewController";
     private static final boolean DEBUG = true;
 
-    private final Context mContext;
     private final Handler mHandler;
     private final CarServiceProvider mCarServiceProvider;
     private final KeyguardStateController mKeyguardStateController;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final Lazy<BiometricUnlockController> mBiometricUnlockControllerLazy;
-    private final LockPatternUtils mLockPatternUtils;
-    private final FalsingManager mFalsingManager;
-    private final Lazy<KeyguardBypassController> mKeyguardBypassControllerLazy;
-    private final DismissCallbackRegistry mDismissCallbackRegistry;
     private final ViewMediatorCallback mViewMediatorCallback;
     private final CarNavigationBarController mCarNavigationBarController;
+    private final Factory mKeyguardBouncerFactory;
     // Needed to instantiate mBouncer.
     private final KeyguardBouncer.BouncerExpansionCallback
             mExpansionCallback = new KeyguardBouncer.BouncerExpansionCallback() {
@@ -107,7 +99,6 @@ public class CarKeyguardViewController extends OverlayViewController implements
 
     @Inject
     public CarKeyguardViewController(
-            Context context,
             @Main Handler mainHandler,
             CarServiceProvider carServiceProvider,
             OverlayViewGlobalStateController overlayViewGlobalStateController,
@@ -116,42 +107,31 @@ public class CarKeyguardViewController extends OverlayViewController implements
             Lazy<BiometricUnlockController> biometricUnlockControllerLazy,
             ViewMediatorCallback viewMediatorCallback,
             CarNavigationBarController carNavigationBarController,
-            /* The params below are only used to reuse KeyguardBouncer */
-            LockPatternUtils lockPatternUtils,
-            DismissCallbackRegistry dismissCallbackRegistry,
-            FalsingManager falsingManager,
-            Lazy<KeyguardBypassController> keyguardBypassControllerLazy) {
+            KeyguardBouncer.Factory keyguardBouncerFactory) {
 
         super(R.id.keyguard_stub, overlayViewGlobalStateController);
 
-        mContext = context;
         mHandler = mainHandler;
         mCarServiceProvider = carServiceProvider;
         mKeyguardStateController = keyguardStateController;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mBiometricUnlockControllerLazy = biometricUnlockControllerLazy;
-        mLockPatternUtils = lockPatternUtils;
-        mFalsingManager = falsingManager;
-        mKeyguardBypassControllerLazy = keyguardBypassControllerLazy;
-        mDismissCallbackRegistry = dismissCallbackRegistry;
         mViewMediatorCallback = viewMediatorCallback;
         mCarNavigationBarController = carNavigationBarController;
+        mKeyguardBouncerFactory = keyguardBouncerFactory;
 
         registerUserSwitchedListener();
     }
 
     @Override
-    protected boolean shouldShowNavigationBar() {
+    protected boolean shouldShowNavigationBarInsets() {
         return true;
     }
 
     @Override
     public void onFinishInflate() {
-        mBouncer = SystemUIFactory.getInstance().createKeyguardBouncer(mContext,
-                mViewMediatorCallback, mLockPatternUtils,
-                getLayout().findViewById(R.id.keyguard_container), mDismissCallbackRegistry,
-                mExpansionCallback, mKeyguardStateController, mFalsingManager,
-                mKeyguardBypassControllerLazy.get());
+        mBouncer = mKeyguardBouncerFactory
+                .create(getLayout().findViewById(R.id.keyguard_container), mExpansionCallback);
         mBiometricUnlockControllerLazy.get().setKeyguardViewController(this);
     }
 
@@ -177,7 +157,6 @@ public class CarKeyguardViewController extends OverlayViewController implements
         mKeyguardStateController.notifyKeyguardState(mShowing, /* occluded= */ false);
         mCarNavigationBarController.showAllKeyguardButtons(/* isSetUp= */ true);
         start();
-        getOverlayViewGlobalStateController().setWindowFocusable(/* focusable= */ true);
         reset(/* hideBouncerWhenShowing= */ false);
         notifyKeyguardUpdateMonitor();
     }
@@ -192,7 +171,6 @@ public class CarKeyguardViewController extends OverlayViewController implements
         mBouncer.hide(/* destroyView= */ true);
         mCarNavigationBarController.hideAllKeyguardButtons(/* isSetUp= */ true);
         stop();
-        getOverlayViewGlobalStateController().setWindowFocusable(/* focusable= */ false);
         mKeyguardStateController.notifyKeyguardDoneFading();
         mHandler.post(mViewMediatorCallback::keyguardGone);
         notifyKeyguardUpdateMonitor();
@@ -237,7 +215,6 @@ public class CarKeyguardViewController extends OverlayViewController implements
     public void onCancelClicked() {
         if (mBouncer == null) return;
 
-        getOverlayViewGlobalStateController().setWindowFocusable(/* focusable= */ false);
         getOverlayViewGlobalStateController().setWindowNeedsInput(/* needsInput= */ false);
 
         mBouncer.hide(/* destroyView= */ true);
@@ -359,9 +336,8 @@ public class CarKeyguardViewController extends OverlayViewController implements
     public void registerStatusBar(StatusBar statusBar, ViewGroup container,
             NotificationPanelViewController notificationPanelViewController,
             BiometricUnlockController biometricUnlockController,
-            DismissCallbackRegistry dismissCallbackRegistry, ViewGroup lockIconContainer,
-            View notificationContainer, KeyguardBypassController bypassController,
-            FalsingManager falsingManager) {
+            ViewGroup lockIconContainer,
+            View notificationContainer, KeyguardBypassController bypassController) {
         // no-op
     }
 

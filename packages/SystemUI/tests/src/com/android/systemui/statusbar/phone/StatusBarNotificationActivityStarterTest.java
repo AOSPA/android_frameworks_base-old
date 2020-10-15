@@ -67,12 +67,13 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationTestHelper;
+import com.android.systemui.statusbar.notification.row.OnUserInteractionCallback;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.time.FakeSystemClock;
@@ -121,8 +122,6 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     private FeatureFlags mFeatureFlags;
     @Mock
     private NotifPipeline mNotifPipeline;
-    @Mock
-    private NotifCollection mNotifCollection;
 
     @Mock
     private ActivityIntentHelper mActivityIntentHelper;
@@ -130,6 +129,8 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     private PendingIntent mContentIntent;
     @Mock
     private Intent mContentIntentInner;
+    @Mock
+    private OnUserInteractionCallback mOnUserInteractionCallback;
     @Mock
     private NotificationActivityStarter mNotificationActivityStarter;
     private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
@@ -181,11 +182,9 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                         getContext(),
                         mock(CommandQueue.class),
                         mHandler,
-                        mHandler,
                         mUiBgExecutor,
                         mEntryManager,
                         mNotifPipeline,
-                        mNotifCollection,
                         mock(HeadsUpManagerPhone.class),
                         mActivityStarter,
                         mClickNotifier,
@@ -196,7 +195,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                         mBubbleController,
                         () -> mAssistManager,
                         mRemoteInputManager,
-                        mock(NotificationGroupManager.class),
+                        mock(NotificationGroupManagerLegacy.class),
                         mock(NotificationLockscreenUserManager.class),
                         mShadeController,
                         mKeyguardStateController,
@@ -207,7 +206,8 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
 
                         mFeatureFlags,
                         mock(MetricsLogger.class),
-                        mock(StatusBarNotificationActivityStarterLogger.class))
+                        mock(StatusBarNotificationActivityStarterLogger.class),
+                        mOnUserInteractionCallback)
                 .setStatusBar(mStatusBar)
                 .setNotificationPresenter(mock(NotificationPresenter.class))
                 .setNotificationPanelViewController(mock(NotificationPanelViewController.class))
@@ -230,9 +230,6 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // set up Handler to synchronously invoke the Runnable arg
         doAnswer(answerVoid(Runnable::run))
                 .when(mHandler).post(any(Runnable.class));
-
-        doAnswer(answerVoid(Runnable::run))
-                .when(mHandler).postAtFrontOfQueue(any(Runnable.class));
     }
 
     @Test
@@ -266,8 +263,8 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         verify(mClickNotifier).onNotificationClick(
                 eq(sbn.getKey()), any(NotificationVisibility.class));
 
-        // Notification is removed due to FLAG_AUTO_CANCEL
-        verify(mEntryManager).performRemoveNotification(eq(sbn), eq(REASON_CLICK));
+        // Notification calls dismiss callback to remove notification due to FLAG_AUTO_CANCEL
+        verify(mOnUserInteractionCallback).onDismiss(mNotificationRow.getEntry(), REASON_CLICK);
     }
 
     @Test
@@ -296,7 +293,8 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         verifyZeroInteractions(mContentIntent);
 
         // Notification should not be cancelled.
-        verify(mEntryManager, never()).performRemoveNotification(eq(sbn), anyInt());
+        verify(mOnUserInteractionCallback, never()).onDismiss(eq(mNotificationRow.getEntry()),
+                anyInt());
     }
 
     @Test
@@ -326,7 +324,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         verifyZeroInteractions(mContentIntent);
 
         // Notification should not be cancelled.
-        verify(mEntryManager, never()).performRemoveNotification(eq(sbn), anyInt());
+        verify(mEntryManager, never()).performRemoveNotification(eq(sbn), any(), anyInt());
     }
 
     @Test
@@ -358,6 +356,6 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         verifyNoMoreInteractions(mContentIntent);
 
         // Notification should not be cancelled.
-        verify(mEntryManager, never()).performRemoveNotification(eq(sbn), anyInt());
+        verify(mEntryManager, never()).performRemoveNotification(eq(sbn), any(), anyInt());
     }
 }

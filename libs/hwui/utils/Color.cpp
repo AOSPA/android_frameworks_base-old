@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <Properties.h>
 
 namespace android {
 namespace uirenderer {
@@ -342,6 +343,24 @@ SkColor LabToSRGB(const Lab& lab, SkAlpha alpha) {
             static_cast<uint8_t>(rgb.r * 255),
             static_cast<uint8_t>(rgb.g * 255),
             static_cast<uint8_t>(rgb.b * 255));
+}
+
+skcms_TransferFunction GetPQSkTransferFunction(float sdr_white_level) {
+    if (sdr_white_level <= 0.f) {
+        sdr_white_level = Properties::defaultSdrWhitePoint;
+    }
+    // The generic PQ transfer function produces normalized luminance values i.e.
+    // the range 0-1 represents 0-10000 nits for the reference display, but we
+    // want to map 1.0 to |sdr_white_level| nits so we need to scale accordingly.
+    const double w = 10000. / sdr_white_level;
+    // Distribute scaling factor W by scaling A and B with X ^ (1/F):
+    // ((A + Bx^C) / (D + Ex^C))^F * W = ((A + Bx^C) / (D + Ex^C) * W^(1/F))^F
+    // See https://crbug.com/1058580#c32 for discussion.
+    skcms_TransferFunction fn = SkNamedTransferFn::kPQ;
+    const double ws = pow(w, 1. / fn.f);
+    fn.a = ws * fn.a;
+    fn.b = ws * fn.b;
+    return fn;
 }
 
 }  // namespace uirenderer

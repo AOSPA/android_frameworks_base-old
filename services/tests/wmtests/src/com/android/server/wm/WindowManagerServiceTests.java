@@ -27,6 +27,8 @@ import static android.window.DisplayAreaOrganizer.FEATURE_VENDOR_FIRST;
 
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 
@@ -114,11 +116,11 @@ public class WindowManagerServiceTests extends WindowTestsBase {
         Task tappedStack = createTaskStackOnDisplay(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, display);
         Task tappedTask = createTaskInStack(tappedStack, 0 /* userId */);
-        spyOn(mWm.mActivityTaskManager);
+        spyOn(mWm.mAtmService);
 
         mWm.handleTaskFocusChange(tappedTask);
 
-        verify(mWm.mActivityTaskManager).setFocusedTask(tappedTask.mTaskId);
+        verify(mWm.mAtmService).setFocusedTask(tappedTask.mTaskId);
     }
 
     @Test
@@ -135,11 +137,11 @@ public class WindowManagerServiceTests extends WindowTestsBase {
         Task tappedStack = createTaskStackOnDisplay(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, display);
         Task tappedTask = createTaskInStack(tappedStack, 0 /* userId */);
-        spyOn(mWm.mActivityTaskManager);
+        spyOn(mWm.mAtmService);
 
         mWm.handleTaskFocusChange(tappedTask);
 
-        verify(mWm.mActivityTaskManager, never()).setFocusedTask(tappedTask.mTaskId);
+        verify(mWm.mAtmService, never()).setFocusedTask(tappedTask.mTaskId);
     }
 
     @Test
@@ -158,10 +160,20 @@ public class WindowManagerServiceTests extends WindowTestsBase {
         Task tappedStack = createTaskStackOnTaskDisplayArea(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, secondTda);
         Task tappedTask = createTaskInStack(tappedStack, 0 /* userId */);
-        spyOn(mWm.mActivityTaskManager);
+        spyOn(mWm.mAtmService);
 
         mWm.handleTaskFocusChange(tappedTask);
 
-        verify(mWm.mActivityTaskManager).setFocusedTask(tappedTask.mTaskId);
+        verify(mWm.mAtmService).setFocusedTask(tappedTask.mTaskId);
+    }
+
+    @Test
+    public void testDismissKeyguardCanWakeUp() {
+        doReturn(true).when(mWm).checkCallingPermission(anyString(), anyString());
+        spyOn(mWm.mAtmInternal);
+        doReturn(true).when(mWm.mAtmInternal).isDreaming();
+        doNothing().when(mWm.mAtmService.mStackSupervisor).wakeUp(anyString());
+        mWm.dismissKeyguard(null, "test-dismiss-keyguard");
+        verify(mWm.mAtmService.mStackSupervisor).wakeUp(anyString());
     }
 }

@@ -26,10 +26,8 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.RemoteException;
 import android.os.ServiceManager;
-import android.telephony.Annotation.ApnType;
 import android.telephony.Annotation.CallState;
 import android.telephony.Annotation.DataActivityType;
-import android.telephony.Annotation.DataFailureCause;
 import android.telephony.Annotation.DisconnectCauses;
 import android.telephony.Annotation.NetworkType;
 import android.telephony.Annotation.PreciseCallStates;
@@ -37,7 +35,6 @@ import android.telephony.Annotation.PreciseDisconnectCauses;
 import android.telephony.Annotation.RadioPowerState;
 import android.telephony.Annotation.SimActivationState;
 import android.telephony.Annotation.SrvccState;
-import android.telephony.data.ApnSetting;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.ims.ImsReasonInfo;
 import android.util.Log;
@@ -111,7 +108,6 @@ public class TelephonyRegistryManager {
         IOnSubscriptionsChangedListener callback = new IOnSubscriptionsChangedListener.Stub() {
             @Override
             public void onSubscriptionsChanged () {
-                Log.d(TAG, "onSubscriptionsChangedListener callback received.");
                 executor.execute(() -> listener.onSubscriptionsChanged());
             }
         };
@@ -226,7 +222,7 @@ public class TelephonyRegistryManager {
      * @param notifyNow Whether to notify instantly
      */
     public void listenForSubscriber(int subId, @NonNull String pkg, @NonNull String featureId,
-            @NonNull PhoneStateListener listener, int events, boolean notifyNow) {
+            @NonNull PhoneStateListener listener, long events, boolean notifyNow) {
         try {
             // subId from PhoneStateListener is deprecated Q on forward, use the subId from
             // TelephonyManager instance. Keep using subId from PhoneStateListener for pre-Q.
@@ -414,17 +410,16 @@ public class TelephonyRegistryManager {
      * @param subId for which data connection state changed.
      * @param slotIndex for which data connections state changed. Can be derived from subId except
      * when subId is invalid.
-     * @param apnType the apn type bitmask, defined with {@code ApnSetting#TYPE_*} flags.
      * @param preciseState the PreciseDataConnectionState
      *
-     * @see android.telephony.PreciseDataConnection
+     * @see PreciseDataConnectionState
      * @see TelephonyManager#DATA_DISCONNECTED
      */
     public void notifyDataConnectionForSubscriber(int slotIndex, int subId,
-            @ApnType int apnType, @Nullable PreciseDataConnectionState preciseState) {
+            @NonNull PreciseDataConnectionState preciseState) {
         try {
             sRegistry.notifyDataConnectionForSubscriber(
-                    slotIndex, subId, apnType, preciseState);
+                    slotIndex, subId, preciseState);
         } catch (RemoteException ex) {
             // system process is dead
         }
@@ -624,25 +619,6 @@ public class TelephonyRegistryManager {
     }
 
     /**
-     * Notify precise data connection failed cause on certain subscription.
-     *
-     * @param subId for which data connection failed.
-     * @param slotIndex for which data conenction failed. Can be derived from subId except when
-     * subId is invalid.
-     * @param apnType the apn type bitmask, defined with {@code ApnSetting#TYPE_*} flags.
-     * @param apn the APN {@link ApnSetting#getApnName()} of this data connection.
-     * @param failCause data fail cause.
-     */
-    public void notifyPreciseDataConnectionFailed(int subId, int slotIndex, @ApnType int apnType,
-            @Nullable String apn, @DataFailureCause int failCause) {
-        try {
-            sRegistry.notifyPreciseDataConnectionFailed(slotIndex, subId, apnType, apn, failCause);
-        } catch (RemoteException ex) {
-            // system process is dead
-        }
-    }
-
-    /**
      * Notify single Radio Voice Call Continuity (SRVCC) state change for the currently active call
      * on certain subscription.
      *
@@ -784,6 +760,21 @@ public class TelephonyRegistryManager {
             int slotIndex, int subId, @NonNull BarringInfo barringInfo) {
         try {
             sRegistry.notifyBarringInfoChanged(slotIndex, subId, barringInfo);
+        } catch (RemoteException ex) {
+            // system server crash
+        }
+    }
+
+    /**
+     * Notify {@link PhysicalChannelConfig} has changed for a specific subscription.
+     *
+     * @param subId the subId
+     * @param configs a list of {@link PhysicalChannelConfig}, the configs of physical channel.
+     */
+    public void notifyPhysicalChannelConfigurationForSubscriber(
+            int subId, List<PhysicalChannelConfig> configs) {
+        try {
+            sRegistry.notifyPhysicalChannelConfigurationForSubscriber(subId, configs);
         } catch (RemoteException ex) {
             // system server crash
         }

@@ -17,13 +17,16 @@
 package com.android.systemui.accessibility;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.RemoteException;
 import android.testing.AndroidTestingRunner;
+import android.testing.TestableLooper;
 import android.view.Display;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.IWindowMagnificationConnection;
@@ -43,6 +46,7 @@ import org.mockito.MockitoAnnotations;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
+@TestableLooper.RunWithLooper
 public class WindowMagnificationTest extends SysuiTestCase {
 
     @Mock
@@ -95,5 +99,14 @@ public class WindowMagnificationTest extends SysuiTestCase {
 
         verify(connectionCallback).onWindowMagnifierBoundsChanged(Display.DEFAULT_DISPLAY,
                 testBounds);
+    }
+
+    @Test
+    public void onConfigurationChanged_updateModeSwitches() {
+        final Configuration config = new Configuration();
+        config.densityDpi = Configuration.DENSITY_DPI_ANY;
+        mWindowMagnification.onConfigurationChanged(config);
+
+        verify(mModeSwitchesController).onConfigurationChanged(anyInt());
     }
 }

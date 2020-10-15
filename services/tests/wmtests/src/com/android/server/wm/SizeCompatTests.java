@@ -35,7 +35,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doCallRealMethod;
 
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -64,19 +66,19 @@ import java.util.ArrayList;
 @MediumTest
 @Presubmit
 @RunWith(WindowTestRunner.class)
-public class SizeCompatTests extends ActivityTestsBase {
+public class SizeCompatTests extends WindowTestsBase {
     private Task mStack;
     private Task mTask;
     private ActivityRecord mActivity;
 
     private void setUpApp(DisplayContent display) {
-        mStack = new StackBuilder(mRootWindowContainer).setDisplay(display).build();
+        mStack = new TaskBuilder(mSupervisor).setDisplay(display).setCreateActivity(true).build();
         mTask = mStack.getBottomMostTask();
         mActivity = mTask.getTopNonFinishingActivity();
     }
 
     private void setUpDisplaySizeWithApp(int dw, int dh) {
-        final TestDisplayContent.Builder builder = new TestDisplayContent.Builder(mService, dw, dh);
+        final TestDisplayContent.Builder builder = new TestDisplayContent.Builder(mAtm, dw, dh);
         setUpApp(builder.build());
     }
 
@@ -90,9 +92,9 @@ public class SizeCompatTests extends ActivityTestsBase {
         prepareUnresizable(1.5f /* maxAspect */, SCREEN_ORIENTATION_UNSPECIFIED);
 
         final Rect originalOverrideBounds = new Rect(mActivity.getBounds());
-        resizeDisplay(mStack.getDisplay(), 600, 1200);
+        resizeDisplay(mStack.mDisplayContent, 600, 1200);
         // The visible activity should recompute configuration according to the last parent bounds.
-        mService.restartActivityProcessIfVisible(mActivity.appToken);
+        mAtm.restartActivityProcessIfVisible(mActivity.appToken);
 
         assertEquals(Task.ActivityState.RESTARTING_PROCESS, mActivity.getState());
         assertNotEquals(originalOverrideBounds, mActivity.getBounds());
@@ -102,7 +104,7 @@ public class SizeCompatTests extends ActivityTestsBase {
     public void testKeepBoundsWhenChangingFromFreeformToFullscreen() {
         removeGlobalMinSizeRestriction();
         // create freeform display and a freeform app
-        DisplayContent display = new TestDisplayContent.Builder(mService, 2000, 1000)
+        DisplayContent display = new TestDisplayContent.Builder(mAtm, 2000, 1000)
                 .setCanRotate(false)
                 .setWindowingMode(WindowConfiguration.WINDOWING_MODE_FREEFORM).build();
         setUpApp(display);
@@ -135,9 +137,7 @@ public class SizeCompatTests extends ActivityTestsBase {
     @Test
     public void testFixedAspectRatioBoundsWithDecorInSquareDisplay() {
         final int notchHeight = 100;
-        setUpApp(new TestDisplayContent.Builder(mService, 600, 800).setNotch(notchHeight).build());
-        // Rotation is ignored so because the display size is close to square (700/600<1.333).
-        assertTrue(mActivity.mDisplayContent.ignoreRotationForApps());
+        setUpApp(new TestDisplayContent.Builder(mAtm, 600, 800).setNotch(notchHeight).build());
 
         final Rect displayBounds = mActivity.mDisplayContent.getWindowConfiguration().getBounds();
         final float aspectRatio = 1.2f;
@@ -161,23 +161,14 @@ public class SizeCompatTests extends ActivityTestsBase {
         mActivity.setRequestedOrientation(SCREEN_ORIENTATION_LANDSCAPE);
         assertFitted();
 
-        // After the orientation of activity is changed, even display is not rotated, the aspect
-        // ratio should be the same (bounds=[0, 0 - 600, 600], appBounds=[0, 100 - 600, 600]).
+        // After the orientation of activity is changed, the display is rotated, the aspect
+        // ratio should be the same (bounds=[100, 0 - 800, 583], appBounds=[100, 0 - 800, 583]).
         assertEquals(appBounds.width(), appBounds.height() * aspectRatio, 0.5f /* delta */);
-        // The notch is still on top.
-        assertEquals(mActivity.getBounds().height(), appBounds.height() + notchHeight);
+        // The notch is no longer on top.
+        assertEquals(appBounds, mActivity.getBounds());
 
         mActivity.setRequestedOrientation(SCREEN_ORIENTATION_PORTRAIT);
         assertFitted();
-
-        // Close-to-square display can rotate without being restricted by the requested orientation.
-        // The notch becomes on the left side. The activity is horizontal centered in 100 ~ 800.
-        // So the bounds and appBounds will be [200, 0 - 700, 600] (500x600) that is still fitted.
-        // Left = 100 + (800 - 100 - 500) / 2 = 200.
-        rotateDisplay(mActivity.mDisplayContent, ROTATION_90);
-        assertFitted();
-        assertEquals(appBounds.left,
-                notchHeight + (displayBounds.width() - notchHeight - appBounds.width()) / 2);
     }
 
     @Test
@@ -186,10 +177,10 @@ public class SizeCompatTests extends ActivityTestsBase {
 
         // Make a new less-tall display with lower density
         final DisplayContent newDisplay =
-                new TestDisplayContent.Builder(mService, 1000, 2000)
+                new TestDisplayContent.Builder(mAtm, 1000, 2000)
                         .setDensityDpi(200).build();
 
-        mActivity = new ActivityBuilder(mService)
+        mActivity = new ActivityBuilder(mAtm)
                 .setTask(mTask)
                 .setResizeMode(RESIZE_MODE_UNRESIZEABLE)
                 .setMaxAspectRatio(1.5f)
@@ -216,22 +207,50 @@ public class SizeCompatTests extends ActivityTestsBase {
 
         final Rect origBounds = new Rect(mActivity.getBounds());
         final Rect currentBounds = mActivity.getWindowConfiguration().getBounds();
+        final DisplayContent display = mActivity.mDisplayContent;
 
         // Change the size of current display.
-        resizeDisplay(mStack.getDisplay(), 1000, 2000);
-
+        resizeDisplay(display, 1000, 2000);
+        // The bounds should be [100, 0 - 1100, 2500].
         assertEquals(origBounds.width(), currentBounds.width());
         assertEquals(origBounds.height(), currentBounds.height());
         assertScaled();
+
+        // The scale is 2000/2500=0.8. The horizontal centered offset is (1000-(1000*0.8))/2=100.
+        final float scale = (float) display.mBaseDisplayHeight / currentBounds.height();
+        final int offsetX = (int) (display.mBaseDisplayWidth - (origBounds.width() * scale)) / 2;
+        assertEquals(offsetX, currentBounds.left);
 
         // The position of configuration bounds should be the same as compat bounds.
         assertEquals(mActivity.getBounds().left, currentBounds.left);
         assertEquals(mActivity.getBounds().top, currentBounds.top);
 
         // Change display size to a different orientation
-        resizeDisplay(mStack.getDisplay(), 2000, 1000);
+        resizeDisplay(display, 2000, 1000);
+        // The bounds should be [800, 0 - 1800, 2500].
         assertEquals(origBounds.width(), currentBounds.width());
         assertEquals(origBounds.height(), currentBounds.height());
+        assertEquals(Configuration.ORIENTATION_LANDSCAPE, display.getConfiguration().orientation);
+        assertEquals(Configuration.ORIENTATION_PORTRAIT, mActivity.getConfiguration().orientation);
+
+        // The previous resize operation doesn't consider the rotation change after size changed.
+        // These setups apply the requested orientation to rotation as real case that the top fixed
+        // portrait activity will determine the display rotation.
+        final DisplayRotation displayRotation = display.getDisplayRotation();
+        doCallRealMethod().when(displayRotation).updateRotationUnchecked(anyBoolean());
+        // Skip unrelated layout procedures.
+        mAtm.deferWindowLayout();
+        display.reconfigureDisplayLocked();
+        displayRotation.updateOrientation(display.getOrientation(), true /* forceUpdate */);
+        display.sendNewConfiguration();
+
+        assertEquals(Configuration.ORIENTATION_PORTRAIT, display.getConfiguration().orientation);
+        assertEquals(Configuration.ORIENTATION_PORTRAIT, mActivity.getConfiguration().orientation);
+        // The size should still be in portrait [100, 0 - 1100, 2500] = 1000x2500.
+        assertEquals(origBounds.width(), currentBounds.width());
+        assertEquals(origBounds.height(), currentBounds.height());
+        assertEquals(offsetX, currentBounds.left);
+        assertScaled();
     }
 
     @Test
@@ -262,7 +281,7 @@ public class SizeCompatTests extends ActivityTestsBase {
 
     @Test
     public void testAspectRatioMatchParentBoundsAndImeAttachable() {
-        setUpApp(new TestDisplayContent.Builder(mService, 1000, 2000)
+        setUpApp(new TestDisplayContent.Builder(mAtm, 1000, 2000)
                 .setSystemDecorations(true).build());
         prepareUnresizable(2f /* maxAspect */, SCREEN_ORIENTATION_UNSPECIFIED);
         assertFitted();
@@ -293,7 +312,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         final int origHeight = configBounds.height();
 
         final int notchHeight = 100;
-        final DisplayContent newDisplay = new TestDisplayContent.Builder(mService, 2000, 1000)
+        final DisplayContent newDisplay = new TestDisplayContent.Builder(mAtm, 2000, 1000)
                 .setCanRotate(false).setNotch(notchHeight).build();
 
         // Move the non-resizable activity to the new display.
@@ -327,7 +346,7 @@ public class SizeCompatTests extends ActivityTestsBase {
     public void testFixedOrientRotateCutoutDisplay() {
         // Create a display with a notch/cutout
         final int notchHeight = 60;
-        setUpApp(new TestDisplayContent.Builder(mService, 1000, 2500)
+        setUpApp(new TestDisplayContent.Builder(mAtm, 1000, 2500)
                 .setNotch(notchHeight).build());
         // Bounds=[0, 0 - 1000, 1460], AppBounds=[0, 60 - 1000, 1460].
         prepareUnresizable(1.4f /* maxAspect */, SCREEN_ORIENTATION_PORTRAIT);
@@ -412,7 +431,7 @@ public class SizeCompatTests extends ActivityTestsBase {
     public void testResetNonVisibleActivity() {
         setUpDisplaySizeWithApp(1000, 2500);
         prepareUnresizable(1.5f, SCREEN_ORIENTATION_UNSPECIFIED);
-        final DisplayContent display = mStack.getDisplay();
+        final DisplayContent display = mStack.mDisplayContent;
         // Resize the display so the activity is in size compatibility mode.
         resizeDisplay(display, 900, 1800);
 
@@ -430,14 +449,14 @@ public class SizeCompatTests extends ActivityTestsBase {
         // Change display density
         display.mBaseDisplayDensity = (int) (0.7f * display.mBaseDisplayDensity);
         display.computeScreenConfiguration(rotatedConfig);
-        mService.mAmInternal = mock(ActivityManagerInternal.class);
+        mAtm.mAmInternal = mock(ActivityManagerInternal.class);
         display.onRequestedOverrideConfigurationChanged(rotatedConfig);
 
         // The override configuration should be reset and the activity's process will be killed.
         assertFitted();
         verify(mActivity).restartProcessIfVisible();
-        waitHandlerIdle(mService.mH);
-        verify(mService.mAmInternal).killProcess(
+        waitHandlerIdle(mAtm.mH);
+        verify(mAtm.mAmInternal).killProcess(
                 eq(mActivity.app.mName), eq(mActivity.app.mUid), anyString());
     }
 
@@ -454,7 +473,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         assertFitted();
 
         final ArrayList<IBinder> compatTokens = new ArrayList<>();
-        mService.getTaskChangeNotificationController().registerTaskStackListener(
+        mAtm.getTaskChangeNotificationController().registerTaskStackListener(
                 new TaskStackListener() {
                     @Override
                     public void onSizeCompatModeActivityChanged(int displayId,
@@ -464,7 +483,7 @@ public class SizeCompatTests extends ActivityTestsBase {
                 });
 
         // Resize the display so that the activity exercises size-compat mode.
-        resizeDisplay(mStack.getDisplay(), 1000, 2500);
+        resizeDisplay(mStack.mDisplayContent, 1000, 2500);
 
         // Expect the exact token when the activity is in size compatibility mode.
         assertEquals(1, compatTokens.size());
@@ -477,7 +496,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         activity.restartProcessIfVisible();
         // The full lifecycle isn't hooked up so manually set state to resumed
         activity.setState(Task.ActivityState.RESUMED, "testHandleActivitySizeCompatMode");
-        mStack.getDisplay().handleActivitySizeCompatModeIfNeeded(activity);
+        mStack.mDisplayContent.handleActivitySizeCompatModeIfNeeded(activity);
 
         // Expect null token when switching to non-size-compat mode activity.
         assertEquals(1, compatTokens.size());
@@ -492,7 +511,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         mActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_RESIZEABLE;
 
         // Create a size compat activity on the same task.
-        final ActivityRecord activity = new ActivityBuilder(mService)
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setTask(mTask)
                 .setResizeMode(ActivityInfo.RESIZE_MODE_UNRESIZEABLE)
                 .setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
@@ -516,7 +535,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         final int dw = 1000;
         final int dh = 2500;
         final int notchHeight = 200;
-        setUpApp(new TestDisplayContent.Builder(mService, dw, dh).setNotch(notchHeight).build());
+        setUpApp(new TestDisplayContent.Builder(mAtm, dw, dh).setNotch(notchHeight).build());
         addStatusBar(mActivity.mDisplayContent);
 
         mActivity.setVisible(false);
@@ -547,7 +566,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         assertEquals(new Rect(mActivity.getBounds().left, 0, dh - mActivity.getBounds().right, 0),
                 mActivity.getLetterboxInsets());
 
-        final StatusBarController statusBarController =
+        final BarController statusBarController =
                 mActivity.mDisplayContent.getDisplayPolicy().getStatusBarController();
         // The activity doesn't fill the display, so the letterbox of the rotated activity is
         // overlapped with the rotated content frame of status bar. Hence the status bar shouldn't
@@ -568,7 +587,9 @@ public class SizeCompatTests extends ActivityTestsBase {
     private static WindowState addWindowToActivity(ActivityRecord activity) {
         final WindowManager.LayoutParams params = new WindowManager.LayoutParams();
         params.type = WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
-        final WindowTestUtils.TestWindowState w = new WindowTestUtils.TestWindowState(
+        params.setFitInsetsSides(0);
+        params.setFitInsetsTypes(0);
+        final TestWindowState w = new TestWindowState(
                 activity.mWmService, mock(Session.class), new TestIWindow(), params, activity);
         WindowTestsBase.makeWindowVisible(w);
         w.mWinAnimator.mDrawState = WindowStateAnimator.HAS_DRAWN;
@@ -581,7 +602,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         doReturn(true).when(displayPolicy).hasStatusBar();
         displayPolicy.onConfigurationChanged();
 
-        final WindowTestUtils.TestWindowToken token = WindowTestUtils.createTestWindowToken(
+        final TestWindowToken token = createTestWindowToken(
                 WindowManager.LayoutParams.TYPE_STATUS_BAR, displayContent);
         final WindowManager.LayoutParams attrs =
                 new WindowManager.LayoutParams(WindowManager.LayoutParams.TYPE_STATUS_BAR);
@@ -589,7 +610,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         attrs.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         attrs.setFitInsetsTypes(0 /* types */);
-        final WindowTestUtils.TestWindowState statusBar = new WindowTestUtils.TestWindowState(
+        final TestWindowState statusBar = new TestWindowState(
                 displayContent.mWmService, mock(Session.class), new TestIWindow(), attrs, token);
         token.addWindow(statusBar);
         statusBar.setRequestedSize(displayContent.mBaseDisplayWidth,

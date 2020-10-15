@@ -85,7 +85,7 @@ public class BiometricScheduler {
         static final int STATE_WAITING_FOR_COOKIE = 4;
 
         /**
-         * The {@link ClientMonitor.FinishCallback} has been invoked and the client is finished.
+         * The {@link ClientMonitor.Callback} has been invoked and the client is finished.
          */
         static final int STATE_FINISHED = 5;
 
@@ -99,13 +99,13 @@ public class BiometricScheduler {
         @interface OperationState {}
 
         @NonNull final ClientMonitor<?> clientMonitor;
-        @Nullable final ClientMonitor.FinishCallback clientFinishCallback;
+        @Nullable final ClientMonitor.Callback mClientCallback;
         @OperationState int state;
 
         Operation(@NonNull ClientMonitor<?> clientMonitor,
-                @Nullable ClientMonitor.FinishCallback finishCallback) {
+                @Nullable ClientMonitor.Callback callback) {
             this.clientMonitor = clientMonitor;
-            this.clientFinishCallback = finishCallback;
+            this.mClientCallback = callback;
             state = STATE_WAITING_IN_QUEUE;
         }
 
@@ -133,7 +133,7 @@ public class BiometricScheduler {
         public void run() {
             if (operation.state != Operation.STATE_FINISHED) {
                 Slog.e(tag, "[Watchdog Triggered]: " + operation);
-                operation.clientMonitor.mFinishCallback
+                operation.clientMonitor.mCallback
                         .onClientFinished(operation.clientMonitor, false /* success */);
             }
         }
@@ -175,17 +175,25 @@ public class BiometricScheduler {
     @Nullable private final GestureAvailabilityDispatcher mGestureAvailabilityDispatcher;
     @NonNull private final IBiometricService mBiometricService;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
-    @NonNull private final InternalFinishCallback mInternalFinishCallback;
+    @NonNull private final InternalCallback mInternalCallback;
     @NonNull private final Queue<Operation> mPendingOperations;
     @Nullable private Operation mCurrentOperation;
     @NonNull private final ArrayDeque<CrashState> mCrashStates;
 
-    // Internal finish callback, notified when an operation is complete. Notifies the requester
+    // Internal callback, notified when an operation is complete. Notifies the requester
     // that the operation is complete, before performing internal scheduler work (such as
     // starting the next client).
-    private class InternalFinishCallback implements ClientMonitor.FinishCallback {
+    public class InternalCallback implements ClientMonitor.Callback {
         @Override
-        public void onClientFinished(ClientMonitor<?> clientMonitor, boolean success) {
+        public void onClientStarted(@NonNull ClientMonitor<?> clientMonitor) {
+            Slog.d(getTag(), "[Started] " + clientMonitor);
+            if (mCurrentOperation.mClientCallback != null) {
+                mCurrentOperation.mClientCallback.onClientStarted(clientMonitor);
+            }
+        }
+
+        @Override
+        public void onClientFinished(@NonNull ClientMonitor<?> clientMonitor, boolean success) {
             mHandler.post(() -> {
                 if (mCurrentOperation == null) {
                     Slog.e(getTag(), "[Finishing] " + clientMonitor
@@ -194,19 +202,19 @@ public class BiometricScheduler {
                     return;
                 }
 
+                if (clientMonitor != mCurrentOperation.clientMonitor) {
+                    Slog.e(getTag(), "[Ignoring Finish] " + clientMonitor + " does not match"
+                            + " current: " + mCurrentOperation.clientMonitor);
+                    return;
+                }
+
+                Slog.d(getTag(), "[Finishing] " + clientMonitor + ", success: " + success);
                 mCurrentOperation.state = Operation.STATE_FINISHED;
 
-                if (mCurrentOperation.clientFinishCallback != null) {
-                    mCurrentOperation.clientFinishCallback.onClientFinished(clientMonitor, success);
+                if (mCurrentOperation.mClientCallback != null) {
+                    mCurrentOperation.mClientCallback.onClientFinished(clientMonitor, success);
                 }
 
-                if (clientMonitor != mCurrentOperation.clientMonitor) {
-                    throw new IllegalStateException("Mismatched operation, "
-                            + " current: " + mCurrentOperation.clientMonitor
-                            + " received: " + clientMonitor);
-                }
-
-                Slog.d(getTag(), "[Finished] " + clientMonitor + ", success: " + success);
                 if (mGestureAvailabilityDispatcher != null) {
                     mGestureAvailabilityDispatcher.markSensorActive(
                             mCurrentOperation.clientMonitor.getSensorId(), false /* active */);
@@ -227,12 +235,20 @@ public class BiometricScheduler {
     public BiometricScheduler(@NonNull String tag,
             @Nullable GestureAvailabilityDispatcher gestureAvailabilityDispatcher) {
         mBiometricTag = tag;
-        mInternalFinishCallback = new InternalFinishCallback();
+        mInternalCallback = new InternalCallback();
         mGestureAvailabilityDispatcher = gestureAvailabilityDispatcher;
         mPendingOperations = new ArrayDeque<>();
         mBiometricService = IBiometricService.Stub.asInterface(
                 ServiceManager.getService(Context.BIOMETRIC_SERVICE));
         mCrashStates = new ArrayDeque<>();
+    }
+
+    /**
+     * @return A reference to the internal callback that should be invoked whenever the scheduler
+     *         needs to (e.g. client started, client finished).
+     */
+    @NonNull protected InternalCallback getInternalCallback() {
+        return mInternalCallback;
     }
 
     private String getTag() {
@@ -262,7 +278,7 @@ public class BiometricScheduler {
             }
 
             final Interruptable interruptable = (Interruptable) currentClient;
-            interruptable.cancelWithoutStarting(mInternalFinishCallback);
+            interruptable.cancelWithoutStarting(getInternalCallback());
             // Now we wait for the client to send its FinishCallback, which kicks off the next
             // operation.
             return;
@@ -280,7 +296,7 @@ public class BiometricScheduler {
         final boolean shouldStartNow = currentClient.getCookie() == 0;
         if (shouldStartNow) {
             Slog.d(getTag(), "[Starting] " + mCurrentOperation);
-            currentClient.start(mInternalFinishCallback);
+            currentClient.start(getInternalCallback());
             mCurrentOperation.state = Operation.STATE_STARTED;
         } else {
             try {
@@ -324,7 +340,7 @@ public class BiometricScheduler {
 
         Slog.d(getTag(), "[Starting] Prepared client: " + mCurrentOperation);
         mCurrentOperation.state = Operation.STATE_STARTED;
-        mCurrentOperation.clientMonitor.start(mInternalFinishCallback);
+        mCurrentOperation.clientMonitor.start(getInternalCallback());
     }
 
     /**
@@ -340,11 +356,11 @@ public class BiometricScheduler {
      * Adds a {@link ClientMonitor} to the pending queue
      *
      * @param clientMonitor        operation to be scheduled
-     * @param clientFinishCallback optional callback, invoked when the client is finished, but
+     * @param clientCallback optional callback, invoked when the client is finished, but
      *                             before it has been removed from the queue.
      */
     public void scheduleClientMonitor(@NonNull ClientMonitor<?> clientMonitor,
-            @Nullable ClientMonitor.FinishCallback clientFinishCallback) {
+            @Nullable ClientMonitor.Callback clientCallback) {
         // Mark any interruptable pending clients as canceling. Once they reach the head of the
         // queue, the scheduler will send ERROR_CANCELED and skip the operation.
         for (Operation operation : mPendingOperations) {
@@ -356,7 +372,7 @@ public class BiometricScheduler {
             }
         }
 
-        mPendingOperations.add(new Operation(clientMonitor, clientFinishCallback));
+        mPendingOperations.add(new Operation(clientMonitor, clientCallback));
         Slog.d(getTag(), "[Added] " + clientMonitor
                 + ", new queue size: " + mPendingOperations.size());
 

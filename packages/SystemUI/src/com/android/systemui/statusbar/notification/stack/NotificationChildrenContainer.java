@@ -22,7 +22,6 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.drawable.ColorDrawable;
 import android.service.notification.StatusBarNotification;
-import android.util.ArraySet;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.NotificationHeaderView;
@@ -36,7 +35,7 @@ import com.android.systemui.R;
 import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.NotificationHeaderUtil;
 import com.android.systemui.statusbar.notification.NotificationUtils;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.HybridGroupManager;
 import com.android.systemui.statusbar.notification.row.HybridNotificationView;
@@ -447,7 +446,7 @@ public class NotificationChildrenContainer extends ViewGroup {
      * @param callback
      * @return whether the list order has changed
      */
-    public boolean applyChildOrder(List<? extends NotificationListItem> childOrder,
+    public boolean applyChildOrder(List<ExpandableNotificationRow> childOrder,
             VisualStabilityManager visualStabilityManager,
             VisualStabilityManager.Callback callback) {
         if (childOrder == null) {
@@ -456,7 +455,7 @@ public class NotificationChildrenContainer extends ViewGroup {
         boolean result = false;
         for (int i = 0; i < mAttachedChildren.size() && i < childOrder.size(); i++) {
             ExpandableNotificationRow child = mAttachedChildren.get(i);
-            ExpandableNotificationRow desiredChild = (ExpandableNotificationRow) childOrder.get(i);
+            ExpandableNotificationRow desiredChild = childOrder.get(i);
             if (child != desiredChild) {
                 if (visualStabilityManager.canReorderNotification(desiredChild)) {
                     mAttachedChildren.remove(desiredChild);
@@ -1300,20 +1299,6 @@ public class NotificationChildrenContainer extends ViewGroup {
     public void setHeaderVisibleAmount(float headerVisibleAmount) {
         mHeaderVisibleAmount = headerVisibleAmount;
         mCurrentHeaderTranslation = (int) ((1.0f - headerVisibleAmount) * mTranslationForHeader);
-    }
-
-    /**
-     * Show a set of app opp icons in the layout.
-     *
-     * @param appOps which app ops to show
-     */
-    public void showAppOpsIcons(ArraySet<Integer> appOps) {
-        if (mNotificationHeaderWrapper != null) {
-            mNotificationHeaderWrapper.showAppOpsIcons(appOps);
-        }
-        if (mNotificationHeaderWrapperLowPriority != null) {
-            mNotificationHeaderWrapperLowPriority.showAppOpsIcons(appOps);
-        }
     }
 
     /**

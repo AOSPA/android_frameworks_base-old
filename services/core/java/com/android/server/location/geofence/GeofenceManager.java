@@ -16,6 +16,7 @@
 
 package com.android.server.location.geofence;
 
+import static android.location.LocationManager.FUSED_PROVIDER;
 import static android.location.LocationManager.KEY_PROXIMITY_ENTERING;
 
 import static com.android.internal.util.ConcurrentUtils.DIRECT_EXECUTOR;
@@ -32,6 +33,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.location.LocationRequest;
 import android.location.util.identity.CallerIdentity;
+import android.os.Binder;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.WorkSource;
@@ -39,6 +41,7 @@ import android.stats.location.LocationStatsEnums;
 import android.util.ArraySet;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.listeners.ListenerExecutor.ListenerOperation;
 import com.android.server.PendingIntentUtils;
 import com.android.server.location.LocationPermissions;
 import com.android.server.location.listeners.ListenerMultiplexer;
@@ -57,7 +60,7 @@ import java.util.Objects;
  * Manages all geofences.
  */
 public class GeofenceManager extends
-        ListenerMultiplexer<GeofenceKey, Geofence, PendingIntent,
+        ListenerMultiplexer<GeofenceKey, PendingIntent, ListenerOperation<PendingIntent>,
                         GeofenceManager.GeofenceRegistration, LocationRequest> implements
         LocationListener {
 
@@ -92,7 +95,7 @@ public class GeofenceManager extends
 
         protected GeofenceRegistration(Geofence geofence, CallerIdentity identity,
                 PendingIntent pendingIntent) {
-            super(TAG, geofence, identity, pendingIntent);
+            super(geofence, identity, pendingIntent);
 
             mCenter = new Location("");
             mCenter.setLatitude(geofence.getLatitude());
@@ -271,6 +274,11 @@ public class GeofenceManager extends
         mLocationUsageLogger = injector.getLocationUsageLogger();
     }
 
+    @Override
+    public String getTag() {
+        return TAG;
+    }
+
     private LocationManager getLocationManager() {
         synchronized (mLock) {
             if (mLocationManager == null) {
@@ -291,17 +299,28 @@ public class GeofenceManager extends
             @Nullable String attributionTag) {
         LocationPermissions.enforceCallingOrSelfLocationPermission(mContext, PERMISSION_FINE);
 
-        CallerIdentity identity = CallerIdentity.fromBinder(mContext, packageName, attributionTag,
-                AppOpsManager.toReceiverId(pendingIntent));
-        addRegistration(new GeofenceKey(pendingIntent, geofence),
-                new GeofenceRegistration(geofence, identity, pendingIntent));
+        CallerIdentity callerIdentity = CallerIdentity.fromBinder(mContext, packageName,
+                attributionTag, AppOpsManager.toReceiverId(pendingIntent));
+
+        long identity = Binder.clearCallingIdentity();
+        try {
+            addRegistration(new GeofenceKey(pendingIntent, geofence),
+                    new GeofenceRegistration(geofence, callerIdentity, pendingIntent));
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
      * Removes the geofence associated with the PendingIntent.
      */
     public void removeGeofence(PendingIntent pendingIntent) {
-        removeRegistrationIf(key -> key.getPendingIntent().equals(pendingIntent));
+        long identity = Binder.clearCallingIdentity();
+        try {
+            removeRegistrationIf(key -> key.getPendingIntent().equals(pendingIntent));
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     @Override
@@ -338,11 +357,11 @@ public class GeofenceManager extends
                 LocationStatsEnums.USAGE_ENDED,
                 LocationStatsEnums.API_REQUEST_GEOFENCE,
                 registration.getIdentity().getPackageName(),
+                null,
                 /* LocationRequest= */ null,
                 /* hasListener= */ false,
                 true,
-                registration.getRequest(),
-                true);
+                registration.getRequest(), true);
     }
 
     @Override
@@ -351,16 +370,18 @@ public class GeofenceManager extends
                 LocationStatsEnums.USAGE_ENDED,
                 LocationStatsEnums.API_REQUEST_GEOFENCE,
                 registration.getIdentity().getPackageName(),
+                null,
                 /* LocationRequest= */ null,
                 /* hasListener= */ false,
                 true,
-                registration.getRequest(),
-                true);
+                registration.getRequest(), true);
     }
 
     @Override
-    protected boolean registerWithService(LocationRequest locationRequest) {
-        getLocationManager().requestLocationUpdates(locationRequest, DIRECT_EXECUTOR, this);
+    protected boolean registerWithService(LocationRequest locationRequest,
+            Collection<GeofenceRegistration> registrations) {
+        getLocationManager().requestLocationUpdates(FUSED_PROVIDER, locationRequest,
+                DIRECT_EXECUTOR, this);
         return true;
     }
 
@@ -373,7 +394,7 @@ public class GeofenceManager extends
     }
 
     @Override
-    protected LocationRequest mergeRequests(Collection<GeofenceRegistration> registrations) {
+    protected LocationRequest mergeRegistrations(Collection<GeofenceRegistration> registrations) {
         Location location = getLastLocation();
 
         long realtimeMs = SystemClock.elapsedRealtime();
@@ -405,13 +426,11 @@ public class GeofenceManager extends
             intervalMs = mSettingsHelper.getBackgroundThrottleProximityAlertIntervalMs();
         }
 
-        LocationRequest request = LocationRequest.createFromDeprecatedProvider(
-                LocationManager.FUSED_PROVIDER, intervalMs, 0, false);
-        request.setFastestInterval(0);
-        request.setHideFromAppOps(true);
-        request.setWorkSource(workSource);
-
-        return request;
+        return new LocationRequest.Builder(intervalMs)
+                .setMinUpdateIntervalMillis(0)
+                .setHiddenFromAppOps(true)
+                .setWorkSource(workSource)
+                .build();
     }
 
 

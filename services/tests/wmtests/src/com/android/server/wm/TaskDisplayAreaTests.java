@@ -76,8 +76,7 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
         // Stack should contain visible app window to be considered visible.
         final Task pinnedTask = createTaskInStack(mPinnedStack, 0 /* userId */);
         assertFalse(mPinnedStack.isVisible());
-        final ActivityRecord pinnedApp =
-                WindowTestUtils.createTestActivityRecord(mDisplayContent);
+        final ActivityRecord pinnedApp = createTestActivityRecord(mDisplayContent);
         pinnedTask.addChild(pinnedApp, 0 /* addPos */);
         assertTrue(mPinnedStack.isVisible());
     }
@@ -92,7 +91,7 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
         final Task stack = createTaskStackOnDisplay(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, mDisplayContent);
         final Task task = createTaskInStack(stack, 0 /* userId */);
-        final ActivityRecord activity = WindowTestUtils.createTestActivityRecord(mDisplayContent);
+        final ActivityRecord activity = createTestActivityRecord(mDisplayContent);
         task.addChild(activity, 0 /* addPos */);
         final TaskDisplayArea taskDisplayArea = activity.getDisplayArea();
         activity.mNeedsAnimationBoundsLayer = true;
@@ -219,8 +218,7 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
         final Task rootHomeTask = defaultTaskDisplayArea.getRootHomeTask();
         rootHomeTask.mResizeMode = RESIZE_MODE_UNRESIZEABLE;
 
-        final Task primarySplitTask =
-                new ActivityTestsBase.StackBuilder(rootWindowContainer)
+        final Task primarySplitTask = new TaskBuilder(mSupervisor)
                 .setTaskDisplayArea(defaultTaskDisplayArea)
                 .setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)
                 .setActivityType(ACTIVITY_TYPE_STANDARD)
@@ -234,7 +232,7 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
 
         ActivityRecord homeActivity = rootHomeTask.getTopNonFinishingActivity();
         if (homeActivity == null) {
-            homeActivity = new ActivityTestsBase.ActivityBuilder(mWm.mAtmService)
+            homeActivity = new ActivityBuilder(mWm.mAtmService)
                     .setStack(rootHomeTask).setCreateTask(true).build();
         }
         homeActivity.setVisible(false);

@@ -59,10 +59,11 @@ public:
     GaugeMetricProducer(
             const ConfigKey& key, const GaugeMetric& gaugeMetric, const int conditionIndex,
             const vector<ConditionState>& initialConditionCache,
-            const sp<ConditionWizard>& conditionWizard, const int whatMatcherIndex,
-            const sp<EventMatcherWizard>& matcherWizard, const int pullTagId,
-            const int triggerAtomId, const int atomId, const int64_t timeBaseNs,
-            const int64_t startTimeNs, const sp<StatsPullerManager>& pullerManager,
+            const sp<ConditionWizard>& conditionWizard, const uint64_t protoHash,
+            const int whatMatcherIndex, const sp<EventMatcherWizard>& matcherWizard,
+            const int pullTagId, const int triggerAtomId, const int atomId,
+            const int64_t timeBaseNs, const int64_t startTimeNs,
+            const sp<StatsPullerManager>& pullerManager,
             const std::unordered_map<int, std::shared_ptr<Activation>>& eventActivationMap = {},
             const std::unordered_map<int, std::vector<std::shared_ptr<Activation>>>&
                     eventDeactivationMap = {});
@@ -95,6 +96,10 @@ public:
             pullAndMatchEventsLocked(eventTimeNs);
         }
     };
+
+    MetricType getMetricType() const override {
+        return METRIC_TYPE_GAUGE;
+    }
 
 protected:
     void onMatchedLogEventInternalLocked(
@@ -170,14 +175,14 @@ private:
     // for each slice with the latest value.
     void updateCurrentSlicedBucketForAnomaly();
 
-    // Whitelist of fields to report. Empty means all are reported.
+    // Allowlist of fields to report. Empty means all are reported.
     std::vector<Matcher> mFieldMatchers;
 
     GaugeMetric::SamplingType mSamplingType;
 
     const int64_t mMaxPullDelayNs;
 
-    // apply a whitelist on the original input
+    // apply an allowlist on the original input
     std::shared_ptr<vector<FieldValue>> getGaugeFields(const LogEvent& event);
 
     // Util function to check whether the specified dimension hits the guardrail.

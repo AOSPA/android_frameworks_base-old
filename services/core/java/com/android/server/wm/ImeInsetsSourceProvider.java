@@ -16,13 +16,13 @@
 
 package com.android.server.wm;
 
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_IME;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_IME;
 
 import android.view.InsetsSource;
 import android.view.WindowInsets;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.server.protolog.common.ProtoLog;
+import com.android.internal.protolog.common.ProtoLog;
 
 import java.io.PrintWriter;
 
@@ -93,7 +93,7 @@ class ImeInsetsSourceProvider extends InsetsSourceProvider {
                 || (mImeTargetFromIme != null
                 && isImeTargetFromDisplayContentAndImeSame()
                 && mWin != null
-                && mWin.isDrawnLw()
+                && mWin.isDrawn()
                 && !mWin.mGivenInsetsPending)) {
             mIsImeLayoutDrawn = true;
             // show IME if InputMethodService requested it to be shown.

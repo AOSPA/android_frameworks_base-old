@@ -22,6 +22,8 @@ import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.provider.Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_MAGNIFICATION_CONTROLLER;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_2BUTTON_OVERLAY;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY;
 
 import static com.android.providers.settings.SettingsState.FALLBACK_FILE_SUFFIX;
 
@@ -41,6 +43,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.om.IOverlayManager;
+import android.content.om.OverlayInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
@@ -2576,7 +2579,7 @@ public class SettingsProvider extends ContentProvider {
         public void syncSsaidTableOnStart() {
             synchronized (mLock) {
                 // Verify that each user's packages and ssaid's are in sync.
-                for (UserInfo user : mUserManager.getUsers(true)) {
+                for (UserInfo user : mUserManager.getAliveUsers()) {
                     // Get all uids for the user's packages.
                     final List<PackageInfo> packages;
                     try {
@@ -3007,7 +3010,7 @@ public class SettingsProvider extends ContentProvider {
 
                 final long identity = Binder.clearCallingIdentity();
                 try {
-                    List<UserInfo> users = mUserManager.getUsers(true);
+                    List<UserInfo> users = mUserManager.getAliveUsers();
 
                     final int userCount = users.size();
                     for (int i = 0; i < userCount; i++) {
@@ -3244,7 +3247,7 @@ public class SettingsProvider extends ContentProvider {
             // is a singleton generation entry for the global settings which
             // is already incremented be the caller.
             final Uri uri = getNotificationUriFor(key, name);
-            final List<UserInfo> users = mUserManager.getUsers(/*excludeDying*/ true);
+            final List<UserInfo> users = mUserManager.getAliveUsers();
             for (int i = 0; i < users.size(); i++) {
                 final int userId = users.get(i).id;
                 if (mUserManager.isUserRunning(UserHandle.of(userId))) {
@@ -3255,7 +3258,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private void notifyLocationChangeForRunningUsers() {
-            final List<UserInfo> users = mUserManager.getUsers(/*excludeDying=*/ true);
+            final List<UserInfo> users = mUserManager.getAliveUsers();
 
             for (int i = 0; i < users.size(); i++) {
                 final int userId = users.get(i).id;
@@ -3414,7 +3417,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 191;
+            private static final int SETTINGS_VERSION = 192;
 
             private final int mUserId;
 
@@ -4793,6 +4796,20 @@ public class SettingsProvider extends ContentProvider {
                     currentVersion = 191;
                 }
 
+                if (currentVersion == 191) {
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    int mode = getContext().getResources().getInteger(
+                            com.android.internal.R.integer.config_navBarInteractionMode);
+                    if (mode == NAV_BAR_MODE_GESTURAL) {
+                        switchToDefaultGestureNavBackInset(userId, secureSettings);
+                    }
+                    migrateBackGestureSensitivity(Secure.BACK_GESTURE_INSET_SCALE_LEFT, userId,
+                            secureSettings);
+                    migrateBackGestureSensitivity(Secure.BACK_GESTURE_INSET_SCALE_RIGHT, userId,
+                            secureSettings);
+                    currentVersion = 192;
+                }
+
                 // vXXX: Add new settings above this point.
 
                 if (currentVersion != newVersion) {
@@ -4808,6 +4825,83 @@ public class SettingsProvider extends ContentProvider {
 
                 // Return the current version.
                 return currentVersion;
+            }
+        }
+
+        /**
+         * Previously, We were using separate overlay packages for different back inset sizes. Now,
+         * we have a single overlay package for gesture navigation mode, and set the inset size via
+         * a secure.settings field.
+         *
+         * If a non-default overlay package is enabled, then enable the default overlay exclusively,
+         * and set the calculated inset size difference as a scale value in secure.settings.
+         */
+        private void switchToDefaultGestureNavBackInset(int userId, SettingsState secureSettings) {
+            try {
+                final IOverlayManager om = IOverlayManager.Stub.asInterface(
+                        ServiceManager.getService(Context.OVERLAY_SERVICE));
+                final OverlayInfo info = om.getOverlayInfo(NAV_BAR_MODE_GESTURAL_OVERLAY, userId);
+                if (info != null && !info.isEnabled()) {
+                    final int curInset = getContext().getResources().getDimensionPixelSize(
+                            com.android.internal.R.dimen.config_backGestureInset);
+                    om.setEnabledExclusiveInCategory(NAV_BAR_MODE_GESTURAL_OVERLAY, userId);
+                    final int defInset = getContext().getResources().getDimensionPixelSize(
+                            com.android.internal.R.dimen.config_backGestureInset);
+
+                    final float scale = defInset == 0 ? 1.0f : ((float) curInset) / defInset;
+                    if (scale != 1.0f) {
+                        secureSettings.insertSettingLocked(
+                                Secure.BACK_GESTURE_INSET_SCALE_LEFT,
+                                Float.toString(scale), null /* tag */, false /* makeDefault */,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                        secureSettings.insertSettingLocked(
+                                Secure.BACK_GESTURE_INSET_SCALE_RIGHT,
+                                Float.toString(scale), null /* tag */, false /* makeDefault */,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                        if (DEBUG) {
+                            Slog.v(LOG_TAG, "Moved back sensitivity for user " + userId
+                                    + " to scale " + scale);
+                        }
+                    }
+                }
+            } catch (SecurityException | IllegalStateException | RemoteException e) {
+                Slog.e(LOG_TAG, "Failed to switch to default gesture nav overlay for user "
+                        + userId);
+            }
+        }
+
+        private void migrateBackGestureSensitivity(String side, int userId,
+                SettingsState secureSettings) {
+            final Setting currentScale = secureSettings.getSettingLocked(side);
+            if (currentScale.isNull()) {
+                return;
+            }
+            float current = 1.0f;
+            try {
+                current = Float.parseFloat(currentScale.getValue());
+            } catch (NumberFormatException e) {
+                // Do nothing. Overwrite with default value.
+            }
+
+            // Inset scale migration across all devices
+            //     Old(24dp): 0.66  0.75  0.83  1.00  1.08  1.33  1.66
+            //     New(30dp): 0.60  0.60  1.00  1.00  1.00  1.00  1.33
+            final float low = 0.76f;   // Values smaller than this will map to 0.6
+            final float high = 1.65f;  // Values larger than this will map to 1.33
+            float newScale;
+            if (current < low) {
+                newScale = 0.6f;
+            } else if (current < high) {
+                newScale = 1.0f;
+            } else {
+                newScale = 1.33f;
+            }
+            secureSettings.insertSettingLocked(side, Float.toString(newScale),
+                    null /* tag */, false /* makeDefault */,
+                    SettingsState.SYSTEM_PACKAGE_NAME);
+            if (DEBUG) {
+                Slog.v(LOG_TAG, "Changed back sensitivity from " + current + " to " + newScale
+                        + " for user " + userId + " on " + side);
             }
         }
 

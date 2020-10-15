@@ -726,7 +726,7 @@ public abstract class ContentResolver implements ContentInterface {
 
     /**
      * In addition to {@link #SYNC_EXEMPTION_PROMOTE_BUCKET}, we put the sync adapter app in the
-     * temp whitelist for 10 minutes, so that even RARE apps can run syncs right away.
+     * temp allowlist for 10 minutes, so that even RARE apps can run syncs right away.
      * @hide
      */
     public static final int SYNC_EXEMPTION_PROMOTE_BUCKET_WITH_TEMP = 2;
@@ -776,6 +776,10 @@ public abstract class ContentResolver implements ContentInterface {
     private static final int REMOTE_CONTENT_PROVIDER_TIMEOUT_MILLIS =
             CONTENT_PROVIDER_READY_TIMEOUT_MILLIS + CONTENT_PROVIDER_TIMEOUT_MILLIS;
 
+    /**
+     * Note: passing a {@code null} context here could lead to unexpected behavior in certain
+     * ContentResolver APIs so it is highly recommended to pass a non-null context here.
+     */
     public ContentResolver(@Nullable Context context) {
         this(context, null);
     }
@@ -3387,12 +3391,12 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /**
-     * Gets the master auto-sync setting that applies to all the providers and accounts.
+     * Gets the global auto-sync setting that applies to all the providers and accounts.
      * If this is false then the per-provider auto-sync setting is ignored.
      * <p>This method requires the caller to hold the permission
      * {@link android.Manifest.permission#READ_SYNC_SETTINGS}.
      *
-     * @return the master auto-sync setting that applies to all the providers and accounts
+     * @return the global auto-sync setting that applies to all the providers and accounts
      */
     public static boolean getMasterSyncAutomatically() {
         try {
@@ -3415,12 +3419,12 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /**
-     * Sets the master auto-sync setting that applies to all the providers and accounts.
+     * Sets the global auto-sync setting that applies to all the providers and accounts.
      * If this is false then the per-provider auto-sync setting is ignored.
      * <p>This method requires the caller to hold the permission
      * {@link android.Manifest.permission#WRITE_SYNC_SETTINGS}.
      *
-     * @param sync the master auto-sync setting that applies to all the providers and accounts
+     * @param sync the global auto-sync setting that applies to all the providers and accounts
      */
     public static void setMasterSyncAutomatically(boolean sync) {
         setMasterSyncAutomaticallyAsUser(sync, UserHandle.myUserId());

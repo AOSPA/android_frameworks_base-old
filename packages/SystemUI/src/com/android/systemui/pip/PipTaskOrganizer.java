@@ -23,12 +23,12 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
 import static com.android.systemui.pip.PipAnimationController.ANIM_TYPE_ALPHA;
 import static com.android.systemui.pip.PipAnimationController.ANIM_TYPE_BOUNDS;
+import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_LEAVE_PIP;
+import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_NONE;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_REMOVE_STACK;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_SAME;
-import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_TO_FULLSCREEN;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_TO_PIP;
-import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_TO_SPLIT_SCREEN;
 import static com.android.systemui.pip.PipAnimationController.isInPipDirection;
 import static com.android.systemui.pip.PipAnimationController.isOutPipDirection;
 
@@ -47,19 +47,25 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.util.Log;
+import android.util.Rational;
 import android.util.Size;
 import android.view.SurfaceControl;
+import android.view.SurfaceControlViewHost;
+import android.view.View;
+import android.view.WindowManager;
 import android.window.TaskOrganizer;
 import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 import android.window.WindowContainerTransactionCallback;
-import android.window.WindowOrganizer;
 
 import com.android.internal.os.SomeArgs;
+import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.pip.phone.PipMenuActivityController;
 import com.android.systemui.pip.phone.PipUpdateThread;
-import com.android.systemui.stackdivider.Divider;
 import com.android.wm.shell.R;
+import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayController;
+import com.android.wm.shell.splitscreen.SplitScreen;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -67,10 +73,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
-
-import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Manages PiP tasks such as resize and offset.
@@ -83,8 +87,8 @@ import javax.inject.Singleton;
  * This class is also responsible for general resize/offset PiP operations within SysUI component,
  * see also {@link com.android.systemui.pip.phone.PipMotionHelper}.
  */
-@Singleton
-public class PipTaskOrganizer extends TaskOrganizer implements
+@SysUISingleton
+public class PipTaskOrganizer extends TaskOrganizer implements ShellTaskOrganizer.TaskListener,
         DisplayController.OnDisplaysChangedListener {
     private static final String TAG = PipTaskOrganizer.class.getSimpleName();
     private static final boolean DEBUG = false;
@@ -95,16 +99,51 @@ public class PipTaskOrganizer extends TaskOrganizer implements
     private static final int MSG_FINISH_RESIZE = 4;
     private static final int MSG_RESIZE_USER = 5;
 
+    // Not a complete set of states but serves what we want right now.
+    private enum State {
+        UNDEFINED(0),
+        TASK_APPEARED(1),
+        ENTERING_PIP(2),
+        EXITING_PIP(3);
+
+        private final int mStateValue;
+
+        State(int value) {
+            mStateValue = value;
+        }
+
+        private boolean isInPip() {
+            return mStateValue >= TASK_APPEARED.mStateValue
+                    && mStateValue != EXITING_PIP.mStateValue;
+        }
+
+        /**
+         * Resize request can be initiated in other component, ignore if we are no longer in PIP,
+         * still waiting for animation or we're exiting from it.
+         *
+         * @return {@code true} if the resize request should be blocked/ignored.
+         */
+        private boolean shouldBlockResizeRequest() {
+            return mStateValue < ENTERING_PIP.mStateValue
+                    || mStateValue == EXITING_PIP.mStateValue;
+        }
+    }
+
+    private final Context mContext;
     private final Handler mMainHandler;
     private final Handler mUpdateHandler;
     private final PipBoundsHandler mPipBoundsHandler;
     private final PipAnimationController mPipAnimationController;
+    private final PipUiEventLogger mPipUiEventLoggerLogger;
     private final List<PipTransitionCallback> mPipTransitionCallbacks = new ArrayList<>();
     private final Rect mLastReportedBounds = new Rect();
     private final int mEnterExitAnimationDuration;
     private final PipSurfaceTransactionHelper mSurfaceTransactionHelper;
     private final Map<IBinder, Configuration> mInitialState = new HashMap<>();
-    private final Divider mSplitDivider;
+    private final Optional<SplitScreen> mSplitScreenOptional;
+    protected final ShellTaskOrganizer mTaskOrganizer;
+    private SurfaceControlViewHost mPipViewHost;
+    private SurfaceControl mPipMenuSurface;
 
     // These callbacks are called on the update thread
     private final PipAnimationController.PipAnimationCallback mPipAnimationCallback =
@@ -191,8 +230,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
     private ActivityManager.RunningTaskInfo mTaskInfo;
     private WindowContainerToken mToken;
     private SurfaceControl mLeash;
-    private boolean mInPip;
-    private boolean mExitingPip;
+    private State mState = State.UNDEFINED;
     private @PipAnimationController.AnimationType int mOneShotAnimationType = ANIM_TYPE_BOUNDS;
     private PipSurfaceTransactionHelper.SurfaceControlTransactionFactory
             mSurfaceControlTransactionFactory;
@@ -204,21 +242,25 @@ public class PipTaskOrganizer extends TaskOrganizer implements
      */
     private boolean mShouldDeferEnteringPip;
 
-    @Inject
     public PipTaskOrganizer(Context context, @NonNull PipBoundsHandler boundsHandler,
             @NonNull PipSurfaceTransactionHelper surfaceTransactionHelper,
-            @Nullable Divider divider,
+            Optional<SplitScreen> splitScreenOptional,
             @NonNull DisplayController displayController,
-            @NonNull PipAnimationController pipAnimationController) {
+            @NonNull PipUiEventLogger pipUiEventLogger,
+            @NonNull ShellTaskOrganizer shellTaskOrganizer) {
+        mContext = context;
         mMainHandler = new Handler(Looper.getMainLooper());
         mUpdateHandler = new Handler(PipUpdateThread.get().getLooper(), mUpdateCallbacks);
         mPipBoundsHandler = boundsHandler;
         mEnterExitAnimationDuration = context.getResources()
                 .getInteger(R.integer.config_pipResizeAnimationDuration);
         mSurfaceTransactionHelper = surfaceTransactionHelper;
-        mPipAnimationController = pipAnimationController;
+        mPipAnimationController = new PipAnimationController(mSurfaceTransactionHelper);
+        mPipUiEventLoggerLogger = pipUiEventLogger;
         mSurfaceControlTransactionFactory = SurfaceControl.Transaction::new;
-        mSplitDivider = divider;
+        mSplitScreenOptional = splitScreenOptional;
+        mTaskOrganizer = shellTaskOrganizer;
+        mTaskOrganizer.addListener(this, WINDOWING_MODE_PINNED);
         displayController.addDisplayWindowListener(this);
     }
 
@@ -240,11 +282,11 @@ public class PipTaskOrganizer extends TaskOrganizer implements
     }
 
     public boolean isInPip() {
-        return mInPip;
+        return mState.isInPip();
     }
 
     public boolean isDeferringEnterPipAnimation() {
-        return mInPip && mShouldDeferEnteringPip;
+        return mState.isInPip() && mShouldDeferEnteringPip;
     }
 
     /**
@@ -273,53 +315,57 @@ public class PipTaskOrganizer extends TaskOrganizer implements
      * @param animationDurationMs duration in millisecond for the exiting PiP transition
      */
     public void exitPip(int animationDurationMs) {
-        if (!mInPip || mExitingPip || mToken == null) {
+        if (!mState.isInPip() || mState == State.EXITING_PIP || mToken == null) {
             Log.wtf(TAG, "Not allowed to exitPip in current state"
-                    + " mInPip=" + mInPip + " mExitingPip=" + mExitingPip + " mToken=" + mToken);
+                    + " mState=" + mState + " mToken=" + mToken);
             return;
         }
 
+        mPipUiEventLoggerLogger.log(
+                PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_EXPAND_TO_FULLSCREEN);
         final Configuration initialConfig = mInitialState.remove(mToken.asBinder());
         final boolean orientationDiffers = initialConfig.windowConfiguration.getRotation()
                 != mPipBoundsHandler.getDisplayRotation();
         final WindowContainerTransaction wct = new WindowContainerTransaction();
         final Rect destinationBounds = initialConfig.windowConfiguration.getBounds();
         final int direction = syncWithSplitScreenBounds(destinationBounds)
-                ? TRANSITION_DIRECTION_TO_SPLIT_SCREEN
-                : TRANSITION_DIRECTION_TO_FULLSCREEN;
+                ? TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN
+                : TRANSITION_DIRECTION_LEAVE_PIP;
         if (orientationDiffers) {
+            mState = State.EXITING_PIP;
             // Send started callback though animation is ignored.
             sendOnPipTransitionStarted(direction);
             // Don't bother doing an animation if the display rotation differs or if it's in
             // a non-supported windowing mode
             applyWindowingModeChangeOnExit(wct, direction);
-            WindowOrganizer.applyTransaction(wct);
+            mTaskOrganizer.applyTransaction(wct);
             // Send finished callback though animation is ignored.
             sendOnPipTransitionFinished(direction);
-            mInPip = false;
         } else {
             final SurfaceControl.Transaction tx =
                     mSurfaceControlTransactionFactory.getTransaction();
             mSurfaceTransactionHelper.scale(tx, mLeash, destinationBounds,
                     mLastReportedBounds);
             tx.setWindowCrop(mLeash, destinationBounds.width(), destinationBounds.height());
-            wct.setActivityWindowingMode(mToken, direction == TRANSITION_DIRECTION_TO_SPLIT_SCREEN
+            // We set to fullscreen here for now, but later it will be set to UNDEFINED for
+            // the proper windowing mode to take place. See #applyWindowingModeChangeOnExit.
+            wct.setActivityWindowingMode(mToken,
+                    direction == TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN
                     ? WINDOWING_MODE_SPLIT_SCREEN_SECONDARY
                     : WINDOWING_MODE_FULLSCREEN);
             wct.setBounds(mToken, destinationBounds);
             wct.setBoundsChangeTransaction(mToken, tx);
-            applySyncTransaction(wct, new WindowContainerTransactionCallback() {
+            mTaskOrganizer.applySyncTransaction(wct, new WindowContainerTransactionCallback() {
                 @Override
                 public void onTransactionReady(int id, SurfaceControl.Transaction t) {
                     t.apply();
                     scheduleAnimateResizePip(mLastReportedBounds, destinationBounds,
-                            null /* sourceHintRect */, direction, animationDurationMs,
-                            null /* updateBoundsCallback */);
-                    mInPip = false;
+                            getValidSourceHintRect(mTaskInfo, destinationBounds), direction,
+                            animationDurationMs, null /* updateBoundsCallback */);
+                    mState = State.EXITING_PIP;
                 }
             });
         }
-        mExitingPip = true;
     }
 
     private void applyWindowingModeChangeOnExit(WindowContainerTransaction wct, int direction) {
@@ -327,18 +373,20 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         wct.setWindowingMode(mToken, getOutPipWindowingMode());
         // Simply reset the activity mode set prior to the animation running.
         wct.setActivityWindowingMode(mToken, WINDOWING_MODE_UNDEFINED);
-        if (mSplitDivider != null && direction == TRANSITION_DIRECTION_TO_SPLIT_SCREEN) {
-            wct.reparent(mToken, mSplitDivider.getSecondaryRoot(), true /* onTop */);
-        }
+        mSplitScreenOptional.ifPresent(splitScreen -> {
+            if (direction == TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN) {
+                wct.reparent(mToken, splitScreen.getSecondaryRoot(), true /* onTop */);
+            }
+        });
     }
 
     /**
      * Removes PiP immediately.
      */
     public void removePip() {
-        if (!mInPip || mExitingPip ||  mToken == null) {
+        if (!mState.isInPip() ||  mToken == null) {
             Log.wtf(TAG, "Not allowed to removePip in current state"
-                    + " mInPip=" + mInPip + " mExitingPip=" + mExitingPip + " mToken=" + mToken);
+                    + " mState=" + mState + " mToken=" + mToken);
             return;
         }
 
@@ -350,7 +398,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
                 .setDuration(mEnterExitAnimationDuration)
                 .start());
         mInitialState.remove(mToken.asBinder());
-        mExitingPip = true;
+        mState = State.EXITING_PIP;
     }
 
     private void removePipImmediately() {
@@ -358,7 +406,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
             // Reset the task bounds first to ensure the activity configuration is reset as well
             final WindowContainerTransaction wct = new WindowContainerTransaction();
             wct.setBounds(mToken, null);
-            WindowOrganizer.applyTransaction(wct);
+            mTaskOrganizer.applyTransaction(wct);
 
             ActivityTaskManager.getService().removeStacksInWindowingModes(
                     new int[]{ WINDOWING_MODE_PINNED });
@@ -372,11 +420,13 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         Objects.requireNonNull(info, "Requires RunningTaskInfo");
         mTaskInfo = info;
         mToken = mTaskInfo.token;
-        mInPip = true;
-        mExitingPip = false;
+        mState = State.TASK_APPEARED;
         mLeash = leash;
         mInitialState.put(mToken.asBinder(), new Configuration(mTaskInfo.configuration));
         mPictureInPictureParams = mTaskInfo.pictureInPictureParams;
+
+        mPipUiEventLoggerLogger.setTaskInfo(mTaskInfo);
+        mPipUiEventLoggerLogger.log(PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_ENTER);
 
         if (mShouldDeferEnteringPip) {
             if (DEBUG) Log.d(TAG, "Defer entering PiP animation, fixed rotation is ongoing");
@@ -400,6 +450,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
             scheduleAnimateResizePip(currentBounds, destinationBounds, sourceHintRect,
                     TRANSITION_DIRECTION_TO_PIP, mEnterExitAnimationDuration,
                     null /* updateBoundsCallback */);
+            mState = State.ENTERING_PIP;
         } else if (mOneShotAnimationType == ANIM_TYPE_ALPHA) {
             enterPipWithAlphaAnimation(destinationBounds, mEnterExitAnimationDuration);
             mOneShotAnimationType = ANIM_TYPE_BOUNDS;
@@ -435,7 +486,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         wct.setActivityWindowingMode(mToken, WINDOWING_MODE_UNDEFINED);
         wct.setBounds(mToken, destinationBounds);
         wct.scheduleFinishEnterPip(mToken, destinationBounds);
-        applySyncTransaction(wct, new WindowContainerTransactionCallback() {
+        mTaskOrganizer.applySyncTransaction(wct, new WindowContainerTransactionCallback() {
             @Override
             public void onTransactionReady(int id, SurfaceControl.Transaction t) {
                 t.apply();
@@ -445,16 +496,20 @@ public class PipTaskOrganizer extends TaskOrganizer implements
                         .setPipAnimationCallback(mPipAnimationCallback)
                         .setDuration(durationMs)
                         .start());
+                // mState is set right after the animation is kicked off to block any resize
+                // requests such as offsetPip that may have been called prior to the transition.
+                mState = State.ENTERING_PIP;
             }
         });
     }
 
     private void sendOnPipTransitionStarted(
             @PipAnimationController.TransitionDirection int direction) {
+        final Rect pipBounds = new Rect(mLastReportedBounds);
         runOnMainHandler(() -> {
             for (int i = mPipTransitionCallbacks.size() - 1; i >= 0; i--) {
                 final PipTransitionCallback callback = mPipTransitionCallbacks.get(i);
-                callback.onPipTransitionStarted(mTaskInfo.baseActivity, direction);
+                callback.onPipTransitionStarted(mTaskInfo.baseActivity, direction, pipBounds);
             }
         });
     }
@@ -488,6 +543,57 @@ public class PipTaskOrganizer extends TaskOrganizer implements
     }
 
     /**
+     * Setup the ViewHost and attach the provided menu view to the ViewHost.
+     */
+    public void attachPipMenuViewHost(View menuView, WindowManager.LayoutParams lp) {
+        if (mPipMenuSurface != null) {
+            Log.e(TAG, "PIP Menu View already created and attached.");
+            return;
+        }
+
+        if (mLeash == null) {
+            Log.e(TAG, "PiP Leash is not yet ready.");
+            return;
+        }
+
+        if (Looper.getMainLooper() != Looper.myLooper()) {
+            throw new RuntimeException("PipMenuView needs to be attached on the main thread.");
+        }
+
+        mPipViewHost = new SurfaceControlViewHost(mContext, mContext.getDisplay(),
+                (android.os.Binder) null);
+        mPipMenuSurface = mPipViewHost.getSurfacePackage().getSurfaceControl();
+        SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
+        transaction.reparent(mPipMenuSurface, mLeash);
+        transaction.show(mPipMenuSurface);
+        transaction.setRelativeLayer(mPipMenuSurface, mLeash, 1);
+        transaction.apply();
+        mPipViewHost.setView(menuView, lp);
+    }
+
+
+    /**
+     * Releases the PIP Menu's View host, remove it from PIP task surface.
+     */
+    public void detachPipMenuViewHost() {
+        if (mPipMenuSurface != null) {
+            SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
+            transaction.remove(mPipMenuSurface);
+            transaction.apply();
+            mPipMenuSurface = null;
+            mPipViewHost = null;
+        }
+    }
+
+    /**
+     * Return whether the PiP Menu has been attached to the leash yet.
+     */
+    public boolean isPipMenuViewHostAttached() {
+        return mPipViewHost != null;
+    }
+
+
+    /**
      * Note that dismissing PiP is now originated from SystemUI, see {@link #exitPip(int)}.
      * Meanwhile this callback is invoked whenever the task is removed. For instance:
      *   - as a result of removeStacksInWindowingModes from WM
@@ -497,7 +603,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
      */
     @Override
     public void onTaskVanished(ActivityManager.RunningTaskInfo info) {
-        if (!mInPip) {
+        if (!mState.isInPip()) {
             return;
         }
         final WindowContainerToken token = info.token;
@@ -508,8 +614,8 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         }
         mShouldDeferEnteringPip = false;
         mPictureInPictureParams = null;
-        mInPip = false;
-        mExitingPip = false;
+        mState = State.UNDEFINED;
+        mPipUiEventLoggerLogger.setTaskInfo(null);
     }
 
     @Override
@@ -530,18 +636,13 @@ public class PipTaskOrganizer extends TaskOrganizer implements
     }
 
     @Override
-    public void onBackPressedOnTaskRoot(ActivityManager.RunningTaskInfo taskInfo) {
-        // Do nothing
-    }
-
-    @Override
     public void onFixedRotationStarted(int displayId, int newRotation) {
         mShouldDeferEnteringPip = true;
     }
 
     @Override
     public void onFixedRotationFinished(int displayId) {
-        if (mShouldDeferEnteringPip && mInPip) {
+        if (mShouldDeferEnteringPip && mState.isInPip()) {
             final Rect destinationBounds = mPipBoundsHandler.getDestinationBounds(
                     mTaskInfo.topActivity, getAspectRatioOrDefault(mPictureInPictureParams),
                     null /* bounds */, getMinimalSize(mTaskInfo.topActivityInfo));
@@ -564,7 +665,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
                 mPipAnimationController.getCurrentAnimator();
         if (animator == null || !animator.isRunning()
                 || animator.getTransitionDirection() != TRANSITION_DIRECTION_TO_PIP) {
-            if (mInPip && fromRotation) {
+            if (mState.isInPip() && fromRotation) {
                 // If we are rotating while there is a current animation, immediately cancel the
                 // animation (remove the listeners so we don't trigger the normal finish resize
                 // call that should only happen on the update thread)
@@ -625,13 +726,16 @@ public class PipTaskOrganizer extends TaskOrganizer implements
      * {@link PictureInPictureParams} would affect the bounds.
      */
     private boolean applyPictureInPictureParams(@NonNull PictureInPictureParams params) {
-        final boolean changed = (mPictureInPictureParams == null) ? true : !Objects.equals(
-                mPictureInPictureParams.getAspectRatioRational(), params.getAspectRatioRational());
-        if (changed) {
-            mPictureInPictureParams = params;
+        final Rational currentAspectRatio =
+                mPictureInPictureParams != null ? mPictureInPictureParams.getAspectRatioRational()
+                        : null;
+        final boolean aspectRatioChanged = !Objects.equals(currentAspectRatio,
+                params.getAspectRatioRational());
+        mPictureInPictureParams = params;
+        if (aspectRatioChanged) {
             mPipBoundsHandler.onAspectRatioChanged(params.getAspectRatio());
         }
-        return changed;
+        return aspectRatioChanged;
     }
 
     /**
@@ -650,10 +754,10 @@ public class PipTaskOrganizer extends TaskOrganizer implements
     private void scheduleAnimateResizePip(Rect currentBounds, Rect destinationBounds,
             Rect sourceHintRect, @PipAnimationController.TransitionDirection int direction,
             int durationMs, Consumer<Rect> updateBoundsCallback) {
-        if (!mInPip) {
+        if (!mState.isInPip()) {
             // TODO: tend to use shouldBlockResizeRequest here as well but need to consider
             // the fact that when in exitPip, scheduleAnimateResizePip is executed in the window
-            // container transaction callback and we want to set the mExitingPip immediately.
+            // container transaction callback and we want to set the mState immediately.
             return;
         }
 
@@ -710,7 +814,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
     private void scheduleFinishResizePip(Rect destinationBounds,
             @PipAnimationController.TransitionDirection int direction,
             Consumer<Rect> updateBoundsCallback) {
-        if (shouldBlockResizeRequest()) {
+        if (mState.shouldBlockResizeRequest()) {
             return;
         }
 
@@ -729,7 +833,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         mSurfaceTransactionHelper
                 .crop(tx, mLeash, destinationBounds)
                 .resetScale(tx, mLeash, destinationBounds)
-                .round(tx, mLeash, mInPip);
+                .round(tx, mLeash, mState.isInPip());
         return tx;
     }
 
@@ -738,7 +842,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
      */
     public void scheduleOffsetPip(Rect originalBounds, int offset, int duration,
             Consumer<Rect> updateBoundsCallback) {
-        if (shouldBlockResizeRequest()) {
+        if (mState.shouldBlockResizeRequest()) {
             return;
         }
         if (mShouldDeferEnteringPip) {
@@ -783,7 +887,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         final SurfaceControl.Transaction tx = mSurfaceControlTransactionFactory.getTransaction();
         mSurfaceTransactionHelper
                 .crop(tx, mLeash, destinationBounds)
-                .round(tx, mLeash, mInPip);
+                .round(tx, mLeash, mState.isInPip());
         tx.apply();
     }
 
@@ -826,6 +930,12 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         WindowContainerTransaction wct = new WindowContainerTransaction();
         prepareFinishResizeTransaction(destinationBounds, direction, tx, wct);
         applyFinishBoundsResize(wct, direction);
+        runOnMainHandler(() -> {
+            if (mPipViewHost != null) {
+                mPipViewHost.relayout(PipMenuActivityController.getPipMenuLayoutParams(
+                        destinationBounds.width(), destinationBounds.height()));
+            }
+        });
     }
 
     private void prepareFinishResizeTransaction(Rect destinationBounds,
@@ -842,7 +952,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         } else if (isOutPipDirection(direction)) {
             // If we are animating to fullscreen, then we need to reset the override bounds
             // on the task to ensure that the task "matches" the parent's bounds.
-            taskBounds = (direction == TRANSITION_DIRECTION_TO_FULLSCREEN)
+            taskBounds = (direction == TRANSITION_DIRECTION_LEAVE_PIP)
                     ? null : destinationBounds;
             applyWindowingModeChangeOnExit(wct, direction);
         } else {
@@ -863,7 +973,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
      */
     public void applyFinishBoundsResize(@NonNull WindowContainerTransaction wct,
             @PipAnimationController.TransitionDirection int direction) {
-        WindowOrganizer.applyTransaction(wct);
+        mTaskOrganizer.applyTransaction(wct);
     }
 
     /**
@@ -888,7 +998,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
             return;
         }
         mPipAnimationController
-                .getAnimator(mLeash, currentBounds, destinationBounds, sourceHintRect)
+                .getAnimator(mLeash, currentBounds, destinationBounds, sourceHintRect, direction)
                 .setTransitionDirection(direction)
                 .setPipAnimationCallback(mPipAnimationCallback)
                 .setDuration(durationMs)
@@ -915,30 +1025,26 @@ public class PipTaskOrganizer extends TaskOrganizer implements
     }
 
     /**
-     * Resize request can be initiated in other component, ignore if we are no longer in PIP
-     * or we're exiting from it.
-     *
-     * @return {@code true} if the resize request should be blocked/ignored.
-     */
-    private boolean shouldBlockResizeRequest() {
-        return !mInPip || mExitingPip;
-    }
-
-    /**
-     * Sync with {@link #mSplitDivider} on destination bounds if PiP is going to split screen.
+     * Sync with {@link SplitScreen} on destination bounds if PiP is going to split screen.
      *
      * @param destinationBoundsOut contain the updated destination bounds if applicable
      * @return {@code true} if destinationBounds is altered for split screen
      */
     private boolean syncWithSplitScreenBounds(Rect destinationBoundsOut) {
-        if (mSplitDivider == null || !mSplitDivider.isDividerVisible()) {
-            // bail early if system is not in split screen mode
+        if (!mSplitScreenOptional.isPresent()) {
             return false;
         }
+
+        SplitScreen splitScreen = mSplitScreenOptional.get();
+        if (!splitScreen.isDividerVisible()) {
+            // fail early if system is not in split screen mode
+            return false;
+        }
+
         // PiP window will go to split-secondary mode instead of fullscreen, populates the
         // split screen bounds here.
-        destinationBoundsOut.set(
-                mSplitDivider.getView().getNonMinimizedSplitScreenSecondaryBounds());
+        destinationBoundsOut.set(splitScreen.getDividerView()
+                .getNonMinimizedSplitScreenSecondaryBounds());
         return true;
     }
 
@@ -952,7 +1058,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         pw.println(innerPrefix + "mToken=" + mToken
                 + " binder=" + (mToken != null ? mToken.asBinder() : null));
         pw.println(innerPrefix + "mLeash=" + mLeash);
-        pw.println(innerPrefix + "mInPip=" + mInPip);
+        pw.println(innerPrefix + "mState=" + mState);
         pw.println(innerPrefix + "mOneShotAnimationType=" + mOneShotAnimationType);
         pw.println(innerPrefix + "mPictureInPictureParams=" + mPictureInPictureParams);
         pw.println(innerPrefix + "mLastReportedBounds=" + mLastReportedBounds);
@@ -970,7 +1076,7 @@ public class PipTaskOrganizer extends TaskOrganizer implements
         /**
          * Callback when the pip transition is started.
          */
-        void onPipTransitionStarted(ComponentName activity, int direction);
+        void onPipTransitionStarted(ComponentName activity, int direction, Rect pipBounds);
 
         /**
          * Callback when the pip transition is finished.

@@ -310,9 +310,16 @@ public class WifiConfiguration implements Parcelable {
          */
         public static final int SMS4 = 4;
 
+        /**
+         * AES in Galois/Counter Mode with a 128-bit integrity key
+         */
+        public static final int GCMP_128 = 5;
+
+
         public static final String varName = "pairwise";
 
-        public static final String[] strings = { "NONE", "TKIP", "CCMP", "GCMP_256", "SMS4" };
+        public static final String[] strings = { "NONE", "TKIP", "CCMP", "GCMP_256", "SMS4",
+                "GCMP_128" };
     }
 
     /**
@@ -354,13 +361,17 @@ public class WifiConfiguration implements Parcelable {
          * SMS4 cipher for WAPI
          */
         public static final int SMS4 = 6;
+        /**
+         * AES in Galois/Counter Mode with a 128-bit integrity key
+         */
+        public static final int GCMP_128 = 7;
 
         public static final String varName = "group";
 
         public static final String[] strings =
                 { /* deprecated */ "WEP40", /* deprecated */ "WEP104",
                         "TKIP", "CCMP", "GTK_NOT_USED", "GCMP_256",
-                        "SMS4" };
+                        "SMS4", "GCMP_128" };
     }
 
     /**
@@ -507,8 +518,10 @@ public class WifiConfiguration implements Parcelable {
                 allowedProtocols.set(WifiConfiguration.Protocol.RSN);
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SAE);
                 allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.GCMP_128);
                 allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.GCMP_256);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
+                allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_128);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_256);
                 requirePmf = true;
                 break;
@@ -517,7 +530,9 @@ public class WifiConfiguration implements Parcelable {
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_EAP);
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.IEEE8021X);
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SUITE_B_192);
+                allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.GCMP_128);
                 allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.GCMP_256);
+                allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_128);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_256);
                 allowedGroupManagementCiphers.set(WifiConfiguration.GroupMgmtCipher.BIP_GMAC_256);
                 // Note: allowedSuiteBCiphers bitset will be set by the service once the
@@ -528,8 +543,10 @@ public class WifiConfiguration implements Parcelable {
                 allowedProtocols.set(WifiConfiguration.Protocol.RSN);
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.OWE);
                 allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.GCMP_128);
                 allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.GCMP_256);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
+                allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_128);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_256);
                 requirePmf = true;
                 break;
@@ -1157,7 +1174,9 @@ public class WifiConfiguration implements Parcelable {
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"RANDOMIZATION_"}, value = {
             RANDOMIZATION_NONE,
-            RANDOMIZATION_PERSISTENT})
+            RANDOMIZATION_PERSISTENT,
+            RANDOMIZATION_ENHANCED,
+            RANDOMIZATION_AUTO})
     public @interface MacRandomizationSetting {}
 
     /**
@@ -1174,14 +1193,30 @@ public class WifiConfiguration implements Parcelable {
     public static final int RANDOMIZATION_PERSISTENT = 1;
 
     /**
+     * Use a randomly generated MAC address for connections to this network.
+     * This option does not persist the randomized MAC address.
+     * @hide
+     */
+    @SystemApi
+    public static final int RANDOMIZATION_ENHANCED = 2;
+
+    /**
+     * Let the wifi framework automatically decide the MAC randomization strategy.
+     * @hide
+     */
+    @SystemApi
+    public static final int RANDOMIZATION_AUTO = 3;
+
+    /**
      * Level of MAC randomization for this network.
-     * One of {@link #RANDOMIZATION_NONE} or {@link #RANDOMIZATION_PERSISTENT}.
-     * By default this field is set to {@link #RANDOMIZATION_PERSISTENT}.
+     * One of {@link #RANDOMIZATION_NONE}, {@link #RANDOMIZATION_AUTO},
+     * {@link #RANDOMIZATION_PERSISTENT} or {@link #RANDOMIZATION_ENHANCED}.
+     * By default this field is set to {@link #RANDOMIZATION_AUTO}.
      * @hide
      */
     @SystemApi
     @MacRandomizationSetting
-    public int macRandomizationSetting = RANDOMIZATION_PERSISTENT;
+    public int macRandomizationSetting = RANDOMIZATION_AUTO;
 
     /**
      * @hide
@@ -2560,7 +2595,18 @@ public class WifiConfiguration implements Parcelable {
     @KeyMgmt.KeyMgmtScheme
     public int getAuthType() {
         if (allowedKeyManagement.cardinality() > 1) {
-            throw new IllegalStateException("More than one auth type set");
+            if (allowedKeyManagement.get(KeyMgmt.WPA_EAP)) {
+                if (allowedKeyManagement.cardinality() == 2
+                        && allowedKeyManagement.get(KeyMgmt.IEEE8021X)) {
+                    return KeyMgmt.WPA_EAP;
+                }
+                if (allowedKeyManagement.cardinality() == 3
+                        && allowedKeyManagement.get(KeyMgmt.IEEE8021X)
+                        && allowedKeyManagement.get(KeyMgmt.SUITE_B_192)) {
+                    return KeyMgmt.SUITE_B_192;
+                }
+            }
+            throw new IllegalStateException("Invalid auth type set: " + allowedKeyManagement);
         }
         if (allowedKeyManagement.get(KeyMgmt.WPA_PSK)) {
             return KeyMgmt.WPA_PSK;

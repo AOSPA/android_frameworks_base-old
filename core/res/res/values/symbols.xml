@@ -1869,7 +1869,7 @@
   <java-symbol type="array" name="config_tether_upstream_types" />
   <java-symbol type="array" name="config_tether_usb_regexs" />
   <java-symbol type="array" name="config_tether_wifi_regexs" />
-  <java-symbol type="array" name="config_usbHostBlacklist" />
+  <java-symbol type="array" name="config_usbHostDenylist" />
   <java-symbol type="array" name="config_serialPorts" />
   <java-symbol type="array" name="radioAttributes" />
   <java-symbol type="array" name="config_oemUsbModeOverride" />
@@ -2411,6 +2411,7 @@
   <java-symbol type="plurals" name="zen_mode_duration_hours_short" />
   <java-symbol type="plurals" name="zen_mode_duration_minutes_summary_short" />
   <java-symbol type="plurals" name="zen_mode_duration_hours_summary_short" />
+  <java-symbol type="string" name="zen_mode_until_next_day" />
   <java-symbol type="string" name="zen_mode_until" />
   <java-symbol type="string" name="zen_mode_feature_name" />
   <java-symbol type="string" name="zen_mode_downtime_feature_name" />
@@ -2524,6 +2525,7 @@
   <java-symbol type="string" name="face_error_security_update_required" />
 
   <java-symbol type="array" name="config_biometric_sensors" />
+  <java-symbol type="bool" name="allow_test_udfps" />
 
   <java-symbol type="array" name="config_face_acquire_enroll_ignorelist" />
   <java-symbol type="array" name="config_face_acquire_vendor_enroll_ignorelist" />
@@ -2531,6 +2533,7 @@
   <java-symbol type="array" name="config_face_acquire_vendor_keyguard_ignorelist" />
   <java-symbol type="array" name="config_face_acquire_biometricprompt_ignorelist" />
   <java-symbol type="array" name="config_face_acquire_vendor_biometricprompt_ignorelist" />
+  <java-symbol type="bool" name="config_faceAuthSupportsSelfIllumination" />
   <java-symbol type="bool" name="config_faceAuthDismissesKeyguard" />
 
   <!-- Face config -->
@@ -3063,6 +3066,9 @@
   <java-symbol type="string" name="config_tvRemoteServicePackage" />
   <java-symbol type="string" name="notification_messaging_title_template" />
 
+  <!-- Notification handler / dashboard package -->
+  <java-symbol type="string" name="config_notificationHandlerPackage" />
+
   <java-symbol type="bool" name="config_supportPreRebootSecurityLogs" />
 
   <java-symbol type="dimen" name="notification_media_image_margin_end" />
@@ -3500,6 +3506,7 @@
   <java-symbol type="array" name="config_hideWhenDisabled_packageNames" />
 
   <java-symbol type="string" name="config_dozeLongPressSensorType" />
+  <java-symbol type="string" name="config_dozeUdfpsLongPressSensorType" />
   <java-symbol type="bool" name="config_dozeWakeLockScreenSensorAvailable" />
   <java-symbol type="integer" name="config_dozeWakeLockScreenDebounce" />
 
@@ -3867,6 +3874,7 @@
   <java-symbol type="layout" name="chooser_dialog_item" />
   <java-symbol type="drawable" name="chooser_dialog_background" />
   <java-symbol type="id" name="chooser_copy_button" />
+  <java-symbol type="id" name="chooser_nearby_button" />
   <java-symbol type="layout" name="chooser_action_button" />
   <java-symbol type="dimen" name="chooser_action_button_icon_size" />
   <java-symbol type="string" name="config_defaultNearbySharingComponent" />
@@ -4085,4 +4093,5 @@
   <java-symbol type="dimen" name="config_defaultBinderHeavyHitterAutoSamplerThreshold" />
 
   <java-symbol type="array" name="config_keep_warming_services" />
+  <java-symbol type="string" name="config_display_features" />
 </resources>
