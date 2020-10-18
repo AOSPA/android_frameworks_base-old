@@ -16,14 +16,21 @@
 
 package com.android.systemui.shade
 
+import android.content.Context
+import android.database.ContentObserver
 import android.graphics.Point
 import android.hardware.display.AmbientDisplayConfiguration
+import android.os.Handler
 import android.os.PowerManager
+import android.os.UserHandle
 import android.provider.Settings
+import android.provider.Settings.System.GESTURE_DOUBLE_TAP
+import android.provider.Settings.System.GESTURE_SINGLE_TAP
 import android.view.GestureDetector
 import android.view.MotionEvent
 import com.android.systemui.Dumpable
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.dock.DockManager
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.keyguard.domain.interactor.DozeInteractor
@@ -34,6 +41,7 @@ import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.tuner.TunerService
 import com.android.systemui.tuner.TunerService.Tunable
+import com.android.systemui.util.settings.SystemSettings
 import java.io.PrintWriter
 import javax.inject.Inject
 
@@ -48,6 +56,8 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class PulsingGestureListener @Inject constructor(
+        @Main private val handler: Handler,
+        private val context: Context,
         private val falsingManager: FalsingManager,
         private val dockManager: DockManager,
         private val powerInteractor: PowerInteractor,
@@ -56,11 +66,14 @@ class PulsingGestureListener @Inject constructor(
         private val shadeLogger: ShadeLogger,
         private val dozeInteractor: DozeInteractor,
         userTracker: UserTracker,
+        systemSettings: SystemSettings,
         tunerService: TunerService,
         dumpManager: DumpManager
 ) : GestureDetector.SimpleOnGestureListener(), Dumpable {
     private var doubleTapEnabled = false
     private var singleTapEnabled = false
+    private var customDoubleTapEnabled = false
+    private var customSingleTapEnabled = false
 
     init {
         val tunable = Tunable { key: String?, _: String? ->
@@ -76,6 +89,33 @@ class PulsingGestureListener @Inject constructor(
         tunerService.addTunable(tunable,
                 Settings.Secure.DOZE_DOUBLE_TAP_GESTURE,
                 Settings.Secure.DOZE_TAP_SCREEN_GESTURE)
+
+        val settingsObserver = object : ContentObserver(handler) {
+            override fun onChange(selfChange: Boolean) = update()
+
+            fun update() {
+                val customDoubleTap = systemSettings.getIntForUser(
+                        GESTURE_DOUBLE_TAP,
+                        context.resources.getInteger(
+                            com.android.internal.R.integer.config_doubleTapDefault),
+                        UserHandle.USER_CURRENT
+                )
+                val customSingleTap = systemSettings.getIntForUser(
+                        GESTURE_SINGLE_TAP,
+                        context.resources.getInteger(
+                            com.android.internal.R.integer.config_singleTapDefault),
+                        UserHandle.USER_CURRENT
+                )
+                // WAKE_UP = 1; PULSE_AMBIENT = 2; from KeyHandler
+                customDoubleTapEnabled = customDoubleTap == 1 || customDoubleTap == 2
+                customSingleTapEnabled = customSingleTap == 1 || customSingleTap == 2
+            }
+        }
+        systemSettings.registerContentObserverForUser(
+                GESTURE_DOUBLE_TAP, settingsObserver, UserHandle.USER_CURRENT)
+        systemSettings.registerContentObserverForUser(
+                GESTURE_SINGLE_TAP, settingsObserver, UserHandle.USER_CURRENT)
+        settingsObserver.update()
 
         dumpManager.registerDumpable(this)
     }
@@ -107,7 +147,8 @@ class PulsingGestureListener @Inject constructor(
         // checks MUST be on the ACTION_UP event.
         if (e.actionMasked == MotionEvent.ACTION_UP &&
                 statusBarStateController.isDozing &&
-                (doubleTapEnabled || singleTapEnabled) &&
+                (doubleTapEnabled || singleTapEnabled ||
+                    customDoubleTapEnabled || customSingleTapEnabled) &&
                 !falsingManager.isProximityNear &&
                 !falsingManager.isFalseDoubleTap
         ) {
@@ -120,6 +161,8 @@ class PulsingGestureListener @Inject constructor(
     override fun dump(pw: PrintWriter, args: Array<out String>) {
         pw.println("singleTapEnabled=$singleTapEnabled")
         pw.println("doubleTapEnabled=$doubleTapEnabled")
+        pw.println("customSingleTapEnabled=$customSingleTapEnabled")
+        pw.println("customDoubleTapEnabled=$customDoubleTapEnabled")
         pw.println("isDocked=${dockManager.isDocked}")
         pw.println("isProxCovered=${falsingManager.isProximityNear}")
     }
