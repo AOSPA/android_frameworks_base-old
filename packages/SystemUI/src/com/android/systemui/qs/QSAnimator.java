@@ -44,7 +44,6 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
 
     public static final float EXPANDED_TILE_DELAY = .86f;
 
-
     private final ArrayList<View> mAllViews = new ArrayList<>();
     /**
      * List of {@link View}s representing Quick Settings that are being animated from the quick QS
@@ -66,7 +65,6 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     private TouchAnimator mNonfirstPageDelayedAnimator;
     // This animates fading of SecurityFooter and media divider
     private TouchAnimator mAllPagesDelayedAnimator;
-    private TouchAnimator mBrightnessAnimator;
     private boolean mNeedsAnimatorUpdate = false;
 
     private boolean mOnKeyguard;
@@ -279,18 +277,6 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         }
 
         if (mAllowFancy) {
-            // Make brightness appear static position and alpha in through second half.
-            View brightness = mQsPanel.getBrightnessView();
-            if (brightness != null) {
-                firstPageBuilder.addFloat(brightness, "translationY", heightDiff, 0);
-                mBrightnessAnimator = new TouchAnimator.Builder()
-                        .addFloat(brightness, "alpha", 0, 1)
-                        .setStartDelay(.5f)
-                        .build();
-                mAllViews.add(brightness);
-            } else {
-                mBrightnessAnimator = null;
-            }
             mFirstPageAnimator = firstPageBuilder
                     .setListener(this)
                     .build();
@@ -388,15 +374,18 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             mFirstPageDelayedAnimator.setPosition(position);
             mTranslationXAnimator.setPosition(position);
             mTranslationYAnimator.setPosition(position);
-            if (mBrightnessAnimator != null) {
-                mBrightnessAnimator.setPosition(position);
-            }
         } else {
             mNonfirstPageAnimator.setPosition(position);
             mNonfirstPageDelayedAnimator.setPosition(position);
         }
         if (mAllowFancy) {
             mAllPagesDelayedAnimator.setPosition(position);
+        }
+
+        if (position == 0f) {
+            mQuickQsPanel.getBrightnessView().setVisibility(View.VISIBLE);
+        } else {
+            mQuickQsPanel.getBrightnessView().setVisibility(View.INVISIBLE);
         }
     }
 
