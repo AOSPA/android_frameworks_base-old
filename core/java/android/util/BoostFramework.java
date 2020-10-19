@@ -57,8 +57,12 @@ public class BoostFramework {
     private static Method sReleaseFunc = null;
     private static Method sReleaseHandlerFunc = null;
     private static Method sFeedbackFunc = null;
+    private static Method sFeedbackFuncExtn = null;
     private static Method sPerfGetPropFunc = null;
     private static Method sAcqAndReleaseFunc = null;
+    private static Method sperfHintAcqRelFunc = null;
+    private static Method sperfHintRenewFunc = null;
+    private static Method sPerfEventFunc = null;
 
     private static Method sIOPStart = null;
     private static Method sIOPStop  = null;
@@ -229,6 +233,9 @@ public class BoostFramework {
                     argClasses = new Class[] {int.class, String.class};
                     sFeedbackFunc = sPerfClass.getMethod("perfGetFeedback", argClasses);
 
+                    argClasses = new Class[] {int.class, String.class, int.class, int[].class};
+                    sFeedbackFuncExtn = sPerfClass.getMethod("perfGetFeedbackExtn", argClasses);
+
                     argClasses = new Class[] {int.class, String.class, String.class};
                     sIOPStart =   sPerfClass.getDeclaredMethod("perfIOPrefetchStart", argClasses);
 
@@ -240,6 +247,17 @@ public class BoostFramework {
 
                     argClasses = new Class[] {int.class, int.class, int.class, int.class, int[].class};
                     sAcqAndReleaseFunc = sPerfClass.getMethod("perfLockAcqAndRelease", argClasses);
+
+                    argClasses = new Class[] {int.class, String.class, int.class, int[].class};
+                    sPerfEventFunc = sPerfClass.getMethod("perfEvent", argClasses);
+
+                    argClasses = new Class[] {int.class, int.class, String.class, int.class,
+                                              int.class, int.class, int[].class};
+                    sperfHintAcqRelFunc = sPerfClass.getMethod("perfHintAcqRel", argClasses);
+
+                    argClasses = new Class[] {int.class, int.class, String.class, int.class,
+                                              int.class, int.class, int[].class};
+                    sperfHintRenewFunc = sPerfClass.getMethod("perfHintRenew", argClasses);
 
                     try {
                         argClasses = new Class[] {int.class, int.class, String.class, int.class, String.class};
@@ -342,11 +360,25 @@ public class BoostFramework {
     }
 
 /** @hide */
-    public int perfGetFeedback(int req, String userDataStr) {
+    public int perfGetFeedback(int req, String pkg_name) {
         int ret = -1;
         try {
             if (sFeedbackFunc != null) {
-                Object retVal = sFeedbackFunc.invoke(mPerf, req, userDataStr);
+                Object retVal = sFeedbackFunc.invoke(mPerf, req, pkg_name);
+                ret = (int)retVal;
+            }
+        } catch(Exception e) {
+            Log.e(TAG,"Exception " + e);
+        }
+        return ret;
+    }
+
+/** @hide */
+    public int perfGetFeedbackExtn(int req, String pkg_name, int numArgs, int... list) {
+        int ret = -1;
+        try {
+            if (sFeedbackFuncExtn != null) {
+                Object retVal = sFeedbackFuncExtn.invoke(mPerf, req, pkg_name, numArgs, list);
                 ret = (int)retVal;
             }
         } catch(Exception e) {
@@ -446,6 +478,84 @@ public class BoostFramework {
         try {
             if (sAcqAndReleaseFunc != null) {
                 Object retVal = sAcqAndReleaseFunc.invoke(mPerf, handle, duration, numArgs, reserveNumArgs, list);
+                ret = (int)retVal;
+            }
+        } catch(Exception e) {
+            Log.e(TAG,"Exception " + e);
+        }
+        return ret;
+    }
+
+/** @hide */
+    public void perfEvent(int eventId, String pkg_name) {
+        perfEvent(eventId, pkg_name, 0);
+    }
+
+/** @hide */
+    public void perfEvent(int eventId, String pkg_name, int numArgs, int... list) {
+        try {
+            if (sPerfEventFunc != null) {
+                sPerfEventFunc.invoke(mPerf, eventId, pkg_name, numArgs, list);
+            }
+        } catch(Exception e) {
+            Log.e(TAG,"Exception " + e);
+        }
+    }
+
+/** @hide */
+    public int perfHintAcqRel(int handle, int hint, String pkg_name) {
+        return perfHintAcqRel(handle, hint, pkg_name, -1, -1, 0);
+    }
+
+/** @hide */
+    public int perfHintAcqRel(int handle, int hint, String pkg_name, int duration) {
+        return perfHintAcqRel(handle, hint, pkg_name, duration, -1, 0);
+    }
+
+/** @hide */
+    public int perfHintAcqRel(int handle, int hint, String pkg_name, int duration, int hintType) {
+        return perfHintAcqRel(handle, hint, pkg_name, duration, hintType, 0);
+    }
+
+/** @hide */
+    public int perfHintAcqRel(int handle, int hint, String pkg_name, int duration,
+                              int hintType, int numArgs, int... list) {
+        int ret = -1;
+        try {
+            if (sperfHintAcqRelFunc != null) {
+                Object retVal = sperfHintAcqRelFunc.invoke(mPerf,handle, hint, pkg_name,
+                                                           duration, hintType, numArgs, list);
+                ret = (int)retVal;
+            }
+        } catch(Exception e) {
+            Log.e(TAG,"Exception " + e);
+        }
+        return ret;
+    }
+
+/** @hide */
+    public int perfHintRenew(int handle, int hint, String pkg_name) {
+        return perfHintRenew(handle, hint, pkg_name, -1, -1, 0);
+    }
+
+/** @hide */
+    public int perfHintRenew(int handle, int hint, String pkg_name, int duration) {
+        return perfHintRenew(handle, hint, pkg_name, duration, -1, 0);
+    }
+
+/** @hide */
+    public int perfHintRenew(int handle, int hint, String pkg_name, int duration, int hintType) {
+        return perfHintRenew(handle, hint, pkg_name, duration, hintType, 0);
+    }
+
+/** @hide */
+    public int perfHintRenew(int handle, int hint, String pkg_name, int duration,
+                             int hintType, int numArgs, int... list) {
+        int ret = -1;
+        try {
+            if (sperfHintRenewFunc != null) {
+                Object retVal = sperfHintRenewFunc.invoke(mPerf,handle, hint, pkg_name,
+                                                          duration, hintType, numArgs, list);
                 ret = (int)retVal;
             }
         } catch(Exception e) {
