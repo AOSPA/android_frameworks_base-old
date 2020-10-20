@@ -151,26 +151,22 @@ public class MobileSignalController extends SignalController<
         updateDataSim();
 
         int phoneId = mSubscriptionInfo.getSimSlotIndex();
-        mFeatureConnector = new FeatureConnector(mContext, phoneId,
-                new FeatureConnector.Listener<ImsManager> () {
-                    @Override
-                    public ImsManager getFeatureManager() {
-                        return ImsManager.getInstance(mContext, phoneId);
-                    }
+        mFeatureConnector = ImsManager.getConnector(
+            mContext, phoneId, "?",
+            new FeatureConnector.Listener<ImsManager> () {
+                @Override
+                public void connectionReady(ImsManager manager) throws ImsException {
+                    Log.d(mTag, "ImsManager: connection ready.");
+                    mImsManager = manager;
+                    setListeners();
+                }
 
-                    @Override
-                    public void connectionReady(ImsManager manager) throws ImsException {
-                        Log.d(mTag, "ImsManager: connection ready.");
-                        mImsManager = manager;
-                        setListeners();
-                    }
-
-                    @Override
-                    public void connectionUnavailable() {
-                        Log.d(mTag, "ImsManager: connection unavailable.");
-                        removeListeners();
-                    }
-        }, "?");
+                @Override
+                public void connectionUnavailable(int reason) {
+                    Log.d(mTag, "ImsManager: connection unavailable.");
+                    removeListeners();
+                }
+            }, mContext.getMainExecutor());
 
 
         mObserver = new ContentObserver(new Handler(receiverLooper)) {
@@ -456,8 +452,8 @@ public class MobileSignalController extends SignalController<
         }
 
         try {
-            mImsManager.addCapabilitiesCallback(mCapabilityCallback);
-            mImsManager.addRegistrationCallback(mImsRegistrationCallback);
+            mImsManager.addCapabilitiesCallback(mCapabilityCallback, mContext.getMainExecutor());
+            mImsManager.addRegistrationCallback(mImsRegistrationCallback, mContext.getMainExecutor());
             Log.d(mTag, "addCapabilitiesCallback " + mCapabilityCallback + " into " + mImsManager);
             Log.d(mTag, "addRegistrationCallback " + mImsRegistrationCallback
                     + " into " + mImsManager);
