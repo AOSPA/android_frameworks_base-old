@@ -16,6 +16,24 @@
       "revId": "267cfecf7e54a3337698322b95c3d101c461e117",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b6bf6945_c41d49aa",
+        "filename": "packages/SystemUI/res/values/pa_config.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 21,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-10-21T14:02:38Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d5bd1fc9_45ef41d8",
+      "revId": "267cfecf7e54a3337698322b95c3d101c461e117",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
