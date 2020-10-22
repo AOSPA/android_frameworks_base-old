@@ -1,0 +1,416 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "4ca5889b_386bdd56",
+        "filename": "services/core/java/com/android/server/biometrics/face/FaceService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 233,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "just return mSenseManager.isEnabled();",
+      "range": {
+        "startLine": 230,
+        "startChar": 0,
+        "endLine": 233,
+        "endChar": 25
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "654a6329_3b893b4b",
+        "filename": "services/core/java/com/android/server/biometrics/face/FaceService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 238,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "add a space",
+      "range": {
+        "startLine": 238,
+        "startChar": 42,
+        "endLine": 238,
+        "endChar": 43
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "935d6845_ccff021a",
+        "filename": "services/core/java/com/android/server/biometrics/face/FaceService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1055,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "using null for a primitive type seems kind of odd. perhaps this can be initialized as an empty array?",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9a5b62c9_3226b8dd",
+        "filename": "services/core/java/com/android/server/biometrics/face/FaceService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1449,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "can you move this to a separate if statement below. the code comment above seems to mention only the props. for readability purposes create a new if statement (either above or below this one) which returns if sensemanager is enabled",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "c9316528_5a2e8b0a",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "why is this public?",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4dab43ba_b71ceb33",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 67,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "is there a specific reason for this to be static? if so, rename this to sSenseEnabled because the m stands for member variable, which is not a static variable",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "aa347d12_f1f62534",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 79,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "can mark this as final",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d43d2cdb_8cf037e9",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 80,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "same here",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "191a1b1b_a8bd3785",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 190,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "spacing",
+      "range": {
+        "startLine": 190,
+        "startChar": 15,
+        "endLine": 190,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5d5f6cc5_1d9d4f5a",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 208,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "spacing",
+      "range": {
+        "startLine": 208,
+        "startChar": 11,
+        "endLine": 208,
+        "endChar": 12
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "1c30b057_c6153366",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 219,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "spacing",
+      "range": {
+        "startLine": 219,
+        "startChar": 15,
+        "endLine": 219,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "64b63804_e5150242",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 228,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "what does this value mean? can you move this to a constant (with perhaps a code comment explaining the value, if it has any significance)",
+      "range": {
+        "startLine": 228,
+        "startChar": 15,
+        "endLine": 228,
+        "endChar": 17
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5d025299_5725f908",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 249,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "same here",
+      "range": {
+        "startLine": 249,
+        "startChar": 15,
+        "endLine": 249,
+        "endChar": 17
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5fc57376_3337c559",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 255,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "spacing",
+      "range": {
+        "startLine": 255,
+        "startChar": 15,
+        "endLine": 255,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "27c6efba_471e2bfa",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 264,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "and here",
+      "range": {
+        "startLine": 264,
+        "startChar": 15,
+        "endLine": 264,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "eb813e15_1feffb6b",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 270,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "spacing",
+      "range": {
+        "startLine": 270,
+        "startChar": 15,
+        "endLine": 270,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "45adb020_b9a9bfb5",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 285,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "spacing",
+      "range": {
+        "startLine": 285,
+        "startChar": 15,
+        "endLine": 285,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "31127fdb_b64311b7",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 349,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "remove this. the code will fall through to the next return false anyway",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "0dc79af5_ac114531",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 388,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "move this below the check. this variable is not used if mSenseEnabled returns false, so no need to create it in that case",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "121b3f03_3e34fcff",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 393,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-10-22T08:56:39Z",
+      "side": 1,
+      "message": "can you reference the flags you\u0027re using here rather than using the total magic value? (e.g PackageManager.GET_RESOLVED | PackageManager.GET_SHARED_LIBRARY.... etc)",
+      "range": {
+        "startLine": 393,
+        "startChar": 53,
+        "endLine": 393,
+        "endChar": 59
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
