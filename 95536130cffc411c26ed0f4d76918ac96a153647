@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "d11e1804_ca82288b",
+        "filename": "services/core/java/com/android/server/biometrics/face/FaceService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 233,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4ca5889b_386bdd56",
+      "range": {
+        "startLine": 230,
+        "startChar": 0,
+        "endLine": 233,
+        "endChar": 25
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "654a6329_3b893b4b",
         "filename": "services/core/java/com/android/server/biometrics/face/FaceService.java",
         "patchSetId": 2
@@ -45,6 +69,30 @@
       "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "77e3cca1_eb6b5fa0",
+        "filename": "services/core/java/com/android/server/biometrics/face/FaceService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 238,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "654a6329_3b893b4b",
+      "range": {
+        "startLine": 238,
+        "startChar": 42,
+        "endLine": 238,
+        "endChar": 43
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     },
     {
       "key": {
@@ -82,6 +130,24 @@
     },
     {
       "key": {
+        "uuid": "fa9a84ad_87633e38",
+        "filename": "services/core/java/com/android/server/biometrics/face/FaceService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1449,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "9a5b62c9_3226b8dd",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "c9316528_5a2e8b0a",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -96,6 +162,24 @@
       "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "372ae85a_b63119d1",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "c9316528_5a2e8b0a",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     },
     {
       "key": {
@@ -116,6 +200,24 @@
     },
     {
       "key": {
+        "uuid": "d51596f9_313bda06",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 67,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4dab43ba_b71ceb33",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "aa347d12_f1f62534",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -133,6 +235,24 @@
     },
     {
       "key": {
+        "uuid": "1a339c54_309e280b",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 79,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "aa347d12_f1f62534",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "d43d2cdb_8cf037e9",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -147,6 +267,24 @@
       "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4616612c_79ba706b",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 80,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d43d2cdb_8cf037e9",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     },
     {
       "key": {
@@ -173,6 +311,30 @@
     },
     {
       "key": {
+        "uuid": "52317b59_3d6738d6",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 190,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "191a1b1b_a8bd3785",
+      "range": {
+        "startLine": 190,
+        "startChar": 15,
+        "endLine": 190,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "5d5f6cc5_1d9d4f5a",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -196,6 +358,30 @@
     },
     {
       "key": {
+        "uuid": "d5c164ef_f40eb516",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 208,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "5d5f6cc5_1d9d4f5a",
+      "range": {
+        "startLine": 208,
+        "startChar": 11,
+        "endLine": 208,
+        "endChar": 12
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "1c30b057_c6153366",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -216,6 +402,30 @@
       "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4fc0e064_45e36407",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 219,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "1c30b057_c6153366",
+      "range": {
+        "startLine": 219,
+        "startChar": 15,
+        "endLine": 219,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     },
     {
       "key": {
@@ -288,6 +498,30 @@
     },
     {
       "key": {
+        "uuid": "24df8169_fad48b8a",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 255,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "5fc57376_3337c559",
+      "range": {
+        "startLine": 255,
+        "startChar": 15,
+        "endLine": 255,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "27c6efba_471e2bfa",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -334,6 +568,30 @@
     },
     {
       "key": {
+        "uuid": "6128547b_65facac6",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 270,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "eb813e15_1feffb6b",
+      "range": {
+        "startLine": 270,
+        "startChar": 15,
+        "endLine": 270,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "45adb020_b9a9bfb5",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -357,6 +615,30 @@
     },
     {
       "key": {
+        "uuid": "2d5f7f24_20d0ab95",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 285,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "45adb020_b9a9bfb5",
+      "range": {
+        "startLine": 285,
+        "startChar": 15,
+        "endLine": 285,
+        "endChar": 16
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "31127fdb_b64311b7",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -374,6 +656,24 @@
     },
     {
       "key": {
+        "uuid": "9ac02cc7_e125ee73",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 349,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "31127fdb_b64311b7",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "0dc79af5_ac114531",
         "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
         "patchSetId": 2
@@ -388,6 +688,24 @@
       "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5580dbc8_cc65c264",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 388,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "0dc79af5_ac114531",
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     },
     {
       "key": {
@@ -411,6 +729,30 @@
       "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d3d6211b_2c4f7536",
+        "filename": "services/core/java/com/android/server/biometrics/face/ParanoidSenseManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 393,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-10-23T14:10:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "121b3f03_3e34fcff",
+      "range": {
+        "startLine": 393,
+        "startChar": 53,
+        "endLine": 393,
+        "endChar": 59
+      },
+      "revId": "95536130cffc411c26ed0f4d76918ac96a153647",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
