@@ -45,6 +45,7 @@ import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
 import android.util.MathUtils;
+import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -415,6 +416,8 @@ public class NotificationPanelViewController extends PanelViewController {
     private final ShadeController mShadeController;
     private int mDisplayId;
 
+    private GestureDetector mLockscreenDoubleTapToSleep;
+
     /**
      * Cache the resource id of the theme to avoid unnecessary work in onThemeChanged.
      *
@@ -553,6 +556,14 @@ public class NotificationPanelViewController extends PanelViewController {
         });
         mBottomAreaShadeAlphaAnimator.setDuration(160);
         mBottomAreaShadeAlphaAnimator.setInterpolator(Interpolators.ALPHA_OUT);
+        mLockscreenDoubleTapToSleep = new GestureDetector(mView.getContext(),
+                new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDoubleTap(MotionEvent e) {
+                Utils.switchScreenOff(mView.getContext());
+                return true;
+            }
+        });
         mShadeController = shadeController;
         mLockscreenUserManager = notificationLockscreenUserManager;
         mEntryManager = notificationEntryManager;
@@ -3154,6 +3165,10 @@ public class NotificationPanelViewController extends PanelViewController {
                 // to pull down QS or expand the shade.
                 if (mStatusBar.isBouncerShowingScrimmed()) {
                     return false;
+                }
+
+                if (mBarState == StatusBarState.KEYGUARD) {
+                    mLockscreenDoubleTapToSleep.onTouchEvent(event);
                 }
 
                 // Make sure the next touch won't the blocked after the current ends.
