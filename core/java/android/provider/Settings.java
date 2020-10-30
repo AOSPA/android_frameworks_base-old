@@ -8332,6 +8332,13 @@ public final class Settings {
                 "torch_power_button_gesture";
 
         /**
+         * Swipe to screenshot gesture
+         * Also known as Three Fingers Screenshot.
+         * @hide
+         */
+        public static final String SWIPE_TO_SCREENSHOT = "swipe_to_screenshot";
+
+        /**
          * Whether or not the flashlight (camera torch mode) is available required to turn
          * on flashlight.
          *
