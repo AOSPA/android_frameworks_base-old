@@ -182,16 +182,11 @@ public final class SurfaceControl implements Parcelable {
             IBinder displayToken, int mode);
     private static native void nativeDeferTransactionUntil(long transactionObj, long nativeObject,
             long barrierObject, long frame);
-    private static native void nativeDeferTransactionUntilSurface(long transactionObj,
-            long nativeObject,
-            long surfaceObject, long frame);
     private static native void nativeReparentChildren(long transactionObj, long nativeObject,
             long newParentObject);
     private static native void nativeReparent(long transactionObj, long nativeObject,
             long newParentNativeObject);
     private static native void nativeSeverChildren(long transactionObj, long nativeObject);
-    private static native void nativeSetOverrideScalingMode(long transactionObj, long nativeObject,
-            int scalingMode);
 
     private static native Display.HdrCapabilities nativeGetHdrCapabilities(IBinder displayToken);
 
@@ -225,6 +220,8 @@ public final class SurfaceControl implements Parcelable {
             int transformHint);
     private static native void nativeSetFocusedWindow(long transactionObj, IBinder toToken,
                                                       IBinder focusedToken, int displayId);
+    private static native void nativeSetFrameTimelineVsync(long transactionObj,
+            long frameTimelineVsyncId);
 
     @Nullable
     @GuardedBy("mLock")
@@ -268,7 +265,7 @@ public final class SurfaceControl implements Parcelable {
 
     private WeakReference<View> mLocalOwnerView;
 
-    static Transaction sGlobalTransaction;
+    static GlobalTransactionWrapper sGlobalTransaction;
     static long sTransactionNestCount = 0;
 
     /**
@@ -316,11 +313,19 @@ public final class SurfaceControl implements Parcelable {
     public static final int HIDDEN = 0x00000004;
 
     /**
-     * Surface creation flag: The surface contains secure content, special
-     * measures will be taken to disallow the surface's content to be copied
-     * from another process. In particular, screenshots and VNC servers will
-     * be disabled, but other measures can take place, for instance the
-     * surface might not be hardware accelerated.
+     * Surface creation flag: Skip this layer and its children when taking a screenshot. This
+     * also includes mirroring and screen recording, so the layers with flag SKIP_SCREENSHOT
+     * will not be included on non primary displays.
+     * @hide
+     */
+    public static final int SKIP_SCREENSHOT = 0x00000040;
+
+    /**
+     * Surface creation flag: Special measures will be taken to disallow the surface's content to
+     * be copied. In particular, screenshots and secondary, non-secure displays will render black
+     * content instead of the surface content.
+     *
+     * @see #createDisplay(String, boolean)
      * @hide
      */
     public static final int SECURE = 0x00000080;
@@ -483,15 +488,6 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public static final int POWER_MODE_ON_SUSPEND = 4;
-
-    /**
-     * A value for windowType used to indicate that the window should be omitted from screenshots
-     * and display mirroring. A temporary workaround until we express such things with
-     * the hierarchy.
-     * TODO: b/64227542
-     * @hide
-     */
-    public static final int WINDOW_TYPE_DONT_SCREENSHOT = 441731;
 
     /**
      * internal representation of how to interpret pixel value, used only to convert to ColorSpace.
@@ -1458,7 +1454,7 @@ public final class SurfaceControl implements Parcelable {
     public static void openTransaction() {
         synchronized (SurfaceControl.class) {
             if (sGlobalTransaction == null) {
-                sGlobalTransaction = new Transaction();
+                sGlobalTransaction = new GlobalTransactionWrapper();
             }
             synchronized(SurfaceControl.class) {
                 sTransactionNestCount++;
@@ -1492,7 +1488,7 @@ public final class SurfaceControl implements Parcelable {
             } else if (--sTransactionNestCount > 0) {
                 return;
             }
-            sGlobalTransaction.apply();
+            sGlobalTransaction.applyGlobalTransaction(false);
         }
     }
 
@@ -1520,16 +1516,6 @@ public final class SurfaceControl implements Parcelable {
     public void detachChildren() {
         synchronized(SurfaceControl.class) {
             sGlobalTransaction.detachChildren(this);
-        }
-    }
-
-    /**
-     * @hide
-     */
-    public void setOverrideScalingMode(int scalingMode) {
-        checkNotReleased();
-        synchronized(SurfaceControl.class) {
-            sGlobalTransaction.setOverrideScalingMode(this, scalingMode);
         }
     }
 
@@ -2560,7 +2546,10 @@ public final class SurfaceControl implements Parcelable {
             nativeApplyTransaction(mNativeObject, sync);
         }
 
-        private void applyResizedSurfaces() {
+        /**
+         * @hide
+         */
+        protected void applyResizedSurfaces() {
             for (int i = mResizedSurfaces.size() - 1; i >= 0; i--) {
                 final Point size = mResizedSurfaces.valueAt(i);
                 final SurfaceControl surfaceControl = mResizedSurfaces.keyAt(i);
@@ -2572,7 +2561,10 @@ public final class SurfaceControl implements Parcelable {
             mResizedSurfaces.clear();
         }
 
-        private void notifyReparentedSurfaces() {
+        /**
+         * @hide
+         */
+        protected void notifyReparentedSurfaces() {
             final int reparentCount = mReparentedSurfaces.size();
             for (int i = reparentCount - 1; i >= 0; i--) {
                 final SurfaceControl child = mReparentedSurfaces.keyAt(i);
@@ -2949,22 +2941,6 @@ public final class SurfaceControl implements Parcelable {
         /**
          * @hide
          */
-        @Deprecated
-        @UnsupportedAppUsage
-        public Transaction deferTransactionUntilSurface(SurfaceControl sc, Surface barrierSurface,
-                long frameNumber) {
-            if (frameNumber < 0) {
-                return this;
-            }
-            checkPreconditions(sc);
-            nativeDeferTransactionUntilSurface(mNativeObject, sc.mNativeObject,
-                    barrierSurface.mNativeObject, frameNumber);
-            return this;
-        }
-
-        /**
-         * @hide
-         */
         public Transaction reparentChildren(SurfaceControl sc, SurfaceControl newParent) {
             checkPreconditions(sc);
             nativeReparentChildren(mNativeObject, sc.mNativeObject, newParent.mNativeObject);
@@ -3000,16 +2976,6 @@ public final class SurfaceControl implements Parcelable {
         public Transaction detachChildren(SurfaceControl sc) {
             checkPreconditions(sc);
             nativeSeverChildren(mNativeObject, sc.mNativeObject);
-            return this;
-        }
-
-        /**
-         * @hide
-         */
-        public Transaction setOverrideScalingMode(SurfaceControl sc, int overrideScalingMode) {
-            checkPreconditions(sc);
-            nativeSetOverrideScalingMode(mNativeObject, sc.mNativeObject,
-                    overrideScalingMode);
             return this;
         }
 
@@ -3290,6 +3256,22 @@ public final class SurfaceControl implements Parcelable {
             return this;
         }
 
+        /**
+         * Adds or removes the flag SKIP_SCREENSHOT of the surface.  Setting the flag is equivalent
+         * to creating the Surface with the {@link #SKIP_SCREENSHOT} flag.
+         *
+         * @hide
+         */
+        public Transaction setSkipScreenshot(SurfaceControl sc, boolean skipScrenshot) {
+            checkPreconditions(sc);
+            if (skipScrenshot) {
+                nativeSetFlags(mNativeObject, sc.mNativeObject, SKIP_SCREENSHOT, SKIP_SCREENSHOT);
+            } else {
+                nativeSetFlags(mNativeObject, sc.mNativeObject, 0, SKIP_SCREENSHOT);
+            }
+            return this;
+        }
+
          /**
          * Merge the other transaction into this transaction, clearing the
          * other transaction as if it had been applied.
@@ -3325,6 +3307,19 @@ public final class SurfaceControl implements Parcelable {
         public Transaction remove(@NonNull SurfaceControl sc) {
             reparent(sc, null);
             sc.release();
+            return this;
+        }
+
+        /**
+         * Sets the frame timeline vsync id received from choreographer
+         * {@link Choreographer#getVsyncId()} that corresponds to the transaction submitted on that
+         * surface control.
+         *
+         * @hide
+         */
+        @NonNull
+        public Transaction setFrameTimelineVsync(long frameTimelineVsyncId) {
+            nativeSetFrameTimelineVsync(mNativeObject, frameTimelineVsyncId);
             return this;
         }
 
@@ -3395,6 +3390,26 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
+     * As part of eliminating usage of the global Transaction we expose
+     * a SurfaceControl.getGlobalTransaction function. However calling
+     * apply on this global transaction (rather than using closeTransaction)
+     * would be very dangerous. So for the global transaction we use this
+     * subclass of Transaction where the normal apply throws an exception.
+     */
+    private static class GlobalTransactionWrapper extends SurfaceControl.Transaction {
+        void applyGlobalTransaction(boolean sync) {
+            applyResizedSurfaces();
+            notifyReparentedSurfaces();
+            nativeApplyTransaction(mNativeObject, sync);
+        }
+
+        @Override
+        public void apply(boolean sync) {
+            throw new RuntimeException("Global transaction must be applied from closeTransaction");
+        }
+    }
+
+    /**
      * Acquire a frame rate flexibility token, which allows surface flinger to freely switch display
      * frame rates. This is used by CTS tests to put the device in a consistent state. See
      * ISurfaceComposer::acquireFrameRateFlexibilityToken(). The caller must have the
@@ -3413,5 +3428,18 @@ public final class SurfaceControl implements Parcelable {
     @TestApi
     public static void releaseFrameRateFlexibilityToken(long token) {
         nativeReleaseFrameRateFlexibilityToken(token);
+    }
+
+    /**
+     * This is a refactoring utility function to enable lower levels of code to be refactored
+     * from using the global transaction (and instead use a passed in Transaction) without
+     * having to refactor the higher levels at the same time.
+     * The returned global transaction can't be applied, it must be applied from closeTransaction
+     * Unless you are working on removing Global Transaction usage in the WindowManager, this
+     * probably isn't a good function to use.
+     * @hide
+     */
+    public static Transaction getGlobalTransaction() {
+        return sGlobalTransaction;
     }
 }

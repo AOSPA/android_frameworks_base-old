@@ -481,7 +481,7 @@ static void nativeSetRelativeLayer(JNIEnv* env, jclass clazz, jlong transactionO
     auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     auto relative = reinterpret_cast<SurfaceControl *>(relativeToObject);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->setRelativeLayer(ctrl, relative->getHandle(), zorder);
+    transaction->setRelativeLayer(ctrl, relative, zorder);
 }
 
 static void nativeSetPosition(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -1327,20 +1327,9 @@ static jboolean nativeGetAnimationFrameStats(JNIEnv* env, jclass clazz, jobject 
 
 static void nativeDeferTransactionUntil(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject, jlong barrierObject, jlong frameNumber) {
-    auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    auto barrier = reinterpret_cast<SurfaceControl *>(barrierObject);
+    sp<SurfaceControl> ctrl = reinterpret_cast<SurfaceControl*>(nativeObject);
+    sp<SurfaceControl> barrier = reinterpret_cast<SurfaceControl*>(barrierObject);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->deferTransactionUntil_legacy(ctrl, barrier->getHandle(), frameNumber);
-}
-
-static void nativeDeferTransactionUntilSurface(JNIEnv* env, jclass clazz, jlong transactionObj,
-        jlong nativeObject,
-        jlong surfaceObject, jlong frameNumber) {
-    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-
-    auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    sp<Surface> barrier = reinterpret_cast<Surface *>(surfaceObject);
-
     transaction->deferTransactionUntil_legacy(ctrl, barrier, frameNumber);
 }
 
@@ -1351,7 +1340,7 @@ static void nativeReparentChildren(JNIEnv* env, jclass clazz, jlong transactionO
     auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     auto newParent = reinterpret_cast<SurfaceControl *>(newParentObject);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->reparentChildren(ctrl, newParent->getHandle());
+    transaction->reparentChildren(ctrl, newParent);
 }
 
 static void nativeReparent(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -1360,7 +1349,7 @@ static void nativeReparent(JNIEnv* env, jclass clazz, jlong transactionObj,
     auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     auto newParent = reinterpret_cast<SurfaceControl *>(newParentObject);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->reparent(ctrl, newParent != NULL ? newParent->getHandle() : NULL);
+    transaction->reparent(ctrl, newParent);
 }
 
 static void nativeSeverChildren(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -1369,15 +1358,6 @@ static void nativeSeverChildren(JNIEnv* env, jclass clazz, jlong transactionObj,
 
     auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     transaction->detachChildren(ctrl);
-}
-
-static void nativeSetOverrideScalingMode(JNIEnv* env, jclass clazz, jlong transactionObj,
-        jlong nativeObject,
-        jint scalingMode) {
-    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-
-    auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    transaction->setOverrideScalingMode(ctrl, scalingMode);
 }
 
 static jobject nativeGetHdrCapabilities(JNIEnv* env, jclass clazz, jobject tokenObject) {
@@ -1434,7 +1414,8 @@ static jlong nativeReadFromParcel(JNIEnv* env, jclass clazz, jobject parcelObj) 
         doThrowNPE(env);
         return 0;
     }
-    sp<SurfaceControl> surface = SurfaceControl::readFromParcel(parcel);
+    sp<SurfaceControl> surface;
+    SurfaceControl::readFromParcel(*parcel, &surface);
     if (surface == nullptr) {
         return 0;
     }
@@ -1462,7 +1443,7 @@ static void nativeWriteToParcel(JNIEnv* env, jclass clazz,
     }
     SurfaceControl* const self = reinterpret_cast<SurfaceControl *>(nativeObject);
     if (self != nullptr) {
-        self->writeToParcel(parcel);
+        self->writeToParcel(*parcel);
     }
 }
 
@@ -1555,6 +1536,13 @@ static void nativeSetFocusedWindow(JNIEnv* env, jclass clazz, jlong transactionO
     }
     transaction->setFocusedWindow(toToken, focusedToken, systemTime(SYSTEM_TIME_MONOTONIC),
                                   displayId);
+}
+
+static void nativeSetFrameTimelineVsync(JNIEnv* env, jclass clazz, jlong transactionObj,
+                                        jlong frameTimelineVsyncId) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    transaction->setFrameTimelineVsync(frameTimelineVsyncId);
 }
 
 // ----------------------------------------------------------------------------
@@ -1691,16 +1679,12 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetProtectedContentSupport },
     {"nativeDeferTransactionUntil", "(JJJJ)V",
             (void*)nativeDeferTransactionUntil },
-    {"nativeDeferTransactionUntilSurface", "(JJJJ)V",
-            (void*)nativeDeferTransactionUntilSurface },
     {"nativeReparentChildren", "(JJJ)V",
             (void*)nativeReparentChildren } ,
     {"nativeReparent", "(JJJ)V",
             (void*)nativeReparent },
     {"nativeSeverChildren", "(JJ)V",
             (void*)nativeSeverChildren } ,
-    {"nativeSetOverrideScalingMode", "(JJI)V",
-            (void*)nativeSetOverrideScalingMode },
     {"nativeCaptureDisplay",
             "(Landroid/view/SurfaceControl$DisplayCaptureArgs;Landroid/view/SurfaceControl$ScreenCaptureListener;)I",
             (void*)nativeCaptureDisplay },
@@ -1741,6 +1725,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetFixedTransformHint},
     {"nativeSetFocusedWindow", "(JLandroid/os/IBinder;Landroid/os/IBinder;I)V",
             (void*)nativeSetFocusedWindow},
+    {"nativeSetFrameTimelineVsync", "(JJ)V",
+            (void*)nativeSetFrameTimelineVsync },
         // clang-format on
 };
 

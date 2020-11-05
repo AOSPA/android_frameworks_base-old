@@ -34,6 +34,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.UserInfo;
 import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
+import android.database.StaleDataException;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.FileUtils;
@@ -492,7 +493,12 @@ public class RingtoneManager {
     public Uri getRingtoneUri(int position) {
         // use cursor directly instead of requerying it, which could easily
         // cause position to shuffle.
-        if (mCursor == null || !mCursor.moveToPosition(position)) {
+        try {
+            if (mCursor == null || !mCursor.moveToPosition(position)) {
+                return null;
+            }
+        } catch (StaleDataException | IllegalStateException e) {
+            Log.e(TAG, "Unexpected Exception has been catched.", e);
             return null;
         }
 
@@ -1130,11 +1136,13 @@ public class RingtoneManager {
 
             // Try finding the scanned ringtone
             final String filename = getDefaultRingtoneFilename(type);
+            final String whichAudio = getQueryStringForType(type);
+            final String where = MediaColumns.DISPLAY_NAME + "=? AND " + whichAudio + "=?";
             final Uri baseUri = MediaStore.Audio.Media.INTERNAL_CONTENT_URI;
             try (Cursor cursor = context.getContentResolver().query(baseUri,
                     new String[] { MediaColumns._ID },
-                    MediaColumns.DISPLAY_NAME + "=?",
-                    new String[] { filename }, null)) {
+                    where,
+                    new String[] { filename, "1" }, null)) {
                 if (cursor.moveToFirst()) {
                     final Uri ringtoneUri = context.getContentResolver().canonicalizeOrElse(
                             ContentUris.withAppendedId(baseUri, cursor.getLong(0)));
@@ -1159,6 +1167,15 @@ public class RingtoneManager {
             case TYPE_RINGTONE: return SystemProperties.get("ro.config.ringtone");
             case TYPE_NOTIFICATION: return SystemProperties.get("ro.config.notification_sound");
             case TYPE_ALARM: return SystemProperties.get("ro.config.alarm_alert");
+            default: throw new IllegalArgumentException();
+        }
+    }
+
+    private static String getQueryStringForType(int type) {
+        switch (type) {
+            case TYPE_RINGTONE: return MediaStore.Audio.AudioColumns.IS_RINGTONE;
+            case TYPE_NOTIFICATION: return MediaStore.Audio.AudioColumns.IS_NOTIFICATION;
+            case TYPE_ALARM: return MediaStore.Audio.AudioColumns.IS_ALARM;
             default: throw new IllegalArgumentException();
         }
     }

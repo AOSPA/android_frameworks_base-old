@@ -379,8 +379,7 @@ interface IPackageManager {
     /**
      * Logs process start information (including APK hash) to the security log.
      */
-    void logAppProcessStartIfNeeded(String processName, int uid, String seinfo, String apkFile,
-            int pid);
+    void logAppProcessStartIfNeeded(String packageName, String processName, int uid, String seinfo, String apkFile, int pid);
 
     /**
      * As per {@link android.content.pm.PackageManager#flushPackageRestrictionsAsUser}.
@@ -749,7 +748,7 @@ interface IPackageManager {
 
     void notifyPackagesReplacedReceived(in String[] packages);
 
-    void getChecksums(in String packageName, boolean includeSplits, int optional, int required, in List trustedInstallers, in IntentSender statusReceiver, int userId);
+    void requestChecksums(in String packageName, boolean includeSplits, int optional, int required, in List trustedInstallers, in IntentSender statusReceiver, int userId);
 
     //------------------------------------------------------------------------
     //
@@ -793,4 +792,8 @@ interface IPackageManager {
     List<String> getMimeGroup(String packageName, String group);
 
     boolean isAutoRevokeWhitelisted(String packageName);
+
+    void grantImplicitAccess(int queryingUid, String visibleAuthority);
+
+    void holdLock(in int durationMs);
 }

@@ -327,7 +327,7 @@ public class Tethering {
         // It is OK for the configuration to be passed to the PrivateAddressCoordinator at
         // construction time because the only part of the configuration it uses is
         // shouldEnableWifiP2pDedicatedIp(), and currently do not support changing that.
-        mPrivateAddressCoordinator = new PrivateAddressCoordinator(mContext, mConfig);
+        mPrivateAddressCoordinator = mDeps.getPrivateAddressCoordinator(mContext, mConfig);
 
         // Must be initialized after tethering configuration is loaded because BpfCoordinator
         // constructor needs to use the configuration.
@@ -1680,14 +1680,6 @@ public class Tethering {
             }
         }
 
-        private void addUpstreamPrefixes(final UpstreamNetworkState ns) {
-            mPrivateAddressCoordinator.updateUpstreamPrefix(ns.network, ns.linkProperties);
-        }
-
-        private void removeUpstreamPrefixes(final UpstreamNetworkState ns) {
-            mPrivateAddressCoordinator.removeUpstreamPrefix(ns.network);
-        }
-
         @VisibleForTesting
         void handleUpstreamNetworkMonitorCallback(int arg1, Object o) {
             if (arg1 == UpstreamNetworkMonitor.NOTIFY_LOCAL_PREFIXES) {
@@ -1698,10 +1690,10 @@ public class Tethering {
             final UpstreamNetworkState ns = (UpstreamNetworkState) o;
             switch (arg1) {
                 case UpstreamNetworkMonitor.EVENT_ON_LINKPROPERTIES:
-                    addUpstreamPrefixes(ns);
+                    mPrivateAddressCoordinator.updateUpstreamPrefix(ns);
                     break;
                 case UpstreamNetworkMonitor.EVENT_ON_LOST:
-                    removeUpstreamPrefixes(ns);
+                    mPrivateAddressCoordinator.removeUpstreamPrefix(ns.network);
                     break;
             }
 
@@ -2106,7 +2098,7 @@ public class Tethering {
     }
 
     private boolean hasCallingPermission(@NonNull String permission) {
-        return mContext.checkCallingPermission(permission) == PERMISSION_GRANTED;
+        return mContext.checkCallingOrSelfPermission(permission) == PERMISSION_GRANTED;
     }
 
     /** Unregister tethering event callback */

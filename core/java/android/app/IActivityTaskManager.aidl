@@ -123,7 +123,7 @@ interface IActivityTaskManager {
             in ProfilerInfo profilerInfo, in Bundle options, int userId);
     int startAssistantActivity(in String callingPackage, in String callingFeatureId, int callingPid,
             int callingUid, in Intent intent, in String resolvedType, in Bundle options, int userId);
-    void startRecentsActivity(in Intent intent, in IAssistDataReceiver assistDataReceiver,
+    void startRecentsActivity(in Intent intent, in long eventTime,
             in IRecentsAnimationRunner recentsAnimationRunner);
     int startActivityFromRecents(int taskId, in Bundle options);
     int startActivityAsCaller(in IApplicationThread caller, in String callingPackage,
@@ -165,7 +165,8 @@ interface IActivityTaskManager {
     int getTaskForActivity(in IBinder token, in boolean onlyRoot);
     /** Finish all activities that were started for result from the specified activity. */
     void finishSubActivity(in IBinder token, in String resultWho, int requestCode);
-    ParceledListSlice getRecentTasks(int maxNum, int flags, int userId);
+    ParceledListSlice<ActivityManager.RecentTaskInfo> getRecentTasks(int maxNum, int flags,
+            int userId);
     boolean willActivityBeVisible(in IBinder token);
     void setRequestedOrientation(in IBinder token, int requestedOrientation);
     int getRequestedOrientation(in IBinder token);
@@ -186,11 +187,11 @@ interface IActivityTaskManager {
     void reportAssistContextExtras(in IBinder token, in Bundle extras,
             in AssistStructure structure, in AssistContent content, in Uri referrer);
 
-    void setFocusedStack(int stackId);
+    void setFocusedRootTask(int taskId);
     ActivityTaskManager.RootTaskInfo getFocusedRootTaskInfo();
     Rect getTaskBounds(int taskId);
 
-    void cancelRecentsAnimation(boolean restoreHomeStackPosition);
+    void cancelRecentsAnimation(boolean restoreHomeRootTaskPosition);
     void startLockTaskModeByToken(in IBinder token);
     void stopLockTaskModeByToken(in IBinder token);
     void updateLockTaskPackages(int userId, in String[] packages);
@@ -239,8 +240,7 @@ interface IActivityTaskManager {
      * @return Return true on success. Otherwise false.
      */
     boolean resizeTask(int taskId, in Rect bounds, int resizeMode);
-    void moveStackToDisplay(int stackId, int displayId);
-    void removeStack(int stackId);
+    void moveRootTaskToDisplay(int taskId, int displayId);
 
     /**
      * Sets the windowing mode for a specific task. Only works on tasks of type
@@ -251,15 +251,15 @@ interface IActivityTaskManager {
      * @return Whether the task was successfully put into the specified windowing mode.
      */
     boolean setTaskWindowingMode(int taskId, int windowingMode, boolean toTop);
-    void moveTaskToStack(int taskId, int stackId, boolean toTop);
+    void moveTaskToRootTask(int taskId, int rootTaskId, boolean toTop);
     boolean setTaskWindowingModeSplitScreenPrimary(int taskId, boolean toTop);
     /**
-     * Removes stacks in the input windowing modes from the system if they are of activity type
+     * Removes root tasks in the input windowing modes from the system if they are of activity type
      * ACTIVITY_TYPE_STANDARD or ACTIVITY_TYPE_UNDEFINED
      */
-    void removeStacksInWindowingModes(in int[] windowingModes);
-    /** Removes stack of the activity types from the system. */
-    void removeStacksWithActivityTypes(in int[] activityTypes);
+    void removeRootTasksInWindowingModes(in int[] windowingModes);
+    /** Removes root tasks of the activity types from the system. */
+    void removeRootTasksWithActivityTypes(in int[] activityTypes);
 
     List<ActivityTaskManager.RootTaskInfo> getAllRootTaskInfos();
     ActivityTaskManager.RootTaskInfo getRootTaskInfo(int windowingMode, int activityType);
@@ -295,17 +295,11 @@ interface IActivityTaskManager {
     ComponentName getActivityClassForToken(in IBinder token);
     String getPackageForToken(in IBinder token);
 
-    /**
-     * Try to place task to provided position. The final position might be different depending on
-     * current user and stacks state. The task will be moved to target stack if it's currently in
-     * different stack.
-     */
-    void positionTaskInStack(int taskId, int stackId, int position);
     void reportSizeConfigurations(in IBinder token, in int[] horizontalSizeConfiguration,
             in int[] verticalSizeConfigurations, in int[] smallestWidthConfigurations);
 
     void suppressResizeConfigChanges(boolean suppress);
-    boolean moveTopActivityToPinnedStack(int stackId, in Rect bounds);
+    boolean moveTopActivityToPinnedRootTask(int rootTaskId, in Rect bounds);
     boolean enterPictureInPictureMode(in IBinder token, in PictureInPictureParams params);
     void setPictureInPictureParams(in IBinder token, in PictureInPictureParams params);
     void requestPictureInPictureMode(in IBinder token);
@@ -331,7 +325,7 @@ interface IActivityTaskManager {
      *                                 stacks.
      * @throws RemoteException
      */
-    void resizeDockedStack(in Rect dockedBounds, in Rect tempDockedTaskBounds,
+    void resizePrimarySplitScreen(in Rect dockedBounds, in Rect tempDockedTaskBounds,
             in Rect tempDockedTaskInsetBounds,
             in Rect tempOtherTaskBounds, in Rect tempOtherTaskInsetBounds);
 

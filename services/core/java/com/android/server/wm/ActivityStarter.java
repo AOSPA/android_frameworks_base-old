@@ -57,14 +57,13 @@ import static android.os.Process.INVALID_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
 import static com.android.server.wm.ActivityStackSupervisor.DEFER_RESUME;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
-import static com.android.server.wm.ActivityStackSupervisor.TAG_TASKS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ACTIVITY_STARTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_PERMISSIONS_REVIEW;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RESULTS;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_TASKS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_USER_LEAVING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_FOCUS;
@@ -704,11 +703,15 @@ class ActivityStarter {
                     mService.updateConfigurationLocked(mRequest.globalConfig, null, false);
                 }
 
+                // The original options may have additional info about metrics. The mOptions is not
+                // used here because it may be cleared in setTargetStackIfNeeded.
+                final ActivityOptions originalOptions = mRequest.activityOptions != null
+                        ? mRequest.activityOptions.getOriginalOptions() : null;
                 // Notify ActivityMetricsLogger that the activity has launched.
                 // ActivityMetricsLogger will then wait for the windows to be drawn and populate
                 // WaitResult.
                 mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(launchingState, res,
-                        mLastStartActivityRecord, mOptions);
+                        mLastStartActivityRecord, originalOptions);
                 return getExternalResult(mRequest.waitResult == null ? res
                         : waitForResult(res, mLastStartActivityRecord));
             }
@@ -1359,6 +1362,12 @@ class ActivityStarter {
             }
             return false;
         }
+        // don't abort if the callingUid has SYSTEM_ALERT_WINDOW permission
+        if (mService.hasSystemAlertWindowPermission(callingUid, callingPid, callingPackage)) {
+            Slog.w(TAG, "Background activity start for " + callingPackage
+                    + " allowed because SYSTEM_ALERT_WINDOW permission is granted.");
+            return false;
+        }
         // If we don't have callerApp at this point, no caller was provided to startActivity().
         // That's the case for PendingIntent-based starts, since the creator's process might not be
         // up and alive. If that's the case, we retrieve the WindowProcessController for the send()
@@ -1394,12 +1403,6 @@ class ActivityStarter {
                     }
                 }
             }
-        }
-        // don't abort if the callingUid has SYSTEM_ALERT_WINDOW permission
-        if (mService.hasSystemAlertWindowPermission(callingUid, callingPid, callingPackage)) {
-            Slog.w(TAG, "Background activity start for " + callingPackage
-                    + " allowed because SYSTEM_ALERT_WINDOW permission is granted.");
-            return false;
         }
         // anything that has fallen through would currently be aborted
         Slog.w(TAG, "Background activity start [callingPackage: " + callingPackage
@@ -1497,9 +1500,10 @@ class ActivityStarter {
             // anyone interested in this piece of information.
             final Task homeStack = targetTask.getDisplayArea().getRootHomeTask();
             final boolean homeTaskVisible = homeStack != null && homeStack.shouldBeVisible(null);
+            final ActivityRecord top = targetTask.getTopNonFinishingActivity();
+            final boolean visible = top != null && top.isVisible();
             mService.getTaskChangeNotificationController().notifyActivityRestartAttempt(
-                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask,
-                    targetTask.getTopNonFinishingActivity().isVisible());
+                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask, visible);
         }
     }
 
@@ -1914,10 +1918,8 @@ class ActivityStarter {
             // if that is the case, so this is it!  And for paranoia, make sure we have
             // correctly resumed the top activity.
             if (!mMovedToFront && mDoResume) {
-                if (DEBUG_TASKS) {
-                    Slog.d(TAG_TASKS, "Bring to front target: " + mTargetStack
-                            + " from " + targetTaskTop);
-                }
+                ProtoLog.d(WM_DEBUG_TASKS, "Bring to front target: %s from %s", mTargetStack,
+                        targetTaskTop);
                 mTargetStack.moveToFront("intentActivityFound");
             }
             resumeTargetStackIfNeeded();
@@ -2569,10 +2571,8 @@ class ActivityStarter {
                 mVoiceInteractor, toTop, mStartActivity, mSourceRecord, mOptions);
         addOrReparentStartingActivity(task, "setTaskFromReuseOrCreateNewTask - mReuseTask");
 
-        if (DEBUG_TASKS) {
-            Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
-                    + " in new task " + mStartActivity.getTask());
-        }
+        ProtoLog.v(WM_DEBUG_TASKS, "Starting new activity %s in new task %s",
+                mStartActivity, mStartActivity.getTask());
 
         if (taskToAffiliate != null) {
             mStartActivity.setTaskToAffiliateWith(taskToAffiliate);

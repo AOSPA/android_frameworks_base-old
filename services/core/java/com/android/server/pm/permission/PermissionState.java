@@ -17,7 +17,6 @@
 package com.android.server.pm.permission;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 
 import com.android.internal.annotations.GuardedBy;
@@ -41,13 +40,12 @@ public final class PermissionState {
     @GuardedBy("mLock")
     private int mFlags;
 
-    public PermissionState(@NonNull BasePermission permission, boolean isRuntime) {
+    public PermissionState(@NonNull BasePermission permission) {
         mPermission = permission;
-        mRuntime = isRuntime;
     }
 
     public PermissionState(@NonNull PermissionState other) {
-        this(other.mPermission, other.mRuntime);
+        this(other.mPermission);
 
         mGranted = other.mGranted;
         mFlags = other.mFlags;
@@ -63,14 +61,14 @@ public final class PermissionState {
         return mPermission.getName();
     }
 
-    @Nullable
+    @NonNull
     public int[] computeGids(@UserIdInt int userId) {
         return mPermission.computeGids(userId);
     }
 
     public boolean isRuntime() {
         synchronized (mLock) {
-            return mRuntime;
+            return mPermission.isRuntime();
         }
     }
 

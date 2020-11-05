@@ -98,9 +98,9 @@
     <string name="notification_channel_wfc" msgid="9048240466765169038">"Wi-Fi-тэлефанія"</string>
     <string name="notification_channel_sim" msgid="5098802350325677490">"Статус SIM-карты"</string>
     <string name="notification_channel_sim_high_prio" msgid="642361929452850928">"Стан SIM-карты з высокім прыярытэтам"</string>
-    <string name="peerTtyModeFull" msgid="337553730440832160">"Аднарангавая прылада запытала рэжым TTY FULL"</string>
-    <string name="peerTtyModeHco" msgid="5626377160840915617">"Аднарангавая прылада запытала рэжым TTY НСО"</string>
-    <string name="peerTtyModeVco" msgid="572208600818270944">"Аднарангавая прылада запытала рэжым TTY VCO"</string>
+    <string name="peerTtyModeFull" msgid="337553730440832160">"Аднарангавая прылада запытала рэжым поўнафункцыянальнага TTY"</string>
+    <string name="peerTtyModeHco" msgid="5626377160840915617">"Аднарангавая прылада запытала рэжым TTY з магчымасцю чуць суразмоўніка"</string>
+    <string name="peerTtyModeVco" msgid="572208600818270944">"Аднарангавая прылада запытала рэжым TTY з магчымасцю чуць суразмоўніка"</string>
     <string name="peerTtyModeOff" msgid="2420380956369226583">"Аднарангавая прылада запытала рэжым TTY OFF"</string>
     <string name="serviceClassVoice" msgid="2065556932043454987">"Голас"</string>
     <string name="serviceClassData" msgid="4148080018967300248">"Дадзеныя"</string>
@@ -438,13 +438,17 @@
     <string name="permlab_modifyAudioSettings" msgid="6129039778010031815">"змяняць налады аудыё"</string>
     <string name="permdesc_modifyAudioSettings" msgid="8687227609663124921">"Дазваляе прыкладанням змяняць глабальныя налады гуку, такія як моц і тое, што дынамік выкарыстоўваецца для выхаду."</string>
     <string name="permlab_recordAudio" msgid="1208457423054219147">"запіс аўдыя"</string>
-    <string name="permdesc_recordAudio" msgid="3976213377904701093">"Гэта праграма можа у любы час запісваць аўдыя, выкарыстоўваючы мікрафон."</string>
+    <string name="permdesc_recordAudio" msgid="5857246765327514062">"Гэта праграма падчас яе выкарыстання можа запісваць аўдыя з дапамогай мікрафона."</string>
+    <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"запісваць аўдыя ў фонавым рэжыме"</string>
+    <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Гэта праграма можа ў любы час запісваць аўдыя з дапамогай мікрафона."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"адпраўляць каманды на SIM-карту"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Дазваляе праграме адпраўляць каманды SIM-карце. Гэта вельмі небяспечна."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"распазнаваць фізічную актыўнасць"</string>
     <string name="permdesc_activityRecognition" msgid="8667484762991357519">"Гэта праграма можа распазнаваць фізічную актыўнасць."</string>
     <string name="permlab_camera" msgid="6320282492904119413">"рабіць фатаграфіі і відэа"</string>
-    <string name="permdesc_camera" msgid="1354600178048761499">"Гэта праграма можа рабіць фота і запісваць відэа з дапамогай камеры ў любы час."</string>
+    <string name="permdesc_camera" msgid="5240801376168647151">"Гэта праграма падчас яе выкарыстання можа рабіць фота і запісваць відэа з дапамогай камеры."</string>
+    <string name="permlab_backgroundCamera" msgid="7549917926079731681">"знімаць фота і відэа ў фонавым рэжыме"</string>
+    <string name="permdesc_backgroundCamera" msgid="1615291686191138250">"Гэта праграма можа ў любы час рабіць фота і запісваць відэа з дапамогай камеры."</string>
     <string name="permlab_systemCamera" msgid="3642917457796210580">"Дазволіць праграме або сэрвісу атрымліваць доступ да сістэмных камер, каб здымаць фота і запісваць відэа"</string>
     <string name="permdesc_systemCamera" msgid="5938360914419175986">"Гэта прыярытэтная ці сістэмная праграма можа здымаць фота і запісваць відэа з дапамогай сістэмнай камеры. Праграме таксама патрэбны дазвол android.permission.CAMERA"</string>
     <string name="permlab_cameraOpenCloseListener" msgid="5548732769068109315">"Дазволіць праграме ці сэрвісу атрымліваць зваротныя выклікі наконт адкрыцця ці закрыцця прылад камеры."</string>
@@ -970,7 +974,7 @@
     <string name="permlab_addVoicemail" msgid="4770245808840814471">"дадаць галасавое паведамленне"</string>
     <string name="permdesc_addVoicemail" msgid="5470312139820074324">"Дазваляе прыкладанням дадаваць паведамленні ў вашу скрыню галасавой пошты."</string>
     <string name="permlab_writeGeolocationPermissions" msgid="8605631647492879449">"змяніць дазволы геапазіцыянавання для браўзэра"</string>
-    <string name="permdesc_writeGeolocationPermissions" msgid="5817346421222227772">"Дазваляе прыкладанням змяняць дазволы геалакацыі браўзэра. Шкоднасныя прыкладанні могуць выкарыстоўваць гэта, каб дазваляць адпраўку інфармацыі аб месцазнаходжанні выпадковым вэб-сайтам."</string>
+    <string name="permdesc_writeGeolocationPermissions" msgid="5817346421222227772">"Дазваляе праграме змяняць дазволы геалакацыі браўзера. Шкодныя праграмы могуць выкарыстоўваць гэта, каб адпраўляць даныя аб месцазнаходжанні на любыя вэб-сайты."</string>
     <string name="save_password_message" msgid="2146409467245462965">"Вы хочаце, каб браўзэр запомніў гэты пароль?"</string>
     <string name="save_password_notnow" msgid="2878327088951240061">"Не зараз"</string>
     <string name="save_password_remember" msgid="6490888932657708341">"Запомніць"</string>
@@ -1345,8 +1349,8 @@
     <string name="usb_tether_notification_title" msgid="8828527870612663771">"Рэжым USB-мадэма"</string>
     <string name="usb_midi_notification_title" msgid="7404506788950595557">"MIDI праз USB"</string>
     <string name="usb_accessory_notification_title" msgid="1385394660861956980">"USB-прылада падключана"</string>
-    <string name="usb_notification_message" msgid="4715163067192110676">"Дакраніцеся, каб атрымаць іншыя параметры."</string>
-    <string name="usb_power_notification_message" msgid="7284765627437897702">"Зарадка падключанай прылады. Націсніце, каб убачыць іншыя параметры."</string>
+    <string name="usb_notification_message" msgid="4715163067192110676">"Дакраніцеся, каб убачыць іншыя параметры."</string>
+    <string name="usb_power_notification_message" msgid="7284765627437897702">"Падключаная прылада зараджаецца. Дакраніцеся, каб убачыць іншыя параметры."</string>
     <string name="usb_unsupported_audio_accessory_title" msgid="2335775548086533065">"Выяўлены аксесуар аналагавага аўдыя"</string>
     <string name="usb_unsupported_audio_accessory_message" msgid="1300168007129796621">"Далучаная прылада не сумяшчальная з гэтым тэлефонам. Націсніце, каб даведацца больш."</string>
     <string name="adb_active_notification_title" msgid="408390247354560331">"Адладка па USB падключана"</string>
@@ -1542,7 +1546,7 @@
     <string name="activitychooserview_choose_application_error" msgid="6937782107559241734">"Не атрымалася запусціць <xliff:g id="APPLICATION_NAME">%s</xliff:g>"</string>
     <string name="shareactionprovider_share_with" msgid="2753089758467748982">"Апублікаваць з дапамогай"</string>
     <string name="shareactionprovider_share_with_application" msgid="4902832247173666973">"Адправiць з дапамогай прыкладання <xliff:g id="APPLICATION_NAME">%s</xliff:g>"</string>
-    <string name="content_description_sliding_handle" msgid="982510275422590757">"Ручка для перасоўвання. Націсніце і ўтрымлівайце."</string>
+    <string name="content_description_sliding_handle" msgid="982510275422590757">"Маркер для перасоўвання. Дакраніцеся і ўтрымлівайце."</string>
     <string name="description_target_unlock_tablet" msgid="7431571180065859551">"Прагартайце, каб разблакаваць."</string>
     <string name="action_bar_home_description" msgid="1501655419158631974">"Перайсці да пачатковай старонкі"</string>
     <string name="action_bar_up_description" msgid="6611579697195026932">"Перайсці ўверх"</string>
@@ -1666,10 +1670,10 @@
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"Павялiчыць гук вышэй рэкамендаванага ўзроўню?\n\nДоўгае праслухоўванне музыкi на вялiкай гучнасцi можа пашкодзiць ваш слых."</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"Выкарыстоўваць камбінацыю хуткага доступу для спецыяльных магчымасцей?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Калі хуткі доступ уключаны, вы можаце націснуць абедзве кнопкі гучнасці і ўтрымліваць іх 3 секунды, каб запусціць функцыю спецыяльных магчымасцей."</string>
-    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"Уключыць спецыяльныя магчымасці?"</string>
+    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Уключыць хуткі доступ да спецыяльных магчымасцей?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Утрымліванне націснутымі абедзвюх клавіш гучнасці на працягу некалькіх секунд уключае спецыяльныя магчымасці. У выніку ваша прылада можа пачаць працаваць па-іншаму.\n\nБягучыя функцыі:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nВыбраныя функцыі можна змяніць у меню \"Налады &gt; Спецыяльныя магчымасці\"."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"Уключыць службу \"<xliff:g id="SERVICE">%1$s</xliff:g>\"?"</string>
+    <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Уключыць хуткі доступ да сэрвісу \"<xliff:g id="SERVICE">%1$s</xliff:g>\"?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Утрымліванне націснутымі абедзвюх клавіш гучнасці на працягу некалькіх секунд уключае службу \"<xliff:g id="SERVICE">%1$s</xliff:g>\", якая з\'яўляецца спецыяльнай магчымасцю. У выніку ваша прылада можа пачаць працаваць па-іншаму.\n\nВы можаце задаць гэта спалучэнне клавіш для іншай функцыі ў меню \"Налады &gt; Спецыяльныя магчымасці\"."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Уключыць"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"Не ўключаць"</string>
@@ -1891,6 +1895,7 @@
       <item quantity="many">На %d гадз</item>
       <item quantity="other">На %d гадз</item>
     </plurals>
+    <string name="zen_mode_until_next_day" msgid="1403042784161725038">"Да <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"Да <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"Да <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (наступны будзільнік)"</string>
     <string name="zen_mode_forever" msgid="740585666364912448">"Пакуль не выключыце"</string>

@@ -432,13 +432,17 @@
     <string name="permlab_modifyAudioSettings" msgid="6129039778010031815">"Аудио тохиргоо солих"</string>
     <string name="permdesc_modifyAudioSettings" msgid="8687227609663124921">"Апп нь дууны хэмжээ, спикерын гаралтад ашиглагдах глобал аудио тохиргоог өөрчлөх боломжтой."</string>
     <string name="permlab_recordAudio" msgid="1208457423054219147">"аудио бичих"</string>
-    <string name="permdesc_recordAudio" msgid="3976213377904701093">"Энэ апп ямар ч үед микрофон ашиглан аудио бичих боломжтой."</string>
+    <string name="permdesc_recordAudio" msgid="5857246765327514062">"Энэ аппыг ашиглаж байх үед энэ нь микрофон ашиглан аудио бичих боломжтой."</string>
+    <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"ард видео бичих"</string>
+    <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Энэ апп ямар ч үед микрофон ашиглан аудио бичих боломжтой."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"SIM картад тушаал илгээх"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Апп-д SIM рүү комманд илгээхийг зөвшөөрнө. Энэ маш аюултай."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"биеийн дасгал хөдөлгөөн таних"</string>
     <string name="permdesc_activityRecognition" msgid="8667484762991357519">"Энэ апп таны биеийн дасгал хөдөлгөөнийг таних боломжтой."</string>
     <string name="permlab_camera" msgid="6320282492904119413">"зураг авах болон видео бичих"</string>
-    <string name="permdesc_camera" msgid="1354600178048761499">"Энэ апп ямар ч үед камер ашиглан зураг авж, видео хийх боломжтой."</string>
+    <string name="permdesc_camera" msgid="5240801376168647151">"Энэ аппыг ашиглаж байх үед энэ нь камер ашиглан зураг авж, видео бичих боломжтой."</string>
+    <string name="permlab_backgroundCamera" msgid="7549917926079731681">"ард зураг авж, видео хийх"</string>
+    <string name="permdesc_backgroundCamera" msgid="1615291686191138250">"Энэ апп ямар ч үед камер ашиглан зураг авж, видео бичих боломжтой."</string>
     <string name="permlab_systemCamera" msgid="3642917457796210580">"Видео болон зураг авахын тулд апп эсвэл үйлчилгээнд хандахыг системийн камерт зөвшөөрөх"</string>
     <string name="permdesc_systemCamera" msgid="5938360914419175986">"Энэ хамгаалагдсан эсвэл системийн апп нь системийн камер ашиглан ямар ч үед зураг авч, видео бичих боломжтой. Мөн түүнчлэн, апп нь android.permission.CAMERA-н зөвшөөрөлтэй байх шаардлагатай"</string>
     <string name="permlab_cameraOpenCloseListener" msgid="5548732769068109315">"Аппликэйшн эсвэл үйлчилгээнд камерын төхөөрөмжүүдийг нээж эсвэл хааж байгаа тухай залгасан дуудлага хүлээн авахыг зөвшөөрөх."</string>
@@ -953,18 +957,18 @@
     <string name="autofill_parish" msgid="6847960518334530198">"Мөргөлч"</string>
     <string name="autofill_area" msgid="8289022370678448983">"Хэсэг"</string>
     <string name="autofill_emirate" msgid="2544082046790551168">"Эмират"</string>
-    <string name="permlab_readHistoryBookmarks" msgid="9102293913842539697">"өөрийн Вэб хавчуурга болон түүхийг унших"</string>
+    <string name="permlab_readHistoryBookmarks" msgid="9102293913842539697">"өөрийн Веб хавчуурга болон түүхийг унших"</string>
     <string name="permdesc_readHistoryBookmarks" msgid="2323799501008967852">"Апп нь Хөтчийн зочилж байсан бүх URL-н түүх болон Хөтчийн бүх хавчуургыг унших боломжтой. Анхаар: Энэ зөвшөөрөл нь гуравдагч талын хөтөч эсвэл вебээр хөтөчлөх чадавхтай аппликейшнүүдэд ашиглагдахгүй байх боломжтой."</string>
-    <string name="permlab_writeHistoryBookmarks" msgid="6090259925187986937">"вэб хавчуурга болон түүхийг бичих"</string>
+    <string name="permlab_writeHistoryBookmarks" msgid="6090259925187986937">"веб хавчуурга болон түүхийг бичих"</string>
     <string name="permdesc_writeHistoryBookmarks" product="tablet" msgid="573341025292489065">"Апп нь таны таблет дээр хадгалагдсан Хөтчийн түүх эсвэл хавчуургыг өөрчлөх боломжтой. Энэ нь апп-д Хөтчийн датаг арилгах эсвэл өөрчлөх боломжийг олгоно. Анхаар: Энэ зөвшөөрөл нь гуравдагч талын хөтөч эсвэл вебээр хөтөчлөх чадвартай аппликейшнд ажиллахгүй байх боломжтой."</string>
-    <string name="permdesc_writeHistoryBookmarks" product="tv" msgid="88642768580408561">"Аппад таны Android TV төхөөрөмжид хадгалсан Хөтчийн түүх эсвэл хавчуургыг өөрчлөхийг зөвшөөрнө. Энэ нь аппад Хөтчийн өгөгдлийг устгах эсвэл өөрчлөхийг зөвшөөрч болзошгүй. Санамж: энэ зөвшөөрөл нь гуравдагч талын хөтөч эсвэл вэб хөтчийн чадамжтай бусад аппад хэрэгжихгүй байж болзошгүй."</string>
+    <string name="permdesc_writeHistoryBookmarks" product="tv" msgid="88642768580408561">"Аппад таны Android TV төхөөрөмжид хадгалсан Хөтчийн түүх эсвэл хавчуургыг өөрчлөхийг зөвшөөрнө. Энэ нь аппад Хөтчийн өгөгдлийг устгах эсвэл өөрчлөхийг зөвшөөрч болзошгүй. Санамж: энэ зөвшөөрөл нь гуравдагч талын хөтөч эсвэл веб хөтчийн чадамжтай бусад аппад хэрэгжихгүй байж болзошгүй."</string>
     <string name="permdesc_writeHistoryBookmarks" product="default" msgid="2245203087160913652">"Апп нь таны утсан дээр хадгалагдсан Хөтчийн түүх эсвэл хавчуургыг өөрчлөх боломжтой. Энэ нь апп-д Хөтчийн датаг арилгах эсвэл өөрчлөх боломжийг олгоно. Анхаар: Энэ зөвшөөрөл нь гуравдагч талын хөтөч эсвэл вебээр хөтөчлөх чадвартай аппликейшнд ажиллахгүй байх боломжтой."</string>
     <string name="permlab_setAlarm" msgid="1158001610254173567">"сэрүүлэг тохируулах"</string>
     <string name="permdesc_setAlarm" msgid="2185033720060109640">"Апп нь суулгагдсан сэрүүлэгний апп дээр сэрүүлэг тохируулах боломжтой. Зарим сэрүүлэгний апп нь энэ функцийг дэмжихгүй байж болзошгүй."</string>
     <string name="permlab_addVoicemail" msgid="4770245808840814471">"дуут шуудан нэмэх"</string>
     <string name="permdesc_addVoicemail" msgid="5470312139820074324">"Таны дуут шуудангийн ирсэн мэйлд зурвас нэмэхийг апп-д зөвшөөрөх."</string>
     <string name="permlab_writeGeolocationPermissions" msgid="8605631647492879449">"Хөтчийн геобайршлын зөвшөөрлийг өөрчлөх"</string>
-    <string name="permdesc_writeGeolocationPermissions" msgid="5817346421222227772">"Апп нь Хөтчийн гео байршлын зөвшөөрлийг өөрчлөх боломжтой. Хортой апп нь энийг ашиглан дурын вэб хуудасруу байршлын мэдээллийг илгээх боломжтой."</string>
+    <string name="permdesc_writeGeolocationPermissions" msgid="5817346421222227772">"Апп нь Хөтчийн гео байршлын зөвшөөрлийг өөрчлөх боломжтой. Хортой апп нь энийг ашиглан дурын веб хуудасруу байршлын мэдээллийг илгээх боломжтой."</string>
     <string name="save_password_message" msgid="2146409467245462965">"Та хөтчид энэ нууц үгийг сануулах уу?"</string>
     <string name="save_password_notnow" msgid="2878327088951240061">"Одоо биш"</string>
     <string name="save_password_remember" msgid="6490888932657708341">"Санах"</string>
@@ -1455,7 +1459,7 @@
     <string name="progress_erasing" msgid="6891435992721028004">"Хуваалцсан хадгалах санг устгаж байна…"</string>
     <string name="share" msgid="4157615043345227321">"Хуваалцах"</string>
     <string name="find" msgid="5015737188624767706">"Олох"</string>
-    <string name="websearch" msgid="5624340204512793290">"Вэб хайлт"</string>
+    <string name="websearch" msgid="5624340204512793290">"Веб хайлт"</string>
     <string name="find_next" msgid="5341217051549648153">"Дараагийнхыг хайх"</string>
     <string name="find_previous" msgid="4405898398141275532">"Өмнөхөөс олох"</string>
     <string name="gpsNotifTicker" msgid="3207361857637620780">"<xliff:g id="NAME">%s</xliff:g>-н байршлын хүсэлт"</string>
@@ -1622,10 +1626,10 @@
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"Дууг санал болгосноос чанга болгож өсгөх үү?\n\nУрт хугацаанд чанга хөгжим сонсох нь таны сонсголыг муутгаж болно."</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"Хүртээмжийн товчлолыг ашиглах уу?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Товчлол асаалттай үед дууны түвшний хоёр товчлуурыг хамтад нь 3 секунд дарснаар хандалтын онцлогийг эхлүүлнэ."</string>
-    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"Хандалтын онцлогуудыг асаах уу?"</string>
+    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Хандалтын онцлогуудын товчлолыг асаах уу?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Дууны түвшний түлхүүрийг хэдэн секундийн турш зэрэг дарснаар хандалтын онцлогууд асна. Энэ нь таны төхөөрөмжийн ажиллах зарчмыг өөрчилж болзошгүй.\n\nОдоогийн онцлогууд:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nТа сонгосон онцлогуудыг Тохиргоо &gt; Хандалт хэсэгт өөрчлөх боломжтой."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"<xliff:g id="SERVICE">%1$s</xliff:g>-г асаах уу?"</string>
+    <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"<xliff:g id="SERVICE">%1$s</xliff:g>-н товчлолыг асаах уу?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Дууны түвшний түлхүүрийг хэдэн секундийн турш зэрэг дарах нь хандалтын онцлог болох <xliff:g id="SERVICE">%1$s</xliff:g>-г асаадаг. Энэ нь таны төхөөрөмжийн ажиллах зарчмыг өөрчилж болзошгүй.\n\nТа Тохиргоо &gt; Хандалт хэсэгт энэ товчлолыг өөр онцлогт оноож өөрчлөх боломжтой."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Асаах"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"Бүү асаа"</string>
@@ -1829,6 +1833,7 @@
       <item quantity="other">%d цагийн турш</item>
       <item quantity="one">1 цагийн турш:</item>
     </plurals>
+    <string name="zen_mode_until_next_day" msgid="1403042784161725038">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> хүртэл"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> хүртэл"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> хүртэл (дараагийн сэрүүлэг)"</string>
     <string name="zen_mode_forever" msgid="740585666364912448">"Таныг унтраах хүртэл"</string>

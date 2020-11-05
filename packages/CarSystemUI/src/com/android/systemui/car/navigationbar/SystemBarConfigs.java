@@ -97,10 +97,12 @@ public class SystemBarConfigs {
 
         populateMaps();
         readConfigs();
+
         checkEnabledBarsHaveUniqueBarTypes();
         checkAllOverlappingBarsHaveDifferentZOrders();
         checkSystemBarEnabledForNotificationPanel();
         checkHideBottomBarForKeyboardConfigSync();
+
         setInsetPaddingsForOverlappingCorners();
         sortSystemBarSidesByZOrder();
     }
@@ -199,10 +201,10 @@ public class SystemBarConfigs {
         BAR_TITLE_MAP.put(LEFT, "LeftCarSystemBar");
         BAR_TITLE_MAP.put(RIGHT, "RightCarSystemBar");
 
-        BAR_GESTURE_MAP.put(TOP, InsetsState.ITYPE_TOP_GESTURES);
-        BAR_GESTURE_MAP.put(BOTTOM, InsetsState.ITYPE_BOTTOM_GESTURES);
-        BAR_GESTURE_MAP.put(LEFT, InsetsState.ITYPE_LEFT_GESTURES);
-        BAR_GESTURE_MAP.put(RIGHT, InsetsState.ITYPE_RIGHT_GESTURES);
+        BAR_GESTURE_MAP.put(TOP, InsetsState.ITYPE_TOP_MANDATORY_GESTURES);
+        BAR_GESTURE_MAP.put(BOTTOM, InsetsState.ITYPE_BOTTOM_MANDATORY_GESTURES);
+        BAR_GESTURE_MAP.put(LEFT, InsetsState.ITYPE_LEFT_MANDATORY_GESTURES);
+        BAR_GESTURE_MAP.put(RIGHT, InsetsState.ITYPE_RIGHT_MANDATORY_GESTURES);
     }
 
     private void readConfigs() {
@@ -216,7 +218,7 @@ public class SystemBarConfigs {
                     new SystemBarConfigBuilder()
                             .setSide(TOP)
                             .setGirth(mResources.getDimensionPixelSize(
-                                    com.android.internal.R.dimen.status_bar_height))
+                                    R.dimen.car_top_navigation_bar_height))
                             .setBarType(mResources.getInteger(R.integer.config_topSystemBarType))
                             .setZOrder(mResources.getInteger(R.integer.config_topSystemBarZOrder))
                             .setHideForKeyboard(mResources.getBoolean(
@@ -230,7 +232,7 @@ public class SystemBarConfigs {
                     new SystemBarConfigBuilder()
                             .setSide(BOTTOM)
                             .setGirth(mResources.getDimensionPixelSize(
-                                    com.android.internal.R.dimen.navigation_bar_height))
+                                    R.dimen.car_bottom_navigation_bar_height))
                             .setBarType(mResources.getInteger(R.integer.config_bottomSystemBarType))
                             .setZOrder(
                                     mResources.getInteger(R.integer.config_bottomSystemBarZOrder))

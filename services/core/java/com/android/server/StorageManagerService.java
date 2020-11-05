@@ -18,14 +18,10 @@ package com.android.server;
 
 import static android.Manifest.permission.ACCESS_MTP;
 import static android.Manifest.permission.INSTALL_PACKAGES;
-import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
-import static android.Manifest.permission.WRITE_MEDIA_STORAGE;
-import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.OP_LEGACY_STORAGE;
 import static android.app.AppOpsManager.OP_MANAGE_EXTERNAL_STORAGE;
-import static android.app.AppOpsManager.OP_READ_EXTERNAL_STORAGE;
 import static android.app.AppOpsManager.OP_REQUEST_INSTALL_PACKAGES;
 import static android.app.AppOpsManager.OP_WRITE_EXTERNAL_STORAGE;
 import static android.content.pm.PackageManager.MATCH_ANY_USER;
@@ -137,7 +133,6 @@ import android.util.TimeUtils;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.AppFuseMount;
@@ -153,7 +148,6 @@ import com.android.internal.util.HexDump;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
-import com.android.server.SystemService.TargetUser;
 import com.android.server.pm.Installer;
 import com.android.server.storage.AppFuseBridge;
 import com.android.server.storage.StorageSessionController;
@@ -1749,7 +1743,7 @@ class StorageManagerService extends IStorageManager.Stub
         UserManager um = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         final int callingUserId = UserHandle.getCallingUserId();
         boolean isAdmin;
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             isAdmin = um.getUserInfo(callingUserId).isAdmin();
         } finally {
@@ -2522,19 +2516,6 @@ class StorageManagerService extends IStorageManager.Stub
     @Override
     public void abortIdleMaintenance() {
         abortIdleMaint(null);
-    }
-
-    private void remountUidExternalStorage(int uid, int mode) {
-        if (uid == Process.SYSTEM_UID) {
-            // No need to remount uid for system because it has all access anyways
-            return;
-        }
-
-        try {
-            mVold.remountUid(uid, mode);
-        } catch (Exception e) {
-            Slog.wtf(TAG, e);
-        }
     }
 
     @Override
@@ -3862,21 +3843,6 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
-    private IAppOpsCallback.Stub mAppOpsCallback = new IAppOpsCallback.Stub() {
-        @Override
-        public void opChanged(int op, int uid, String packageName) throws RemoteException {
-            if (!ENABLE_ISOLATED_STORAGE) return;
-
-            int mountMode = getMountMode(uid, packageName);
-            boolean isUidActive = LocalServices.getService(ActivityManagerInternal.class)
-                    .getUidProcessState(uid) != PROCESS_STATE_NONEXISTENT;
-
-            if (isUidActive) {
-                remountUidExternalStorage(uid, mountMode);
-            }
-        }
-    };
-
     private void addObbStateLocked(ObbState obbState) throws RemoteException {
         final IBinder binder = obbState.getBinder();
         List<ObbState> obbStates = mObbMounts.get(binder);
@@ -4251,18 +4217,8 @@ class StorageManagerService extends IStorageManager.Stub
             }
 
             // Determine if caller is holding runtime permission
-            final boolean hasRead = StorageManager.checkPermissionAndCheckOp(mContext, false, 0,
-                    uid, packageName, READ_EXTERNAL_STORAGE, OP_READ_EXTERNAL_STORAGE);
             final boolean hasWrite = StorageManager.checkPermissionAndCheckOp(mContext, false, 0,
                     uid, packageName, WRITE_EXTERNAL_STORAGE, OP_WRITE_EXTERNAL_STORAGE);
-
-            // We're only willing to give out broad access if they also hold
-            // runtime permission; this is a firm CDD requirement
-            final boolean hasFull = mIPackageManager.checkUidPermission(WRITE_MEDIA_STORAGE,
-                    uid) == PERMISSION_GRANTED;
-            if (hasFull && hasWrite) {
-                return Zygote.MOUNT_EXTERNAL_FULL;
-            }
 
             // We're only willing to give out installer access if they also hold
             // runtime permission; this is a firm CDD requirement
@@ -4283,19 +4239,7 @@ class StorageManagerService extends IStorageManager.Stub
             if ((hasInstall || hasInstallOp) && hasWrite) {
                 return Zygote.MOUNT_EXTERNAL_INSTALLER;
             }
-
-            // Otherwise we're willing to give out sandboxed or non-sandboxed if
-            // they hold the runtime permission
-            boolean hasLegacy = mIAppOpsService.checkOperation(OP_LEGACY_STORAGE,
-                    uid, packageName) == MODE_ALLOWED;
-
-            if (hasLegacy && hasWrite) {
-                return Zygote.MOUNT_EXTERNAL_WRITE;
-            } else if (hasLegacy && hasRead) {
-                return Zygote.MOUNT_EXTERNAL_READ;
-            } else {
-                return Zygote.MOUNT_EXTERNAL_DEFAULT;
-            }
+            return Zygote.MOUNT_EXTERNAL_DEFAULT;
         } catch (RemoteException e) {
             // Should not happen
         }
@@ -4585,12 +4529,6 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         @Override
-        public void onExternalStoragePolicyChanged(int uid, String packageName) {
-            final int mountMode = getExternalStorageMountMode(uid, packageName);
-            remountUidExternalStorage(uid, mountMode);
-        }
-
-        @Override
         public int getExternalStorageMountMode(int uid, String packageName) {
             if (ENABLE_ISOLATED_STORAGE) {
                 return getMountMode(uid, packageName);
@@ -4656,6 +4594,11 @@ class StorageManagerService extends IStorageManager.Stub
             // make sure the OBB dir for the application is setup correctly, if it exists.
             File[] packageObbDirs = userEnv.buildExternalStorageAppObbDirs(packageName);
             for (File packageObbDir : packageObbDirs) {
+                if (packageObbDir.getPath().startsWith(
+                                Environment.getDataPreloadsMediaDirectory().getPath())) {
+                    Slog.i(TAG, "Skipping app data preparation for " + packageObbDir);
+                    continue;
+                }
                 try {
                     mVold.fixupAppDir(packageObbDir.getCanonicalPath() + "/", uid);
                 } catch (IOException e) {
@@ -4729,16 +4672,6 @@ class StorageManagerService extends IStorageManager.Stub
                     case OP_LEGACY_STORAGE:
                         updateLegacyStorageApps(packageName, uid, mode == MODE_ALLOWED);
                         return;
-                }
-
-                if (mode == MODE_ALLOWED && (code == OP_READ_EXTERNAL_STORAGE
-                                || code == OP_WRITE_EXTERNAL_STORAGE
-                                || code == OP_REQUEST_INSTALL_PACKAGES)) {
-                    final UserManagerInternal userManagerInternal =
-                            LocalServices.getService(UserManagerInternal.class);
-                    if (userManagerInternal.isUserInitialized(UserHandle.getUserId(uid))) {
-                        onExternalStoragePolicyChanged(uid, packageName);
-                    }
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);

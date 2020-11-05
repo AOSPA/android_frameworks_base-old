@@ -58,12 +58,14 @@ import com.android.internal.statusbar.IStatusBar;
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.view.AppearanceRegion;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
+import com.android.systemui.statusbar.commandline.CommandRegistry;
 import com.android.systemui.statusbar.policy.CallbackController;
 import com.android.systemui.tracing.ProtoTracer;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
 
 /**
  * This class takes the functions from IStatusBar that come in on
@@ -138,6 +140,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     private static final int MSG_SUPPRESS_AMBIENT_DISPLAY          = 56 << MSG_SHIFT;
     private static final int MSG_REQUEST_WINDOW_MAGNIFICATION_CONNECTION = 57 << MSG_SHIFT;
     private static final int MSG_HANDLE_WINDOW_MANAGER_LOGGING_COMMAND = 58 << MSG_SHIFT;
+    //TODO(b/169175022) Update name and when feature name is locked.
+    private static final int MSG_EMERGENCY_ACTION_LAUNCH_GESTURE      = 59 << MSG_SHIFT;
 
     public static final int FLAG_EXCLUDE_NONE = 0;
     public static final int FLAG_EXCLUDE_SEARCH_PANEL = 1 << 0;
@@ -159,6 +163,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
      */
     private int mLastUpdatedImeDisplayId = INVALID_DISPLAY;
     private ProtoTracer mProtoTracer;
+    private final @Nullable CommandRegistry mRegistry;
 
     /**
      * These methods are called back on the main thread.
@@ -255,6 +260,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         default void showAssistDisclosure() { }
         default void startAssist(Bundle args) { }
         default void onCameraLaunchGestureDetected(int source) { }
+
+        /**
+         * Notifies SysUI that the emergency action gesture was detected.
+         */
+        default void onEmergencyActionLaunchGestureDetected() { }
         default void showPictureInPictureMenu() { }
         default void setTopAppHidesStatusBar(boolean topAppHidesStatusBar) { }
 
@@ -368,11 +378,12 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     }
 
     public CommandQueue(Context context) {
-        this(context, null);
+        this(context, null, null);
     }
 
-    public CommandQueue(Context context, ProtoTracer protoTracer) {
+    public CommandQueue(Context context, ProtoTracer protoTracer, CommandRegistry registry) {
         mProtoTracer = protoTracer;
+        mRegistry = registry;
         context.getSystemService(DisplayManager.class).registerDisplayListener(this, mHandler);
         // We always have default display.
         setDisabled(DEFAULT_DISPLAY, DISABLE_NONE, DISABLE2_NONE);
@@ -726,6 +737,14 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     }
 
     @Override
+    public void onEmergencyActionLaunchGestureDetected() {
+        synchronized (mLock) {
+            mHandler.removeMessages(MSG_EMERGENCY_ACTION_LAUNCH_GESTURE);
+            mHandler.obtainMessage(MSG_EMERGENCY_ACTION_LAUNCH_GESTURE).sendToTarget();
+        }
+    }
+
+    @Override
     public void addQsTile(ComponentName tile) {
         synchronized (mLock) {
             mHandler.obtainMessage(MSG_ADD_QS_TILE, tile).sendToTarget();
@@ -1013,6 +1032,34 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         }
     }
 
+    @Override
+    public void passThroughShellCommand(String[] args, ParcelFileDescriptor pfd) {
+        final FileOutputStream fos = new FileOutputStream(pfd.getFileDescriptor());
+        final PrintWriter pw = new PrintWriter(fos);
+        // This is mimicking Binder#dumpAsync, but on this side of the binder. Might be possible
+        // to just throw this work onto the handler just like the other messages
+        Thread thr = new Thread("Sysui.passThroughShellCommand") {
+            public void run() {
+                try {
+                    if (mRegistry == null) {
+                        return;
+                    }
+
+                    // Registry blocks this thread until finished
+                    mRegistry.onShellCommand(pw, args);
+                } finally {
+                    pw.flush();
+                    try {
+                        // Close the file descriptor so the TransferPipe finishes its thread
+                        pfd.close();
+                    } catch (Exception e) {
+                    }
+                }
+            }
+        };
+        thr.start();
+    }
+
     private final class H extends Handler {
         private H(Looper l) {
             super(l);
@@ -1154,6 +1201,10 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                         mCallbacks.get(i).onCameraLaunchGestureDetected(msg.arg1);
                     }
                     break;
+                case MSG_EMERGENCY_ACTION_LAUNCH_GESTURE:
+                    for (int i = 0; i < mCallbacks.size(); i++) {
+                        mCallbacks.get(i).onEmergencyActionLaunchGestureDetected();
+                    }
                 case MSG_SHOW_PICTURE_IN_PICTURE_MENU:
                     for (int i = 0; i < mCallbacks.size(); i++) {
                         mCallbacks.get(i).showPictureInPictureMenu();

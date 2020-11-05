@@ -22,11 +22,13 @@ import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -47,20 +49,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
-import javax.inject.Inject;
 
 /**
  * Activity for showing aged out bubbles.
  * Must be public to be accessible to androidx...AppComponentFactory
  */
 public class BubbleOverflowActivity extends Activity {
+    static final String EXTRA_BUBBLE_CONTROLLER = "bubble_controller";
+
     private static final String TAG = TAG_WITH_CLASS_NAME ? "BubbleOverflowActivity" : TAG_BUBBLES;
 
     private LinearLayout mEmptyState;
     private TextView mEmptyStateTitle;
     private TextView mEmptyStateSubtitle;
     private ImageView mEmptyStateImage;
-    private BubbleController mBubbleController;
+    private Bubbles mBubbles;
     private BubbleOverflowAdapter mAdapter;
     private RecyclerView mRecyclerView;
     private List<Bubble> mOverflowBubbles = new ArrayList<>();
@@ -71,7 +74,8 @@ public class BubbleOverflowActivity extends Activity {
         }
         @Override
         public boolean canScrollVertically() {
-            if (mBubbleController.inLandscape()) {
+            if (getResources().getConfiguration().orientation
+                    == Configuration.ORIENTATION_LANDSCAPE) {
                 return super.canScrollVertically();
             }
             return false;
@@ -92,11 +96,6 @@ public class BubbleOverflowActivity extends Activity {
         }
     }
 
-    @Inject
-    public BubbleOverflowActivity(BubbleController controller) {
-        mBubbleController = controller;
-    }
-
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -108,6 +107,15 @@ public class BubbleOverflowActivity extends Activity {
         mEmptyStateSubtitle = findViewById(R.id.bubble_overflow_empty_subtitle);
         mEmptyStateImage = findViewById(R.id.bubble_overflow_empty_state_image);
 
+        Intent intent = getIntent();
+        if (intent != null && intent.getExtras() != null) {
+            IBinder binder = intent.getExtras().getBinder(EXTRA_BUBBLE_CONTROLLER);
+            if (binder instanceof ObjectWrapper) {
+                mBubbles = ((ObjectWrapper<Bubbles>) binder).get();
+            }
+        } else {
+            Log.w(TAG, "Bubble overflow activity created without bubble controller!");
+        }
         updateOverflow();
     }
 
@@ -131,15 +139,15 @@ public class BubbleOverflowActivity extends Activity {
         final int viewHeight = recyclerViewHeight / rows;
 
         mAdapter = new BubbleOverflowAdapter(getApplicationContext(), mOverflowBubbles,
-                mBubbleController::promoteBubbleFromOverflow, viewWidth, viewHeight);
+                mBubbles::promoteBubbleFromOverflow, viewWidth, viewHeight);
         mRecyclerView.setAdapter(mAdapter);
 
         mOverflowBubbles.clear();
-        mOverflowBubbles.addAll(mBubbleController.getOverflowBubbles());
+        mOverflowBubbles.addAll(mBubbles.getOverflowBubbles());
         mAdapter.notifyDataSetChanged();
         updateEmptyStateVisibility();
 
-        mBubbleController.setOverflowListener(mDataListener);
+        mBubbles.setOverflowListener(mDataListener);
         updateTheme();
     }
 
@@ -209,8 +217,7 @@ public class BubbleOverflowActivity extends Activity {
 
             if (DEBUG_OVERFLOW) {
                 Log.d(TAG, BubbleDebugConfig.formatBubblesString(
-                        mBubbleController.getOverflowBubbles(),
-                        null));
+                        mBubbles.getOverflowBubbles(), null));
             }
         }
     };

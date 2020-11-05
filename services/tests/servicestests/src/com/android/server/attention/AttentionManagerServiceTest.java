@@ -116,7 +116,7 @@ public class AttentionManagerServiceTest {
 
     @Test
     public void testCheckAttention_returnFalseWhenPowerManagerNotInteract() throws RemoteException {
-        doReturn(true).when(mSpyAttentionManager).isAttentionServiceSupported();
+        mSpyAttentionManager.mIsServiceEnabled = true;
         doReturn(false).when(mMockIPowerManager).isInteractive();
         AttentionCallbackInternal callback = Mockito.mock(AttentionCallbackInternal.class);
         assertThat(mSpyAttentionManager.checkAttention(mTimeout, callback)).isFalse();
@@ -124,7 +124,7 @@ public class AttentionManagerServiceTest {
 
     @Test
     public void testCheckAttention_callOnSuccess() throws RemoteException {
-        doReturn(true).when(mSpyAttentionManager).isAttentionServiceSupported();
+        mSpyAttentionManager.mIsServiceEnabled = true;
         doReturn(true).when(mSpyAttentionManager).isServiceAvailable();
         doReturn(true).when(mMockIPowerManager).isInteractive();
         doNothing().when(mSpyAttentionManager).freeIfInactiveLocked();

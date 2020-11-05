@@ -25,6 +25,7 @@ import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.ZYGOTE_POLICY_FLAG_EMPTY;
 
+import static com.android.internal.messages.nano.SystemMessageProto.SystemMessage.NOTE_FOREGROUND_SERVICE_BG_LAUNCH;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_BACKGROUND_CHECK;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FOREGROUND_SERVICE;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_MU;
@@ -121,6 +122,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -241,6 +243,10 @@ public final class ActiveServices {
 
     // white listed packageName.
     ArraySet<String> mWhiteListAllowWhileInUsePermissionInFgs = new ArraySet<>();
+
+    // TODO: remove this after feature development is done
+    private static final SimpleDateFormat DATE_FORMATTER =
+            new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     final Runnable mLastAnrDumpClearer = new Runnable() {
         @Override public void run() {
@@ -513,17 +519,18 @@ public final class ActiveServices {
     }
 
     ComponentName startServiceLocked(IApplicationThread caller, Intent service, String resolvedType,
-            int callingPid, int callingUid, boolean fgRequired, boolean hideFgNotification,
-            String callingPackage, @Nullable String callingFeatureId, final int userId)
+            int callingPid, int callingUid, boolean fgRequired, String callingPackage,
+            @Nullable String callingFeatureId, final int userId)
             throws TransactionTooLargeException {
         return startServiceLocked(caller, service, resolvedType, callingPid, callingUid, fgRequired,
-                hideFgNotification, callingPackage, callingFeatureId, userId, false);
+                callingPackage, callingFeatureId, userId, false, null);
     }
 
     ComponentName startServiceLocked(IApplicationThread caller, Intent service, String resolvedType,
-            int callingPid, int callingUid, boolean fgRequired, boolean hideFgNotification,
+            int callingPid, int callingUid, boolean fgRequired,
             String callingPackage, @Nullable String callingFeatureId, final int userId,
-            boolean allowBackgroundActivityStarts) throws TransactionTooLargeException {
+            boolean allowBackgroundActivityStarts, @Nullable IBinder backgroundActivityStartsToken)
+            throws TransactionTooLargeException {
         if (DEBUG_DELAYED_STARTS) Slog.v(TAG_SERVICE, "startService: " + service
                 + " type=" + resolvedType + " args=" + service.getExtras());
 
@@ -586,10 +593,18 @@ public final class ActiveServices {
                 }
                 if (r.mAllowStartForeground == FGS_FEATURE_DENIED
                         && mAm.mConstants.mFlagFgsStartRestrictionEnabled) {
-                    Slog.w(TAG, "startForegroundService() not allowed due to "
-                                    + " mAllowStartForeground false: service "
-                                    + r.shortInstanceName);
-                    forcedStandby = true;
+                    if (mAm.mConstants.mFlagFgsStartTempAllowListEnabled
+                            && mAm.isOnDeviceIdleWhitelistLocked(r.appInfo.uid, false)) {
+                        // uid is on DeviceIdleController's allowlist.
+                        Slog.d(TAG, "startForegroundService() mAllowStartForeground false "
+                                + "but allowlist true: service " + r.shortInstanceName);
+                    } else {
+                        Slog.w(TAG, "startForegroundService() not allowed due to "
+                                + "mAllowStartForeground false: service "
+                                + r.shortInstanceName);
+                        showFgsBgRestrictedNotificationLocked(r);
+                        return null;
+                    }
                 }
             }
         }
@@ -687,7 +702,6 @@ public final class ActiveServices {
         r.startRequested = true;
         r.delayedStop = false;
         r.fgRequired = fgRequired;
-        r.hideFgNotification = hideFgNotification;
         r.pendingStarts.add(new ServiceRecord.StartItem(r, false, r.makeNextStartId(),
                 service, neededGrants, callingUid));
 
@@ -768,7 +782,7 @@ public final class ActiveServices {
             }
         }
         if (allowBackgroundActivityStarts) {
-            r.allowBgActivityStartsOnServiceStart();
+            r.allowBgActivityStartsOnServiceStart(backgroundActivityStartsToken);
         }
         ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting);
         return cmp;
@@ -1490,12 +1504,20 @@ public final class ActiveServices {
                         }
                         if (r.mAllowStartForeground == FGS_FEATURE_DENIED
                                 && mAm.mConstants.mFlagFgsStartRestrictionEnabled) {
-                            Slog.w(TAG,
-                                    "Service.startForeground() not allowed due to "
-                                            + "mAllowStartForeground false: service "
-                                            + r.shortInstanceName);
-                            updateServiceForegroundLocked(r.app, true);
-                            ignoreForeground = true;
+                            if (mAm.mConstants.mFlagFgsStartTempAllowListEnabled
+                                    && mAm.isOnDeviceIdleWhitelistLocked(r.appInfo.uid, false)) {
+                                // uid is on DeviceIdleController's allowlist.
+                                Slog.d(TAG, "Service.startForeground() "
+                                        + "mAllowStartForeground false but allowlist true: service "
+                                        + r.shortInstanceName);
+                            } else {
+                                Slog.w(TAG, "Service.startForeground() not allowed due to "
+                                                + "mAllowStartForeground false: service "
+                                                + r.shortInstanceName);
+                                showFgsBgRestrictedNotificationLocked(r);
+                                updateServiceForegroundLocked(r.app, true);
+                                ignoreForeground = true;
+                            }
                         }
                     }
                 }
@@ -2691,12 +2713,12 @@ public final class ActiveServices {
 
     private int getAllowMode(Intent service, @Nullable String callingPackage) {
         if (callingPackage == null || service.getComponent() == null) {
-            return ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE_OR_FULL;
+            return ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE;
         }
         if (callingPackage.equals(service.getComponent().getPackageName())) {
-            return ActivityManagerInternal.ALLOW_ACROSS_PROFILES_IN_PROFILE_OR_FULL;
+            return ActivityManagerInternal.ALLOW_ALL_PROFILE_PERMISSIONS_IN_PROFILE;
         } else {
-            return ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE_OR_FULL;
+            return ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE;
         }
     }
 
@@ -5242,4 +5264,27 @@ public final class ActiveServices {
                 && code != FGS_FEATURE_ALLOWED_BY_UID_VISIBLE;
     }
 
+    // TODO: remove this notification after feature development is done
+    private void showFgsBgRestrictedNotificationLocked(ServiceRecord r) {
+        final Context context = mAm.mContext;
+        final String title = "Foreground Service BG-Launch Restricted";
+        final String content = "App restricted: " + r.mRecentCallingPackage;
+        final long now = System.currentTimeMillis();
+        final String bigText = DATE_FORMATTER.format(now) + " " + r.mInfoAllowStartForeground;
+        final String groupKey = "com.android.fgs-bg-restricted";
+        final Notification.Builder n =
+                new Notification.Builder(context,
+                        SystemNotificationChannels.ALERTS)
+                        .setGroup(groupKey)
+                        .setSmallIcon(R.drawable.stat_sys_vitals)
+                        .setWhen(0)
+                        .setColor(context.getColor(
+                                com.android.internal.R.color.system_notification_accent_color))
+                        .setTicker(title)
+                        .setContentTitle(title)
+                        .setContentText(content)
+                        .setStyle(new Notification.BigTextStyle().bigText(bigText));
+        context.getSystemService(NotificationManager.class).notifyAsUser(Long.toString(now),
+                NOTE_FOREGROUND_SERVICE_BG_LAUNCH, n.build(), UserHandle.ALL);
+    }
 }

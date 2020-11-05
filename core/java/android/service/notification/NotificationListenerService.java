@@ -64,6 +64,7 @@ import com.android.internal.os.SomeArgs;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -1802,7 +1803,7 @@ public abstract class NotificationListenerService extends Service {
          * {@link NotificationAssistantService}
          */
         public @NonNull List<Notification.Action> getSmartActions() {
-            return mSmartActions;
+            return mSmartActions == null ? Collections.emptyList() : mSmartActions;
         }
 
         /**
@@ -1810,7 +1811,7 @@ public abstract class NotificationListenerService extends Service {
          * {@link NotificationAssistantService}
          */
         public @NonNull List<CharSequence> getSmartReplies() {
-            return mSmartReplies;
+            return mSmartReplies == null ? Collections.emptyList() : mSmartReplies;
         }
 
         /**
@@ -1864,8 +1865,9 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
-         * Returns whether this notification is a conversation notification.
-         * @hide
+         * Returns whether this notification is a conversation notification, and would appear
+         * in the conversation section of the notification shade, on devices that separate that
+         * type of notification.
          */
         public boolean isConversation() {
             return mIsConversation;
@@ -1880,7 +1882,10 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
-         * @hide
+         * Returns the shortcut information associated with this notification, if it is a
+         * {@link #isConversation() conversation notification}.
+         * <p>This might be null even if the notification is a conversation notification, if
+         * the posting app hasn't opted into the full conversation feature set yet.</p>
          */
         public @Nullable ShortcutInfo getShortcutInfo() {
             return mShortcutInfo;

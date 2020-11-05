@@ -24,26 +24,30 @@ import android.view.SurfaceControl;
  */
 public final class BLASTBufferQueue {
     // Note: This field is accessed by native code.
-    private long mNativeObject; // BLASTBufferQueue*
+    public long mNativeObject; // BLASTBufferQueue*
 
-    private static native long nativeCreate(long surfaceControl, long width, long height,
-            boolean tripleBufferingEnabled);
+    private static native long nativeCreate(String name, long surfaceControl, long width,
+                                            long height, boolean tripleBufferingEnabled);
     private static native void nativeDestroy(long ptr);
     private static native Surface nativeGetSurface(long ptr);
     private static native void nativeSetNextTransaction(long ptr, long transactionPtr);
     private static native void nativeUpdate(long ptr, long surfaceControl, long width, long height);
 
     /** Create a new connection with the surface flinger. */
-    public BLASTBufferQueue(SurfaceControl sc, int width, int height,
+    public BLASTBufferQueue(String name, SurfaceControl sc, int width, int height,
             boolean tripleBufferingEnabled) {
-        mNativeObject = nativeCreate(sc.mNativeObject, width, height, tripleBufferingEnabled);
+        mNativeObject = nativeCreate(name, sc.mNativeObject, width, height, tripleBufferingEnabled);
     }
 
     public void destroy() {
         nativeDestroy(mNativeObject);
+        mNativeObject = 0;
     }
 
-    public Surface getSurface() {
+    /**
+     * @return a new Surface instance from the IGraphicsBufferProducer of the adapter.
+     */
+    public Surface createSurface() {
         return nativeGetSurface(mNativeObject);
     }
 

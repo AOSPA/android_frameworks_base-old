@@ -16,14 +16,17 @@
 
 package android.hardware.biometrics;
 
+import static android.Manifest.permission.TEST_BIOMETRIC;
 import static android.Manifest.permission.USE_BIOMETRIC;
 import static android.Manifest.permission.USE_BIOMETRIC_INTERNAL;
 import static android.Manifest.permission.WRITE_DEVICE_CONFIG;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.content.Context;
 import android.os.RemoteException;
 import android.security.keystore.KeyGenParameterSpec;
@@ -32,6 +35,8 @@ import android.util.Slog;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A class that contains biometric utilities. For authentication, see {@link BiometricPrompt}.
@@ -103,6 +108,7 @@ public class BiometricManager {
         @IntDef(flag = true, value = {
                 BIOMETRIC_STRONG,
                 BIOMETRIC_WEAK,
+                BIOMETRIC_CONVENIENCE,
                 DEVICE_CREDENTIAL,
         })
         @interface Types {}
@@ -192,6 +198,28 @@ public class BiometricManager {
     public BiometricManager(Context context, IAuthService service) {
         mContext = context;
         mService = service;
+    }
+
+    /**
+     * @return A list of {@link SensorProperties}
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    @RequiresPermission(TEST_BIOMETRIC)
+    public List<SensorProperties> getSensorProperties() {
+        return new ArrayList<>(); // TODO(169459906)
+    }
+
+    /**
+     * Retrieves a test session for BiometricManager/BiometricPrompt.
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    @RequiresPermission(TEST_BIOMETRIC)
+    public BiometricTestSession createTestSession(int sensorId) {
+        return null; // TODO(169459906)
     }
 
     /**

@@ -56,7 +56,7 @@ import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricSourceType;
 import android.hardware.biometrics.IBiometricEnabledOnKeyguardCallback;
 import android.hardware.face.FaceManager;
-import android.hardware.face.FaceSensorProperties;
+import android.hardware.face.FaceSensorPropertiesInternal;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintManager.AuthenticationCallback;
 import android.hardware.fingerprint.FingerprintManager.AuthenticationResult;
@@ -100,8 +100,8 @@ import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListener;
+import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.util.Assert;
@@ -181,6 +181,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private static final int MSG_USER_STOPPED = 340;
     private static final int MSG_USER_REMOVED = 341;
     private static final int MSG_KEYGUARD_GOING_AWAY = 342;
+    private static final int MSG_LOCK_SCREEN_MODE = 343;
+
+    public static final int LOCK_SCREEN_MODE_NORMAL = 0;
+    public static final int LOCK_SCREEN_MODE_LAYOUT_1 = 1;
 
     /** Biometric authentication state: Not listening. */
     private static final int BIOMETRIC_STATE_STOPPED = 0;
@@ -264,6 +268,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private final ArrayList<WeakReference<KeyguardUpdateMonitorCallback>>
             mCallbacks = Lists.newArrayList();
     private ContentObserver mDeviceProvisionedObserver;
+    private ContentObserver mLockScreenModeObserver;
 
     private boolean mSwitchingUser;
 
@@ -287,6 +292,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mLockIconPressed;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     private final Executor mBackgroundExecutor;
+    private int mLockScreenMode;
 
     /**
      * Short delay before restarting fingerprint authentication after a successful try. This should
@@ -1337,7 +1343,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private CancellationSignal mFaceCancelSignal;
     private FingerprintManager mFpm;
     private FaceManager mFaceManager;
-    private List<FaceSensorProperties> mFaceSensorProperties;
+    private List<FaceSensorPropertiesInternal> mFaceSensorProperties;
     private boolean mFingerprintLockedOut;
     private TelephonyManager mTelephonyManager;
 
@@ -1695,6 +1701,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     case MSG_KEYGUARD_GOING_AWAY:
                         handleKeyguardGoingAway((boolean) msg.obj);
                         break;
+                    case MSG_LOCK_SCREEN_MODE:
+                        handleLockScreenMode();
+                        break;
                     default:
                         super.handleMessage(msg);
                         break;
@@ -1779,7 +1788,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         }
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FACE)) {
             mFaceManager = (FaceManager) context.getSystemService(Context.FACE_SERVICE);
-            mFaceSensorProperties = mFaceManager.getSensorProperties();
+            mFaceSensorProperties = mFaceManager.getSensorPropertiesInternal();
         }
 
         if (mFpm != null || mFaceManager != null) {
@@ -1797,7 +1806,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
         mIsAutomotive = isAutomotive();
 
-        ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
+        TaskStackChangeListeners.getInstance().registerTaskStackListener(mTaskStackListener);
         mUserManager = context.getSystemService(UserManager.class);
         mIsPrimaryUser = mUserManager.isPrimaryUser();
         int user = ActivityManager.getCurrentUser();
@@ -1829,6 +1838,23 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 }
             }
         }
+
+        updateLockScreenMode();
+        mLockScreenModeObserver = new ContentObserver(mHandler) {
+            @Override
+            public void onChange(boolean selfChange) {
+                updateLockScreenMode();
+                mHandler.sendEmptyMessage(MSG_LOCK_SCREEN_MODE);
+            }
+        };
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.SHOW_NEW_LOCKSCREEN),
+                false, mLockScreenModeObserver);
+    }
+
+    private void updateLockScreenMode() {
+        mLockScreenMode = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.SHOW_NEW_LOCKSCREEN, 0);
     }
 
     private final UserSwitchObserver mUserSwitchObserver = new UserSwitchObserver() {
@@ -2351,6 +2377,20 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     }
 
     /**
+     * Handle {@link #MSG_LOCK_SCREEN_MODE}
+     */
+    private void handleLockScreenMode() {
+        Assert.isMainThread();
+        if (DEBUG) Log.d(TAG, "handleLockScreenMode(" + mLockScreenMode + ")");
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
+            if (cb != null) {
+                cb.onLockScreenModeChanged(mLockScreenMode);
+            }
+        }
+    }
+
+    /**
      * Handle (@line #MSG_TIMEZONE_UPDATE}
      */
     private void handleTimeZoneUpdate(String timeZone) {
@@ -2679,6 +2719,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         callback.onClockVisibilityChanged();
         callback.onKeyguardVisibilityChangedRaw(mKeyguardIsVisible);
         callback.onTelephonyCapable(mTelephonyCapable);
+        callback.onLockScreenModeChanged(mLockScreenMode);
+
         for (Entry<Integer, SimData> data : mSimDatas.entrySet()) {
             final SimData state = data.getValue();
             callback.onSimStateChanged(state.subId, state.slotId, state.simState);
@@ -3023,13 +3065,17 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             mContext.getContentResolver().unregisterContentObserver(mDeviceProvisionedObserver);
         }
 
+        if (mLockScreenModeObserver != null) {
+            mContext.getContentResolver().unregisterContentObserver(mLockScreenModeObserver);
+        }
+
         try {
             ActivityManager.getService().unregisterUserSwitchObserver(mUserSwitchObserver);
         } catch (RemoteException e) {
             Log.d(TAG, "RemoteException onDestroy. cannot unregister userSwitchObserver");
         }
 
-        ActivityManagerWrapper.getInstance().unregisterTaskStackListener(mTaskStackListener);
+        TaskStackChangeListeners.getInstance().unregisterTaskStackListener(mTaskStackListener);
 
         mBroadcastDispatcher.unregisterReceiver(mBroadcastReceiver);
         mBroadcastDispatcher.unregisterReceiver(mBroadcastAllReceiver);

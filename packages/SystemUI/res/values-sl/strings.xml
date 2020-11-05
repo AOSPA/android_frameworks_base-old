@@ -889,20 +889,13 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"Pokaži ikone obvestil z nizko stopnjo prednosti"</string>
     <string name="other" msgid="429768510980739978">"Drugo"</string>
-    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
-    <skip />
+    <string name="accessibility_qs_edit_remove_tile_action" msgid="775511891457193480">"odstranitev ploščice"</string>
+    <string name="accessibility_qs_edit_tile_add_action" msgid="5051211910345301833">"dodajanje ploščice na konec"</string>
+    <string name="accessibility_qs_edit_tile_start_move" msgid="2009373939914517817">"Premik ploščice"</string>
+    <string name="accessibility_qs_edit_tile_start_add" msgid="7560798153975555772">"Dodajanje ploščice"</string>
+    <string name="accessibility_qs_edit_tile_move_to_position" msgid="5198161544045930556">"Premik na položaj <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_tile_add_to_position" msgid="9029163095148274690">"Dodajanje na položaj <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_position" msgid="4509277359815711830">"Položaj <xliff:g id="POSITION">%1$d</xliff:g>"</string>
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"Urejevalnik hitrih nastavitev."</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"Obvestilo za <xliff:g id="ID_1">%1$s</xliff:g>: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"Odpri nastavitve."</string>
@@ -1029,6 +1022,16 @@
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Nastavitve"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Povečevalno okno"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Kontrolniki povečevalnega okna"</string>
+    <string name="accessibility_control_zoom_in" msgid="1189272315480097417">"Povečaj"</string>
+    <string name="accessibility_control_zoom_out" msgid="69578832020304084">"Pomanjšaj"</string>
+    <string name="accessibility_control_move_up" msgid="6622825494014720136">"Premakni navzgor"</string>
+    <string name="accessibility_control_move_down" msgid="5390922476900974512">"Premakni navzdol"</string>
+    <string name="accessibility_control_move_left" msgid="8156206978511401995">"Premakni levo"</string>
+    <string name="accessibility_control_move_right" msgid="8926821093629582888">"Premakni desno"</string>
+    <string name="magnification_mode_switch_description" msgid="2698364322069934733">"Stikalo za povečavo"</string>
+    <string name="magnification_mode_switch_state_full_screen" msgid="2882507327576770574">"Povečava celotnega zaslona"</string>
+    <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"Povečava dela zaslona"</string>
+    <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"Stikalo"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Kontrolniki naprave"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"Dodajte kontrolnike za povezane naprave"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"Nastavitev kontrolnikov naprave"</string>
@@ -1094,4 +1097,6 @@
     <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (povezava prekinjena)"</string>
     <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"Povezave ni bilo mogoče vzpostaviti. Poskusite znova."</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Seznanitev nove naprave"</string>
+    <string name="build_number_clip_data_label" msgid="3623176728412560914">"Delovna različica"</string>
+    <string name="build_number_copy_toast" msgid="877720921605503046">"Delovna različica je bila kopirana v odložišče."</string>
 </resources>

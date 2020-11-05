@@ -15,8 +15,6 @@
  */
 package com.android.systemui.navigationbar.gestural;
 
-import static android.view.Display.INVALID_DISPLAY;
-
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -57,7 +55,6 @@ import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.broadcast.BroadcastDispatcher;
-import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationBarView;
 import com.android.systemui.navigationbar.NavigationModeController;
@@ -71,6 +68,7 @@ import com.android.systemui.shared.system.InputChannelCompat;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.shared.system.TaskStackChangeListener;
+import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.shared.tracing.ProtoTraceable;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.tracing.nano.EdgeBackGestureHandlerProto;
@@ -207,6 +205,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
     private boolean mUseMLModel;
     private float mMLModelThreshold;
     private String mPackageName;
+    private float mMLResults;
 
     private final GestureNavigationSettingsObserver mGestureNavigationSettingsObserver;
 
@@ -386,7 +385,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
             mGestureNavigationSettingsObserver.unregister();
             mContext.getSystemService(DisplayManager.class).unregisterDisplayListener(this);
             mPluginManager.removePluginListener(this);
-            ActivityManagerWrapper.getInstance().unregisterTaskStackListener(mTaskStackListener);
+            TaskStackChangeListeners.getInstance().unregisterTaskStackListener(mTaskStackListener);
             DeviceConfig.removeOnPropertiesChangedListener(mOnPropertiesChangedListener);
 
             try {
@@ -402,7 +401,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
             updateDisplaySize();
             mContext.getSystemService(DisplayManager.class).registerDisplayListener(this,
                     mContext.getMainThreadHandler());
-            ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
+            TaskStackChangeListeners.getInstance().registerTaskStackListener(mTaskStackListener);
             DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI,
                     runnable -> (mContext.getMainThreadHandler()).post(runnable),
                     mOnPropertiesChangedListener);
@@ -531,10 +530,10 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
             new long[]{(long) y},
         };
 
-        final float results = mBackGestureTfClassifierProvider.predict(featuresVector);
-        if (results == -1) return -1;
+        mMLResults = mBackGestureTfClassifierProvider.predict(featuresVector);
+        if (mMLResults == -1) return -1;
 
-        return results >= mMLModelThreshold ? 1 : 0;
+        return mMLResults >= mMLModelThreshold ? 1 : 0;
     }
 
     private boolean isWithinTouchRegion(int x, int y) {
@@ -604,6 +603,11 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
             return;
         }
         mLogGesture = false;
+        String logPackageName = "";
+        // Due to privacy, only top 100 most used apps by all users can be logged.
+        if (mUseMLModel && mVocab.containsKey(mPackageName) && mVocab.get(mPackageName) < 100) {
+            logPackageName = mPackageName;
+        }
         SysUiStatsLog.write(SysUiStatsLog.BACK_GESTURE_REPORTED_REPORTED, backType,
                 (int) mDownPoint.y, mIsOnLeftEdge
                         ? SysUiStatsLog.BACK_GESTURE__X_LOCATION__LEFT
@@ -611,7 +615,8 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
                 (int) mDownPoint.x, (int) mDownPoint.y,
                 (int) mEndPoint.x, (int) mEndPoint.y,
                 mEdgeWidthLeft + mLeftInset,
-                mDisplaySize.x - (mEdgeWidthRight + mRightInset));
+                mDisplaySize.x - (mEdgeWidthRight + mRightInset),
+                mUseMLModel ? mMLResults : -2, logPackageName);
     }
 
     private void onMotionEvent(MotionEvent ev) {
@@ -621,6 +626,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
             // either the bouncer is showing or the notification panel is hidden
             mInputEventReceiver.setBatchingEnabled(false);
             mIsOnLeftEdge = ev.getX() <= mEdgeWidthLeft + mLeftInset;
+            mMLResults = 0;
             mLogGesture = false;
             mInRejectedExclusion = false;
             mAllowGesture = !mDisabledForQuickstep && mIsBackGestureAllowed
@@ -725,14 +731,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
                 KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_VIRTUAL_HARD_KEY,
                 InputDevice.SOURCE_KEYBOARD);
 
-        // Bubble controller will give us a valid display id if it should get the back event
-        BubbleController bubbleController = Dependency.get(BubbleController.class);
-        int bubbleDisplayId = bubbleController.getExpandedDisplayId(mContext);
-        if (bubbleDisplayId != INVALID_DISPLAY) {
-            ev.setDisplayId(bubbleDisplayId);
-        } else {
-            ev.setDisplayId(mContext.getDisplay().getDisplayId());
-        }
+        ev.setDisplayId(mContext.getDisplay().getDisplayId());
         InputManager.getInstance().injectInputEvent(ev, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
     }
 

@@ -30,6 +30,7 @@ import android.app.TaskStackBuilder;
 import android.content.Context;
 import android.content.Intent;
 import android.os.AsyncTask;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
@@ -40,7 +41,6 @@ import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 import android.util.EventLog;
 import android.view.RemoteAnimationAdapter;
-import android.view.View;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.statusbar.NotificationVisibility;
@@ -48,7 +48,7 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.ActivityIntentHelper;
 import com.android.systemui.EventLogTags;
 import com.android.systemui.assist.AssistManager;
-import com.android.systemui.bubbles.BubbleController;
+import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dagger.qualifiers.UiBackground;
@@ -77,6 +77,7 @@ import com.android.systemui.statusbar.notification.row.OnUserInteractionCallback
 import com.android.systemui.statusbar.policy.HeadsUpUtil;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 
+import java.util.Optional;
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
@@ -103,7 +104,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private final KeyguardManager mKeyguardManager;
     private final IDreamManager mDreamManager;
-    private final BubbleController mBubbleController;
+    private final Optional<Bubbles> mBubblesOptional;
     private final Lazy<AssistManager> mAssistManagerLazy;
     private final NotificationRemoteInputManager mRemoteInputManager;
     private final GroupMembershipManager mGroupMembershipManager;
@@ -141,7 +142,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             KeyguardManager keyguardManager,
             IDreamManager dreamManager,
-            BubbleController bubbleController,
+            Optional<Bubbles> bubblesOptional,
             Lazy<AssistManager> assistManagerLazy,
             NotificationRemoteInputManager remoteInputManager,
             GroupMembershipManager groupMembershipManager,
@@ -175,7 +176,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mKeyguardManager = keyguardManager;
         mDreamManager = dreamManager;
-        mBubbleController = bubbleController;
+        mBubblesOptional = bubblesOptional;
         mAssistManagerLazy = assistManagerLazy;
         mRemoteInputManager = remoteInputManager;
         mGroupMembershipManager = groupMembershipManager;
@@ -386,11 +387,14 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
     }
 
     private void expandBubbleStackOnMainThread(NotificationEntry entry) {
+        if (!mBubblesOptional.isPresent()) {
+            return;
+        }
+
         if (Looper.getMainLooper().isCurrentThread()) {
-            mBubbleController.expandStackAndSelectBubble(entry);
+            mBubblesOptional.get().expandStackAndSelectBubble(entry);
         } else {
-            mMainThreadHandler.post(
-                    () -> mBubbleController.expandStackAndSelectBubble(entry));
+            mMainThreadHandler.post(() -> mBubblesOptional.get().expandStackAndSelectBubble(entry));
         }
     }
 
@@ -398,7 +402,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             PendingIntent intent,
             Intent fillInIntent,
             NotificationEntry entry,
-            View row,
+            ExpandableNotificationRow row,
             boolean wasOccluded,
             boolean isActivityIntent) {
         RemoteAnimationAdapter adapter = mActivityLaunchAnimator.getLaunchAnimation(row,
@@ -410,8 +414,11 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                         .registerRemoteAnimationForNextActivityStart(
                                 intent.getCreatorPackage(), adapter);
             }
+            long eventTime = row.getAndResetLastActionUpTime();
+            Bundle options = eventTime > 0 ? getActivityOptions(adapter,
+                    mKeyguardStateController.isShowing(), eventTime) : getActivityOptions(adapter);
             int launchResult = intent.sendAndReturnResult(mContext, 0, fillInIntent, null,
-                    null, null, getActivityOptions(adapter));
+                    null, null, options);
             mMainThreadHandler.post(() -> {
                 mActivityLaunchAnimator.setLaunchResult(launchResult, isActivityIntent);
             });
@@ -602,7 +609,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
         private final KeyguardManager mKeyguardManager;
         private final IDreamManager mDreamManager;
-        private final BubbleController mBubbleController;
+        private final Optional<Bubbles> mBubblesOptional;
         private final Lazy<AssistManager> mAssistManagerLazy;
         private final NotificationRemoteInputManager mRemoteInputManager;
         private final GroupMembershipManager mGroupMembershipManager;
@@ -639,7 +646,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                 StatusBarKeyguardViewManager statusBarKeyguardViewManager,
                 KeyguardManager keyguardManager,
                 IDreamManager dreamManager,
-                BubbleController bubbleController,
+                Optional<Bubbles> bubblesOptional,
                 Lazy<AssistManager> assistManagerLazy,
                 NotificationRemoteInputManager remoteInputManager,
                 GroupMembershipManager groupMembershipManager,
@@ -669,7 +676,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
             mKeyguardManager = keyguardManager;
             mDreamManager = dreamManager;
-            mBubbleController = bubbleController;
+            mBubblesOptional = bubblesOptional;
             mAssistManagerLazy = assistManagerLazy;
             mRemoteInputManager = remoteInputManager;
             mGroupMembershipManager = groupMembershipManager;
@@ -725,7 +732,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                     mStatusBarKeyguardViewManager,
                     mKeyguardManager,
                     mDreamManager,
-                    mBubbleController,
+                    mBubblesOptional,
                     mAssistManagerLazy,
                     mRemoteInputManager,
                     mGroupMembershipManager,
@@ -736,12 +743,10 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                     mLockPatternUtils,
                     mRemoteInputCallback,
                     mActivityIntentHelper,
-
                     mFeatureFlags,
                     mMetricsLogger,
                     mLogger,
                     mOnUserInteractionCallback,
-
                     mStatusBar,
                     mNotificationPresenter,
                     mNotificationPanelViewController,

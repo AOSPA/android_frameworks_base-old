@@ -550,7 +550,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         try {
             doReturn(false).when(stack).isTranslucent(any());
-            assertFalse(mStack.shouldBeVisible(null /* starting */));
+            assertTrue(mStack.shouldBeVisible(null /* starting */));
 
             mActivity.setLastReportedConfiguration(new MergedConfiguration(new Configuration(),
                     mActivity.getConfiguration()));
@@ -1126,7 +1126,7 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         // Verify the stack-top activity is occluded keyguard.
         assertEquals(topActivity, mStack.topRunningActivity());
-        assertTrue(mStack.topActivityOccludesKeyguard());
+        assertTrue(keyguardController.isDisplayOccluded(DEFAULT_DISPLAY));
 
         // Finish the top activity
         topActivity.setState(PAUSED, "true");
@@ -1135,7 +1135,7 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         // Verify new top activity does not occlude keyguard.
         assertEquals(mActivity, mStack.topRunningActivity());
-        assertFalse(mStack.topActivityOccludesKeyguard());
+        assertFalse(keyguardController.isDisplayOccluded(DEFAULT_DISPLAY));
     }
 
     /**
@@ -1522,7 +1522,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         try {
             // Return error to skip unnecessary operation.
             doReturn(WindowManagerGlobal.ADD_STARTING_NOT_NEEDED).when(session).addToDisplay(
-                    any() /* window */, anyInt() /* seq */, any() /* attrs */,
+                    any() /* window */,  any() /* attrs */,
                     anyInt() /* viewVisibility */, anyInt() /* displayId */, any() /* outFrame */,
                     any() /* outContentInsets */, any() /* outStableInsets */,
                     any() /* outDisplayCutout */, any() /* outInputChannel */,

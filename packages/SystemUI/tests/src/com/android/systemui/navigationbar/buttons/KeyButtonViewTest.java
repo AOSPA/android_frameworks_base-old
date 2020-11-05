@@ -32,15 +32,11 @@ import static com.android.systemui.navigationbar.buttons.KeyButtonView.NavBarBut
 import static com.android.systemui.navigationbar.buttons.KeyButtonView.NavBarButtonEvent.NAVBAR_OVERVIEW_BUTTON_LONGPRESS;
 import static com.android.systemui.navigationbar.buttons.KeyButtonView.NavBarButtonEvent.NAVBAR_OVERVIEW_BUTTON_TAP;
 
-import static junit.framework.Assert.assertEquals;
-
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import android.hardware.input.InputManager;
 import android.testing.AndroidTestingRunner;
@@ -53,8 +49,7 @@ import androidx.test.filters.SmallTest;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.bubbles.BubbleController;
-import com.android.systemui.navigationbar.buttons.KeyButtonView;
+import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.recents.OverviewProxyService;
 
 import org.junit.Before;
@@ -71,7 +66,7 @@ public class KeyButtonViewTest extends SysuiTestCase {
 
     private KeyButtonView mKeyButtonView;
     private MetricsLogger mMetricsLogger;
-    private BubbleController mBubbleController;
+    private Bubbles mBubbles;
     private UiEventLogger mUiEventLogger;
     private InputManager mInputManager = mock(InputManager.class);
     @Captor
@@ -81,7 +76,7 @@ public class KeyButtonViewTest extends SysuiTestCase {
     public void setup() throws Exception {
         MockitoAnnotations.initMocks(this);
         mMetricsLogger = mDependency.injectMockDependency(MetricsLogger.class);
-        mBubbleController = mDependency.injectMockDependency(BubbleController.class);
+        mBubbles = mDependency.injectMockDependency(Bubbles.class);
         mDependency.injectMockDependency(OverviewProxyService.class);
         mUiEventLogger = mDependency.injectMockDependency(UiEventLogger.class);
 
@@ -151,20 +146,5 @@ public class KeyButtonViewTest extends SysuiTestCase {
         } else {
             verify(mUiEventLogger, times(1)).log(expected);
         }
-    }
-
-    @Test
-    public void testBubbleEvents_bubbleExpanded() {
-        when(mBubbleController.getExpandedDisplayId(mContext)).thenReturn(3);
-
-        int action = KeyEvent.ACTION_DOWN;
-        int flags = 0;
-        int code = KeyEvent.KEYCODE_BACK;
-        mKeyButtonView.setCode(code);
-        mKeyButtonView.sendEvent(action, flags);
-
-        verify(mInputManager, times(1)).injectInputEvent(mInputEventCaptor.capture(),
-                anyInt());
-        assertEquals(3, mInputEventCaptor.getValue().getDisplayId());
     }
 }

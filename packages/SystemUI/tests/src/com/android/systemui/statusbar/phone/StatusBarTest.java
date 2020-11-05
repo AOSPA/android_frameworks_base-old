@@ -24,6 +24,7 @@ import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
 import static junit.framework.TestCase.fail;
 
+import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -34,6 +35,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,6 +45,7 @@ import android.app.StatusBarManager;
 import android.app.trust.TrustManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
+import android.content.Intent;
 import android.content.IntentFilter;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.hardware.fingerprint.FingerprintManager;
@@ -80,10 +83,11 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
-import com.android.systemui.bubbles.BubbleController;
+import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.classifier.FalsingManagerFake;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.demomode.DemoModeController;
+import com.android.systemui.emergency.EmergencyGesture;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.ScreenLifecycle;
@@ -93,7 +97,6 @@ import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.PluginDependencyProvider;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.CommandQueue;
@@ -147,6 +150,7 @@ import com.android.wm.shell.splitscreen.SplitScreen;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -219,7 +223,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private UserSwitcherController mUserSwitcherController;
     @Mock private NetworkController mNetworkController;
     @Mock private VibratorHelper mVibratorHelper;
-    @Mock private BubbleController mBubbleController;
+    @Mock private Bubbles mBubbles;
     @Mock private NotificationShadeWindowController mNotificationShadeWindowController;
     @Mock private NotificationIconAreaController mNotificationIconAreaController;
     @Mock private NotificationShadeWindowViewController mNotificationShadeWindowViewController;
@@ -232,7 +236,6 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private KeyguardLiftController mKeyguardLiftController;
     @Mock private VolumeComponent mVolumeComponent;
     @Mock private CommandQueue mCommandQueue;
-    @Mock private Recents mRecents;
     @Mock private Provider<StatusBarComponent.Builder> mStatusBarComponentBuilderProvider;
     @Mock private StatusBarComponent.Builder mStatusBarComponentBuilder;
     @Mock private StatusBarComponent mStatusBarComponent;
@@ -332,7 +335,7 @@ public class StatusBarTest extends SysuiTestCase {
         mShadeController = new ShadeControllerImpl(mCommandQueue,
                 mStatusBarStateController, mNotificationShadeWindowController,
                 mStatusBarKeyguardViewManager, mContext.getSystemService(WindowManager.class),
-                () -> mStatusBar, () -> mAssistManager, () -> mBubbleController);
+                () -> mStatusBar, () -> mAssistManager, Optional.of(() -> mBubbles));
 
         mStatusBar = new StatusBar(
                 mContext,
@@ -374,7 +377,7 @@ public class StatusBarTest extends SysuiTestCase {
                 wakefulnessLifecycle,
                 mStatusBarStateController,
                 mVibratorHelper,
-                mBubbleController,
+                Optional.of(mBubbles),
                 mVisualStabilityManager,
                 mDeviceProvisionedController,
                 mNavigationBarController,
@@ -392,7 +395,6 @@ public class StatusBarTest extends SysuiTestCase {
                 mDozeScrimController,
                 mVolumeComponent,
                 mCommandQueue,
-                Optional.of(mRecents),
                 mStatusBarComponentBuilderProvider,
                 mPluginManager,
                 Optional.of(mSplitScreen),
@@ -874,6 +876,19 @@ public class StatusBarTest extends SysuiTestCase {
     public void testSuppressAmbientDisplay_unsuppress() {
         mStatusBar.suppressAmbientDisplay(false);
         verify(mDozeServiceHost).setDozeSuppressed(false);
+    }
+
+    @Test
+    public void onEmergencyActionLaunchGesture_launchesEmergencyIntent() {
+        ArgumentCaptor<Intent> intentCaptor = ArgumentCaptor.forClass(Intent.class);
+        StatusBar statusBarSpy = spy(mStatusBar);
+
+        statusBarSpy.onEmergencyActionLaunchGestureDetected();
+
+        verify(statusBarSpy).startActivity(intentCaptor.capture(), eq(true));
+        Intent sentIntent = intentCaptor.getValue();
+        assertEquals(sentIntent.getAction(), EmergencyGesture.ACTION_LAUNCH_EMERGENCY);
+
     }
 
     public static class TestableNotificationInterruptStateProviderImpl extends

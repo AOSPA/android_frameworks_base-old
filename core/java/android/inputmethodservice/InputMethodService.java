@@ -16,10 +16,41 @@
 
 package android.inputmethodservice;
 
+import static android.graphics.Color.TRANSPARENT;
+import static android.inputmethodservice.InputMethodServiceProto.CANDIDATES_VIEW_STARTED;
+import static android.inputmethodservice.InputMethodServiceProto.CANDIDATES_VISIBILITY;
+import static android.inputmethodservice.InputMethodServiceProto.CAN_PRE_RENDER;
+import static android.inputmethodservice.InputMethodServiceProto.CONFIGURATION;
+import static android.inputmethodservice.InputMethodServiceProto.DECOR_VIEW_VISIBLE;
+import static android.inputmethodservice.InputMethodServiceProto.DECOR_VIEW_WAS_VISIBLE;
+import static android.inputmethodservice.InputMethodServiceProto.EXTRACTED_TOKEN;
+import static android.inputmethodservice.InputMethodServiceProto.EXTRACT_VIEW_HIDDEN;
+import static android.inputmethodservice.InputMethodServiceProto.FULLSCREEN_APPLIED;
+import static android.inputmethodservice.InputMethodServiceProto.INPUT_BINDING;
+import static android.inputmethodservice.InputMethodServiceProto.INPUT_EDITOR_INFO;
+import static android.inputmethodservice.InputMethodServiceProto.INPUT_STARTED;
+import static android.inputmethodservice.InputMethodServiceProto.INPUT_VIEW_STARTED;
+import static android.inputmethodservice.InputMethodServiceProto.IN_SHOW_WINDOW;
+import static android.inputmethodservice.InputMethodServiceProto.IS_FULLSCREEN;
+import static android.inputmethodservice.InputMethodServiceProto.IS_INPUT_VIEW_SHOWN;
+import static android.inputmethodservice.InputMethodServiceProto.IS_PRE_RENDERED;
+import static android.inputmethodservice.InputMethodServiceProto.InsetsProto.CONTENT_TOP_INSETS;
+import static android.inputmethodservice.InputMethodServiceProto.InsetsProto.TOUCHABLE_INSETS;
+import static android.inputmethodservice.InputMethodServiceProto.InsetsProto.TOUCHABLE_REGION;
+import static android.inputmethodservice.InputMethodServiceProto.InsetsProto.VISIBLE_TOP_INSETS;
+import static android.inputmethodservice.InputMethodServiceProto.LAST_COMPUTED_INSETS;
+import static android.inputmethodservice.InputMethodServiceProto.LAST_SHOW_INPUT_REQUESTED;
+import static android.inputmethodservice.InputMethodServiceProto.SETTINGS_OBSERVER;
+import static android.inputmethodservice.InputMethodServiceProto.SHOW_INPUT_FLAGS;
+import static android.inputmethodservice.InputMethodServiceProto.SHOW_INPUT_REQUESTED;
+import static android.inputmethodservice.InputMethodServiceProto.SOFT_INPUT_WINDOW;
+import static android.inputmethodservice.InputMethodServiceProto.STATUS_ICON;
+import static android.inputmethodservice.InputMethodServiceProto.TOKEN;
+import static android.inputmethodservice.InputMethodServiceProto.VIEWS_CREATED;
+import static android.inputmethodservice.InputMethodServiceProto.WINDOW_VISIBLE;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 import static android.view.WindowInsets.Type.navigationBars;
-import static android.view.WindowInsets.Type.statusBars;
 import static android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
 
 import static java.lang.annotation.RetentionPolicy.SOURCE;
@@ -59,6 +90,7 @@ import android.text.method.MovementMethod;
 import android.util.Log;
 import android.util.PrintWriterPrinter;
 import android.util.Printer;
+import android.util.proto.ProtoOutputStream;
 import android.view.Gravity;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
@@ -69,7 +101,6 @@ import android.view.ViewGroup;
 import android.view.ViewRootImpl;
 import android.view.ViewTreeObserver;
 import android.view.Window;
-import android.view.WindowInsets;
 import android.view.WindowInsets.Side;
 import android.view.WindowManager;
 import android.view.animation.AnimationUtils;
@@ -105,6 +136,7 @@ import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collections;
+import java.util.Objects;
 
 /**
  * InputMethodService provides a standard implementation of an InputMethod,
@@ -1042,6 +1074,15 @@ public class InputMethodService extends AbstractInputMethodService {
          * or {@link #TOUCHABLE_INSETS_REGION}.
          */
         public int touchableInsets;
+
+        private void dumpDebug(ProtoOutputStream proto, long fieldId) {
+            final long token = proto.start(fieldId);
+            proto.write(CONTENT_TOP_INSETS, contentTopInsets);
+            proto.write(VISIBLE_TOP_INSETS, visibleTopInsets);
+            proto.write(TOUCHABLE_INSETS, touchableInsets);
+            proto.write(TOUCHABLE_REGION, touchableRegion.toString());
+            proto.end(token);
+        }
     }
 
     /**
@@ -1204,25 +1245,22 @@ public class InputMethodService extends AbstractInputMethodService {
                 Context.LAYOUT_INFLATER_SERVICE);
         mWindow = new SoftInputWindow(this, "InputMethod", mTheme, null, null, mDispatcherState,
                 WindowManager.LayoutParams.TYPE_INPUT_METHOD, Gravity.BOTTOM, false);
-        mWindow.getWindow().getAttributes().setFitInsetsTypes(statusBars() | navigationBars());
+        mWindow.getWindow().getAttributes().setFitInsetsTypes(navigationBars());
         mWindow.getWindow().getAttributes().setFitInsetsSides(Side.all() & ~Side.BOTTOM);
         mWindow.getWindow().getAttributes().setFitInsetsIgnoringVisibility(true);
 
-        // IME layout should always be inset by navigation bar, no matter its current visibility,
-        // unless automotive requests it. Automotive devices may request the navigation bar to be
-        // hidden when the IME shows up (controlled via config_automotiveHideNavBarForKeyboard)
-        // in order to maximize the visible screen real estate. When this happens, the IME window
-        // should animate from the bottom of the screen to reduce the jank that happens from the
-        // lack of synchronization between the bottom system window and the IME window.
+        // Our window will extend into the status bar area no matter the bar is visible or not.
+        // We don't want the ColorView to be visible when status bar is shown.
+        mWindow.getWindow().setStatusBarColor(TRANSPARENT);
+
+        // Automotive devices may request the navigation bar to be hidden when the IME shows up
+        // (controlled via config_automotiveHideNavBarForKeyboard) in order to maximize the visible
+        // screen real estate. When this happens, the IME window should animate from the bottom of
+        // the screen to reduce the jank that happens from the lack of synchronization between the
+        // bottom system window and the IME window.
         if (mIsAutomotive && mAutomotiveHideNavBarForKeyboard) {
             mWindow.getWindow().setDecorFitsSystemWindows(false);
         }
-        mWindow.getWindow().getDecorView().setOnApplyWindowInsetsListener(
-                (v, insets) -> v.onApplyWindowInsets(
-                        new WindowInsets.Builder(insets).setInsets(
-                                navigationBars(),
-                                insets.getInsetsIgnoringVisibility(navigationBars()))
-                                .build()));
 
         // For ColorView in DecorView to work, FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS needs to be set
         // by default (but IME developers can opt this out later if they want a new behavior).
@@ -1384,7 +1422,7 @@ public class InputMethodService extends AbstractInputMethodService {
     public AbstractInputMethodSessionImpl onCreateInputMethodSessionInterface() {
         return new InputMethodSessionImpl();
     }
-    
+
     public LayoutInflater getLayoutInflater() {
         return mInflater;
     }
@@ -3298,7 +3336,7 @@ public class InputMethodService extends AbstractInputMethodService {
         } else {
             p.println("  mInputEditorInfo: null");
         }
-        
+
         p.println("  mShowInputRequested=" + mShowInputRequested
                 + " mLastShowInputRequested=" + mLastShowInputRequested
                 + " mCanPreRender=" + mCanPreRender
@@ -3308,7 +3346,7 @@ public class InputMethodService extends AbstractInputMethodService {
                 + " mFullscreenApplied=" + mFullscreenApplied
                 + " mIsFullscreen=" + mIsFullscreen
                 + " mExtractViewHidden=" + mExtractViewHidden);
-        
+
         if (mExtractedText != null) {
             p.println("  mExtractedText:");
             p.println("    text=" + mExtractedText.text.length() + " chars"
@@ -3328,5 +3366,43 @@ public class InputMethodService extends AbstractInputMethodService {
                 + " touchableInsets=" + mTmpInsets.touchableInsets
                 + " touchableRegion=" + mTmpInsets.touchableRegion);
         p.println(" mSettingsObserver=" + mSettingsObserver);
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    final void dumpProtoInternal(FileDescriptor fd, String[] args) {
+        final ProtoOutputStream proto = new ProtoOutputStream(fd);
+        mWindow.dumpDebug(proto, SOFT_INPUT_WINDOW);
+        proto.write(VIEWS_CREATED, mViewsCreated);
+        proto.write(DECOR_VIEW_VISIBLE, mDecorViewVisible);
+        proto.write(DECOR_VIEW_WAS_VISIBLE, mDecorViewWasVisible);
+        proto.write(WINDOW_VISIBLE, mWindowVisible);
+        proto.write(IN_SHOW_WINDOW, mInShowWindow);
+        proto.write(CONFIGURATION, getResources().getConfiguration().toString());
+        proto.write(TOKEN, Objects.toString(mToken));
+        proto.write(INPUT_BINDING, Objects.toString(mInputBinding));
+        proto.write(INPUT_STARTED, mInputStarted);
+        proto.write(INPUT_VIEW_STARTED, mInputViewStarted);
+        proto.write(CANDIDATES_VIEW_STARTED, mCandidatesViewStarted);
+        if (mInputEditorInfo != null) {
+            mInputEditorInfo.dumpDebug(proto, INPUT_EDITOR_INFO);
+        }
+        proto.write(SHOW_INPUT_REQUESTED, mShowInputRequested);
+        proto.write(LAST_SHOW_INPUT_REQUESTED, mLastShowInputRequested);
+        proto.write(CAN_PRE_RENDER, mCanPreRender);
+        proto.write(IS_PRE_RENDERED, mIsPreRendered);
+        proto.write(SHOW_INPUT_FLAGS, mShowInputFlags);
+        proto.write(CANDIDATES_VISIBILITY, mCandidatesVisibility);
+        proto.write(FULLSCREEN_APPLIED, mFullscreenApplied);
+        proto.write(IS_FULLSCREEN, mIsFullscreen);
+        proto.write(EXTRACT_VIEW_HIDDEN, mExtractViewHidden);
+        proto.write(EXTRACTED_TOKEN, mExtractedToken);
+        proto.write(IS_INPUT_VIEW_SHOWN, mIsInputViewShown);
+        proto.write(STATUS_ICON, mStatusIcon);
+        mTmpInsets.dumpDebug(proto, LAST_COMPUTED_INSETS);
+        proto.write(SETTINGS_OBSERVER, Objects.toString(mSettingsObserver));
+        proto.flush();
     }
 }

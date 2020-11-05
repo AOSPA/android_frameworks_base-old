@@ -47,15 +47,36 @@ stubs_defaults {
         "core/java/**/*.logtags",
         ":opt-telephony-srcs",
         ":opt-net-voip-srcs",
-        ":art-module-public-api-stubs-source",
+        ":art.module.public.api{.public.stubs.source}",
         ":android_icu4j_public_api_files",
         "**/package.html",
     ],
-    // TODO(b/147699819): remove below aidl includes.
+    // TODO(b/147699819, b/169090544): remove below aidl includes.
     aidl: {
-        local_include_dirs: ["telephony/java"],
+        local_include_dirs: [
+            "telephony/java",
+            "media/aidl",
+        ],
     },
-    libs: ["framework-internal-utils"],
+    // These are libs from framework-internal-utils that are required (i.e. being referenced)
+    // from framework-non-updatable-sources. Add more here when there's a need.
+    // DO NOT add the entire framework-internal-utils. It might cause unnecessary circular
+    // dependencies gets bigger.
+    libs: [
+        "android.hardware.cas-V1.2-java",
+        "android.hardware.health-V1.0-java-constants",
+        "android.hardware.radio-V1.5-java",
+        "android.hardware.thermal-V1.0-java-constants",
+        "android.hardware.thermal-V2.0-java",
+        "android.hardware.tv.input-V1.0-java-constants",
+        "android.hardware.tv.tuner-V1.0-java-constants",
+        "android.hardware.tv.tuner-V1.1-java-constants",
+        "android.hardware.usb-V1.0-java-constants",
+        "android.hardware.usb-V1.1-java-constants",
+        "android.hardware.usb.gadget-V1.0-java",
+        "android.hardware.vibrator-V1.3-java",
+        "framework-protos",
+    ],
     installable: false,
     annotations_enabled: true,
     previous_api: ":android.api.public.latest",
@@ -101,7 +122,6 @@ stubs_defaults {
 droidstubs {
     name: "api-stubs-docs",
     defaults: ["metalava-full-api-stubs-default"],
-    removed_dex_api_filename: "removed-dex.txt",
     arg_files: [
         "core/res/AndroidManifest.xml",
     ],
@@ -122,12 +142,6 @@ droidstubs {
             baseline_file: "api/lint-baseline.txt",
         },
     },
-    dist: {
-        targets: ["sdk", "win_sdk"],
-        dir: "apistubs/android/public/api",
-        dest: "android.txt",
-    },
-    jdiff_enabled: true,
 }
 
 droidstubs {
@@ -139,6 +153,11 @@ droidstubs {
         current: {
             api_file: "non-updatable-api/current.txt",
             removed_api_file: "non-updatable-api/removed.txt",
+        },
+        last_released: {
+            api_file: ":android-non-updatable.api.public.latest",
+            removed_api_file: ":android-non-updatable-removed.api.public.latest",
+            baseline_file: ":public-api-incompatibilities-with-last-released",
         },
         api_lint: {
             enabled: true,
@@ -163,7 +182,6 @@ module_libs = " " +
 droidstubs {
     name: "system-api-stubs-docs",
     defaults: ["metalava-full-api-stubs-default"],
-    removed_dex_api_filename: "system-removed-dex.txt",
     arg_files: [
         "core/res/AndroidManifest.xml",
     ],
@@ -184,12 +202,6 @@ droidstubs {
             baseline_file: "api/system-lint-baseline.txt",
         },
     },
-    dist: {
-        targets: ["sdk", "win_sdk"],
-        dir: "apistubs/android/system/api",
-        dest: "android.txt",
-    },
-    jdiff_enabled: true,
 }
 
 droidstubs {
@@ -201,6 +213,11 @@ droidstubs {
         current: {
             api_file: "non-updatable-api/system-current.txt",
             removed_api_file: "non-updatable-api/system-removed.txt",
+        },
+        last_released: {
+            api_file: ":android-non-updatable.api.system.latest",
+            removed_api_file: ":android-non-updatable-removed.api.system.latest",
+            baseline_file: ":system-api-incompatibilities-with-last-released"
         },
         api_lint: {
             enabled: true,
@@ -216,7 +233,11 @@ droidstubs {
     arg_files: [
         "core/res/AndroidManifest.xml",
     ],
-    args: metalava_framework_docs_args + " --show-annotation android.annotation.TestApi",
+    args: metalava_framework_docs_args
+        + " --show-annotation android.annotation.TestApi"
+        + " --show-for-stub-purposes-annotation android.annotation.SystemApi\\("
+        +     "client=android.annotation.SystemApi.Client.PRIVILEGED_APPS"
+        + "\\)",
     check_api: {
         current: {
             api_file: "api/test-current.txt",
@@ -264,11 +285,6 @@ droidstubs {
             baseline_file: "api/module-lib-lint-baseline.txt",
         },
     },
-    dist: {
-        targets: ["sdk", "win_sdk"],
-        dir: "apistubs/android/module-lib/api",
-        dest: "android.txt",
-    },
 }
 
 droidstubs {
@@ -280,6 +296,10 @@ droidstubs {
         current: {
             api_file: "non-updatable-api/module-lib-current.txt",
             removed_api_file: "non-updatable-api/module-lib-removed.txt",
+        },
+        last_released: {
+            api_file: ":android-non-updatable.api.module-lib.latest",
+            removed_api_file: ":android-non-updatable-removed.api.module-lib.latest",
         },
         api_lint: {
             enabled: true,
@@ -333,6 +353,7 @@ java_library_static {
     srcs: [ ":api-stubs-docs-non-updatable" ],
     static_libs: [
         "conscrypt.module.public.api.stubs",
+        "framework-appsearch.stubs",
         "framework-graphics.stubs",
         "framework-media.stubs",
         "framework-mediaprovider.stubs",
@@ -378,7 +399,7 @@ java_library_static {
     srcs: [ ":system-api-stubs-docs-non-updatable" ],
     static_libs: [
         "conscrypt.module.public.api.stubs",
-        "framework-appsearch-stubs", // TODO: standardize appsearch stubs
+        "framework-appsearch.stubs.system",
         "framework-graphics.stubs.system",
         "framework-media.stubs.system",
         "framework-mediaprovider.stubs.system",
@@ -486,31 +507,5 @@ java_library_static {
     sdk_version: "core_current",
     srcs: [
         ":hwbinder-stubs-docs",
-    ],
-}
-
-/////////////////////////////////////////////////////////////////////
-// api/*-current.txt files for use by modules in other directories
-// like the CTS test
-/////////////////////////////////////////////////////////////////////
-
-filegroup {
-    name: "frameworks-base-api-current.txt",
-    srcs: [
-        "api/current.txt",
-    ],
-}
-
-filegroup {
-    name: "frameworks-base-api-system-current.txt",
-    srcs: [
-        "api/system-current.txt",
-    ],
-}
-
-filegroup {
-    name: "frameworks-base-api-system-removed.txt",
-    srcs: [
-        "api/system-removed.txt",
     ],
 }

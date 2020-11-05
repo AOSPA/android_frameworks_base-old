@@ -265,6 +265,7 @@ final class InputMonitor {
                 consumer.mWindowHandle.layoutParamsFlags |= FLAG_NOT_TOUCH_MODAL;
                 break;
             case INPUT_CONSUMER_RECENTS_ANIMATION:
+                consumer.mWindowHandle.focusable = true;
                 break;
             default:
                 throw new IllegalArgumentException("Illegal input consumer : " + name
@@ -285,10 +286,12 @@ final class InputMonitor {
         inputWindowHandle.dispatchingTimeoutMillis = child.getInputDispatchingTimeoutMillis();
         inputWindowHandle.visible = isVisible;
         inputWindowHandle.focusable = focusable;
+        inputWindowHandle.touchOcclusionMode = child.getTouchOcclusionMode();
         inputWindowHandle.hasWallpaper = hasWallpaper;
         inputWindowHandle.paused = child.mActivityRecord != null ? child.mActivityRecord.paused : false;
         inputWindowHandle.ownerPid = child.mSession.mPid;
         inputWindowHandle.ownerUid = child.mSession.mUid;
+        inputWindowHandle.packageName = child.getOwningPackage();
         inputWindowHandle.inputFeatures = child.mAttrs.inputFeatures;
         inputWindowHandle.displayId = child.getDisplayId();
 
@@ -543,7 +546,7 @@ final class InputMonitor {
 
             if (mAddRecentsAnimationInputConsumerHandle && shouldApplyRecentsInputConsumer) {
                 if (recentsAnimationController.updateInputConsumerForApp(
-                        mRecentsAnimationInputConsumer.mWindowHandle, focusable)) {
+                        mRecentsAnimationInputConsumer.mWindowHandle)) {
                     mRecentsAnimationInputConsumer.show(mInputTransaction, w);
                     mAddRecentsAnimationInputConsumerHandle = false;
                 }

@@ -16,8 +16,6 @@
 
 package com.android.systemui.car.notification;
 
-import static android.view.WindowInsets.Type.navigationBars;
-
 import android.app.ActivityManager;
 import android.car.Car;
 import android.car.drivingstate.CarUxRestrictionsManager;
@@ -25,6 +23,8 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.inputmethodservice.InputMethodService;
+import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
 import android.view.GestureDetector;
@@ -32,6 +32,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -96,6 +97,7 @@ public class NotificationPanelViewController extends OverlayPanelViewController
     private boolean mNotificationListAtEndAtTimeOfTouch;
     private boolean mIsSwipingVerticallyToClose;
     private boolean mIsNotificationCardSwiping;
+    private boolean mImeVisible = false;
 
     private OnUnseenCountUpdateListener mUnseenCountUpdateListener;
 
@@ -139,6 +141,7 @@ public class NotificationPanelViewController extends OverlayPanelViewController
         mNotificationVisibilityLogger = notificationVisibilityLogger;
 
         mCommandQueue.addCallback(this);
+
         // Notification background setup.
         mInitialBackgroundAlpha = (float) mResources.getInteger(
                 R.integer.config_initialNotificationBackgroundAlpha) / 100;
@@ -179,6 +182,15 @@ public class NotificationPanelViewController extends OverlayPanelViewController
         }
     }
 
+    @Override
+    public void setImeWindowStatus(int displayId, IBinder token, int vis, int backDisposition,
+            boolean showImeSwitcher) {
+        if (mContext.getDisplayId() != displayId) {
+            return;
+        }
+        mImeVisible = (vis & InputMethodService.IME_VISIBLE) != 0;
+    }
+
     // OverlayViewController
 
     @Override
@@ -204,12 +216,18 @@ public class NotificationPanelViewController extends OverlayPanelViewController
 
     @Override
     protected int getInsetTypesToFit() {
-        return navigationBars();
+        return WindowInsets.Type.navigationBars();
     }
 
     @Override
     protected boolean shouldShowHUN() {
         return mEnableHeadsUpNotificationWhenNotificationShadeOpen;
+    }
+
+    @Override
+    protected boolean shouldUseStableInsets() {
+        // When IME is visible, then the inset from the nav bar should not be applied.
+        return !mImeVisible;
     }
 
     /** Reinflates the view. */

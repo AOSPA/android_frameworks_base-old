@@ -37,7 +37,6 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.keyguard.CarrierText;
 import com.android.systemui.Dependency;
-import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.SysuiBaseFragmentTest;
 import com.android.systemui.broadcast.BroadcastDispatcher;
@@ -45,6 +44,7 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.phone.AutoTileManager;
@@ -107,7 +107,7 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
                 mock(PluginManager.class), mock(TunerService.class),
                 () -> mock(AutoTileManager.class), mock(DumpManager.class),
                 mock(BroadcastDispatcher.class), Optional.of(mock(StatusBar.class)),
-                mock(QSLogger.class), mock(UiEventLogger.class));
+                mock(QSLogger.class), mock(UiEventLogger.class), mock(UserTracker.class));
         qs.setHost(host);
 
         qs.setListening(true);
@@ -115,11 +115,6 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
 
         qs.setListening(false);
         processAllMessages();
-
-        // Manually push header through detach so it can handle standard cleanup it does on
-        // removed from window.
-        ((QuickStatusBarHeader) qs.getView().findViewById(R.id.header)).onDetachedFromWindow();
-
         host.destroy();
         processAllMessages();
     }

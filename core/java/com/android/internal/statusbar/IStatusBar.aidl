@@ -102,6 +102,13 @@ oneway interface IStatusBar
     void onCameraLaunchGestureDetected(int source);
 
     /**
+     * Notifies the status bar that the Emergency Action launch gesture has been detected.
+     *
+     * TODO(b/169175022) Update method name and docs when feature name is locked.
+     */
+    void onEmergencyActionLaunchGestureDetected();
+
+    /**
      * Shows the picture-in-picture menu if an activity is in picture-in-picture mode.
      */
     void showPictureInPictureMenu();
@@ -242,4 +249,10 @@ oneway interface IStatusBar
      * @param connect {@code true} if needs connection, otherwise set the connection to null.
      */
     void requestWindowMagnificationConnection(boolean connect);
+
+    /**
+     * Allow for pass-through arguments from `adb shell cmd statusbar <args>`, and write to the
+     * file descriptor passed in.
+     */
+     void passThroughShellCommand(in String[] args, in ParcelFileDescriptor pfd);
 }

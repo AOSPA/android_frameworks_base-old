@@ -27,13 +27,13 @@ import android.graphics.Rect;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.util.Log;
+import android.view.InsetsState;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 
 import com.android.systemui.shared.recents.view.AppTransitionAnimationSpecsFuture;
 import com.android.systemui.shared.recents.view.RecentsTransition;
-import com.android.systemui.shared.system.PinnedStackListenerForwarder.PinnedStackListener;
 
 public class WindowManagerWrapper {
 
@@ -75,24 +75,30 @@ public class WindowManagerWrapper {
             WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
     public static final int WINDOWING_MODE_MULTI_WINDOW =
             WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
-    public static final int WINDOWING_MODE_PINNED = WindowConfiguration.WINDOWING_MODE_PINNED;
+
     public static final int WINDOWING_MODE_SPLIT_SCREEN_PRIMARY =
             WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
     public static final int WINDOWING_MODE_SPLIT_SCREEN_SECONDARY =
             WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
     public static final int WINDOWING_MODE_FREEFORM = WindowConfiguration.WINDOWING_MODE_FREEFORM;
 
-    private static final WindowManagerWrapper sInstance = new WindowManagerWrapper();
+    public static final int ITYPE_EXTRA_NAVIGATION_BAR = InsetsState.ITYPE_EXTRA_NAVIGATION_BAR;
 
-    /**
-     * Forwarder to which we can add multiple pinned stack listeners. Each listener will receive
-     * updates from the window manager service.
-     */
-    private PinnedStackListenerForwarder mPinnedStackListenerForwarder =
-            new PinnedStackListenerForwarder();
+    private static final WindowManagerWrapper sInstance = new WindowManagerWrapper();
 
     public static WindowManagerWrapper getInstance() {
         return sInstance;
+    }
+
+
+    /**
+     * Sets {@param providesInsetsTypes} as the inset types provided by {@param params}.
+     * @param params The window layout params.
+     * @param providesInsetsTypes The inset types we would like this layout params to provide.
+     */
+    public void setProvidesInsetsTypes(WindowManager.LayoutParams params,
+            int[] providesInsetsTypes) {
+        params.providesInsetsTypes = providesInsetsTypes;
     }
 
     /**
@@ -185,23 +191,6 @@ public class WindowManagerWrapper {
             Log.w(TAG, "Failed to get nav bar position");
         }
         return NAV_BAR_POS_INVALID;
-    }
-
-    /**
-     * Adds a pinned stack listener, which will receive updates from the window manager service
-     * along with any other pinned stack listeners that were added via this method.
-     */
-    public void addPinnedStackListener(PinnedStackListener listener) throws RemoteException {
-        mPinnedStackListenerForwarder.addListener(listener);
-        WindowManagerGlobal.getWindowManagerService().registerPinnedStackListener(
-                DEFAULT_DISPLAY, mPinnedStackListenerForwarder);
-    }
-
-    /**
-     * Removes a pinned stack listener.
-     */
-    public void removePinnedStackListener(PinnedStackListener listener) {
-        mPinnedStackListenerForwarder.removeListener(listener);
     }
 
     /**

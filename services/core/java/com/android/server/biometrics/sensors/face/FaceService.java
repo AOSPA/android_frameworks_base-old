@@ -21,11 +21,12 @@ import static android.Manifest.permission.USE_BIOMETRIC_INTERNAL;
 
 import android.annotation.NonNull;
 import android.content.Context;
+import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
 import android.hardware.face.Face;
-import android.hardware.face.FaceSensorProperties;
+import android.hardware.face.FaceSensorPropertiesInternal;
 import android.hardware.face.IFaceService;
 import android.hardware.face.IFaceServiceReceiver;
 import android.os.Binder;
@@ -66,9 +67,11 @@ public class FaceService extends SystemService {
      */
     private final class FaceServiceWrapper extends IFaceService.Stub {
         @Override // Binder call
-        public List<FaceSensorProperties> getSensorProperties(String opPackageName) {
+        public List<FaceSensorPropertiesInternal> getSensorPropertiesInternal(
+                String opPackageName) {
             Utils.checkPermission(getContext(), USE_BIOMETRIC_INTERNAL);
-            final List<FaceSensorProperties> properties = new ArrayList<>();
+
+            final List<FaceSensorPropertiesInternal> properties = new ArrayList<>();
 
             if (mFace10 != null) {
                 properties.add(mFace10.getFaceSensorProperties());
@@ -308,9 +311,10 @@ public class FaceService extends SystemService {
         }
 
         @Override // Binder call
-        public void initializeConfiguration(int sensorId) {
+        public void initializeConfiguration(int sensorId,
+                @BiometricManager.Authenticators.Types int strength) {
             Utils.checkPermission(getContext(), USE_BIOMETRIC_INTERNAL);
-            mFace10 = new Face10(getContext(), sensorId, mLockoutResetDispatcher);
+            mFace10 = new Face10(getContext(), sensorId, strength, mLockoutResetDispatcher);
         }
     }
 

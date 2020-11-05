@@ -77,6 +77,7 @@ import android.net.ipsec.ike.ChildSessionParams;
 import android.net.ipsec.ike.IkeSession;
 import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionParams;
+import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.os.Binder;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
@@ -142,6 +143,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -378,8 +380,8 @@ public class Vpn {
             }
         }
 
-        public boolean checkInterfacePresent(final Vpn vpn, final String iface) {
-            return vpn.jniCheck(iface) == 0;
+        public boolean isInterfacePresent(final Vpn vpn, final String iface) {
+            return vpn.jniCheck(iface) != 0;
         }
     }
 
@@ -964,7 +966,7 @@ public class Vpn {
     /** Prepare the VPN for the given package. Does not perform permission checks. */
     @GuardedBy("this")
     private void prepareInternal(String newPackage) {
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             // Reset the interface.
             if (mInterface != null) {
@@ -1128,7 +1130,13 @@ public class Vpn {
         return mNetworkInfo;
     }
 
-    public int getNetId() {
+    /**
+     * Return netId of current running VPN network.
+     *
+     * @return a netId if there is a running VPN network or NETID_UNSET if there is no running VPN
+     *         network or network is null.
+     */
+    public synchronized int getNetId() {
         final NetworkAgent agent = mNetworkAgent;
         if (null == agent) return NETID_UNSET;
         final Network network = agent.getNetwork();
@@ -1243,7 +1251,7 @@ public class Vpn {
         mNetworkCapabilities.setAdministratorUids(new int[] {mOwnerUID});
         mNetworkCapabilities.setUids(createUserAndRestrictedProfilesRanges(mUserId,
                 mConfig.allowedApplications, mConfig.disallowedApplications));
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             mNetworkAgent = new NetworkAgent(mLooper, mContext, NETWORKTYPE /* logtag */,
                     mNetworkInfo, mNetworkCapabilities, lp,
@@ -1262,7 +1270,7 @@ public class Vpn {
     }
 
     private boolean canHaveRestrictedProfile(int userId) {
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             return UserManager.get(mContext).canHaveRestrictedProfile(userId);
         } finally {
@@ -1309,7 +1317,7 @@ public class Vpn {
         // Check if the service is properly declared.
         Intent intent = new Intent(VpnConfig.SERVICE_INTERFACE);
         intent.setClassName(mPackage, config.user);
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             // Restricted users are not allowed to create VPNs, they are tied to Owner
             enforceNotRestrictedUser();
@@ -1600,7 +1608,7 @@ public class Vpn {
      */
     public synchronized void onUserStopped() {
         // Switch off networking lockdown (if it was enabled)
-        setLockdown(false);
+        setVpnForcedLocked(false);
         mAlwaysOn = false;
 
         // Quit any active connections
@@ -1706,7 +1714,7 @@ public class Vpn {
     /**
      * Return the configuration of the currently running VPN.
      */
-    public VpnConfig getVpnConfig() {
+    public synchronized VpnConfig getVpnConfig() {
         enforceControlPermission();
         return mConfig;
     }
@@ -2037,7 +2045,7 @@ public class Vpn {
      */
     public void startLegacyVpn(VpnProfile profile, KeyStore keyStore, LinkProperties egress) {
         enforceControlPermission();
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             startLegacyVpnPrivileged(profile, keyStore, egress);
         } finally {
@@ -2144,7 +2152,11 @@ public class Vpn {
                 break;
         }
 
-        // Prepare arguments for mtpd.
+        // Prepare arguments for mtpd. MTU/MRU calculated conservatively. Only IPv4 supported
+        // because LegacyVpn.
+        // 1500 - 60 (Carrier-internal IPv6 + UDP + GTP) - 10 (PPP) - 16 (L2TP) - 8 (UDP)
+        //   - 77 (IPsec w/ SHA-2 512, 256b trunc-len, AES-CBC) - 8 (UDP encap) - 20 (IPv4)
+        //   - 28 (464xlat)
         String[] mtpd = null;
         switch (profile.type) {
             case VpnProfile.TYPE_PPTP:
@@ -2152,7 +2164,7 @@ public class Vpn {
                     iface, "pptp", profile.server, "1723",
                     "name", profile.username, "password", profile.password,
                     "linkname", "vpn", "refuse-eap", "nodefaultroute",
-                    "usepeerdns", "idle", "1800", "mtu", "1400", "mru", "1400",
+                    "usepeerdns", "idle", "1800", "mtu", "1270", "mru", "1270",
                     (profile.mppe ? "+mppe" : "nomppe"),
                 };
                 break;
@@ -2162,7 +2174,7 @@ public class Vpn {
                     iface, "l2tp", profile.server, "1701", profile.l2tpSecret,
                     "name", profile.username, "password", profile.password,
                     "linkname", "vpn", "refuse-eap", "nodefaultroute",
-                    "usepeerdns", "idle", "1800", "mtu", "1400", "mru", "1400",
+                    "usepeerdns", "idle", "1800", "mtu", "1270", "mru", "1270",
                 };
                 break;
         }
@@ -2301,7 +2313,7 @@ public class Vpn {
         void onChildTransformCreated(
                 @NonNull Network network, @NonNull IpSecTransform transform, int direction);
 
-        void onSessionLost(@NonNull Network network);
+        void onSessionLost(@NonNull Network network, @Nullable Exception exception);
     }
 
     /**
@@ -2458,7 +2470,7 @@ public class Vpn {
                 networkAgent.sendLinkProperties(lp);
             } catch (Exception e) {
                 Log.d(TAG, "Error in ChildOpened for network " + network, e);
-                onSessionLost(network);
+                onSessionLost(network, e);
             }
         }
 
@@ -2488,7 +2500,7 @@ public class Vpn {
                 mIpSecManager.applyTunnelModeTransform(mTunnelIface, direction, transform);
             } catch (IOException e) {
                 Log.d(TAG, "Transform application failed for network " + network, e);
-                onSessionLost(network);
+                onSessionLost(network, e);
             }
         }
 
@@ -2546,9 +2558,18 @@ public class Vpn {
                     Log.d(TAG, "Ike Session started for network " + network);
                 } catch (Exception e) {
                     Log.i(TAG, "Setup failed for network " + network + ". Aborting", e);
-                    onSessionLost(network);
+                    onSessionLost(network, e);
                 }
             });
+        }
+
+        /** Marks the state as FAILED, and disconnects. */
+        private void markFailedAndDisconnect(Exception exception) {
+            synchronized (Vpn.this) {
+                updateState(DetailedState.FAILED, exception.getMessage());
+            }
+
+            disconnectVpnRunner();
         }
 
         /**
@@ -2560,7 +2581,7 @@ public class Vpn {
          * <p>This method MUST always be called on the mExecutor thread in order to ensure
          * consistency of the Ikev2VpnRunner fields.
          */
-        public void onSessionLost(@NonNull Network network) {
+        public void onSessionLost(@NonNull Network network, @Nullable Exception exception) {
             if (!isActiveNetwork(network)) {
                 Log.d(TAG, "onSessionLost() called for obsolete network " + network);
 
@@ -2569,6 +2590,27 @@ public class Vpn {
                 // IKE session was already shut down (exited, or an error was encountered somewhere
                 // else). In both cases, all resources and sessions are torn down via
                 // onSessionLost() and resetIkeState().
+                return;
+            }
+
+            if (exception instanceof IkeProtocolException) {
+                final IkeProtocolException ikeException = (IkeProtocolException) exception;
+
+                switch (ikeException.getErrorType()) {
+                    case IkeProtocolException.ERROR_TYPE_NO_PROPOSAL_CHOSEN: // Fallthrough
+                    case IkeProtocolException.ERROR_TYPE_INVALID_KE_PAYLOAD: // Fallthrough
+                    case IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED: // Fallthrough
+                    case IkeProtocolException.ERROR_TYPE_SINGLE_PAIR_REQUIRED: // Fallthrough
+                    case IkeProtocolException.ERROR_TYPE_FAILED_CP_REQUIRED: // Fallthrough
+                    case IkeProtocolException.ERROR_TYPE_TS_UNACCEPTABLE:
+                        // All the above failures are configuration errors, and are terminal
+                        markFailedAndDisconnect(exception);
+                        return;
+                    // All other cases possibly recoverable.
+                }
+            } else if (exception instanceof IllegalArgumentException) {
+                // Failed to build IKE/ChildSessionParams; fatal profile configuration error
+                markFailedAndDisconnect(exception);
                 return;
             }
 
@@ -2621,12 +2663,18 @@ public class Vpn {
         }
 
         /**
-         * Cleans up all Ikev2VpnRunner internal state
+         * Disconnects and shuts down this VPN.
+         *
+         * <p>This method resets all internal Ikev2VpnRunner state, but unless called via
+         * VpnRunner#exit(), this Ikev2VpnRunner will still be listed as the active VPN of record
+         * until the next VPN is started, or the Ikev2VpnRunner is explicitly exited. This is
+         * necessary to ensure that the detailed state is shown in the Settings VPN menus; if the
+         * active VPN is cleared, Settings VPNs will not show the resultant state or errors.
          *
          * <p>This method MUST always be called on the mExecutor thread in order to ensure
          * consistency of the Ikev2VpnRunner fields.
          */
-        private void shutdownVpnRunner() {
+        private void disconnectVpnRunner() {
             mActiveNetwork = null;
             mIsRunning = false;
 
@@ -2640,9 +2688,13 @@ public class Vpn {
 
         @Override
         public void exitVpnRunner() {
-            mExecutor.execute(() -> {
-                shutdownVpnRunner();
-            });
+            try {
+                mExecutor.execute(() -> {
+                    disconnectVpnRunner();
+                });
+            } catch (RejectedExecutionException ignored) {
+                // The Ikev2VpnRunner has already shut down.
+            }
         }
     }
 
@@ -2713,7 +2765,10 @@ public class Vpn {
                     final LinkProperties lp = cm.getLinkProperties(network);
                     if (lp != null && lp.getAllInterfaceNames().contains(mOuterInterface)) {
                         final NetworkInfo networkInfo = cm.getNetworkInfo(network);
-                        if (networkInfo != null) mOuterConnection.set(networkInfo.getType());
+                        if (networkInfo != null) {
+                            mOuterConnection.set(networkInfo.getType());
+                            break;
+                        }
                     }
                 }
             }
@@ -2944,7 +2999,7 @@ public class Vpn {
                     checkInterruptAndDelay(false);
 
                     // Check if the interface is gone while we are waiting.
-                    if (mDeps.checkInterfacePresent(Vpn.this, mConfig.interfaze)) {
+                    if (!mDeps.isInterfacePresent(Vpn.this, mConfig.interfaze)) {
                         throw new IllegalStateException(mConfig.interfaze + " is gone");
                     }
 

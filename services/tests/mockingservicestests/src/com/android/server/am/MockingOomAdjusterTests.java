@@ -351,7 +351,7 @@ public class MockingOomAdjusterTests {
         doReturn(mock(WindowProcessController.class)).when(app).getWindowProcessController();
         WindowProcessController wpc = app.getWindowProcessController();
         doReturn(true).when(wpc).hasActivities();
-        doAnswer(answer((minTaskLayer, callback) -> {
+        doAnswer(answer(callback -> {
             Field field = callback.getClass().getDeclaredField("adj");
             field.set(callback, VISIBLE_APP_ADJ);
             field = callback.getClass().getDeclaredField("foregroundActivities");
@@ -361,7 +361,7 @@ public class MockingOomAdjusterTests {
             field = callback.getClass().getDeclaredField("schedGroup");
             field.set(callback, SCHED_GROUP_TOP_APP);
             return 0;
-        })).when(wpc).computeOomAdjFromActivities(anyInt(),
+        })).when(wpc).computeOomAdjFromActivities(
                 any(WindowProcessController.ComputeOomAdjCallback.class));
         sService.mWakefulness = PowerManagerInternal.WAKEFULNESS_AWAKE;
         sService.mOomAdjuster.updateOomAdjLocked(app, false, OomAdjuster.OOM_ADJ_REASON_NONE);
@@ -457,12 +457,12 @@ public class MockingOomAdjusterTests {
     public void testUpdateOomAdj_DoOne_HeavyWeight() {
         ProcessRecord app = spy(makeDefaultProcessRecord(MOCKAPP_PID, MOCKAPP_UID,
                 MOCKAPP_PROCESSNAME, MOCKAPP_PACKAGENAME, true));
-        doReturn(true).when(sService.mAtmInternal).isHeavyWeightProcess(any(
-                WindowProcessController.class));
+        doReturn(mock(WindowProcessController.class)).when(app).getWindowProcessController();
+        WindowProcessController wpc = app.getWindowProcessController();
+        doReturn(true).when(wpc).isHeavyWeightProcess();
         sService.mWakefulness = PowerManagerInternal.WAKEFULNESS_AWAKE;
         sService.mOomAdjuster.updateOomAdjLocked(app, false, OomAdjuster.OOM_ADJ_REASON_NONE);
-        doReturn(false).when(sService.mAtmInternal).isHeavyWeightProcess(any(
-                WindowProcessController.class));
+        doReturn(false).when(wpc).isHeavyWeightProcess();
 
         assertProcStates(app, PROCESS_STATE_HEAVY_WEIGHT, HEAVY_WEIGHT_APP_ADJ,
                 SCHED_GROUP_BACKGROUND);

@@ -45,9 +45,11 @@ import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
+import android.hardware.biometrics.SensorProperties;
 import android.hardware.face.FaceManager;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorProperties;
+import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.os.Bundle;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
@@ -119,11 +121,15 @@ public class AuthControllerTest extends SysuiTestCase {
         when(mDialog2.isAllowDeviceCredentials()).thenReturn(false);
 
         when(mFingerprintManager.isHardwareDetected()).thenReturn(true);
-        FingerprintSensorProperties prop = new FingerprintSensorProperties(
-                1, FingerprintSensorProperties.TYPE_UDFPS, true, 1);
-        List<FingerprintSensorProperties> props = new ArrayList<>();
+        FingerprintSensorPropertiesInternal prop = new FingerprintSensorPropertiesInternal(
+                1 /* sensorId */,
+                SensorProperties.STRENGTH_STRONG,
+                1 /* maxEnrollmentsPerUser */,
+                FingerprintSensorProperties.TYPE_UDFPS_OPTICAL,
+                true /* resetLockoutRequireHardwareAuthToken */);
+        List<FingerprintSensorPropertiesInternal> props = new ArrayList<>();
         props.add(prop);
-        when(mFingerprintManager.getSensorProperties()).thenReturn(props);
+        when(mFingerprintManager.getSensorPropertiesInternal()).thenReturn(props);
 
         mAuthController = new TestableAuthController(context, mCommandQueue,
                 mStatusBarStateController, mActivityTaskManager, mFingerprintManager,

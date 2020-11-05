@@ -90,8 +90,10 @@ import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.ZenModeController;
-import com.android.systemui.util.FloatingContentCoordinator;
 import com.android.systemui.util.InjectionInflationController;
+import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.WindowManagerShellWrapper;
+import com.android.wm.shell.common.FloatingContentCoordinator;
 
 import org.junit.Before;
 import org.junit.Ignore;
@@ -185,6 +187,10 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
     private IStatusBarService mStatusBarService;
     @Mock
     private LauncherApps mLauncherApps;
+    @Mock
+    private WindowManagerShellWrapper mWindowManagerShellWrapper;
+    @Mock
+    private BubbleLogger mBubbleLogger;
 
     private BubbleData mBubbleData;
 
@@ -248,7 +254,7 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
                         mock(HeadsUpManager.class),
                         mock(Handler.class)
                 );
-        mBubbleData = new BubbleData(mContext);
+        mBubbleData = new BubbleData(mContext, mBubbleLogger);
         when(mFeatureFlagsNewPipeline.isNewNotifPipelineRenderingEnabled()).thenReturn(true);
         mBubbleController = new TestableBubbleController(
                 mContext,
@@ -271,7 +277,11 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
                 mock(INotificationManager.class),
                 mStatusBarService,
                 mWindowManager,
-                mLauncherApps);
+                mWindowManagerShellWrapper,
+                mLauncherApps,
+                mBubbleLogger,
+                mock(Handler.class),
+                mock(ShellTaskOrganizer.class));
         mBubbleController.addNotifCallback(mNotifCallback);
         mBubbleController.setExpandListener(mBubbleExpandListener);
 

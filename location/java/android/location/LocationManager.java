@@ -20,6 +20,8 @@ import static android.Manifest.permission.ACCESS_COARSE_LOCATION;
 import static android.Manifest.permission.ACCESS_FINE_LOCATION;
 import static android.Manifest.permission.LOCATION_HARDWARE;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
+import static android.location.LocationRequest.createFromDeprecatedCriteria;
+import static android.location.LocationRequest.createFromDeprecatedProvider;
 
 import static com.android.internal.util.ConcurrentUtils.DIRECT_EXECUTOR;
 
@@ -85,6 +87,26 @@ import java.util.function.Consumer;
 @SystemService(Context.LOCATION_SERVICE)
 @RequiresFeature(PackageManager.FEATURE_LOCATION)
 public class LocationManager {
+
+    /**
+     * For apps targeting Android S and above, LocationRequest system APIs may not be used with
+     * PendingIntent location requests.
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    public static final long PREVENT_PENDING_INTENT_SYSTEM_API_USAGE = 169887240L;
+
+    /**
+     * For apps targeting Android S and above, location clients may receive historical locations
+     * (from before the present time) under some circumstances.
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    public static final long DELIVER_HISTORICAL_LOCATIONS = 73144566L;
 
     /**
      * For apps targeting Android R and above, {@link #getProvider(String)} will no longer throw any
@@ -784,21 +806,24 @@ public class LocationManager {
         Preconditions.checkArgument(provider != null, "invalid null provider");
         Preconditions.checkArgument(locationRequest != null, "invalid null location request");
 
-        ICancellationSignal remoteCancellationSignal = CancellationSignal.createTransport();
-        GetCurrentLocationTransport transport = new GetCurrentLocationTransport(executor, consumer,
-                remoteCancellationSignal);
-
         if (cancellationSignal != null) {
             cancellationSignal.throwIfCanceled();
-            cancellationSignal.setOnCancelListener(transport::cancel);
         }
 
+        GetCurrentLocationTransport transport = new GetCurrentLocationTransport(executor, consumer,
+                cancellationSignal);
+
+        ICancellationSignal cancelRemote;
         try {
-            mService.getCurrentLocation(provider, locationRequest, remoteCancellationSignal,
-                    transport, mContext.getPackageName(), mContext.getAttributionTag(),
-                    AppOpsManager.toReceiverId(consumer));
+            cancelRemote = mService.getCurrentLocation(provider,
+                    locationRequest, transport, mContext.getPackageName(),
+                    mContext.getAttributionTag(), AppOpsManager.toReceiverId(consumer));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+
+        if (cancellationSignal != null) {
+            cancellationSignal.setRemote(cancelRemote);
         }
     }
 
@@ -1032,9 +1057,7 @@ public class LocationManager {
 
         requestLocationUpdates(
                 provider,
-                new LocationRequest.Builder(minTimeMs)
-                        .setMinUpdateDistanceMeters(minDistanceM)
-                        .build(),
+                createFromDeprecatedProvider(provider, minTimeMs, minDistanceM, false),
                 executor,
                 listener);
     }
@@ -1095,10 +1118,7 @@ public class LocationManager {
 
         requestLocationUpdates(
                 FUSED_PROVIDER,
-                new LocationRequest.Builder(minTimeMs)
-                        .setQuality(criteria)
-                        .setMinUpdateDistanceMeters(minDistanceM)
-                        .build(),
+                createFromDeprecatedCriteria(criteria, minTimeMs, minDistanceM, false),
                 executor,
                 listener);
     }
@@ -1127,9 +1147,7 @@ public class LocationManager {
 
         requestLocationUpdates(
                 provider,
-                new LocationRequest.Builder(minTimeMs)
-                        .setMinUpdateDistanceMeters(minDistanceM)
-                        .build(),
+                createFromDeprecatedProvider(provider, minTimeMs, minDistanceM, false),
                 pendingIntent);
     }
 
@@ -1156,10 +1174,7 @@ public class LocationManager {
         Preconditions.checkArgument(criteria != null, "invalid null criteria");
         requestLocationUpdates(
                 FUSED_PROVIDER,
-                new LocationRequest.Builder(minTimeMs)
-                        .setQuality(criteria)
-                        .setMinUpdateDistanceMeters(minDistanceM)
-                        .build(),
+                createFromDeprecatedCriteria(criteria, minTimeMs, minDistanceM, false),
                 pendingIntent);
     }
 
@@ -1275,13 +1290,15 @@ public class LocationManager {
      * arguments. The same listener may be used across multiple providers with different requests
      * for each provider.
      *
-     * <p>It may take a while to receive the first location update. If an immediate location is
-     * required, applications may use the {@link #getLastKnownLocation(String)} method.
+     * <p>It may take some time to receive the first location update depending on the conditions the
+     * device finds itself in. In order to take advantage of cached locations, application may
+     * consider using {@link #getLastKnownLocation(String)} or {@link #getCurrentLocation(String,
+     * LocationRequest, CancellationSignal, Executor, Consumer)} instead.
      *
      * <p>See {@link LocationRequest} documentation for an explanation of various request parameters
      * and how they can affect the received locations.
      *
-     * <p> If your application wants to passively observe location updates from any provider, then
+     * <p>If your application wants to passively observe location updates from all providers, then
      * use the {@link #PASSIVE_PROVIDER}. This provider does not turn on or modify active location
      * providers, so you do not need to be as careful about minimum time and minimum distance
      * parameters. However, if your application performs heavy work on a location update (such as
@@ -1290,12 +1307,19 @@ public class LocationManager {
      *
      * <p>In case the provider you have selected is disabled, location updates will cease, and a
      * provider availability update will be sent. As soon as the provider is enabled again, another
-     * provider availability update will be sent and location updates will immediately resume.
+     * provider availability update will be sent and location updates will resume.
      *
-     * <p> When location callbacks are invoked, the system will hold a wakelock on your
+     * <p>When location callbacks are invoked, the system will hold a wakelock on your
      * application's behalf for some period of time, but not indefinitely. If your application
      * requires a long running wakelock within the location callback, you should acquire it
      * yourself.
+     *
+     * <p>Spamming location requests is a drain on system resources, and the system has preventative
+     * measures in place to ensure that this behavior will never result in more locations than could
+     * be achieved with a single location request with an equivalent interval that is left in place
+     * the whole time. As part of this amelioration, applications that target Android S and above
+     * may receive cached or historical locations through their listener. These locations will never
+     * be older than the interval of the location request.
      *
      * <p>To unregister for location updates, use {@link #removeUpdates(LocationListener)}.
      *
@@ -1805,22 +1829,6 @@ public class LocationManager {
      */
     @Deprecated
     public void clearTestProviderStatus(@NonNull String provider) {}
-
-    /**
-     * Get the last list of {@link LocationRequest}s sent to the provider.
-     *
-     * @hide
-     */
-    @TestApi
-    @NonNull
-    public List<LocationRequest> getTestProviderCurrentRequests(String providerName) {
-        Preconditions.checkArgument(providerName != null, "invalid null provider");
-        try {
-            return mService.getTestProviderCurrentRequests(providerName);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
 
     /**
      * Sets a proximity alert for the location given by the position (latitude, longitude) and the
@@ -2538,7 +2546,7 @@ public class LocationManager {
     }
 
     private static class GetCurrentLocationTransport extends ILocationCallback.Stub implements
-            ListenerExecutor {
+            ListenerExecutor, CancellationSignal.OnCancelListener {
 
         private final Executor mExecutor;
 
@@ -2546,33 +2554,22 @@ public class LocationManager {
         @Nullable
         private Consumer<Location> mConsumer;
 
-        @GuardedBy("this")
-        @Nullable
-        private ICancellationSignal mRemoteCancellationSignal;
-
         GetCurrentLocationTransport(Executor executor, Consumer<Location> consumer,
-                ICancellationSignal remoteCancellationSignal) {
+                @Nullable CancellationSignal cancellationSignal) {
             Preconditions.checkArgument(executor != null, "illegal null executor");
             Preconditions.checkArgument(consumer != null, "illegal null consumer");
             mExecutor = executor;
             mConsumer = consumer;
-            mRemoteCancellationSignal = remoteCancellationSignal;
-        }
-
-        public void cancel() {
-            ICancellationSignal cancellationSignal;
-            synchronized (this) {
-                cancellationSignal = mRemoteCancellationSignal;
-                mConsumer = null;
-                mRemoteCancellationSignal = null;
-            }
 
             if (cancellationSignal != null) {
-                try {
-                    cancellationSignal.cancel();
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
+                cancellationSignal.setOnCancelListener(this);
+            }
+        }
+
+        @Override
+        public void onCancel() {
+            synchronized (this) {
+                mConsumer = null;
             }
         }
 
@@ -2582,7 +2579,6 @@ public class LocationManager {
             synchronized (this) {
                 consumer = mConsumer;
                 mConsumer = null;
-                mRemoteCancellationSignal = null;
             }
 
             executeSafely(mExecutor, () -> consumer, listener -> listener.accept(location));

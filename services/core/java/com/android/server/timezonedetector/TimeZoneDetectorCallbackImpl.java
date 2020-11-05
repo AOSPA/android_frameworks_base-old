@@ -23,7 +23,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManagerInternal;
 import android.app.AlarmManager;
-import android.app.timezonedetector.TimeZoneConfiguration;
+import android.app.time.TimeZoneConfiguration;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -87,6 +87,7 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
         contentResolver.registerContentObserver(
                 Settings.Global.getUriFor(Settings.Global.AUTO_TIME_ZONE), true,
                 new ContentObserver(mHandler) {
+                    @Override
                     public void onChange(boolean selfChange) {
                         handleConfigChangeOnHandlerThread();
                     }
@@ -97,6 +98,7 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
                 Settings.Secure.getUriFor(Settings.Secure.LOCATION_TIME_ZONE_DETECTION_ENABLED),
                 true,
                 new ContentObserver(mHandler) {
+                    @Override
                     public void onChange(boolean selfChange) {
                         handleConfigChangeOnHandlerThread();
                     }
@@ -117,13 +119,13 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
 
     @Override
     public ConfigurationInternal getConfigurationInternal(@UserIdInt int userId) {
-        boolean geoDetectionEnabled = mGeoDetectionFeatureEnabled && isGeoDetectionEnabled(userId);
         return new ConfigurationInternal.Builder(userId)
                 .setUserConfigAllowed(isUserConfigAllowed(userId))
                 .setAutoDetectionSupported(isAutoDetectionSupported())
+                .setGeoDetectionSupported(isGeoDetectionSupported())
                 .setAutoDetectionEnabled(isAutoDetectionEnabled())
                 .setLocationEnabled(isLocationEnabled(userId))
-                .setGeoDetectionEnabled(geoDetectionEnabled)
+                .setGeoDetectionEnabled(isGeoDetectionEnabled(userId))
                 .build();
     }
 
@@ -157,7 +159,7 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
     }
 
     @Override
-    public void storeConfiguration(TimeZoneConfiguration configuration) {
+    public void storeConfiguration(@UserIdInt int userId, TimeZoneConfiguration configuration) {
         Objects.requireNonNull(configuration);
 
         // Avoid writing the auto detection enabled setting for devices that do not support auto
@@ -168,8 +170,11 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
             final boolean autoDetectionEnabled = configuration.isAutoDetectionEnabled();
             setAutoDetectionEnabled(autoDetectionEnabled);
 
-            if (mGeoDetectionFeatureEnabled) {
-                final int userId = configuration.getUserId();
+            // Avoid writing the geo detection enabled setting for devices that do not support geo
+            // time zone detection: if we wrote it down then we'd set the value explicitly, which
+            // would prevent detecting "default" later. That might influence what happens on later
+            // releases that support geo detection on the same hardware.
+            if (isGeoDetectionSupported()) {
                 final boolean geoTzDetectionEnabled = configuration.isGeoDetectionEnabled();
                 setGeoDetectionEnabled(userId, geoTzDetectionEnabled);
             }
@@ -182,7 +187,11 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
     }
 
     private boolean isAutoDetectionSupported() {
-        return deviceHasTelephonyNetwork() || mGeoDetectionFeatureEnabled;
+        return deviceHasTelephonyNetwork() || isGeoDetectionSupported();
+    }
+
+    private boolean isGeoDetectionSupported() {
+        return mGeoDetectionFeatureEnabled;
     }
 
     private boolean isAutoDetectionEnabled() {
@@ -198,10 +207,10 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
     }
 
     private boolean isGeoDetectionEnabled(@UserIdInt int userId) {
-        final boolean locationEnabled = isLocationEnabled(userId);
+        final boolean geoDetectionEnabledByDefault = false;
         return Settings.Secure.getIntForUser(mCr,
                 Settings.Secure.LOCATION_TIME_ZONE_DETECTION_ENABLED,
-                locationEnabled ? 1 : 0 /* defaultValue */, userId) != 0;
+                (geoDetectionEnabledByDefault ? 1 : 0) /* defaultValue */, userId) != 0;
     }
 
     private void setGeoDetectionEnabled(@UserIdInt int userId, boolean enabled) {

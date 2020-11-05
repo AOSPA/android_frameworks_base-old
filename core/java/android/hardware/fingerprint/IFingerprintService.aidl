@@ -17,11 +17,12 @@ package android.hardware.fingerprint;
 
 import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
+import android.hardware.biometrics.ITestSession;
 import android.hardware.fingerprint.IFingerprintClientActiveCallback;
 import android.hardware.fingerprint.IFingerprintServiceReceiver;
 import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.hardware.fingerprint.Fingerprint;
-import android.hardware.fingerprint.FingerprintSensorProperties;
+import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.view.Surface;
 import java.util.List;
 
@@ -30,8 +31,12 @@ import java.util.List;
  * @hide
  */
 interface IFingerprintService {
+
+    // Creates a test session with the specified sensorId
+    ITestSession createTestSession(int sensorId, String opPackageName);
+
     // Retrieve static sensor properties for all fingerprint sensors
-    List<FingerprintSensorProperties> getSensorProperties(String opPackageName);
+    List<FingerprintSensorPropertiesInternal> getSensorPropertiesInternal(String opPackageName);
 
     // Authenticate the given sessionId with a fingerprint. This is protected by
     // USE_FINGERPRINT/USE_BIOMETRIC permission. This is effectively deprecated, since it only comes
@@ -91,7 +96,7 @@ interface IFingerprintService {
     void generateChallenge(IBinder token, int sensorId, IFingerprintServiceReceiver receiver, String opPackageName);
 
     // Finish an enrollment sequence and invalidate the authentication token
-    void revokeChallenge(IBinder token, String opPackageName);
+    void revokeChallenge(IBinder token, String opPackageName, long challenge);
 
     // Determine if a user has at least one enrolled fingerprint
     boolean hasEnrolledFingerprints(int userId, String opPackageName);
@@ -118,13 +123,13 @@ interface IFingerprintService {
     void removeClientActiveCallback(IFingerprintClientActiveCallback callback);
 
     // Give FingerprintService its ID. See AuthService.java
-    void initializeConfiguration(int sensorId);
+    void initializeConfiguration(int sensorId, int strength);
 
     // Notifies about a finger touching the sensor area.
-    void onFingerDown(int x, int y, float minor, float major);
+    void onPointerDown(int sensorId, int x, int y, float minor, float major);
 
     // Notifies about a finger leaving the sensor area.
-    void onFingerUp();
+    void onPointerUp(int sensorId);
 
     // Sets the controller for managing the UDFPS overlay.
     void setUdfpsOverlayController(in IUdfpsOverlayController controller);

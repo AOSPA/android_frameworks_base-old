@@ -1623,10 +1623,12 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         if (!checkNotifyPermission("notifyDisplayInfoChanged()")) {
             return;
         }
+        String str = "notifyDisplayInfoChanged: PhoneId=" + phoneId + " subId=" + subId
+                + " telephonyDisplayInfo=" + telephonyDisplayInfo;
         if (VDBG) {
-            log("notifyDisplayInfoChanged: PhoneId=" + phoneId
-                    + " subId=" + subId + " telephonyDisplayInfo=" + telephonyDisplayInfo);
+            log(str);
         }
+        mLocalLog.log(str);
         synchronized (mRecords) {
             if (validatePhoneId(phoneId)) {
                 mTelephonyDisplayInfos[phoneId] = telephonyDisplayInfo;
@@ -2354,10 +2356,10 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                 pw.println("mOutgoingCallEmergencyNumber=" + mOutgoingCallEmergencyNumber[i]);
                 pw.println("mOutgoingSmsEmergencyNumber=" + mOutgoingSmsEmergencyNumber[i]);
                 pw.println("mBarringInfo=" + mBarringInfo.get(i));
+                pw.println("mTelephonyDisplayInfo=" + mTelephonyDisplayInfos[i]);
                 pw.decreaseIndent();
             }
             pw.println("mCarrierNetworkChangeState=" + mCarrierNetworkChangeState);
-
             pw.println("mPhoneCapability=" + mPhoneCapability);
             pw.println("mActiveDataSubId=" + mActiveDataSubId);
             pw.println("mRadioPowerState=" + mRadioPowerState);
@@ -2418,7 +2420,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
     public static final String ACTION_SIGNAL_STRENGTH_CHANGED = "android.intent.action.SIG_STR";
 
     private void broadcastServiceStateChanged(ServiceState state, int phoneId, int subId) {
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             mBatteryStats.notePhoneState(state.getState());
         } catch (RemoteException re) {
@@ -2442,7 +2444,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
 
     private void broadcastSignalStrengthChanged(SignalStrength signalStrength, int phoneId,
             int subId) {
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             mBatteryStats.notePhoneSignalStrength(signalStrength);
         } catch (RemoteException e) {
@@ -2487,7 +2489,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
      */
     private void broadcastCallStateChanged(int state, String incomingNumber, int phoneId,
                 int subId) {
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             if (state == TelephonyManager.CALL_STATE_IDLE) {
                 mBatteryStats.notePhoneOff();
@@ -2676,7 +2678,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
 
     private boolean validateEventsAndUserLocked(Record r, int events) {
         int foregroundUser;
-        long callingIdentity = Binder.clearCallingIdentity();
+        final long callingIdentity = Binder.clearCallingIdentity();
         boolean valid = false;
         try {
             foregroundUser = ActivityManager.getCurrentUser();

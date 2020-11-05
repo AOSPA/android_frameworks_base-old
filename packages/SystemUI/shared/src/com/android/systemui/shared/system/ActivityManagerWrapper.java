@@ -34,7 +34,6 @@ import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.AppGlobals;
-import android.app.IAssistDataReceiver;
 import android.app.WindowConfiguration;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -43,12 +42,10 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
-import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -84,13 +81,11 @@ public class ActivityManagerWrapper {
 
     private final PackageManager mPackageManager;
     private final BackgroundExecutor mBackgroundExecutor;
-    private final TaskStackChangeListeners mTaskStackChangeListeners;
 
     private ActivityManagerWrapper() {
         final Context context = AppGlobals.getInitialApplication();
         mPackageManager = context.getPackageManager();
         mBackgroundExecutor = BackgroundExecutor.get();
-        mTaskStackChangeListeners = new TaskStackChangeListeners(Looper.getMainLooper());
     }
 
     public static ActivityManagerWrapper getInstance() {
@@ -228,21 +223,10 @@ public class ActivityManagerWrapper {
     /**
      * Starts the recents activity. The caller should manage the thread on which this is called.
      */
-    public void startRecentsActivity(Intent intent, final AssistDataReceiver assistDataReceiver,
+    public void startRecentsActivity(Intent intent, long eventTime,
             final RecentsAnimationListener animationHandler, final Consumer<Boolean> resultCallback,
             Handler resultCallbackHandler) {
         try {
-            IAssistDataReceiver receiver = null;
-            if (assistDataReceiver != null) {
-                receiver = new IAssistDataReceiver.Stub() {
-                    public void onHandleAssistData(Bundle resultData) {
-                        assistDataReceiver.onHandleAssistData(resultData);
-                    }
-                    public void onHandleAssistScreenshot(Bitmap screenshot) {
-                        assistDataReceiver.onHandleAssistScreenshot(screenshot);
-                    }
-                };
-            }
             IRecentsAnimationRunner runner = null;
             if (animationHandler != null) {
                 runner = new IRecentsAnimationRunner.Stub() {
@@ -272,7 +256,7 @@ public class ActivityManagerWrapper {
                     }
                 };
             }
-            ActivityTaskManager.getService().startRecentsActivity(intent, receiver, runner);
+            ActivityTaskManager.getService().startRecentsActivity(intent, eventTime, runner);
             if (resultCallback != null) {
                 resultCallbackHandler.post(new Runnable() {
                     @Override
@@ -296,9 +280,9 @@ public class ActivityManagerWrapper {
     /**
      * Cancels the remote recents animation started from {@link #startRecentsActivity}.
      */
-    public void cancelRecentsAnimation(boolean restoreHomeStackPosition) {
+    public void cancelRecentsAnimation(boolean restoreHomeRootTaskPosition) {
         try {
-            ActivityTaskManager.getService().cancelRecentsAnimation(restoreHomeStackPosition);
+            ActivityTaskManager.getService().cancelRecentsAnimation(restoreHomeRootTaskPosition);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to cancel recents animation", e);
         }
@@ -373,36 +357,17 @@ public class ActivityManagerWrapper {
     }
 
     /**
-     * Moves an already resumed task to the side of the screen to initiate split screen.
-     */
-    public boolean setTaskWindowingModeSplitScreenPrimary(int taskId, int createMode,
-            Rect initialBounds) {
-        try {
-            return ActivityTaskManager.getService().setTaskWindowingModeSplitScreenPrimary(taskId,
-                    true /* onTop */);
-        } catch (RemoteException e) {
-            return false;
-        }
-    }
-
-    /**
-     * Registers a task stack listener with the system.
-     * This should be called on the main thread.
+     * @deprecated use {@link TaskStackChangeListeners#registerTaskStackListener}
      */
     public void registerTaskStackListener(TaskStackChangeListener listener) {
-        synchronized (mTaskStackChangeListeners) {
-            mTaskStackChangeListeners.addListener(ActivityManager.getService(), listener);
-        }
+        TaskStackChangeListeners.getInstance().registerTaskStackListener(listener);
     }
 
     /**
-     * Unregisters a task stack listener with the system.
-     * This should be called on the main thread.
+     * @deprecated use {@link TaskStackChangeListeners#unregisterTaskStackListener}
      */
     public void unregisterTaskStackListener(TaskStackChangeListener listener) {
-        synchronized (mTaskStackChangeListeners) {
-            mTaskStackChangeListeners.removeListener(listener);
-        }
+        TaskStackChangeListeners.getInstance().unregisterTaskStackListener(listener);
     }
 
     /**

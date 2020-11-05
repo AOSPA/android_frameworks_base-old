@@ -16,9 +16,8 @@
 
 package com.android.systemui.bubbles;
 
-import static com.android.systemui.statusbar.NotificationEntryHelper.modifyRanking;
-
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
@@ -29,7 +28,9 @@ import static org.mockito.Mockito.when;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.graphics.drawable.Icon;
+import android.os.Bundle;
 import android.os.UserHandle;
+import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
@@ -39,10 +40,6 @@ import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.bubbles.BubbleData.TimeSource;
-import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
-import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
-import com.android.systemui.statusbar.notification.row.NotificationTestHelper;
 
 import com.google.common.collect.ImmutableList;
 
@@ -68,15 +65,15 @@ import org.mockito.MockitoAnnotations;
 @TestableLooper.RunWithLooper(setAsMainLooper = true)
 public class BubbleDataTest extends SysuiTestCase {
 
-    private NotificationEntry mEntryA1;
-    private NotificationEntry mEntryA2;
-    private NotificationEntry mEntryA3;
-    private NotificationEntry mEntryB1;
-    private NotificationEntry mEntryB2;
-    private NotificationEntry mEntryB3;
-    private NotificationEntry mEntryC1;
-    private NotificationEntry mEntryInterruptive;
-    private NotificationEntry mEntryDismissed;
+    private BubbleEntry mEntryA1;
+    private BubbleEntry mEntryA2;
+    private BubbleEntry mEntryA3;
+    private BubbleEntry mEntryB1;
+    private BubbleEntry mEntryB2;
+    private BubbleEntry mEntryB3;
+    private BubbleEntry mEntryC1;
+    private BubbleEntry mEntryInterruptive;
+    private BubbleEntry mEntryDismissed;
 
     private Bubble mBubbleA1;
     private Bubble mBubbleA2;
@@ -98,8 +95,8 @@ public class BubbleDataTest extends SysuiTestCase {
     private PendingIntent mExpandIntent;
     @Mock
     private PendingIntent mDeleteIntent;
-
-    private NotificationTestHelper mNotificationTestHelper;
+    @Mock
+    private BubbleLogger mBubbleLogger;
 
     @Captor
     private ArgumentCaptor<BubbleData.Update> mUpdateCaptor;
@@ -112,29 +109,23 @@ public class BubbleDataTest extends SysuiTestCase {
 
     @Before
     public void setUp() throws Exception {
-        mNotificationTestHelper = new NotificationTestHelper(
-                mContext,
-                mDependency,
-                TestableLooper.get(this));
         MockitoAnnotations.initMocks(this);
 
-        mEntryA1 = createBubbleEntry(1, "a1", "package.a");
-        mEntryA2 = createBubbleEntry(1, "a2", "package.a");
-        mEntryA3 = createBubbleEntry(1, "a3", "package.a");
-        mEntryB1 = createBubbleEntry(1, "b1", "package.b");
-        mEntryB2 = createBubbleEntry(1, "b2", "package.b");
-        mEntryB3 = createBubbleEntry(1, "b3", "package.b");
-        mEntryC1 = createBubbleEntry(1, "c1", "package.c");
+        mEntryA1 = createBubbleEntry(1, "a1", "package.a", null);
+        mEntryA2 = createBubbleEntry(1, "a2", "package.a", null);
+        mEntryA3 = createBubbleEntry(1, "a3", "package.a", null);
+        mEntryB1 = createBubbleEntry(1, "b1", "package.b", null);
+        mEntryB2 = createBubbleEntry(1, "b2", "package.b", null);
+        mEntryB3 = createBubbleEntry(1, "b3", "package.b", null);
+        mEntryC1 = createBubbleEntry(1, "c1", "package.c", null);
 
-        mEntryInterruptive = createBubbleEntry(1, "interruptive", "package.d");
-        modifyRanking(mEntryInterruptive)
-                .setVisuallyInterruptive(true)
-                .build();
+        NotificationListenerService.Ranking ranking =
+                mock(NotificationListenerService.Ranking.class);
+        when(ranking.visuallyInterruptive()).thenReturn(true);
+        mEntryInterruptive = createBubbleEntry(1, "interruptive", "package.d", ranking);
         mBubbleInterruptive = new Bubble(mEntryInterruptive, mSuppressionListener, null);
 
-        ExpandableNotificationRow row = mNotificationTestHelper.createBubble();
-        mEntryDismissed = createBubbleEntry(1, "dismissed", "package.d");
-        mEntryDismissed.setRow(row);
+        mEntryDismissed = createBubbleEntry(1, "dismissed", "package.d", null);
         mBubbleDismissed = new Bubble(mEntryDismissed, mSuppressionListener, null);
 
         mBubbleA1 = new Bubble(mEntryA1, mSuppressionListener, mPendingIntentCanceledListener);
@@ -145,7 +136,7 @@ public class BubbleDataTest extends SysuiTestCase {
         mBubbleB3 = new Bubble(mEntryB3, mSuppressionListener, mPendingIntentCanceledListener);
         mBubbleC1 = new Bubble(mEntryC1, mSuppressionListener, mPendingIntentCanceledListener);
 
-        mBubbleData = new BubbleData(getContext());
+        mBubbleData = new BubbleData(getContext(), mBubbleLogger);
 
         // Used by BubbleData to set lastAccessedTime
         when(mTimeSource.currentTimeMillis()).thenReturn(1000L);
@@ -513,6 +504,26 @@ public class BubbleDataTest extends SysuiTestCase {
     }
 
     /**
+     * Verifies that when a non visually interruptive update occurs, that the selection does not
+     * change.
+     */
+    @Test
+    public void test_notVisuallyInterruptive_updateBubble_selectionDoesntChange() {
+        // Setup
+        sendUpdatedEntryAtTime(mEntryA1, 1000);
+        sendUpdatedEntryAtTime(mEntryB1, 2000);
+        sendUpdatedEntryAtTime(mEntryB2, 3000);
+        sendUpdatedEntryAtTime(mEntryA2, 4000); // [A2, B2, B1, A1]
+        mBubbleData.setListener(mListener);
+
+        assertThat(mBubbleData.getSelectedBubble()).isEqualTo(mBubbleA2);
+
+        // Test
+        sendUpdatedEntryAtTime(mEntryB1, 5000, false /* isVisuallyInterruptive */);
+        assertThat(mBubbleData.getSelectedBubble()).isEqualTo(mBubbleA2);
+    }
+
+    /**
      * Verifies that a request to expand the stack has no effect if there are no bubbles.
      */
     @Test
@@ -793,47 +804,48 @@ public class BubbleDataTest extends SysuiTestCase {
 
     private void assertBubbleAdded(Bubble expected) {
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.addedBubble).named("addedBubble").isEqualTo(expected);
+        assertWithMessage("addedBubble").that(update.addedBubble).isEqualTo(expected);
     }
 
     private void assertBubbleRemoved(Bubble expected, @BubbleController.DismissReason int reason) {
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.removedBubbles).named("removedBubbles")
+        assertWithMessage("removedBubbles").that(update.removedBubbles)
                 .isEqualTo(ImmutableList.of(Pair.create(expected, reason)));
     }
 
     private void assertOrderNotChanged() {
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.orderChanged).named("orderChanged").isFalse();
+        assertWithMessage("orderChanged").that(update.orderChanged).isFalse();
     }
 
     private void assertOrderChangedTo(Bubble... order) {
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.orderChanged).named("orderChanged").isTrue();
-        assertThat(update.bubbles).named("bubble order").isEqualTo(ImmutableList.copyOf(order));
+        assertWithMessage("orderChanged").that(update.orderChanged).isTrue();
+        assertWithMessage("bubble order").that(update.bubbles)
+                .isEqualTo(ImmutableList.copyOf(order));
     }
 
     private void assertSelectionNotChanged() {
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.selectionChanged).named("selectionChanged").isFalse();
+        assertWithMessage("selectionChanged").that(update.selectionChanged).isFalse();
     }
 
     private void assertSelectionChangedTo(Bubble bubble) {
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.selectionChanged).named("selectionChanged").isTrue();
-        assertThat(update.selectedBubble).named("selectedBubble").isEqualTo(bubble);
+        assertWithMessage("selectionChanged").that(update.selectionChanged).isTrue();
+        assertWithMessage("selectedBubble").that(update.selectedBubble).isEqualTo(bubble);
     }
 
     private void assertSelectionCleared() {
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.selectionChanged).named("selectionChanged").isTrue();
-        assertThat(update.selectedBubble).named("selectedBubble").isNull();
+        assertWithMessage("selectionChanged").that(update.selectionChanged).isTrue();
+        assertWithMessage("selectedBubble").that(update.selectedBubble).isNull();
     }
 
     private void assertExpandedChangedTo(boolean expected) {
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.expandedChanged).named("expandedChanged").isTrue();
-        assertThat(update.expanded).named("expanded").isEqualTo(expected);
+        assertWithMessage("expandedChanged").that(update.expandedChanged).isTrue();
+        assertWithMessage("expanded").that(update.expanded).isEqualTo(expected);
     }
 
     private void assertOverflowChangedTo(ImmutableList<Bubble> bubbles) {
@@ -842,12 +854,13 @@ public class BubbleDataTest extends SysuiTestCase {
     }
 
 
-    private NotificationEntry createBubbleEntry(int userId, String notifKey, String packageName) {
-        return createBubbleEntry(userId, notifKey, packageName, 1000);
+    private BubbleEntry createBubbleEntry(int userId, String notifKey, String packageName,
+            NotificationListenerService.Ranking ranking) {
+        return createBubbleEntry(userId, notifKey, packageName, ranking, 1000);
     }
 
-    private void setPostTime(NotificationEntry entry, long postTime) {
-        when(entry.getSbn().getPostTime()).thenReturn(postTime);
+    private void setPostTime(BubbleEntry entry, long postTime) {
+        when(entry.getStatusBarNotification().getPostTime()).thenReturn(postTime);
     }
 
     /**
@@ -855,16 +868,19 @@ public class BubbleDataTest extends SysuiTestCase {
      * required for BubbleData functionality and verification. NotificationTestHelper is used only
      * as a convenience to create a Notification w/BubbleMetadata.
      */
-    private NotificationEntry createBubbleEntry(int userId, String notifKey, String packageName,
-            long postTime) {
+    private BubbleEntry createBubbleEntry(int userId, String notifKey, String packageName,
+            NotificationListenerService.Ranking ranking, long postTime) {
         // BubbleMetadata
         Notification.BubbleMetadata bubbleMetadata = new Notification.BubbleMetadata.Builder(
                 mExpandIntent, Icon.createWithResource("", 0))
                 .setDeleteIntent(mDeleteIntent)
                 .build();
         // Notification -> BubbleMetadata
-        Notification notification = mNotificationTestHelper.createNotification(false,
-                null /* groupKey */, bubbleMetadata);
+        Notification notification = mock(Notification.class);
+        notification.setBubbleMetadata(bubbleMetadata);
+
+        // Notification -> extras
+        notification.extras = new Bundle();
 
         // StatusBarNotification
         StatusBarNotification sbn = mock(StatusBarNotification.class);
@@ -875,17 +891,23 @@ public class BubbleDataTest extends SysuiTestCase {
         when(sbn.getNotification()).thenReturn(notification);
 
         // NotificationEntry -> StatusBarNotification -> Notification -> BubbleMetadata
-        return new NotificationEntryBuilder().setSbn(sbn).build();
+        return new BubbleEntry(sbn, ranking, true, false, false, false);
     }
 
     private void setCurrentTime(long time) {
         when(mTimeSource.currentTimeMillis()).thenReturn(time);
     }
 
-    private void sendUpdatedEntryAtTime(NotificationEntry entry, long postTime) {
+    private void sendUpdatedEntryAtTime(BubbleEntry entry, long postTime) {
+        sendUpdatedEntryAtTime(entry, postTime, true /* visuallyInterruptive */);
+    }
+
+    private void sendUpdatedEntryAtTime(BubbleEntry entry, long postTime,
+            boolean visuallyInterruptive) {
         setPostTime(entry, postTime);
         // BubbleController calls this:
         Bubble b = mBubbleData.getOrCreateBubble(entry, null /* persistedBubble */);
+        b.setVisuallyInterruptiveForTest(visuallyInterruptive);
         // And then this
         mBubbleData.notificationEntryUpdated(b, false /* suppressFlyout*/,
                 true /* showInShade */);

@@ -114,6 +114,7 @@ import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.internal.util.Preconditions;
 import com.android.internal.widget.ICheckCredentialProgressCallback;
 import com.android.internal.widget.ILockSettings;
 import com.android.internal.widget.LockPatternUtils;
@@ -1428,7 +1429,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             // Now we have unlocked the parent user and attempted to unlock the profile we should
             // show notifications if the profile is still locked.
             if (!alreadyUnlocked) {
-                long ident = clearCallingIdentity();
+                final long ident = clearCallingIdentity();
                 try {
                     maybeShowEncryptionNotificationForUser(profile.id);
                 } finally {
@@ -2275,7 +2276,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         final IStorageManager service = mInjector.getStorageManager();
         // TODO(b/120484642): Update vold to return a password as a byte array
         String password;
-        long identity = Binder.clearCallingIdentity();
+        final long identity = Binder.clearCallingIdentity();
         try {
             password = service.getPassword();
             service.clearPassword();
@@ -2658,9 +2659,12 @@ public class LockSettingsService extends ILockSettings.Stub {
     protected AuthenticationToken initializeSyntheticPasswordLocked(byte[] credentialHash,
             LockscreenCredential credential, int userId) {
         Slog.i(TAG, "Initialize SyntheticPassword for user: " + userId);
+        Preconditions.checkState(
+                getSyntheticPasswordHandleLocked(userId) == SyntheticPasswordManager.DEFAULT_HANDLE,
+                "Cannot reinitialize SP");
+
         final AuthenticationToken auth = mSpManager.newSyntheticPasswordAndSid(
                 getGateKeeperService(), credentialHash, credential, userId);
-        onAuthTokenKnownForUser(userId, auth);
         if (auth == null) {
             Slog.wtf(TAG, "initializeSyntheticPasswordLocked returns null auth token");
             return null;
@@ -2683,6 +2687,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
         fixateNewestUserKeyAuth(userId);
         setSyntheticPasswordHandleLocked(handle, userId);
+        onAuthTokenKnownForUser(userId, auth);
         return auth;
     }
 
@@ -2718,7 +2723,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @VisibleForTesting
     protected boolean shouldMigrateToSyntheticPasswordLocked(int userId) {
-        return true;
+        return getSyntheticPasswordHandleLocked(userId) == SyntheticPasswordManager.DEFAULT_HANDLE;
     }
 
     private VerifyCredentialResponse spBasedDoVerifyCredential(LockscreenCredential userCredential,
@@ -3491,7 +3496,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
         @Override
         public PasswordMetrics getUserPasswordMetrics(int userHandle) {
-            long identity = Binder.clearCallingIdentity();
+            final long identity = Binder.clearCallingIdentity();
             try {
                 if (isManagedProfileWithUnifiedLock(userHandle)) {
                     // A managed profile with unified challenge is supposed to be protected by the
@@ -3550,6 +3555,9 @@ public class LockSettingsService extends ILockSettings.Stub {
             SyntheticPasswordManager.AuthenticationToken
                     authToken = new SyntheticPasswordManager.AuthenticationToken(spVersion);
             authToken.recreateDirectly(syntheticPassword);
+            synchronized (mSpManager) {
+                mSpManager.verifyChallenge(getGateKeeperService(), authToken, 0L, userId);
+            }
             onCredentialVerified(authToken, loadPasswordMetrics(authToken, userId), userId);
         }
     }

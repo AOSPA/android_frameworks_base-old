@@ -831,6 +831,16 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      */
     public static final int CONFIG_WINDOW_CONFIGURATION = 0x20000000;
 
+    /**
+     * Bit in {@link #configChanges} that indicates that the activity
+     * can itself handle changes to bold text.  Set from the
+     * {@link android.R.attr#configChanges} attribute.  This is
+     * not a core resource configuration, but a higher-level value, so its
+     * constant starts at the high bits.
+     */
+
+    public static final int CONFIG_FORCE_BOLD_TEXT = 0x10000000;
+
     /** @hide
      * Unfortunately the constants for config changes in native code are
      * different from ActivityInfo. :(  Here are the values we should use for the
@@ -1096,6 +1106,34 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
                 || orientation == SCREEN_ORIENTATION_SENSOR_PORTRAIT
                 || orientation == SCREEN_ORIENTATION_REVERSE_PORTRAIT
                 || orientation == SCREEN_ORIENTATION_USER_PORTRAIT;
+    }
+
+    /**
+     * Returns the reversed orientation.
+     * @hide
+     */
+    @ActivityInfo.ScreenOrientation
+    public static int reverseOrientation(@ActivityInfo.ScreenOrientation int orientation) {
+        switch (orientation) {
+            case SCREEN_ORIENTATION_LANDSCAPE:
+                return SCREEN_ORIENTATION_PORTRAIT;
+            case SCREEN_ORIENTATION_PORTRAIT:
+                return SCREEN_ORIENTATION_LANDSCAPE;
+            case SCREEN_ORIENTATION_SENSOR_LANDSCAPE:
+                return SCREEN_ORIENTATION_SENSOR_PORTRAIT;
+            case SCREEN_ORIENTATION_SENSOR_PORTRAIT:
+                return SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+            case SCREEN_ORIENTATION_REVERSE_LANDSCAPE:
+                return SCREEN_ORIENTATION_REVERSE_PORTRAIT;
+            case SCREEN_ORIENTATION_REVERSE_PORTRAIT:
+                return SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
+            case SCREEN_ORIENTATION_USER_LANDSCAPE:
+                return SCREEN_ORIENTATION_USER_PORTRAIT;
+            case SCREEN_ORIENTATION_USER_PORTRAIT:
+                return SCREEN_ORIENTATION_USER_LANDSCAPE;
+            default:
+                return orientation;
+        }
     }
 
     /**

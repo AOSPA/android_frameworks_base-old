@@ -226,6 +226,8 @@
     <dimen name="notification_guts_conversation_action_text_padding_start">32dp</dimen>
     <dimen name="conversation_onboarding_bullet_gap_width">6dp</dimen>
 
+    <dimen name="notification_guts_header_top_padding">11dp</dimen>
+
     <!-- The height of the header in inline settings -->
     <dimen name="notification_guts_header_height">24dp</dimen>
 
@@ -482,20 +484,20 @@
     <!-- The size of the gesture span needed to activate the "pull" notification expansion -->
     <dimen name="pull_span_min">25dp</dimen>
 
-    <dimen name="qs_tile_height">106dp</dimen>
+    <dimen name="qs_tile_height">96dp</dimen>
     <!--notification_side_paddings + notification_content_margin_start - (qs_quick_tile_size - qs_tile_background_size) / 2 -->
     <dimen name="qs_tile_layout_margin_side">18dp</dimen>
     <dimen name="qs_tile_margin_horizontal">18dp</dimen>
     <dimen name="qs_tile_margin_horizontal_two_line">2dp</dimen>
-    <dimen name="qs_tile_margin_vertical">24dp</dimen>
+    <dimen name="qs_tile_margin_vertical">2dp</dimen>
     <dimen name="qs_tile_margin_top_bottom">12dp</dimen>
     <dimen name="qs_tile_margin_top_bottom_negative">-12dp</dimen>
     <!-- The height of the qs customize header. Should be
-         (qs_panel_padding_top (48dp) +  brightness_mirror_height (48dp) + qs_tile_margin_top (18dp)) -
+         (qs_panel_padding_top (48dp) +  brightness_mirror_height (48dp) + qs_tile_margin_top (0dp)) -
          (Toolbar_minWidth (56dp) + qs_tile_margin_top_bottom (12dp))
     -->
-    <dimen name="qs_customize_header_min_height">46dp</dimen>
-    <dimen name="qs_tile_margin_top">18dp</dimen>
+    <dimen name="qs_customize_header_min_height">28dp</dimen>
+    <dimen name="qs_tile_margin_top">0dp</dimen>
     <dimen name="qs_tile_icon_background_stroke_width">-1dp</dimen>
     <dimen name="qs_tile_background_size">44dp</dimen>
     <dimen name="qs_quick_tile_size">48dp</dimen>
@@ -504,6 +506,10 @@
     <dimen name="qs_header_tile_margin_bottom">18dp</dimen>
     <dimen name="qs_page_indicator_width">16dp</dimen>
     <dimen name="qs_page_indicator_height">8dp</dimen>
+    <!-- The size of a single dot in relation to the whole animation.
+         Scaled @dimen/qs_page_indicator-width by .4f.
+    -->
+    <dimen name="qs_page_indicator_dot_width">6.4dp</dimen>
     <dimen name="qs_tile_icon_size">24dp</dimen>
     <dimen name="qs_tile_text_size">12sp</dimen>
     <dimen name="qs_tile_divider_height">1dp</dimen>
@@ -968,8 +974,6 @@
     <!-- The start margin of quick scrub onboarding toast. -->
     <dimen name="recents_quick_scrub_onboarding_margin_start">8dp</dimen>
 
-    <dimen name="floating_dismiss_bottom_margin">50dp</dimen>
-
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
 
@@ -1213,7 +1217,7 @@
     <!-- Interior padding of the message bubble -->
     <dimen name="bubble_message_padding">4dp</dimen>
     <!-- Offset between bubbles in their stacked position. -->
-    <dimen name="bubble_stack_offset">5dp</dimen>
+    <dimen name="bubble_stack_offset">10dp</dimen>
     <!-- How far offscreen the bubble stack rests. Cuts off padding and part of icon bitmap. -->
     <dimen name="bubble_stack_offscreen">9dp</dimen>
     <!-- How far down the screen the stack starts. -->
@@ -1225,8 +1229,6 @@
     <dimen name="bubble_dismiss_target_padding_x">40dp</dimen>
     <dimen name="bubble_dismiss_target_padding_y">20dp</dimen>
     <dimen name="bubble_manage_menu_elevation">4dp</dimen>
-
-    <dimen name="dismiss_target_x_size">24dp</dimen>
 
     <!-- Bubbles user education views -->
     <dimen name="bubbles_manage_education_width">160dp</dimen>
@@ -1368,9 +1370,11 @@
     <dimen name="config_rounded_mask_size_bottom">@*android:dimen/rounded_corner_radius_bottom</dimen>
 
     <!-- Output switcher panel related dimensions -->
-    <dimen name="media_output_dialog_padding_top">11dp</dimen>
+    <dimen name="media_output_dialog_list_margin">12dp</dimen>
     <dimen name="media_output_dialog_list_max_height">364dp</dimen>
     <dimen name="media_output_dialog_header_album_icon_size">52dp</dimen>
     <dimen name="media_output_dialog_header_back_icon_size">36dp</dimen>
+    <dimen name="media_output_dialog_header_icon_padding">16dp</dimen>
     <dimen name="media_output_dialog_icon_corner_radius">16dp</dimen>
+    <dimen name="media_output_dialog_title_anim_y_delta">12.5dp</dimen>
 </resources>

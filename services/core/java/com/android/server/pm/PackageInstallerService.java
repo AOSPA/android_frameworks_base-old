@@ -244,7 +244,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         mSessionsDir.mkdirs();
 
         mApexManager = ApexManager.getInstance();
-        mStagingManager = new StagingManager(this, context, apexParserSupplier);
+        mStagingManager = new StagingManager(context, apexParserSupplier);
 
         LocalServices.getService(SystemServiceManager.class).startService(
                 new Lifecycle(context, this));
@@ -619,6 +619,13 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             }
         }
 
+        if ((params.installFlags & PackageManager.INSTALL_INSTANT_APP) != 0
+                && !isCalledBySystemOrShell(callingUid)
+                && (mPm.getFlagsForUid(callingUid) & ApplicationInfo.FLAG_SYSTEM) == 0) {
+            throw new SecurityException(
+                    "Only system apps could use the PackageManager.INSTALL_INSTANT_APP flag.");
+        }
+
         if (params.isStaged && !isCalledBySystemOrShell(callingUid)) {
             if (mBypassNextStagedInstallerCheck) {
                 mBypassNextStagedInstallerCheck = false;
@@ -739,9 +746,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
         synchronized (mSessions) {
             mSessions.put(sessionId, session);
-        }
-        if (params.isStaged) {
-            mStagingManager.createSession(session);
         }
 
         mCallbacks.notifySessionCreated(session.sessionId, session.userId);
@@ -974,7 +978,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         } else if (canSilentlyInstallPackage) {
             // Allow the device owner and affiliated profile owner to silently delete packages
             // Need to clear the calling identity to get DELETE_PACKAGES permission
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 mPm.deletePackageVersioned(versionedPackage, adapter.getBinder(), userId, flags);
             } finally {

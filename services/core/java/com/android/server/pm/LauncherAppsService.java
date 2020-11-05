@@ -75,6 +75,7 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.BackgroundThread;
@@ -142,6 +143,9 @@ public class LauncherAppsService extends SystemService {
         private final DevicePolicyManager mDpm;
 
         private final MyPackageMonitor mPackageMonitor = new MyPackageMonitor();
+
+        @GuardedBy("mListeners")
+        private boolean mIsWatchingPackageBroadcasts = false;
 
         private final ShortcutChangeHandler mShortcutChangeHandler;
 
@@ -257,7 +261,7 @@ public class LauncherAppsService extends SystemService {
             verifyCallingPackage(callingPackage);
             List<SessionInfo> sessionInfos = new ArrayList<>();
             int[] userIds = mUm.getEnabledProfileIds(getCallingUserId());
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 for (int userId : userIds) {
                     sessionInfos.addAll(getPackageInstallerService().getAllSessions(userId)
@@ -281,7 +285,10 @@ public class LauncherAppsService extends SystemService {
          * Register a receiver to watch for package broadcasts
          */
         private void startWatchingPackageBroadcasts() {
-            mPackageMonitor.register(mContext, UserHandle.ALL, true, mCallbackHandler);
+            if (!mIsWatchingPackageBroadcasts) {
+                mPackageMonitor.register(mContext, UserHandle.ALL, true, mCallbackHandler);
+                mIsWatchingPackageBroadcasts = true;
+            }
         }
 
         /**
@@ -291,7 +298,10 @@ public class LauncherAppsService extends SystemService {
             if (DEBUG) {
                 Log.d(TAG, "Stopped watching for packages");
             }
-            mPackageMonitor.unregister();
+            if (mIsWatchingPackageBroadcasts) {
+                mPackageMonitor.unregister();
+                mIsWatchingPackageBroadcasts = false;
+            }
         }
 
         void checkCallbackCount() {
@@ -531,7 +541,7 @@ public class LauncherAppsService extends SystemService {
             }
 
             final int callingUid = injectBinderCallingUid();
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 final PackageManagerInternal pmInt =
                         LocalServices.getService(PackageManagerInternal.class);
@@ -605,7 +615,7 @@ public class LauncherAppsService extends SystemService {
             }
 
             final int callingUid = injectBinderCallingUid();
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 final PackageManagerInternal pmInt =
                         LocalServices.getService(PackageManagerInternal.class);
@@ -639,7 +649,7 @@ public class LauncherAppsService extends SystemService {
             }
 
             final int callingUid = injectBinderCallingUid();
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 final PackageManagerInternal pmInt =
                         LocalServices.getService(PackageManagerInternal.class);
@@ -918,7 +928,7 @@ public class LauncherAppsService extends SystemService {
             }
 
             final int callingUid = injectBinderCallingUid();
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 final int state = mIPM.getComponentEnabledSetting(component, user.getIdentifier());
                 switch (state) {
@@ -989,7 +999,7 @@ public class LauncherAppsService extends SystemService {
             boolean canLaunch = false;
 
             final int callingUid = injectBinderCallingUid();
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 final PackageManagerInternal pmInt =
                         LocalServices.getService(PackageManagerInternal.class);
@@ -1040,7 +1050,7 @@ public class LauncherAppsService extends SystemService {
             }
 
             final Intent intent;
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 String packageName = component.getPackageName();
                 intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,

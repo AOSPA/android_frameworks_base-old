@@ -40,6 +40,7 @@ import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.VrManager;
+import android.app.time.TimeManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -351,6 +352,13 @@ public abstract class Context {
      * due to its foreground state such as an activity or foreground service, then this flag will
      * allow the bound app to get the same capabilities, as long as it has the required permissions
      * as well.
+     *
+     * If binding from a top app and its target SDK version is at or above
+     * {@link android.os.Build.VERSION_CODES#R}, the app needs to
+     * explicitly use BIND_INCLUDE_CAPABILITIES flag to pass all capabilities to the service so the
+     * other app can have while-use-use access such as location, camera, microphone from background.
+     * If binding from a top app and its target SDK version is below
+     * {@link android.os.Build.VERSION_CODES#R}, BIND_INCLUDE_CAPABILITIES is implicit.
      */
     public static final int BIND_INCLUDE_CAPABILITIES = 0x000001000;
 
@@ -3179,8 +3187,8 @@ public abstract class Context {
      *          {@link #BIND_AUTO_CREATE}, {@link #BIND_DEBUG_UNBIND},
      *          {@link #BIND_NOT_FOREGROUND}, {@link #BIND_ABOVE_CLIENT},
      *          {@link #BIND_ALLOW_OOM_MANAGEMENT}, {@link #BIND_WAIVE_PRIORITY}.
-     *          {@link #BIND_IMPORTANT}, or
-     *          {@link #BIND_ADJUST_WITH_ACTIVITY}.
+     *          {@link #BIND_IMPORTANT}, {@link #BIND_ADJUST_WITH_ACTIVITY},
+     *          {@link #BIND_NOT_PERCEPTIBLE}, or {@link #BIND_INCLUDE_CAPABILITIES}.
      * @return {@code true} if the system is in the process of bringing up a
      *         service that your client has permission to bind to; {@code false}
      *         if the system couldn't find the service or if your client doesn't
@@ -3201,6 +3209,8 @@ public abstract class Context {
      * @see #BIND_WAIVE_PRIORITY
      * @see #BIND_IMPORTANT
      * @see #BIND_ADJUST_WITH_ACTIVITY
+     * @see #BIND_NOT_PERCEPTIBLE
+     * @see #BIND_INCLUDE_CAPABILITIES
      */
     public abstract boolean bindService(@RequiresPermission Intent service,
             @NonNull ServiceConnection conn, @BindServiceFlags int flags);
@@ -3498,6 +3508,7 @@ public abstract class Context {
             PERMISSION_SERVICE,
             LIGHTS_SERVICE,
             //@hide: PEOPLE_SERVICE,
+            //@hide: DEVICE_STATE_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -4492,6 +4503,14 @@ public abstract class Context {
     public static final String SOUND_TRIGGER_MIDDLEWARE_SERVICE = "soundtrigger_middleware";
 
     /**
+     * Used to access {@link MusicRecognitionManagerService}.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    public static final String MUSIC_RECOGNITION_SERVICE = "music_recognition";
+
+    /**
      * Official published name of the (internal) permission service.
      *
      * @see #getSystemService(String)
@@ -5081,6 +5100,14 @@ public abstract class Context {
     public static final String TIME_ZONE_DETECTOR_SERVICE = "time_zone_detector";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve an {@link TimeManager}.
+     * @hide
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String TIME_MANAGER = "time_manager";
+
+    /**
      * Binder service name for {@link AppBindingService}.
      * @hide
      */
@@ -5218,6 +5245,14 @@ public abstract class Context {
      * @hide
      */
     public static final String PEOPLE_SERVICE = "people";
+
+    /**
+     * Use with {@link #getSystemService(String)} to access device state service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String DEVICE_STATE_SERVICE = "device_state";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -5820,10 +5855,19 @@ public abstract class Context {
      * {@link #createWindowContext(int, Bundle)} on the returned display Context or use an
      * {@link android.app.Activity}.
      *
+     * <p>
+     * Note that invoking #createDisplayContext(Display) from an UI context is not regarded
+     * as an UI context. In other words, it is not suggested to access UI components (such as
+     * obtain a {@link WindowManager} by {@link #getSystemService(String)})
+     * from the context created from #createDisplayContext(Display).
+     * </p>
+     *
      * @param display A {@link Display} object specifying the display for whose metrics the
      * Context's resources should be tailored.
      *
      * @return A {@link Context} for the display.
+     *
+     * @see #getSystemService(String)
      */
     @DisplayContext
     public abstract Context createDisplayContext(@NonNull Display display);

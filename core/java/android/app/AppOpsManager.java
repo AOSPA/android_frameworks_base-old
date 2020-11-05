@@ -81,8 +81,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -5021,8 +5019,7 @@ public class AppOpsManager {
          * @hide
          */
         public static double round(double value) {
-            final BigDecimal decimalScale = new BigDecimal(value);
-            return decimalScale.setScale(0, RoundingMode.HALF_UP).doubleValue();
+            return Math.floor(value + 0.5);
         }
 
         @Override
@@ -6741,14 +6738,10 @@ public class AppOpsManager {
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setUidMode(int code, int uid, @Mode int mode) {
-        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-        long token = Binder.clearCallingIdentity();
         try {
             mService.setUidMode(code, uid, mode);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        } finally {
-            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -6766,7 +6759,11 @@ public class AppOpsManager {
     @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setUidMode(@NonNull String appOp, int uid, @Mode int mode) {
-        setUidMode(AppOpsManager.strOpToOp(appOp), uid, mode);
+        try {
+            mService.setUidMode(AppOpsManager.strOpToOp(appOp), uid, mode);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /** @hide */
@@ -6795,14 +6792,10 @@ public class AppOpsManager {
     @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setMode(int code, int uid, String packageName, @Mode int mode) {
-        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-        long token = Binder.clearCallingIdentity();
         try {
             mService.setMode(code, uid, packageName, mode);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        } finally {
-            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -6822,7 +6815,11 @@ public class AppOpsManager {
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setMode(@NonNull String op, int uid, @Nullable String packageName,
             @Mode int mode) {
-        setMode(strOpToOp(op), uid, packageName, mode);
+        try {
+            mService.setMode(strOpToOp(op), uid, packageName, mode);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -7298,14 +7295,10 @@ public class AppOpsManager {
      * @hide
      */
     public int unsafeCheckOpRawNoThrow(int op, int uid, @NonNull String packageName) {
-        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-        long token = Binder.clearCallingIdentity();
         try {
             return mService.checkOperationRaw(op, uid, packageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        } finally {
-            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -7344,21 +7337,48 @@ public class AppOpsManager {
     }
 
     /**
-     * Make note of an application performing an operation.  Note that you must pass
-     * in both the uid and name of the application to be checked; this function will verify
-     * that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
-     * succeeds, the last execution time of the operation for this app will be updated to
-     * the current time.
+     * Make note of an application performing an operation and check if the application is allowed
+     * to perform it.
      *
      * <p>If this is a check that is not preceding the protected operation, use
      * {@link #unsafeCheckOp} instead.
      *
+     * <p>The identity of the package the app-op is noted for is specified by the
+     * {@code uid} and {@code packageName} parameters. If this is noted for a regular app both
+     * should be set and the package needs to be part of the uid. In the very rare case that an
+     * app-op is noted for an entity that does not have a package name, the package can be
+     * {@code null}. As it is possible that a single process contains more than one package the
+     * {@code packageName} should be {@link Context#getPackageName() read} from the context of the
+     * caller of the API (in the app process) that eventually triggers this check. If this op is
+     * not noted for a running process the {@code packageName} cannot be read from the context, but
+     * it should be clear which package the note is for.
+     *
+     * <p>If the  {@code uid} and {@code packageName} do not match this return
+     * {@link #MODE_IGNORED}.
+     *
+     * <p>Beside the access check this method also records the access. While the access check is
+     * based on {@code uid} and/or {@code packageName} the access recording is done based on the
+     * {@code packageName} and {@code attributionTag}. The {@code attributionTag} should be
+     * {@link Context#getAttributionTag() read} from the same context the package name is read from.
+     * In the case the check is not related to an API call, the  {@code attributionTag} should be
+     * {@code null}. Please note that e.g. registering a callback for later is still an API call and
+     * the code should store the attribution tag along the package name for being used in this
+     * method later.
+     *
+     * <p>The {@code message} parameter only needs to be set when this method is <ul>not</ul>
+     * called in a two-way binder call from the client. In this case the message is a free form text
+     * that is meant help the app developer determine what part of the app's code triggered the
+     * note. This message is passed back to the app in the
+     * {@link OnOpNotedCallback#onAsyncNoted(AsyncNotedAppOp)} callback. A good example of a useful
+     * message is including the {@link System#identityHashCode(Object)} of the listener that will
+     * receive data or the name of the manifest-receiver.
+     *
      * @param op The operation to note.  One of the OPSTR_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
+     * @param uid The uid of the application attempting to perform the operation.
      * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or {@code
-     * null} for default attribution
-     * @param message A message describing the reason the op was noted
+     * @param attributionTag The {@link Context#createAttributionContext attribution tag} of the
+     *                       calling context or {@code null} for default attribution
+     * @param message A message describing why the op was noted
      *
      * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
      * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
@@ -7366,33 +7386,16 @@ public class AppOpsManager {
      *
      * @throws SecurityException If the app has been configured to crash on this op.
      */
+    // For platform callers of this method, please read the package name parameter from
+    // Context#getOpPackageName.
+    // When noting a callback, the message can be computed using the #toReceiverId method.
     public int noteOp(@NonNull String op, int uid, @Nullable String packageName,
             @Nullable String attributionTag, @Nullable String message) {
         return noteOp(strOpToOp(op), uid, packageName, attributionTag, message);
     }
 
     /**
-     * Make note of an application performing an operation.  Note that you must pass
-     * in both the uid and name of the application to be checked; this function will verify
-     * that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
-     * succeeds, the last execution time of the operation for this app will be updated to
-     * the current time.
-     *
-     * <p>If this is a check that is not preceding the protected operation, use
-     * {@link #unsafeCheckOp} instead.
-     *
-     * @param op The operation to note.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or {@code
-     * null} for default attribution
-     * @param message A message describing the reason the op was noted
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     *
-     * @throws SecurityException If the app has been configured to crash on this op.
+     * @see #noteOp(String, int, String, String, String
      *
      * @hide
      */
@@ -7430,16 +7433,7 @@ public class AppOpsManager {
      * Like {@link #noteOp(String, int, String, String, String)} but instead of throwing a
      * {@link SecurityException} it returns {@link #MODE_ERRORED}.
      *
-     * @param op The operation to note.  One of the OPSTR_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or {@code
-     * null} for default attribution
-     * @param message A message describing the reason the op was noted
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
+     * @see #noteOp(String, int, String, String, String)
      */
     public int noteOpNoThrow(@NonNull String op, int uid, @NonNull String packageName,
             @Nullable String attributionTag, @Nullable String message) {
@@ -7447,19 +7441,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Like {@link #noteOp(String, int, String, String, String)} but instead of throwing a
-     * {@link SecurityException} it returns {@link #MODE_ERRORED}.
-     *
-     * @param op The operation to note.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or {@code
-     * null} for default attribution
-     * @param message A message describing the reason the op was noted
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
+     * @see #noteOpNoThrow(String, int, String, String, String)
      *
      * @hide
      */
@@ -7477,20 +7459,8 @@ public class AppOpsManager {
                 }
             }
 
-            int mode;
-            // Making the binder call "noteOperation" usually sets Binder.callingUid to the calling
-            // processes UID. Hence clearing the calling UID is superfluous.
-            // If the call is inside the system server though "noteOperation" is not a binder all,
-            // it is only a method call. Hence Binder.callingUid might still be set to the app that
-            // called the system server. This can lead to problems as not every app can see the
-            // same appops the system server can see.
-            long token = Binder.clearCallingIdentity();
-            try {
-                mode = mService.noteOperation(op, uid, packageName, attributionTag,
-                        collectionMode == COLLECT_ASYNC, message, shouldCollectMessage);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
+            int mode = mService.noteOperation(op, uid, packageName, attributionTag,
+                    collectionMode == COLLECT_ASYNC, message, shouldCollectMessage);
 
             if (mode == MODE_ALLOWED) {
                 if (collectionMode == COLLECT_SELF) {
@@ -7528,23 +7498,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Make note of an application performing an operation on behalf of another application when
-     * handling an IPC. This function will verify that the calling uid and proxied package name
-     * match, and if not, return {@link #MODE_IGNORED}. If this call succeeds, the last execution
-     * time of the operation for the proxied app and your app will be updated to the current time.
-     *
-     * @param op The operation to note. One of the OP_* constants.
-     * @param proxiedPackageName The name of the application calling into the proxy application.
-     * @param proxiedUid The uid of the proxied application
-     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
-     * attribution tag} or {@code null} for default attribution
-     * @param message A message describing the reason the op was noted
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or {@link #MODE_IGNORED}
-     * if it is not allowed and should be silently ignored (without causing the app to crash).
-     *
-     * @throws SecurityException If the proxy or proxied app has been configured to crash on this
-     * op.
+     * @see #noteProxyOp(String, String, int, String, String)
      *
      * @hide
      */
@@ -7606,15 +7560,7 @@ public class AppOpsManager {
      * Like {@link #noteProxyOp(String, String, int, String, String)} but instead
      * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
      *
-     * <p>This API requires package with the {@code proxiedPackageName} to belong to
-     * {@code proxiedUid}.
-     *
-     * @param op The op to note
-     * @param proxiedPackageName The package to note the op for
-     * @param proxiedUid The uid the package belongs to
-     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
-     * attribution tag} or {@code null} for default attribution
-     * @param message A message describing the reason the op was noted
+     * @see #noteOpNoThrow(String, int, String, String, String)
      */
     public int noteProxyOpNoThrow(@NonNull String op, @Nullable String proxiedPackageName,
             int proxiedUid, @Nullable String proxiedAttributionTag, @Nullable String message) {
@@ -7623,16 +7569,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Like {@link #noteProxyOp(int, String, int, String, String)} but instead
-     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
-     *
-     * @param op The op to note
-     * @param proxiedPackageName The package to note the op for or {@code null} if the op should be
-     *                           noted for the "android" package
-     * @param proxiedUid The uid the package belongs to
-     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
-     * attribution tag} or {@code null} for default attribution
-     * @param message A message describing the reason the op was noted
+     * @see #noteProxyOpNoThrow(String, String, int, String, String)
      *
      * @hide
      */
@@ -7653,17 +7590,10 @@ public class AppOpsManager {
                 }
             }
 
-            int mode;
-            // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-            long token = Binder.clearCallingIdentity();
-            try {
-                mode = mService.noteProxyOperation(op, proxiedUid, proxiedPackageName,
-                        proxiedAttributionTag, myUid, mContext.getOpPackageName(),
-                        mContext.getAttributionTag(), collectionMode == COLLECT_ASYNC, message,
-                        shouldCollectMessage);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
+            int mode = mService.noteProxyOperation(op, proxiedUid, proxiedPackageName,
+                    proxiedAttributionTag, myUid, mContext.getOpPackageName(),
+                    mContext.getAttributionTag(), collectionMode == COLLECT_ASYNC, message,
+                    shouldCollectMessage);
 
             if (mode == MODE_ALLOWED) {
                 if (collectionMode == COLLECT_SELF) {
@@ -7713,8 +7643,6 @@ public class AppOpsManager {
      */
     @UnsupportedAppUsage
     public int checkOp(int op, int uid, String packageName) {
-        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-        long token = Binder.clearCallingIdentity();
         try {
             int mode = mService.checkOperation(op, uid, packageName);
             if (mode == MODE_ERRORED) {
@@ -7723,27 +7651,24 @@ public class AppOpsManager {
             return mode;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        } finally {
-            Binder.restoreCallingIdentity(token);
         }
     }
 
     /**
      * Like {@link #checkOp} but instead of throwing a {@link SecurityException} it
      * returns {@link #MODE_ERRORED}.
+     *
+     * @see #checkOp(int, int, String)
+     *
      * @hide
      */
     @UnsupportedAppUsage
     public int checkOpNoThrow(int op, int uid, String packageName) {
-        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-        long token = Binder.clearCallingIdentity();
         try {
             int mode = mService.checkOperation(op, uid, packageName);
             return mode == AppOpsManager.MODE_FOREGROUND ? AppOpsManager.MODE_ALLOWED : mode;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        } finally {
-            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -7866,6 +7791,10 @@ public class AppOpsManager {
     /**
      * Report that an application has started executing a long-running operation.
      *
+     * <p>For more details how to determine the {@code callingPackageName},
+     * {@code callingAttributionTag}, and {@code message}, please check the description in
+     * {@link #noteOp(String, int, String, String, String)}
+     *
      * @param op The operation to start.  One of the OPSTR_* constants.
      * @param uid The user id of the application attempting to perform the operation.
      * @param packageName The name of the application attempting to perform the operation.
@@ -7886,22 +7815,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Report that an application has started executing a long-running operation.
-     *
-     * @param op The operation to start.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or
-     * {@code null} for default attribution
-     * @param startIfModeDefault Whether to start if mode is {@link #MODE_DEFAULT}.
-     * @param message Description why op was started
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     *
-     * @throws SecurityException If the app has been configured to crash on this op or
-     * the package is not in the passed in UID.
+     * @see #startOp(String, int, String, String, String)
      *
      * @hide
      */
@@ -7947,16 +7861,7 @@ public class AppOpsManager {
      * Like {@link #startOp(String, int, String, String, String)} but instead of throwing a
      * {@link SecurityException} it returns {@link #MODE_ERRORED}.
      *
-     * @param op The operation to start.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or
-     * {@code null} for default attribution
-     * @param message Description why op was started
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
+     * @see #startOp(String, int, String, String, String)
      */
     public int startOpNoThrow(@NonNull String op, int uid, @NonNull String packageName,
             @NonNull String attributionTag, @Nullable String message) {
@@ -7964,20 +7869,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Like {@link #startOp(int, int, String, boolean, String, String)} but instead of throwing a
-     * {@link SecurityException} it returns {@link #MODE_ERRORED}.
-     *
-     * @param op The operation to start.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or
-     * {@code null} for default attribution
-     * @param startIfModeDefault Whether to start if mode is {@link #MODE_DEFAULT}.
-     * @param message Description why op was started
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
+     * @see #startOpNoThrow(String, int, String, String, String)
      *
      * @hide
      */
@@ -7995,22 +7887,90 @@ public class AppOpsManager {
                 }
             }
 
-            int mode;
-            // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-            long token = Binder.clearCallingIdentity();
-            try {
-                mode = mService.startOperation(getClientId(), op, uid, packageName,
-                        attributionTag, startIfModeDefault, collectionMode == COLLECT_ASYNC,
-                        message, shouldCollectMessage);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
+            int mode = mService.startOperation(getClientId(), op, uid, packageName,
+                    attributionTag, startIfModeDefault, collectionMode == COLLECT_ASYNC, message,
+                    shouldCollectMessage);
 
             if (mode == MODE_ALLOWED) {
                 if (collectionMode == COLLECT_SELF) {
                     collectNotedOpForSelf(op, attributionTag);
                 } else if (collectionMode == COLLECT_SYNC) {
                     collectNotedOpSync(op, attributionTag);
+                }
+            }
+
+            return mode;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+    /**
+     * Report that an application has started executing a long-running operation on behalf of
+     * another application when handling an IPC. This function will verify that the calling uid and
+     * proxied package name match, and if not, return {@link #MODE_IGNORED}.
+     *
+     * @param op The op to note
+     * @param proxiedUid The uid to note the op for {@code null}
+     * @param proxiedPackageName The package name the uid belongs to
+     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
+     * attribution tag} or {@code null} for default attribution
+     * @param message A message describing the reason the op was noted
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or {@link #MODE_IGNORED}
+     * if it is not allowed and should be silently ignored (without causing the app to crash).
+     *
+     * @throws SecurityException If the proxy or proxied app has been configured to crash on this
+     * op.
+     */
+    public int startProxyOp(@NonNull String op, int proxiedUid, @NonNull String proxiedPackageName,
+            @Nullable String proxiedAttributionTag, @Nullable String message) {
+        final int mode = startProxyOpNoThrow(op, proxiedUid, proxiedPackageName,
+                proxiedAttributionTag, message);
+        if (mode == MODE_ERRORED) {
+            throw new SecurityException("Proxy package " + mContext.getOpPackageName()
+                    + " from uid " + Process.myUid() + " or calling package " + proxiedPackageName
+                    + " from uid " + proxiedUid + " not allowed to perform "
+                    + sOpNames[strOpToOp(op)]);
+        }
+        return mode;
+    }
+
+    /**
+     *Like {@link #startProxyOp(String, int, String, String, String)} but instead
+     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * @see #startProxyOp(String, int, String, String, String)
+     */
+    public int startProxyOpNoThrow(@NonNull String op, int proxiedUid,
+            @NonNull String proxiedPackageName, @Nullable String proxiedAttributionTag,
+            @Nullable String message) {
+        try {
+            int opInt = strOpToOp(op);
+
+            collectNoteOpCallsForValidation(opInt);
+            int collectionMode = getNotedOpCollectionMode(proxiedUid, proxiedPackageName, opInt);
+            boolean shouldCollectMessage = Process.myUid() == Process.SYSTEM_UID;
+            if (collectionMode == COLLECT_ASYNC) {
+                if (message == null) {
+                    // Set stack trace as default message
+                    message = getFormattedStackTrace();
+                    shouldCollectMessage = true;
+                }
+            }
+
+            int mode = mService.startProxyOperation(getClientId(), opInt, proxiedUid,
+                    proxiedPackageName, proxiedAttributionTag, Process.myUid(),
+                    mContext.getOpPackageName(), mContext.getAttributionTag(), false,
+                    collectionMode == COLLECT_ASYNC, message, shouldCollectMessage);
+
+            if (mode == MODE_ALLOWED) {
+                if (collectionMode == COLLECT_SELF) {
+                    collectNotedOpForSelf(opInt, proxiedAttributionTag);
+                } else if (collectionMode == COLLECT_SYNC
+                        // Only collect app-ops when the proxy is trusted
+                        && mContext.checkPermission(Manifest.permission.UPDATE_APP_OPS_STATS, -1,
+                        Process.myUid()) == PackageManager.PERMISSION_GRANTED) {
+                    collectNotedOpSync(opInt, proxiedAttributionTag);
                 }
             }
 
@@ -8058,23 +8018,38 @@ public class AppOpsManager {
     }
 
     /**
-     * Report that an application is no longer performing an operation that had previously
-     * been started with {@link #startOp(int, int, String, boolean, String, String)}. There is no
-     * validation of input or result; the parameters supplied here must be the exact same ones
-     * previously passed in when starting the operation.
+     * @see #finishOp(String, int, String, String)
      *
      * @hide
      */
     public void finishOp(int op, int uid, @NonNull String packageName,
             @Nullable String attributionTag) {
-        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-        long token = Binder.clearCallingIdentity();
         try {
             mService.finishOperation(getClientId(), op, uid, packageName, attributionTag);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        } finally {
-            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     *  Report that an application is no longer performing an operation that had previously
+     * been started with {@link #startProxyOp(String, int, String, String, String)}. There is no
+     * validation of input or result; the parameters supplied here must be the exact same ones
+     * previously passed in when starting the operation.
+     * @param op The operation which was started
+     * @param proxiedUid The uid the op was started on behalf of
+     * @param proxiedPackageName The package the op was started on behalf of
+     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
+     * attribution tag} or {@code null} for default attribution
+     */
+    public void finishProxyOp(@NonNull String op, int proxiedUid,
+            @NonNull String proxiedPackageName, @Nullable String proxiedAttributionTag) {
+        try {
+            mService.finishProxyOperation(getClientId(), strOpToOp(op), proxiedUid,
+                    proxiedPackageName, proxiedAttributionTag, Process.myUid(),
+                    mContext.getOpPackageName(), mContext.getAttributionTag());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -8522,7 +8497,7 @@ public class AppOpsManager {
             public void opNoted(AsyncNotedAppOp op) {
                 Objects.requireNonNull(op);
 
-                long token = Binder.clearCallingIdentity();
+                final long token = Binder.clearCallingIdentity();
                 try {
                     getAsyncNotedExecutor().execute(() -> onAsyncNoted(op));
                 } finally {
@@ -8666,14 +8641,10 @@ public class AppOpsManager {
     // TODO: Uncomment below annotation once b/73559440 is fixed
     // @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
     public boolean isOperationActive(int code, int uid, String packageName) {
-        // Clear calling UID to handle calls from inside the system server. See #noteOpNoThrow
-        long token = Binder.clearCallingIdentity();
         try {
             return mService.isOperationActive(code, uid, packageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        } finally {
-            Binder.restoreCallingIdentity(token);
         }
     }
 

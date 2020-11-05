@@ -330,6 +330,7 @@ filegroup {
         ":gatekeeper_aidl",
         ":gsiservice_aidl",
         ":incidentcompanion_aidl",
+        ":inputconstants_aidl",
         ":installd_aidl",
         ":keystore_aidl",
         ":libaudioclient_aidl",
@@ -373,7 +374,7 @@ filegroup {
 java_library {
     name: "framework-updatable-stubs-module_libs_api",
     static_libs: [
-        "framework-appsearch-stubs", // TODO: Update to module_libs_api when there is one.
+        "framework-appsearch.stubs.module_lib",
         "framework-graphics.stubs.module_lib",
         "framework-media.stubs.module_lib",
         "framework-mediaprovider.stubs.module_lib",
@@ -392,7 +393,7 @@ java_library {
     installable: false,
     static_libs: [
         "framework-minus-apex",
-        "framework-appsearch",
+        "framework-appsearch.impl",
         "framework-graphics.impl",
         "framework-mediaprovider.impl",
         "framework-permission.impl",
@@ -474,12 +475,14 @@ java_library {
         "android.hardware.radio-V1.3-java",
         "android.hardware.radio-V1.4-java",
         "android.hardware.radio-V1.5-java",
+        "android.hardware.radio-V1.6-java",
         "android.hardware.thermal-V1.0-java-constants",
         "android.hardware.thermal-V1.0-java",
         "android.hardware.thermal-V1.1-java",
         "android.hardware.thermal-V2.0-java",
         "android.hardware.tv.input-V1.0-java-constants",
         "android.hardware.tv.tuner-V1.0-java-constants",
+        "android.hardware.tv.tuner-V1.1-java-constants",
         "android.hardware.usb-V1.0-java-constants",
         "android.hardware.usb-V1.1-java-constants",
         "android.hardware.usb-V1.2-java-constants",
@@ -547,6 +550,7 @@ java_library {
     exclude_srcs: ["core/java/android/content/pm/AndroidTestBaseUpdater.java"],
     aidl: {
         generate_get_transaction_name: true,
+        local_include_dirs: ["media/aidl"],
     },
     dxflags: [
         "--core-library",
@@ -583,6 +587,7 @@ java_library {
         // in favor of an API stubs dependency in java_library "framework" below.
         "mimemap",
         "mediatranscoding_aidl_interface-java",
+        "soundtrigger_middleware-aidl-java",
     ],
     // For backwards compatibility.
     stem: "framework",
@@ -595,6 +600,13 @@ java_library {
         "//frameworks/base/apex/jobscheduler/framework",
         "//frameworks/base/packages/Tethering/tests/unit",
     ],
+    errorprone: {
+        javacflags: [
+            "-Xep:AndroidFrameworkBinderIdentity:ERROR",
+            "-Xep:AndroidFrameworkCompatChange:ERROR",
+            "-Xep:AndroidFrameworkUid:ERROR",
+        ],
+    },
 }
 
 // This "framework" module is NOT installed to the device. It's
@@ -613,8 +625,7 @@ java_library {
     static_libs: [
         "app-compat-annotations",
         "framework-minus-apex",
-        // TODO(b/146218515): should be removed
-        "framework-appsearch",
+        "framework-appsearch.impl", // TODO(b/146218515): should be removed
         "framework-updatable-stubs-module_libs_api",
     ],
     sdk_version: "core_platform",
@@ -786,7 +797,6 @@ filegroup {
     name: "framework-services-net-module-wifi-shared-srcs",
     srcs: [
         "core/java/android/net/DhcpResults.java",
-        "core/java/android/net/util/IpUtils.java",
         "core/java/android/util/LocalLog.java",
     ],
 }
@@ -1346,7 +1356,7 @@ droidstubs {
     },
     libs: [
         "framework-annotations-lib",
-        "android.hardware.radio-V1.5-java",
+        "android.hardware.radio-V1.6-java",
     ],
     check_api: {
         current: {
