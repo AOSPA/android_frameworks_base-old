@@ -24,4 +24,7 @@
     <string-array name="config_vendorPlatformSignatures">
     </string-array>
 
+    <!-- Default value for Horizon light color (Blue) -->
+    <integer name="config_AmbientPulseLightColor">0x3980FF</integer>
+
 </resources>
