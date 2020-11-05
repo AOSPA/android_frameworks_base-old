@@ -118,4 +118,7 @@
     <!-- Enforce DisplayModeDirector to select user preferred resolution -->
     <java-symbol type="bool" name="config_forceToUseSelectedResolution" />
 
+    <!-- Horizon Light -->
+    <java-symbol type="integer" name="config_AmbientPulseLightColor" />
+
 </resources>

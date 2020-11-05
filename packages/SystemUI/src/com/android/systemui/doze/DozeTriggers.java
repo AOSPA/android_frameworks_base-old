@@ -34,6 +34,7 @@ import android.os.Looper;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.text.format.Formatter;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
@@ -630,7 +631,9 @@ public class DozeTriggers implements DozeMachine.Part {
                     runIfNotNull(onPulseSuppressedListener);
                     return;
                 }
-
+            Settings.System.putIntForUser(mContext.getContentResolver(),
+                    Settings.System.PULSE_TRIGGER_REASON, reason,
+                    UserHandle.USER_CURRENT);
                 mMachine.requestPulse(reason);
             }
         }, !mDozeParameters.getProxCheckBeforePulse() || performedProxCheck, reason);
