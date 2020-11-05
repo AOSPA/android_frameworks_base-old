@@ -59,6 +59,7 @@ import java.util.function.Consumer;
  * manager.
  */
 public class ImsMmTelManager implements RegistrationManager {
+    private static final String TAG = "ImsMmTelManager";
 
     /**
      * @hide
@@ -160,7 +161,7 @@ public class ImsMmTelManager implements RegistrationManager {
             public void onCapabilitiesStatusChanged(int config) {
                 if (mLocalCallback == null) return;
 
-                long callingIdentity = Binder.clearCallingIdentity();
+                final long callingIdentity = Binder.clearCallingIdentity();
                 try {
                     mExecutor.execute(() -> mLocalCallback.onCapabilitiesStatusChanged(
                             new MmTelFeature.MmTelCapabilities(config)));
@@ -809,7 +810,7 @@ public class ImsMmTelManager implements RegistrationManager {
         }
 
         try {
-            getITelephony().isMmTelCapabilitySupported(mSubId, new IIntegerConsumer.Stub() {
+            iTelephony.isMmTelCapabilitySupported(mSubId, new IIntegerConsumer.Stub() {
                 @Override
                 public void accept(int result) {
                     executor.execute(() -> callback.accept(result == 1));

@@ -44,6 +44,7 @@ import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.OsuProvider;
 import android.net.wifi.hotspot2.PasspointConfiguration;
 import android.net.wifi.hotspot2.ProvisioningCallback;
+import android.net.wifi.util.SdkLevelUtil;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -981,9 +982,11 @@ public class WifiManager {
      * This can be as a result of adding/updating/deleting a network.
      * <br />
      * {@link #EXTRA_CHANGE_REASON} contains whether the configuration was added/changed/removed.
-     * {@link #EXTRA_WIFI_CONFIGURATION} is never set starting in Android 11.
+     * {@link #EXTRA_WIFI_CONFIGURATION} is never set beginning in
+     * {@link android.os.Build.VERSION_CODES#R}.
      * {@link #EXTRA_MULTIPLE_NETWORKS_CHANGED} is set for backwards compatibility reasons, but
-     * its value is always true, even if only a single network changed.
+     * its value is always true beginning in {@link android.os.Build.VERSION_CODES#R}, even if only
+     * a single network changed.
      * <br />
      * The {@link android.Manifest.permission#ACCESS_WIFI_STATE ACCESS_WIFI_STATE} permission is
      * required to receive this broadcast.
@@ -997,17 +1000,22 @@ public class WifiManager {
      * The lookup key for a {@link android.net.wifi.WifiConfiguration} object representing
      * the changed Wi-Fi configuration when the {@link #CONFIGURED_NETWORKS_CHANGED_ACTION}
      * broadcast is sent.
-     * Note: this extra is never set starting in Android 11.
+     * @deprecated This extra is never set beginning in {@link android.os.Build.VERSION_CODES#R},
+     * regardless of the target SDK version. Use {@link #getConfiguredNetworks} to get the full list
+     * of configured networks.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String EXTRA_WIFI_CONFIGURATION = "wifiConfiguration";
     /**
      * Multiple network configurations have changed.
      * @see #CONFIGURED_NETWORKS_CHANGED_ACTION
-     * Note: this extra is always true starting in Android 11.
+     * @deprecated This extra's value is always true beginning in
+     * {@link android.os.Build.VERSION_CODES#R}, regardless of the target SDK version.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String EXTRA_MULTIPLE_NETWORKS_CHANGED = "multipleChanges";
     /**
@@ -1103,9 +1111,6 @@ public class WifiManager {
 
     /**
      * Broadcast intent action indicating that the link configuration changed on wifi.
-     * <br />Included Extras:
-     * <br />{@link #EXTRA_LINK_PROPERTIES}: {@link android.net.LinkProperties} object associated
-     * with the Wi-Fi network.
      * <br /> No permissions are required to listen to this broadcast.
      * @hide
      */
@@ -1121,8 +1126,12 @@ public class WifiManager {
      * Included in the {@link #ACTION_LINK_CONFIGURATION_CHANGED} broadcast.
      *
      * Retrieve with {@link android.content.Intent#getParcelableExtra(String)}.
+     *
+     * @deprecated this extra is no longer populated.
+     *
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String EXTRA_LINK_PROPERTIES = "android.net.wifi.extra.LINK_PROPERTIES";
 
@@ -2628,6 +2637,18 @@ public class WifiManager {
     }
 
     /**
+     * Query whether the device supports 2 or more concurrent stations (STA) or not.
+     *
+     * @return true if this device supports multiple STA concurrency, false otherwise.
+     */
+    public boolean isMultiStaConcurrencySupported() {
+        if (!SdkLevelUtil.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        return isFeatureSupported(WIFI_FEATURE_ADDITIONAL_STA);
+    }
+
+    /**
      * @deprecated Please use {@link android.content.pm.PackageManager#hasSystemFeature(String)}
      * with {@link android.content.pm.PackageManager#FEATURE_WIFI_RTT} and
      * {@link android.content.pm.PackageManager#FEATURE_WIFI_AWARE}.
@@ -2657,14 +2678,6 @@ public class WifiManager {
      */
     public boolean isPreferredNetworkOffloadSupported() {
         return isFeatureSupported(WIFI_FEATURE_PNO);
-    }
-
-    /**
-     * @return true if this adapter supports multiple simultaneous connections
-     * @hide
-     */
-    public boolean isAdditionalStaSupported() {
-        return isFeatureSupported(WIFI_FEATURE_ADDITIONAL_STA);
     }
 
     /**

@@ -79,6 +79,7 @@ import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -247,7 +248,7 @@ class ProcessRecord implements WindowProcessListener {
     long lastTopTime;           // The last time the process was in the TOP state or greater.
     boolean reportLowMemory;    // Set to true when waiting to report low mem
     boolean empty;              // Is this an empty background process?
-    private volatile boolean mCached;    // Is this a cached process?
+    private boolean mCached;    // Is this a cached process?
     String adjType;             // Debugging: primary thing impacting oom_adj.
     int adjTypeCode;            // Debugging: adj code to report to app.
     Object adjSource;           // Debugging: option dependent object.
@@ -819,10 +820,7 @@ class ProcessRecord implements WindowProcessListener {
     }
 
     void setCached(boolean cached) {
-        if (mCached != cached) {
-            mCached = cached;
-            mWindowProcessController.onProcCachedStateChanged(cached);
-        }
+        mCached = cached;
     }
 
     @Override
@@ -912,7 +910,7 @@ class ProcessRecord implements WindowProcessListener {
                     Slog.w(TAG, "scheduleCrash: trying to crash system process!");
                     return;
                 }
-                long ident = Binder.clearCallingIdentity();
+                final long ident = Binder.clearCallingIdentity();
                 try {
                     thread.scheduleCrash(message);
                 } catch (RemoteException e) {
@@ -1372,13 +1370,15 @@ class ProcessRecord implements WindowProcessListener {
      * {@param originatingToken} if you have one such originating token, this is useful for tracing
      * back the grant in the case of the notification token.
      */
-    void addAllowBackgroundActivityStartsToken(Binder entity, @Nullable IBinder originatingToken) {
-        if (entity == null) return;
-        mWindowProcessController.addAllowBackgroundActivityStartsToken(entity, originatingToken);
+    void addOrUpdateAllowBackgroundActivityStartsToken(Binder entity,
+            @Nullable IBinder originatingToken) {
+        Objects.requireNonNull(entity);
+        mWindowProcessController.addOrUpdateAllowBackgroundActivityStartsToken(entity,
+                originatingToken);
     }
 
     void removeAllowBackgroundActivityStartsToken(Binder entity) {
-        if (entity == null) return;
+        Objects.requireNonNull(entity);
         mWindowProcessController.removeAllowBackgroundActivityStartsToken(entity);
     }
 
@@ -1879,8 +1879,8 @@ class ProcessRecord implements WindowProcessListener {
 
     boolean getCachedIsHeavyWeight() {
         if (mCachedIsHeavyWeight == VALUE_INVALID) {
-            mCachedIsHeavyWeight = mService.mAtmInternal.isHeavyWeightProcess(
-                    getWindowProcessController()) ? VALUE_TRUE : VALUE_FALSE;
+            mCachedIsHeavyWeight = getWindowProcessController().isHeavyWeightProcess()
+                    ? VALUE_TRUE : VALUE_FALSE;
         }
         return mCachedIsHeavyWeight == VALUE_TRUE;
     }
@@ -1938,8 +1938,8 @@ class ProcessRecord implements WindowProcessListener {
         }
         callback.initialize(this, adj, foregroundActivities, procState, schedGroup, appUid, logUid,
                 processCurTop);
-        final int minLayer = getWindowProcessController().computeOomAdjFromActivities(
-                ProcessList.VISIBLE_APP_LAYER_MAX, callback);
+        final int minLayer = Math.min(ProcessList.VISIBLE_APP_LAYER_MAX,
+                getWindowProcessController().computeOomAdjFromActivities(callback));
 
         mCachedAdj = callback.adj;
         mCachedForegroundActivities = callback.foregroundActivities;

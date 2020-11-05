@@ -44,7 +44,6 @@ import com.android.server.location.util.SettingsHelper;
 import com.android.server.location.util.UserInfoHelper;
 import com.android.server.location.util.UserInfoHelper.UserListener;
 
-import java.io.PrintWriter;
 import java.util.Collection;
 import java.util.Objects;
 
@@ -230,7 +229,7 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
      */
     protected void addListener(TRequest request, CallerIdentity callerIdentity,
             TListener listener) {
-        long identity = Binder.clearCallingIdentity();
+        final long identity = Binder.clearCallingIdentity();
         try {
             addRegistration(listener.asBinder(),
                     new GnssListenerRegistration(request, callerIdentity, listener));
@@ -243,7 +242,7 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
      * Removes the given listener.
      */
     public void removeListener(TListener listener) {
-        long identity = Binder.clearCallingIdentity();
+        final long identity = Binder.clearCallingIdentity();
         try {
             removeRegistration(listener.asBinder());
         } finally {
@@ -260,7 +259,7 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
         CallerIdentity identity = registration.getIdentity();
         return registration.isPermitted()
                 && (registration.isForeground() || isBackgroundRestrictionExempt(identity))
-                && mUserInfoHelper.isCurrentUserId(identity.getUserId())
+                && (identity.isSystem() || mUserInfoHelper.isCurrentUserId(identity.getUserId()))
                 && mLocationManagerInternal.isProviderEnabledForUser(GPS_PROVIDER,
                 identity.getUserId())
                 && !mSettingsHelper.isLocationPackageBlacklisted(identity.getUserId(),
@@ -361,11 +360,11 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
     }
 
     @Override
-    protected void dumpServiceState(PrintWriter pw) {
+    protected String getServiceState() {
         if (!isServiceSupported()) {
-            pw.print("unsupported");
+            return "unsupported";
         } else {
-            super.dumpServiceState(pw);
+            return super.getServiceState();
         }
     }
 }

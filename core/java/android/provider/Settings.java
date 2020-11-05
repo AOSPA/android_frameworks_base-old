@@ -81,6 +81,7 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.MemoryIntArray;
 import android.view.Display;
+import android.view.WindowManager.LayoutParams;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
@@ -324,6 +325,21 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_ACCESSIBILITY_DETAILS_SETTINGS =
             "android.settings.ACCESSIBILITY_DETAILS_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of Reduce Bright Colors.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_REDUCE_BRIGHT_COLORS_SETTINGS =
+            "android.settings.REDUCE_BRIGHT_COLORS_SETTINGS";
 
     /**
      * Activity Action: Show settings to control access to usage information.
@@ -3569,6 +3585,9 @@ public final class Settings {
             if (outConfig.fontScale < 0) {
                 outConfig.fontScale = DEFAULT_FONT_SCALE;
             }
+            outConfig.forceBoldText = Settings.Secure.getIntForUser(
+                    cr, Settings.Secure.FORCE_BOLD_TEXT, Configuration.FORCE_BOLD_TEXT_NO,
+                    userHandle);
 
             final String localeValue =
                     Settings.System.getStringForUser(cr, SYSTEM_LOCALES, userHandle);
@@ -3599,6 +3618,7 @@ public final class Settings {
             if (!inoutConfig.userSetLocale && !inoutConfig.getLocales().isEmpty()) {
                 inoutConfig.clearLocales();
             }
+            inoutConfig.forceBoldText = Configuration.FORCE_BOLD_TEXT_UNDEFINED;
         }
 
         /**
@@ -3622,7 +3642,11 @@ public final class Settings {
                             DEFAULT_OVERRIDEABLE_BY_RESTORE);
         }
 
-        /** @hide */
+        /**
+         * Convenience function for checking if settings should be overwritten with config changes.
+         * @see #putConfigurationForUser(ContentResolver, Configuration, int)
+         * @hide
+         */
         public static boolean hasInterestingConfigurationChanges(int changes) {
             return (changes & ActivityInfo.CONFIG_FONT_SCALE) != 0 ||
                     (changes & ActivityInfo.CONFIG_LOCALE) != 0;
@@ -6814,6 +6838,12 @@ public final class Settings {
         /**
          * Whether to draw text in bold.
          *
+         * <p>Values:
+         *  1 - Text is not displayed in bold. (Default)
+         *  2 - Text is displayed in bold.
+         *
+         * @see Configuration#FORCE_BOLD_TEXT_NO
+         * @see Configuration#FORCE_BOLD_TEXT_YES
          * @hide
          */
         public static final String FORCE_BOLD_TEXT = "force_bold_text";
@@ -7125,6 +7155,33 @@ public final class Settings {
          */
         public static final String ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS =
                 "accessibility_interactive_ui_timeout_ms";
+
+
+        /**
+         * Setting that specifies whether Reduce Bright Colors, or brightness dimming by color
+         * adjustment, is enabled.
+         *
+         * @hide
+         */
+        public static final String REDUCE_BRIGHT_COLORS_ACTIVATED =
+                "reduce_bright_colors_activated";
+
+        /**
+         * Setting that specifies the level of Reduce Bright Colors in intensity. The range is
+         * [0, 100].
+         *
+         * @hide
+         */
+        public static final String REDUCE_BRIGHT_COLORS_LEVEL =
+                "reduce_bright_colors_level";
+
+        /**
+         * Setting that specifies whether Reduce Bright Colors should persist across reboots.
+         *
+         * @hide
+         */
+        public static final String REDUCE_BRIGHT_COLORS_PERSIST_ACROSS_REBOOTS =
+                "reduce_bright_colors_persist_across_reboots";
 
         /**
          * List of the enabled print services.
@@ -7674,6 +7731,8 @@ public final class Settings {
          * @hide
          */
         @UnsupportedAppUsage
+        @TestApi
+        @SuppressLint("NoSettingsProvider")
         public static final String SELECTED_SPELL_CHECKER = "selected_spell_checker";
 
         /**
@@ -7684,6 +7743,8 @@ public final class Settings {
          * @hide
          */
         @UnsupportedAppUsage
+        @TestApi
+        @SuppressLint("NoSettingsProvider")
         public static final String SELECTED_SPELL_CHECKER_SUBTYPE =
                 "selected_spell_checker_subtype";
 
@@ -7963,6 +8024,12 @@ public final class Settings {
          * @hide
          */
         public static final String UI_NIGHT_MODE_OVERRIDE_ON = "ui_night_mode_override_on";
+
+        /**
+         * The last computed night mode bool the last time the phone was on
+         * @hide
+         */
+        public static final String UI_NIGHT_MODE_LAST_COMPUTED = "ui_night_mode_last_computed";
 
         /**
          * The current night mode that has been overridden to turn off by the system.  Owned
@@ -9032,6 +9099,7 @@ public final class Settings {
          * @see#ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
          * @hide
          */
+        @TestApi
         public static final String ACCESSIBILITY_MAGNIFICATION_MODE =
                 "accessibility_magnification_mode";
 
@@ -9039,12 +9107,14 @@ public final class Settings {
          * Magnification mode value that magnifies whole display.
          * @hide
          */
+        @TestApi
         public static final int ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN = 0x1;
 
         /**
          * Magnification mode value that magnifies magnify particular region in a window
          * @hide
          */
+        @TestApi
         public static final int ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW = 0x2;
 
         /**
@@ -9052,6 +9122,7 @@ public final class Settings {
          * region in a window.
          * @hide
          */
+        @TestApi
         public static final int ACCESSIBILITY_MAGNIFICATION_MODE_ALL = 0x3;
 
         /**
@@ -9063,6 +9134,7 @@ public final class Settings {
          * @see#ACCESSIBILITY_MAGNIFICATION_MODE_ALL
          * @hide
          */
+        @TestApi
         public static final String ACCESSIBILITY_MAGNIFICATION_CAPABILITY =
                 "accessibility_magnification_capability";
 
@@ -9087,6 +9159,22 @@ public final class Settings {
                 ENABLED_NOTIFICATION_ASSISTANT,
                 ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES
         };
+
+        /**
+         * How long Assistant handles have enabled in milliseconds.
+         *
+         * @hide
+         */
+        public static final String ASSIST_HANDLES_LEARNING_TIME_ELAPSED_MILLIS =
+                "reminder_exp_learning_time_elapsed";
+
+        /**
+         * How many times the Assistant has been triggered using the touch gesture.
+         *
+         * @hide
+         */
+        public static final String ASSIST_HANDLES_LEARNING_EVENT_COUNT =
+                "reminder_exp_learning_event_count";
 
         /**
          * These entries are considered common between the personal and the managed profile,
@@ -9696,6 +9784,14 @@ public final class Settings {
          */
         public static final String DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR =
                 "render_shadows_in_compositor";
+
+        /**
+         * If true, submit buffers using blast in SurfaceView.
+         * (0 = false, 1 = true)
+         * @hide
+         */
+        public static final String DEVELOPMENT_USE_BLAST_ADAPTER_SV =
+                "use_blast_adapter_sv";
 
        /**
         * Whether user has enabled development settings.
@@ -11821,29 +11917,6 @@ public final class Settings {
         public static final String POWER_MANAGER_CONSTANTS = "power_manager_constants";
 
         /**
-         * Alarm manager specific settings.
-         * This is encoded as a key=value list, separated by commas. Ex:
-         *
-         * "min_futurity=5000,allow_while_idle_short_time=4500"
-         *
-         * The following keys are supported:
-         *
-         * <pre>
-         * min_futurity                         (long)
-         * min_interval                         (long)
-         * allow_while_idle_short_time          (long)
-         * allow_while_idle_long_time           (long)
-         * allow_while_idle_whitelist_duration  (long)
-         * </pre>
-         *
-         * <p>
-         * Type: string
-         * @hide
-         * @see com.android.server.AlarmManagerService.Constants
-         */
-        public static final String ALARM_MANAGER_CONSTANTS = "alarm_manager_constants";
-
-        /**
          * Job scheduler QuotaController specific settings.
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -12329,6 +12402,15 @@ public final class Settings {
          */
         public static final String GLOBAL_SETTINGS_ANGLE_ALLOWLIST =
                 "angle_allowlist";
+
+        /**
+         * Lists of ANGLE EGL features for debugging.
+         * Each list of features is separated by a comma, each feature in each list is separated by
+         * a colon.
+         * e.g. feature1:feature2:feature3,feature1:feature3:feature5
+         * @hide
+         */
+        public static final String ANGLE_EGL_FEATURES = "angle_egl_features";
 
         /**
          * Show the "ANGLE In Use" dialog box to the user when ANGLE is the OpenGL driver.
@@ -13343,6 +13425,7 @@ public final class Settings {
          *
          * @hide
          */
+        @TestApi
         public static final String HIDDEN_API_POLICY = "hidden_api_policy";
 
         /**
@@ -13398,15 +13481,6 @@ public final class Settings {
          */
         public static final String POWER_BUTTON_VERY_LONG_PRESS =
                 "power_button_very_long_press";
-
-        /**
-         * Global settings that shouldn't be persisted.
-         *
-         * @hide
-         */
-        public static final String[] TRANSIENT_SETTINGS = {
-                LOCATION_GLOBAL_KILL_SWITCH,
-        };
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to
@@ -14478,6 +14552,66 @@ public final class Settings {
          */
         public static final String NR_NSA_TRACKING_SCREEN_OFF_MODE =
                 "nr_nsa_tracking_screen_off_mode";
+
+        /**
+         * Whether to show People Space.
+         * Values are:
+         * 0: Disabled (default)
+         * 1: Enabled
+         * @hide
+         */
+        public static final String SHOW_PEOPLE_SPACE = "show_people_space";
+
+        /**
+         * Whether to show new lockscreen & AOD UI.
+         * Values are:
+         * 0: Disabled (default)
+         * 1: Enabled
+         * @hide
+         */
+        public static final String SHOW_NEW_LOCKSCREEN = "show_new_lockscreen";
+
+        /**
+         * Block untrusted touches mode.
+         *
+         * Can be one of:
+         * <ul>
+         *      <li>0 = {@link BlockUntrustedTouchesMode#DISABLED}: Feature is off.
+         *      <li>1 = {@link BlockUntrustedTouchesMode#PERMISSIVE}: Untrusted touches are flagged
+         *          but not blocked
+         *      <li>2 = {@link BlockUntrustedTouchesMode#BLOCK}: Untrusted touches are blocked
+         * </ul>
+         *
+         * @hide
+         */
+        public static final String BLOCK_UNTRUSTED_TOUCHES_MODE = "block_untrusted_touches";
+
+        /**
+         * The maximum allowed obscuring opacity by UID to propagate touches.
+         *
+         * For certain window types (eg. SAWs), the decision of honoring {@link LayoutParams
+         * #FLAG_NOT_TOUCHABLE} or not depends on the combined obscuring opacity of the windows
+         * above the touch-consuming window.
+         *
+         * For a certain UID:
+         * <ul>
+         *     <li>If it's the same as the UID of the touch-consuming window, allow it to propagate
+         *     the touch.
+         *     <li>Otherwise take all its windows of eligible window types above the touch-consuming
+         *     window, compute their combined obscuring opacity considering that {@code
+         *     opacity(A, B) = 1 - (1 - opacity(A))*(1 - opacity(B))}. If the computed value is
+         *     lesser than or equal to this setting and there are no other windows preventing the
+         *     touch, allow the UID to propagate the touch.
+         * </ul>
+         *
+         * @see android.hardware.input.InputManager#getMaximumObscuringOpacityForTouch(Context)
+         * @see android.hardware.input.InputManager#setMaximumObscuringOpacityForTouch(Context,
+         * float)
+         *
+         * @hide
+         */
+        public static final String MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH =
+                "maximum_obscuring_opacity_for_touch";
     }
 
     /**

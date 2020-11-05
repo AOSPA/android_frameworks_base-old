@@ -86,6 +86,7 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.qs.SecureSetting;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 
@@ -125,6 +126,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private final TunerService mTunerService;
     private DisplayManager.DisplayListener mDisplayListener;
     private CameraAvailabilityListener mCameraListener;
+    private final UserTracker mUserTracker;
 
     //TODO: These are piecemeal being updated to Points for now to support non-square rounded
     // corners. for now it is only supposed when reading the intrinsic size from the drawables with
@@ -202,11 +204,13 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     public ScreenDecorations(Context context,
             @Main Handler handler,
             BroadcastDispatcher broadcastDispatcher,
-            TunerService tunerService) {
+            TunerService tunerService,
+            UserTracker userTracker) {
         super(context);
         mMainHandler = handler;
         mBroadcastDispatcher = broadcastDispatcher;
         mTunerService = tunerService;
+        mUserTracker = userTracker;
     }
 
     @Override
@@ -310,7 +314,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             // Watch color inversion and invert the overlay as needed.
             if (mColorInversionSetting == null) {
                 mColorInversionSetting = new SecureSetting(mContext, mHandler,
-                        Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED) {
+                        Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED,
+                        mUserTracker.getUserId()) {
                     @Override
                     protected void handleValueChanged(int value, boolean observedChange) {
                         updateColorInversion(value);

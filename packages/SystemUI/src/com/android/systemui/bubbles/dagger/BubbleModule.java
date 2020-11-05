@@ -19,13 +19,15 @@ package com.android.systemui.bubbles.dagger;
 import android.app.INotificationManager;
 import android.content.Context;
 import android.content.pm.LauncherApps;
+import android.os.Handler;
 import android.view.WindowManager;
 
+import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.bubbles.BubbleController;
-import com.android.systemui.bubbles.BubbleData;
-import com.android.systemui.bubbles.BubbleDataRepository;
+import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
@@ -39,7 +41,9 @@ import com.android.systemui.statusbar.notification.interruption.NotificationInte
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ZenModeController;
-import com.android.systemui.util.FloatingContentCoordinator;
+import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.WindowManagerShellWrapper;
+import com.android.wm.shell.common.FloatingContentCoordinator;
 
 import dagger.Module;
 import dagger.Provides;
@@ -52,12 +56,11 @@ public interface BubbleModule {
      */
     @SysUISingleton
     @Provides
-    static BubbleController newBubbleController(
+    static Bubbles newBubbleController(
             Context context,
             NotificationShadeWindowController notificationShadeWindowController,
             StatusBarStateController statusBarStateController,
             ShadeController shadeController,
-            BubbleData data,
             ConfigurationController configurationController,
             NotificationInterruptStateProvider interruptionStateProvider,
             ZenModeController zenModeController,
@@ -68,18 +71,20 @@ public interface BubbleModule {
             FeatureFlags featureFlags,
             DumpManager dumpManager,
             FloatingContentCoordinator floatingContentCoordinator,
-            BubbleDataRepository bubbleDataRepository,
             SysUiState sysUiState,
             INotificationManager notifManager,
             IStatusBarService statusBarService,
             WindowManager windowManager,
-            LauncherApps launcherApps) {
-        return new BubbleController(
+            WindowManagerShellWrapper windowManagerShellWrapper,
+            LauncherApps launcherApps,
+            UiEventLogger uiEventLogger,
+            @Main Handler mainHandler,
+            ShellTaskOrganizer organizer) {
+        return BubbleController.create(
                 context,
                 notificationShadeWindowController,
                 statusBarStateController,
                 shadeController,
-                data,
                 null /* synchronizer */,
                 configurationController,
                 interruptionStateProvider,
@@ -91,11 +96,14 @@ public interface BubbleModule {
                 featureFlags,
                 dumpManager,
                 floatingContentCoordinator,
-                bubbleDataRepository,
                 sysUiState,
                 notifManager,
                 statusBarService,
                 windowManager,
-                launcherApps);
+                windowManagerShellWrapper,
+                launcherApps,
+                uiEventLogger,
+                mainHandler,
+                organizer);
     }
 }

@@ -119,8 +119,8 @@ import com.android.internal.util.IntPair;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.accessibility.magnification.FullScreenMagnificationController;
+import com.android.server.accessibility.magnification.MagnificationController;
 import com.android.server.accessibility.magnification.MagnificationGestureHandler;
-import com.android.server.accessibility.magnification.MagnificationTransitionController;
 import com.android.server.accessibility.magnification.WindowMagnificationManager;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
@@ -219,15 +219,11 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     // Lazily initialized - access through getSystemActionPerfomer()
     private SystemActionPerformer mSystemActionPerformer;
 
-    private FullScreenMagnificationController mFullScreenMagnificationController;
-
     private InteractionBridge mInteractionBridge;
 
     private AlertDialog mEnableTouchExplorationDialog;
 
     private AccessibilityInputFilter mInputFilter;
-
-    private WindowMagnificationManager mWindowMagnificationMgr;
 
     private boolean mHasInputFilter;
 
@@ -259,7 +255,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
     private Point mTempPoint = new Point();
     private boolean mIsAccessibilityButtonShown;
-    private MagnificationTransitionController mMagnificationTransitionController;
+    private MagnificationController mMagnificationController;
 
     private AccessibilityUserState getCurrentUserStateLocked() {
         return getUserStateLocked(mCurrentUserId);
@@ -292,7 +288,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             SystemActionPerformer systemActionPerformer,
             AccessibilityWindowManager a11yWindowManager,
             AccessibilityDisplayListener a11yDisplayListener,
-            WindowMagnificationManager windowMagnificationMgr) {
+            MagnificationController magnificationController) {
         mContext = context;
         mPowerManager =  (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
         mWindowManagerService = LocalServices.getService(WindowManagerInternal.class);
@@ -303,8 +299,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         mSystemActionPerformer = systemActionPerformer;
         mA11yWindowManager = a11yWindowManager;
         mA11yDisplayListener = a11yDisplayListener;
-        mWindowMagnificationMgr = windowMagnificationMgr;
-        mMagnificationTransitionController = new MagnificationTransitionController(this, mLock);
+        mMagnificationController = magnificationController;
         init();
     }
 
@@ -324,7 +319,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         mA11yWindowManager = new AccessibilityWindowManager(mLock, mMainHandler,
                 mWindowManagerService, this, mSecurityPolicy, this);
         mA11yDisplayListener = new AccessibilityDisplayListener(mContext, mMainHandler);
-        mMagnificationTransitionController = new MagnificationTransitionController(this, mLock);
+        mMagnificationController = new MagnificationController(this, mLock, mContext);
         init();
     }
 
@@ -946,10 +941,19 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             if (resolvedUserId != mCurrentUserId) {
                 return null;
             }
-            if (mA11yWindowManager.findA11yWindowInfoByIdLocked(windowId) == null) {
+            final AccessibilityWindowInfo accessibilityWindowInfo = mA11yWindowManager
+                    .findA11yWindowInfoByIdLocked(windowId);
+            if (accessibilityWindowInfo == null) {
                 return null;
             }
-            return mA11yWindowManager.getWindowTokenForUserAndWindowIdLocked(userId, windowId);
+            // We use AccessibilityWindowInfo#getId instead of windowId. When the windowId comes
+            // from an embedded hierarchy, the system can't find correct window token because
+            // embedded hierarchy doesn't have windowInfo. Calling
+            // AccessibilityWindowManager#findA11yWindowInfoByIdLocked can look for its parent's
+            // windowInfo, so it is safer to use AccessibilityWindowInfo#getId
+            // to get window token to find real window.
+            return mA11yWindowManager.getWindowTokenForUserAndWindowIdLocked(userId,
+                    accessibilityWindowInfo.getId());
         }
     }
 
@@ -1195,9 +1199,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // The user changed.
             mCurrentUserId = userId;
 
-            if (mWindowMagnificationMgr != null) {
-                mWindowMagnificationMgr.setUserId(mCurrentUserId);
-            }
+            mMagnificationController.updateUserIdIfNeeded(mCurrentUserId);
             AccessibilityUserState userState = getCurrentUserStateLocked();
 
             readConfigurationForUserStateLocked(userState);
@@ -1554,7 +1556,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         if (fallBackMagnificationModeSettingsLocked(userState)) {
             return;
         }
-        mMagnificationTransitionController.transitionMagnificationModeLocked(
+        mMagnificationController.transitionMagnificationModeLocked(
                 Display.DEFAULT_DISPLAY, userState.getMagnificationModeLocked(),
                 this::onMagnificationTransitionEndedLocked);
     }
@@ -2080,9 +2082,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     }
 
     private void updateAccessibilityEnabledSettingLocked(AccessibilityUserState userState) {
-        final long identity = Binder.clearCallingIdentity();
         final boolean isA11yEnabled = mUiAutomationManager.isUiAutomationRunningLocked()
                 || userState.isHandlingAccessibilityEventsLocked();
+        final long identity = Binder.clearCallingIdentity();
         try {
             Settings.Secure.putIntForUser(mContext.getContentResolver(),
                     Settings.Secure.ACCESSIBILITY_ENABLED,
@@ -2310,13 +2312,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             return;
         }
 
-        if (mFullScreenMagnificationController != null) {
-            mFullScreenMagnificationController.setUserId(userState.mUserId);
-        }
-
         if (mUiAutomationManager.suppressingAccessibilityServicesLocked()
-                && mFullScreenMagnificationController != null) {
-            mFullScreenMagnificationController.unregisterAll();
+                && mMagnificationController.isFullScreenMagnificationControllerInitialized()) {
+            getFullScreenMagnificationController().unregisterAll();
             return;
         }
 
@@ -2339,8 +2337,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             final int displayId = display.getDisplayId();
             if (userHasListeningMagnificationServicesLocked(userState, displayId)) {
                 getFullScreenMagnificationController().register(displayId);
-            } else if (mFullScreenMagnificationController != null) {
-                mFullScreenMagnificationController.unregister(displayId);
+            } else if (mMagnificationController.isFullScreenMagnificationControllerInitialized()) {
+                getFullScreenMagnificationController().unregister(displayId);
             }
         }
     }
@@ -2395,8 +2393,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 int numServices = services.size();
                 for (int i = 0; i < numServices; i++) {
                     if (services.get(i).isCapturingFingerprintGestures()) {
-                        final long identity = Binder.clearCallingIdentity();
                         IFingerprintService service = null;
+                        final long identity = Binder.clearCallingIdentity();
                         try {
                             service = IFingerprintService.Stub.asInterface(
                                     ServiceManager.getService(Context.FINGERPRINT_SERVICE));
@@ -2990,10 +2988,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
      */
     public WindowMagnificationManager getWindowMagnificationMgr() {
         synchronized (mLock) {
-            if (mWindowMagnificationMgr == null) {
-                mWindowMagnificationMgr = new WindowMagnificationManager(mContext, mCurrentUserId);
-            }
-            return mWindowMagnificationMgr;
+            return mMagnificationController.getWindowMagnificationMgr();
         }
     }
 
@@ -3060,12 +3055,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     @Override
     public FullScreenMagnificationController getFullScreenMagnificationController() {
         synchronized (mLock) {
-            if (mFullScreenMagnificationController == null) {
-                mFullScreenMagnificationController = new FullScreenMagnificationController(mContext,
-                        this, mLock);
-                mFullScreenMagnificationController.setUserId(mCurrentUserId);
-            }
-            return mFullScreenMagnificationController;
+            return mMagnificationController.getFullScreenMagnificationController();
         }
     }
 
@@ -3307,9 +3297,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     }
                 }
             }
-            if (mFullScreenMagnificationController != null) {
-                mFullScreenMagnificationController.onDisplayRemoved(displayId);
-            }
+            mMagnificationController.onDisplayRemoved(displayId);
             mA11yWindowManager.stopTrackingWindows(displayId);
         }
 

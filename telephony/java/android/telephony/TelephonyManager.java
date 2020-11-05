@@ -85,8 +85,6 @@ import android.telephony.emergency.EmergencyNumber;
 import android.telephony.emergency.EmergencyNumber.EmergencyServiceCategories;
 import android.telephony.ims.ImsMmTelManager;
 import android.telephony.ims.aidl.IImsConfig;
-import android.telephony.ims.aidl.IImsMmTelFeature;
-import android.telephony.ims.aidl.IImsRcsFeature;
 import android.telephony.ims.aidl.IImsRegistration;
 import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
@@ -94,11 +92,12 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
 
-import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.IBooleanConsumer;
+import com.android.internal.telephony.ICallForwardingInfoCallback;
+import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.IOns;
 import com.android.internal.telephony.IPhoneSubInfo;
@@ -1886,8 +1885,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -1939,8 +1938,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -2009,8 +2008,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -2087,8 +2086,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -2125,8 +2124,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -2209,8 +2208,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -2246,8 +2245,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -2808,7 +2807,11 @@ public class TelephonyManager {
     /** Current network is LTE_CA {@hide} */
     @UnsupportedAppUsage
     public static final int NETWORK_TYPE_LTE_CA = TelephonyProtoEnums.NETWORK_TYPE_LTE_CA; // = 19.
-    /** Current network is NR(New Radio) 5G. */
+    /**
+     * Current network is NR (New Radio) 5G.
+     * This will only be returned for 5G SA.
+     * For 5G NSA, the network type will be {@link #NETWORK_TYPE_LTE}.
+     */
     public static final int NETWORK_TYPE_NR = TelephonyProtoEnums.NETWORK_TYPE_NR; // 20.
 
     private static final @NetworkType int[] NETWORK_TYPES = {
@@ -3724,8 +3727,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -3762,8 +3765,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -4017,8 +4020,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -4056,8 +4059,8 @@ public class TelephonyManager {
      *
      * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
      * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="c"> Best practices for unique identifiers</a>). This method can be invoked if one of
-     * the following requirements is met:
+     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
+     * method can be invoked if one of the following requirements is met:
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
@@ -7384,80 +7387,6 @@ public class TelephonyManager {
     }
 
     /**
-     * Returns the {@link IImsMmTelFeature} that corresponds to the given slot Id and MMTel
-     * feature or {@link null} if the service is not available. If an MMTelFeature is available, the
-     * {@link IImsServiceFeatureCallback} callback is registered as a listener for feature updates.
-     * @param slotIndex The SIM slot that we are requesting the {@link IImsMmTelFeature} for.
-     * @param callback Listener that will send updates to ImsManager when there are updates to
-     * ImsServiceController.
-     * @return {@link IImsMmTelFeature} interface for the feature specified or {@code null} if
-     * it is unavailable.
-     * @hide
-     */
-    public @Nullable IImsMmTelFeature getImsMmTelFeatureAndListen(int slotIndex,
-            IImsServiceFeatureCallback callback) {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null) {
-                return telephony.getMmTelFeatureAndListen(slotIndex, callback);
-            }
-        } catch (RemoteException e) {
-            Rlog.e(TAG, "getImsMmTelFeatureAndListen, RemoteException: "
-                    + e.getMessage());
-        }
-        return null;
-    }
-
-    /**
-     * Returns the {@link IImsRcsFeature} that corresponds to the given slot Id and RCS
-     * feature for emergency calling or {@link null} if the service is not available. If an
-     * RcsFeature is available, the {@link IImsServiceFeatureCallback} callback is registered as a
-     * listener for feature updates.
-     * @param slotIndex The SIM slot that we are requesting the {@link IImsRcsFeature} for.
-     * @param callback Listener that will send updates to ImsManager when there are updates to
-     * ImsServiceController.
-     * @return {@link IImsRcsFeature} interface for the feature specified or {@code null} if
-     * it is unavailable.
-     * @hide
-     */
-    public @Nullable IImsRcsFeature getImsRcsFeatureAndListen(int slotIndex,
-            IImsServiceFeatureCallback callback) {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null) {
-                return telephony.getRcsFeatureAndListen(slotIndex, callback);
-            }
-        } catch (RemoteException e) {
-            Rlog.e(TAG, "getImsRcsFeatureAndListen, RemoteException: "
-                    + e.getMessage());
-        }
-        return null;
-    }
-
-    /**
-     * Unregister a IImsServiceFeatureCallback previously associated with an ImsFeature through
-     * {@link #getImsMmTelFeatureAndListen(int, IImsServiceFeatureCallback)} or
-     * {@link #getImsRcsFeatureAndListen(int, IImsServiceFeatureCallback)}.
-     * @param slotIndex The SIM slot associated with the callback.
-     * @param featureType The {@link android.telephony.ims.feature.ImsFeature.FeatureType}
-     *                    associated with the callback.
-     * @param callback The callback to be unregistered.
-     * @hide
-     */
-    public void unregisterImsFeatureCallback(int slotIndex, int featureType,
-            IImsServiceFeatureCallback callback) {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null) {
-                telephony.unregisterImsFeatureCallback(slotIndex, featureType, callback);
-            }
-        } catch (RemoteException e) {
-            Rlog.e(TAG, "unregisterImsFeatureCallback, RemoteException: "
-                    + e.getMessage());
-        }
-    }
-
-    /**
      * @return the {@IImsRegistration} interface that corresponds with the slot index and feature.
      * @param slotIndex The SIM slot corresponding to the ImsService ImsRegistration is active for.
      * @param feature An integer indicating the feature that we wish to get the ImsRegistration for.
@@ -10474,19 +10403,25 @@ public class TelephonyManager {
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges})
      * and {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}.
+     *
+     * May return {@code null} when the subscription is inactive or when there was an error
+     * communicating with the phone process.
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(allOf = {
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.ACCESS_COARSE_LOCATION
     })
-    public ServiceState getServiceState() {
+    public @Nullable ServiceState getServiceState() {
         return getServiceStateForSubscriber(getSubId());
     }
 
     /**
      * Returns the service state information on specified subscription. Callers require
      * either READ_PRIVILEGED_PHONE_STATE or READ_PHONE_STATE to retrieve the information.
+     *
+     * May return {@code null} when the subscription is inactive or when there was an error
+     * communicating with the phone process.
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
@@ -10513,9 +10448,9 @@ public class TelephonyManager {
      * @param accountHandle The handle for the {@link PhoneAccount} for which to retrieve the
      * voicemail ringtone.
      * @return The URI for the ringtone to play when receiving a voicemail from a specific
-     * PhoneAccount.
+     * PhoneAccount. May be {@code null} if no ringtone is set.
      */
-    public Uri getVoicemailRingtoneUri(PhoneAccountHandle accountHandle) {
+    public @Nullable Uri getVoicemailRingtoneUri(PhoneAccountHandle accountHandle) {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
@@ -12885,7 +12820,7 @@ public class TelephonyManager {
      *  1) User data is turned on, or
      *  2) APN is un-metered for this subscription, or
      *  3) APN type is whitelisted. E.g. MMS is whitelisted if
-     *  {@link #setAlwaysAllowMmsData(boolean)} is turned on.
+     *  {@link #MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED} is enabled.
      *
      * @param apnType Value indicating the apn type. Apn types are defined in {@link ApnSetting}.
      * @return whether data is enabled for a apn type.
@@ -13026,218 +12961,402 @@ public class TelephonyManager {
     }
 
     /**
-     * Gets the voice call forwarding info {@link CallForwardingInfo}, given the call forward
-     * reason.
+     * Callback to be used with {@link #getCallForwarding}
+     * @hide
+     */
+    @SystemApi
+    public interface CallForwardingInfoCallback {
+        /**
+         * Indicates that the operation was successful.
+         */
+        int RESULT_SUCCESS = 0;
+
+        /**
+         * Indicates that setting or retrieving the call forwarding info failed with an unknown
+         * error.
+         */
+        int RESULT_ERROR_UNKNOWN = 1;
+
+        /**
+         * Indicates that call forwarding is not enabled because the recipient is not on a
+         * Fixed Dialing Number (FDN) list.
+         */
+        int RESULT_ERROR_FDN_CHECK_FAILURE = 2;
+
+        /**
+         * Indicates that call forwarding is not supported on the network at this time.
+         */
+        int RESULT_ERROR_NOT_SUPPORTED = 3;
+
+        /**
+         * Call forwarding errors
+         * @hide
+         */
+        @IntDef(prefix = { "RESULT_ERROR_" }, value = {
+                RESULT_ERROR_UNKNOWN,
+                RESULT_ERROR_NOT_SUPPORTED,
+                RESULT_ERROR_FDN_CHECK_FAILURE
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        @interface CallForwardingError{
+        }
+        /**
+         * Called when the call forwarding info is successfully retrieved from the network.
+         * @param info information about how calls are forwarded
+         */
+        void onCallForwardingInfoAvailable(@NonNull CallForwardingInfo info);
+
+        /**
+         * Called when there was an error retrieving the call forwarding information.
+         * @param error
+         */
+        void onError(@CallForwardingError int error);
+    }
+
+    /**
+     * Gets the voice call forwarding info for a given call forwarding reason.
      *
-     * @param callForwardingReason the call forwarding reasons
+     * This method queries the network for the currently set call forwarding configuration for the
+     * provided call forwarding reason. When the network has provided its response, the result will
+     * be supplied via the provided {@link Executor} on the provided
+     * {@link CallForwardingInfoCallback}.
+     *
+     * @param callForwardingReason the call forwarding reason to query.
+     * @param executor The executor on which to execute the callback once the result is ready.
+     * @param callback The callback the results should be delivered on.
      *
      * @throws IllegalArgumentException if callForwardingReason is not any of
-     * {@link CallForwardingInfo.REASON_UNCONDITIONAL}, {@link CallForwardingInfo.REASON_BUSY},
-     * {@link CallForwardingInfo.REASON_NO_REPLY}, {@link CallForwardingInfo.REASON_NOT_REACHABLE},
-     * {@link CallForwardingInfo.REASON_ALL}, {@link CallForwardingInfo.REASON_ALL_CONDITIONAL}
-     *
-     * @return {@link CallForwardingInfo} with the status {@link CallForwardingInfo#STATUS_ACTIVE}
-     * or {@link CallForwardingInfo#STATUS_INACTIVE} and the target phone number to forward calls
-     * to, if it's available. Otherwise, it will return a {@link CallForwardingInfo} with status
-     * {@link CallForwardingInfo#STATUS_UNKNOWN_ERROR},
-     * {@link CallForwardingInfo#STATUS_NOT_SUPPORTED},
-     * or {@link CallForwardingInfo#STATUS_FDN_CHECK_FAILURE} depending on the situation.
+     * {@link CallForwardingInfo#REASON_UNCONDITIONAL}, {@link CallForwardingInfo#REASON_BUSY},
+     * {@link CallForwardingInfo#REASON_NO_REPLY}, {@link CallForwardingInfo#REASON_NOT_REACHABLE},
+     * {@link CallForwardingInfo#REASON_ALL}, or {@link CallForwardingInfo#REASON_ALL_CONDITIONAL}
      *
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    @NonNull
-    public CallForwardingInfo getCallForwarding(@CallForwardingReason int callForwardingReason) {
+    @SystemApi
+    public void getCallForwarding(@CallForwardingReason int callForwardingReason,
+            @NonNull Executor executor, @NonNull CallForwardingInfoCallback callback) {
         if (callForwardingReason < CallForwardingInfo.REASON_UNCONDITIONAL
                 || callForwardingReason > CallForwardingInfo.REASON_ALL_CONDITIONAL) {
             throw new IllegalArgumentException("callForwardingReason is out of range");
         }
+
+        ICallForwardingInfoCallback internalCallback = new ICallForwardingInfoCallback.Stub() {
+            @Override
+            public void onCallForwardingInfoAvailable(CallForwardingInfo info) {
+                executor.execute(() ->
+                        Binder.withCleanCallingIdentity(() ->
+                                callback.onCallForwardingInfoAvailable(info)));
+            }
+
+            @Override
+            public void onError(int error) {
+                executor.execute(() ->
+                        Binder.withCleanCallingIdentity(() ->
+                                callback.onError(error)));
+            }
+        };
+
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.getCallForwarding(getSubId(), callForwardingReason);
+                telephony.getCallForwarding(getSubId(), callForwardingReason, internalCallback);
             }
         } catch (RemoteException ex) {
             Rlog.e(TAG, "getCallForwarding RemoteException", ex);
-        } catch (NullPointerException ex) {
-            Rlog.e(TAG, "getCallForwarding NPE", ex);
+            ex.rethrowAsRuntimeException();
         }
-        return new CallForwardingInfo(
-                CallForwardingInfo.STATUS_UNKNOWN_ERROR, 0 /* reason */, null /* number */,
-                        0 /* timeout */);
     }
 
     /**
-     * Sets the voice call forwarding info including status (enable/disable), call forwarding
-     * reason, the number to forward, and the timeout before the forwarding is attempted.
+     * Sets voice call forwarding behavior as described by the provided {@link CallForwardingInfo}.
      *
-     * @param callForwardingInfo {@link CallForwardingInfo} to setup the call forwarding.
-     * Enabling if {@link CallForwardingInfo#getStatus()} returns
-     * {@link CallForwardingInfo#STATUS_ACTIVE}; Disabling if
-     * {@link CallForwardingInfo#getStatus()} returns {@link CallForwardingInfo#STATUS_INACTIVE}.
+     * This method will enable call forwarding if the provided {@link CallForwardingInfo} returns
+     * {@code true} from its {@link CallForwardingInfo#isEnabled()} method, and disables call
+     * forwarding otherwise.
      *
-     * @throws IllegalArgumentException if any of the following for parameter callForwardingInfo:
-     * 0) it is {@code null}.
-     * 1) {@link CallForwardingInfo#getStatus()} returns neither
-     * {@link CallForwardingInfo#STATUS_ACTIVE} nor {@link CallForwardingInfo#STATUS_INACTIVE}.
-     * 2) {@link CallForwardingInfo#getReason()} is not any of
-     * {@link CallForwardingInfo.REASON_UNCONDITIONAL}, {@link CallForwardingInfo.REASON_BUSY},
-     * {@link CallForwardingInfo.REASON_NO_REPLY}, {@link CallForwardingInfo.REASON_NOT_REACHABLE},
-     * {@link CallForwardingInfo.REASON_ALL}, {@link CallForwardingInfo.REASON_ALL_CONDITIONAL}
-     * 3) {@link CallForwardingInfo#getNumber()} returns {@code null}.
-     * 4) {@link CallForwardingInfo#getTimeoutSeconds()} doesn't return a positive value.
+     * If you wish to be notified about the results of this operation, provide an {@link Executor}
+     * and {@link Consumer<Integer>} to be notified asynchronously when the operation completes.
      *
-     * @return {@code true} to indicate it was set successfully; {@code false} otherwise.
+     * @param callForwardingInfo Info about whether calls should be forwarded and where they
+     *                           should be forwarded to.
+     * @param executor The executor on which the listener will be called. Must be non-null if
+     *                 {@code listener} is non-null.
+     * @param resultListener Asynchronous listener that'll be called when the operation completes.
+     *                      Called with {@link CallForwardingInfoCallback#RESULT_SUCCESS} if the
+     *                      operation succeeded and an error code from
+     *                      {@link CallForwardingInfoCallback} it failed.
      *
+     * @throws IllegalArgumentException if any of the following are true for the parameter
+     * callForwardingInfo:
+     * <ul>
+     * <li>it is {@code null}.</li>
+     * <li>{@link CallForwardingInfo#getReason()} is not any of:
+     *     <ul>
+     *         <li>{@link CallForwardingInfo#REASON_UNCONDITIONAL}</li>
+     *         <li>{@link CallForwardingInfo#REASON_BUSY}</li>
+     *         <li>{@link CallForwardingInfo#REASON_NO_REPLY}</li>
+     *         <li>{@link CallForwardingInfo#REASON_NOT_REACHABLE}</li>
+     *         <li>{@link CallForwardingInfo#REASON_ALL}</li>
+     *         <li>{@link CallForwardingInfo#REASON_ALL_CONDITIONAL}</li>
+     *     </ul>
+     * <li>{@link CallForwardingInfo#getNumber()} returns {@code null} when enabling call
+     * forwarding</li>
+     * <li>{@link CallForwardingInfo#getTimeoutSeconds()} returns a non-positive value when
+     * enabling call forwarding</li>
+     * </ul>
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public boolean setCallForwarding(@NonNull CallForwardingInfo callForwardingInfo) {
+    @SystemApi
+    public void setCallForwarding(@NonNull CallForwardingInfo callForwardingInfo,
+            @Nullable @CallbackExecutor Executor executor,
+            @Nullable @CallForwardingInfoCallback.CallForwardingError
+                    Consumer<Integer> resultListener) {
         if (callForwardingInfo == null) {
             throw new IllegalArgumentException("callForwardingInfo is null");
-        }
-        int callForwardingStatus = callForwardingInfo.getStatus();
-        if (callForwardingStatus != CallForwardingInfo.STATUS_ACTIVE
-                && callForwardingStatus != CallForwardingInfo.STATUS_INACTIVE) {
-            throw new IllegalArgumentException(
-                    "callForwardingStatus is neither active nor inactive");
         }
         int callForwardingReason = callForwardingInfo.getReason();
         if (callForwardingReason < CallForwardingInfo.REASON_UNCONDITIONAL
                 || callForwardingReason > CallForwardingInfo.REASON_ALL_CONDITIONAL) {
             throw new IllegalArgumentException("callForwardingReason is out of range");
         }
-        if (callForwardingInfo.getNumber() == null) {
-            throw new IllegalArgumentException("callForwarding number is null");
+        if (callForwardingInfo.isEnabled()) {
+            if (callForwardingInfo.getNumber() == null) {
+                throw new IllegalArgumentException("callForwarding number is null");
+            }
+            if (callForwardingInfo.getTimeoutSeconds() <= 0) {
+                throw new IllegalArgumentException("callForwarding timeout isn't positive");
+            }
         }
-        if (callForwardingInfo.getTimeoutSeconds() <= 0) {
-            throw new IllegalArgumentException("callForwarding timeout isn't positive");
+        if (resultListener != null) {
+            Objects.requireNonNull(executor);
         }
+
+        IIntegerConsumer internalCallback = new IIntegerConsumer.Stub() {
+            @Override
+            public void accept(int result) {
+                executor.execute(() ->
+                        Binder.withCleanCallingIdentity(() -> resultListener.accept(result)));
+            }
+        };
+
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.setCallForwarding(getSubId(), callForwardingInfo);
+                telephony.setCallForwarding(getSubId(), callForwardingInfo, internalCallback);
             }
         } catch (RemoteException ex) {
             Rlog.e(TAG, "setCallForwarding RemoteException", ex);
+            ex.rethrowAsRuntimeException();
         } catch (NullPointerException ex) {
             Rlog.e(TAG, "setCallForwarding NPE", ex);
+            throw ex;
         }
-        return false;
     }
 
     /**
-     * Indicates the call waiting status is active.
+     * Indicates that call waiting is enabled.
      *
      * @hide
      */
-    public static final int CALL_WAITING_STATUS_ACTIVE = 1;
+    @SystemApi
+    public static final int CALL_WAITING_STATUS_ENABLED = 1;
 
     /**
-     * Indicates the call waiting status is inactive.
+     * Indicates that call waiting is disabled.
      *
      * @hide
      */
-    public static final int CALL_WAITING_STATUS_INACTIVE = 2;
+    @SystemApi
+    public static final int CALL_WAITING_STATUS_DISABLED = 2;
 
     /**
-     * Indicates the call waiting status is with an unknown error.
+     * Indicates there was an unknown error retrieving the call waiting status.
      *
      * @hide
      */
+    @SystemApi
     public static final int CALL_WAITING_STATUS_UNKNOWN_ERROR = 3;
 
     /**
-     * Indicates the call waiting is not supported (e.g. called via CDMA).
+     * Indicates the call waiting is not supported on the current network.
      *
      * @hide
      */
+    @SystemApi
     public static final int CALL_WAITING_STATUS_NOT_SUPPORTED = 4;
 
     /**
-     * Call waiting function status
-     *
      * @hide
      */
     @IntDef(prefix = { "CALL_WAITING_STATUS_" }, value = {
-        CALL_WAITING_STATUS_ACTIVE,
-        CALL_WAITING_STATUS_INACTIVE,
-        CALL_WAITING_STATUS_NOT_SUPPORTED,
-        CALL_WAITING_STATUS_UNKNOWN_ERROR
+            CALL_WAITING_STATUS_ENABLED,
+            CALL_WAITING_STATUS_DISABLED,
+            CALL_WAITING_STATUS_UNKNOWN_ERROR,
+            CALL_WAITING_STATUS_NOT_SUPPORTED,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CallWaitingStatus {
     }
 
     /**
-     * Gets the status of voice call waiting function. Call waiting function enables the waiting
-     * for the incoming call when it reaches the user who is busy to make another call and allows
-     * users to decide whether to switch to the incoming call.
+     * Retrieves the call waiting status of this device from the network.
      *
-     * @return the status of call waiting function.
+     * When call waiting is enabled, an incoming call that arrives when the user is already on
+     * an active call will be held in a waiting state while the user is notified instead of being
+     * rejected with a busy signal.
+     *
+     * @param executor The executor on which the result listener will be called.
+     * @param resultListener A {@link Consumer} that will be called with the result fetched
+     *                       from the network. The result will be one of:
+     *                       <ul>
+     *                          <li>{@link #CALL_WAITING_STATUS_ENABLED}}</li>
+     *                          <li>{@link #CALL_WAITING_STATUS_DISABLED}}</li>
+     *                          <li>{@link #CALL_WAITING_STATUS_UNKNOWN_ERROR}}</li>
+     *                          <li>{@link #CALL_WAITING_STATUS_NOT_SUPPORTED}}</li>
+     *                       </ul>
      * @hide
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public @CallWaitingStatus int getCallWaitingStatus() {
+    public void getCallWaitingStatus(@NonNull Executor executor,
+            @NonNull @CallWaitingStatus Consumer<Integer> resultListener) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(resultListener);
+
+        IIntegerConsumer internalCallback = new IIntegerConsumer.Stub() {
+            @Override
+            public void accept(int result) {
+                executor.execute(() -> Binder.withCleanCallingIdentity(
+                        () -> resultListener.accept(result)));
+            }
+        };
+
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.getCallWaitingStatus(getSubId());
+                telephony.getCallWaitingStatus(getSubId(), internalCallback);
             }
         } catch (RemoteException ex) {
             Rlog.e(TAG, "getCallWaitingStatus RemoteException", ex);
+            ex.rethrowAsRuntimeException();
         } catch (NullPointerException ex) {
             Rlog.e(TAG, "getCallWaitingStatus NPE", ex);
+            throw ex;
         }
-        return CALL_WAITING_STATUS_UNKNOWN_ERROR;
     }
 
     /**
-     * Sets the status for voice call waiting function. Call waiting function enables the waiting
-     * for the incoming call when it reaches the user who is busy to make another call and allows
-     * users to decide whether to switch to the incoming call.
+     * Sets the call waiting status of this device with the network.
      *
-     * @param isEnable {@code true} to enable; {@code false} to disable.
-     * @return {@code true} to indicate it was set successfully; {@code false} otherwise.
+     * If you wish to be notified about the results of this operation, provide an {@link Executor}
+     * and {@link Consumer<Integer>} to be notified asynchronously when the operation completes.
      *
+     * @see #getCallWaitingStatus for a description of the call waiting functionality.
+     *
+     * @param enabled {@code true} to enable; {@code false} to disable.
+     * @param executor The executor on which the listener will be called. Must be non-null if
+     *                 {@code listener} is non-null.
+     * @param resultListener Asynchronous listener that'll be called when the operation completes.
+     *                       Called with the new call waiting status (either
+     *                       {@link #CALL_WAITING_STATUS_ENABLED} or
+     *                       {@link #CALL_WAITING_STATUS_DISABLED} if the operation succeeded and
+     *                       {@link #CALL_WAITING_STATUS_NOT_SUPPORTED} or
+     *                       {@link #CALL_WAITING_STATUS_UNKNOWN_ERROR} if it failed.
      * @hide
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public boolean setCallWaitingStatus(boolean isEnable) {
+    public void setCallWaitingEnabled(boolean enabled, @Nullable Executor executor,
+            @Nullable Consumer<Integer> resultListener) {
+        if (resultListener != null) {
+            Objects.requireNonNull(executor);
+        }
+
+        IIntegerConsumer internalCallback = new IIntegerConsumer.Stub() {
+            @Override
+            public void accept(int result) {
+                executor.execute(() ->
+                        Binder.withCleanCallingIdentity(() -> resultListener.accept(result)));
+            }
+        };
+
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.setCallWaitingStatus(getSubId(), isEnable);
+                telephony.setCallWaitingStatus(getSubId(), enabled, internalCallback);
             }
         } catch (RemoteException ex) {
             Rlog.e(TAG, "setCallWaitingStatus RemoteException", ex);
+            ex.rethrowAsRuntimeException();
         } catch (NullPointerException ex) {
             Rlog.e(TAG, "setCallWaitingStatus NPE", ex);
+            throw ex;
         }
-        return false;
     }
 
     /**
-     * Set allowing mobile data during voice call. This is used for allowing data on the non-default
-     * data SIM. When a voice call is placed on the non-default data SIM on DSDS devices, users will
-     * not be able to use mobile data. By calling this API, data will be temporarily enabled on the
-     * non-default data SIM during the life cycle of the voice call.
+     * Controls whether mobile data  on the non-default SIM is allowed during a voice call.
      *
-     * @param allow {@code true} if allowing using data during voice call, {@code false} if
-     * disallowed.
+     * This is used for allowing data on the non-default data SIM when a voice call is placed on
+     * the non-default data SIM on DSDS devices. If this policy is disabled, users will not be able
+     * to use mobile data via the non-default data SIM during the call, which may mean no mobile
+     * data at all since some modem implementations disallow mobile data via the default data SIM
+     * during voice calls.
+     * If this policy is enabled, data will be temporarily enabled on the non-default data SIM
+     * during any voice calls.
      *
-     * @return {@code true} if operation is successful. otherwise {@code false}.
-     *
-     * @throws SecurityException if the caller doesn't have the permission.
-     *
+     * This policy can be enabled and disabled via {@link #setMobileDataPolicyEnabledStatus}.
      * @hide
      */
+    @SystemApi
+    @TestApi
+    public static final int MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL = 1;
+
+    /**
+     * Controls whether MMS messages bypass the user-specified "mobile data" toggle.
+     *
+     * When enabled, requests for connections to the MMS APN will be accepted by telephony even if
+     * the user has turned "mobile data" off on this specific sim card. {@link #isDataEnabledForApn}
+     * will also return true for {@link ApnSetting#TYPE_MMS}.
+     * When disabled, the MMS APN will be governed by the same rules as all other APNs.
+     *
+     * This policy can be enabled and disabled via {@link #setMobileDataPolicyEnabledStatus}.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final int MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED = 2;
+
+    /**
+     * @hide
+     */
+    @IntDef(prefix = { "MOBILE_DATA_POLICY_" }, value = {
+            MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL,
+            MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface MobileDataPolicy { }
+
+    /**
+     * Enables or disables a piece of mobile data policy.
+     *
+     * Enables or disables the mobile data policy specified in {@code policy}. See the detailed
+     * description of each policy constant for what they do.
+     *
+     * @param policy The data policy to enable.
+     * @param enabled Whether to enable or disable the policy.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public boolean setDataAllowedDuringVoiceCall(boolean allow) {
+    public void setMobileDataPolicyEnabledStatus(@MobileDataPolicy int policy, boolean enabled) {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
-                return service.setDataAllowedDuringVoiceCall(getSubId(), allow);
+                service.setMobileDataPolicyEnabledStatus(getSubId(), policy, enabled);
             }
         } catch (RemoteException ex) {
             // This could happen if binder process crashes.
@@ -13245,55 +13364,26 @@ public class TelephonyManager {
                 ex.rethrowAsRuntimeException();
             }
         }
-        return false;
     }
 
     /**
-     * Check whether data is allowed during voice call. This is used for allowing data on the
-     * non-default data SIM. When a voice call is placed on the non-default data SIM on DSDS
-     * devices, users will not be able to use mobile data. By calling this API, data will be
-     * temporarily enabled on the non-default data SIM during the life cycle of the voice call.
+     * Fetches the status of a piece of mobile data policy.
      *
-     * @return {@code true} if data is allowed during voice call.
-     *
-     * @throws SecurityException if the caller doesn't have the permission.
-     *
+     * @param policy The data policy that you want the status for.
+     * @return {@code true} if enabled, {@code false} otherwise.
      * @hide
      */
+    @SystemApi
+    @TestApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public boolean isDataAllowedInVoiceCall() {
+    public boolean isMobileDataPolicyEnabled(@MobileDataPolicy int policy) {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
-                return service.isDataAllowedInVoiceCall(getSubId());
+                return service.isMobileDataPolicyEnabled(getSubId(), policy);
             }
         } catch (RemoteException ex) {
             // This could happen if binder process crashes.
-            if (!isSystemProcess()) {
-                ex.rethrowAsRuntimeException();
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Set whether the specific sim card always allows MMS connection. If true, MMS network
-     * request will be accepted by telephony even if user turns "mobile data" off
-     * on this specific sim card.
-     *
-     * @param alwaysAllow whether Mms data is always allowed.
-     * @return whether operation is successful.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public boolean setAlwaysAllowMmsData(boolean alwaysAllow) {
-        try {
-            ITelephony service = getITelephony();
-            if (service != null) {
-                return service.setAlwaysAllowMmsData(getSubId(), alwaysAllow);
-            }
-        } catch (RemoteException ex) {
             if (!isSystemProcess()) {
                 ex.rethrowAsRuntimeException();
             }
@@ -13590,5 +13680,37 @@ public class TelephonyManager {
         } catch (NullPointerException ex) {
             return true;
         }
+    }
+
+    /**
+     * Returns a list of the equivalent home PLMNs (EF_EHPLMN) from the USIM app.
+     *
+     * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     *
+     * @return A list of equivalent home PLMNs. Returns an empty list if EF_EHPLMN is empty or
+     * does not exist on the SIM card.
+     *
+     * @throws IllegalStateException if the Telephony process is not currently available.
+     * @throws SecurityException if the caller doesn't have the permission.
+     *
+     */
+    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    public @NonNull List<String> getEquivalentHomePlmns() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getEquivalentHomePlmns(getSubId(), mContext.getOpPackageName(),
+                        getAttributionTag());
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+
+        return Collections.emptyList();
     }
 }

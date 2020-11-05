@@ -243,7 +243,7 @@
     <string name="global_action_power_off" msgid="4404936470711393203">"Искључи"</string>
     <string name="global_action_power_options" msgid="1185286119330160073">"Напајање"</string>
     <string name="global_action_restart" msgid="4678451019561687074">"Рестартуј"</string>
-    <string name="global_action_emergency" msgid="1387617624177105088">"Хитни позив"</string>
+    <string name="global_action_emergency" msgid="1387617624177105088">"Хитан позив"</string>
     <string name="global_action_bug_report" msgid="5127867163044170003">"Извештај о грешци"</string>
     <string name="global_action_logout" msgid="6093581310002476511">"Заврши сесију"</string>
     <string name="global_action_screenshot" msgid="2610053466156478564">"Снимак екрана"</string>
@@ -435,13 +435,17 @@
     <string name="permlab_modifyAudioSettings" msgid="6129039778010031815">"промена аудио подешавања"</string>
     <string name="permdesc_modifyAudioSettings" msgid="8687227609663124921">"Дозвољава апликацији да мења глобална аудио подешавања као што су јачина звука и избор звучника који се користи као излаз."</string>
     <string name="permlab_recordAudio" msgid="1208457423054219147">"снимање аудио записа"</string>
-    <string name="permdesc_recordAudio" msgid="3976213377904701093">"Ова апликација може да снима звук помоћу микрофона у било ком тренутку."</string>
+    <string name="permdesc_recordAudio" msgid="5857246765327514062">"Ова апликација може да снима звук помоћу микрофона док се апликација користи."</string>
+    <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"да снима звук у позадини"</string>
+    <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Ова апликација може да снима звук помоћу микрофона у било ком тренутку."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"слање команди на SIM"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Омогућава апликацији да шаље команде SIM картици. То је веома опасно."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"препознавање физичких активности"</string>
     <string name="permdesc_activityRecognition" msgid="8667484762991357519">"Ова апликација може да препозна физичке активности."</string>
     <string name="permlab_camera" msgid="6320282492904119413">"снимање фотографија и видео снимака"</string>
-    <string name="permdesc_camera" msgid="1354600178048761499">"Ова апликација може да снима фотографије и видео снимке помоћу камере у било ком тренутку."</string>
+    <string name="permdesc_camera" msgid="5240801376168647151">"Ова апликација може да снима слике и видео снимке помоћу камере док се апликација користи."</string>
+    <string name="permlab_backgroundCamera" msgid="7549917926079731681">"да снима слике и видео снимке у позадини"</string>
+    <string name="permdesc_backgroundCamera" msgid="1615291686191138250">"Ова апликација може да снима фотографије и видео снимке помоћу камере у било ком тренутку."</string>
     <string name="permlab_systemCamera" msgid="3642917457796210580">"Дозволите некој апликацији или услузи да приступа камерама система да би снимала слике и видео снимке"</string>
     <string name="permdesc_systemCamera" msgid="5938360914419175986">"Ова привилегована системска апликација може да снима слике и видео снимке помоћу камере система у било ком тренутку. Апликација треба да има и дозволу android.permission.CAMERA"</string>
     <string name="permlab_cameraOpenCloseListener" msgid="5548732769068109315">"Дозволите апликацији или услузи да добија повратне позиве о отварању или затварању уређаја са камером."</string>
@@ -835,7 +839,7 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Притисните „Мени“ да бисте откључали телефон или упутите хитан позив."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Притисните „Мени“ за откључавање."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Унесите шаблон за откључавање"</string>
-    <string name="lockscreen_emergency_call" msgid="7549683825868928636">"Хитни позив"</string>
+    <string name="lockscreen_emergency_call" msgid="7549683825868928636">"Хитан позив"</string>
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Назад на позив"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Тачно!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Пробајте поново"</string>
@@ -1644,10 +1648,10 @@
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"Желите да појачате звук изнад препорученог нивоа?\n\nСлушање гласне музике дуже време може да вам оштети слух."</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"Желите ли да користите пречицу за приступачност?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Када је пречица укључена, притисните оба дугмета за јачину звука да бисте покренули функцију приступачности."</string>
-    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"Желите ли да укључите функције приступачности?"</string>
+    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Желите да укључите пречицу за функције приступачности?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Ако задржите оба тастера за јачину звука пар секунди, укључиће се функције приступачности. То може да промени начин рада уређаја.\n\nПостојеће функције:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nМожете да промените изабране функције у одељку Подешавања &gt; Приступачност."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"Желите ли да укључите услугу <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
+    <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Желите да укључите пречицу за услугу <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Ако задржите оба тастера за јачину звука пар секунди, укључује се <xliff:g id="SERVICE">%1$s</xliff:g>, функција приступачности. То може да промени начин рада уређаја.\n\nМожете да промените функцију на коју се односи ова пречица у одељку Подешавања &gt; Приступачност."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Укључи"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"Не укључуј"</string>
@@ -1815,7 +1819,7 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Ажурирао је администратор"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Избрисао је администратор"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Потврди"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Да би се продужило трајање батерије, Уштеда батерије:\n\n• укључује тамну тему\n• искључује или ограничава активности у позадини, неке визуелне ефекте и друге функције, на пример, „Ок Google“\n\n"<annotation id="url">"Сазнајте више"</annotation></string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Да би се продужило трајање батерије, Уштеда батерије:\n\n• укључује тамну тему\n• искључује или ограничава активности у позадини, неке визуелне ефекте и друге функције, на пример „Ок Google“\n\n"<annotation id="url">"Сазнајте више"</annotation></string>
     <string name="battery_saver_description" msgid="6794188153647295212">"Да би се продужило трајање батерије, Уштеда батерије:\n\n• укључује тамну тему\n• искључује или ограничава активности у позадини, неке визуелне ефекте и друге функције, на пример, „Ок Google“"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Да би се смањила потрошња података, Уштеда података спречава неке апликације да шаљу или примају податке у позадини. Апликација коју тренутно користите може да приступа подацима, али ће то чинити ређе. На пример, слике се неће приказивати док их не додирнете."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Желите да укључите Уштеду података?"</string>
@@ -1860,6 +1864,7 @@
       <item quantity="few">За %d с</item>
       <item quantity="other">За %d с</item>
     </plurals>
+    <string name="zen_mode_until_next_day" msgid="1403042784161725038">"До <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"До <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"До <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (следећи аларм)"</string>
     <string name="zen_mode_forever" msgid="740585666364912448">"Док не искључите"</string>

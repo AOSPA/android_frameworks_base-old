@@ -18,6 +18,8 @@ package com.android.systemui.statusbar.phone;
 
 import static android.view.View.GONE;
 
+import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE;
+import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_QS_EXPAND_COLLAPSE;
 import static com.android.systemui.classifier.Classifier.QUICK_SETTINGS;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
@@ -62,6 +64,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.LatencyTracker;
@@ -216,6 +219,11 @@ public class NotificationPanelViewController extends PanelViewController {
     final KeyguardUpdateMonitorCallback
             mKeyguardUpdateCallback =
             new KeyguardUpdateMonitorCallback() {
+
+                @Override
+                public void onLockScreenModeChanged(int mode) {
+                    mClockPositionAlgorithm.onLockScreenModeChanged(mode);
+                }
 
                 @Override
                 public void onBiometricAuthenticated(int userId,
@@ -1139,6 +1147,7 @@ public class NotificationPanelViewController extends PanelViewController {
                     onQsExpansionStarted();
                     mInitialHeightOnTouch = mQsExpansionHeight;
                     mQsTracking = true;
+                    traceQsJank(true /* startTracing */, false /* wasCancelled */);
                     mNotificationStackScrollLayoutController.cancelLongPress();
                 }
                 break;
@@ -1170,6 +1179,7 @@ public class NotificationPanelViewController extends PanelViewController {
                         && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, h)) {
                     mView.getParent().requestDisallowInterceptTouchEvent(true);
                     mQsTracking = true;
+                    traceQsJank(true /* startTracing */, false /* wasCancelled */);
                     onQsExpansionStarted();
                     notifyExpandingFinished();
                     mInitialHeightOnTouch = mQsExpansionHeight;
@@ -1200,6 +1210,19 @@ public class NotificationPanelViewController extends PanelViewController {
                 .isBelowLastNotification(x - stackScrollerX, y)
                 && stackScrollerX < x
                 && x < stackScrollerX + mNotificationStackScrollLayoutController.getWidth();
+    }
+
+    private void traceQsJank(boolean startTracing, boolean wasCancelled) {
+        InteractionJankMonitor monitor = InteractionJankMonitor.getInstance();
+        if (startTracing) {
+            monitor.begin(CUJ_NOTIFICATION_SHADE_QS_EXPAND_COLLAPSE);
+        } else {
+            if (wasCancelled) {
+                monitor.cancel(CUJ_NOTIFICATION_SHADE_QS_EXPAND_COLLAPSE);
+            } else {
+                monitor.end(CUJ_NOTIFICATION_SHADE_QS_EXPAND_COLLAPSE);
+            }
+        }
     }
 
     private void initDownStates(MotionEvent event) {
@@ -1315,9 +1338,9 @@ public class NotificationPanelViewController extends PanelViewController {
         final int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN && getExpandedFraction() == 1f
                 && mBarState != KEYGUARD && !mQsExpanded && mQsExpansionEnabled) {
-
             // Down in the empty area while fully expanded - go to QS.
             mQsTracking = true;
+            traceQsJank(true /* startTracing */, false /* wasCancelled */);
             mConflictingQsExpansionGesture = true;
             onQsExpansionStarted();
             mInitialHeightOnTouch = mQsExpansionHeight;
@@ -1405,6 +1428,7 @@ public class NotificationPanelViewController extends PanelViewController {
             return;
         }
         mExpectingSynthesizedDown = true;
+        InteractionJankMonitor.getInstance().begin(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
         onTrackingStarted();
         updatePanelExpanded();
     }
@@ -1474,6 +1498,7 @@ public class NotificationPanelViewController extends PanelViewController {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 mQsTracking = true;
+                traceQsJank(true /* startTracing */, false /* wasCancelled */);
                 mInitialTouchY = y;
                 mInitialTouchX = x;
                 onQsExpansionStarted();
@@ -1512,6 +1537,9 @@ public class NotificationPanelViewController extends PanelViewController {
                 float fraction = getQsExpansionFraction();
                 if (fraction != 0f || y >= mInitialTouchY) {
                     flingQsWithCurrentVelocity(y,
+                            event.getActionMasked() == MotionEvent.ACTION_CANCEL);
+                } else {
+                    traceQsJank(false /* startTracing */,
                             event.getActionMasked() == MotionEvent.ACTION_CANCEL);
                 }
                 if (mQsVelocityTracker != null) {
@@ -1893,7 +1921,7 @@ public class NotificationPanelViewController extends PanelViewController {
      * @see #flingSettings(float, int, Runnable, boolean)
      */
     public void flingSettings(float vel, int type) {
-        flingSettings(vel, type, null, false /* isClick */);
+        flingSettings(vel, type, null /* onFinishRunnable */, false /* isClick */);
     }
 
     /**
@@ -1923,6 +1951,7 @@ public class NotificationPanelViewController extends PanelViewController {
             if (onFinishRunnable != null) {
                 onFinishRunnable.run();
             }
+            traceQsJank(false /* startTracing */, type != FLING_EXPAND /* wasCancelled */);
             return;
         }
 
@@ -1947,9 +1976,15 @@ public class NotificationPanelViewController extends PanelViewController {
             setQsExpansion((Float) animation.getAnimatedValue());
         });
         animator.addListener(new AnimatorListenerAdapter() {
+            private boolean mIsCanceled;
             @Override
             public void onAnimationStart(Animator animation) {
                 notifyExpandingStarted();
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                mIsCanceled = true;
             }
 
             @Override
@@ -1961,6 +1996,7 @@ public class NotificationPanelViewController extends PanelViewController {
                 if (onFinishRunnable != null) {
                     onFinishRunnable.run();
                 }
+                traceQsJank(false /* startTracing */, mIsCanceled /* wasCancelled */);
             }
         });
         // Let's note that we're animating QS. Moving the animator here will cancel it immediately,

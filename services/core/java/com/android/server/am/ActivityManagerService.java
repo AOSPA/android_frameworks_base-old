@@ -153,7 +153,6 @@ import android.app.ContentProviderHolder;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
-import android.app.IAssistDataReceiver;
 import android.app.IInstrumentationWatcher;
 import android.app.INotificationManager;
 import android.app.IProcessObserver;
@@ -286,7 +285,6 @@ import android.util.proto.ProtoOutputStream;
 import android.util.proto.ProtoUtils;
 import android.view.Display;
 import android.view.Gravity;
-import android.view.IRecentsAnimationRunner;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
@@ -1199,10 +1197,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     final Injector mInjector;
 
-    /** The package verifier app. */
-    private String mPackageVerifier;
-    private int mPackageVerifierUid = UserHandle.USER_NULL;
-
     static final class ProcessChangeItem {
         static final int CHANGE_ACTIVITIES = 1<<0;
         static final int CHANGE_FOREGROUND_SERVICES = 1<<1;
@@ -1831,18 +1825,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (phase == PHASE_SYSTEM_SERVICES_READY) {
                 mService.mBatteryStatsService.systemServicesReady();
                 mService.mServices.systemServicesReady();
-                mService.mPackageVerifier = ArrayUtils.firstOrNull(
-                        LocalServices.getService(PackageManagerInternal.class).getKnownPackageNames(
-                                PackageManagerInternal.PACKAGE_VERIFIER, UserHandle.USER_SYSTEM));
-                if (mService.mPackageVerifier != null) {
-                    try {
-                        mService.mPackageVerifierUid =
-                                getContext().getPackageManager().getPackageUid(
-                                        mService.mPackageVerifier, UserHandle.USER_SYSTEM);
-                    } catch (NameNotFoundException e) {
-                        Slog.wtf(TAG, "Package manager couldn't get package verifier uid", e);
-                    }
-                }
             } else if (phase == PHASE_ACTIVITY_MANAGER_READY) {
                 mService.startBroadcastObservers();
             } else if (phase == PHASE_THIRD_PARTY_APPS_CAN_START) {
@@ -2436,8 +2418,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public void setFocusedStack(int stackId) {
-        mActivityTaskManager.setFocusedStack(stackId);
+    public void setFocusedRootTask(int taskId) {
+        mActivityTaskManager.setFocusedRootTask(taskId);
     }
 
     /** Sets the task stack listener that gets callbacks when a task stack changes. */
@@ -2918,18 +2900,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
         return 1;
-    }
-
-    @Override
-    public void startRecentsActivity(Intent intent, IAssistDataReceiver assistDataReceiver,
-            IRecentsAnimationRunner recentsAnimationRunner) {
-        mActivityTaskManager.startRecentsActivity(
-                intent, assistDataReceiver, recentsAnimationRunner);
-    }
-
-    @Override
-    public void cancelRecentsAnimation(boolean restoreHomeStackPosition) {
-        mActivityTaskManager.cancelRecentsAnimation(restoreHomeStackPosition);
     }
 
     /**
@@ -3457,7 +3427,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final ApplicationInfo appInfo;
         final boolean isInstantApp;
 
-        long callingId = Binder.clearCallingIdentity();
+        final long callingId = Binder.clearCallingIdentity();
         try {
             IPackageManager pm = AppGlobals.getPackageManager();
             synchronized(this) {
@@ -3598,7 +3568,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 userId, true, ALLOW_FULL_ONLY, "killBackgroundProcesses", null);
         final int[] userIds = mUserController.expandUserId(userId);
 
-        long callingId = Binder.clearCallingIdentity();
+        final long callingId = Binder.clearCallingIdentity();
         try {
             IPackageManager pm = AppGlobals.getPackageManager();
             for (int targetUserId : userIds) {
@@ -3697,7 +3667,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final int callingPid = Binder.getCallingPid();
         userId = mUserController.handleIncomingUser(callingPid, Binder.getCallingUid(),
                 userId, true, ALLOW_FULL_ONLY, "forceStopPackage", null);
-        long callingId = Binder.clearCallingIdentity();
+        final long callingId = Binder.clearCallingIdentity();
         try {
             IPackageManager pm = AppGlobals.getPackageManager();
             synchronized(this) {
@@ -5764,11 +5734,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public void removeStack(int stackId) {
-        mActivityTaskManager.removeStack(stackId);
-    }
-
-    @Override
     public boolean removeTask(int taskId) {
         return mActivityTaskManager.removeTask(taskId);
     }
@@ -5804,8 +5769,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public void moveTaskToStack(int taskId, int stackId, boolean toTop) {
-        mActivityTaskManager.moveTaskToStack(taskId, stackId, toTop);
+    public void moveTaskToRootTask(int taskId, int rootTaskId, boolean toTop) {
+        mActivityTaskManager.moveTaskToRootTask(taskId, rootTaskId, toTop);
     }
 
     @Override
@@ -5815,22 +5780,17 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
-     * Moves the top activity in the input stackId to the pinned stack.
+     * Moves the top activity in the input rootTaskId to the pinned root task.
      *
-     * @param stackId Id of stack to move the top activity to pinned stack.
-     * @param bounds Bounds to use for pinned stack.
+     * @param rootTaskId Id of root task to move the top activity to pinned root task.
+     * @param bounds Bounds to use for pinned root task.
      *
-     * @return True if the top activity of the input stack was successfully moved to the pinned
-     *          stack.
+     * @return True if the top activity of the input root task was successfully moved to the pinned
+     *          root task.
      */
     @Override
-    public boolean moveTopActivityToPinnedStack(int stackId, Rect bounds) {
-        return mActivityTaskManager.moveTopActivityToPinnedStack(stackId, bounds);
-    }
-
-    @Override
-    public void positionTaskInStack(int taskId, int stackId, int position) {
-        mActivityTaskManager.positionTaskInStack(taskId, stackId, position);
+    public boolean moveTopActivityToPinnedRootTask(int rootTaskId, Rect bounds) {
+        return mActivityTaskManager.moveTopActivityToPinnedRootTask(rootTaskId, bounds);
     }
 
     @Override
@@ -6271,7 +6231,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         enforceCallingPermission(android.Manifest.permission.SET_DEBUG_APP,
                 "setDebugApp()");
 
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             // Note that this is not really thread safe if there are multiple
             // callers into it at the same time, but that's not a situation we
@@ -6372,7 +6332,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         enforceCallingPermission(android.Manifest.permission.SET_ALWAYS_FINISH,
                 "setAlwaysFinish()");
 
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             Settings.Global.putInt(
                     mContext.getContentResolver(),
@@ -7138,7 +7098,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     + android.Manifest.permission.FORCE_STOP_PACKAGES);
         }
         int callerUid = Binder.getCallingUid();
-        long iden = Binder.clearCallingIdentity();
+        final long iden = Binder.clearCallingIdentity();
         try {
             mProcessList.killProcessesWhenImperceptible(pids, reason, callerUid);
         } finally {
@@ -7523,7 +7483,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 t.traceBegin("sendUserStartBroadcast");
                 final int callingUid = Binder.getCallingUid();
                 final int callingPid = Binder.getCallingPid();
-                long ident = Binder.clearCallingIdentity();
+                final long ident = Binder.clearCallingIdentity();
                 try {
                     Intent intent = new Intent(Intent.ACTION_USER_STARTED);
                     intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
@@ -8287,7 +8247,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     int enforceDumpPermissionForPackage(String packageName, int userId, int callingUid,
             String function) {
-        long identity = Binder.clearCallingIdentity();
+        final long identity = Binder.clearCallingIdentity();
         int uid = Process.INVALID_UID;
         try {
             uid = mPackageManagerInt.getPackageUid(packageName,
@@ -8295,12 +8255,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
-        if (uid == Process.INVALID_UID) {
-            return Process.INVALID_UID;
-        }
+        // If the uid is Process.INVALID_UID, the below 'if' check will be always true
         if (UserHandle.getAppId(uid) != UserHandle.getAppId(callingUid)) {
             // Requires the DUMP permission if the target package doesn't belong
-            // to the caller.
+            // to the caller or it doesn't exist.
             enforceCallingPermission(android.Manifest.permission.DUMP, function);
         }
         return uid;
@@ -8350,7 +8308,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private void dumpEverything(FileDescriptor fd, PrintWriter pw, String[] args, int opti,
             boolean dumpAll, String dumpPackage, boolean dumpClient, boolean dumpNormalPriority,
-            int dumpAppId) {
+            int dumpAppId, boolean dumpProxies) {
 
         ActiveServices.ServiceDumper sdumper;
 
@@ -8409,7 +8367,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             sdumper.dumpWithClient();
         }
-        if (dumpPackage == null) {
+        if (dumpPackage == null && dumpProxies) {
             // Intentionally dropping the lock for this, because dumpBinderProxies() will make many
             // outgoing binder calls to retrieve interface descriptors; while that is system code,
             // there is nothing preventing an app from overriding this implementation by talking to
@@ -8549,7 +8507,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
-        long origId = Binder.clearCallingIdentity();
+        final long origId = Binder.clearCallingIdentity();
 
         if (useProto) {
             final ProtoOutputStream proto = new ProtoOutputStream(fd);
@@ -8818,13 +8776,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // dumpEverything() will take the lock when needed, and momentarily drop
                 // it for dumping client state.
                 dumpEverything(fd, pw, args, opti, dumpAll, dumpPackage, dumpClient,
-                        dumpNormalPriority, dumpAppId);
+                        dumpNormalPriority, dumpAppId, true /* dumpProxies */);
             } else {
                 // Take the lock here, so we get a consistent state for the entire dump;
-                // dumpEverything() will take the lock as well, but that is fine.
+                // dumpEverything() will take the lock as well, which is fine for everything
+                // except dumping proxies, which can take a long time; exclude them.
                 synchronized(this) {
                     dumpEverything(fd, pw, args, opti, dumpAll, dumpPackage, dumpClient,
-                            dumpNormalPriority, dumpAppId);
+                            dumpNormalPriority, dumpAppId, false /* dumpProxies */);
                 }
             }
         }
@@ -11314,10 +11273,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             long kernelUsed = memInfo.getKernelUsedSizeKb();
             final long ionHeap = Debug.getIonHeapsSizeKb();
-            if (ionHeap > 0) {
+            final long ionPool = Debug.getIonPoolsSizeKb();
+            if (ionHeap >= 0 && ionPool >= 0) {
                 final long ionMapped = Debug.getIonMappedSizeKb();
                 final long ionUnmapped = ionHeap - ionMapped;
-                final long ionPool = Debug.getIonPoolsSizeKb();
                 pw.print("      ION: ");
                         pw.print(stringifyKBSize(ionHeap + ionPool));
                         pw.print(" (");
@@ -12114,10 +12073,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         memInfoBuilder.append("\n");
         long kernelUsed = memInfo.getKernelUsedSizeKb();
         final long ionHeap = Debug.getIonHeapsSizeKb();
-        if (ionHeap > 0) {
+        final long ionPool = Debug.getIonPoolsSizeKb();
+        if (ionHeap >= 0 && ionPool >= 0) {
             final long ionMapped = Debug.getIonMappedSizeKb();
             final long ionUnmapped = ionHeap - ionMapped;
-            final long ionPool = Debug.getIonPoolsSizeKb();
             memInfoBuilder.append("       ION: ");
             memInfoBuilder.append(stringifyKBSize(ionHeap + ionPool));
             memInfoBuilder.append("\n");
@@ -12244,6 +12203,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         app.setHasClientActivities(false);
 
         mServices.killServicesLocked(app, allowRestart);
+        mPhantomProcessList.onAppDied(app.pid);
 
         boolean restart = false;
 
@@ -12462,8 +12422,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public ComponentName startService(IApplicationThread caller, Intent service,
-            String resolvedType, boolean requireForeground, boolean hideForegroundNotification,
-            String callingPackage, String callingFeatureId, int userId)
+            String resolvedType, boolean requireForeground, String callingPackage,
+            String callingFeatureId, int userId)
             throws TransactionTooLargeException {
         enforceNotIsolatedCaller("startService");
         // Refuse possible leaked file descriptors
@@ -12475,27 +12435,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             throw new IllegalArgumentException("callingPackage cannot be null");
         }
 
-        final int callingUid = Binder.getCallingUid();
-        if (requireForeground && hideForegroundNotification) {
-            if (!UserHandle.isSameApp(callingUid, mPackageVerifierUid)
-                    || !callingPackage.equals(mPackageVerifier)) {
-                throw new IllegalArgumentException(
-                        "Only the package verifier can hide its foreground service notification");
-            }
-            Slog.i(TAG, "Foreground service notification hiding requested by " + callingPackage);
-        }
-
         if (DEBUG_SERVICE) Slog.v(TAG_SERVICE,
                 "*** startService: " + service + " type=" + resolvedType + " fg=" + requireForeground);
         synchronized(this) {
             final int callingPid = Binder.getCallingPid();
+            final int callingUid = Binder.getCallingUid();
             final long origId = Binder.clearCallingIdentity();
             ComponentName res;
             try {
                 res = mServices.startServiceLocked(caller, service,
                         resolvedType, callingPid, callingUid,
-                        requireForeground, hideForegroundNotification,
-                        callingPackage, callingFeatureId, userId);
+                        requireForeground, callingPackage, callingFeatureId, userId);
             } finally {
                 Binder.restoreCallingIdentity(origId);
             }
@@ -12848,7 +12798,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
-        long oldIdent = Binder.clearCallingIdentity();
+        final long oldIdent = Binder.clearCallingIdentity();
         try {
             IBackupManager bm = IBackupManager.Stub.asInterface(
                     ServiceManager.getService(Context.BACKUP_SERVICE));
@@ -13811,6 +13761,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                     return ActivityManager.BROADCAST_SUCCESS;
                 case Intent.ACTION_PRE_BOOT_COMPLETED:
                     timeoutExempt = true;
+                    break;
+                case Intent.ACTION_PACKAGE_UNSTARTABLE:
+                    final String packageName = intent.getStringExtra(Intent.EXTRA_PACKAGE_NAME);
+                    forceStopPackageLocked(packageName, -1, false, true, true,
+                            false, false, userId, "package unstartable");
                     break;
             }
 
@@ -15211,7 +15166,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final int callingPid = Binder.getCallingPid();
         userId = mUserController.handleIncomingUser(callingPid, Binder.getCallingUid(),
                 userId, true, ALLOW_FULL_ONLY, "makePackageIdle", null);
-        long callingId = Binder.clearCallingIdentity();
+        final long callingId = Binder.clearCallingIdentity();
         synchronized(this) {
             try {
                 IPackageManager pm = AppGlobals.getPackageManager();
@@ -15940,6 +15895,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
+        public int getPendingIntentFlags(IIntentSender target) {
+            return mPendingIntentController.getPendingIntentFlags(target);
+        }
+
+        @Override
         public void setPendingIntentAllowBgActivityStarts(IIntentSender target,
                 IBinder whitelistToken, int flags) {
             if (!(target instanceof PendingIntentRecord)) {
@@ -16415,8 +16375,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 ComponentName res;
                 try {
                     res = mServices.startServiceLocked(null, service,
-                            resolvedType, -1, uid, fgRequired, false, callingPackage,
-                            callingFeatureId, userId, allowBackgroundActivityStarts);
+                            resolvedType, -1, uid, fgRequired, callingPackage,
+                            callingFeatureId, userId, allowBackgroundActivityStarts,
+                            backgroundActivityStartsToken);
                 } finally {
                     Binder.restoreCallingIdentity(origId);
                 }
@@ -16626,7 +16587,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public int getStorageMountMode(int pid, int uid) {
             if (uid == SHELL_UID || uid == ROOT_UID) {
-                return Zygote.MOUNT_EXTERNAL_FULL;
+                return Zygote.MOUNT_EXTERNAL_DEFAULT;
             }
             synchronized (mPidsSelfLocked) {
                 final ProcessRecord pr = mPidsSelfLocked.get(pid);
@@ -16907,7 +16868,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     "Cannot kill the dependents of a package without its name.");
         }
 
-        long callingId = Binder.clearCallingIdentity();
+        final long callingId = Binder.clearCallingIdentity();
         IPackageManager pm = AppGlobals.getPackageManager();
         int pkgUid = -1;
         try {
@@ -17466,6 +17427,20 @@ public class ActivityManagerService extends IActivityManager.Stub
             return mOomAdjuster.mCachedAppOptimizer.enableFreezer(enable);
         } else {
             throw new SecurityException("Caller uid " + callerUid + " cannot set freezer state ");
+        }
+    }
+
+    /**
+     * Holds the AM lock for the specified amount of milliseconds.
+     * Intended for use by the tests that need to imitate lock contention.
+     * Requires permission identity of the shell UID.
+     */
+    @Override
+    public void holdLock(int durationMs) {
+        enforceCallingPermission(Manifest.permission.INJECT_EVENTS, "holdLock");
+
+        synchronized (this) {
+            SystemClock.sleep(durationMs);
         }
     }
 }

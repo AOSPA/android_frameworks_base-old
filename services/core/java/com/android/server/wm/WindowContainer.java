@@ -22,6 +22,7 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
 import static android.content.pm.ActivityInfo.isFixedOrientationPortrait;
+import static android.content.pm.ActivityInfo.reverseOrientation;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
@@ -32,6 +33,7 @@ import static android.view.SurfaceControl.Transaction;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_SYNC_ENGINE;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.AppTransition.MAX_APP_TRANSITION_DURATION;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
@@ -416,7 +418,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     void setInitialSurfaceControlProperties(SurfaceControl.Builder b) {
         setSurfaceControl(b.setCallsite("WindowContainer.setInitialSurfaceControlProperties").build());
-        getSyncTransaction().show(mSurfaceControl);
+        if (showSurfaceOnCreation()) {
+            getSyncTransaction().show(mSurfaceControl);
+        }
         onSurfaceShown(getSyncTransaction());
         updateSurfacePositionNonOrganized();
     }
@@ -806,6 +810,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return parent != null ? parent.getDisplayArea() : null;
     }
 
+    /** Get the first node of type {@link RootDisplayArea} above or at this node. */
+    @Nullable
+    RootDisplayArea getRootDisplayArea() {
+        WindowContainer parent = getParent();
+        return parent != null ? parent.getRootDisplayArea() : null;
+    }
+
     boolean isAttached() {
         return getDisplayArea() != null;
     }
@@ -847,13 +858,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mChildren.get(i);
             wc.resetDragResizingChangeReported();
-        }
-    }
-
-    void forceWindowsScaleableInTransaction(boolean force) {
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowContainer wc = mChildren.get(i);
-            wc.forceWindowsScaleableInTransaction(force);
         }
     }
 
@@ -991,6 +995,21 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mChildren.get(i);
             if (wc.isVisible()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Is this window's surface needed?  This is almost like isVisible, except when participating
+     * in a transition, this will reflect the final visibility while isVisible won't change until
+     * the transition is finished.
+     */
+    boolean isVisibleRequested() {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final WindowContainer child = mChildren.get(i);
+            if (child.isVisibleRequested()) {
                 return true;
             }
         }
@@ -1136,17 +1155,30 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      *         {@link Configuration#ORIENTATION_UNDEFINED}).
      */
     int getRequestedConfigurationOrientation() {
-        if (mOrientation == ActivityInfo.SCREEN_ORIENTATION_NOSENSOR) {
+        int requestedOrientation = mOrientation;
+        final RootDisplayArea root = getRootDisplayArea();
+        if (root != null && root.isOrientationDifferentFromDisplay()) {
+            // Reverse the requested orientation if the orientation of its root is different from
+            // the display, so that when the display rotates to the reversed orientation, the
+            // requested app will be in the requested orientation.
+            // For example, if the display is 1200x900 (landscape), and the DAG is 600x900
+            // (portrait).
+            // When an app below the DAG is requesting landscape, it should actually request the
+            // display to be portrait, so that the DAG and the app will be in landscape.
+            requestedOrientation = reverseOrientation(mOrientation);
+        }
+
+        if (requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_NOSENSOR) {
             // NOSENSOR means the display's "natural" orientation, so return that.
             if (mDisplayContent != null) {
                 return mDisplayContent.getNaturalOrientation();
             }
-        } else if (mOrientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED) {
+        } else if (requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED) {
             // LOCKED means the activity's orientation remains unchanged, so return existing value.
             return getConfiguration().orientation;
-        } else if (isFixedOrientationLandscape(mOrientation)) {
+        } else if (isFixedOrientationLandscape(requestedOrientation)) {
             return ORIENTATION_LANDSCAPE;
-        } else if (isFixedOrientationPortrait(mOrientation)) {
+        } else if (isFixedOrientationPortrait(requestedOrientation)) {
             return ORIENTATION_PORTRAIT;
         }
         return ORIENTATION_UNDEFINED;
@@ -2705,8 +2737,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             pw.print(prefix); pw.println("ContainerAnimator:");
             mSurfaceAnimator.dump(pw, prefix + "  ");
         }
-        if (mLastOrientationSource != null) {
+        if (mLastOrientationSource != null && this == mDisplayContent) {
             pw.println(prefix + "mLastOrientationSource=" + mLastOrientationSource);
+            pw.println(prefix + "deepestLastOrientationSource=" + getLastOrientationSource());
         }
     }
 
@@ -2815,6 +2848,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return false;
     }
 
+    /**
+     * @return {@code true} if this container's surface should be shown when it is created.
+     */
+    boolean showSurfaceOnCreation() {
+        return true;
+    }
+
     static WindowContainer fromBinder(IBinder binder) {
         return RemoteToken.fromBinder(binder).getContainer();
     }
@@ -2886,6 +2926,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // If we are invisible, no need to sync, likewise if we are already engaged in a sync,
         // we can't support overlapping syncs on a single container yet.
         if (!isVisible() || mWaitingListener != null) {
+            ProtoLog.v(WM_DEBUG_SYNC_ENGINE, "- NOT adding to sync: visible=%b "
+                            + "hasListener=%b", isVisible(), mWaitingListener != null);
             return false;
         }
         mUsingBLASTSyncTransaction = true;

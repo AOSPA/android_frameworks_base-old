@@ -207,13 +207,13 @@ public abstract class ApexManager {
     /**
      * Returns the active apex package's name that contains the (apk) package.
      *
-     * @param containedPackage The (apk) package that might be in a apex
+     * @param containedPackageName The (apk) package that might be in a apex
      * @return the apex package's name of {@code null} if the {@code containedPackage} is not inside
      *         any apex.
      */
     @Nullable
     public abstract String getActiveApexPackageNameContainingPackage(
-            @NonNull AndroidPackage containedPackage);
+            @NonNull String containedPackageName);
 
     /**
      * Retrieves information about an apexd staged session i.e. the internal state used by apexd to
@@ -650,15 +650,14 @@ public abstract class ApexManager {
 
         @Override
         @Nullable
-        public String getActiveApexPackageNameContainingPackage(AndroidPackage containedPackage) {
-            Objects.requireNonNull(containedPackage);
+        public String getActiveApexPackageNameContainingPackage(String containedPackageName) {
+            Objects.requireNonNull(containedPackageName);
             synchronized (mLock) {
                 Preconditions.checkState(mPackageNameToApexModuleName != null,
                         "APEX packages have not been scanned");
                 int numApksInApex = mApksInApex.size();
                 for (int apkInApexNum = 0; apkInApexNum < numApksInApex; apkInApexNum++) {
-                    if (mApksInApex.valueAt(apkInApexNum).contains(
-                            containedPackage.getPackageName())) {
+                    if (mApksInApex.valueAt(apkInApexNum).contains(containedPackageName)) {
                         String apexModuleName = mApksInApex.keyAt(apkInApexNum);
 
                         int numApexPkgs = mPackageNameToApexModuleName.size();
@@ -778,12 +777,15 @@ public abstract class ApexManager {
         void registerApkInApex(AndroidPackage pkg) {
             synchronized (mLock) {
                 for (ActiveApexInfo aai : mActiveApexInfosCache) {
-                    if (pkg.getBaseApkPath().startsWith(aai.apexDirectory.getAbsolutePath())) {
+                    if (pkg.getBaseApkPath().startsWith(
+                            aai.apexDirectory.getAbsolutePath() + File.separator)) {
                         List<String> apks = mApksInApex.get(aai.apexModuleName);
                         if (apks == null) {
                             apks = Lists.newArrayList();
                             mApksInApex.put(aai.apexModuleName, apks);
                         }
+                        Slog.i(TAG, "Registering " + pkg.getPackageName() + " as apk-in-apex of "
+                                + aai.apexModuleName);
                         apks.add(pkg.getPackageName());
                     }
                 }
@@ -1080,8 +1082,8 @@ public abstract class ApexManager {
         @Override
         @Nullable
         public String getActiveApexPackageNameContainingPackage(
-                @NonNull AndroidPackage containedPackage) {
-            Objects.requireNonNull(containedPackage);
+                @NonNull String containedPackageName) {
+            Objects.requireNonNull(containedPackageName);
 
             return null;
         }

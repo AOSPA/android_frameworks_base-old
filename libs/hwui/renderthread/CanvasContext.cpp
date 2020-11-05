@@ -139,7 +139,7 @@ void CanvasContext::destroy() {
     mAnimationContext->destroy();
 }
 
-static void setBufferCount(ANativeWindow* window, uint32_t extraBuffers) {
+static void setBufferCount(ANativeWindow* window) {
     int query_value;
     int err = window->query(window, NATIVE_WINDOW_MIN_UNDEQUEUED_BUFFERS, &query_value);
     if (err != 0 || query_value < 0) {
@@ -148,7 +148,9 @@ static void setBufferCount(ANativeWindow* window, uint32_t extraBuffers) {
     }
     auto min_undequeued_buffers = static_cast<uint32_t>(query_value);
 
-    int bufferCount = min_undequeued_buffers + 2 + extraBuffers;
+    // We only need to set min_undequeued + 2 because the renderahead amount was already factored into the
+    // query for min_undequeued
+    int bufferCount = min_undequeued_buffers + 2;
     native_window_set_buffer_count(window, bufferCount);
 }
 
@@ -182,7 +184,8 @@ void CanvasContext::setupPipelineSurface() {
             mNativeSurface ? mNativeSurface->getNativeWindow() : nullptr, mSwapBehavior);
 
     if (mNativeSurface && !mNativeSurface->didSetExtraBuffers()) {
-        setBufferCount(mNativeSurface->getNativeWindow(), mRenderAheadCapacity);
+        setBufferCount(mNativeSurface->getNativeWindow());
+
     }
 
     mFrameNumber = -1;
@@ -641,10 +644,11 @@ void CanvasContext::prepareAndDraw(RenderNode* node) {
 
     nsecs_t vsync = mRenderThread.timeLord().computeFrameTimeNanos();
     int64_t vsyncId = mRenderThread.timeLord().lastVsyncId();
+    int64_t frameDeadline = mRenderThread.timeLord().lastFrameDeadline();
     int64_t frameInfo[UI_THREAD_FRAME_INFO_SIZE];
     UiFrameInfoBuilder(frameInfo)
         .addFlag(FrameInfoFlags::RTAnimation)
-        .setVsync(vsync, vsync, vsyncId);
+        .setVsync(vsync, vsync, vsyncId, frameDeadline);
 
     TreeInfo info(TreeInfo::MODE_RT_ONLY, *this);
     prepareTree(info, frameInfo, systemTime(SYSTEM_TIME_MONOTONIC), node);

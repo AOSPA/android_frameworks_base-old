@@ -24,9 +24,13 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.net.MacAddress;
+import android.net.NetworkCapabilities;
 import android.net.wifi.hotspot2.PasspointConfiguration;
+import android.net.wifi.util.SdkLevelUtil;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 
@@ -119,6 +123,12 @@ public final class WifiNetworkSuggestion implements Parcelable {
         private int mCarrierId;
 
         /**
+         * The Subscription ID identifies the SIM card for which this network configuration is
+         * valid.
+         */
+        private int mSubscriptionId;
+
+        /**
          * Whether this network is shared credential with user to allow user manually connect.
          */
         private boolean mIsSharedWithUser;
@@ -150,6 +160,11 @@ public final class WifiNetworkSuggestion implements Parcelable {
         private boolean mIsNetworkUntrusted;
 
         /**
+         * Whether this network will be brought up as OEM paid (OEM_PAID capability bit added).
+         */
+        private boolean mIsNetworkOemPaid;
+
+        /**
          * Whether this network will use enhanced MAC randomization.
          */
         private boolean mIsEnhancedMacRandomizationEnabled;
@@ -175,8 +190,10 @@ public final class WifiNetworkSuggestion implements Parcelable {
             mWapiPskPassphrase = null;
             mWapiEnterpriseConfig = null;
             mIsNetworkUntrusted = false;
+            mIsNetworkOemPaid = false;
             mPriorityGroup = 0;
             mIsEnhancedMacRandomizationEnabled = false;
+            mSubscriptionId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
         }
 
         /**
@@ -345,6 +362,27 @@ public final class WifiNetworkSuggestion implements Parcelable {
         }
 
         /**
+         * Set the subscription ID of the SIM card for which this suggestion is targeted.
+         * The suggestion will only apply to that SIM card.
+         * <p>
+         * The subscription ID must belong to a carrier ID which meets either of the following
+         * conditions:
+         * <li>The carrier ID specified by the cross carrier provider, or</li>
+         * <li>The carrier ID which is used to validate the suggesting carrier-privileged app, see
+         * {@link TelephonyManager#hasCarrierPrivileges()}</li>
+         *
+         * @param subId subscription ID see {@link SubscriptionInfo#getSubscriptionId()}
+         * @return Instance of {@link Builder} to enable chaining of the builder method.
+         */
+        public @NonNull Builder setSubscriptionId(int subId) {
+            if (!SdkLevelUtil.isAtLeastS()) {
+                throw new UnsupportedOperationException();
+            }
+            mSubscriptionId = subId;
+            return this;
+        }
+
+        /**
          * Set the priority group ID, {@link #setPriority(int)} will only impact the network
          * suggestions from the same priority group within the same app.
          *
@@ -352,6 +390,9 @@ public final class WifiNetworkSuggestion implements Parcelable {
          * @return Instance of {@link Builder} to enable chaining of the builder method.
          */
         public @NonNull Builder setPriorityGroup(int priorityGroup) {
+            if (!SdkLevelUtil.isAtLeastS()) {
+                throw new UnsupportedOperationException();
+            }
             mPriorityGroup = priorityGroup;
             return this;
         }
@@ -543,7 +584,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
 
         /**
          * Specifies whether the system will bring up the network (if selected) as untrusted. An
-         * untrusted network has its {@link android.net.NetworkCapabilities#NET_CAPABILITY_TRUSTED}
+         * untrusted network has its {@link NetworkCapabilities#NET_CAPABILITY_TRUSTED}
          * capability removed. The Wi-Fi network selection process may use this information to
          * influence priority of the suggested network for Wi-Fi network selection (most likely to
          * reduce it). The connectivity service may use this information to influence the overall
@@ -559,6 +600,41 @@ public final class WifiNetworkSuggestion implements Parcelable {
          */
         public @NonNull Builder setUntrusted(boolean isUntrusted) {
             mIsNetworkUntrusted = isUntrusted;
+            return this;
+        }
+
+        /**
+         * Specifies whether the system will bring up the network (if selected) as OEM paid. An
+         * OEM paid network has {@link NetworkCapabilities#NET_CAPABILITY_OEM_PAID} capability
+         * added.
+         * Note:
+         * <li>The connectivity service may use this information to influence the overall
+         * network configuration of the device. This network is typically only available to system
+         * apps.
+         * <li>On devices which support only 1 concurrent connection (indicated via
+         * {@link WifiManager#isMultiStaConcurrencySupported()}, Wi-Fi network selection process may
+         * use this information to influence priority of the suggested network for Wi-Fi network
+         * selection (most likely to reduce it).
+         * <li>On devices which support more than 1 concurrent connections (indicated via
+         * {@link WifiManager#isMultiStaConcurrencySupported()}, these OEM paid networks will be
+         * brought up as a secondary concurrent connection (primary connection will be used
+         * for networks available to the user and all apps.
+         * <p>
+         * <li> An OEM paid network's credentials may not be shared with the user using
+         * {@link #setCredentialSharedWithUser(boolean)}.</li>
+         * <li> If not set, defaults to false (i.e. network is not OEM paid).</li>
+         *
+         * @param isOemPaid Boolean indicating whether the network should be brought up as OEM paid
+         *                  (if true) or not OEM paid (if false).
+         * @return Instance of {@link Builder} to enable chaining of the builder method.
+         * @hide
+         */
+        @SystemApi
+        public @NonNull Builder setOemPaid(boolean isOemPaid) {
+            if (!SdkLevelUtil.isAtLeastS()) {
+                throw new UnsupportedOperationException();
+            }
+            mIsNetworkOemPaid = isOemPaid;
             return this;
         }
 
@@ -628,9 +704,11 @@ public final class WifiNetworkSuggestion implements Parcelable {
             wifiConfiguration.meteredOverride = mMeteredOverride;
             wifiConfiguration.carrierId = mCarrierId;
             wifiConfiguration.trusted = !mIsNetworkUntrusted;
+            wifiConfiguration.oemPaid = mIsNetworkOemPaid;
             wifiConfiguration.macRandomizationSetting = mIsEnhancedMacRandomizationEnabled
                     ? WifiConfiguration.RANDOMIZATION_ENHANCED
                     : WifiConfiguration.RANDOMIZATION_PERSISTENT;
+            wifiConfiguration.subscriptionId = mSubscriptionId;
             return wifiConfiguration;
         }
 
@@ -659,7 +737,10 @@ public final class WifiNetworkSuggestion implements Parcelable {
             wifiConfiguration.priority = mPriority;
             wifiConfiguration.meteredOverride = mMeteredOverride;
             wifiConfiguration.trusted = !mIsNetworkUntrusted;
+            wifiConfiguration.oemPaid = mIsNetworkOemPaid;
+            wifiConfiguration.subscriptionId = mSubscriptionId;
             mPasspointConfiguration.setCarrierId(mCarrierId);
+            mPasspointConfiguration.setSubscriptionId(mSubscriptionId);
             mPasspointConfiguration.setMeteredOverride(wifiConfiguration.meteredOverride);
             wifiConfiguration.macRandomizationSetting = mIsEnhancedMacRandomizationEnabled
                     ? WifiConfiguration.RANDOMIZATION_ENHANCED
@@ -764,7 +845,15 @@ public final class WifiNetworkSuggestion implements Parcelable {
                 if (mIsSharedWithUserSet && mIsSharedWithUser) {
                     throw new IllegalStateException("Should not be both"
                             + "setCredentialSharedWithUser and +"
-                            + "setIsNetworkAsUntrusted to true");
+                            + "setUntrusted to true");
+                }
+                mIsSharedWithUser = false;
+            }
+            if (mIsNetworkOemPaid) {
+                if (mIsSharedWithUserSet && mIsSharedWithUser) {
+                    throw new IllegalStateException("Should not be both"
+                            + "setCredentialSharedWithUser and +"
+                            + "setOemPaid to true");
                 }
                 mIsSharedWithUser = false;
             }
@@ -893,7 +982,8 @@ public final class WifiNetworkSuggestion implements Parcelable {
     @Override
     public int hashCode() {
         return Objects.hash(wifiConfiguration.SSID, wifiConfiguration.BSSID,
-                wifiConfiguration.allowedKeyManagement, wifiConfiguration.getKey());
+                wifiConfiguration.allowedKeyManagement, wifiConfiguration.getKey(),
+                wifiConfiguration.subscriptionId, wifiConfiguration.carrierId);
     }
 
     /**
@@ -917,7 +1007,9 @@ public final class WifiNetworkSuggestion implements Parcelable {
                 && Objects.equals(this.wifiConfiguration.allowedKeyManagement,
                 lhs.wifiConfiguration.allowedKeyManagement)
                 && TextUtils.equals(this.wifiConfiguration.getKey(),
-                lhs.wifiConfiguration.getKey());
+                lhs.wifiConfiguration.getKey())
+                && this.wifiConfiguration.carrierId == lhs.wifiConfiguration.carrierId
+                && this.wifiConfiguration.subscriptionId == lhs.wifiConfiguration.subscriptionId;
     }
 
     @Override
@@ -931,6 +1023,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
                 .append(", isCredentialSharedWithUser=").append(isUserAllowedToManuallyConnect)
                 .append(", isInitialAutoJoinEnabled=").append(isInitialAutoJoinEnabled)
                 .append(", isUnTrusted=").append(!wifiConfiguration.trusted)
+                .append(", isOemPaid=").append(wifiConfiguration.oemPaid)
                 .append(", priorityGroup=").append(priorityGroup)
                 .append(" ]");
         return sb.toString();
@@ -1026,6 +1119,18 @@ public final class WifiNetworkSuggestion implements Parcelable {
     }
 
     /**
+     * @see Builder#setOemPaid(boolean)
+     * @hide
+     */
+    @SystemApi
+    public boolean isOemPaid() {
+        if (!SdkLevelUtil.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        return wifiConfiguration.oemPaid;
+    }
+
+    /**
      * Get the WifiEnterpriseConfig, or null if unset.
      * @see Builder#setWapiEnterpriseConfig(WifiEnterpriseConfig)
      * @see Builder#setWpa2EnterpriseConfig(WifiEnterpriseConfig)
@@ -1057,6 +1162,19 @@ public final class WifiNetworkSuggestion implements Parcelable {
      * @see Builder#setPriorityGroup(int)
      */
     public int getPriorityGroup() {
+        if (!SdkLevelUtil.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
         return priorityGroup;
+    }
+
+    /**
+     * @see Builder#setSubscriptionId(int)
+     */
+    public int getSubscriptionId() {
+        if (!SdkLevelUtil.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        return wifiConfiguration.subscriptionId;
     }
 }

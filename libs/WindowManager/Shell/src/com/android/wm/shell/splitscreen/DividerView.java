@@ -845,15 +845,7 @@ public class DividerView extends FrameLayout implements OnTouchListener,
     }
 
     void enterSplitMode(boolean isHomeStackResizable) {
-        post(() -> {
-            final SurfaceControl sc = getWindowSurfaceControl();
-            if (sc == null) {
-                return;
-            }
-            Transaction t = mTiles.getTransaction();
-            t.show(sc).apply();
-            mTiles.releaseTransaction(t);
-        });
+        setHidden(false);
 
         SnapTarget miniMid =
                 mSplitLayout.getMinimizedSnapAlgorithm(isHomeStackResizable).getMiddleTarget();
@@ -880,14 +872,19 @@ public class DividerView extends FrameLayout implements OnTouchListener,
     }
 
     void exitSplitMode() {
-        // Reset tile bounds
+        // The view is going to be removed right after this function involved, updates the surface
+        // in the current thread instead of posting it to the view's UI thread.
         final SurfaceControl sc = getWindowSurfaceControl();
         if (sc == null) {
             return;
         }
         Transaction t = mTiles.getTransaction();
-        t.hide(sc).apply();
+        t.hide(sc);
+        mImeController.setDimsHidden(t, true);
+        t.apply();
         mTiles.releaseTransaction(t);
+
+        // Reset tile bounds
         int midPos = mSplitLayout.getSnapAlgorithm().getMiddleTarget().position;
         mWindowManagerProxy.applyResizeSplits(midPos, mSplitLayout);
     }
@@ -1317,38 +1314,6 @@ public class DividerView extends FrameLayout implements OnTouchListener,
                 mHandle.getBottom());
         inoutInfo.touchableRegion.op(mBackground.getLeft(), mBackground.getTop(),
                 mBackground.getRight(), mBackground.getBottom(), Op.UNION);
-    }
-
-    void onDockedFirstAnimationFrame() {
-        saveSnapTargetBeforeMinimized(mSplitLayout.getSnapAlgorithm().getMiddleTarget());
-    }
-
-    void onDockedTopTask() {
-        mState.animateAfterRecentsDrawn = true;
-        startDragging(false /* animate */, false /* touching */);
-        updateDockSide();
-        mEntranceAnimationRunning = true;
-
-        resizeStackSurfaces(calculatePositionForInsetBounds(),
-                mSplitLayout.getSnapAlgorithm().getMiddleTarget().position,
-                mSplitLayout.getSnapAlgorithm().getMiddleTarget(),
-                null /* transaction */);
-    }
-
-    void onRecentsDrawn() {
-        updateDockSide();
-        final int position = calculatePositionForInsetBounds();
-        if (mState.animateAfterRecentsDrawn) {
-            mState.animateAfterRecentsDrawn = false;
-
-            mHandler.post(() -> {
-                // Delay switching resizing mode because this might cause jank in recents animation
-                // that's longer than this animation.
-                stopDragging(position, getSnapAlgorithm().getMiddleTarget(),
-                        mLongPressEntraceAnimDuration, Interpolators.FAST_OUT_SLOW_IN,
-                        200 /* endDelay */);
-            });
-        }
     }
 
     void onUndockingTask() {

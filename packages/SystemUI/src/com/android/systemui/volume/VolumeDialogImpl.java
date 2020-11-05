@@ -90,6 +90,7 @@ import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
+import com.android.systemui.media.dialog.MediaOutputDialogFactory;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.VolumeDialog;
 import com.android.systemui.plugins.VolumeDialogController;
@@ -122,8 +123,11 @@ public class VolumeDialogImpl implements VolumeDialog,
     static final int DIALOG_SAFETYWARNING_TIMEOUT_MILLIS = 5000;
     static final int DIALOG_ODI_CAPTIONS_TOOLTIP_TIMEOUT_MILLIS = 5000;
     static final int DIALOG_HOVERING_TIMEOUT_MILLIS = 16000;
-    static final int DIALOG_SHOW_ANIMATION_DURATION = 300;
-    static final int DIALOG_HIDE_ANIMATION_DURATION = 250;
+
+    private final int mDialogShowAnimationDurationMs;
+    private final int mDialogHideAnimationDurationMs;
+    private final boolean mShowLowMediaVolumeIcon;
+    private final boolean mChangeVolumeRowTintWhenInactive;
 
     private final Context mContext;
     private final H mHandler = new H();
@@ -154,8 +158,6 @@ public class VolumeDialogImpl implements VolumeDialog,
     private boolean mShowing;
     private boolean mShowA11yStream;
 
-    private final boolean mShowLowMediaVolumeIcon;
-
     private int mActiveStream;
     private int mPrevActiveStream;
     private boolean mAutomute = VolumePrefs.DEFAULT_ENABLE_AUTOMUTE;
@@ -183,6 +185,12 @@ public class VolumeDialogImpl implements VolumeDialog,
                 Prefs.getBoolean(context, Prefs.Key.HAS_SEEN_ODI_CAPTIONS_TOOLTIP, false);
         mShowLowMediaVolumeIcon =
             mContext.getResources().getBoolean(R.bool.config_showLowMediaVolumeIcon);
+        mChangeVolumeRowTintWhenInactive =
+            mContext.getResources().getBoolean(R.bool.config_changeVolumeRowTintWhenInactive);
+        mDialogShowAnimationDurationMs =
+            mContext.getResources().getInteger(R.integer.config_dialogShowAnimationDurationMs);
+        mDialogHideAnimationDurationMs =
+            mContext.getResources().getInteger(R.integer.config_dialogHideAnimationDurationMs);
     }
 
     @Override
@@ -272,7 +280,7 @@ public class VolumeDialogImpl implements VolumeDialog,
             mDialogView.animate()
                     .alpha(1)
                     .translationX(0)
-                    .setDuration(DIALOG_SHOW_ANIMATION_DURATION)
+                    .setDuration(mDialogShowAnimationDurationMs)
                     .setInterpolator(new SystemUIInterpolators.LogDecelerateInterpolator())
                     .withEndAction(() -> {
                         if (!Prefs.getBoolean(mContext, Prefs.Key.TOUCHED_RINGER_TOGGLE, false)) {
@@ -512,6 +520,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                 Events.writeEvent(Events.EVENT_SETTINGS_CLICK);
                 Intent intent = new Intent(Settings.Panel.ACTION_VOLUME);
                 dismissH(DISMISS_REASON_SETTINGS_CLICKED);
+                Dependency.get(MediaOutputDialogFactory.class).dismiss();
                 Dependency.get(ActivityStarter.class).startActivity(intent,
                         true /* dismissShade */);
             });
@@ -592,7 +601,7 @@ public class VolumeDialogImpl implements VolumeDialog,
             mODICaptionsTooltipView.setAlpha(0.f);
             mODICaptionsTooltipView.animate()
                 .alpha(1.f)
-                .setStartDelay(DIALOG_SHOW_ANIMATION_DURATION)
+                .setStartDelay(mDialogShowAnimationDurationMs)
                 .withEndAction(() -> {
                     if (D.BUG) Log.d(TAG, "tool:checkODICaptionsTooltip() putBoolean true");
                     Prefs.putBoolean(mContext,
@@ -614,7 +623,7 @@ public class VolumeDialogImpl implements VolumeDialog,
             mODICaptionsTooltipView.animate()
                     .alpha(0.f)
                     .setStartDelay(0)
-                    .setDuration(DIALOG_HIDE_ANIMATION_DURATION)
+                    .setDuration(mDialogHideAnimationDurationMs)
                     .withEndAction(() -> mODICaptionsTooltipView.setVisibility(INVISIBLE))
                     .start();
         }
@@ -793,7 +802,7 @@ public class VolumeDialogImpl implements VolumeDialog,
         mDialogView.setAlpha(1);
         ViewPropertyAnimator animator = mDialogView.animate()
                 .alpha(0)
-                .setDuration(DIALOG_HIDE_ANIMATION_DURATION)
+                .setDuration(mDialogHideAnimationDurationMs)
                 .setInterpolator(new SystemUIInterpolators.LogAccelerateInterpolator())
                 .withEndAction(() -> mHandler.postDelayed(() -> {
                     mDialog.dismiss();
@@ -1076,7 +1085,7 @@ public class VolumeDialogImpl implements VolumeDialog,
             iconRes = isStreamMuted(ss) ? R.drawable.ic_volume_media_bt_mute
                                         : R.drawable.ic_volume_media_bt;
         } else if (isStreamMuted(ss)) {
-            iconRes = row.iconMuteRes;
+            iconRes = ss.muted ? R.drawable.ic_volume_media_off : row.iconMuteRes;
         } else {
             iconRes = mShowLowMediaVolumeIcon && ss.level * 2 < (ss.levelMax + ss.levelMin)
                       ? R.drawable.ic_volume_media_low : row.iconRes;
@@ -1154,6 +1163,9 @@ public class VolumeDialogImpl implements VolumeDialog,
             row.slider.requestFocus();
         }
         boolean useActiveColoring = isActive && row.slider.isEnabled();
+        if (!useActiveColoring && !mChangeVolumeRowTintWhenInactive) {
+            return;
+        }
         final ColorStateList tint = useActiveColoring
                 ? Utils.getColorAccent(mContext)
                 : Utils.getColorAttr(mContext, android.R.attr.colorForeground);

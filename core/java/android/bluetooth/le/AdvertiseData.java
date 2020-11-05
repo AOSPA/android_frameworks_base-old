@@ -16,6 +16,7 @@
 
 package android.bluetooth.le;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Parcel;
 import android.os.ParcelUuid;
@@ -43,6 +44,9 @@ public final class AdvertiseData implements Parcelable {
     @Nullable
     private final List<ParcelUuid> mServiceUuids;
 
+    @Nullable
+    private final List<ParcelUuid> mServiceSolicitationUuids;
+
     private final SparseArray<byte[]> mManufacturerSpecificData;
     private final Map<ParcelUuid, byte[]> mServiceData;
     private final boolean mIncludeTxPowerLevel;
@@ -50,12 +54,14 @@ public final class AdvertiseData implements Parcelable {
     private final byte[] mTransportDiscoveryData;
 
     private AdvertiseData(List<ParcelUuid> serviceUuids,
+            List<ParcelUuid> serviceSolicitationUuids,
             SparseArray<byte[]> manufacturerData,
             Map<ParcelUuid, byte[]> serviceData,
             boolean includeTxPowerLevel,
             boolean includeDeviceName,
             byte[] transportDiscoveryData) {
         mServiceUuids = serviceUuids;
+        mServiceSolicitationUuids = serviceSolicitationUuids;
         mManufacturerSpecificData = manufacturerData;
         mServiceData = serviceData;
         mIncludeTxPowerLevel = includeTxPowerLevel;
@@ -69,6 +75,14 @@ public final class AdvertiseData implements Parcelable {
      */
     public List<ParcelUuid> getServiceUuids() {
         return mServiceUuids;
+    }
+
+    /**
+     * Returns a list of service solicitation UUIDs within the advertisement that we invite to connect.
+     */
+    @Nullable
+    public List<ParcelUuid> getServiceSolicitationUuids() {
+        return mServiceSolicitationUuids;
     }
 
     /**
@@ -113,8 +127,8 @@ public final class AdvertiseData implements Parcelable {
      */
     @Override
     public int hashCode() {
-        return Objects.hash(mServiceUuids, mManufacturerSpecificData, mServiceData,
-                mIncludeDeviceName, mIncludeTxPowerLevel, mTransportDiscoveryData);
+        return Objects.hash(mServiceUuids, mServiceSolicitationUuids, mManufacturerSpecificData,
+                mServiceData, mIncludeDeviceName, mIncludeTxPowerLevel, mTransportDiscoveryData);
     }
 
     /**
@@ -130,6 +144,7 @@ public final class AdvertiseData implements Parcelable {
         }
         AdvertiseData other = (AdvertiseData) obj;
         return Objects.equals(mServiceUuids, other.mServiceUuids)
+                && Objects.equals(mServiceSolicitationUuids, other.mServiceSolicitationUuids)
                 && BluetoothLeUtils.equals(mManufacturerSpecificData,
                     other.mManufacturerSpecificData)
                 && BluetoothLeUtils.equals(mServiceData, other.mServiceData)
@@ -140,7 +155,8 @@ public final class AdvertiseData implements Parcelable {
 
     @Override
     public String toString() {
-        return "AdvertiseData [mServiceUuids=" + mServiceUuids + ", mManufacturerSpecificData="
+        return "AdvertiseData [mServiceUuids=" + mServiceUuids + ", mServiceSolicitationUuids="
+                + mServiceSolicitationUuids + ", mManufacturerSpecificData="
                 + BluetoothLeUtils.toString(mManufacturerSpecificData) + ", mServiceData="
                 + BluetoothLeUtils.toString(mServiceData)
                 + ", mIncludeTxPowerLevel=" + mIncludeTxPowerLevel + ", mIncludeDeviceName="
@@ -156,6 +172,8 @@ public final class AdvertiseData implements Parcelable {
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeTypedArray(mServiceUuids.toArray(new ParcelUuid[mServiceUuids.size()]), flags);
+        dest.writeTypedArray(mServiceSolicitationUuids.toArray(
+                new ParcelUuid[mServiceSolicitationUuids.size()]), flags);
 
         // mManufacturerSpecificData could not be null.
         dest.writeInt(mManufacturerSpecificData.size());
@@ -191,6 +209,11 @@ public final class AdvertiseData implements Parcelable {
                         builder.addServiceUuid(uuid);
                     }
 
+                    ArrayList<ParcelUuid> solicitationUuids = in.createTypedArrayList(ParcelUuid.CREATOR);
+                    for (ParcelUuid uuid : solicitationUuids) {
+                        builder.addServiceSolicitationUuid(uuid);
+                    }
+
                     int manufacturerSize = in.readInt();
                     for (int i = 0; i < manufacturerSize; ++i) {
                         int manufacturerId = in.readInt();
@@ -220,6 +243,8 @@ public final class AdvertiseData implements Parcelable {
     public static final class Builder {
         @Nullable
         private List<ParcelUuid> mServiceUuids = new ArrayList<ParcelUuid>();
+        @Nullable
+        private List<ParcelUuid> mServiceSolicitationUuids = new ArrayList<ParcelUuid>();
         private SparseArray<byte[]> mManufacturerSpecificData = new SparseArray<byte[]>();
         private Map<ParcelUuid, byte[]> mServiceData = new ArrayMap<ParcelUuid, byte[]>();
         private boolean mIncludeTxPowerLevel;
@@ -230,16 +255,30 @@ public final class AdvertiseData implements Parcelable {
          * Add a service UUID to advertise data.
          *
          * @param serviceUuid A service UUID to be advertised.
-         * @throws IllegalArgumentException If the {@code serviceUuids} are null.
+         * @throws IllegalArgumentException If the {@code serviceUuid} is null.
          */
         public Builder addServiceUuid(ParcelUuid serviceUuid) {
             if (serviceUuid == null) {
-                throw new IllegalArgumentException("serivceUuids are null");
+                throw new IllegalArgumentException("serviceUuid is null");
             }
             mServiceUuids.add(serviceUuid);
             return this;
         }
 
+        /**
+         * Add a service solicitation UUID to advertise data.
+         *
+         * @param serviceSolicitationUuid A service solicitation UUID to be advertised.
+         * @throws IllegalArgumentException If the {@code serviceSolicitationUuid} is null.
+         */
+        @NonNull
+        public Builder addServiceSolicitationUuid(@NonNull ParcelUuid serviceSolicitationUuid) {
+            if (serviceSolicitationUuid == null) {
+                throw new IllegalArgumentException("serviceSolicitationUuid is null");
+            }
+            mServiceSolicitationUuids.add(serviceSolicitationUuid);
+            return this;
+        }
         /**
          * Add service data to advertise data.
          *
@@ -314,8 +353,9 @@ public final class AdvertiseData implements Parcelable {
          * Build the {@link AdvertiseData}.
          */
         public AdvertiseData build() {
-            return new AdvertiseData(mServiceUuids, mManufacturerSpecificData, mServiceData,
-                    mIncludeTxPowerLevel, mIncludeDeviceName, mTransportDiscoveryData);
+            return new AdvertiseData(mServiceUuids, mServiceSolicitationUuids,
+                    mManufacturerSpecificData, mServiceData, mIncludeTxPowerLevel,
+                    mIncludeDeviceName, mTransportDiscoveryData);
         }
     }
 }

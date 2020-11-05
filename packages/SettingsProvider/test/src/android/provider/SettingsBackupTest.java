@@ -117,7 +117,6 @@ public class SettingsBackupTest {
                     Settings.Global.AIRPLANE_MODE_ON,
                     Settings.Global.AIRPLANE_MODE_RADIOS,
                     Settings.Global.AIRPLANE_MODE_TOGGLEABLE_RADIOS,
-                    Settings.Global.ALARM_MANAGER_CONSTANTS,
                     Settings.Global.ALLOW_USER_SWITCHING_WHEN_SYSTEM_USER_LOCKED,
                     Settings.Global.ALWAYS_FINISH_ACTIVITIES,
                     Settings.Global.ALWAYS_ON_DISPLAY_CONSTANTS,
@@ -160,6 +159,7 @@ public class SettingsBackupTest {
                     Settings.Global.BLE_SCAN_LOW_LATENCY_WINDOW_MS,
                     Settings.Global.BLE_SCAN_LOW_LATENCY_INTERVAL_MS,
                     Settings.Global.BLE_SCAN_BACKGROUND_MODE,
+                    Settings.Global.BLOCK_UNTRUSTED_TOUCHES_MODE,
                     Settings.Global.BLOCKED_SLICES,
                     Settings.Global.BLOCKING_HELPER_DISMISS_TO_VIEW_RATIO_LIMIT,
                     Settings.Global.BLOCKING_HELPER_STREAK_LIMIT,
@@ -229,6 +229,7 @@ public class SettingsBackupTest {
                     Settings.Global.DEVELOPMENT_FORCE_RTL,
                     Settings.Global.DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM,
                     Settings.Global.DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR,
+                    Settings.Global.DEVELOPMENT_USE_BLAST_ADAPTER_SV,
                     Settings.Global.DEVICE_DEMO_MODE,
                     Settings.Global.BATTERY_SAVER_ADAPTIVE_CONSTANTS,
                     Settings.Global.BATTERY_SAVER_CONSTANTS,
@@ -332,6 +333,7 @@ public class SettingsBackupTest {
                     Settings.Global.MAX_ERROR_BYTES_PREFIX,
                     Settings.Global.MAX_NOTIFICATION_ENQUEUE_RATE,
                     Settings.Global.MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY,
+                    Settings.Global.MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH,
                     Settings.Global.MDC_INITIAL_MAX_RETRY,
                     Settings.Global.MHL_INPUT_SWITCHING_ENABLED,
                     Settings.Global.MHL_POWER_CHARGE_ENABLED,
@@ -437,6 +439,8 @@ public class SettingsBackupTest {
                     Settings.Global.SHOW_MUTE_IN_CRASH_DIALOG,
                     Settings.Global.SHOW_NEW_APP_INSTALLED_NOTIFICATION_ENABLED,
                     Settings.Global.SHOW_NOTIFICATION_CHANNEL_WARNINGS,
+                    Settings.Global.SHOW_PEOPLE_SPACE,
+                    Settings.Global.SHOW_NEW_LOCKSCREEN,
                     Settings.Global.SHOW_RESTART_IN_CRASH_DIALOG,
                     Settings.Global.SHOW_TEMPERATURE_WARNING,
                     Settings.Global.SHOW_USB_TEMPERATURE_ALARM,
@@ -502,6 +506,7 @@ public class SettingsBackupTest {
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS,
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES,
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_ALLOWLIST,
+                    Settings.Global.ANGLE_EGL_FEATURES,
                     Settings.Global.UPDATABLE_DRIVER_ALL_APPS,
                     Settings.Global.UPDATABLE_DRIVER_PRODUCTION_OPT_IN_APPS,
                     Settings.Global.UPDATABLE_DRIVER_PRERELEASE_OPT_IN_APPS,
@@ -741,7 +746,8 @@ public class SettingsBackupTest {
                  Settings.Secure.NEARBY_SHARING_COMPONENT, // not user configurable
                  Settings.Secure.WINDOW_MAGNIFICATION,
                  Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_MAGNIFICATION_CONTROLLER,
-                 Settings.Secure.SUPPRESS_DOZE);
+                 Settings.Secure.SUPPRESS_DOZE,
+                 Settings.Secure.REDUCE_BRIGHT_COLORS_ACTIVATED);
 
     @Test
     public void systemSettingsBackedUpOrDenied() {

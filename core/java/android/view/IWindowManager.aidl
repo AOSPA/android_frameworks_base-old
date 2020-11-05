@@ -378,11 +378,6 @@ interface IWindowManager
     boolean requestAssistScreenshot(IAssistDataReceiver receiver);
 
     /**
-     * Called by the status bar to notify Views of changes to System UI visiblity.
-     */
-    oneway void statusBarVisibilityChanged(int displayId, int visibility);
-
-    /**
      * Called by System UI to notify Window Manager to hide transient bars.
      */
     oneway void hideTransientBars(int displayId);
@@ -757,4 +752,10 @@ interface IWindowManager
      */
     void requestScrollCapture(int displayId, IBinder behindClient, int taskId,
             IScrollCaptureController controller);
+
+    /**
+     * Holds the WM lock for the specified amount of milliseconds.
+     * Intended for use by the tests that need to imitate lock contention.
+     */
+    void holdLock(in int durationMs);
 }

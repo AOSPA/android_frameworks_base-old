@@ -58,7 +58,6 @@ import com.android.internal.logging.UiEventLoggerImpl;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.shared.system.QuickStepContract;
 
@@ -425,12 +424,6 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
         // Make KeyEvent work on multi-display environment
         if (getDisplay() != null) {
             displayId = getDisplay().getDisplayId();
-        }
-        // Bubble controller will give us a valid display id if it should get the back event
-        BubbleController bubbleController = Dependency.get(BubbleController.class);
-        int bubbleDisplayId = bubbleController.getExpandedDisplayId(mContext);
-        if (mCode == KeyEvent.KEYCODE_BACK && bubbleDisplayId != INVALID_DISPLAY) {
-            displayId = bubbleDisplayId;
         }
         if (displayId != INVALID_DISPLAY) {
             ev.setDisplayId(displayId);

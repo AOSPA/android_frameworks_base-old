@@ -22,17 +22,20 @@ import static android.view.MotionEvent.ACTION_CANCEL;
 import static android.view.MotionEvent.ACTION_DOWN;
 import static android.view.MotionEvent.ACTION_MOVE;
 import static android.view.MotionEvent.ACTION_UP;
+import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK;
 
+import static com.android.systemui.accessibility.MagnificationModeSwitch.FADING_ANIMATION_DURATION_MS;
 import static com.android.systemui.accessibility.MagnificationModeSwitch.getIconResId;
 
 import static junit.framework.Assert.assertEquals;
 
+import static org.hamcrest.CoreMatchers.hasItems;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,10 +48,12 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewPropertyAnimator;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.ImageView;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 
 import org.junit.Before;
@@ -63,6 +68,9 @@ import org.mockito.MockitoAnnotations;
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
 public class MagnificationModeSwitchTest extends SysuiTestCase {
+
+    private static final float FADE_IN_ALPHA = 1f;
+    private static final float FADE_OUT_ALPHA = 0f;
 
     private ImageView mSpyImageView;
     @Mock
@@ -82,49 +90,47 @@ public class MagnificationModeSwitchTest extends SysuiTestCase {
         ).when(mWindowManager).getMaximumWindowMetrics();
         mContext.addMockSystemService(Context.WINDOW_SERVICE, mWindowManager);
         mSpyImageView = Mockito.spy(new ImageView(mContext));
-        doAnswer(invocation -> null).when(mSpyImageView).setOnTouchListener(
-                mTouchListenerCaptor.capture());
-        initMockImageViewAndAnimator();
+        resetMockImageViewAndAnimator();
 
         mMagnificationModeSwitch = new MagnificationModeSwitch(mContext, mSpyImageView);
     }
 
     @Test
-    public void removeButton_removeView() {
+    public void removeButton_buttonIsShowing_removeView() {
         mMagnificationModeSwitch.showButton(ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW);
 
         mMagnificationModeSwitch.removeButton();
 
         verify(mWindowManager).removeView(mSpyImageView);
-        // First invocation is in showButton.
-        verify(mViewPropertyAnimator, times(2)).cancel();
+        verify(mViewPropertyAnimator).cancel();
     }
 
     @Test
     public void showWindowModeButton_fullscreenMode_addViewAndSetImageResource() {
         mMagnificationModeSwitch.showButton(ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW);
-
-        verify(mSpyImageView).setAlpha(1.0f);
         verify(mSpyImageView).setImageResource(
                 getIconResId(ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW));
-        assertShowButtonAnimation();
+        assertShowFadingAnimation(FADE_IN_ALPHA);
+        assertShowFadingAnimation(FADE_OUT_ALPHA);
+
         ArgumentCaptor<Runnable> captor = ArgumentCaptor.forClass(Runnable.class);
         verify(mViewPropertyAnimator).withEndAction(captor.capture());
         verify(mWindowManager).addView(eq(mSpyImageView), any(WindowManager.LayoutParams.class));
 
         captor.getValue().run();
 
-        // First invocation is in showButton.
-        verify(mViewPropertyAnimator, times(2)).cancel();
+        verify(mViewPropertyAnimator).cancel();
         verify(mWindowManager).removeView(mSpyImageView);
     }
 
     @Test
-    public void onConfigurationChanged_setImageResource() {
+    public void onConfigurationChanged_buttonIsShowing_setImageResource() {
         mMagnificationModeSwitch.showButton(ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN);
+        resetMockImageViewAndAnimator();
+
         mMagnificationModeSwitch.onConfigurationChanged(ActivityInfo.CONFIG_DENSITY);
 
-        verify(mSpyImageView, times(2)).setImageResource(
+        verify(mSpyImageView).setImageResource(
                 getIconResId(ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN));
     }
 
@@ -142,13 +148,7 @@ public class MagnificationModeSwitchTest extends SysuiTestCase {
         resetMockImageViewAndAnimator();
         listener.onTouch(mSpyImageView, MotionEvent.obtain(
                 0, ViewConfiguration.getTapTimeout(), ACTION_UP, 100, 100, 0));
-        verify(mViewPropertyAnimator).cancel();
-        verify(mSpyImageView).setImageResource(
-                getIconResId(ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW));
-        verify(mWindowManager).removeView(mSpyImageView);
-        final int actualMode = Settings.Secure.getInt(mContext.getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE, 0);
-        assertEquals(ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW, actualMode);
+        verifyTapAction(ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW);
     }
 
     @Test
@@ -163,7 +163,6 @@ public class MagnificationModeSwitchTest extends SysuiTestCase {
                 Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE, 0);
         listener.onTouch(mSpyImageView, MotionEvent.obtain(
                 0, 0, ACTION_DOWN, 100, 100, 0));
-        verify(mSpyImageView).setAlpha(1.0f);
         verify(mViewPropertyAnimator).cancel();
 
         listener.onTouch(mSpyImageView, MotionEvent.obtain(
@@ -174,9 +173,8 @@ public class MagnificationModeSwitchTest extends SysuiTestCase {
         resetMockImageViewAndAnimator();
         listener.onTouch(mSpyImageView, MotionEvent.obtain(
                 0, ViewConfiguration.getTapTimeout() + 10, ACTION_UP, 100 + offset, 100, 0));
-        verify(mSpyImageView).setAlpha(1.0f);
         assertModeUnchanged(previousMode);
-        assertShowButtonAnimation();
+        assertShowFadingAnimation(FADE_OUT_ALPHA);
     }
 
     @Test
@@ -194,9 +192,8 @@ public class MagnificationModeSwitchTest extends SysuiTestCase {
         resetMockImageViewAndAnimator();
         listener.onTouch(mSpyImageView, MotionEvent.obtain(
                 0, ViewConfiguration.getTapTimeout(), ACTION_CANCEL, 100, 100, 0));
-        verify(mSpyImageView).setAlpha(1.0f);
         assertModeUnchanged(previousMode);
-        assertShowButtonAnimation();
+        assertShowFadingAnimation(FADE_OUT_ALPHA);
     }
 
     @Test
@@ -217,9 +214,49 @@ public class MagnificationModeSwitchTest extends SysuiTestCase {
         resetMockImageViewAndAnimator();
         listener.onTouch(mSpyImageView, MotionEvent.obtain(
                 0, ViewConfiguration.getTapTimeout(), ACTION_CANCEL, 100 + offset, 100, 0));
-        verify(mSpyImageView).setAlpha(1.0f);
         assertModeUnchanged(previousMode);
-        assertShowButtonAnimation();
+        assertShowFadingAnimation(FADE_OUT_ALPHA);
+    }
+
+    @Test
+    public void initializeA11yNode_showWindowModeButton_expectedValues() {
+        mMagnificationModeSwitch.showButton(ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW);
+        final AccessibilityNodeInfo nodeInfo = new AccessibilityNodeInfo();
+
+        mSpyImageView.onInitializeAccessibilityNodeInfo(nodeInfo);
+
+        assertEquals(mContext.getString(R.string.magnification_mode_switch_description),
+                nodeInfo.getContentDescription());
+        assertEquals(mContext.getString(R.string.magnification_mode_switch_state_window),
+                nodeInfo.getStateDescription());
+        assertThat(nodeInfo.getActionList(),
+                hasItems(new AccessibilityNodeInfo.AccessibilityAction(
+                        ACTION_CLICK.getId(), mContext.getResources().getString(
+                        R.string.magnification_mode_switch_click_label))));
+    }
+
+    @Test
+    public void performA11yActions_showWindowModeButton_verifyTapAction() {
+        mMagnificationModeSwitch.showButton(ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW);
+        resetMockImageViewAndAnimator();
+
+        mSpyImageView.performAccessibilityAction(
+                ACTION_CLICK.getId(), null);
+
+        verifyTapAction(ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN);
+    }
+
+    @Test
+    public void showButton_showFadeOutAnimation_fadeOutAnimationCanceled() {
+        mMagnificationModeSwitch.showButton(ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN);
+        assertShowFadingAnimation(FADE_OUT_ALPHA);
+        resetMockImageViewAndAnimator();
+
+        mMagnificationModeSwitch.showButton(ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN);
+
+        verify(mViewPropertyAnimator).cancel();
+        assertEquals(1f, mSpyImageView.getAlpha());
+        assertShowFadingAnimation(FADE_OUT_ALPHA);
     }
 
     private void assertModeUnchanged(int expectedMode) {
@@ -228,30 +265,50 @@ public class MagnificationModeSwitchTest extends SysuiTestCase {
         assertEquals(expectedMode, actualMode);
     }
 
-    private void assertShowButtonAnimation() {
-        verify(mViewPropertyAnimator).cancel();
-        verify(mViewPropertyAnimator).setDuration(anyLong());
-        verify(mViewPropertyAnimator).alpha(anyFloat());
+    private void assertShowFadingAnimation(float alpha) {
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        if (alpha == FADE_IN_ALPHA) { // Fade-in
+            verify(mSpyImageView).postOnAnimation(runnableCaptor.capture());
+        } else { // Fade-out
+            verify(mSpyImageView).postOnAnimationDelayed(runnableCaptor.capture(), anyLong());
+        }
+        resetMockAnimator();
+
+        runnableCaptor.getValue().run();
+
+        verify(mViewPropertyAnimator).setDuration(eq(FADING_ANIMATION_DURATION_MS));
+        verify(mViewPropertyAnimator).alpha(alpha);
         verify(mViewPropertyAnimator).start();
     }
 
-    private void initMockImageViewAndAnimator() {
+    private void resetMockImageViewAndAnimator() {
+        Mockito.reset(mSpyImageView);
+        doAnswer(invocation -> null).when(mSpyImageView).setOnTouchListener(
+                mTouchListenerCaptor.capture());
+        resetMockAnimator();
+    }
+
+    private void resetMockAnimator() {
+        Mockito.reset(mViewPropertyAnimator);
         when(mViewPropertyAnimator.setDuration(anyLong())).thenReturn(mViewPropertyAnimator);
         when(mViewPropertyAnimator.alpha(anyFloat())).thenReturn(mViewPropertyAnimator);
         when(mViewPropertyAnimator.withEndAction(any(Runnable.class))).thenReturn(
                 mViewPropertyAnimator);
-
         when(mSpyImageView.animate()).thenReturn(mViewPropertyAnimator);
-        doAnswer(invocation -> {
-            Runnable run = invocation.getArgument(0);
-            run.run();
-            return null;
-        }).when(mSpyImageView).postDelayed(any(), anyLong());
     }
 
-    private void resetMockImageViewAndAnimator() {
-        Mockito.reset(mViewPropertyAnimator);
-        Mockito.reset(mSpyImageView);
-        initMockImageViewAndAnimator();
+    /**
+     * Verifies the tap behaviour including the image of the button and the magnification mode.
+     *
+     * @param expectedMode the expected mode after tapping
+     */
+    private void verifyTapAction(int expectedMode) {
+        verify(mViewPropertyAnimator).cancel();
+        verify(mSpyImageView).setImageResource(
+                getIconResId(expectedMode));
+        verify(mWindowManager).removeView(mSpyImageView);
+        final int actualMode = Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE, 0);
+        assertEquals(expectedMode, actualMode);
     }
 }

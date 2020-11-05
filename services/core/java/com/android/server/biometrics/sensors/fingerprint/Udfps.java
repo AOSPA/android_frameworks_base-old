@@ -22,6 +22,6 @@ package com.android.server.biometrics.sensors.fingerprint;
  * finger position (e.g. enroll, authenticate) should implement this.
  */
 public interface Udfps {
-    void onFingerDown(int x, int y, float minor, float major);
-    void onFingerUp();
+    void onPointerDown(int x, int y, float minor, float major);
+    void onPointerUp();
 }

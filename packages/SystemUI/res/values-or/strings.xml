@@ -861,7 +861,7 @@
     <string name="right_keycode" msgid="2480715509844798438">"ଡାହାଣ କୀ\'କୋଡ୍‍"</string>
     <string name="left_icon" msgid="5036278531966897006">"ବାମ ଆଇକନ୍‍"</string>
     <string name="right_icon" msgid="1103955040645237425">"ଡାହାଣ ଆଇକନ୍"</string>
-    <string name="drag_to_add_tiles" msgid="8933270127508303672">"ଟାଇଲ୍ ଯୋଡ଼ିବା ପାଇଁ ଦାବିଧରି ଟାଣନ୍ତୁ"</string>
+    <string name="drag_to_add_tiles" msgid="8933270127508303672">"ଟାଇଲ୍ ଯୋଗ କରିବା ପାଇଁ ଦାବିଧରି ଟାଣନ୍ତୁ"</string>
     <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"ଟାଇଲ୍‍ ପୁଣି ସଜାଇବାକୁ ଦାବିଧରି ଟାଣନ୍ତୁ"</string>
     <string name="drag_to_remove_tiles" msgid="4682194717573850385">"ବାହାର କରିବାକୁ ଏଠାକୁ ଡ୍ରାଗ୍‍ କରନ୍ତୁ"</string>
     <string name="drag_to_remove_disabled" msgid="933046987838658850">"ଆପଣଙ୍କର ଅତିକମ୍‌ରେ <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g>ଟି ଟାଇଲ୍ ଆବଶ୍ୟକ"</string>
@@ -879,20 +879,13 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"କମ୍‍-ଅଗ୍ରାଧିକାର ବିଜ୍ଞପ୍ତି ଆଇକନ୍‍ ଦେଖାନ୍ତୁ"</string>
     <string name="other" msgid="429768510980739978">"ଅନ୍ୟାନ୍ୟ"</string>
-    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
-    <skip />
+    <string name="accessibility_qs_edit_remove_tile_action" msgid="775511891457193480">"ଟାଇଲ୍ କାଢ଼ି ଦିଅନ୍ତୁ"</string>
+    <string name="accessibility_qs_edit_tile_add_action" msgid="5051211910345301833">"ଶେଷରେ ଟାଇଲ୍ ଯୋଗ କରନ୍ତୁ"</string>
+    <string name="accessibility_qs_edit_tile_start_move" msgid="2009373939914517817">"ଟାଇଲ୍ ମୁଭ୍ କରନ୍ତୁ"</string>
+    <string name="accessibility_qs_edit_tile_start_add" msgid="7560798153975555772">"ଟାଇଲ୍ ଯୋଗ କରନ୍ତୁ"</string>
+    <string name="accessibility_qs_edit_tile_move_to_position" msgid="5198161544045930556">"<xliff:g id="POSITION">%1$d</xliff:g>କୁ ମୁଭ୍ କରନ୍ତୁ"</string>
+    <string name="accessibility_qs_edit_tile_add_to_position" msgid="9029163095148274690">"<xliff:g id="POSITION">%1$d</xliff:g> ଅବସ୍ଥିତିରେ ଯୋଗ କରନ୍ତୁ"</string>
+    <string name="accessibility_qs_edit_position" msgid="4509277359815711830">"ଅବସ୍ଥିତି <xliff:g id="POSITION">%1$d</xliff:g>"</string>
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"ଦ୍ରୁତ ସେଟିଙ୍ଗ ଏଡିଟର୍।"</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"<xliff:g id="ID_1">%1$s</xliff:g> ବିଜ୍ଞପ୍ତି: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"ସେଟିଂସ୍ ଖୋଲନ୍ତୁ।"</string>
@@ -1019,6 +1012,16 @@
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ସେଟିଂସ୍"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"ମ୍ୟାଗ୍ନିଫିକେସନ୍ ୱିଣ୍ଡୋ"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"ମ୍ୟାଗ୍ନିଫିକେସନ୍ ୱିଣ୍ଡୋ ନିୟନ୍ତ୍ରଣଗୁଡ଼ିକ"</string>
+    <string name="accessibility_control_zoom_in" msgid="1189272315480097417">"ଜୁମ୍ ଇନ୍ କରନ୍ତୁ"</string>
+    <string name="accessibility_control_zoom_out" msgid="69578832020304084">"ଜୁମ୍ ଆଉଟ୍ କରନ୍ତୁ"</string>
+    <string name="accessibility_control_move_up" msgid="6622825494014720136">"ଉପରକୁ ମୁଭ୍ କରନ୍ତୁ"</string>
+    <string name="accessibility_control_move_down" msgid="5390922476900974512">"ତଳକୁ ମୁଭ୍ କରନ୍ତୁ"</string>
+    <string name="accessibility_control_move_left" msgid="8156206978511401995">"ବାମକୁ ମୁଭ୍ କରନ୍ତୁ"</string>
+    <string name="accessibility_control_move_right" msgid="8926821093629582888">"ଡାହାଣକୁ ମୁଭ୍ କରନ୍ତୁ"</string>
+    <string name="magnification_mode_switch_description" msgid="2698364322069934733">"ମ୍ୟାଗ୍ନିଫିକେସନ୍ ସ୍ୱିଚ୍"</string>
+    <string name="magnification_mode_switch_state_full_screen" msgid="2882507327576770574">"ସମ୍ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନ୍ ମାଗ୍ନିଫାଏ କରନ୍ତୁ"</string>
+    <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"ସ୍କ୍ରିନର ଅଂଶ ମାଗ୍ନିଫାଏ କରନ୍ତୁ"</string>
+    <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"ସ୍ୱିଚ୍ କରନ୍ତୁ"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"ଡିଭାଇସ୍ ନିୟନ୍ତ୍ରଣଗୁଡ଼ିକ"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"ଆପଣଙ୍କ ସଂଯୁକ୍ତ ଡିଭାଇସଗୁଡ଼ିକ ପାଇଁ ନିୟନ୍ତ୍ରଣ ଯୋଗ କରନ୍ତୁ"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"ଡିଭାଇସ୍ ନିୟନ୍ତ୍ରଣଗୁଡ଼ିକୁ ସେଟ୍ ଅପ୍ କରନ୍ତୁ"</string>
@@ -1082,4 +1085,6 @@
     <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (ବିଚ୍ଛିନ୍ନ କରାଯାଇଛି)"</string>
     <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"ସଂଯୋଗ କରାଯାଇପାରିଲା ନାହିଁ। ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।"</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"ନୂଆ ଡିଭାଇସକୁ ପେୟାର୍ କରନ୍ତୁ"</string>
+    <string name="build_number_clip_data_label" msgid="3623176728412560914">"ବିଲ୍ଡ ନମ୍ୱର"</string>
+    <string name="build_number_copy_toast" msgid="877720921605503046">"କ୍ଲିପବୋର୍ଡକୁ କପି କରାଯାଇଥିବା ବିଲ୍ଡ ନମ୍ୱର।"</string>
 </resources>

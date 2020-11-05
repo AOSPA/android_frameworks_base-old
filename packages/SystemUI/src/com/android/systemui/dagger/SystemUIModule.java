@@ -41,8 +41,10 @@ import com.android.systemui.statusbar.notification.row.dagger.NotificationShelfC
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
+import com.android.systemui.statusbar.policy.dagger.SmartRepliesInflationModule;
 import com.android.systemui.statusbar.policy.dagger.StatusBarPolicyModule;
 import com.android.systemui.tuner.dagger.TunerModule;
+import com.android.systemui.user.UserModule;
 import com.android.systemui.util.concurrency.SysUIConcurrencyModule;
 import com.android.systemui.util.dagger.UtilModule;
 import com.android.systemui.util.sensors.SensorModule;
@@ -73,19 +75,23 @@ import dagger.Provides;
             SensorModule.class,
             SettingsModule.class,
             SettingsUtilModule.class,
+            SmartRepliesInflationModule.class,
             StatusBarPolicyModule.class,
             SysUIConcurrencyModule.class,
             TunerModule.class,
+            UserModule.class,
             UtilModule.class,
             VolumeModule.class
         },
-        subcomponents = {StatusBarComponent.class,
-                NotificationRowComponent.class,
-                DozeComponent.class,
-                ExpandableNotificationRowComponent.class,
-                KeyguardBouncerComponent.class,
-                NotificationShelfComponent.class,
-                FragmentService.FragmentCreator.class})
+        subcomponents = {
+            StatusBarComponent.class,
+            NotificationRowComponent.class,
+            DozeComponent.class,
+            ExpandableNotificationRowComponent.class,
+            KeyguardBouncerComponent.class,
+            NotificationShelfComponent.class,
+            FragmentService.FragmentCreator.class
+        })
 public abstract class SystemUIModule {
 
     @Binds

@@ -35,10 +35,10 @@ import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.os.Process.SYSTEM_UID;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
 import static com.android.server.wm.ActivityStackSupervisor.REMOVE_FROM_RECENTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RECENTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RECENTS_TRIM_TASKS;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_TASKS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_RECENTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_TASKS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
@@ -73,6 +73,7 @@ import android.view.MotionEvent;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.am.ActivityManagerService;
 
@@ -158,7 +159,8 @@ class RecentTasks {
      */
     private int mRecentsUid = -1;
     private ComponentName mRecentsComponent = null;
-    private @Nullable String mFeatureId;
+    @Nullable
+    private String mFeatureId;
 
     /**
      * Mapping of user id -> whether recent tasks have been loaded for that user.
@@ -399,7 +401,7 @@ class RecentTasks {
 
     /**
      * @return whether the given component is the recents component and shares the same uid as the
-     *         recents component.
+     * recents component.
      */
     boolean isRecentsComponent(ComponentName cn, int uid) {
         return cn.equals(mRecentsComponent) && UserHandle.isSameApp(uid, mRecentsUid);
@@ -425,7 +427,8 @@ class RecentTasks {
     /**
      * @return the featureId for the recents component.
      */
-    @Nullable String getRecentsComponentFeatureId() {
+    @Nullable
+    String getRecentsComponentFeatureId() {
         return mFeatureId;
     }
 
@@ -619,7 +622,7 @@ class RecentTasks {
 
     /** Remove recent tasks for a user. */
     private void removeTasksForUserLocked(int userId) {
-        if(userId <= 0) {
+        if (userId <= 0) {
             Slog.i(TAG, "Can't remove recent task on user " + userId);
             return;
         }
@@ -627,8 +630,8 @@ class RecentTasks {
         for (int i = mTasks.size() - 1; i >= 0; --i) {
             Task task = mTasks.get(i);
             if (task.mUserId == userId) {
-                if(DEBUG_TASKS) Slog.i(TAG_TASKS,
-                        "remove RecentTask " + task + " when finishing user" + userId);
+                ProtoLog.i(WM_DEBUG_TASKS, "remove RecentTask %s when finishing user "
+                        + "%d", task, userId);
                 remove(task);
             }
         }
@@ -642,11 +645,11 @@ class RecentTasks {
                     && packageNames.contains(task.realActivity.getPackageName())
                     && task.mUserId == userId
                     && task.realActivitySuspended != suspended) {
-               task.realActivitySuspended = suspended;
-               if (suspended) {
-                   mSupervisor.removeTask(task, false, REMOVE_FROM_RECENTS, "suspended-package");
-               }
-               notifyTaskPersisterLocked(task, false);
+                task.realActivitySuspended = suspended;
+                if (suspended) {
+                    mSupervisor.removeTask(task, false, REMOVE_FROM_RECENTS, "suspended-package");
+                }
+                notifyTaskPersisterLocked(task, false);
             }
         }
     }
@@ -782,25 +785,31 @@ class RecentTasks {
                         continue;
                     } else {
                         // Otherwise just not available for now.
-                        if (DEBUG_RECENTS && task.isAvailable) Slog.d(TAG_RECENTS,
-                                "Making recent unavailable: " + task);
+                        if (DEBUG_RECENTS && task.isAvailable) {
+                            Slog.d(TAG_RECENTS,
+                                    "Making recent unavailable: " + task);
+                        }
                         task.isAvailable = false;
                     }
                 } else {
                     if (!ai.enabled || !ai.applicationInfo.enabled
                             || (ai.applicationInfo.flags
-                                    & ApplicationInfo.FLAG_INSTALLED) == 0) {
-                        if (DEBUG_RECENTS && task.isAvailable) Slog.d(TAG_RECENTS,
-                                "Making recent unavailable: " + task
-                                        + " (enabled=" + ai.enabled + "/"
-                                        + ai.applicationInfo.enabled
-                                        + " flags="
-                                        + Integer.toHexString(ai.applicationInfo.flags)
-                                        + ")");
+                            & ApplicationInfo.FLAG_INSTALLED) == 0) {
+                        if (DEBUG_RECENTS && task.isAvailable) {
+                            Slog.d(TAG_RECENTS,
+                                    "Making recent unavailable: " + task
+                                            + " (enabled=" + ai.enabled + "/"
+                                            + ai.applicationInfo.enabled
+                                            + " flags="
+                                            + Integer.toHexString(ai.applicationInfo.flags)
+                                            + ")");
+                        }
                         task.isAvailable = false;
                     } else {
-                        if (DEBUG_RECENTS && !task.isAvailable) Slog.d(TAG_RECENTS,
-                                "Making recent available: " + task);
+                        if (DEBUG_RECENTS && !task.isAvailable) {
+                            Slog.d(TAG_RECENTS,
+                                    "Making recent available: " + task);
+                        }
                         task.isAvailable = true;
                     }
                 }
@@ -976,16 +985,20 @@ class RecentTasks {
         final int size = mTasks.size();
         for (int i = 0; i < size; i++) {
             final Task task = mTasks.get(i);
-            if (TaskPersister.DEBUG) Slog.d(TAG, "LazyTaskWriter: task=" + task
-                    + " persistable=" + task.isPersistable);
+            if (TaskPersister.DEBUG) {
+                Slog.d(TAG, "LazyTaskWriter: task=" + task
+                        + " persistable=" + task.isPersistable);
+            }
             final Task rootTask = task.getRootTask();
             if ((task.isPersistable || task.inRecents)
                     && (rootTask == null || !rootTask.isHomeOrRecentsStack())) {
                 if (TaskPersister.DEBUG) Slog.d(TAG, "adding to persistentTaskIds task=" + task);
                 persistentTaskIds.add(task.mTaskId);
             } else {
-                if (TaskPersister.DEBUG) Slog.d(TAG, "omitting from persistentTaskIds task="
-                        + task);
+                if (TaskPersister.DEBUG) {
+                    Slog.d(TAG, "omitting from persistentTaskIds task="
+                            + task);
+                }
             }
         }
     }
@@ -1053,8 +1066,10 @@ class RecentTasks {
         // TODO: VI what about if it's just an activity?
         // Probably nothing to do here
         if (task.voiceSession != null) {
-            if (DEBUG_RECENTS) Slog.d(TAG_RECENTS,
-                    "addRecent: not adding voice interaction " + task);
+            if (DEBUG_RECENTS) {
+                Slog.d(TAG_RECENTS,
+                        "addRecent: not adding voice interaction " + task);
+            }
             return;
         }
         // Another quick case: check if the top-most recent task is the same.
@@ -1066,8 +1081,10 @@ class RecentTasks {
         // tasks that are at the top.
         if (isAffiliated && recentsCount > 0 && task.inRecents
                 && task.mAffiliatedTaskId == mTasks.get(0).mAffiliatedTaskId) {
-            if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "addRecent: affiliated " + mTasks.get(0)
-                    + " at top when adding " + task);
+            if (DEBUG_RECENTS) {
+                Slog.d(TAG_RECENTS, "addRecent: affiliated " + mTasks.get(0)
+                        + " at top when adding " + task);
+            }
             return;
         }
 
@@ -1124,14 +1141,17 @@ class RecentTasks {
                     if (other == task.mNextAffiliate) {
                         // We found the index of our next affiliation, which is who is
                         // before us in the list, so add after that point.
-                        taskIndex = otherIndex+1;
+                        taskIndex = otherIndex + 1;
                     } else {
                         // We found the index of our previous affiliation, which is who is
                         // after us in the list, so add at their position.
                         taskIndex = otherIndex;
                     }
-                    if (DEBUG_RECENTS) Slog.d(TAG_RECENTS,
-                            "addRecent: new affiliated task added at " + taskIndex + ": " + task);
+                    if (DEBUG_RECENTS) {
+                        Slog.d(TAG_RECENTS,
+                                "addRecent: new affiliated task added at " + taskIndex + ": "
+                                        + task);
+                    }
                     mTasks.add(taskIndex, task);
                     notifyTaskAdded(task);
 
@@ -1145,13 +1165,17 @@ class RecentTasks {
                     // everything and then go through our general path of adding a new task.
                     needAffiliationFix = true;
                 } else {
-                    if (DEBUG_RECENTS) Slog.d(TAG_RECENTS,
-                            "addRecent: couldn't find other affiliation " + other);
+                    if (DEBUG_RECENTS) {
+                        Slog.d(TAG_RECENTS,
+                                "addRecent: couldn't find other affiliation " + other);
+                    }
                     needAffiliationFix = true;
                 }
             } else {
-                if (DEBUG_RECENTS) Slog.d(TAG_RECENTS,
-                        "addRecent: adding affiliated task without next/prev:" + task);
+                if (DEBUG_RECENTS) {
+                    Slog.d(TAG_RECENTS,
+                            "addRecent: adding affiliated task without next/prev:" + task);
+                }
                 needAffiliationFix = true;
             }
         }
@@ -1217,8 +1241,10 @@ class RecentTasks {
             final Task task = mTasks.remove(recentsCount - 1);
             notifyTaskRemoved(task, true /* wasTrimmed */, false /* killProcess */);
             recentsCount--;
-            if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "Trimming over max-recents task=" + task
-                    + " max=" + mGlobalMaxNumTasks);
+            if (DEBUG_RECENTS_TRIM_TASKS) {
+                Slog.d(TAG, "Trimming over max-recents task=" + task
+                        + " max=" + mGlobalMaxNumTasks);
+            }
         }
 
         // Remove any tasks that belong to currently quiet profiles
@@ -1229,13 +1255,15 @@ class RecentTasks {
             if (userInfo != null && userInfo.isManagedProfile() && userInfo.isQuietModeEnabled()) {
                 mTmpQuietProfileUserIds.put(userId, true);
             }
-            if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "User: " + userInfo
-                    + " quiet=" + mTmpQuietProfileUserIds.get(userId));
+            if (DEBUG_RECENTS_TRIM_TASKS) {
+                Slog.d(TAG, "User: " + userInfo
+                        + " quiet=" + mTmpQuietProfileUserIds.get(userId));
+            }
         }
 
         // Remove any inactive tasks, calculate the latest set of visible tasks.
         int numVisibleTasks = 0;
-        for (int i = 0; i < mTasks.size();) {
+        for (int i = 0; i < mTasks.size(); ) {
             final Task task = mTasks.get(i);
 
             if (isActiveRecentTask(task, mTmpQuietProfileUserIds)) {
@@ -1259,8 +1287,10 @@ class RecentTasks {
                     } else {
                         // Fall through to trim visible tasks that are no longer in range and
                         // trimmable
-                        if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG,
-                                "Trimming out-of-range visible task=" + task);
+                        if (DEBUG_RECENTS_TRIM_TASKS) {
+                            Slog.d(TAG,
+                                    "Trimming out-of-range visible task=" + task);
+                        }
                     }
                 }
             } else {
@@ -1279,8 +1309,10 @@ class RecentTasks {
      * @return whether the given task should be considered active.
      */
     private boolean isActiveRecentTask(Task task, SparseBooleanArray quietProfileUserIds) {
-        if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "isActiveRecentTask: task=" + task
-                + " globalMax=" + mGlobalMaxNumTasks);
+        if (DEBUG_RECENTS_TRIM_TASKS) {
+            Slog.d(TAG, "isActiveRecentTask: task=" + task
+                    + " globalMax=" + mGlobalMaxNumTasks);
+        }
 
         if (quietProfileUserIds.get(task.mUserId)) {
             // Quiet profile user's tasks are never active
@@ -1293,8 +1325,10 @@ class RecentTasks {
             final Task affiliatedTask = getTask(task.mAffiliatedTaskId);
             if (affiliatedTask != null) {
                 if (!isActiveRecentTask(affiliatedTask, quietProfileUserIds)) {
-                    if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG,
-                            "\taffiliatedWithTask=" + affiliatedTask + " is not active");
+                    if (DEBUG_RECENTS_TRIM_TASKS) {
+                        Slog.d(TAG,
+                                "\taffiliatedWithTask=" + affiliatedTask + " is not active");
+                    }
                     return false;
                 }
             }
@@ -1309,13 +1343,15 @@ class RecentTasks {
      */
     @VisibleForTesting
     boolean isVisibleRecentTask(Task task) {
-        if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "isVisibleRecentTask: task=" + task
-                + " minVis=" + mMinNumVisibleTasks + " maxVis=" + mMaxNumVisibleTasks
-                + " sessionDuration=" + mActiveTasksSessionDurationMs
-                + " inactiveDuration=" + task.getInactiveDuration()
-                + " activityType=" + task.getActivityType()
-                + " windowingMode=" + task.getWindowingMode()
-                + " intentFlags=" + task.getBaseIntent().getFlags());
+        if (DEBUG_RECENTS_TRIM_TASKS) {
+            Slog.d(TAG, "isVisibleRecentTask: task=" + task
+                    + " minVis=" + mMinNumVisibleTasks + " maxVis=" + mMaxNumVisibleTasks
+                    + " sessionDuration=" + mActiveTasksSessionDurationMs
+                    + " inactiveDuration=" + task.getInactiveDuration()
+                    + " activityType=" + task.getActivityType()
+                    + " windowingMode=" + task.getWindowingMode()
+                    + " intentFlags=" + task.getBaseIntent().getFlags());
+        }
 
         switch (task.getActivityType()) {
             case ACTIVITY_TYPE_HOME:
@@ -1481,8 +1517,10 @@ class RecentTasks {
                 mHiddenTasks.add(removedTask);
             }
             notifyTaskRemoved(removedTask, false /* wasTrimmed */, false /* killProcess */);
-            if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "Trimming task=" + removedTask
-                    + " for addition of task=" + task);
+            if (DEBUG_RECENTS_TRIM_TASKS) {
+                Slog.d(TAG, "Trimming task=" + removedTask
+                        + " for addition of task=" + task);
+            }
         }
         notifyTaskPersisterLocked(removedTask, false /* flush */);
     }
@@ -1635,16 +1673,20 @@ class RecentTasks {
             top = top.mNextAffiliate;
             topIndex--;
         }
-        if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "addRecent: adding affilliates starting at "
-                + topIndex + " from intial " + taskIndex);
+        if (DEBUG_RECENTS) {
+            Slog.d(TAG_RECENTS, "addRecent: adding affiliates starting at "
+                    + topIndex + " from initial " + taskIndex);
+        }
         // Find the end of the chain, doing a validity check along the way.
         boolean isValid = top.mAffiliatedTaskId == task.mAffiliatedTaskId;
         int endIndex = topIndex;
         Task prev = top;
         while (endIndex < recentsCount) {
             Task cur = mTasks.get(endIndex);
-            if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "addRecent: looking at next chain @"
-                    + endIndex + " " + cur);
+            if (DEBUG_RECENTS) {
+                Slog.d(TAG_RECENTS, "addRecent: looking at next chain @"
+                        + endIndex + " " + cur);
+            }
             if (cur == top) {
                 // Verify start of the chain.
                 if (cur.mNextAffiliate != null || cur.mNextAffiliateTaskId != INVALID_TASK_ID) {
@@ -1714,14 +1756,18 @@ class RecentTasks {
         if (isValid) {
             // All looks good, we can just move all of the affiliated tasks
             // to the top.
-            for (int i=topIndex; i<=endIndex; i++) {
-                if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "addRecent: moving affiliated " + task
-                        + " from " + i + " to " + (i-topIndex));
+            for (int i = topIndex; i <= endIndex; i++) {
+                if (DEBUG_RECENTS) {
+                    Slog.d(TAG_RECENTS, "addRecent: moving affiliated " + task
+                            + " from " + i + " to " + (i - topIndex));
+                }
                 Task cur = mTasks.remove(i);
                 mTasks.add(i - topIndex, cur);
             }
-            if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "addRecent: done moving tasks  " +  topIndex
-                    + " to " + endIndex);
+            if (DEBUG_RECENTS) {
+                Slog.d(TAG_RECENTS, "addRecent: done moving tasks  " + topIndex
+                        + " to " + endIndex);
+            }
             return true;
         }
 
@@ -1781,7 +1827,9 @@ class RecentTasks {
                 printedHeader = true;
                 printedAnything = true;
             }
-            pw.print("  * Recent #"); pw.print(i); pw.print(": ");
+            pw.print("  * Recent #");
+            pw.print(i);
+            pw.print(": ");
             pw.println(task);
             if (dumpAll) {
                 task.dump(pw, "    ");
@@ -1800,7 +1848,7 @@ class RecentTasks {
                     boolean match = taskInfo.baseIntent != null
                             && taskInfo.baseIntent.getComponent() != null
                             && dumpPackage.equals(
-                                    taskInfo.baseIntent.getComponent().getPackageName());
+                            taskInfo.baseIntent.getComponent().getPackageName());
                     if (!match) {
                         match |= taskInfo.baseActivity != null
                                 && dumpPackage.equals(taskInfo.baseActivity.getPackageName());
@@ -1831,7 +1879,9 @@ class RecentTasks {
                     printedAnything = true;
                 }
 
-                pw.print("  * RecentTaskInfo #"); pw.print(i); pw.print(": ");
+                pw.print("  * RecentTaskInfo #");
+                pw.print(i);
+                pw.print(": ");
                 taskInfo.dump(pw, "    ");
             }
         }
@@ -1855,8 +1905,8 @@ class RecentTasks {
 
     /**
      * @return Whether the activity types and windowing modes of the two tasks are considered
-     *         compatible. This is necessary because we currently don't persist the activity type
-     *         or the windowing mode with the task, so they can be undefined when restored.
+     * compatible. This is necessary because we currently don't persist the activity type
+     * or the windowing mode with the task, so they can be undefined when restored.
      */
     private boolean hasCompatibleActivityTypeAndWindowingMode(Task t1, Task t2) {
         final int activityType = t1.getActivityType();

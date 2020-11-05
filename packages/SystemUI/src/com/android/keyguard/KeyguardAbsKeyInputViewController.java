@@ -107,7 +107,7 @@ public abstract class KeyguardAbsKeyInputViewController<T extends KeyguardAbsKey
         if (shouldLockout(deadline)) {
             handleAttemptLockout(deadline);
         } else {
-            mView.resetState();
+            resetState();
         }
     }
 

@@ -157,33 +157,33 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public int addToDisplay(IWindow window, int seq, WindowManager.LayoutParams attrs,
+    public int addToDisplay(IWindow window, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, Rect outFrame, Rect outContentInsets,
             Rect outStableInsets,
             DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel,
             InsetsState outInsetsState, InsetsSourceControl[] outActiveControls) {
-        return mService.addWindow(this, window, seq, attrs, viewVisibility, displayId, outFrame,
+        return mService.addWindow(this, window, attrs, viewVisibility, displayId, outFrame,
                 outContentInsets, outStableInsets, outDisplayCutout, outInputChannel,
                 outInsetsState, outActiveControls, UserHandle.getUserId(mUid));
     }
 
 
     @Override
-    public int addToDisplayAsUser(IWindow window, int seq, WindowManager.LayoutParams attrs,
+    public int addToDisplayAsUser(IWindow window, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, int userId, Rect outFrame,
             Rect outContentInsets, Rect outStableInsets,
             DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel,
             InsetsState outInsetsState, InsetsSourceControl[] outActiveControls) {
-        return mService.addWindow(this, window, seq, attrs, viewVisibility, displayId, outFrame,
+        return mService.addWindow(this, window, attrs, viewVisibility, displayId, outFrame,
                 outContentInsets, outStableInsets, outDisplayCutout, outInputChannel,
                 outInsetsState, outActiveControls, userId);
     }
 
     @Override
-    public int addToDisplayWithoutInputChannel(IWindow window, int seq, WindowManager.LayoutParams attrs,
+    public int addToDisplayWithoutInputChannel(IWindow window, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, Rect outContentInsets, Rect outStableInsets,
             InsetsState outInsetsState) {
-        return mService.addWindow(this, window, seq, attrs, viewVisibility, displayId,
+        return mService.addWindow(this, window, attrs, viewVisibility, displayId,
                 new Rect() /* outFrame */, outContentInsets, outStableInsets,
                 new DisplayCutout.ParcelableWrapper() /* cutout */, null /* outInputChannel */,
                 outInsetsState, mDummyControls, UserHandle.getUserId(mUid));
@@ -200,7 +200,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public int relayout(IWindow window, int seq, WindowManager.LayoutParams attrs,
+    public int relayout(IWindow window, WindowManager.LayoutParams attrs,
             int requestedWidth, int requestedHeight, int viewFlags, int flags, long frameNumber,
             ClientWindowFrames outFrames, MergedConfiguration mergedConfiguration,
             SurfaceControl outSurfaceControl, InsetsState outInsetsState,
@@ -209,7 +209,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         if (false) Slog.d(TAG_WM, ">>>>>> ENTERED relayout from "
                 + Binder.getCallingPid());
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, mRelayoutTag);
-        int res = mService.relayoutWindow(this, window, seq, attrs,
+        int res = mService.relayoutWindow(this, window, attrs,
                 requestedWidth, requestedHeight, viewFlags, flags, frameNumber,
                 outFrames, mergedConfiguration, outSurfaceControl, outInsetsState,
                 outActiveControls, outSurfaceSize, outBLASTSurfaceControl);
@@ -255,7 +255,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
 
     @Override
     public boolean performHapticFeedback(int effectId, boolean always) {
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             return mService.mPolicy.performHapticFeedback(mUid, mPackageName,
                         effectId, always, null);
@@ -313,7 +313,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         if (DEBUG_TASK_POSITIONING) Slog.d(
                 TAG_WM, "startMovingTask: {" + startX + "," + startY + "}");
 
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             return mService.mTaskPositioningController.startMovingTask(window, startX, startY);
         } finally {
@@ -325,7 +325,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     public void finishMovingTask(IWindow window) {
         if (DEBUG_TASK_POSITIONING) Slog.d(TAG_WM, "finishMovingTask");
 
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             mService.mTaskPositioningController.finishTaskPositioning(window);
         } finally {
@@ -335,7 +335,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
 
     @Override
     public void reportSystemGestureExclusionChanged(IWindow window, List<Rect> exclusionRects) {
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             mService.reportSystemGestureExclusionChanged(this, window, exclusionRects);
         } finally {
@@ -352,7 +352,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     @Override
     public void setWallpaperPosition(IBinder window, float x, float y, float xStep, float yStep) {
         synchronized (mService.mGlobalLock) {
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 actionOnWallpaper(window, (wpController, windowState) ->
                         wpController.setWindowWallpaperPosition(windowState, x, y, xStep, yStep));
@@ -369,7 +369,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
                     + zoom);
         }
         synchronized (mService.mGlobalLock) {
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 actionOnWallpaper(window, (wpController, windowState) ->
                         wpController.setWallpaperZoomOut(windowState, zoom));
@@ -398,7 +398,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     @Override
     public void setWallpaperDisplayOffset(IBinder window, int x, int y) {
         synchronized (mService.mGlobalLock) {
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 actionOnWallpaper(window, (wpController, windowState) ->
                         wpController.setWindowWallpaperDisplayOffset(windowState, x, y));
@@ -412,7 +412,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     public Bundle sendWallpaperCommand(IBinder window, String action, int x, int y,
             int z, Bundle extras, boolean sync) {
         synchronized (mService.mGlobalLock) {
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 final WindowState windowState = mService.windowForClientLocked(this, window, true);
                 return windowState.getDisplayContent().mWallpaperController

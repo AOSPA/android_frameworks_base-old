@@ -44,7 +44,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -292,8 +291,7 @@ public class RecentTasksTest extends WindowTestsBase {
             mRecentTasks.add(mTasks.get(1));
             invocation.callRealMethod();
             return null;
-        }).when(mSupervisor).endActivityVisibilityUpdate(any(), anyInt(), anyBoolean(),
-                anyBoolean());
+        }).when(mSupervisor).endActivityVisibilityUpdate();
 
         mTaskContainer.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
                 false /* preserveWindows */, false /* notifyClients */);
@@ -1156,22 +1154,22 @@ public class RecentTasksTest extends WindowTestsBase {
     }
 
     private void doTestRecentTasksApis(boolean expectCallable) {
-        assertSecurityException(expectCallable, () -> mAtm.removeStack(INVALID_STACK_ID));
+        assertSecurityException(expectCallable, () -> mAtm.removeTask(INVALID_STACK_ID));
         assertSecurityException(expectCallable,
-                () -> mAtm.removeStacksInWindowingModes(
+                () -> mAtm.removeRootTasksInWindowingModes(
                         new int[]{WINDOWING_MODE_UNDEFINED}));
         assertSecurityException(expectCallable,
-                () -> mAtm.removeStacksWithActivityTypes(
+                () -> mAtm.removeRootTasksWithActivityTypes(
                         new int[]{ACTIVITY_TYPE_UNDEFINED}));
         assertSecurityException(expectCallable, () -> mAtm.removeTask(0));
         assertSecurityException(expectCallable,
                 () -> mAtm.setTaskWindowingMode(0, WINDOWING_MODE_UNDEFINED, true));
         assertSecurityException(expectCallable,
-                () -> mAtm.moveTaskToStack(0, INVALID_STACK_ID, true));
+                () -> mAtm.moveTaskToRootTask(0, INVALID_STACK_ID, true));
         assertSecurityException(expectCallable,
                 () -> mAtm.setTaskWindowingModeSplitScreenPrimary(0, true));
         assertSecurityException(expectCallable,
-                () -> mAtm.moveTopActivityToPinnedStack(INVALID_STACK_ID, new Rect()));
+                () -> mAtm.moveTopActivityToPinnedRootTask(INVALID_STACK_ID, new Rect()));
         assertSecurityException(expectCallable, () -> mAtm.getAllRootTaskInfos());
         assertSecurityException(expectCallable,
                 () -> mAtm.getRootTaskInfo(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_UNDEFINED));
@@ -1190,7 +1188,7 @@ public class RecentTasksTest extends WindowTestsBase {
                 () -> mAtm.unregisterTaskStackListener(null));
         assertSecurityException(expectCallable, () -> mAtm.getTaskDescription(0));
         assertSecurityException(expectCallable, () -> mAtm.cancelTaskWindowTransition(0));
-        assertSecurityException(expectCallable, () -> mAtm.startRecentsActivity(null, null,
+        assertSecurityException(expectCallable, () -> mAtm.startRecentsActivity(null, 0,
                 null));
         assertSecurityException(expectCallable, () -> mAtm.cancelRecentsAnimation(true));
         assertSecurityException(expectCallable, () -> mAtm.stopAppSwitches());

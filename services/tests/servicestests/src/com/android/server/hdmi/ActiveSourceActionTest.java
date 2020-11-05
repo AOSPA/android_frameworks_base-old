@@ -110,7 +110,7 @@ public class ActiveSourceActionTest {
         mHdmiControlService.setIoLooper(looper);
         mNativeWrapper = new FakeNativeWrapper();
         HdmiCecController hdmiCecController = HdmiCecController.createWithNativeWrapper(
-                this.mHdmiControlService, mNativeWrapper);
+                this.mHdmiControlService, mNativeWrapper, mHdmiControlService.getAtomWriter());
         mHdmiControlService.setCecController(hdmiCecController);
         mHdmiControlService.setHdmiMhlController(HdmiMhlControllerStub.create(mHdmiControlService));
         mHdmiControlService.setMessageValidator(new HdmiCecMessageValidator(mHdmiControlService));
@@ -160,7 +160,7 @@ public class ActiveSourceActionTest {
         assertThat(playbackDevice.getActiveSource().logicalAddress).isEqualTo(
                 playbackDevice.mAddress);
         assertThat(playbackDevice.getActiveSource().physicalAddress).isEqualTo(mPhysicalAddress);
-        assertThat(playbackDevice.mIsActiveSource).isTrue();
+        assertThat(playbackDevice.isActiveSource()).isTrue();
     }
 
     @Test

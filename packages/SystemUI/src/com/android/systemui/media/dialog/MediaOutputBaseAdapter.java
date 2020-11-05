@@ -16,6 +16,8 @@
 
 package com.android.systemui.media.dialog;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.text.TextUtils;
@@ -33,6 +35,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.settingslib.media.MediaDevice;
+import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 
 /**
@@ -44,9 +47,13 @@ public abstract class MediaOutputBaseAdapter extends
     private static final String FONT_SELECTED_TITLE = "sans-serif-medium";
     private static final String FONT_TITLE = "sans-serif";
 
+    static final int CUSTOMIZED_ITEM_PAIR_NEW = 1;
+
     final MediaOutputController mController;
 
     private boolean mIsDragging;
+    private int mMargin;
+    private boolean mIsAnimating;
 
     Context mContext;
     View mHolderView;
@@ -60,6 +67,8 @@ public abstract class MediaOutputBaseAdapter extends
     public MediaDeviceBaseViewHolder onCreateViewHolder(@NonNull ViewGroup viewGroup,
             int viewType) {
         mContext = viewGroup.getContext();
+        mMargin = mContext.getResources().getDimensionPixelSize(
+                R.dimen.media_output_dialog_list_margin);
         mHolderView = LayoutInflater.from(mContext).inflate(R.layout.media_output_list_item,
                 viewGroup, false);
 
@@ -70,7 +79,7 @@ public abstract class MediaOutputBaseAdapter extends
         return device.getName();
     }
 
-    boolean isCurrentConnected(MediaDevice device) {
+    boolean isCurrentlyConnected(MediaDevice device) {
         return TextUtils.equals(device.getId(),
                 mController.getCurrentConnectedMediaDevice().getId());
     }
@@ -79,10 +88,17 @@ public abstract class MediaOutputBaseAdapter extends
         return mIsDragging;
     }
 
+    boolean isAnimating() {
+        return mIsAnimating;
+    }
+
     /**
      * ViewHolder for binding device view.
      */
     abstract class MediaDeviceBaseViewHolder extends RecyclerView.ViewHolder {
+
+        private static final int ANIM_DURATION = 200;
+
         final FrameLayout mFrameLayout;
         final TextView mTitleText;
         final TextView mTwoLineTitleText;
@@ -106,15 +122,28 @@ public abstract class MediaOutputBaseAdapter extends
             mSeekBar = view.requireViewById(R.id.volume_seekbar);
         }
 
-        void onBind(MediaDevice device) {
+        void onBind(MediaDevice device, boolean topMargin, boolean bottomMargin) {
             mTitleIcon.setImageIcon(mController.getDeviceIconCompat(device).toIcon(mContext));
+            setMargin(topMargin, bottomMargin);
         }
 
-        void onBind(int customizedItem) { }
+        void onBind(int customizedItem, boolean topMargin, boolean bottomMargin) {
+            setMargin(topMargin, bottomMargin);
+        }
+
+        private void setMargin(boolean topMargin, boolean bottomMargin) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) mFrameLayout
+                    .getLayoutParams();
+            params.topMargin = topMargin ? mMargin : 0;
+            params.bottomMargin = bottomMargin ? mMargin : 0;
+            mFrameLayout.setLayoutParams(params);
+        }
 
         void setSingleLineLayout(CharSequence title, boolean bFocused) {
-            mTitleText.setVisibility(View.VISIBLE);
             mTwoLineLayout.setVisibility(View.GONE);
+            mProgressBar.setVisibility(View.GONE);
+            mTitleText.setVisibility(View.VISIBLE);
+            mTitleText.setTranslationY(0);
             mTitleText.setText(title);
             if (bFocused) {
                 mTitleText.setTypeface(Typeface.create(FONT_SELECTED_TITLE, Typeface.NORMAL));
@@ -123,10 +152,21 @@ public abstract class MediaOutputBaseAdapter extends
             }
         }
 
-        void setTwoLineLayout(MediaDevice device, boolean bFocused) {
+        void setTwoLineLayout(MediaDevice device, CharSequence title, boolean bFocused,
+                boolean showSeekBar, boolean showProgressBar, boolean showSubtitle) {
             mTitleText.setVisibility(View.GONE);
             mTwoLineLayout.setVisibility(View.VISIBLE);
-            mTwoLineTitleText.setText(getItemTitle(device));
+            mSeekBar.setAlpha(1);
+            mSeekBar.setVisibility(showSeekBar ? View.VISIBLE : View.GONE);
+            mProgressBar.setVisibility(showProgressBar ? View.VISIBLE : View.GONE);
+            mSubTitleText.setVisibility(showSubtitle ? View.VISIBLE : View.GONE);
+            mTwoLineTitleText.setTranslationY(0);
+            if (device == null) {
+                mTwoLineTitleText.setText(title);
+            } else {
+                mTwoLineTitleText.setText(getItemTitle(device));
+            }
+
             if (bFocused) {
                 mTwoLineTitleText.setTypeface(Typeface.create(FONT_SELECTED_TITLE,
                         Typeface.NORMAL));
@@ -160,6 +200,54 @@ public abstract class MediaOutputBaseAdapter extends
                     mIsDragging = false;
                 }
             });
+        }
+
+        void playSwitchingAnim(@NonNull View from, @NonNull View to) {
+            final float delta = (float) (mContext.getResources().getDimensionPixelSize(
+                    R.dimen.media_output_dialog_title_anim_y_delta));
+            final SeekBar fromSeekBar = from.requireViewById(R.id.volume_seekbar);
+            final TextView toTitleText = to.requireViewById(R.id.title);
+            if (fromSeekBar.getVisibility() != View.VISIBLE || toTitleText.getVisibility()
+                    != View.VISIBLE) {
+                return;
+            }
+            mIsAnimating = true;
+            // Animation for title text
+            toTitleText.setTypeface(Typeface.create(FONT_SELECTED_TITLE, Typeface.NORMAL));
+            toTitleText.animate()
+                    .setDuration(ANIM_DURATION)
+                    .translationY(-delta)
+                    .setInterpolator(Interpolators.FAST_OUT_SLOW_IN)
+                    .setListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            to.requireViewById(R.id.volume_indeterminate_progress).setVisibility(
+                                    View.VISIBLE);
+                        }
+                    });
+            // Animation for seek bar
+            fromSeekBar.animate()
+                    .alpha(0)
+                    .setDuration(ANIM_DURATION)
+                    .setListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            final TextView fromTitleText = from.requireViewById(
+                                    R.id.two_line_title);
+                            fromTitleText.setTypeface(Typeface.create(FONT_TITLE, Typeface.NORMAL));
+                            fromTitleText.animate()
+                                    .setDuration(ANIM_DURATION)
+                                    .translationY(delta)
+                                    .setInterpolator(Interpolators.FAST_OUT_SLOW_IN)
+                                    .setListener(new AnimatorListenerAdapter() {
+                                        @Override
+                                        public void onAnimationEnd(Animator animation) {
+                                            mIsAnimating = false;
+                                            notifyDataSetChanged();
+                                        }
+                                    });
+                        }
+                    });
         }
     }
 }

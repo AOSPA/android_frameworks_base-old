@@ -92,7 +92,6 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
-import android.os.storage.StorageManager;
 import android.os.storage.StorageManagerInternal;
 import android.system.Os;
 import android.text.TextUtils;
@@ -1786,14 +1785,10 @@ public final class ProcessList {
                     final IPackageManager pm = AppGlobals.getPackageManager();
                     permGids = pm.getPackageGids(app.info.packageName,
                             MATCH_DIRECT_BOOT_AUTO, app.userId);
-                    if (StorageManager.hasIsolatedStorage() && mountExtStorageFull) {
-                        mountExternal = Zygote.MOUNT_EXTERNAL_FULL;
-                    } else {
-                        StorageManagerInternal storageManagerInternal = LocalServices.getService(
-                                StorageManagerInternal.class);
-                        mountExternal = storageManagerInternal.getExternalStorageMountMode(uid,
-                                app.info.packageName);
-                    }
+                    StorageManagerInternal storageManagerInternal = LocalServices.getService(
+                            StorageManagerInternal.class);
+                    mountExternal = storageManagerInternal.getExternalStorageMountMode(uid,
+                            app.info.packageName);
                 } catch (RemoteException e) {
                     throw e.rethrowAsRuntimeException();
                 }
@@ -1924,7 +1919,9 @@ public final class ProcessList {
 
             String instructionSet = null;
             if (app.info.primaryCpuAbi != null) {
-                instructionSet = VMRuntime.getInstructionSet(app.info.primaryCpuAbi);
+                // If ABI override is specified, use the isa derived from the value of ABI override.
+                // Otherwise, use the isa derived from primary ABI
+                instructionSet = VMRuntime.getInstructionSet(requiredAbi);
             }
 
             app.gids = gids;
@@ -1933,7 +1930,7 @@ public final class ProcessList {
 
             // If instructionSet is non-null, this indicates that the system_server is spawning a
             // process with an ISA that may be different from its own. System (kernel and hardware)
-            // compatililty for these features is checked in the decideTaggingLevel in the
+            // compatibility for these features is checked in the decideTaggingLevel in the
             // system_server process (not the child process). As both MTE and TBI are only supported
             // in aarch64, we can simply ensure that the new process is also aarch64. This prevents
             // the mismatch where a 64-bit system server spawns a 32-bit child that thinks it should
@@ -2556,8 +2553,8 @@ public final class ProcessList {
                 app.hostingRecord.getName() != null ? app.hostingRecord.getName() : "");
 
         try {
-            AppGlobals.getPackageManager().logAppProcessStartIfNeeded(app.processName, app.uid,
-                    app.seInfo, app.info.sourceDir, pid);
+            AppGlobals.getPackageManager().logAppProcessStartIfNeeded(app.info.packageName,
+                    app.processName, app.uid, app.seInfo, app.info.sourceDir, pid);
         } catch (RemoteException ex) {
             // Ignore
         }
@@ -3577,7 +3574,7 @@ public final class ProcessList {
             int clientTargetSdk) {
         outInfo.pid = app.pid;
         outInfo.uid = app.info.uid;
-        if (mService.mAtmInternal.isHeavyWeightProcess(app.getWindowProcessController())) {
+        if (app.getWindowProcessController().isHeavyWeightProcess()) {
             outInfo.flags |= ActivityManager.RunningAppProcessInfo.FLAG_CANT_SAVE_STATE;
         }
         if (app.isPersistent()) {

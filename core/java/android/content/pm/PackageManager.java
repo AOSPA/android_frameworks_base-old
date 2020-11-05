@@ -79,7 +79,6 @@ import com.android.internal.util.ArrayUtils;
 import dalvik.system.VMRuntime;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.security.cert.Certificate;
@@ -865,6 +864,12 @@ public abstract class PackageManager {
      * permissions should be whitelisted. If {@link #INSTALL_ALL_USERS}
      * is set the restricted permissions will be whitelisted for all users, otherwise
      * only to the owner.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      *
      * @hide
      */
@@ -3303,7 +3308,7 @@ public abstract class PackageManager {
     /**
      * Extra field name for the ID of a package pending verification. Passed to
      * a package verifier and is used to call back to
-     * @see #getChecksums
+     * @see #requestChecksums
      */
     public static final String EXTRA_CHECKSUMS = "android.content.pm.extra.CHECKSUMS";
 
@@ -3505,6 +3510,17 @@ public abstract class PackageManager {
     public static final int FLAG_PERMISSION_AUTO_REVOKED = 1 << 17;
 
     /**
+     * Permission flag: The permission is restricted but the app is exempt
+     * from the restriction and is allowed to hold this permission in its
+     * full form and the exemption is provided by the held roles.
+     *
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    public static final int FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT =  1 << 18;
+
+    /**
      * Permission flags: Reserved for use by the permission controller. The platform and any
      * packages besides the permission controller should not assume any definition about these
      * flags.
@@ -3522,7 +3538,8 @@ public abstract class PackageManager {
     public static final int FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT =
             FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT
                     | FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT
-                    | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
+                    | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT
+                    | FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
 
     /**
      * Mask for all permission flags.
@@ -3568,13 +3585,27 @@ public abstract class PackageManager {
 
     /**
      * Permission whitelist flag: permissions whitelisted by the system.
-     * Permissions can also be whitelisted by the installer or on upgrade.
+     * Permissions can also be whitelisted by the installer, on upgrade, or on
+     * role grant.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      */
     public static final int FLAG_PERMISSION_WHITELIST_SYSTEM = 1 << 0;
 
     /**
      * Permission whitelist flag: permissions whitelisted by the installer.
-     * Permissions can also be whitelisted by the system or on upgrade.
+     * Permissions can also be whitelisted by the system, on upgrade, or on role
+     * grant.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      */
     public static final int FLAG_PERMISSION_WHITELIST_INSTALLER = 1 << 1;
 
@@ -3582,15 +3613,31 @@ public abstract class PackageManager {
      * Permission whitelist flag: permissions whitelisted by the system
      * when upgrading from an OS version where the permission was not
      * restricted to an OS version where the permission is restricted.
-     * Permissions can also be whitelisted by the installer or the system.
+     * Permissions can also be whitelisted by the installer, the system, or on
+     * role grant.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      */
     public static final int FLAG_PERMISSION_WHITELIST_UPGRADE = 1 << 2;
+
+    /**
+     * Permission allowlist flag: permissions exempted by the system
+     * when being granted a role.
+     * Permissions can also be exempted by the installer, the system, or on
+     * upgrade.
+     */
+    public static final int FLAG_PERMISSION_ALLOWLIST_ROLE = 1 << 3;
 
     /** @hide */
     @IntDef(flag = true, prefix = {"FLAG_PERMISSION_WHITELIST_"}, value = {
             FLAG_PERMISSION_WHITELIST_SYSTEM,
             FLAG_PERMISSION_WHITELIST_INSTALLER,
-            FLAG_PERMISSION_WHITELIST_UPGRADE
+            FLAG_PERMISSION_WHITELIST_UPGRADE,
+            FLAG_PERMISSION_ALLOWLIST_ROLE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PermissionWhitelistFlags {}
@@ -3737,6 +3784,36 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int SYSTEM_APP_STATE_UNINSTALLED = 3;
+
+    /**
+     * Reasons for why a package is unstartable.
+     * @hide
+     */
+    @IntDef({UNSTARTABLE_REASON_UNKNOWN,
+            UNSTARTABLE_REASON_CONNECTION_ERROR,
+            UNSTARTABLE_REASON_INSUFFICIENT_STORAGE
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface UnstartableReason {}
+
+    /**
+     * Unstartable state with no root cause specified. E.g., data loader seeing missing pages but
+     * unclear about the cause. This corresponds to a generic alert window shown to the user when
+     * the user attempts to launch the app.
+     */
+    public static final int UNSTARTABLE_REASON_UNKNOWN = 0;
+
+    /**
+     * Unstartable state due to connection issues that interrupt package loading.
+     * This corresponds to an alert window shown to the user indicating connection errors.
+     */
+    public static final int UNSTARTABLE_REASON_CONNECTION_ERROR = 1;
+
+    /**
+     * Unstartable state after encountering storage limitations.
+     * This corresponds to an alert window indicating limited storage.
+     */
+    public static final int UNSTARTABLE_REASON_INSUFFICIENT_STORAGE = 2;
 
     /** {@hide} */
     public int getUserId() {
@@ -4536,7 +4613,7 @@ public abstract class PackageManager {
      * allows for the to hold that permission and whitelisting a soft restricted
      * permission allows the app to hold the permission in its full, unrestricted form.
      *
-     * <p><ol>There are three whitelists:
+     * <p><ol>There are four allowlists:
      *
      * <li>one for cases where the system permission policy whitelists a permission
      * This list corresponds to the{@link #FLAG_PERMISSION_WHITELIST_SYSTEM} flag.
@@ -4553,6 +4630,17 @@ public abstract class PackageManager {
      * Can be accessed by pre-installed holders of a dedicated permission or the
      * installer on record.
      *
+     * <li>one for cases where the system exempts the permission when granting a role.
+     * This list corresponds to the {@link #FLAG_PERMISSION_ALLOWLIST_ROLE} flag. Can
+     * be accessed by pre-installed holders of a dedicated permission.
+     * </ol>
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
+     *
      * @param packageName The app for which to get whitelisted permissions.
      * @param whitelistFlag The flag to determine which whitelist to query. Only one flag
      * can be passed.s
@@ -4563,6 +4651,7 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
+     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to access a whitelist that you have no access to.
      */
@@ -4584,7 +4673,7 @@ public abstract class PackageManager {
      * allows for the to hold that permission and whitelisting a soft restricted
      * permission allows the app to hold the permission in its full, unrestricted form.
      *
-     * <p><ol>There are three whitelists:
+     * <p><ol>There are four whitelists:
      *
      * <li>one for cases where the system permission policy whitelists a permission
      * This list corresponds to the {@link #FLAG_PERMISSION_WHITELIST_SYSTEM} flag.
@@ -4602,9 +4691,20 @@ public abstract class PackageManager {
      * Can be modified by pre-installed holders of a dedicated permission or the installer
      * on record.
      *
+     * <li>one for cases where the system exempts the permission when permission when
+     * granting a role. This list corresponds to the {@link #FLAG_PERMISSION_ALLOWLIST_ROLE}
+     * flag. Can be modified by pre-installed holders of a dedicated permission.
+     * </ol>
+     *
      * <p>You need to specify the whitelists for which to set the whitelisted permissions
      * which will clear the previous whitelisted permissions and replace them with the
      * provided ones.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      *
      * @param packageName The app for which to get whitelisted permissions.
      * @param permName The whitelisted permission to add.
@@ -4617,6 +4717,7 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
+     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to modify a whitelist that you have no access to.
      */
@@ -4638,7 +4739,7 @@ public abstract class PackageManager {
      * allows for the to hold that permission and whitelisting a soft restricted
      * permission allows the app to hold the permission in its full, unrestricted form.
      *
-     * <p><ol>There are three whitelists:
+     * <p><ol>There are four whitelists:
      *
      * <li>one for cases where the system permission policy whitelists a permission
      * This list corresponds to the {@link #FLAG_PERMISSION_WHITELIST_SYSTEM} flag.
@@ -4656,9 +4757,23 @@ public abstract class PackageManager {
      * Can be modified by pre-installed holders of a dedicated permission or the installer
      * on record.
      *
+     * <li>one for cases where the system exempts the permission when upgrading
+     * from an OS version in which the permission was not restricted to an OS version
+     * in which the permission is restricted. This list corresponds to the {@link
+     * #FLAG_PERMISSION_WHITELIST_UPGRADE} flag. Can be modified by pre-installed
+     * holders of a dedicated permission. The installer on record can only remove
+     * permissions from this allowlist.
+     * </ol>
+     *
      * <p>You need to specify the whitelists for which to set the whitelisted permissions
      * which will clear the previous whitelisted permissions and replace them with the
      * provided ones.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      *
      * @param packageName The app for which to get whitelisted permissions.
      * @param permName The whitelisted permission to remove.
@@ -4671,6 +4786,7 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
+     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to modify a whitelist that you have no access to.
      */
@@ -4690,6 +4806,12 @@ public abstract class PackageManager {
      * Packages start in whitelisted state, and it is the installer's responsibility to
      * un-whitelist the packages it installs, unless auto-revoking permissions from that package
      * would cause breakages beyond having to re-request the permission(s).
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      *
      * @param packageName The app for which to set exemption.
      * @param whitelisted Whether the app should be whitelisted.
@@ -4712,6 +4834,13 @@ public abstract class PackageManager {
      *
      * Only the installer on record that installed the given package, or a holder of
      * {@code WHITELIST_AUTO_REVOKE_PERMISSIONS} is allowed to call this.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
+     *
      * @param packageName The app for which to set exemption.
      *
      * @return Whether the app is whitelisted.
@@ -7854,42 +7983,49 @@ public abstract class PackageManager {
 
     /**
      * Trust any Installer to provide checksums for the package.
-     * @see #getChecksums
+     * @see #requestChecksums
      */
-    public static final @Nullable List<Certificate> TRUST_ALL = null;
+    public static final @Nullable List<Certificate> TRUST_ALL = Collections.singletonList(null);
 
     /**
      * Don't trust any Installer to provide checksums for the package.
      * This effectively disables optimized Installer-enforced checksums.
-     * @see #getChecksums
+     * @see #requestChecksums
      */
-    public static final @NonNull List<Certificate> TRUST_NONE = Collections.emptyList();
+    public static final @NonNull List<Certificate> TRUST_NONE = Collections.singletonList(null);
 
     /**
-     * Returns the checksums for APKs within a package.
+     * Requesting the checksums for APKs within a package.
+     * The checksums will be returned asynchronously via statusReceiver.
      *
      * By default returns all readily available checksums:
      * - enforced by platform,
      * - enforced by installer.
      * If caller needs a specific checksum kind, they can specify it as required.
      *
+     * <b>Caution: Android can not verify installer-provided checksums. Make sure you specify
+     * trusted installers.</b>
+     *
      * @param packageName whose checksums to return.
      * @param includeSplits whether to include checksums for non-base splits.
-     * @param required explicitly request the checksum kinds. Will incur significant
+     * @param required explicitly request the checksum types. May incur significant
      *                 CPU/memory/disk usage.
-     * @param trustedInstallers for checksums enforced by Installer, which ones to be trusted.
-     *                          {@link #TRUST_ALL} will return checksums from any Installer,
-     *                          {@link #TRUST_NONE} disables optimized Installer-enforced checksums.
+     * @param trustedInstallers for checksums enforced by installer, which installers are to be
+     *                          trusted.
+     *                          {@link #TRUST_ALL} will return checksums from any installer,
+     *                          {@link #TRUST_NONE} disables optimized installer-enforced checksums,
+     *                          otherwise the list has to be non-empty list of certificates.
      * @param statusReceiver called once when the results are available as
-     *                       {@link #EXTRA_CHECKSUMS} of type ApkChecksum[].
+     *                       {@link #EXTRA_CHECKSUMS} of type {@link ApkChecksum}[].
      * @throws CertificateEncodingException if an encoding error occurs for trustedInstallers.
+     * @throws IllegalArgumentException if the list of trusted installer certificates is empty.
      * @throws NameNotFoundException if a package with the given name cannot be found on the system.
      */
-    public void getChecksums(@NonNull String packageName, boolean includeSplits,
-            @Checksum.Kind int required, @Nullable List<Certificate> trustedInstallers,
+    public void requestChecksums(@NonNull String packageName, boolean includeSplits,
+            @Checksum.Type int required, @NonNull List<Certificate> trustedInstallers,
             @NonNull IntentSender statusReceiver)
-            throws CertificateEncodingException, IOException, NameNotFoundException {
-        throw new UnsupportedOperationException("getChecksums not implemented in subclass");
+            throws CertificateEncodingException, NameNotFoundException {
+        throw new UnsupportedOperationException("requestChecksums not implemented in subclass");
     }
 
     /**
@@ -8023,6 +8159,12 @@ public abstract class PackageManager {
     }
 
     /**
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
+     *
      * @return whether this package is whitelisted from having its runtime permission be
      *         auto-revoked if unused for an extended period of time.
      */
@@ -8080,6 +8222,20 @@ public abstract class PackageManager {
     public Set<String> getMimeGroup(@NonNull String mimeGroup) {
         throw new UnsupportedOperationException(
                 "getMimeGroup not implemented in subclass");
+    }
+
+    /**
+     * Grants implicit visibility of the package that provides an authority to a querying UID.
+     *
+     * @throws SecurityException when called by a package other than the contacts provider
+     * @hide
+     */
+    public void grantImplicitAccess(int queryingUid, String visibleAuthority) {
+        try {
+            ActivityThread.getPackageManager().grantImplicitAccess(queryingUid, visibleAuthority);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     // Some of the flags don't affect the query result, but let's be conservative and cache
@@ -8287,5 +8443,20 @@ public abstract class PackageManager {
      * @hide */
     public static void uncorkPackageInfoCache() {
         PropertyInvalidatedCache.uncorkInvalidations(PermissionManager.CACHE_KEY_PACKAGE_INFO);
+    }
+
+    /**
+     * Holds the PM lock for the specified amount of milliseconds.
+     * Intended for use by the tests that need to imitate lock contention.
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.INJECT_EVENTS)
+    public void holdLock(int durationMs) {
+        try {
+            ActivityThread.getPackageManager().holdLock(durationMs);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 }

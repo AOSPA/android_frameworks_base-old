@@ -1574,7 +1574,7 @@ public class StatsPullAtomService extends SystemService {
     }
 
     int pullWifiActivityInfoLocked(int atomTag, List<StatsEvent> pulledData) {
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             SynchronousResultReceiver wifiReceiver = new SynchronousResultReceiver("wifi");
             mWifiManager.getWifiActivityEnergyInfoAsync(
@@ -1622,7 +1622,7 @@ public class StatsPullAtomService extends SystemService {
     }
 
     int pullModemActivityInfoLocked(int atomTag, List<StatsEvent> pulledData) {
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             SynchronousResultReceiver modemReceiver = new SynchronousResultReceiver("telephony");
             mTelephony.requestModemActivityInfo(modemReceiver);
@@ -1630,13 +1630,14 @@ public class StatsPullAtomService extends SystemService {
             if (modemInfo == null) {
                 return StatsManager.PULL_SKIP;
             }
-            pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, modemInfo.getTimestamp(),
+            pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag,
+                    modemInfo.getTimestampMillis(),
                     modemInfo.getSleepTimeMillis(), modemInfo.getIdleTimeMillis(),
-                    modemInfo.getTransmitPowerInfo().get(0).getTimeInMillis(),
-                    modemInfo.getTransmitPowerInfo().get(1).getTimeInMillis(),
-                    modemInfo.getTransmitPowerInfo().get(2).getTimeInMillis(),
-                    modemInfo.getTransmitPowerInfo().get(3).getTimeInMillis(),
-                    modemInfo.getTransmitPowerInfo().get(4).getTimeInMillis(),
+                    modemInfo.getTransmitDurationMillisAtPowerLevel(0),
+                    modemInfo.getTransmitDurationMillisAtPowerLevel(1),
+                    modemInfo.getTransmitDurationMillisAtPowerLevel(2),
+                    modemInfo.getTransmitDurationMillisAtPowerLevel(3),
+                    modemInfo.getTransmitDurationMillisAtPowerLevel(4),
                     modemInfo.getReceiveTimeMillis(),
                     -1 /*`energy_used` field name deprecated, use -1 to indicate as unused.*/));
         } finally {
@@ -2723,7 +2724,7 @@ public class StatsPullAtomService extends SystemService {
 
     // Add a RoleHolder atom for each package that holds a role.
     int pullRoleHolderLocked(int atomTag, List<StatsEvent> pulledData) {
-        long callingToken = Binder.clearCallingIdentity();
+        final long callingToken = Binder.clearCallingIdentity();
         try {
             PackageManager pm = mContext.getPackageManager();
             RoleManagerInternal rmi = LocalServices.getService(RoleManagerInternal.class);

@@ -597,7 +597,7 @@
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Ini akan terus ditampilkan sampai Anda melepas pin. Sentuh lama tombol Ringkasan untuk melepas pin."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Ini akan terus ditampilkan sampai Anda melepas pin. Sentuh lama tombol Beranda untuk melepas pin."</string>
     <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Data pribadi dapat diakses (seperti kontak dan konten email)."</string>
-    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Aplikasi yang dipasangi pin dapat membuka aplikasi lain."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Aplikasi yang disematkan dapat membuka aplikasi lain."</string>
     <string name="screen_pinning_toast" msgid="8177286912533744328">"Untuk melepas pin aplikasi ini, sentuh &amp; lama tombol Kembali dan Ringkasan"</string>
     <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Untuk melepas pin aplikasi ini, sentuh &amp; lama tombol Kembali dan Layar utama"</string>
     <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Untuk melepas pin aplikasi ini, geser ke atas &amp; tahan"</string>
@@ -862,7 +862,7 @@
     <string name="left_icon" msgid="5036278531966897006">"Ikon kiri"</string>
     <string name="right_icon" msgid="1103955040645237425">"Ikon kanan"</string>
     <string name="drag_to_add_tiles" msgid="8933270127508303672">"Tahan dan tarik untuk menambahkan kartu"</string>
-    <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"Tahan dan tarik untuk mengatur ulang kartu"</string>
+    <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"Tahan dan tarik untuk menata ulang kartu"</string>
     <string name="drag_to_remove_tiles" msgid="4682194717573850385">"Tarik ke sini untuk menghapus"</string>
     <string name="drag_to_remove_disabled" msgid="933046987838658850">"Anda membutuhkan setidaknya <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> kartu"</string>
     <string name="qs_edit" msgid="5583565172803472437">"Edit"</string>
@@ -879,20 +879,13 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"Tampilkan ikon notifikasi prioritas rendah"</string>
     <string name="other" msgid="429768510980739978">"Lainnya"</string>
-    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
-    <skip />
+    <string name="accessibility_qs_edit_remove_tile_action" msgid="775511891457193480">"menghapus kartu"</string>
+    <string name="accessibility_qs_edit_tile_add_action" msgid="5051211910345301833">"menambahkan kartu ke akhir"</string>
+    <string name="accessibility_qs_edit_tile_start_move" msgid="2009373939914517817">"Pindahkan kartu"</string>
+    <string name="accessibility_qs_edit_tile_start_add" msgid="7560798153975555772">"Tambahkan kartu"</string>
+    <string name="accessibility_qs_edit_tile_move_to_position" msgid="5198161544045930556">"Pindahkan ke <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_tile_add_to_position" msgid="9029163095148274690">"Tambahkan ke posisi <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_position" msgid="4509277359815711830">"Posisi <xliff:g id="POSITION">%1$d</xliff:g>"</string>
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"Editor setelan cepat."</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"Notifikasi <xliff:g id="ID_1">%1$s</xliff:g>: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"Buka setelan."</string>
@@ -1019,6 +1012,16 @@
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Setelan"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Jendela Pembesaran"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Kontrol Jendela Pembesaran"</string>
+    <string name="accessibility_control_zoom_in" msgid="1189272315480097417">"Perbesar"</string>
+    <string name="accessibility_control_zoom_out" msgid="69578832020304084">"Perkecil"</string>
+    <string name="accessibility_control_move_up" msgid="6622825494014720136">"Pindahkan ke atas"</string>
+    <string name="accessibility_control_move_down" msgid="5390922476900974512">"Pindahkan ke bawah"</string>
+    <string name="accessibility_control_move_left" msgid="8156206978511401995">"Pindahkan ke kiri"</string>
+    <string name="accessibility_control_move_right" msgid="8926821093629582888">"Pindahkan ke kanan"</string>
+    <string name="magnification_mode_switch_description" msgid="2698364322069934733">"Tombol pembesaran"</string>
+    <string name="magnification_mode_switch_state_full_screen" msgid="2882507327576770574">"Perbesar seluruh layar"</string>
+    <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"Perbesar sebagian layar"</string>
+    <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"Alihkan"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Kontrol perangkat"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"Tambahkan kontrol untuk perangkat terhubung"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"Siapkan kontrol perangkat"</string>
@@ -1082,4 +1085,6 @@
     <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (terputus)"</string>
     <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"Tidak dapat terhubung. Coba lagi."</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Sambungkan perangkat baru"</string>
+    <string name="build_number_clip_data_label" msgid="3623176728412560914">"Nomor versi"</string>
+    <string name="build_number_copy_toast" msgid="877720921605503046">"Nomor versi disalin ke papan klip."</string>
 </resources>

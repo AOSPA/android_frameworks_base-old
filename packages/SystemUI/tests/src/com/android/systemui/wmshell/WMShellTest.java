@@ -16,12 +16,17 @@
 
 package com.android.systemui.wmshell;
 
+import static android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE;
+
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.content.pm.PackageManager;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.testing.TestableContext;
 
 import androidx.test.runner.AndroidJUnit4;
 
@@ -31,16 +36,19 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationModeController;
-import com.android.systemui.pip.Pip;
-import com.android.systemui.shared.system.ActivityManagerWrapper;
+import com.android.systemui.shared.system.InputConsumerController;
 import com.android.systemui.shared.system.TaskStackChangeListener;
+import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedGestureHandler;
 import com.android.wm.shell.onehanded.OneHandedTransitionCallback;
+import com.android.wm.shell.pip.Pip;
+import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.splitscreen.SplitScreen;
 
 import org.junit.Before;
@@ -54,28 +62,39 @@ import java.util.Optional;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class WMShellTest extends SysuiTestCase {
-
+    InputConsumerController mInputConsumerController;
     WMShell mWMShell;
+
     @Mock CommandQueue mCommandQueue;
+    @Mock ConfigurationController mConfigurationController;
     @Mock KeyguardUpdateMonitor mKeyguardUpdateMonitor;
-    @Mock ActivityManagerWrapper mActivityManagerWrapper;
+    @Mock TaskStackChangeListeners mTaskStackChangeListeners;
     @Mock DisplayImeController mDisplayImeController;
+    @Mock InputConsumerController mMockInputConsumerController;
     @Mock NavigationModeController mNavigationModeController;
     @Mock ScreenLifecycle mScreenLifecycle;
     @Mock SysUiState mSysUiState;
     @Mock Pip mPip;
+    @Mock PipTouchHandler mPipTouchHandler;
     @Mock SplitScreen mSplitScreen;
     @Mock OneHanded mOneHanded;
     @Mock ShellTaskOrganizer mTaskOrganizer;
     @Mock ProtoTracer mProtoTracer;
+    @Mock PackageManager mMockPackageManager;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        mWMShell = new WMShell(mContext, mCommandQueue, mKeyguardUpdateMonitor,
-                mActivityManagerWrapper, mDisplayImeController, mNavigationModeController,
-                mScreenLifecycle, mSysUiState, Optional.of(mPip), Optional.of(mSplitScreen),
-                Optional.of(mOneHanded), mTaskOrganizer, mProtoTracer);
+        mInputConsumerController = InputConsumerController.getPipInputConsumer();
+
+        mWMShell = new WMShell(mContext, mCommandQueue, mConfigurationController,
+                mInputConsumerController, mKeyguardUpdateMonitor, mTaskStackChangeListeners,
+                mDisplayImeController, mNavigationModeController, mScreenLifecycle, mSysUiState,
+                Optional.of(mPip), Optional.of(mSplitScreen), Optional.of(mOneHanded),
+                mTaskOrganizer, mProtoTracer);
+
+        when(mPip.getPipTouchHandler()).thenReturn(mPipTouchHandler);
+
     }
 
     @Test
@@ -89,8 +108,27 @@ public class WMShellTest extends SysuiTestCase {
     public void initPip_registersCommandQueueCallback() {
         mWMShell.initPip(mPip);
 
-        // Once for the shell, once for pip
-        verify(mCommandQueue, times(2)).addCallback(any(CommandQueue.Callbacks.class));
+        verify(mCommandQueue).addCallback(any(CommandQueue.Callbacks.class));
+    }
+
+    @Test
+    public void nonPipDevice_shouldNotInitPip() {
+        final TestableContext nonPipContext = getNonPipFeatureContext();
+        final WMShell nonPipWMShell = new WMShell(nonPipContext, mCommandQueue,
+                mConfigurationController, mMockInputConsumerController, mKeyguardUpdateMonitor,
+                mTaskStackChangeListeners, mDisplayImeController, mNavigationModeController,
+                mScreenLifecycle, mSysUiState, Optional.of(mPip), Optional.of(mSplitScreen),
+                Optional.of(mOneHanded), mTaskOrganizer, mProtoTracer);
+        nonPipWMShell.initPip(mPip);
+
+        verify(mCommandQueue, never()).addCallback(any());
+        verify(mKeyguardUpdateMonitor, never()).registerCallback(any());
+        verify(mConfigurationController, never()).addCallback(any());
+        verify(mSysUiState, never()).addCallback(any());
+        verify(mTaskStackChangeListeners, never()).registerTaskStackListener(any());
+        verify(mMockInputConsumerController, never()).setInputListener(any());
+        verify(mMockInputConsumerController, never()).setRegistrationListener(any());
+        verify(mPip, never()).registerSessionListenerForCurrentUser();
     }
 
     @Test
@@ -98,26 +136,31 @@ public class WMShellTest extends SysuiTestCase {
         mWMShell.initSplitScreen(mSplitScreen);
 
         verify(mKeyguardUpdateMonitor).registerCallback(any(KeyguardUpdateMonitorCallback.class));
-        verify(mActivityManagerWrapper).registerTaskStackListener(
+        verify(mTaskStackChangeListeners).registerTaskStackListener(
                 any(TaskStackChangeListener.class));
     }
 
     @Test
     public void initOneHanded_registersCallbacks() {
-        when(mOneHanded.hasOneHandedFeature()).thenReturn(true);
         mWMShell.initOneHanded(mOneHanded);
 
         verify(mKeyguardUpdateMonitor).registerCallback(any(KeyguardUpdateMonitorCallback.class));
-        // Once for the shell, once for the one handed mode
-        verify(mCommandQueue, times(2)).addCallback(any(CommandQueue.Callbacks.class));
+        verify(mCommandQueue).addCallback(any(CommandQueue.Callbacks.class));
         verify(mScreenLifecycle).addObserver(any(ScreenLifecycle.Observer.class));
         verify(mNavigationModeController).addListener(
                 any(NavigationModeController.ModeChangedListener.class));
-        verify(mActivityManagerWrapper).registerTaskStackListener(
+        verify(mTaskStackChangeListeners).registerTaskStackListener(
                 any(TaskStackChangeListener.class));
 
         verify(mOneHanded).registerGestureCallback(any(
                 OneHandedGestureHandler.OneHandedGestureEventCallback.class));
         verify(mOneHanded).registerTransitionCallback(any(OneHandedTransitionCallback.class));
+    }
+
+    TestableContext getNonPipFeatureContext() {
+        TestableContext spiedContext = spy(mContext);
+        when(mMockPackageManager.hasSystemFeature(FEATURE_PICTURE_IN_PICTURE)).thenReturn(false);
+        when(spiedContext.getPackageManager()).thenReturn(mMockPackageManager);
+        return spiedContext;
     }
 }

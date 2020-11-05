@@ -17,9 +17,7 @@
 package android.hardware.fingerprint;
 
 import android.annotation.IntDef;
-import android.hardware.face.FaceSensorProperties;
-import android.os.Parcel;
-import android.os.Parcelable;
+import android.hardware.biometrics.SensorProperties;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -28,70 +26,77 @@ import java.lang.annotation.RetentionPolicy;
  * Container for fingerprint sensor properties.
  * @hide
  */
-public class FingerprintSensorProperties implements Parcelable {
-
+public class FingerprintSensorProperties extends SensorProperties {
+    /**
+     * @hide
+     */
     public static final int TYPE_UNKNOWN = 0;
-    public static final int TYPE_REAR = 1;
-    public static final int TYPE_UDFPS = 2;
-    public static final int TYPE_POWER_BUTTON = 3;
 
-    @IntDef({
-            TYPE_UNKNOWN,
+    /**
+     * @hide
+     */
+    public static final int TYPE_REAR = 1;
+
+    /**
+     * @hide
+     */
+    public static final int TYPE_UDFPS_ULTRASONIC = 2;
+
+    /**
+     * @hide
+     */
+    public static final int TYPE_UDFPS_OPTICAL = 3;
+
+    /**
+     * @hide
+     */
+    public static final int TYPE_POWER_BUTTON = 4;
+
+    /**
+     * @hide
+     */
+    public static final int TYPE_HOME_BUTTON = 5;
+
+    /**
+     * @hide
+     */
+    @IntDef({TYPE_UNKNOWN,
             TYPE_REAR,
-            TYPE_UDFPS,
-            TYPE_POWER_BUTTON})
+            TYPE_UDFPS_ULTRASONIC,
+            TYPE_UDFPS_OPTICAL,
+            TYPE_POWER_BUTTON,
+            TYPE_HOME_BUTTON})
     @Retention(RetentionPolicy.SOURCE)
     public @interface SensorType {}
 
-    public final int sensorId;
-    public final @SensorType int sensorType;
-    // IBiometricsFingerprint@2.1 does not manage timeout below the HAL, so the Gatekeeper HAT
-    // cannot be checked
-    public final boolean resetLockoutRequiresHardwareAuthToken;
-    // Maximum number of enrollments a user/profile can have.
-    public final int maxTemplatesAllowed;
+    @SensorType final int mSensorType;
 
     /**
-     * Initializes SensorProperties with specified values
+     * Constructs a {@link FingerprintSensorProperties} from the internal parcelable representation.
+     * @hide
      */
-    public FingerprintSensorProperties(int sensorId, @SensorType int sensorType,
-            boolean resetLockoutRequiresHardwareAuthToken, int maxTemplatesAllowed) {
-        this.sensorId = sensorId;
-        this.sensorType = sensorType;
-        this.resetLockoutRequiresHardwareAuthToken = resetLockoutRequiresHardwareAuthToken;
-        this.maxTemplatesAllowed = maxTemplatesAllowed;
+    public static FingerprintSensorProperties from(
+            FingerprintSensorPropertiesInternal internalProp) {
+        return new FingerprintSensorProperties(internalProp.sensorId,
+                internalProp.sensorStrength,
+                internalProp.sensorType);
     }
 
-    protected FingerprintSensorProperties(Parcel in) {
-        sensorId = in.readInt();
-        sensorType = in.readInt();
-        resetLockoutRequiresHardwareAuthToken = in.readBoolean();
-        maxTemplatesAllowed = in.readInt();
+    /**
+     * @hide
+     */
+    public FingerprintSensorProperties(int sensorId, int sensorStrength,
+            @SensorType int sensorType) {
+        super(sensorId, sensorStrength);
+        mSensorType = sensorType;
     }
 
-    public static final Creator<FingerprintSensorProperties> CREATOR =
-            new Creator<FingerprintSensorProperties>() {
-                @Override
-                public FingerprintSensorProperties createFromParcel(Parcel in) {
-                    return new FingerprintSensorProperties(in);
-                }
-
-                @Override
-                public FingerprintSensorProperties[] newArray(int size) {
-                    return new FingerprintSensorProperties[size];
-                }
-            };
-
-    @Override
-    public int describeContents() {
-        return 0;
-    }
-
-    @Override
-    public void writeToParcel(Parcel dest, int flags) {
-        dest.writeInt(sensorId);
-        dest.writeInt(sensorType);
-        dest.writeBoolean(resetLockoutRequiresHardwareAuthToken);
-        dest.writeInt(maxTemplatesAllowed);
+    /**
+     * @hide
+     * @return The sensor's type.
+     */
+    @SensorType
+    public int getSensorType() {
+        return mSensorType;
     }
 }

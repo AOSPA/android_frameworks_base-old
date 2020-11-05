@@ -64,6 +64,14 @@ class DozeLogger @Inject constructor(
         })
     }
 
+    fun logDozingSuppressed(isDozingSuppressed: Boolean) {
+        buffer.log(TAG, INFO, {
+            bool1 = isDozingSuppressed
+        }, {
+            "DozingSuppressed=$bool1"
+        })
+    }
+
     fun logFling(
         expand: Boolean,
         aboveThreshold: Boolean,
@@ -140,6 +148,22 @@ class DozeLogger @Inject constructor(
             str1 = state.name
         }, {
             "Doze state changed to $str1"
+        })
+    }
+
+    fun logStateChangedSent(state: DozeMachine.State) {
+        buffer.log(TAG, INFO, {
+            str1 = state.name
+        }, {
+            "Doze state sent to all DozeMachineParts stateSent=$str1"
+        })
+    }
+
+    fun logDisplayStateChanged(displayState: Int) {
+        buffer.log(TAG, INFO, {
+            int1 = displayState
+        }, {
+            "Display state changed to $int1"
         })
     }
 

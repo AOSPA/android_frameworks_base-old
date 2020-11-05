@@ -19,11 +19,13 @@ package com.android.server.location.timezone;
 import android.annotation.NonNull;
 import android.os.Handler;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.location.timezone.LocationTimeZoneProvider.ProviderState;
 import com.android.server.timezonedetector.ConfigurationInternal;
 import com.android.server.timezonedetector.Dumpable;
 import com.android.server.timezonedetector.GeolocationTimeZoneSuggestion;
 
+import java.time.Duration;
 import java.util.Objects;
 
 /**
@@ -84,6 +86,12 @@ abstract class LocationTimeZoneProviderController implements Dumpable {
      */
     abstract void onConfigChanged();
 
+    @VisibleForTesting
+    abstract boolean isUncertaintyTimeoutSet();
+
+    @VisibleForTesting
+    abstract long getUncertaintyTimeoutDelayMillis();
+
     /**
      * Used by {@link LocationTimeZoneProviderController} to obtain information from the surrounding
      * service. It can easily be faked for tests.
@@ -100,6 +108,24 @@ abstract class LocationTimeZoneProviderController implements Dumpable {
 
         /** Returns the {@link ConfigurationInternal} for the current user of the device. */
         abstract ConfigurationInternal getCurrentUserConfigurationInternal();
+
+        /**
+         * Returns the value passed to LocationTimeZoneProviders informing them of how long they
+         * have to return their first time zone suggestion.
+         */
+        abstract Duration getProviderInitializationTimeout();
+
+        /**
+         * Returns the extra time granted on top of {@link #getProviderInitializationTimeout()} to
+         * allow for slop like communication delays.
+         */
+        abstract Duration getProviderInitializationTimeoutFuzz();
+
+        /**
+         * Returns the delay allowed after receiving uncertainty from a provider before it should be
+         * passed on.
+         */
+        abstract Duration getUncertaintyDelay();
     }
 
     /**

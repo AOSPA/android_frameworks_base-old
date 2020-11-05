@@ -526,7 +526,8 @@ public class DisplayContentTests extends WindowTestsBase {
         for (int i = 0; i < types.length; i++) {
             final int type = types[i];
             windows[i] = createWindow(null /* parent */, type, displayContent, "window-" + type);
-            windows[i].mHasSurface = false;
+            windows[i].setHasSurface(true);
+            windows[i].mWinAnimator.mDrawState = WindowStateAnimator.DRAW_PENDING;
         }
         return windows;
     }
@@ -1163,6 +1164,8 @@ public class DisplayContentTests extends WindowTestsBase {
         mDisplayContent.getDisplayRotation().setRotation(ROTATION_0);
         mDisplayContent.computeScreenConfiguration(config);
         mDisplayContent.onRequestedOverrideConfigurationChanged(config);
+        assertNotEquals(config90.windowConfiguration.getMaxBounds(),
+                config.windowConfiguration.getMaxBounds());
 
         final ActivityRecord app = mAppWindow.mActivityRecord;
         app.setVisible(false);
@@ -1218,8 +1221,9 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(t, never()).setPosition(any(), eq(0), eq(0));
 
         // Launch another activity before the transition is finished.
-        final ActivityRecord app2 = new TaskBuilder(mSupervisor)
-                .setDisplay(mDisplayContent).setCreateActivity(true).build().getTopMostActivity();
+        final Task task2 = new TaskBuilder(mSupervisor).setDisplay(mDisplayContent).build();
+        final ActivityRecord app2 = new ActivityBuilder(mAtm).setStack(task2)
+                .setUseProcess(app.app).build();
         app2.setVisible(false);
         mDisplayContent.mOpeningApps.add(app2);
         app2.setRequestedOrientation(newOrientation);
@@ -1228,6 +1232,12 @@ public class DisplayContentTests extends WindowTestsBase {
         // should also be the fixed rotation launching app because it is the latest top.
         assertTrue(app.hasFixedRotationTransform(app2));
         assertTrue(mDisplayContent.isFixedRotationLaunchingApp(app2));
+
+        final Configuration expectedProcConfig = new Configuration(app2.app.getConfiguration());
+        expectedProcConfig.windowConfiguration.setActivityType(
+                WindowConfiguration.ACTIVITY_TYPE_UNDEFINED);
+        assertEquals("The process should receive rotated configuration for compatibility",
+                expectedProcConfig, app2.app.getConfiguration());
 
         // The fixed rotation transform can only be finished when all animation finished.
         doReturn(false).when(app2).isAnimating(anyInt(), anyInt());
@@ -1337,6 +1347,27 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(mWm, atLeastOnce()).startFreezingDisplay(anyInt(), anyInt(), any(), anyInt());
         assertEquals(homeConfigOrientation, displayConfig.orientation);
         assertTrue(displayContent.getPinnedStackController().isPipActiveOrWindowingModeChanging());
+    }
+
+    @Test
+    public void testNoFixedRotationOnResumedScheduledApp() {
+        unblockDisplayRotation(mDisplayContent);
+        final ActivityRecord app = new ActivityBuilder(mAtm).setCreateTask(true).build();
+        app.setVisible(false);
+        app.setState(Task.ActivityState.RESUMED, "test");
+        mDisplayContent.prepareAppTransition(WindowManager.TRANSIT_ACTIVITY_OPEN,
+                false /* alwaysKeepCurrent */);
+        mDisplayContent.mOpeningApps.add(app);
+        final int newOrientation = getRotatedOrientation(mDisplayContent);
+        app.setRequestedOrientation(newOrientation);
+
+        // The condition should reject using fixed rotation because the resumed client in real case
+        // might get display info immediately. And the fixed rotation adjustments haven't arrived
+        // client side so the info may be inconsistent with the requested orientation.
+        verify(mDisplayContent).handleTopActivityLaunchingInDifferentOrientation(eq(app),
+                eq(true) /* checkOpening */);
+        assertFalse(app.isFixedRotationTransforming());
+        assertFalse(mDisplayContent.hasTopFixedRotationLaunchingApp());
     }
 
     @Test
@@ -1551,6 +1582,28 @@ public class DisplayContentTests extends WindowTestsBase {
         // Make sure forceDesktopMode() is false when the force config is disabled.
         mWm.mForceDesktopModeOnExternalDisplays = false;
         assertFalse(publicDc.forceDesktopMode());
+    }
+
+    @Test
+    public void testDisplaySettingsReappliedWhenDisplayChanged() {
+        final DisplayInfo displayInfo = new DisplayInfo();
+        displayInfo.copyFrom(mDisplayInfo);
+        final DisplayContent dc = createNewDisplay(displayInfo);
+
+        // Generate width/height/density values different from the default of the display.
+        final int forcedWidth = dc.mBaseDisplayWidth + 1;
+        final int forcedHeight = dc.mBaseDisplayHeight + 1;;
+        final int forcedDensity = dc.mBaseDisplayDensity + 1;;
+        // Update the forced size and density in settings and the unique id to simualate a display
+        // remap.
+        dc.mWmService.mDisplayWindowSettings.setForcedSize(dc, forcedWidth, forcedHeight);
+        dc.mWmService.mDisplayWindowSettings.setForcedDensity(dc, forcedDensity, 0 /* userId */);
+        dc.mCurrentUniqueDisplayId = mDisplayInfo.uniqueId + "-test";
+        // Trigger display changed.
+        dc.onDisplayChanged();
+        // Ensure overridden size and denisty match the most up-to-date values in settings for the
+        // display.
+        verifySizes(dc, forcedWidth, forcedHeight, forcedDensity);
     }
 
     private boolean isOptionsPanelAtRight(int displayId) {

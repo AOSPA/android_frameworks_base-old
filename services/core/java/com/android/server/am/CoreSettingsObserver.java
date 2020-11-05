@@ -18,6 +18,7 @@ package com.android.server.am;
 
 import android.annotation.NonNull;
 import android.app.ActivityThread;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.net.Uri;
@@ -86,13 +87,15 @@ final class CoreSettingsObserver extends ContentObserver {
         sGlobalSettingToTypeMap.put(
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_DEBUG_PACKAGE, String.class);
         sGlobalSettingToTypeMap.put(
-                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE, String.class);
+                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE, int.class);
         sGlobalSettingToTypeMap.put(
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS, String.class);
         sGlobalSettingToTypeMap.put(
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES, String.class);
         sGlobalSettingToTypeMap.put(
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_ALLOWLIST, String.class);
+        sGlobalSettingToTypeMap.put(
+                Settings.Global.ANGLE_EGL_FEATURES, String.class);
         sGlobalSettingToTypeMap.put(
                 Settings.Global.GLOBAL_SETTINGS_SHOW_ANGLE_IN_USE_DIALOG_BOX, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.ENABLE_GPU_DEBUG_LAYERS, int.class);
@@ -221,16 +224,17 @@ final class CoreSettingsObserver extends ContentObserver {
 
     @VisibleForTesting
     void populateSettings(Bundle snapshot, Map<String, Class<?>> map) {
-        Context context = mActivityManagerService.mContext;
+        final Context context = mActivityManagerService.mContext;
+        final ContentResolver cr = context.getContentResolver();
         for (Map.Entry<String, Class<?>> entry : map.entrySet()) {
             String setting = entry.getKey();
             final String value;
             if (map == sSecureSettingToTypeMap) {
-                value = Settings.Secure.getString(context.getContentResolver(), setting);
+                value = Settings.Secure.getStringForUser(cr, setting, cr.getUserId());
             } else if (map == sSystemSettingToTypeMap) {
-                value = Settings.System.getString(context.getContentResolver(), setting);
+                value = Settings.System.getStringForUser(cr, setting, cr.getUserId());
             } else {
-                value = Settings.Global.getString(context.getContentResolver(), setting);
+                value = Settings.Global.getString(cr, setting);
             }
             if (value == null) {
                 snapshot.remove(setting);

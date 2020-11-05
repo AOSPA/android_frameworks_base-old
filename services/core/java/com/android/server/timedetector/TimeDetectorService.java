@@ -84,6 +84,7 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
         contentResolver.registerContentObserver(
                 Settings.Global.getUriFor(Settings.Global.AUTO_TIME), true,
                 new ContentObserver(handler) {
+                    @Override
                     public void onChange(boolean selfChange) {
                         timeDetectorService.handleAutoTimeDetectionChanged();
                     }
@@ -113,7 +114,7 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
         enforceSuggestManualTimePermission();
         Objects.requireNonNull(timeSignal);
 
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             return mTimeDetectorStrategy.suggestManualTime(timeSignal);
         } finally {

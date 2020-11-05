@@ -889,20 +889,13 @@
   </string-array>
     <string name="tuner_low_priority" msgid="8412666814123009820">"הצגת סמלי התראות בעדיפות נמוכה"</string>
     <string name="other" msgid="429768510980739978">"אחר"</string>
-    <!-- no translation found for accessibility_qs_edit_remove_tile_action (775511891457193480) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_action (5051211910345301833) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_move (2009373939914517817) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_start_add (7560798153975555772) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_move_to_position (5198161544045930556) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_tile_add_to_position (9029163095148274690) -->
-    <skip />
-    <!-- no translation found for accessibility_qs_edit_position (4509277359815711830) -->
-    <skip />
+    <string name="accessibility_qs_edit_remove_tile_action" msgid="775511891457193480">"הסרת האריח"</string>
+    <string name="accessibility_qs_edit_tile_add_action" msgid="5051211910345301833">"הוספת האריח בסוף הרשימה"</string>
+    <string name="accessibility_qs_edit_tile_start_move" msgid="2009373939914517817">"העברת האריח"</string>
+    <string name="accessibility_qs_edit_tile_start_add" msgid="7560798153975555772">"הוספת אריח"</string>
+    <string name="accessibility_qs_edit_tile_move_to_position" msgid="5198161544045930556">"העברה למיקום <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_tile_add_to_position" msgid="9029163095148274690">"הוספה למיקום <xliff:g id="POSITION">%1$d</xliff:g>"</string>
+    <string name="accessibility_qs_edit_position" msgid="4509277359815711830">"מיקום <xliff:g id="POSITION">%1$d</xliff:g>"</string>
     <string name="accessibility_desc_quick_settings_edit" msgid="741658939453595297">"עורך הגדרות מהירות."</string>
     <string name="accessibility_desc_notification_icon" msgid="7331265967584178674">"התראות <xliff:g id="ID_1">%1$s</xliff:g>: <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="accessibility_quick_settings_settings" msgid="7098489591715844713">"פתיחת הגדרות."</string>
@@ -948,7 +941,7 @@
     <string name="notification_channel_general" msgid="4384774889645929705">"הודעות כלליות"</string>
     <string name="notification_channel_storage" msgid="2720725707628094977">"אחסון"</string>
     <string name="notification_channel_hints" msgid="7703783206000346876">"טיפים"</string>
-    <string name="instant_apps" msgid="8337185853050247304">"אפליקציות אינסטנט"</string>
+    <string name="instant_apps" msgid="8337185853050247304">"אפליקציות ללא התקנה"</string>
     <string name="instant_apps_title" msgid="8942706782103036910">"<xliff:g id="APP">%1$s</xliff:g> פועלת"</string>
     <string name="instant_apps_message" msgid="6112428971833011754">"האפליקציה נפתחת בלי התקנה."</string>
     <string name="instant_apps_message_with_help" msgid="1816952263531203932">"האפליקציה נפתחת בלי התקנה. אפשר להקיש כדי לקבל מידע נוסף."</string>
@@ -1029,6 +1022,16 @@
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"הגדרות"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"חלון הגדלה"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"בקרות של חלון ההגדלה"</string>
+    <string name="accessibility_control_zoom_in" msgid="1189272315480097417">"התקרבות"</string>
+    <string name="accessibility_control_zoom_out" msgid="69578832020304084">"התרחקות"</string>
+    <string name="accessibility_control_move_up" msgid="6622825494014720136">"הזזה למעלה"</string>
+    <string name="accessibility_control_move_down" msgid="5390922476900974512">"הזזה למטה"</string>
+    <string name="accessibility_control_move_left" msgid="8156206978511401995">"הזזה שמאלה"</string>
+    <string name="accessibility_control_move_right" msgid="8926821093629582888">"הזזה ימינה"</string>
+    <string name="magnification_mode_switch_description" msgid="2698364322069934733">"מעבר למצב הגדלה"</string>
+    <string name="magnification_mode_switch_state_full_screen" msgid="2882507327576770574">"הגדלת כל המסך"</string>
+    <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"הגדלת חלק מהמסך"</string>
+    <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"מעבר"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"פקדי מכשירים"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"יש להוסיף פקדים למכשירים המחוברים"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"הגדרה של פקדי מכשירים"</string>
@@ -1094,4 +1097,6 @@
     <string name="media_output_dialog_disconnected" msgid="1834473104836986046">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> (מנותק)"</string>
     <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"לא ניתן היה להתחבר. יש לנסות שוב."</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"התאמה של מכשיר חדש"</string>
+    <string name="build_number_clip_data_label" msgid="3623176728412560914">"‏מספר Build"</string>
+    <string name="build_number_copy_toast" msgid="877720921605503046">"‏מספר ה-Build הועתק ללוח."</string>
 </resources>
