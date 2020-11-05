@@ -129,4 +129,7 @@
     <!-- Pocket bridge -->
     <java-symbol type="string" name="config_pocketBridgeSysfsInpocket" />
 
+    <!-- Horizon Light -->
+    <java-symbol type="integer" name="config_AmbientPulseLightColor" />
+
 </resources>
