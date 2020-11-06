@@ -27,10 +27,11 @@ import static org.junit.Assume.assumeTrue;
 import android.net.MacAddress;
 import android.net.wifi.hotspot2.PasspointConfiguration;
 import android.net.wifi.hotspot2.PasspointTestUtils;
-import android.net.wifi.util.SdkLevelUtil;
 import android.os.Parcel;
 
 import androidx.test.filters.SmallTest;
+
+import com.android.modules.utils.build.SdkLevel;
 
 import org.junit.Test;
 
@@ -198,7 +199,7 @@ public class WifiNetworkSuggestionTest {
      */
     @Test
     public void testWifiNetworkSuggestionBuilderForOemPaidEnhancedOpenNetworkWithBssid() {
-        assumeTrue(SdkLevelUtil.isAtLeastS());
+        assumeTrue(SdkLevel.isAtLeastS());
 
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
                 .setSsid(TEST_SSID)
@@ -215,6 +216,34 @@ public class WifiNetworkSuggestionTest {
         assertTrue(suggestion.wifiConfiguration.requirePmf);
         assertTrue(suggestion.wifiConfiguration.oemPaid);
         assertTrue(suggestion.isOemPaid());
+        assertFalse(suggestion.isUserAllowedToManuallyConnect);
+        assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNull(suggestion.getEnterpriseConfig());
+    }
+
+    /**
+     * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for OWE network.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderForOemPrivateEnhancedOpenNetworkWithBssid() {
+        assumeTrue(SdkLevel.isAtLeastS());
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setBssid(MacAddress.fromString(TEST_BSSID))
+                .setOemPrivate(true)
+                .setIsEnhancedOpen(true)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertEquals(TEST_BSSID, suggestion.wifiConfiguration.BSSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.OWE));
+        assertNull(suggestion.wifiConfiguration.preSharedKey);
+        assertTrue(suggestion.wifiConfiguration.requirePmf);
+        assertTrue(suggestion.wifiConfiguration.oemPrivate);
+        assertTrue(suggestion.isOemPrivate());
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
         assertTrue(suggestion.isInitialAutoJoinEnabled);
         assertNull(suggestion.getEnterpriseConfig());
@@ -280,6 +309,116 @@ public class WifiNetworkSuggestionTest {
 
     /**
      * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise standard network.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderForWpa3EapNetworkWithStandardApi() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_CERT0);
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa3EnterpriseStandardModeConfig(enterpriseConfig)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.IEEE8021X));
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.WPA_EAP));
+        assertFalse(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupCiphers
+                .get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(suggestion.wifiConfiguration.requirePmf);
+        assertNull(suggestion.wifiConfiguration.preSharedKey);
+        // allowedSuiteBCiphers are set according to the loaded certificate and cannot be tested
+        // here.
+        assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNotNull(suggestion.getEnterpriseConfig());
+    }
+
+    /**
+     * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise network
+     * with 192-bit RSA SuiteB certificates.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderForWpa3EapNetworkWithSuiteBRsaCerts() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_SUITE_B_RSA3072_CERT);
+        enterpriseConfig.setClientKeyEntryWithCertificateChain(FakeKeys.CLIENT_SUITE_B_RSA3072_KEY,
+                new X509Certificate[] {FakeKeys.CLIENT_SUITE_B_RSA3072_CERT});
+
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa3EnterpriseStandardModeConfig(enterpriseConfig)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.IEEE8021X));
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.WPA_EAP));
+        assertFalse(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupCiphers
+                .get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(suggestion.wifiConfiguration.requirePmf);
+        assertNull(suggestion.wifiConfiguration.preSharedKey);
+        // allowedSuiteBCiphers are set according to the loaded certificate and cannot be tested
+        // here.
+        assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNotNull(suggestion.getEnterpriseConfig());
+    }
+
+    /**
+     * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise network
+     * with 192-bit ECC certificates.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderForWpa3EapNetworkWithSuiteBEccCerts() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_SUITE_B_ECDSA_CERT);
+        enterpriseConfig.setClientKeyEntryWithCertificateChain(FakeKeys.CLIENT_SUITE_B_ECC_KEY,
+                new X509Certificate[] {FakeKeys.CLIENT_SUITE_B_ECDSA_CERT});
+
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa3EnterpriseStandardModeConfig(enterpriseConfig)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.IEEE8021X));
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.WPA_EAP));
+        assertFalse(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupCiphers
+                .get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(suggestion.wifiConfiguration.requirePmf);
+        assertNull(suggestion.wifiConfiguration.preSharedKey);
+        // allowedSuiteBCiphers are set according to the loaded certificate and cannot be tested
+        // here.
+        assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNotNull(suggestion.getEnterpriseConfig());
+    }
+
+    /**
+     * Validate correctness of WifiNetworkSuggestion object created by
      * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise 192-bit RSA SuiteB network.
      */
     @Test
@@ -295,6 +434,41 @@ public class WifiNetworkSuggestionTest {
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
                 .setSsid(TEST_SSID)
                 .setWpa3EnterpriseConfig(enterpriseConfig)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupCiphers
+                .get(WifiConfiguration.GroupCipher.GCMP_256));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupManagementCiphers
+                .get(WifiConfiguration.GroupMgmtCipher.BIP_GMAC_256));
+        assertTrue(suggestion.wifiConfiguration.requirePmf);
+        assertNull(suggestion.wifiConfiguration.preSharedKey);
+        // allowedSuiteBCiphers are set according to the loaded certificate and cannot be tested
+        // here.
+        assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNotNull(suggestion.getEnterpriseConfig());
+    }
+
+    /**
+     * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise 192-bit RSA SuiteB network.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderForWpa3SuiteBRsaEapNetworWith192BitApi() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_SUITE_B_RSA3072_CERT);
+        enterpriseConfig.setClientKeyEntryWithCertificateChain(FakeKeys.CLIENT_SUITE_B_RSA3072_KEY,
+                new X509Certificate[] {FakeKeys.CLIENT_SUITE_B_RSA3072_CERT});
+
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa3Enterprise192BitModeConfig(enterpriseConfig)
                 .build();
 
         assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
@@ -349,6 +523,41 @@ public class WifiNetworkSuggestionTest {
     }
 
     /**
+     * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA3-Enterprise 192-bit ECC SuiteB network.
+     */
+    @Test
+    public void testWifiNetworkSuggestionBuilderForWpa3SuiteBEccEapNetworkWith192BitApi() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_SUITE_B_ECDSA_CERT);
+        enterpriseConfig.setClientKeyEntryWithCertificateChain(FakeKeys.CLIENT_SUITE_B_ECC_KEY,
+                new X509Certificate[] {FakeKeys.CLIENT_SUITE_B_ECDSA_CERT});
+
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa3Enterprise192BitModeConfig(enterpriseConfig)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupCiphers
+                .get(WifiConfiguration.GroupCipher.GCMP_256));
+        assertTrue(suggestion.wifiConfiguration.allowedGroupManagementCiphers
+                .get(WifiConfiguration.GroupMgmtCipher.BIP_GMAC_256));
+        assertTrue(suggestion.wifiConfiguration.requirePmf);
+        assertNull(suggestion.wifiConfiguration.preSharedKey);
+        // allowedSuiteBCiphers are set according to the loaded certificate and cannot be tested
+        // here.
+        assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertTrue(suggestion.isInitialAutoJoinEnabled);
+        assertNotNull(suggestion.getEnterpriseConfig());
+    }
+
+    /**
      * Ensure create enterprise suggestion requires CA, when CA certificate is missing, will throw
      * an exception.
      */
@@ -378,7 +587,7 @@ public class WifiNetworkSuggestionTest {
 
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
                 .setSsid(TEST_SSID)
-                .setWpa3EnterpriseConfig(enterpriseConfig)
+                .setWpa3EnterpriseStandardModeConfig(enterpriseConfig)
                 .build();
     }
 
@@ -600,15 +809,16 @@ public class WifiNetworkSuggestionTest {
     /**
      * Ensure {@link WifiNetworkSuggestion.Builder#build()} throws an exception
      * when both {@link WifiNetworkSuggestion.Builder#setWpa3Passphrase(String)} and
-     * {@link WifiNetworkSuggestion.Builder#setWpa3EnterpriseConfig(WifiEnterpriseConfig)} are
-     * invoked.
+     * {@link WifiNetworkSuggestion.Builderi
+     * #setWpa3EnterpriseStandardModeConfig(WifiEnterpriseConfig)}
+     * are invoked.
      */
     @Test(expected = IllegalStateException.class)
     public void testWifiNetworkSuggestionBuilderWithBothWpa3PasphraseAndEnterprise() {
         new WifiNetworkSuggestion.Builder()
                 .setSsid(TEST_SSID)
                 .setWpa3Passphrase(TEST_PRESHARED_KEY)
-                .setWpa3EnterpriseConfig(new WifiEnterpriseConfig())
+                .setWpa3EnterpriseStandardModeConfig(new WifiEnterpriseConfig())
                 .build();
     }
 
@@ -670,7 +880,9 @@ public class WifiNetworkSuggestionTest {
 
     /**
      * Ensure {@link WifiNetworkSuggestion.Builder#build()} throws an exception
-     * when both {@link WifiNetworkSuggestion.Builder#setWpa3EnterpriseConfig(WifiEnterpriseConfig)}
+     * when both
+     * {@link WifiNetworkSuggestion.Builder
+     * #setWpa3EnterpriseStandardModeConfig(WifiEnterpriseConfig)}
      * and {@link WifiNetworkSuggestion.Builder#setPasspointConfig(PasspointConfiguration)} are
      * invoked.
      */
@@ -678,7 +890,7 @@ public class WifiNetworkSuggestionTest {
     public void testWifiNetworkSuggestionBuilderWithBothEnterpriseAndPasspointConfig() {
         PasspointConfiguration passpointConfiguration = PasspointTestUtils.createConfig();
         new WifiNetworkSuggestion.Builder()
-                .setWpa3EnterpriseConfig(new WifiEnterpriseConfig())
+                .setWpa3EnterpriseStandardModeConfig(new WifiEnterpriseConfig())
                 .setPasspointConfig(passpointConfiguration)
                 .build();
     }
@@ -770,7 +982,7 @@ public class WifiNetworkSuggestionTest {
      */
     @Test
     public void testSimCredentialNetworkWithSubId() {
-        assumeTrue(SdkLevelUtil.isAtLeastS());
+        assumeTrue(SdkLevel.isAtLeastS());
         WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
         enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.SIM);
         enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.NONE);
@@ -1071,7 +1283,7 @@ public class WifiNetworkSuggestionTest {
      */
     @Test
     public void testSetIsNetworkAsOemPaid() {
-        assumeTrue(SdkLevelUtil.isAtLeastS());
+        assumeTrue(SdkLevel.isAtLeastS());
 
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
                 .setSsid(TEST_SSID)
@@ -1089,7 +1301,7 @@ public class WifiNetworkSuggestionTest {
      */
     @Test
     public void testSetIsNetworkAsOemPaidOnPasspointNetwork() {
-        assumeTrue(SdkLevelUtil.isAtLeastS());
+        assumeTrue(SdkLevel.isAtLeastS());
 
         PasspointConfiguration passpointConfiguration = PasspointTestUtils.createConfig();
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
@@ -1097,6 +1309,41 @@ public class WifiNetworkSuggestionTest {
                 .setOemPaid(true)
                 .build();
         assertTrue(suggestion.isOemPaid());
+        assertFalse(suggestion.isUserAllowedToManuallyConnect);
+    }
+
+    /**
+     * Validate {@link WifiNetworkSuggestion.Builder#setCredentialSharedWithUser(boolean)} set the
+     * correct value to the WifiConfiguration.
+     */
+    @Test
+    public void testSetIsNetworkAsOemPrivate() {
+        assumeTrue(SdkLevel.isAtLeastS());
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa2Passphrase(TEST_PRESHARED_KEY)
+                .setOemPrivate(true)
+                .build();
+        assertTrue(suggestion.isOemPrivate());
+        assertFalse(suggestion.isUserAllowedToManuallyConnect);
+    }
+
+    /**
+     * Validate {@link WifiNetworkSuggestion.Builder#setCredentialSharedWithUser(boolean)} set the
+     * correct value to the WifiConfiguration.
+     * Also the {@link WifiNetworkSuggestion#isUserAllowedToManuallyConnect} should be false;
+     */
+    @Test
+    public void testSetIsNetworkAsOemPrivateOnPasspointNetwork() {
+        assumeTrue(SdkLevel.isAtLeastS());
+
+        PasspointConfiguration passpointConfiguration = PasspointTestUtils.createConfig();
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setPasspointConfig(passpointConfiguration)
+                .setOemPrivate(true)
+                .build();
+        assertTrue(suggestion.isOemPrivate());
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
     }
 
@@ -1124,13 +1371,31 @@ public class WifiNetworkSuggestionTest {
      */
     @Test(expected = IllegalStateException.class)
     public void testSetCredentialSharedWithUserWithSetIsNetworkAsOemPaid() {
-        assumeTrue(SdkLevelUtil.isAtLeastS());
+        assumeTrue(SdkLevel.isAtLeastS());
 
         new WifiNetworkSuggestion.Builder()
                 .setSsid(TEST_SSID)
                 .setWpa2Passphrase(TEST_PRESHARED_KEY)
                 .setCredentialSharedWithUser(true)
                 .setOemPaid(true)
+                .build();
+    }
+
+    /**
+     * Ensure {@link WifiNetworkSuggestion.Builder#build()} throws an exception
+     * when set {@link WifiNetworkSuggestion.Builder#setOemPrivate(boolean)} to true and
+     * set {@link WifiNetworkSuggestion.Builder#setCredentialSharedWithUser(boolean)} to true
+     * together.
+     */
+    @Test(expected = IllegalStateException.class)
+    public void testSetCredentialSharedWithUserWithSetIsNetworkAsOemPrivate() {
+        assumeTrue(SdkLevel.isAtLeastS());
+
+        new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa2Passphrase(TEST_PRESHARED_KEY)
+                .setCredentialSharedWithUser(true)
+                .setOemPrivate(true)
                 .build();
     }
 

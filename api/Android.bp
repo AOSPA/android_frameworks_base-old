@@ -16,25 +16,6 @@ package {
     default_visibility: ["//visibility:private"],
 }
 
-// *-current.txt files for use by modules in other directories like cts
-filegroup {
-    name: "frameworks-base-api-current.txt",
-    srcs: ["current.txt"],
-    visibility: ["//visibility:public"],
-}
-
-filegroup {
-    name: "frameworks-base-api-system-current.txt",
-    srcs: ["system-current.txt"],
-    visibility: ["//visibility:public"],
-}
-
-filegroup {
-    name: "frameworks-base-api-system-removed.txt",
-    srcs: ["system-removed.txt"],
-    visibility: ["//visibility:public"],
-}
-
 genrule {
     name: "current-api-xml",
     tools: ["metalava"],
@@ -45,7 +26,7 @@ genrule {
 }
 
 genrule {
-    name: "frameworks-base-api-current-merged.txt",
+    name: "frameworks-base-api-current.txt",
     srcs: [
         ":conscrypt.module.public.api{.public.api.txt}",
         ":framework-appsearch{.public.api.txt}",
@@ -62,15 +43,23 @@ genrule {
     out: ["current.txt"],
     tools: ["metalava"],
     cmd: "$(location metalava) --no-banner --format=v2 $(in) --api $(out)",
-    dist: {
-        targets: ["sdk", "win_sdk"],
-        dir: "apistubs/android/public/api",
-        dest: "android.txt",
-    },
+    dists: [
+        {
+            targets: ["droidcore"],
+            dir: "api",
+            dest: "current.txt",
+        },
+        {
+            targets: ["sdk", "win_sdk"],
+            dir: "apistubs/android/public/api",
+            dest: "android.txt",
+        },
+    ],
+    visibility: ["//visibility:public"],
 }
 
 genrule {
-    name: "frameworks-base-api-removed-merged.txt",
+    name: "frameworks-base-api-removed.txt",
     srcs: [
         ":conscrypt.module.public.api{.public.removed-api.txt}",
         ":framework-appsearch{.public.removed-api.txt}",
@@ -87,10 +76,17 @@ genrule {
     out: ["removed.txt"],
     tools: ["metalava"],
     cmd: "$(location metalava) --no-banner --format=v2 $(in) --api $(out)",
+    dists: [
+        {
+            targets: ["droidcore"],
+            dir: "api",
+            dest: "removed.txt",
+        },
+    ],
 }
 
 genrule {
-    name: "frameworks-base-api-system-current-merged.txt",
+    name: "frameworks-base-api-system-current.txt",
     srcs: [
         ":framework-appsearch{.system.api.txt}",
         ":framework-graphics{.system.api.txt}",
@@ -106,15 +102,23 @@ genrule {
     out: ["system-current.txt"],
     tools: ["metalava"],
     cmd: "$(location metalava) --no-banner --format=v2 $(in) --api $(out)",
-    dist: {
-        targets: ["sdk", "win_sdk"],
-        dir: "apistubs/android/system/api",
-        dest: "android.txt",
-    },
+    dists: [
+        {
+            targets: ["droidcore"],
+            dir: "api",
+            dest: "system-current.txt",
+        },
+        {
+            targets: ["sdk", "win_sdk"],
+            dir: "apistubs/android/system/api",
+            dest: "android.txt",
+        },
+    ],
+    visibility: ["//visibility:public"],
 }
 
 genrule {
-    name: "frameworks-base-api-system-removed-merged.txt",
+    name: "frameworks-base-api-system-removed.txt",
     srcs: [
         ":framework-appsearch{.system.removed-api.txt}",
         ":framework-graphics{.system.removed-api.txt}",
@@ -130,10 +134,18 @@ genrule {
     out: ["system-removed.txt"],
     tools: ["metalava"],
     cmd: "$(location metalava) --no-banner --format=v2 $(in) --api $(out)",
+    dists: [
+        {
+            targets: ["droidcore"],
+            dir: "api",
+            dest: "system-removed.txt",
+        },
+    ],
+    visibility: ["//visibility:public"],
 }
 
 genrule {
-    name: "frameworks-base-api-module-lib-current-merged.txt",
+    name: "frameworks-base-api-module-lib-current.txt",
     srcs: [
         ":framework-appsearch{.module-lib.api.txt}",
         ":framework-graphics{.module-lib.api.txt}",
@@ -149,15 +161,22 @@ genrule {
     out: ["module-lib-current.txt"],
     tools: ["metalava"],
     cmd: "$(location metalava) --no-banner --format=v2 $(in) --api $(out)",
-    dist: {
-        targets: ["sdk", "win_sdk"],
-        dir: "apistubs/android/module-lib/api",
-        dest: "android.txt",
-    },
+    dists: [
+        {
+            targets: ["droidcore"],
+            dir: "api",
+            dest: "module-lib-current.txt",
+        },
+        {
+            targets: ["sdk", "win_sdk"],
+            dir: "apistubs/android/module-lib/api",
+            dest: "android.txt",
+        },
+    ],
 }
 
 genrule {
-    name: "frameworks-base-api-module-lib-removed-merged.txt",
+    name: "frameworks-base-api-module-lib-removed.txt",
     srcs: [
         ":framework-appsearch{.module-lib.removed-api.txt}",
         ":framework-graphics{.module-lib.removed-api.txt}",
@@ -173,13 +192,20 @@ genrule {
     out: ["module-lib-removed.txt"],
     tools: ["metalava"],
     cmd: "$(location metalava) --no-banner --format=v2 $(in) --api $(out)",
+    dists: [
+        {
+            targets: ["droidcore"],
+            dir: "api",
+            dest: "module-lib-removed.txt",
+        },
+    ],
 }
 
 genrule {
     name: "combined-removed-dex",
     srcs: [
-        ":frameworks-base-api-removed-merged.txt",
-        ":frameworks-base-api-system-removed-merged.txt",
+        ":frameworks-base-api-removed.txt",
+        ":frameworks-base-api-system-removed.txt",
         ":android.car-stubs-docs{.removed-api.txt}",
         ":android.car-system-stubs-docs{.removed-api.txt}",
     ],

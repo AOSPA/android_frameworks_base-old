@@ -29,7 +29,6 @@ int register_android_server_ConsumerIrService(JNIEnv *env);
 int register_android_server_InputManager(JNIEnv* env);
 int register_android_server_LightsService(JNIEnv* env);
 int register_android_server_PowerManagerService(JNIEnv* env);
-int register_android_server_PowerStatsService(JNIEnv* env);
 int register_android_server_storage_AppFuse(JNIEnv* env);
 int register_android_server_SerialService(JNIEnv* env);
 int register_android_server_SystemServer(JNIEnv* env);
@@ -63,7 +62,6 @@ int register_com_android_server_soundtrigger_middleware_ExternalCaptureStateTrac
 int register_android_server_com_android_server_pm_PackageManagerShellCommandDataLoader(JNIEnv* env);
 int register_android_server_stats_pull_StatsPullAtomService(JNIEnv* env);
 int register_android_server_AdbDebuggingManager(JNIEnv* env);
-int register_android_server_FingerprintService(JNIEnv* env);
 int register_android_server_FaceService(JNIEnv* env);
 int register_android_server_GpuService(JNIEnv* env);
 int register_android_server_ActivityTriggerService(JNIEnv* env);
@@ -85,7 +83,6 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
     register_android_server_broadcastradio_BroadcastRadioService(env);
     register_android_server_broadcastradio_Tuner(vm, env);
     register_android_server_PowerManagerService(env);
-    register_android_server_PowerStatsService(env);
     register_android_server_SerialService(env);
     register_android_server_InputManager(env);
     register_android_server_LightsService(env);
@@ -123,7 +120,6 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
     register_android_server_com_android_server_pm_PackageManagerShellCommandDataLoader(env);
     register_android_server_stats_pull_StatsPullAtomService(env);
     register_android_server_AdbDebuggingManager(env);
-    register_android_server_FingerprintService(env);
     register_android_server_FaceService(env);
     register_android_server_GpuService(env);
     register_android_server_ActivityTriggerService(env);

@@ -22,6 +22,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.content.Context;
 import android.net.ConnectivityManager;
@@ -36,6 +37,8 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.util.Log;
+
+import com.android.modules.utils.build.SdkLevel;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -151,6 +154,27 @@ public class WifiAwareManager {
      */
     public static final int WIFI_AWARE_DATA_PATH_ROLE_RESPONDER = 1;
 
+    /** @hide */
+    @IntDef({
+            WIFI_AWARE_DISCOVERY_LOST_REASON_UNKNOWN,
+            WIFI_AWARE_DISCOVERY_LOST_REASON_PEER_NOT_VISIBLE})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DiscoveryLostReasonCode {
+    }
+
+    /**
+     * Reason code provided in {@link DiscoverySessionCallback#onServiceLost(PeerHandle, int)}
+     * indicating that the service was lost for unknown reason.
+     */
+    public static final int WIFI_AWARE_DISCOVERY_LOST_REASON_UNKNOWN = 0;
+
+    /**
+     * Reason code provided in {@link DiscoverySessionCallback#onServiceLost(PeerHandle, int)}
+     * indicating that the service advertised by the peer is no longer visible. This may be because
+     * the peer is out of range or because the peer stopped advertising this service.
+     */
+    public static final int WIFI_AWARE_DISCOVERY_LOST_REASON_PEER_NOT_VISIBLE = 1;
+
     private final Context mContext;
     private final IWifiAwareManager mService;
 
@@ -187,8 +211,47 @@ public class WifiAwareManager {
      *         or not (false).
      */
     public boolean isDeviceAttached() {
+        if (!SdkLevel.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
         try {
             return mService.isDeviceAttached();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Enable the Wifi Aware Instant communication mode. If the device doesn't support this feature
+     * calling this API will result no action.
+     * @see Characteristics#isInstantCommunicationModeSupported()
+     * @param enable true for enable, false otherwise.
+     * @hide
+     */
+    @SystemApi
+    public void enableInstantCommunicationMode(boolean enable) {
+        if (!SdkLevel.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mService.enableInstantCommunicationMode(mContext.getOpPackageName(), enable);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Return the current status of the Wifi Aware instant communication mode.
+     * If the device doesn't support this feature, return will always be false.
+     * @see Characteristics#isInstantCommunicationModeSupported()
+     * @return true if it is enabled, false otherwise.
+     */
+    public boolean isInstantCommunicationModeEnabled() {
+        if (!SdkLevel.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mService.isInstantCommunicationModeEnabled();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -200,9 +263,26 @@ public class WifiAwareManager {
      *
      * @return An object specifying configuration limitations of Aware.
      */
-    public Characteristics getCharacteristics() {
+    public @Nullable Characteristics getCharacteristics() {
         try {
             return mService.getCharacteristics();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Return the available resources of the Wi-Fi aware service: a set of parameters which specify
+     * limitations on service usage, e.g the number of data-paths which could be created..
+     *
+     * @return An object specifying the currently available resource of the Wi-Fi Aware service.
+     */
+    public @Nullable AwareResources getAvailableAwareResources() {
+        if (!SdkLevel.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mService.getAvailableAwareResources();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -695,7 +775,8 @@ public class WifiAwareManager {
                             break;
                         case CALLBACK_MATCH_EXPIRED:
                             mOriginalCallback
-                                    .onServiceLost(new PeerHandle(msg.arg1));
+                                    .onServiceLost(new PeerHandle(msg.arg1),
+                                            WIFI_AWARE_DISCOVERY_LOST_REASON_PEER_NOT_VISIBLE);
                     }
                 }
             };

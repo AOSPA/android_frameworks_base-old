@@ -66,10 +66,10 @@ final class Constants {
     public static final int ADDR_PLAYBACK_3 = 11;
 
     /** Logical address reserved for future usage */
-    public static final int ADDR_RESERVED_1 = 12;
+    public static final int ADDR_BACKUP_1 = 12;
 
     /** Logical address reserved for future usage */
-    public static final int ADDR_RESERVED_2 = 13;
+    public static final int ADDR_BACKUP_2 = 13;
 
     /** Logical address for TV other than the one assigned with {@link #ADDR_TV} */
     public static final int ADDR_SPECIFIC_USE = 14;
@@ -491,6 +491,15 @@ final class Constants {
 
     static final int DISABLED = 0;
     static final int ENABLED = 1;
+
+    @IntDef({
+            VERSION_1_4,
+            VERSION_2_0
+    })
+    @interface CecVersion {}
+    static final int VERSION_1_3 = 0x04;
+    static final int VERSION_1_4 = 0x05;
+    static final int VERSION_2_0 = 0x06;
 
     private Constants() {
         /* cannot be instantiated */

@@ -56,6 +56,8 @@ import android.app.Service;
 import android.app.ServiceStartArgs;
 import android.app.admin.DevicePolicyEventLogger;
 import android.appwidget.AppWidgetManagerInternal;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.Disabled;
 import android.content.ComponentName;
 import android.content.ComponentName.WithComponentName;
 import android.content.Context;
@@ -79,6 +81,7 @@ import android.os.Message;
 import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.TransactionTooLargeException;
@@ -101,6 +104,7 @@ import android.webkit.WebViewZygote;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.procstats.ServiceState;
+import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.messages.nano.SystemMessageProto;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BatteryStatsImpl;
@@ -247,6 +251,16 @@ public final class ActiveServices {
     // TODO: remove this after feature development is done
     private static final SimpleDateFormat DATE_FORMATTER =
             new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+    private final IPlatformCompat mPlatformCompat;
+
+    /**
+     * The BG-launch FGS restriction feature is going to be allowed only for apps targetSdkVersion
+     * is higher than R.
+     */
+    @ChangeId
+    @Disabled
+    static final long FGS_BG_START_RESTRICTION_CHANGE_ID = 170668199L;
 
     final Runnable mLastAnrDumpClearer = new Runnable() {
         @Override public void run() {
@@ -445,6 +459,9 @@ public final class ActiveServices {
         mMaxStartingBackground = maxBg > 0
                 ? maxBg : ActivityManager.isLowRamDeviceStatic() ? 1 : 8;
 
+        final IBinder b = ServiceManager.getService(Context.PLATFORM_COMPAT_SERVICE);
+        mPlatformCompat = IPlatformCompat.Stub.asInterface(b);
+
         if(mPerf != null)
             SERVICE_RESCHEDULE = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.qti.am.reschedule_service", "false"));
     }
@@ -592,7 +609,8 @@ public final class ActiveServices {
                     r.mLoggedInfoAllowStartForeground = true;
                 }
                 if (r.mAllowStartForeground == FGS_FEATURE_DENIED
-                        && mAm.mConstants.mFlagFgsStartRestrictionEnabled) {
+                        && (mAm.mConstants.mFlagFgsStartRestrictionEnabled
+                        || isChangeEnabled(FGS_BG_START_RESTRICTION_CHANGE_ID, r))) {
                     if (mAm.mConstants.mFlagFgsStartTempAllowListEnabled
                             && mAm.isOnDeviceIdleWhitelistLocked(r.appInfo.uid, false)) {
                         // uid is on DeviceIdleController's allowlist.
@@ -1503,7 +1521,8 @@ public final class ActiveServices {
                             r.mLoggedInfoAllowStartForeground = true;
                         }
                         if (r.mAllowStartForeground == FGS_FEATURE_DENIED
-                                && mAm.mConstants.mFlagFgsStartRestrictionEnabled) {
+                                && (mAm.mConstants.mFlagFgsStartRestrictionEnabled
+                                || isChangeEnabled(FGS_BG_START_RESTRICTION_CHANGE_ID, r))) {
                             if (mAm.mConstants.mFlagFgsStartTempAllowListEnabled
                                     && mAm.isOnDeviceIdleWhitelistLocked(r.appInfo.uid, false)) {
                                 // uid is on DeviceIdleController's allowlist.
@@ -1956,7 +1975,9 @@ public final class ActiveServices {
         ActivityServiceConnectionsHolder<ConnectionRecord> activity = null;
         if (token != null) {
             activity = mAm.mAtmInternal.getServiceConnectionsHolder(token);
-            if (activity == null) {
+            // TODO(b/171280916): Remove the check after we have another API get window context
+            //  token than getActivityToken.
+            if (activity == null && !mAm.mWindowManager.isWindowToken(token)) {
                 Slog.w(TAG, "Binding with unknown activity: " + token);
                 return 0;
             }
@@ -1984,7 +2005,7 @@ public final class ActiveServices {
         }
 
         if ((flags&Context.BIND_TREAT_LIKE_ACTIVITY) != 0) {
-            mAm.enforceCallingPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS,
+            mAm.enforceCallingPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS,
                     "BIND_TREAT_LIKE_ACTIVITY");
         }
 
@@ -5286,5 +5307,13 @@ public final class ActiveServices {
                         .setStyle(new Notification.BigTextStyle().bigText(bigText));
         context.getSystemService(NotificationManager.class).notifyAsUser(Long.toString(now),
                 NOTE_FOREGROUND_SERVICE_BG_LAUNCH, n.build(), UserHandle.ALL);
+    }
+
+    private boolean isChangeEnabled(long changeId, ServiceRecord r) {
+        boolean enabled = false;
+        try {
+            enabled = mPlatformCompat.isChangeEnabled(changeId, r.appInfo);
+        } catch (RemoteException e) { }
+        return enabled;
     }
 }

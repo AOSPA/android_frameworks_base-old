@@ -129,7 +129,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
     // performance.
     @UnsupportedAppUsage
     private String mAuthority;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private String[] mAuthorities;
     @UnsupportedAppUsage
     private String mReadPermission;
@@ -621,6 +621,20 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                 setCallingPackage(original);
                 Trace.traceEnd(TRACE_TAG_DATABASE);
             }
+        }
+
+        @Override
+        public void uncanonicalizeAsync(String callingPkg, @Nullable String attributionTag, Uri uri,
+                RemoteCallback callback) {
+            final Bundle result = new Bundle();
+            try {
+                result.putParcelable(ContentResolver.REMOTE_CALLBACK_RESULT,
+                        uncanonicalize(callingPkg, attributionTag, uri));
+            } catch (Exception e) {
+                result.putParcelable(ContentResolver.REMOTE_CALLBACK_ERROR,
+                        new ParcelableException(e));
+            }
+            callback.sendResult(result);
         }
 
         @Override
@@ -2342,7 +2356,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * when directly instantiating the provider for testing.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void attachInfoForTesting(Context context, ProviderInfo info) {
         attachInfo(context, info, true);
     }

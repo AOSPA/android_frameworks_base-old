@@ -16,7 +16,6 @@
 
 package com.android.server.wm;
 
-import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
@@ -53,6 +52,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
 
@@ -155,9 +155,8 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         }
 
         void onTaskInfoChanged(Task task, ActivityManager.RunningTaskInfo taskInfo) {
-            if (!task.mCreatedByOrganizer && !task.mTaskAppearedSent) {
-                // Skip if the task has not yet received taskAppeared(), except for tasks created
-                // by the organizer that don't receive that signal
+            if (!task.mTaskAppearedSent) {
+                // Skip if the task has not yet received taskAppeared().
                 return;
             }
             ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Task info changed taskId=%d", task.mTaskId);
@@ -167,6 +166,9 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
                     return;
                 }
                 try {
+                    // Purposely notify of task info change immediately instead of deferring (like
+                    // appear and vanish) to allow info changes (such as new PIP params) to flow
+                    // without waiting.
                     mTaskOrganizer.onTaskInfoChanged(taskInfo);
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Exception sending onTaskInfoChanged callback", e);
@@ -177,9 +179,8 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         void onBackPressedOnTaskRoot(Task task) {
             ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Task back pressed on root taskId=%d",
                     task.mTaskId);
-            if (!task.mCreatedByOrganizer && !task.mTaskAppearedSent) {
-                // Skip if the task has not yet received taskAppeared(), except for tasks created
-                // by the organizer that don't receive that signal
+            if (!task.mTaskAppearedSent) {
+                // Skip if the task has not yet received taskAppeared().
                 return;
             }
             mDeferTaskOrgCallbacksConsumer.accept(() -> {
@@ -188,7 +189,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
                     return;
                 }
                 try {
-                   mTaskOrganizer.onBackPressedOnTaskRoot(task.getTaskInfo());
+                    mTaskOrganizer.onBackPressedOnTaskRoot(task.getTaskInfo());
                 } catch (Exception e) {
                     Slog.e(TAG, "Exception sending onBackPressedOnTaskRoot callback", e);
                 }
@@ -295,8 +296,8 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         mGlobalLock = atm.mGlobalLock;
     }
 
-    private void enforceStackPermission(String func) {
-        mService.mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, func);
+    private void enforceTaskPermission(String func) {
+        mService.enforceTaskPermission(func);
     }
 
     /**
@@ -312,7 +313,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
      */
     @Override
     public ParceledListSlice<TaskAppearedInfo> registerTaskOrganizer(ITaskOrganizer organizer) {
-        enforceStackPermission("registerTaskOrganizer()");
+        enforceTaskPermission("registerTaskOrganizer()");
         final int uid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {
@@ -357,7 +358,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
 
     @Override
     public void unregisterTaskOrganizer(ITaskOrganizer organizer) {
-        enforceStackPermission("unregisterTaskOrganizer()");
+        enforceTaskPermission("unregisterTaskOrganizer()");
         final int uid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {
@@ -402,33 +403,42 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
     }
 
     @Override
-    public RunningTaskInfo createRootTask(int displayId, int windowingMode) {
-        enforceStackPermission("createRootTask()");
+    public void createRootTask(int displayId, int windowingMode, @Nullable IBinder launchCookie) {
+        enforceTaskPermission("createRootTask()");
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
                 DisplayContent display = mService.mRootWindowContainer.getDisplayContent(displayId);
                 if (display == null) {
-                    return null;
+                    ProtoLog.e(WM_DEBUG_WINDOW_ORGANIZER,
+                            "createRootTask unknown displayId=%d", displayId);
+                    return;
                 }
 
-                ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Create root task displayId=%d winMode=%d",
-                        displayId, windowingMode);
-                final Task task = display.getDefaultTaskDisplayArea().createStack(windowingMode,
-                        ACTIVITY_TYPE_UNDEFINED, false /* onTop */, null /* info */, new Intent(),
-                        true /* createdByOrganizer */);
-                RunningTaskInfo out = task.getTaskInfo();
-                mLastSentTaskInfos.put(task, out);
-                return out;
+                createRootTask(display, windowingMode, launchCookie);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
     }
 
+    @VisibleForTesting
+    Task createRootTask(DisplayContent display, int windowingMode, @Nullable IBinder launchCookie) {
+        ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Create root task displayId=%d winMode=%d",
+                display.mDisplayId, windowingMode);
+        // We want to defer the task appear signal until the task is fully created and attached to
+        // to the hierarchy so that the complete starting configuration is in the task info we send
+        // over to the organizer.
+        final Task task = display.getDefaultTaskDisplayArea().createStack(windowingMode,
+                ACTIVITY_TYPE_UNDEFINED, false /* onTop */, null /* info */, new Intent(),
+                true /* createdByOrganizer */, true /* deferTaskAppear */, launchCookie);
+        task.setDeferTaskAppear(false /* deferTaskAppear */);
+        return task;
+    }
+
     @Override
     public boolean deleteRootTask(WindowContainerToken token) {
-        enforceStackPermission("deleteRootTask()");
+        enforceTaskPermission("deleteRootTask()");
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -476,9 +486,14 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         boolean changed = lastInfo == null
                 || mTmpTaskInfo.topActivityType != lastInfo.topActivityType
                 || mTmpTaskInfo.isResizeable != lastInfo.isResizeable
+                || !Objects.equals(
+                        mTmpTaskInfo.letterboxActivityBounds,
+                        lastInfo.letterboxActivityBounds)
+                || !Objects.equals(
+                        mTmpTaskInfo.positionInParent,
+                        lastInfo.positionInParent)
                 || mTmpTaskInfo.pictureInPictureParams != lastInfo.pictureInPictureParams
-                || mTmpTaskInfo.getConfiguration().windowConfiguration.getWindowingMode()
-                        != lastInfo.getConfiguration().windowConfiguration.getWindowingMode()
+                || mTmpTaskInfo.getWindowingMode() != lastInfo.getWindowingMode()
                 || !TaskDescription.equals(mTmpTaskInfo.taskDescription, lastInfo.taskDescription);
         if (!changed) {
             int cfgChanges = mTmpTaskInfo.configuration.diff(lastInfo.configuration);
@@ -516,7 +531,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
 
     @Override
     public WindowContainerToken getImeTarget(int displayId) {
-        enforceStackPermission("getImeTarget()");
+        enforceTaskPermission("getImeTarget()");
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -539,7 +554,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
 
     @Override
     public void setLaunchRoot(int displayId, @Nullable WindowContainerToken token) {
-        enforceStackPermission("setLaunchRoot()");
+        enforceTaskPermission("setLaunchRoot()");
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -573,7 +588,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
     @Override
     public List<RunningTaskInfo> getChildTasks(WindowContainerToken parent,
             @Nullable int[] activityTypes) {
-        enforceStackPermission("getChildTasks()");
+        enforceTaskPermission("getChildTasks()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -614,7 +629,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
 
     @Override
     public List<RunningTaskInfo> getRootTasks(int displayId, @Nullable int[] activityTypes) {
-        enforceStackPermission("getRootTasks()");
+        enforceTaskPermission("getRootTasks()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -644,7 +659,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
     @Override
     public void setInterceptBackPressedOnTaskRoot(WindowContainerToken token,
             boolean interceptBackPressed) {
-        enforceStackPermission("setInterceptBackPressedOnTaskRoot()");
+        enforceTaskPermission("setInterceptBackPressedOnTaskRoot()");
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {

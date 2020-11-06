@@ -130,7 +130,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int fullBackupContent = 0;
 
     /**
@@ -1156,7 +1156,6 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public int targetSandboxVersion;
 
     /**
@@ -2264,7 +2263,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /** {@hide} */ public void setOverrideRes(int overrideResolution) { overrideRes = overrideResolution; }
 
     /** {@hide} */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public String getCodePath() { return scanSourceDir; }
     /** {@hide} */ public String getBaseCodePath() { return sourceDir; }
     /** {@hide} */ public String[] getSplitCodePaths() { return splitSourceDirs; }

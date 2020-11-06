@@ -130,6 +130,7 @@ public final class PendingIntent implements Parcelable {
                     FLAG_UPDATE_CURRENT,
                     FLAG_IMMUTABLE,
                     FLAG_MUTABLE,
+                    FLAG_MUTABLE_UNAUDITED,
 
                     Intent.FILL_IN_ACTION,
                     Intent.FILL_IN_DATA,
@@ -203,6 +204,13 @@ public final class PendingIntent implements Parcelable {
      * PendingIntent that needs to be used with inline reply or bubbles.
      */
     public static final int FLAG_MUTABLE = 1<<25;
+
+    /**
+     * @deprecated Use {@link #FLAG_IMMUTABLE} or {@link #FLAG_MUTABLE} instead.
+     * @hide
+     */
+    @Deprecated
+    public static final int FLAG_MUTABLE_UNAUDITED = FLAG_MUTABLE;
 
     /**
      * Exception thrown when trying to send through a PendingIntent that
@@ -311,7 +319,7 @@ public final class PendingIntent implements Parcelable {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static void setOnMarshaledListener(OnMarshaledListener listener) {
         sOnMarshaledListener.set(listener);
     }
@@ -363,6 +371,7 @@ public final class PendingIntent implements Parcelable {
      * parameters.  May return null only if {@link #FLAG_NO_CREATE} has been
      * supplied.
      */
+    @SuppressWarnings("AndroidFrameworkPendingIntentMutability")
     public static PendingIntent getActivity(Context context, int requestCode,
             Intent intent, @Flags int flags) {
         return getActivity(context, requestCode, intent, flags, null);
@@ -396,25 +405,13 @@ public final class PendingIntent implements Parcelable {
      * parameters.  May return null only if {@link #FLAG_NO_CREATE} has been
      * supplied.
      */
+    @SuppressWarnings("AndroidFrameworkPendingIntentMutability")
     public static PendingIntent getActivity(Context context, int requestCode,
             @NonNull Intent intent, @Flags int flags, @Nullable Bundle options) {
-        String packageName = context.getPackageName();
-        String resolvedType = intent != null ? intent.resolveTypeIfNeeded(
-                context.getContentResolver()) : null;
-        checkFlags(flags, packageName);
-        try {
-            intent.migrateExtraStreamToClipData(context);
-            intent.prepareToLeaveProcess(context);
-            IIntentSender target =
-                ActivityManager.getService().getIntentSenderWithFeature(
-                    ActivityManager.INTENT_SENDER_ACTIVITY, packageName,
-                    context.getAttributionTag(), null, null, requestCode, new Intent[] { intent },
-                    resolvedType != null ? new String[] { resolvedType } : null,
-                    flags, options, context.getUserId());
-            return target != null ? new PendingIntent(target) : null;
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        // Some tests only mock Context.getUserId(), so fallback to the id Context.getUser() is null
+        final UserHandle user = context.getUser();
+        return getActivityAsUser(context, requestCode, intent, flags, options,
+                user != null ? user : UserHandle.of(context.getUserId()));
     }
 
     /**
@@ -489,6 +486,7 @@ public final class PendingIntent implements Parcelable {
      * parameters.  May return null only if {@link #FLAG_NO_CREATE} has been
      * supplied.
      */
+    @SuppressWarnings("AndroidFrameworkPendingIntentMutability")
     public static PendingIntent getActivities(Context context, int requestCode,
             @NonNull Intent[] intents, @Flags int flags) {
         return getActivities(context, requestCode, intents, flags, null);
@@ -539,26 +537,13 @@ public final class PendingIntent implements Parcelable {
      * parameters.  May return null only if {@link #FLAG_NO_CREATE} has been
      * supplied.
      */
+    @SuppressWarnings("AndroidFrameworkPendingIntentMutability")
     public static PendingIntent getActivities(Context context, int requestCode,
             @NonNull Intent[] intents, @Flags int flags, @Nullable Bundle options) {
-        String packageName = context.getPackageName();
-        String[] resolvedTypes = new String[intents.length];
-        for (int i=0; i<intents.length; i++) {
-            intents[i].migrateExtraStreamToClipData(context);
-            intents[i].prepareToLeaveProcess(context);
-            resolvedTypes[i] = intents[i].resolveTypeIfNeeded(context.getContentResolver());
-        }
-        checkFlags(flags, packageName);
-        try {
-            IIntentSender target =
-                ActivityManager.getService().getIntentSenderWithFeature(
-                    ActivityManager.INTENT_SENDER_ACTIVITY, packageName,
-                    context.getAttributionTag(), null, null, requestCode, intents, resolvedTypes,
-                    flags, options, context.getUserId());
-            return target != null ? new PendingIntent(target) : null;
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        // Some tests only mock Context.getUserId(), so fallback to the id Context.getUser() is null
+        final UserHandle user = context.getUser();
+        return getActivitiesAsUser(context, requestCode, intents, flags, options,
+                user != null ? user : UserHandle.of(context.getUserId()));
     }
 
     /**
@@ -611,6 +596,7 @@ public final class PendingIntent implements Parcelable {
      * parameters.  May return null only if {@link #FLAG_NO_CREATE} has been
      * supplied.
      */
+    @SuppressWarnings("AndroidFrameworkPendingIntentMutability")
     public static PendingIntent getBroadcast(Context context, int requestCode,
             Intent intent, @Flags int flags) {
         return getBroadcastAsUser(context, requestCode, intent, flags, context.getUser());
@@ -1159,6 +1145,18 @@ public final class PendingIntent implements Parcelable {
     }
 
     /**
+     * Check if this PendingIntent is marked with {@link #FLAG_IMMUTABLE}.
+     */
+    public boolean isImmutable() {
+        try {
+            return ActivityManager.getService()
+                    .isIntentSenderImmutable(mTarget);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * @hide
      * Check whether this PendingIntent will launch an Activity.
      */
@@ -1236,7 +1234,7 @@ public final class PendingIntent implements Parcelable {
      * operation.
      */
     @Override
-    public boolean equals(Object otherObj) {
+    public boolean equals(@Nullable Object otherObj) {
         if (otherObj instanceof PendingIntent) {
             return mTarget.asBinder().equals(((PendingIntent)otherObj)
                     .mTarget.asBinder());

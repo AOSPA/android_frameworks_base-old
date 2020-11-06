@@ -18,6 +18,7 @@ package com.android.server.notification;
 
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.NotificationChannel.PLACEHOLDER_CONVERSATION_ID;
+import static android.app.NotificationChannel.USER_LOCKED_IMPORTANCE;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_ALL;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_NONE;
 import static android.app.NotificationManager.IMPORTANCE_NONE;
@@ -955,6 +956,23 @@ public class PreferencesHelper implements RankingConfig {
         channel.unlockFields(channel.getUserLockedFields());
     }
 
+    void unlockNotificationChannelImportance(String pkg, int uid, String updatedChannelId) {
+        Objects.requireNonNull(updatedChannelId);
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(pkg, uid);
+            if (r == null) {
+                throw new IllegalArgumentException("Invalid package");
+            }
+
+            NotificationChannel channel = r.channels.get(updatedChannelId);
+            if (channel == null || channel.isDeleted()) {
+                throw new IllegalArgumentException("Channel does not exist");
+            }
+            channel.unlockFields(USER_LOCKED_IMPORTANCE);
+        }
+    }
+
+
     @Override
     public void updateNotificationChannel(String pkg, int uid, NotificationChannel updatedChannel,
             boolean fromUser) {
@@ -1347,6 +1365,24 @@ public class PreferencesHelper implements RankingConfig {
             groups.addAll(r.groups.values());
         }
         return groups;
+    }
+
+    public NotificationChannelGroup getGroupForChannel(String pkg, int uid, String channelId) {
+        synchronized (mPackagePreferences) {
+            PackagePreferences p = getPackagePreferencesLocked(pkg, uid);
+            if (p != null) {
+                NotificationChannel nc = p.channels.get(channelId);
+                if (nc != null && !nc.isDeleted()) {
+                    if (nc.getGroup() != null) {
+                        NotificationChannelGroup group = p.groups.get(nc.getGroup());
+                        if (group != null) {
+                            return group;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     public ArrayList<ConversationChannelWrapper> getConversations(boolean onlyImportant) {
@@ -2369,6 +2405,18 @@ public class PreferencesHelper implements RankingConfig {
                             DEFAULT_SHOW_BADGE ? 1 : 0, userId) != 0);
         }
         return mBadgingEnabled.get(userId, DEFAULT_SHOW_BADGE);
+    }
+
+    public void unlockAllNotificationChannels() {
+        synchronized (mPackagePreferences) {
+            final int numPackagePreferences = mPackagePreferences.size();
+            for (int i = 0; i < numPackagePreferences; i++) {
+                final PackagePreferences r = mPackagePreferences.valueAt(i);
+                for (NotificationChannel channel : r.channels.values()) {
+                    channel.unlockFields(USER_LOCKED_IMPORTANCE);
+                }
+            }
+        }
     }
 
     private void updateConfig() {

@@ -61,9 +61,43 @@
              android:visibility="invisible"
              />
     </FrameLayout>
+    <FrameLayout
+        android:id="@+id/new_lockscreen_clock_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginBottom="24dp"
+        android:visibility="gone">
+        <com.android.keyguard.GradientTextClock
+            android:id="@+id/gradient_clock_view"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="80dp"
+            android:letterSpacing="0.02"
+            android:lineSpacingMultiplier=".8"
+            android:includeFontPadding="false"
+            android:fontFamily="@font/clock"
+            android:typeface="monospace"
+            android:format12Hour="hh\nmm"
+            android:format24Hour="HH\nmm"
+            android:elegantTextHeight="false"
+        />
+    </FrameLayout>
     <include layout="@layout/keyguard_status_area"
         android:id="@+id/keyguard_status_area"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/clock_view" />
+
+    <com.android.systemui.statusbar.phone.NotificationIconContainer
+        android:id="@+id/left_aligned_notification_icon_container"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/notification_shelf_height"
+        android:layout_marginTop="@dimen/widget_vertical_padding"
+        android:layout_below="@id/keyguard_status_area"
+        android:visibility="gone"
+    />
 </com.android.keyguard.KeyguardClockSwitch>

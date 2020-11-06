@@ -23,6 +23,7 @@ import com.android.internal.config.sysui.SystemUiDeviceConfigFlags
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.appops.AppOpsController
 import com.android.systemui.dump.DumpManager
+import com.android.systemui.privacy.logging.PrivacyLogger
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.util.DeviceConfigProxy
 import com.android.systemui.util.DeviceConfigProxyFake
@@ -54,6 +55,7 @@ class PrivacyItemControllerFlagsTest : SysuiTestCase() {
         private const val ALL_INDICATORS =
                 SystemUiDeviceConfigFlags.PROPERTY_PERMISSIONS_HUB_ENABLED
         private const val MIC_CAMERA = SystemUiDeviceConfigFlags.PROPERTY_MIC_CAMERA_ENABLED
+        private const val LOCATION = SystemUiDeviceConfigFlags.PROPERTY_LOCATION_INDICATORS_ENABLED
     }
 
     @Mock
@@ -64,6 +66,8 @@ class PrivacyItemControllerFlagsTest : SysuiTestCase() {
     private lateinit var dumpManager: DumpManager
     @Mock
     private lateinit var userTracker: UserTracker
+    @Mock
+    private lateinit var logger: PrivacyLogger
 
     private lateinit var privacyItemController: PrivacyItemController
     private lateinit var executor: FakeExecutor
@@ -76,8 +80,8 @@ class PrivacyItemControllerFlagsTest : SysuiTestCase() {
                 executor,
                 deviceConfigProxy,
                 userTracker,
-                dumpManager
-        )
+                logger,
+                dumpManager)
     }
 
     @Before
@@ -113,6 +117,15 @@ class PrivacyItemControllerFlagsTest : SysuiTestCase() {
 
         assertFalse(privacyItemController.micCameraAvailable)
         assertFalse(privacyItemController.allIndicatorsAvailable)
+    }
+
+    @Test
+    fun testLocationChanged() {
+        changeLocation(true)
+        executor.runAllReady()
+
+        verify(callback).onFlagLocationChanged(true)
+        assertTrue(privacyItemController.locationAvailable)
     }
 
     @Test
@@ -152,6 +165,14 @@ class PrivacyItemControllerFlagsTest : SysuiTestCase() {
     @Ignore // TODO(b/168209929)
     fun testMicCamera_listening() {
         changeMicCamera(true)
+        executor.runAllReady()
+
+        verify(appOpsController).addCallback(eq(PrivacyItemController.OPS), any())
+    }
+
+    @Test
+    fun testLocation_listening() {
+        changeLocation(true)
         executor.runAllReady()
 
         verify(appOpsController).addCallback(eq(PrivacyItemController.OPS), any())
@@ -205,6 +226,7 @@ class PrivacyItemControllerFlagsTest : SysuiTestCase() {
     }
 
     private fun changeMicCamera(value: Boolean?) = changeProperty(MIC_CAMERA, value)
+    private fun changeLocation(value: Boolean?) = changeProperty(LOCATION, value)
     private fun changeAll(value: Boolean?) = changeProperty(ALL_INDICATORS, value)
 
     private fun changeProperty(name: String, value: Boolean?) {

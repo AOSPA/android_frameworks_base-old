@@ -16,6 +16,8 @@
 
 package android.app;
 
+import static android.app.WindowConfiguration.activityTypeToString;
+import static android.app.WindowConfiguration.windowingModeToString;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 
@@ -503,23 +505,22 @@ public class ActivityManager {
     @UnsupportedAppUsage
     public static final int PROCESS_STATE_TOP = 2;
 
-    /** @hide Process is bound to a TOP app. This is ranked below SERVICE_LOCATION so that
-     * it doesn't get the capability of location access while-in-use. */
+    /** @hide Process is bound to a TOP app. */
     public static final int PROCESS_STATE_BOUND_TOP = 3;
 
     /** @hide Process is hosting a foreground service. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int PROCESS_STATE_FOREGROUND_SERVICE = 4;
 
     /** @hide Process is hosting a foreground service due to a system binding. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE = 5;
 
     /** @hide Process is important to the user, and something they are aware of. */
     public static final int PROCESS_STATE_IMPORTANT_FOREGROUND = 6;
 
     /** @hide Process is important to the user, but not something they are aware of. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int PROCESS_STATE_IMPORTANT_BACKGROUND = 7;
 
     /** @hide Process is in the background transient so we will try to keep running. */
@@ -531,14 +532,14 @@ public class ActivityManager {
     /** @hide Process is in the background running a service.  Unlike oom_adj, this level
      * is used for both the normal running in background state and the executing
      * operations state. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int PROCESS_STATE_SERVICE = 10;
 
     /** @hide Process is in the background running a receiver.   Note that from the
      * perspective of oom_adj, receivers run at a higher foreground level, but for our
      * prioritization here that is not necessary and putting them below services means
      * many fewer changes in some process states as they receive broadcasts. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int PROCESS_STATE_RECEIVER = 11;
 
     /** @hide Same as {@link #PROCESS_STATE_TOP} but while device is sleeping. */
@@ -549,14 +550,14 @@ public class ActivityManager {
     public static final int PROCESS_STATE_HEAVY_WEIGHT = 13;
 
     /** @hide Process is in the background but hosts the home activity. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int PROCESS_STATE_HOME = 14;
 
     /** @hide Process is in the background but hosts the last shown activity. */
     public static final int PROCESS_STATE_LAST_ACTIVITY = 15;
 
     /** @hide Process is being cached for later use and contains activities. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int PROCESS_STATE_CACHED_ACTIVITY = 16;
 
     /** @hide Process is being cached for later use and is a client of another cached
@@ -1620,7 +1621,7 @@ public class ActivityManager {
         }
 
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(@Nullable Object obj) {
             if (!(obj instanceof TaskDescription)) {
                 return false;
             }
@@ -1694,6 +1695,13 @@ public class ActivityManager {
         @Deprecated
         public int affiliatedTaskId;
 
+        /**
+         * Information of organized child tasks.
+         *
+         * @hide
+         */
+        public ArrayList<RecentTaskInfo> childrenTaskInfos = new ArrayList<>();
+
         public RecentTaskInfo() {
         }
 
@@ -1709,6 +1717,7 @@ public class ActivityManager {
         public void readFromParcel(Parcel source) {
             id = source.readInt();
             persistentId = source.readInt();
+            childrenTaskInfos = source.readArrayList(RecentTaskInfo.class.getClassLoader());
             super.readFromParcel(source);
         }
 
@@ -1716,6 +1725,7 @@ public class ActivityManager {
         public void writeToParcel(Parcel dest, int flags) {
             dest.writeInt(id);
             dest.writeInt(persistentId);
+            dest.writeList(childrenTaskInfos);
             super.writeToParcel(dest, flags);
         }
 
@@ -1733,11 +1743,6 @@ public class ActivityManager {
          * @hide
          */
         public void dump(PrintWriter pw, String indent) {
-            final String activityType = WindowConfiguration.activityTypeToString(
-                    configuration.windowConfiguration.getActivityType());
-            final String windowingMode = WindowConfiguration.activityTypeToString(
-                    configuration.windowConfiguration.getActivityType());
-
             pw.println(); pw.print("   ");
             pw.print(" id="); pw.print(persistentId);
             pw.print(" stackId="); pw.print(stackId);
@@ -1763,8 +1768,8 @@ public class ActivityManager {
             pw.print("   ");
             pw.print(" isExcluded=");
             pw.print(((baseIntent.getFlags() & FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0));
-            pw.print(" activityType="); pw.print(activityType);
-            pw.print(" windowingMode="); pw.print(windowingMode);
+            pw.print(" activityType="); pw.print(activityTypeToString(getActivityType()));
+            pw.print(" windowingMode="); pw.print(windowingModeToString(getWindowingMode()));
             pw.print(" supportsSplitScreenMultiWindow=");
             pw.println(supportsSplitScreenMultiWindow);
             if (taskDescription != null) {
@@ -2198,7 +2203,7 @@ public class ActivityManager {
         /**
          * @return The size of the task at the point this snapshot was taken.
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public Point getTaskSize() {
             return mTaskSize;
         }
@@ -2740,13 +2745,13 @@ public class ActivityManager {
         public boolean lowMemory;
 
         /** @hide */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long hiddenAppThreshold;
         /** @hide */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long secondaryServerThreshold;
         /** @hide */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long visibleAppThreshold;
         /** @hide */
         @UnsupportedAppUsage
@@ -3037,7 +3042,7 @@ public class ActivityManager {
          * persistent system app.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static final int FLAG_PERSISTENT = 1<<1;
 
         /**
@@ -3045,7 +3050,7 @@ public class ActivityManager {
          * persistent system app.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static final int FLAG_HAS_ACTIVITIES = 1<<2;
 
         /**
@@ -3149,7 +3154,7 @@ public class ActivityManager {
          *
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         @TestApi
         public static final int IMPORTANCE_CANT_SAVE_STATE_PRE_26 = 170;
 
@@ -3209,7 +3214,7 @@ public class ActivityManager {
          * will be passed to a client, use {@link #procStateToImportanceForClient}.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static @Importance int procStateToImportance(int procState) {
             if (procState == PROCESS_STATE_NONEXISTENT) {
                 return IMPORTANCE_GONE;
@@ -3608,7 +3613,7 @@ public class ActivityManager {
      * running its code, {@link RunningAppProcessInfo#IMPORTANCE_GONE} is returned.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public @RunningAppProcessInfo.Importance int getPackageImportance(String packageName) {
         try {
@@ -3628,7 +3633,7 @@ public class ActivityManager {
      * running its code, {@link RunningAppProcessInfo#IMPORTANCE_GONE} is returned.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public @RunningAppProcessInfo.Importance int getUidImportance(int uid) {
         try {
@@ -3645,7 +3650,7 @@ public class ActivityManager {
      * {@link #addOnUidImportanceListener}.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     public interface OnUidImportanceListener {
         /**
          * The importance if a given uid has changed.  Will be one of the importance
@@ -3676,7 +3681,7 @@ public class ActivityManager {
      * {@link android.Manifest.permission#PACKAGE_USAGE_STATS}.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public void addOnUidImportanceListener(OnUidImportanceListener listener,
             @RunningAppProcessInfo.Importance int importanceCutpoint) {
@@ -3705,7 +3710,7 @@ public class ActivityManager {
      * @throws IllegalArgumentException If the listener is not registered.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public void removeOnUidImportanceListener(OnUidImportanceListener listener) {
         synchronized (this) {
@@ -3847,7 +3852,7 @@ public class ActivityManager {
      * @see #forceStopPackageAsUser(String, int)
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.FORCE_STOP_PACKAGES)
     public void forceStopPackage(String packageName) {
         forceStopPackageAsUser(packageName, mContext.getUserId());
@@ -4168,7 +4173,7 @@ public class ActivityManager {
      * @param userid the user's id. Zero indicates the default user.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean switchUser(int userid) {
         try {
             return getService().switchUser(userid);
@@ -4186,7 +4191,6 @@ public class ActivityManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public boolean switchUser(@NonNull UserHandle user) {
         if (user == null) {
@@ -4619,7 +4623,7 @@ public class ActivityManager {
      *
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.FORCE_STOP_PACKAGES)
     public void killProcessesWhenImperceptible(@NonNull int[] pids, @NonNull String reason) {
         try {
@@ -4813,13 +4817,14 @@ public class ActivityManager {
     /**
      * Holds the AM lock for the specified amount of milliseconds.
      * This is intended for use by the tests that need to imitate lock contention.
+     * The token should be obtained by
+     * {@link android.content.pm.PackageManager#getHoldLockToken()}.
      * @hide
      */
     @TestApi
-    @RequiresPermission(android.Manifest.permission.INJECT_EVENTS)
-    public void holdLock(int durationMs) {
+    public void holdLock(IBinder token, int durationMs) {
         try {
-            getService().holdLock(durationMs);
+            getService().holdLock(token, durationMs);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

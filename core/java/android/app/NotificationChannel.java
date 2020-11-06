@@ -134,7 +134,6 @@ public final class NotificationChannel implements Parcelable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int USER_LOCKED_SOUND = 0x00000020;
 
     /**
@@ -391,7 +390,6 @@ public final class NotificationChannel implements Parcelable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void setBlockable(boolean blockable) {
         mBlockableSystem = blockable;
     }
@@ -631,12 +629,20 @@ public final class NotificationChannel implements Parcelable {
     }
 
     /**
+     * Whether or not this channel represents a conversation.
+     */
+    public boolean isConversation() {
+        return !TextUtils.isEmpty(getConversationId());
+    }
+
+
+    /**
      * Whether or not notifications in this conversation are considered important.
      *
      * <p>Important conversations may get special visual treatment, and might be able to bypass DND.
      *
-     * <p>This is only valid for channels that represent conversations, that is, those with a valid
-     * {@link #getConversationId() conversation id}.
+     * <p>This is only valid for channels that represent conversations, that is,
+     * where {@link #isConversation()} is true.
      */
     public boolean isImportantConversation() {
         return mImportantConvo;
@@ -1146,7 +1152,7 @@ public final class NotificationChannel implements Parcelable {
     }
 
     private static String longArrayToString(long[] values) {
-        StringBuffer sb = new StringBuffer();
+        StringBuilder sb = new StringBuilder();
         if (values != null && values.length > 0) {
             for (int i = 0; i < values.length - 1; i++) {
                 sb.append(values[i]).append(DELIMITER);
@@ -1175,7 +1181,7 @@ public final class NotificationChannel implements Parcelable {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         NotificationChannel that = (NotificationChannel) o;

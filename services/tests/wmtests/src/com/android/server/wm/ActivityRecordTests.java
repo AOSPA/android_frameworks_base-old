@@ -32,7 +32,7 @@ import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.os.Process.NOBODY_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.WindowManager.TRANSIT_TASK_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_CLOSE;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
@@ -59,9 +59,9 @@ import static com.android.server.wm.Task.ActivityState.RESUMED;
 import static com.android.server.wm.Task.ActivityState.STARTED;
 import static com.android.server.wm.Task.ActivityState.STOPPED;
 import static com.android.server.wm.Task.ActivityState.STOPPING;
-import static com.android.server.wm.Task.STACK_VISIBILITY_INVISIBLE;
-import static com.android.server.wm.Task.STACK_VISIBILITY_VISIBLE;
-import static com.android.server.wm.Task.STACK_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
+import static com.android.server.wm.Task.TASK_VISIBILITY_INVISIBLE;
+import static com.android.server.wm.Task.TASK_VISIBILITY_VISIBLE;
+import static com.android.server.wm.Task.TASK_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -114,6 +114,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.invocation.InvocationOnMock;
 
+
 /**
  * Tests for the {@link ActivityRecord} class.
  *
@@ -130,8 +131,9 @@ public class ActivityRecordTests extends WindowTestsBase {
 
     @Before
     public void setUp() throws Exception {
-        mStack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
-        mTask = mStack.getBottomMostTask();
+        mTask = new TaskBuilder(mSupervisor)
+                .setCreateParentTask(true).setCreateActivity(true).build();
+        mStack = mTask.getRootTask();
         mActivity = mTask.getTopNonFinishingActivity();
 
         setBooted(mAtm);
@@ -514,13 +516,13 @@ public class ActivityRecordTests extends WindowTestsBase {
         mActivity.setState(Task.ActivityState.STOPPED, "Testing");
         spyOn(mStack);
 
-        doReturn(STACK_VISIBILITY_VISIBLE).when(mStack).getVisibility(null);
+        doReturn(TASK_VISIBILITY_VISIBLE).when(mStack).getVisibility(null);
         assertEquals(true, mActivity.shouldResumeActivity(null /* activeActivity */));
 
-        doReturn(STACK_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT).when(mStack).getVisibility(null);
+        doReturn(TASK_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT).when(mStack).getVisibility(null);
         assertEquals(false, mActivity.shouldResumeActivity(null /* activeActivity */));
 
-        doReturn(STACK_VISIBILITY_INVISIBLE).when(mStack).getVisibility(null);
+        doReturn(TASK_VISIBILITY_INVISIBLE).when(mStack).getVisibility(null);
         assertEquals(false, mActivity.shouldResumeActivity(null /* activeActivity */));
     }
 
@@ -533,7 +535,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         mActivity.addResultLocked(topActivity, "resultWho", 0, 0, new Intent());
         topActivity.finishing = true;
 
-        doReturn(STACK_VISIBILITY_VISIBLE).when(mStack).getVisibility(null);
+        doReturn(TASK_VISIBILITY_VISIBLE).when(mStack).getVisibility(null);
         assertEquals(true, mActivity.shouldResumeActivity(null /* activeActivity */));
         assertEquals(false, mActivity.shouldPauseActivity(null /*activeActivity */));
     }
@@ -786,7 +788,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         // Have two tasks (topRootableTask and mTask) as the children of mStack.
         ActivityRecord topActivity = new ActivityBuilder(mActivity.mAtmService)
                 .setCreateTask(true)
-                .setStack(mStack)
+                .setParentTask(mStack)
                 .build();
         Task topRootableTask = topActivity.getTask();
         topRootableTask.moveToFront("test");
@@ -844,7 +846,8 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertEquals(PAUSING, mActivity.getState());
         verify(mActivity).setVisibility(eq(false));
         verify(mActivity.mDisplayContent)
-                .prepareAppTransition(eq(TRANSIT_TASK_CLOSE), eq(false) /* alwaysKeepCurrent */);
+                .prepareAppTransitionOld(eq(TRANSIT_OLD_TASK_CLOSE),
+                        eq(false) /* alwaysKeepCurrent */);
     }
 
     /**
@@ -888,7 +891,8 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         verify(mActivity).setVisibility(eq(false));
         verify(mActivity.mDisplayContent)
-                .prepareAppTransition(eq(TRANSIT_TASK_CLOSE), eq(false) /* alwaysKeepCurrent */);
+                .prepareAppTransitionOld(eq(TRANSIT_OLD_TASK_CLOSE),
+                        eq(false) /* alwaysKeepCurrent */);
         verify(mActivity.mDisplayContent, never()).executeAppTransition();
     }
 
@@ -904,7 +908,8 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         verify(mActivity, atLeast(1)).setVisibility(eq(false));
         verify(mActivity.mDisplayContent)
-                .prepareAppTransition(eq(TRANSIT_TASK_CLOSE), eq(false) /* alwaysKeepCurrent */);
+                .prepareAppTransitionOld(eq(TRANSIT_OLD_TASK_CLOSE),
+                        eq(false) /* alwaysKeepCurrent */);
         verify(mActivity.mDisplayContent).executeAppTransition();
     }
 
@@ -922,7 +927,8 @@ public class ActivityRecordTests extends WindowTestsBase {
         mActivity.finishIfPossible("test", false /* oomAdj */);
 
         verify(mActivity.mDisplayContent, never())
-                .prepareAppTransition(eq(TRANSIT_TASK_CLOSE), eq(false) /* alwaysKeepCurrent */);
+                .prepareAppTransitionOld(eq(TRANSIT_OLD_TASK_CLOSE),
+                        eq(false) /* alwaysKeepCurrent */);
     }
 
     /**
@@ -1523,8 +1529,8 @@ public class ActivityRecordTests extends WindowTestsBase {
             // Return error to skip unnecessary operation.
             doReturn(WindowManagerGlobal.ADD_STARTING_NOT_NEEDED).when(session).addToDisplay(
                     any() /* window */,  any() /* attrs */,
-                    anyInt() /* viewVisibility */, anyInt() /* displayId */, any() /* outFrame */,
-                    any() /* outContentInsets */, any() /* outStableInsets */,
+                    anyInt() /* viewVisibility */, anyInt() /* displayId */,
+                    any() /* requestedVisibility */, any() /* outFrame */,
                     any() /* outDisplayCutout */, any() /* outInputChannel */,
                     any() /* outInsetsState */, any() /* outActiveControls */);
             TaskSnapshotSurface.create(mAtm.mWindowManager, mActivity, snapshot);
@@ -1668,7 +1674,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
-    public void testCanTurnScreenOn() {
+    public void testFullscreenWindowCanTurnScreenOn() {
         mStack.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
         doReturn(true).when(mActivity).getTurnScreenOnFlag();
 
@@ -1676,11 +1682,11 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
-    public void testFreeformWindowCantTurnScreenOn() {
+    public void testFreeformWindowCanTurnScreenOn() {
         mStack.setWindowingMode(WINDOWING_MODE_FREEFORM);
         doReturn(true).when(mActivity).getTurnScreenOnFlag();
 
-        assertFalse(mActivity.canTurnScreenOn());
+        assertTrue(mActivity.canTurnScreenOn());
     }
 
     @Test

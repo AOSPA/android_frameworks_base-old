@@ -45,18 +45,17 @@ import java.util.List;
  */
 interface IWindowSession {
     int addToDisplay(IWindow window, in WindowManager.LayoutParams attrs,
-            in int viewVisibility, in int layerStackId, out Rect outFrame,
-            out Rect outContentInsets, out Rect outStableInsets,
+            in int viewVisibility, in int layerStackId, in InsetsState requestedVisibility,
+            out Rect outFrame, out DisplayCutout.ParcelableWrapper displayCutout,
+            out InputChannel outInputChannel, out InsetsState insetsState,
+            out InsetsSourceControl[] activeControls);
+    int addToDisplayAsUser(IWindow window, in WindowManager.LayoutParams attrs,
+            in int viewVisibility, in int layerStackId, in int userId,
+            in InsetsState requestedVisibility, out Rect outFrame,
             out DisplayCutout.ParcelableWrapper displayCutout, out InputChannel outInputChannel,
             out InsetsState insetsState, out InsetsSourceControl[] activeControls);
-    int addToDisplayAsUser(IWindow window, in WindowManager.LayoutParams attrs,
-                in int viewVisibility, in int layerStackId, in int userId,
-                out Rect outFrame, out Rect outContentInsets, out Rect outStableInsets,
-                out DisplayCutout.ParcelableWrapper displayCutout, out InputChannel outInputChannel,
-                out InsetsState insetsState, out InsetsSourceControl[] activeControls);
     int addToDisplayWithoutInputChannel(IWindow window, in WindowManager.LayoutParams attrs,
-            in int viewVisibility, in int layerStackId, out Rect outContentInsets,
-            out Rect outStableInsets, out InsetsState insetsState);
+            in int viewVisibility, in int layerStackId, out InsetsState insetsState);
     @UnsupportedAppUsage
     void remove(IWindow window);
 
@@ -98,9 +97,6 @@ interface IWindowSession {
      * @param outSurface Object in which is placed the new display surface.
      * @param insetsState The current insets state in the system.
      * @param outSurfaceSize The width and height of the surface control
-     * @param outBlastSurfaceControl A BLAST SurfaceControl allocated by the WindowManager
-     * the SurfaceControl willl be managed by the client side, but the WindowManager
-     * may use it as a deferTransaction barrier.
      *
      * @return int Result flags: {@link WindowManagerGlobal#RELAYOUT_SHOW_FOCUS},
      * {@link WindowManagerGlobal#RELAYOUT_FIRST_TIME}.
@@ -110,7 +106,7 @@ interface IWindowSession {
             int flags, long frameNumber, out ClientWindowFrames outFrames,
             out MergedConfiguration outMergedConfiguration, out SurfaceControl outSurfaceControl,
             out InsetsState insetsState, out InsetsSourceControl[] activeControls,
-            out Point outSurfaceSize, out SurfaceControl outBlastSurfaceControl);
+            out Point outSurfaceSize);
 
     /*
      * Notify the window manager that an application is relaunching and
@@ -182,7 +178,7 @@ interface IWindowSession {
      * @param data Data transferred by drag and drop
      * @return Token of drag operation which will be passed to cancelDragAndDrop.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     IBinder performDrag(IWindow window, int flags, in SurfaceControl surface, int touchSource,
             float touchX, float touchY, float thumbCenterX, float thumbCenterY, in ClipData data);
 

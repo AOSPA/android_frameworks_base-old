@@ -132,6 +132,11 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String PROPERTY_MIC_CAMERA_ENABLED = "camera_mic_icons_enabled";
 
+    /**
+     * Whether to show app ops chip for location.
+     */
+    public static final String PROPERTY_LOCATION_INDICATORS_ENABLED = "location_indicators_enabled";
+
     // Flags related to Assistant
 
     /**
@@ -423,6 +428,11 @@ public final class SystemUiDeviceConfigFlags {
      * (boolean) Whether to use an ML model for the Back Gesture.
      */
     public static final String USE_BACK_GESTURE_ML_MODEL = "use_back_gesture_ml_model";
+
+    /**
+     * (string) The name of the ML model for Back Gesture.
+     */
+    public static final String BACK_GESTURE_ML_MODEL_NAME = "back_gesture_ml_model_name";
 
     /**
      * (float) Threshold for Back Gesture ML model prediction.

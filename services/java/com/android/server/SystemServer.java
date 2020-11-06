@@ -47,7 +47,9 @@ import android.database.sqlite.SQLiteCompatibilityWalFlags;
 import android.database.sqlite.SQLiteGlobal;
 import android.graphics.GraphicsStatsService;
 import android.hardware.display.DisplayManagerInternal;
+import android.net.ConnectivityManager;
 import android.net.ConnectivityModuleConnector;
+import android.net.IConnectivityManager;
 import android.net.NetworkStackClient;
 import android.os.BaseBundle;
 import android.os.Binder;
@@ -75,14 +77,18 @@ import android.provider.Settings;
 import android.server.ServerProtoEnums;
 import android.sysprop.VoldProperties;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
+import android.util.IndentingPrintWriter;
 import android.util.Pair;
 import android.util.Slog;
+import android.util.TimeUtils;
 import android.view.contentcapture.ContentCaptureManager;
 
 import com.android.i18n.timezone.ZoneInfoDb;
 import com.android.internal.R;
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
 import com.android.internal.os.RuntimeInit;
@@ -104,7 +110,6 @@ import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.compat.PlatformCompatNative;
-import com.android.server.connectivity.IpConnectivityMetrics;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.coverage.CoverageService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
@@ -191,14 +196,20 @@ import java.lang.reflect.Method;
 import com.google.android.startop.iorap.IorapForwardingService;
 
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Locale;
 import java.util.Timer;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 
-public final class SystemServer {
+/**
+ * Entry point to {@code system_server}.
+ */
+public final class SystemServer implements Dumpable {
 
     private static final String TAG = "SystemServer";
 
@@ -324,6 +335,10 @@ public final class SystemServer {
             "com.android.server.media.MediaSessionService";
     private static final String MEDIA_RESOURCE_MONITOR_SERVICE_CLASS =
             "com.android.server.media.MediaResourceMonitorService";
+    private static final String CONNECTIVITY_SERVICE_INITIALIZER_CLASS =
+            "com.android.server.ConnectivityServiceInitializer";
+    private static final String IP_CONNECTIVITY_METRICS_CLASS =
+            "com.android.server.connectivity.IpConnectivityMetrics";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -382,6 +397,9 @@ public final class SystemServer {
     private Future<?> mSensorServiceStart;
     private Future<?> mZygotePreload;
     private Future<?> mBlobStoreServiceStart;
+
+    private final SystemServerDumper mDumper = new SystemServerDumper();
+
 
     /**
      * The pending WTF to be logged into dropbox.
@@ -443,6 +461,75 @@ public final class SystemServer {
         // TODO: mRuntimeRestart will *not* be set to true if the proccess crashes before
         // sys.boot_completed is set. Fix it.
         mRuntimeRestart = "1".equals(SystemProperties.get("sys.boot_completed"));
+    }
+
+    @Override
+    public void dump(IndentingPrintWriter pw, String[] args) {
+        pw.printf("Runtime restart: %b\n", mRuntimeRestart);
+        pw.printf("Start count: %d\n", mStartCount);
+        pw.print("Runtime start-up time: ");
+        TimeUtils.formatDuration(mRuntimeStartUptime, pw); pw.println();
+        pw.print("Runtime start-elapsed time: ");
+        TimeUtils.formatDuration(mRuntimeStartElapsedTime, pw); pw.println();
+    }
+
+    private final class SystemServerDumper extends Binder {
+
+        @GuardedBy("mDumpables")
+        private final ArrayMap<String, Dumpable> mDumpables = new ArrayMap<>(4);
+
+        @Override
+        protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            final boolean hasArgs = args != null && args.length > 0;
+
+            synchronized (mDumpables) {
+                if (hasArgs && "--list".equals(args[0])) {
+                    final int dumpablesSize = mDumpables.size();
+                    for (int i = 0; i < dumpablesSize; i++) {
+                        pw.println(mDumpables.keyAt(i));
+                    }
+                    return;
+                }
+
+                if (hasArgs && "--name".equals(args[0])) {
+                    if (args.length < 2) {
+                        pw.println("Must pass at least one argument to --name");
+                        return;
+                    }
+                    final String name = args[1];
+                    final Dumpable dumpable = mDumpables.get(name);
+                    if (dumpable == null) {
+                        pw.printf("No dummpable named %s\n", name);
+                        return;
+                    }
+
+                    try (IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ")) {
+                        // Strip --name DUMPABLE from args
+                        final String[] actualArgs = Arrays.copyOfRange(args, 2, args.length);
+                        dumpable.dump(ipw, actualArgs);
+                    }
+                    return;
+                }
+
+                final int dumpablesSize = mDumpables.size();
+                try (IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ")) {
+                    for (int i = 0; i < dumpablesSize; i++) {
+                        final Dumpable dumpable = mDumpables.valueAt(i);
+                        ipw.printf("%s:\n", dumpable.getDumpableName());
+                        ipw.increaseIndent();
+                        dumpable.dump(ipw, args);
+                        ipw.decreaseIndent();
+                        ipw.println();
+                    }
+                }
+            }
+        }
+
+        private void addDumpable(@NonNull Dumpable dumpable) {
+            synchronized (mDumpables) {
+                mDumpables.put(dumpable.getDumpableName(), dumpable);
+            }
+        }
     }
 
     private void run() {
@@ -571,13 +658,21 @@ public final class SystemServer {
             // Call per-process mainline module initialization.
             ActivityThread.initializeMainlineModules();
 
+            // Sets the dumper service
+            ServiceManager.addService("system_server_dumper", mDumper);
+            mDumper.addDumpable(this);
+
             // Create the system service manager.
             mSystemServiceManager = new SystemServiceManager(mSystemContext);
             mSystemServiceManager.setStartInfo(mRuntimeRestart,
                     mRuntimeStartElapsedTime, mRuntimeStartUptime);
+            mDumper.addDumpable(mSystemServiceManager);
+
             LocalServices.addService(SystemServiceManager.class, mSystemServiceManager);
             // Prepare the thread pool for init tasks that can be parallelized
-            SystemServerInitThreadPool.start();
+            SystemServerInitThreadPool tp = SystemServerInitThreadPool.start();
+            mDumper.addDumpable(tp);
+
             // Attach JVMTI agent if this is a debuggable build and the system property is set.
             if (Build.IS_DEBUGGABLE) {
                 // Property is of the form "library_path=parameters".
@@ -1040,9 +1135,10 @@ public final class SystemServer {
         IStorageManager storageManager = null;
         NetworkManagementService networkManagement = null;
         IpSecService ipSecService = null;
+        VcnManagementService vcnManagement = null;
         NetworkStatsService networkStats = null;
         NetworkPolicyManagerService networkPolicy = null;
-        ConnectivityService connectivity = null;
+        IConnectivityManager connectivity = null;
         NsdService serviceDiscovery = null;
         WindowManagerService wm = null;
         SerialService serial = null;
@@ -1177,6 +1273,12 @@ public final class SystemServer {
             inputManager = new InputManagerService(context);
             t.traceEnd();
 
+            if (!disableCameraService) {
+                t.traceBegin("StartCameraServiceProxy");
+                mSystemServiceManager.startService(CameraServiceProxy.class);
+                t.traceEnd();
+            }
+
             t.traceBegin("StartWindowManagerService");
             // WMS needs sensor service ready
             ConcurrentUtils.waitForFutureNoInterrupt(mSensorServiceStart, START_SENSOR_SERVICE);
@@ -1235,7 +1337,7 @@ public final class SystemServer {
             }
 
             t.traceBegin("IpConnectivityMetrics");
-            mSystemServiceManager.startService(IpConnectivityMetrics.class);
+            mSystemServiceManager.startService(IP_CONNECTIVITY_METRICS_CLASS);
             t.traceEnd();
 
             t.traceBegin("NetworkWatchlistService");
@@ -1252,7 +1354,7 @@ public final class SystemServer {
 
             mSystemServiceManager.startService(ActivityTriggerService.class);
 
-            if (Build.IS_DEBUGGABLE) {
+            if (Build.IS_DEBUGGABLE && ProfcollectForwardingService.enabled()) {
                 t.traceBegin("ProfcollectForwardingService");
                 mSystemServiceManager.startService(ProfcollectForwardingService.class);
                 t.traceEnd();
@@ -1495,6 +1597,15 @@ public final class SystemServer {
             }
             t.traceEnd();
 
+            t.traceBegin("StartVcnManagementService");
+            try {
+                vcnManagement = VcnManagementService.create(context);
+                ServiceManager.addService(Context.VCN_MANAGEMENT_SERVICE, vcnManagement);
+            } catch (Throwable e) {
+                reportWtf("starting VCN Management Service", e);
+            }
+            t.traceEnd();
+
             t.traceBegin("StartTextServicesManager");
             mSystemServiceManager.startService(TextServicesManagerService.Lifecycle.class);
             t.traceEnd();
@@ -1581,16 +1692,15 @@ public final class SystemServer {
             }
 
             t.traceBegin("StartConnectivityService");
-            try {
-                connectivity = new ConnectivityService(
-                        context, networkManagement, networkStats, networkPolicy);
-                ServiceManager.addService(Context.CONNECTIVITY_SERVICE, connectivity,
-                        /* allowIsolated= */ false,
-                        DUMP_FLAG_PRIORITY_HIGH | DUMP_FLAG_PRIORITY_NORMAL);
-                networkPolicy.bindConnectivityManager(connectivity);
-            } catch (Throwable e) {
-                reportWtf("starting Connectivity Service", e);
-            }
+            // This has to be called after NetworkManagementService, NetworkStatsService
+            // and NetworkPolicyManager because ConnectivityService needs to take these
+            // services to initialize.
+            // TODO: Dynamically load service-connectivity.jar by using startServiceFromJar.
+            mSystemServiceManager.startService(CONNECTIVITY_SERVICE_INITIALIZER_CLASS);
+            connectivity = IConnectivityManager.Stub.asInterface(
+                    ServiceManager.getService(Context.CONNECTIVITY_SERVICE));
+            // TODO: Use ConnectivityManager instead of ConnectivityService.
+            networkPolicy.bindConnectivityManager(connectivity);
             t.traceEnd();
 
             if (enableWigig) {
@@ -2133,12 +2243,6 @@ public final class SystemServer {
             t.traceEnd();
         }
 
-        if (!disableCameraService) {
-            t.traceBegin("StartCameraServiceProxy");
-            mSystemServiceManager.startService(CameraServiceProxy.class);
-            t.traceEnd();
-        }
-
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_EMBEDDED)) {
             t.traceBegin("StartIoTSystemService");
             mSystemServiceManager.startService(IOT_SERVICE_CLASS);
@@ -2326,7 +2430,6 @@ public final class SystemServer {
         final NetworkManagementService networkManagementF = networkManagement;
         final NetworkStatsService networkStatsF = networkStats;
         final NetworkPolicyManagerService networkPolicyF = networkPolicy;
-        final ConnectivityService connectivityF = connectivity;
         final CountryDetectorService countryDetectorF = countryDetector;
         final NetworkTimeUpdateService networkTimeUpdaterF = networkTimeUpdater;
         final InputManagerService inputManagerF = inputManager;
@@ -2334,7 +2437,10 @@ public final class SystemServer {
         final MediaRouterService mediaRouterF = mediaRouter;
         final MmsServiceBroker mmsServiceF = mmsService;
         final IpSecService ipSecServiceF = ipSecService;
+        final VcnManagementService vcnManagementF = vcnManagement;
         final WindowManagerService windowManagerF = wm;
+        final ConnectivityManager connectivityF = (ConnectivityManager)
+                context.getSystemService(Context.CONNECTIVITY_SERVICE);
 
         // We now tell the activity manager it is okay to run third party
         // code.  It will call back into us once it has gotten to the state
@@ -2372,7 +2478,11 @@ public final class SystemServer {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
                 t.traceBegin("StartCarServiceHelperService");
-                mSystemServiceManager.startService(CAR_SERVICE_HELPER_SERVICE_CLASS);
+                final SystemService cshs = mSystemServiceManager
+                        .startService(CAR_SERVICE_HELPER_SERVICE_CLASS);
+                if (cshs instanceof Dumpable) {
+                    mDumper.addDumpable((Dumpable) cshs);
+                }
                 t.traceEnd();
             }
 
@@ -2418,6 +2528,15 @@ public final class SystemServer {
                 }
             } catch (Throwable e) {
                 reportWtf("making IpSec Service ready", e);
+            }
+            t.traceEnd();
+            t.traceBegin("MakeVcnManagementServiceReady");
+            try {
+                if (vcnManagementF != null) {
+                    vcnManagementF.systemReady();
+                }
+            } catch (Throwable e) {
+                reportWtf("making VcnManagementService ready", e);
             }
             t.traceEnd();
             t.traceBegin("MakeNetworkStatsServiceReady");

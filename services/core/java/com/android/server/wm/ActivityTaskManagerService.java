@@ -23,6 +23,7 @@ import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
+import static android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
 import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.REMOVE_TASKS;
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
@@ -39,6 +40,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMAR
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ApplicationInfo.FLAG_FACTORY_TEST;
 import static android.content.pm.ConfigurationInfo.GL_ES_VERSION_UNDEFINED;
 import static android.content.pm.PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS;
@@ -65,6 +67,7 @@ import static android.text.format.DateUtils.MINUTE_IN_MILLIS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.TRANSIT_NONE;
+import static android.view.WindowManager.TRANSIT_OLD_NONE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS;
@@ -103,7 +106,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_CONFI
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_FOCUS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_IMMERSIVE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_LOCKTASK;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_STACK;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_ROOT_TASK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_SWITCH;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_VISIBILITY;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
@@ -114,14 +117,14 @@ import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_RECEI
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_STRUCTURE;
 import static com.android.server.wm.ActivityTaskManagerService.H.REPORT_TIME_TRACKER_MSG;
 import static com.android.server.wm.ActivityTaskManagerService.UiHandler.DISMISS_DIALOG_UI_MSG;
+import static com.android.server.wm.LockTaskController.LOCK_TASK_AUTH_DONT_LOCK;
 import static com.android.server.wm.RecentsAnimationController.REORDER_KEEP_IN_PLACE;
 import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_ORIGINAL_POSITION;
-import static com.android.server.wm.RootWindowContainer.MATCH_TASK_IN_STACKS_ONLY;
-import static com.android.server.wm.RootWindowContainer.MATCH_TASK_IN_STACKS_OR_RECENT_TASKS;
+import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_ONLY;
+import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS;
 import static com.android.server.wm.Task.ActivityState.DESTROYED;
 import static com.android.server.wm.Task.ActivityState.DESTROYING;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_DONT_LOCK;
-import static com.android.server.wm.Task.REPARENT_KEEP_STACK_AT_FRONT;
+import static com.android.server.wm.Task.REPARENT_KEEP_ROOT_TASK_AT_FRONT;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 
@@ -303,7 +306,7 @@ import java.util.Set;
  */
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityTaskManagerService" : TAG_ATM;
-    static final String TAG_STACK = TAG + POSTFIX_STACK;
+    static final String TAG_ROOT_TASK = TAG + POSTFIX_ROOT_TASK;
     static final String TAG_SWITCH = TAG + POSTFIX_SWITCH;
     private static final String TAG_IMMERSIVE = TAG + POSTFIX_IMMERSIVE;
     private static final String TAG_FOCUS = TAG + POSTFIX_FOCUS;
@@ -1294,6 +1297,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         a.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         a.colorMode = ActivityInfo.COLOR_MODE_DEFAULT;
         a.flags |= ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS;
+        a.resizeMode = RESIZE_MODE_UNRESIZEABLE;
 
         final ActivityOptions options = ActivityOptions.makeBasic();
         options.setLaunchActivityType(ACTIVITY_TYPE_DREAM);
@@ -1593,7 +1597,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     @Override
     public void startRecentsActivity(Intent intent, long eventTime,
             @Nullable IRecentsAnimationRunner recentsAnimationRunner) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "startRecentsActivity()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "startRecentsActivity()");
         final int callingPid = Binder.getCallingPid();
         final int callingUid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
@@ -1659,11 +1663,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         try {
             // Collect information about the target of the Intent.
-            ActivityInfo aInfo = mStackSupervisor.resolveActivity(intent, resolvedType,
-                    0 /* startFlags */, null /* profilerInfo */, userId,
-                    ActivityStarter.computeResolveFilterUid(callingUid, callingUid,
-                            UserHandle.USER_NULL));
-            aInfo = mAmInternal.getActivityInfoForUser(aInfo, userId);
+            final ActivityInfo aInfo = resolveActivityInfoForIntent(intent, resolvedType, userId,
+                    callingUid);
 
             synchronized (mGlobalLock) {
                 return mStackSupervisor.canPlaceEntityOnDisplay(displayId, callingPid, callingUid,
@@ -1672,6 +1673,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
+    }
+
+    ActivityInfo resolveActivityInfoForIntent(Intent intent, String resolvedType,
+            int userId, int callingUid) {
+        ActivityInfo aInfo = mStackSupervisor.resolveActivity(intent, resolvedType,
+                0 /* startFlags */, null /* profilerInfo */, userId,
+                ActivityStarter.computeResolveFilterUid(callingUid, callingUid,
+                        UserHandle.USER_NULL));
+        return mAmInternal.getActivityInfoForUser(aInfo, userId);
     }
 
     /**
@@ -2173,7 +2183,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public RootTaskInfo getFocusedRootTaskInfo() throws RemoteException {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "getFocusedRootTaskInfo()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "getFocusedRootTaskInfo()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -2190,7 +2200,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void setFocusedRootTask(int taskId) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "setFocusedRootTask()");
+        enforceTaskPermission("setFocusedRootTask()");
         ProtoLog.d(WM_DEBUG_FOCUS, "setFocusedRootTask: taskId=%d", taskId);
         final long callingId = Binder.clearCallingIdentity();
         try {
@@ -2212,13 +2222,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void setFocusedTask(int taskId) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "setFocusedTask()");
+        enforceTaskPermission("setFocusedTask()");
         ProtoLog.d(WM_DEBUG_FOCUS, "setFocusedTask: taskId=%d", taskId);
         final long callingId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
                 final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                        MATCH_TASK_IN_STACKS_ONLY);
+                        MATCH_ATTACHED_TASK_ONLY);
                 if (task == null) {
                     return;
                 }
@@ -2234,7 +2244,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void restartActivityProcessIfVisible(IBinder activityToken) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "restartActivityProcess()");
+        enforceTaskPermission("restartActivityProcess()");
         final long callingId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -2256,7 +2266,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             final long ident = Binder.clearCallingIdentity();
             try {
                 final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                        MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
+                        MATCH_ATTACHED_TASK_OR_RECENT_TASKS);
                 if (task == null) {
                     Slog.w(TAG, "removeTask: No task remove with id=" + taskId);
                     return false;
@@ -2358,13 +2368,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public Rect getTaskBounds(int taskId) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "getTaskBounds()");
+        enforceTaskPermission("getTaskBounds()");
         final long ident = Binder.clearCallingIdentity();
         Rect rect = new Rect();
         try {
             synchronized (mGlobalLock) {
                 final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                        MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
+                        MATCH_ATTACHED_TASK_OR_RECENT_TASKS);
                 if (task == null) {
                     Slog.w(TAG, "getTaskBounds: taskId=" + taskId + " not found");
                     return rect;
@@ -2385,9 +2395,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public ActivityManager.TaskDescription getTaskDescription(int id) {
         synchronized (mGlobalLock) {
             enforceCallerIsRecentsOrHasPermission(
-                    MANAGE_ACTIVITY_STACKS, "getTaskDescription()");
+                    MANAGE_ACTIVITY_TASKS, "getTaskDescription()");
             final Task tr = mRootWindowContainer.anyTaskForId(id,
-                    MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
+                    MATCH_ATTACHED_TASK_OR_RECENT_TASKS);
             if (tr != null) {
                 return tr.getTaskDescription();
             }
@@ -2400,7 +2410,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
             return setTaskWindowingModeSplitScreenPrimary(taskId, toTop);
         }
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "setTaskWindowingMode()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "setTaskWindowingMode()");
         synchronized (mGlobalLock) {
             final long ident = Binder.clearCallingIdentity();
             try {
@@ -2408,7 +2418,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     return setTaskWindowingModeSplitScreen(taskId, windowingMode, toTop);
                 }
                 final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                        MATCH_TASK_IN_STACKS_ONLY);
+                        MATCH_ATTACHED_TASK_ONLY);
                 if (task == null) {
                     Slog.w(TAG, "setTaskWindowingMode: No task for id=" + taskId);
                     return false;
@@ -2507,13 +2517,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (taskOrgController.handleInterceptBackPressedOnTaskRoot(stack)) {
                 // This task is handled by a task organizer that has requested the back pressed
                 // callback
-            } else if (stack != null && (stack.isSingleTaskInstance())) {
-                // Single-task stacks are used for activities which are presented in floating
-                // windows above full screen activities. A task change listener is used to notify
-                // SystemUI so the back action can be handled specially.
-                final Task task = r.getTask();
-                mTaskChangeNotificationController
-                        .notifyBackPressedOnTaskRoot(task.getTaskInfo());
             } else {
                 moveActivityTaskToBack(token, false /* nonRoot */);
             }
@@ -2764,7 +2767,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void moveTaskToRootTask(int taskId, int rootTaskId, boolean toTop) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "moveTaskToRootTask()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "moveTaskToRootTask()");
         synchronized (mGlobalLock) {
             final long ident = Binder.clearCallingIdentity();
             try {
@@ -2786,8 +2789,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     throw new IllegalArgumentException("moveTaskToRootTask: Attempt to move task "
                             + taskId + " to rootTask " + rootTaskId);
                 }
-                task.reparent(rootTask, toTop, REPARENT_KEEP_STACK_AT_FRONT, ANIMATE, !DEFER_RESUME,
-                        "moveTaskToRootTask");
+                task.reparent(rootTask, toTop, REPARENT_KEEP_ROOT_TASK_AT_FRONT, ANIMATE,
+                        !DEFER_RESUME, "moveTaskToRootTask");
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -2803,7 +2806,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     @Override
     public boolean setTaskWindowingModeSplitScreenPrimary(int taskId, boolean toTop) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS,
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS,
                 "setTaskWindowingModeSplitScreenPrimary()");
         synchronized (mGlobalLock) {
             final long ident = Binder.clearCallingIdentity();
@@ -2831,7 +2834,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                MATCH_TASK_IN_STACKS_ONLY);
+                MATCH_ATTACHED_TASK_ONLY);
         if (task == null) {
             Slog.w(TAG, "setTaskWindowingModeSplitScreenPrimary: No task for id=" + taskId);
             return false;
@@ -2880,7 +2883,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     @Override
     public void removeRootTasksInWindowingModes(int[] windowingModes) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS,
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS,
                 "removeRootTasksInWindowingModes()");
 
         synchronized (mGlobalLock) {
@@ -2895,7 +2898,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void removeRootTasksWithActivityTypes(int[] activityTypes) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS,
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS,
                 "removeRootTasksWithActivityTypes()");
 
         synchronized (mGlobalLock) {
@@ -2922,7 +2925,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public List<RootTaskInfo> getAllRootTaskInfos() {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "getAllRootTaskInfos()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "getAllRootTaskInfos()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -2935,7 +2938,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public RootTaskInfo getRootTaskInfo(int windowingMode, int activityType) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "getRootTaskInfo()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "getRootTaskInfo()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -2948,7 +2951,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public List<RootTaskInfo> getAllRootTaskInfosOnDisplay(int displayId) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS,
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS,
                 "getAllRootTaskInfosOnDisplay()");
         final long ident = Binder.clearCallingIdentity();
         try {
@@ -2963,7 +2966,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     @Override
     public RootTaskInfo getRootTaskInfoOnDisplay(int windowingMode, int activityType,
             int displayId) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "getRootTaskInfoOnDisplay()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "getRootTaskInfoOnDisplay()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -2976,7 +2979,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void cancelRecentsAnimation(boolean restoreHomeRootTaskPosition) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "cancelRecentsAnimation()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "cancelRecentsAnimation()");
         final long callingUid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {
@@ -3004,13 +3007,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void startSystemLockTaskMode(int taskId) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "startSystemLockTaskMode");
+        enforceTaskPermission("startSystemLockTaskMode");
         // This makes inner call to look as if it was initiated by system.
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
                 final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                        MATCH_TASK_IN_STACKS_ONLY);
+                        MATCH_ATTACHED_TASK_ONLY);
                 if (task == null) {
                     return;
                 }
@@ -3035,7 +3038,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     @Override
     public void stopSystemLockTaskMode() throws RemoteException {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "stopSystemLockTaskMode");
+        enforceTaskPermission("stopSystemLockTaskMode");
         stopLockTaskModeInternal(null, true /* isSystemCaller */);
     }
 
@@ -3358,7 +3361,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public void setTaskResizeable(int taskId, int resizeableMode) {
         synchronized (mGlobalLock) {
             final Task task = mRootWindowContainer.anyTaskForId(
-                    taskId, MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
+                    taskId, MATCH_ATTACHED_TASK_OR_RECENT_TASKS);
             if (task == null) {
                 Slog.w(TAG, "setTaskResizeable: taskId=" + taskId + " not found");
                 return;
@@ -3369,12 +3372,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public boolean resizeTask(int taskId, Rect bounds, int resizeMode) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "resizeTask()");
+        enforceTaskPermission("resizeTask()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
                 final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                        MATCH_TASK_IN_STACKS_ONLY);
+                        MATCH_ATTACHED_TASK_ONLY);
                 if (task == null) {
                     Slog.w(TAG, "resizeTask: taskId=" + taskId + " not found");
                     return false;
@@ -3543,7 +3546,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /** Sets the task stack listener that gets callbacks when a task stack changes. */
     @Override
     public void registerTaskStackListener(ITaskStackListener listener) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS,
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS,
                 "registerTaskStackListener()");
         mTaskChangeNotificationController.registerTaskStackListener(listener);
     }
@@ -3551,7 +3554,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /** Unregister a task stack listener so that it stops receiving callbacks. */
     @Override
     public void unregisterTaskStackListener(ITaskStackListener listener) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS,
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS,
                 "unregisterTaskStackListener()");
         mTaskChangeNotificationController.unregisterTaskStackListener(listener);
     }
@@ -3606,10 +3609,33 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     /** This can be called with or without the global lock held. */
-    private void enforceCallerIsRecentsOrHasPermission(String permission, String func) {
-        if (!getRecentTasks().isCallerRecents(Binder.getCallingUid())) {
+    void enforceCallerIsRecentsOrHasPermission(String permission, String func) {
+        if (getRecentTasks().isCallerRecents(Binder.getCallingUid())) {
+            return;
+        }
+
+        if (permission.equals(MANAGE_ACTIVITY_TASKS) || permission.equals(MANAGE_ACTIVITY_STACKS)) {
+            enforceTaskPermission(func);
+        } else {
             mAmInternal.enforceCallingPermission(permission, func);
         }
+    }
+
+    static void enforceTaskPermission(String func) {
+        if (checkCallingPermission(MANAGE_ACTIVITY_TASKS) == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        if (checkCallingPermission(MANAGE_ACTIVITY_STACKS) == PackageManager.PERMISSION_GRANTED) {
+            Slog.w(TAG, "MANAGE_ACTIVITY_STACKS is deprecated, "
+                    + "please use alternative permission: MANAGE_ACTIVITY_TASKS");
+            return;
+        }
+
+        String msg = "Permission Denial: " + func + " from pid=" + Binder.getCallingPid() + ", uid="
+                + Binder.getCallingUid() + " requires android.permission.MANAGE_ACTIVITY_TASKS";
+        Slog.w(TAG, msg);
+        throw new SecurityException(msg);
     }
 
     @VisibleForTesting
@@ -3976,7 +4002,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void suppressResizeConfigChanges(boolean suppress) throws RemoteException {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS,
+        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_TASKS,
                 "suppressResizeConfigChanges()");
         synchronized (mGlobalLock) {
             mSuppressResizeConfigChanges = suppress;
@@ -3993,7 +4019,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     @Override
     public boolean moveTopActivityToPinnedRootTask(int rootTaskId, Rect bounds) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS,
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS,
                 "moveTopActivityToPinnedRootTask()");
         synchronized (mGlobalLock) {
             if (!mSupportsPictureInPicture) {
@@ -4111,13 +4137,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
-    @Override
-    public int getMaxNumPictureInPictureActions(IBinder token) {
-        // Currently, this is a static constant, but later, we may change this to be dependent on
-        // the context of the activity
-        return 3;
-    }
-
     /**
      * Checks the state of the system and the activity associated with the given {@param token} to
      * verify that picture-in-picture is supported for that activity.
@@ -4155,7 +4174,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         // Truncate the number of actions if necessary
-        params.truncateActions(getMaxNumPictureInPictureActions(token));
+        params.truncateActions(ActivityTaskManager.getMaxNumPictureInPictureActions(mContext));
 
         return r;
     }
@@ -4178,7 +4197,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public void resizePrimarySplitScreen(Rect dockedBounds, Rect tempDockedTaskBounds,
             Rect tempDockedTaskInsetBounds,
             Rect tempOtherTaskBounds, Rect tempOtherTaskInsetBounds) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "resizePrimarySplitScreen()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "resizePrimarySplitScreen()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -4216,7 +4235,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void setSplitScreenResizing(boolean resizing) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "setSplitScreenResizing()");
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS, "setSplitScreenResizing()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -4229,8 +4248,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public IWindowOrganizerController getWindowOrganizerController() {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS,
-                "getWindowOrganizerController()");
+        enforceTaskPermission("getWindowOrganizerController()");
         return mWindowOrganizerController;
     }
 
@@ -4371,13 +4389,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public void cancelTaskWindowTransition(int taskId) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS,
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_TASKS,
                 "cancelTaskWindowTransition()");
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
                 final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                        MATCH_TASK_IN_STACKS_ONLY);
+                        MATCH_ATTACHED_TASK_ONLY);
                 if (task == null) {
                     Slog.w(TAG, "cancelTaskWindowTransition: taskId=" + taskId + " not found");
                     return;
@@ -4405,7 +4423,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final Task task;
         synchronized (mGlobalLock) {
             task = mRootWindowContainer.anyTaskForId(taskId,
-                    MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
+                    MATCH_ATTACHED_TASK_OR_RECENT_TASKS);
             if (task == null) {
                 Slog.w(TAG, "getTaskSnapshot: taskId=" + taskId + " not found");
                 return null;
@@ -4772,8 +4790,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     @Override
     public void clearLaunchParamsForPackages(List<String> packageNames) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS,
-                "clearLaunchParamsForPackages");
+        enforceTaskPermission("clearLaunchParamsForPackages");
         synchronized (mGlobalLock) {
             for (int i = 0; i < packageNames.size(); ++i) {
                 mStackSupervisor.mLaunchParamsPersister.removeRecordForPackage(packageNames.get(i));
@@ -4782,32 +4799,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     /**
-     * Makes the display with the given id a single task instance display. I.e the display can only
-     * contain one task.
-     */
-    @Override
-    public void setDisplayToSingleTaskInstance(int displayId) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS,
-                "setDisplayToSingleTaskInstance");
-        final long origId = Binder.clearCallingIdentity();
-        try {
-            final DisplayContent display =
-                    mRootWindowContainer.getDisplayContentOrCreate(displayId);
-            if (display != null) {
-                display.setDisplayToSingleTaskInstance();
-            }
-        } finally {
-            Binder.restoreCallingIdentity(origId);
-        }
-    }
-
-    /**
      * Requests that an activity should enter picture-in-picture mode if possible.
      */
     @Override
     public void requestPictureInPictureMode(IBinder token) throws RemoteException {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS,
-                "requestPictureInPictureMode");
+        enforceTaskPermission("requestPictureInPictureMode");
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -5136,7 +5132,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                         deferResume);
             }
 
-            kept = ensureConfigAndVisibilityAfterUpdate(starting, changes);
+            if (!deferResume) {
+                kept = ensureConfigAndVisibilityAfterUpdate(starting, changes);
+            }
         } finally {
             continueWindowLayout();
         }
@@ -5573,7 +5571,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     void updateTopApp(ActivityRecord topResumedActivity) {
         final ActivityRecord top = topResumedActivity != null ? topResumedActivity
-                // If there is no resumed activity, it will choose the pausing activity.
+                // If there is no resumed activity, it will choose the pausing or focused activity.
                 : mRootWindowContainer.getTopResumedActivity();
         mTopApp = top != null ? top.app : null;
     }
@@ -6030,10 +6028,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return allUids.contains(uid);
     }
 
-    void notifySingleTaskDisplayEmpty(int displayId) {
-        mTaskChangeNotificationController.notifySingleTaskDisplayEmpty(displayId);
-    }
-
     final class H extends Handler {
         static final int REPORT_TIME_TRACKER_MSG = 1;
 
@@ -6098,11 +6092,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             synchronized (mGlobalLock) {
                 onLocalVoiceInteractionStartedLocked(activity, voiceSession, voiceInteractor);
             }
-        }
-
-        @Override
-        public void notifySingleTaskDisplayDrawn(int displayId) {
-            mTaskChangeNotificationController.notifySingleTaskDisplayDrawn(displayId);
         }
 
         @Override
@@ -6214,10 +6203,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 if (dc == null) {
                     return;
                 }
-                final boolean wasTransitionSet =
-                        dc.mAppTransition.getAppTransition() != TRANSIT_NONE;
+                final boolean wasTransitionSet = dc.mAppTransition.isTransitionSet();
                 if (!wasTransitionSet) {
-                    dc.prepareAppTransition(TRANSIT_NONE, false /* alwaysKeepCurrent */);
+                    dc.prepareAppTransitionOld(TRANSIT_OLD_NONE, false /* alwaysKeepCurrent */);
+                    dc.prepareAppTransition(TRANSIT_NONE);
                 }
                 mRootWindowContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
 
@@ -6908,8 +6897,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public void startConfirmDeviceCredentialIntent(Intent intent, Bundle options) {
-            mAmInternal.enforceCallingPermission(
-                    MANAGE_ACTIVITY_STACKS, "startConfirmDeviceCredentialIntent");
+            enforceTaskPermission("startConfirmDeviceCredentialIntent");
 
             synchronized (mGlobalLock) {
                 final long ident = Binder.clearCallingIdentity();
@@ -7336,20 +7324,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public WindowProcessController getHomeProcess() {
-            synchronized (mGlobalLock) {
-                return mHomeProcess;
-            }
-        }
-
-        @Override
-        public WindowProcessController getPreviousProcess() {
-            synchronized (mGlobalLock) {
-                return mPreviousProcess;
-            }
-        }
-
-        @Override
         public void clearLockedTasks(String reason) {
             synchronized (mGlobalLock) {
                 getLockTaskController().clearLockedTasks(reason);
@@ -7442,6 +7416,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
             synchronized (mGlobalLock) {
                 mCompanionAppUidsMap.put(userId, result);
+            }
+        }
+
+
+        @Override
+        public boolean isBaseOfLockedTask(String packageName) {
+            synchronized (mGlobalLock) {
+                return getLockTaskController().isBaseOfLockedTask(packageName);
             }
         }
     }

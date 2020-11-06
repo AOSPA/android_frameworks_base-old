@@ -24,6 +24,7 @@ import android.content.pm.ActivityInfo;
 import android.graphics.PixelFormat;
 import android.graphics.PointF;
 import android.os.Bundle;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.MathUtils;
 import android.view.Gravity;
@@ -31,6 +32,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
+import android.view.WindowManager.LayoutParams;
+import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.widget.ImageView;
@@ -48,15 +51,16 @@ class MagnificationModeSwitch {
 
     @VisibleForTesting
     static final long FADING_ANIMATION_DURATION_MS = 300;
-    private static final int DEFAULT_FADE_OUT_ANIMATION_DELAY_MS = 3000;
-    // The button visible duration starting from the last showButton() called.
-    private int mVisibleDuration = DEFAULT_FADE_OUT_ANIMATION_DELAY_MS;
+    @VisibleForTesting
+    static final int DEFAULT_FADE_OUT_ANIMATION_DELAY_MS = 3000;
+    private int mUiTimeout;
     private final Runnable mFadeInAnimationTask;
     private final Runnable mFadeOutAnimationTask;
     @VisibleForTesting
     boolean mIsFadeOutAnimating = false;
 
     private final Context mContext;
+    private final AccessibilityManager mAccessibilityManager;
     private final WindowManager mWindowManager;
     private final ImageView mImageView;
     private final PointF mLastDown = new PointF();
@@ -64,7 +68,7 @@ class MagnificationModeSwitch {
     private final int mTapTimeout = ViewConfiguration.getTapTimeout();
     private final int mTouchSlop;
     private int mMagnificationMode = Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN;
-    private final WindowManager.LayoutParams mParams;
+    private final LayoutParams mParams;
     private boolean mIsVisible = false;
 
     MagnificationModeSwitch(Context context) {
@@ -74,9 +78,10 @@ class MagnificationModeSwitch {
     @VisibleForTesting
     MagnificationModeSwitch(Context context, @NonNull ImageView imageView) {
         mContext = context;
+        mAccessibilityManager = mContext.getSystemService(AccessibilityManager.class);
         mWindowManager = (WindowManager) mContext.getSystemService(
                 Context.WINDOW_SERVICE);
-        mParams = createLayoutParams();
+        mParams = createLayoutParams(context);
         mImageView = imageView;
         mTouchSlop = ViewConfiguration.get(mContext).getScaledTouchSlop();
         applyResourcesValues();
@@ -202,6 +207,10 @@ class MagnificationModeSwitch {
             mWindowManager.addView(mImageView, mParams);
             mIsVisible = true;
             mImageView.postOnAnimation(mFadeInAnimationTask);
+            mUiTimeout = mAccessibilityManager.getRecommendedTimeoutMillis(
+                    DEFAULT_FADE_OUT_ANIMATION_DELAY_MS,
+                    AccessibilityManager.FLAG_CONTENT_ICONS
+                            | AccessibilityManager.FLAG_CONTENT_CONTROLS);
         }
         if (mIsFadeOutAnimating) {
             mImageView.animate().cancel();
@@ -209,15 +218,26 @@ class MagnificationModeSwitch {
         }
         // Refresh the time slot of the fade-out task whenever this method is called.
         mImageView.removeCallbacks(mFadeOutAnimationTask);
-        mImageView.postOnAnimationDelayed(mFadeOutAnimationTask, mVisibleDuration);
+        mImageView.postOnAnimationDelayed(mFadeOutAnimationTask, mUiTimeout);
     }
 
     void onConfigurationChanged(int configDiff) {
-        if ((configDiff & ActivityInfo.CONFIG_DENSITY) == 0) {
+        if ((configDiff & ActivityInfo.CONFIG_DENSITY) != 0) {
+            applyResourcesValues();
+            mImageView.setImageResource(getIconResId(mMagnificationMode));
             return;
         }
-        applyResourcesValues();
-        mImageView.setImageResource(getIconResId(mMagnificationMode));
+        if ((configDiff & ActivityInfo.CONFIG_LOCALE) != 0) {
+            updateAccessibilityWindowTitle();
+            return;
+        }
+    }
+
+    private void updateAccessibilityWindowTitle() {
+        mParams.accessibilityTitle = getAccessibilityWindowTitle(mContext);
+        if (mIsVisible) {
+            mWindowManager.updateViewLayout(mImageView, mParams);
+        }
     }
 
     private void toggleMagnificationMode() {
@@ -225,8 +245,11 @@ class MagnificationModeSwitch {
                 mMagnificationMode ^ Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_ALL;
         mMagnificationMode = newMode;
         mImageView.setImageResource(getIconResId(newMode));
-        Settings.Secure.putInt(mContext.getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE, newMode);
+        Settings.Secure.putIntForUser(
+                mContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
+                newMode,
+                UserHandle.USER_CURRENT);
     }
 
     private void handleSingleTap() {
@@ -250,14 +273,19 @@ class MagnificationModeSwitch {
                 : R.drawable.ic_open_in_new_fullscreen;
     }
 
-    private static WindowManager.LayoutParams createLayoutParams() {
-        final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+    private static LayoutParams createLayoutParams(Context context) {
+        final LayoutParams params = new LayoutParams(
+                LayoutParams.WRAP_CONTENT,
+                LayoutParams.WRAP_CONTENT,
+                LayoutParams.TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY,
+                LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSPARENT);
         params.gravity = Gravity.BOTTOM | Gravity.RIGHT;
+        params.accessibilityTitle = getAccessibilityWindowTitle(context);
         return params;
+    }
+
+    private static String getAccessibilityWindowTitle(Context context) {
+        return context.getString(com.android.internal.R.string.android_system_label);
     }
 }

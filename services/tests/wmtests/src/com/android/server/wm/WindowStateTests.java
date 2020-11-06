@@ -17,7 +17,6 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.hardware.camera2.params.OutputConfiguration.ROTATION_90;
@@ -46,6 +45,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
+import static com.android.server.wm.WindowContainer.SYNC_STATE_WAITING_FOR_DRAW;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -62,16 +62,19 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.when;
 
 import android.graphics.Insets;
 import android.graphics.Matrix;
 import android.graphics.Rect;
+import android.os.IBinder;
 import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
 import android.util.Size;
 import android.view.DisplayCutout;
-import android.view.InsetsSource;
+import android.view.InputWindowHandle;
+import android.view.InsetsState;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 
@@ -317,8 +320,7 @@ public class WindowStateTests extends WindowTestsBase {
     public void testPrepareWindowToDisplayDuringRelayout() {
         // Call prepareWindowToDisplayDuringRelayout for a window without FLAG_TURN_SCREEN_ON before
         // calling setCurrentLaunchCanTurnScreenOn for windows with flag in the same activity.
-        final ActivityRecord activity = createActivityRecord(mDisplayContent,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent);
         final WindowState first = createWindow(null, TYPE_APPLICATION, activity, "first");
         final WindowState second = createWindow(null, TYPE_APPLICATION, activity, "second");
 
@@ -426,10 +428,11 @@ public class WindowStateTests extends WindowTestsBase {
                 .setWindow(statusBar, null /* frameProvider */, null /* imeFrameProvider */);
         mDisplayContent.getInsetsStateController().onBarControlTargetChanged(
                 app, null /* fakeTopControlling */, app, null /* fakeNavControlling */);
-        final InsetsSource source = new InsetsSource(ITYPE_STATUS_BAR);
-        source.setVisible(false);
+        final InsetsState state = new InsetsState();
+        state.getSource(ITYPE_STATUS_BAR).setVisible(false);
+        app.updateRequestedVisibility(state);
         mDisplayContent.getInsetsStateController().getSourceProvider(ITYPE_STATUS_BAR)
-                .onInsetsModified(app, source);
+                .updateClientVisibility(app);
         waitUntilHandlersIdle();
         assertFalse(statusBar.isVisible());
     }
@@ -464,10 +467,10 @@ public class WindowStateTests extends WindowTestsBase {
     public void testDisplayIdUpdatedOnReparent() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
         // fake a different display
-        app.mInputWindowHandle.displayId = mDisplayContent.getDisplayId() + 1;
+        app.mInputWindowHandle.setDisplayId(mDisplayContent.getDisplayId() + 1);
         app.onDisplayChanged(mDisplayContent);
 
-        assertThat(app.mInputWindowHandle.displayId, is(mDisplayContent.getDisplayId()));
+        assertThat(app.mInputWindowHandle.getDisplayId(), is(mDisplayContent.getDisplayId()));
         assertThat(app.getDisplayId(), is(mDisplayContent.getDisplayId()));
     }
 
@@ -608,7 +611,8 @@ public class WindowStateTests extends WindowTestsBase {
 
         // Check that the window is in resizing if using blast sync.
         win.reportResized();
-        win.prepareForSync(mock(BLASTSyncEngine.TransactionReadyListener.class), 1);
+        win.prepareSync();
+        assertEquals(SYNC_STATE_WAITING_FOR_DRAW, win.mSyncState);
         win.updateResizingWindowIfNeeded();
         assertThat(mWm.mResizingWindows).contains(win);
 
@@ -675,6 +679,54 @@ public class WindowStateTests extends WindowTestsBase {
         win0.mActivityRecord.getStack().setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
         win0.mActivityRecord.getStack().setFocusable(false);
         assertFalse(win0.canReceiveTouchInput());
+    }
+
+    @Test
+    public void testUpdateInputWindowHandle() {
+        final WindowState win = createWindow(null, TYPE_APPLICATION, "win");
+        win.mAttrs.inputFeatures = WindowManager.LayoutParams.INPUT_FEATURE_DISABLE_USER_ACTIVITY;
+        final InputWindowHandle handle = new InputWindowHandle(
+                win.mInputWindowHandle.getInputApplicationHandle(), win.getDisplayId());
+        final InputWindowHandleWrapper handleWrapper = new InputWindowHandleWrapper(handle);
+        final IBinder inputChannelToken = mock(IBinder.class);
+        win.mInputChannelToken = inputChannelToken;
+
+        mDisplayContent.getInputMonitor().populateInputWindowHandle(handleWrapper, win);
+
+        assertTrue(handleWrapper.isChanged());
+        assertEquals(inputChannelToken, handle.token);
+        assertEquals(win.mActivityRecord.getInputApplicationHandle(false /* update */),
+                handle.inputApplicationHandle);
+        assertEquals(win.mAttrs.inputFeatures, handle.inputFeatures);
+        assertEquals(win.isVisible(), handle.visible);
+
+        final SurfaceControl sc = mock(SurfaceControl.class);
+        final SurfaceControl.Transaction transaction = mSystemServicesTestRule.mTransaction;
+        InputMonitor.setInputWindowInfoIfNeeded(transaction, sc, handleWrapper);
+
+        // The fields of input window handle are changed, so it must set input window info
+        // successfully. And then the changed flag should be reset.
+        verify(transaction).setInputWindowInfo(eq(sc), eq(handle));
+        assertFalse(handleWrapper.isChanged());
+        // Populate the same states again, the handle should not detect change.
+        mDisplayContent.getInputMonitor().populateInputWindowHandle(handleWrapper, win);
+        assertFalse(handleWrapper.isChanged());
+
+        // Apply the no change handle, the invocation of setInputWindowInfo should be skipped.
+        clearInvocations(transaction);
+        InputMonitor.setInputWindowInfoIfNeeded(transaction, sc, handleWrapper);
+        verify(transaction, never()).setInputWindowInfo(any(), any());
+
+        // Populate as an overlay to disable the input of window.
+        InputMonitor.populateOverlayInputInfo(handleWrapper, false /* isVisible */);
+        // The overlay attributes should be set.
+        assertTrue(handleWrapper.isChanged());
+        assertFalse(handle.focusable);
+        assertFalse(handle.visible);
+        assertNull(handle.token);
+        assertEquals(0L, handle.dispatchingTimeoutMillis);
+        assertEquals(WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL,
+                handle.inputFeatures);
     }
 
     @UseTestDisplay(addWindows = W_ACTIVITY)

@@ -667,7 +667,7 @@ public class ApplicationPackageManager extends PackageManager {
                     name, version);
         }
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (o instanceof HasSystemFeatureQuery) {
                 HasSystemFeatureQuery r = (HasSystemFeatureQuery) o;
                 return Objects.equals(name, r.name) &&  version == r.version;
@@ -1050,7 +1050,7 @@ public class ApplicationPackageManager extends PackageManager {
          * are handled first.
          */
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (o instanceof GetPackagesForUidResult) {
                 String [] r = ((GetPackagesForUidResult) o).mValue;
                 String [] l = mValue;
@@ -1309,7 +1309,7 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @Override
     public boolean setInstantAppCookie(@NonNull byte[] cookie) {
         try {
@@ -2083,7 +2083,7 @@ public class ApplicationPackageManager extends PackageManager {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 
@@ -2422,7 +2422,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public @Nullable VolumeInfo getPackageCurrentVolume(ApplicationInfo app) {
         final StorageManager storage = mContext.getSystemService(StorageManager.class);
         return getPackageCurrentVolume(app, storage);

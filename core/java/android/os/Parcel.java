@@ -514,11 +514,11 @@ public final class Parcel {
     }
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static native long getGlobalAllocSize();
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static native long getGlobalAllocCount();
 
     /**
@@ -742,7 +742,7 @@ public final class Parcel {
      * {@hide}
      * {@SystemApi}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public final void writeBlob(@Nullable byte[] b) {
         writeBlob(b, 0, (b != null) ? b.length : 0);
     }
@@ -1014,7 +1014,7 @@ public final class Parcel {
     /**
      * @hide For testing only.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void writeArrayMap(@Nullable ArrayMap<String, Object> val) {
         writeArrayMapInternal(val);
     }
@@ -1053,7 +1053,7 @@ public final class Parcel {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void writeArraySet(@Nullable ArraySet<? extends Object> val) {
         final int size = (val != null) ? val.size() : -1;
         writeInt(size);
@@ -2010,13 +2010,13 @@ public final class Parcel {
      * A map used by {@link #readSquashed} to cache parcelables. It's a map from
      * an absolute position in a Parcel to the parcelable stored at the position.
      */
-    private ArrayMap<Integer, Parcelable> mReadSquashableParcelables;
+    private SparseArray<Parcelable> mReadSquashableParcelables;
 
     private void ensureReadSquashableParcelables() {
         if (mReadSquashableParcelables != null) {
             return;
         }
-        mReadSquashableParcelables = new ArrayMap<>();
+        mReadSquashableParcelables = new SparseArray<>();
     }
 
     /**
@@ -2112,9 +2112,13 @@ public final class Parcel {
 
         final Parcelable p = mReadSquashableParcelables.get(firstAbsolutePos);
         if (p == null) {
+            final StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < mReadSquashableParcelables.size(); i++) {
+                sb.append(mReadSquashableParcelables.keyAt(i)).append(' ');
+            }
             Slog.wtfStack(TAG, "Map doesn't contain offset "
                     + firstAbsolutePos
-                    + " : contains=" + new ArrayList<>(mReadSquashableParcelables.keySet()));
+                    + " : contains=" + sb.toString());
         }
         return (T) p;
     }
@@ -2715,7 +2719,7 @@ public final class Parcel {
      * {@hide}
      * {@SystemApi}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @Nullable
     public final byte[] readBlob() {
         return nativeReadBlob(mNativePtr);
@@ -3629,7 +3633,7 @@ public final class Parcel {
     /**
      * @hide For testing only.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void readArrayMap(@NonNull ArrayMap outVal, @Nullable ClassLoader loader) {
         final int N = readInt();
         if (N < 0) {

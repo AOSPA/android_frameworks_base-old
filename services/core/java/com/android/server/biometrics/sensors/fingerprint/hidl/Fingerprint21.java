@@ -29,6 +29,7 @@ import android.content.pm.UserInfo;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricsProtoEnums;
+import android.hardware.biometrics.ITestSession;
 import android.hardware.biometrics.fingerprint.V2_1.IBiometricsFingerprint;
 import android.hardware.biometrics.fingerprint.V2_2.IBiometricsFingerprintClientCallback;
 import android.hardware.fingerprint.Fingerprint;
@@ -45,14 +46,16 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
-import android.view.Surface;
 
 import com.android.internal.R;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.biometrics.Utils;
 import com.android.server.biometrics.fingerprint.FingerprintServiceDumpProto;
+import com.android.server.biometrics.fingerprint.FingerprintServiceStateProto;
 import com.android.server.biometrics.fingerprint.FingerprintUserStatsProto;
 import com.android.server.biometrics.fingerprint.PerformanceStatsProto;
+import com.android.server.biometrics.fingerprint.SensorStateProto;
+import com.android.server.biometrics.fingerprint.UserStateProto;
 import com.android.server.biometrics.sensors.AcquisitionClient;
 import com.android.server.biometrics.sensors.AuthenticationClient;
 import com.android.server.biometrics.sensors.AuthenticationConsumer;
@@ -90,6 +93,8 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
 
     private static final String TAG = "Fingerprint21";
     private static final int ENROLL_TIMEOUT_SEC = 60;
+
+    private boolean mTestHalEnabled;
 
     final Context mContext;
     private final IActivityTaskManager mActivityTaskManager;
@@ -391,6 +396,10 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     }
 
     private synchronized IBiometricsFingerprint getDaemon() {
+        if (mTestHalEnabled) {
+            return new TestHal();
+        }
+
         if (mDaemon != null) {
             return mDaemon;
         }
@@ -505,7 +514,7 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     }
 
     @Override
-    public void scheduleGenerateChallenge(int sensorId, @NonNull IBinder token,
+    public void scheduleGenerateChallenge(int sensorId, int userId, @NonNull IBinder token,
             @NonNull IFingerprintServiceReceiver receiver, @NonNull String opPackageName) {
         mHandler.post(() -> {
             final FingerprintGenerateChallengeClient client =
@@ -517,7 +526,7 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     }
 
     @Override
-    public void scheduleRevokeChallenge(int sensorId, @NonNull IBinder token,
+    public void scheduleRevokeChallenge(int sensorId, int userId, @NonNull IBinder token,
             @NonNull String opPackageName, long challenge) {
         mHandler.post(() -> {
             final FingerprintRevokeChallengeClient client = new FingerprintRevokeChallengeClient(
@@ -529,8 +538,7 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     @Override
     public void scheduleEnroll(int sensorId, @NonNull IBinder token,
             @NonNull byte[] hardwareAuthToken, int userId,
-            @NonNull IFingerprintServiceReceiver receiver, @NonNull String opPackageName,
-            @Nullable Surface surface) {
+            @NonNull IFingerprintServiceReceiver receiver, @NonNull String opPackageName) {
         mHandler.post(() -> {
             scheduleUpdateActiveUserWithoutHandler(userId);
 
@@ -561,7 +569,7 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     @Override
     public void scheduleFingerDetect(int sensorId, @NonNull IBinder token, int userId,
             @NonNull ClientMonitorCallbackConverter listener, @NonNull String opPackageName,
-            @Nullable Surface surface, int statsClient) {
+            int statsClient) {
         mHandler.post(() -> {
             scheduleUpdateActiveUserWithoutHandler(userId);
 
@@ -632,14 +640,13 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     }
 
     @Override
-    public void scheduleInternalCleanup(int userId, int sensorId) {
+    public void scheduleInternalCleanup(int sensorId, int userId) {
         scheduleInternalCleanup(userId);
     }
 
     @Override
     public boolean isHardwareDetected(int sensorId) {
-        final IBiometricsFingerprint daemon = getDaemon();
-        return daemon != null;
+        return getDaemon() != null;
     }
 
     @Override
@@ -693,7 +700,27 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     }
 
     @Override
-    public void dumpProto(int sensorId, FileDescriptor fd) {
+    public void dumpProtoState(int sensorId, @NonNull ProtoOutputStream proto) {
+        final long sensorToken = proto.start(FingerprintServiceStateProto.SENSOR_STATES);
+
+        proto.write(SensorStateProto.SENSOR_ID, mSensorProperties.sensorId);
+        proto.write(SensorStateProto.IS_BUSY, mScheduler.getCurrentClient() != null);
+
+        for (UserInfo user : UserManager.get(mContext).getUsers()) {
+            final int userId = user.getUserHandle().getIdentifier();
+
+            final long userToken = proto.start(SensorStateProto.USER_STATES);
+            proto.write(UserStateProto.USER_ID, userId);
+            proto.write(UserStateProto.NUM_ENROLLED, FingerprintUtils.getInstance()
+                    .getBiometricsForUser(mContext, userId).size());
+            proto.end(userToken);
+        }
+
+        proto.end(sensorToken);
+    }
+
+    @Override
+    public void dumpProtoMetrics(int sensorId, FileDescriptor fd) {
         PerformanceTracker tracker =
                 PerformanceTracker.getInstanceForSensorId(mSensorProperties.sensorId);
 
@@ -770,5 +797,16 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
         pw.println(dump);
         pw.println("HAL deaths since last reboot: " + performanceTracker.getHALDeathCount());
         mScheduler.dump(pw);
+    }
+
+    void setTestHalEnabled(boolean enabled) {
+        mTestHalEnabled = enabled;
+    }
+
+    @NonNull
+    @Override
+    public ITestSession createTestSession(int sensorId, @NonNull String opPackageName) {
+        return new BiometricTestSessionImpl(mContext, mSensorProperties.sensorId, this,
+                mHalResultController);
     }
 }

@@ -37,7 +37,6 @@ import android.testing.TestableLooper;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -48,6 +47,7 @@ import com.android.systemui.statusbar.notification.row.NotifBindPipeline.BindCal
 import com.android.systemui.statusbar.notification.row.RowContentBindParams;
 import com.android.systemui.statusbar.notification.row.RowContentBindStage;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
+import com.android.wm.shell.bubbles.Bubbles;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -92,7 +92,7 @@ public class NotificationGroupAlertTransferHelperTest extends SysuiTestCase {
         mGroupManager = new NotificationGroupManagerLegacy(
                 mock(StatusBarStateController.class),
                 () -> mock(PeopleNotificationIdentifier.class),
-                Optional.of(() -> mock(Bubbles.class)));
+                Optional.of(mock(Bubbles.class)));
         mDependency.injectTestDependency(NotificationGroupManagerLegacy.class, mGroupManager);
         mGroupManager.setHeadsUpManager(mHeadsUpManager);
 

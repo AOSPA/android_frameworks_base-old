@@ -246,14 +246,17 @@ package android.net.wifi {
     field @NonNull public static final android.os.Parcelable.Creator<android.net.wifi.SoftApCapability> CREATOR;
     field public static final long SOFTAP_FEATURE_ACS_OFFLOAD = 1L; // 0x1L
     field public static final long SOFTAP_FEATURE_CLIENT_FORCE_DISCONNECT = 2L; // 0x2L
+    field public static final long SOFTAP_FEATURE_MAC_ADDRESS_CUSTOMIZATION = 8L; // 0x8L
     field public static final long SOFTAP_FEATURE_WPA3_SAE = 4L; // 0x4L
   }
 
   public final class SoftApConfiguration implements android.os.Parcelable {
     method @NonNull public java.util.List<android.net.MacAddress> getAllowedClientList();
     method public int getBand();
+    method @NonNull public int[] getBands();
     method @NonNull public java.util.List<android.net.MacAddress> getBlockedClientList();
     method public int getChannel();
+    method @NonNull public android.util.SparseIntArray getChannels();
     method public int getMacRandomizationSetting();
     method public int getMaxNumberOfClients();
     method public long getShutdownTimeoutMillis();
@@ -263,7 +266,7 @@ package android.net.wifi {
     field public static final int BAND_2GHZ = 1; // 0x1
     field public static final int BAND_5GHZ = 2; // 0x2
     field public static final int BAND_6GHZ = 4; // 0x4
-    field public static final int BAND_ANY = 7; // 0x7
+    field @Deprecated public static final int BAND_ANY = 7; // 0x7
     field public static final int RANDOMIZATION_NONE = 0; // 0x0
     field public static final int RANDOMIZATION_PERSISTENT = 1; // 0x1
   }
@@ -275,9 +278,11 @@ package android.net.wifi {
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setAllowedClientList(@NonNull java.util.List<android.net.MacAddress>);
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setAutoShutdownEnabled(boolean);
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setBand(int);
+    method @NonNull public android.net.wifi.SoftApConfiguration.Builder setBands(@NonNull int[]);
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setBlockedClientList(@NonNull java.util.List<android.net.MacAddress>);
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setBssid(@Nullable android.net.MacAddress);
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setChannel(int, int);
+    method @NonNull public android.net.wifi.SoftApConfiguration.Builder setChannels(@NonNull android.util.SparseIntArray);
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setClientControlByUserEnabled(boolean);
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setHiddenSsid(boolean);
     method @NonNull public android.net.wifi.SoftApConfiguration.Builder setMacRandomizationSetting(int);
@@ -332,8 +337,11 @@ package android.net.wifi {
     field @Deprecated public static final int RANDOMIZATION_NONE = 0; // 0x0
     field @Deprecated public static final int RANDOMIZATION_PERSISTENT = 1; // 0x1
     field @Deprecated public static final int RECENT_FAILURE_AP_UNABLE_TO_HANDLE_NEW_STA = 17; // 0x11
+    field @Deprecated public static final int RECENT_FAILURE_DISCONNECTION_AP_BUSY = 1004; // 0x3ec
     field @Deprecated public static final int RECENT_FAILURE_MBO_OCE_DISCONNECT = 1001; // 0x3e9
     field @Deprecated public static final int RECENT_FAILURE_NONE = 0; // 0x0
+    field @Deprecated public static final int RECENT_FAILURE_POOR_CHANNEL_CONDITIONS = 1003; // 0x3eb
+    field @Deprecated public static final int RECENT_FAILURE_REFUSED_TEMPORARILY = 1002; // 0x3ea
     field @Deprecated public boolean allowAutojoin;
     field @Deprecated public int carrierId;
     field @Deprecated public String creatorName;
@@ -420,8 +428,11 @@ package android.net.wifi {
     method public double getSuccessfulRxPacketsPerSecond();
     method public double getSuccessfulTxPacketsPerSecond();
     method public boolean isEphemeral();
+    method public boolean isOemPaid();
+    method public boolean isOemPrivate();
     method public boolean isOsuAp();
     method public boolean isPasspointAp();
+    method public boolean isTrusted();
     method @Nullable public static String sanitizeSsid(@Nullable String);
     field public static final String DEFAULT_MAC_ADDRESS = "02:00:00:00:00:00";
     field public static final int INVALID_RSSI = -127; // 0xffffff81
@@ -610,11 +621,13 @@ package android.net.wifi {
   public final class WifiNetworkSuggestion implements android.os.Parcelable {
     method @NonNull public android.net.wifi.WifiConfiguration getWifiConfiguration();
     method public boolean isOemPaid();
+    method public boolean isOemPrivate();
   }
 
   public static final class WifiNetworkSuggestion.Builder {
     method @NonNull @RequiresPermission(android.Manifest.permission.NETWORK_CARRIER_PROVISIONING) public android.net.wifi.WifiNetworkSuggestion.Builder setCarrierId(int);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setOemPaid(boolean);
+    method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setOemPrivate(boolean);
   }
 
   public class WifiScanner {
@@ -798,6 +811,10 @@ package android.net.wifi.aware {
 
   public class DiscoverySession implements java.lang.AutoCloseable {
     method @Deprecated public android.net.NetworkSpecifier createNetworkSpecifierPmk(@NonNull android.net.wifi.aware.PeerHandle, @NonNull byte[]);
+  }
+
+  public class WifiAwareManager {
+    method public void enableInstantCommunicationMode(boolean);
   }
 
   public class WifiAwareSession implements java.lang.AutoCloseable {

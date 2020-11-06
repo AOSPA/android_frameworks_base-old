@@ -173,13 +173,6 @@ public abstract class ActivityTaskManagerInternal {
     public abstract boolean hasResumedActivity(int uid);
 
     /**
-     * Notify listeners that contents are drawn for the first time on a single task display.
-     *
-     * @param displayId An ID of the display on which contents are drawn.
-     */
-    public abstract void notifySingleTaskDisplayDrawn(int displayId);
-
-    /**
      * Start activity {@code intents} as if {@code packageName/featureId} on user {@code userId} did
      * it.
      *
@@ -540,9 +533,6 @@ public abstract class ActivityTaskManagerInternal {
     /** Flush recent tasks to disk. */
     public abstract void flushRecentTasks();
 
-    public abstract WindowProcessController getHomeProcess();
-    public abstract WindowProcessController getPreviousProcess();
-
     public abstract void clearLockedTasks(String reason);
     public abstract void updateUserConfiguration();
     public abstract boolean canShowErrorDialogs();
@@ -572,4 +562,10 @@ public abstract class ActivityTaskManagerInternal {
 
     /** Set all associated companion app that belongs to an userId. */
     public abstract void setCompanionAppPackages(int userId, Set<String> companionAppPackages);
+
+    /**
+     * @param packageName The package to check
+     * @return Whether the package is the base of any locked task
+     */
+    public abstract boolean isBaseOfLockedTask(String packageName);
 }

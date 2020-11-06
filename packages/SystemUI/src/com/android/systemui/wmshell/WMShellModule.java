@@ -20,25 +20,26 @@ import android.content.Context;
 import android.os.Handler;
 import android.view.IWindowManager;
 
-import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.WMSingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.common.FloatingContentCoordinator;
+import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.SystemWindows;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.PipBoundsHandler;
 import com.android.wm.shell.pip.PipBoundsState;
+import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
 import com.android.wm.shell.pip.PipTaskOrganizer;
 import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.phone.PipAppOpsListener;
 import com.android.wm.shell.pip.phone.PipController;
-import com.android.wm.shell.pip.phone.PipMediaController;
 import com.android.wm.shell.pip.phone.PipMenuActivityController;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.splitscreen.SplitScreen;
@@ -54,10 +55,9 @@ import dagger.Provides;
  * Provides dependencies from {@link com.android.wm.shell} which could be customized among different
  * branches of SystemUI.
  */
-// TODO(b/162923491): Move most of these dependencies into WMSingleton scope.
 @Module(includes = WMShellBaseModule.class)
 public class WMShellModule {
-    @SysUISingleton
+    @WMSingleton
     @Provides
     static DisplayImeController provideDisplayImeController(IWindowManager wmService,
             DisplayController displayController, @Main Executor mainExecutor,
@@ -66,25 +66,7 @@ public class WMShellModule {
                 transactionPool);
     }
 
-    @SysUISingleton
-    @Provides
-    static Pip providePipController(Context context,
-            DisplayController displayController,
-            PipAppOpsListener pipAppOpsListener,
-            PipBoundsHandler pipBoundsHandler,
-            PipBoundsState pipBoundsState,
-            PipMediaController pipMediaController,
-            PipMenuActivityController pipMenuActivityController,
-            PipTaskOrganizer pipTaskOrganizer,
-            PipTouchHandler pipTouchHandler,
-            WindowManagerShellWrapper windowManagerShellWrapper) {
-        return new PipController(context, displayController,
-                pipAppOpsListener, pipBoundsHandler, pipBoundsState, pipMediaController,
-                pipMenuActivityController, pipTaskOrganizer, pipTouchHandler,
-                windowManagerShellWrapper);
-    }
-
-    @SysUISingleton
+    @WMSingleton
     @Provides
     static SplitScreen provideSplitScreen(Context context,
             DisplayController displayController, SystemWindows systemWindows,
@@ -95,28 +77,43 @@ public class WMShellModule {
                 displayImeController, handler, transactionPool, shellTaskOrganizer, syncQueue);
     }
 
-    @SysUISingleton
+    @WMSingleton
+    @Provides
+    static Optional<Pip> providePip(Context context, DisplayController displayController,
+            PipAppOpsListener pipAppOpsListener, PipBoundsHandler pipBoundsHandler,
+            PipBoundsState pipBoundsState, PipMediaController pipMediaController,
+            PipMenuActivityController pipMenuActivityController, PipTaskOrganizer pipTaskOrganizer,
+            PipTouchHandler pipTouchHandler, WindowManagerShellWrapper windowManagerShellWrapper,
+            ShellExecutor mainExecutor) {
+        return Optional.ofNullable(PipController.create(context, displayController,
+                pipAppOpsListener, pipBoundsHandler, pipBoundsState, pipMediaController,
+                pipMenuActivityController, pipTaskOrganizer, pipTouchHandler,
+                windowManagerShellWrapper, mainExecutor));
+    }
+
+    @WMSingleton
     @Provides
     static PipBoundsState providePipBoundsState() {
         return new PipBoundsState();
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
-    static PipBoundsHandler providesPipBoundsHandler(Context context) {
-        return new PipBoundsHandler(context);
+    static PipBoundsHandler providesPipBoundsHandler(Context context,
+            PipBoundsState pipBoundsState) {
+        return new PipBoundsHandler(context, pipBoundsState);
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
     static PipMenuActivityController providesPipMenuActivityController(Context context,
-            PipMediaController pipMediaController, PipTaskOrganizer pipTaskOrganizer) {
-        return new PipMenuActivityController(context, pipMediaController, pipTaskOrganizer);
+            PipMediaController pipMediaController, SystemWindows systemWindows) {
+        return new PipMenuActivityController(context, pipMediaController, systemWindows);
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
-    static PipTouchHandler providesPipTouchHandler(Context context,
+    static PipTouchHandler providePipTouchHandler(Context context,
             PipMenuActivityController menuActivityController, PipBoundsHandler pipBoundsHandler,
             PipBoundsState pipBoundsState,
             PipTaskOrganizer pipTaskOrganizer,
@@ -126,16 +123,17 @@ public class WMShellModule {
                 pipBoundsState, pipTaskOrganizer, floatingContentCoordinator, pipUiEventLogger);
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
-    static PipTaskOrganizer providesPipTaskOrganizer(Context context,
+    static PipTaskOrganizer providePipTaskOrganizer(Context context,
             PipBoundsState pipBoundsState,
             PipBoundsHandler pipBoundsHandler,
+            PipMenuActivityController menuActivityController,
             PipSurfaceTransactionHelper pipSurfaceTransactionHelper,
             Optional<SplitScreen> splitScreenOptional, DisplayController displayController,
             PipUiEventLogger pipUiEventLogger, ShellTaskOrganizer shellTaskOrganizer) {
         return new PipTaskOrganizer(context, pipBoundsState, pipBoundsHandler,
-                pipSurfaceTransactionHelper, splitScreenOptional, displayController,
-                pipUiEventLogger, shellTaskOrganizer);
+                menuActivityController, pipSurfaceTransactionHelper, splitScreenOptional,
+                displayController, pipUiEventLogger, shellTaskOrganizer);
     }
 }

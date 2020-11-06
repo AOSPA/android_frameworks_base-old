@@ -1129,6 +1129,8 @@
     <string name="capital_off" msgid="7443704171014626777">"DESACTIVADO"</string>
     <string name="checked" msgid="9179896827054513119">"seleccionado"</string>
     <string name="not_checked" msgid="7972320087569023342">"no seleccionado"</string>
+    <string name="selected" msgid="6614607926197755875">"seleccionado"</string>
+    <string name="not_selected" msgid="410652016565864475">"no seleccionado"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Completar acción utilizando"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Completar acción con %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Completar acción"</string>
@@ -1774,7 +1776,7 @@
       <item quantity="other">Vuelve a intentarlo en <xliff:g id="COUNT">%d</xliff:g> segundos</item>
       <item quantity="one">Vuelve a intentarlo en 1 segundo</item>
     </plurals>
-    <string name="restr_pin_try_later" msgid="5897719962541636727">"Volver a intentar más tarde"</string>
+    <string name="restr_pin_try_later" msgid="5897719962541636727">"Reintentar más tarde"</string>
     <string name="immersive_cling_title" msgid="2307034298721541791">"Modo de pantalla completa"</string>
     <string name="immersive_cling_description" msgid="7092737175345204832">"Para salir, desliza el dedo de arriba abajo."</string>
     <string name="immersive_cling_positive" msgid="7047498036346489883">"Entendido"</string>

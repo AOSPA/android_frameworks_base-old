@@ -85,7 +85,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(int)
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final int EFFECT_THUD = Effect.THUD;
 
@@ -94,7 +94,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(int)
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final int EFFECT_POP = Effect.POP;
 
@@ -135,7 +135,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(Uri, Context)
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final int[] RINGTONES = {
         Effect.RINGTONE_1,
@@ -539,7 +539,7 @@ public abstract class VibrationEffect implements Parcelable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (!(o instanceof VibrationEffect.OneShot)) {
                 return false;
             }
@@ -567,7 +567,7 @@ public abstract class VibrationEffect implements Parcelable {
             out.writeInt(mAmplitude);
         }
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static final @android.annotation.NonNull Parcelable.Creator<OneShot> CREATOR =
             new Parcelable.Creator<OneShot>() {
                 @Override
@@ -705,7 +705,7 @@ public abstract class VibrationEffect implements Parcelable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (!(o instanceof VibrationEffect.Waveform)) {
                 return false;
             }
@@ -872,7 +872,7 @@ public abstract class VibrationEffect implements Parcelable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (!(o instanceof VibrationEffect.Prebaked)) {
                 return false;
             }
@@ -983,6 +983,8 @@ public abstract class VibrationEffect implements Parcelable {
                 Composition.checkPrimitive(effect.id);
                 Preconditions.checkArgumentInRange(
                         effect.scale, 0.0f, 1.0f, "scale");
+                Preconditions.checkArgumentNonNegative(effect.delay,
+                        "Primitive delay must be zero or positive");
             }
         }
 
@@ -998,7 +1000,7 @@ public abstract class VibrationEffect implements Parcelable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             Composed composed = (Composed) o;
@@ -1244,7 +1246,7 @@ public abstract class VibrationEffect implements Parcelable {
             }
 
             @Override
-            public boolean equals(Object o) {
+            public boolean equals(@Nullable Object o) {
                 if (this == o) return true;
                 if (o == null || getClass() != o.getClass()) return false;
                 PrimitiveEffect that = (PrimitiveEffect) o;

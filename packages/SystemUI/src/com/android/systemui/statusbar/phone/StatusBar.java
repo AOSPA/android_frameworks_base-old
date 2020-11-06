@@ -144,8 +144,6 @@ import com.android.systemui.R;
 import com.android.systemui.SystemUI;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
-import com.android.systemui.bubbles.BubbleController;
-import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.charging.WirelessChargingAnimation;
 import com.android.systemui.classifier.FalsingLog;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
@@ -172,7 +170,7 @@ import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSFragment;
-import com.android.systemui.qs.QSPanel;
+import com.android.systemui.qs.QSPanelController;
 import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.WindowManagerWrapper;
@@ -229,6 +227,8 @@ import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
 import com.android.systemui.statusbar.policy.UserInfoControllerImpl;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.volume.VolumeComponent;
+import com.android.systemui.wmshell.BubblesManager;
+import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.splitscreen.SplitScreen;
 
 import java.io.FileDescriptor;
@@ -408,7 +408,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     protected NotificationPanelViewController mNotificationPanelViewController;
 
     // settings
-    private QSPanel mQSPanel;
+    private QSPanelController mQSPanelController;
 
     KeyguardIndicationController mKeyguardIndicationController;
 
@@ -648,8 +648,9 @@ public class StatusBar extends SystemUI implements DemoMode,
     protected StatusBarNotificationPresenter mPresenter;
     private NotificationActivityStarter mNotificationActivityStarter;
     private Lazy<NotificationShadeDepthController> mNotificationShadeDepthControllerLazy;
+    private final Optional<BubblesManager> mBubblesManagerOptional;
     private final Optional<Bubbles> mBubblesOptional;
-    private final BubbleController.BubbleExpandListener mBubbleExpandListener;
+    private final Bubbles.BubbleExpandListener mBubbleExpandListener;
 
     private ActivityIntentHelper mActivityIntentHelper;
     private NotificationStackScrollLayoutController mStackScrollerController;
@@ -697,6 +698,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             WakefulnessLifecycle wakefulnessLifecycle,
             SysuiStatusBarStateController statusBarStateController,
             VibratorHelper vibratorHelper,
+            Optional<BubblesManager> bubblesManagerOptional,
             Optional<Bubbles> bubblesOptional,
             VisualStabilityManager visualStabilityManager,
             DeviceProvisionedController deviceProvisionedController,
@@ -776,6 +778,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mWakefulnessLifecycle = wakefulnessLifecycle;
         mStatusBarStateController = statusBarStateController;
         mVibratorHelper = vibratorHelper;
+        mBubblesManagerOptional = bubblesManagerOptional;
         mBubblesOptional = bubblesOptional;
         mVisualStabilityManager = visualStabilityManager;
         mDeviceProvisionedController = deviceProvisionedController;
@@ -1035,10 +1038,8 @@ public class StatusBar extends SystemUI implements DemoMode,
                 mStackScrollerController.getNotificationListContainer();
         mNotificationLogger.setUpWithContainer(notifListContainer);
 
-        updateAodIconArea();
         inflateShelf();
         mNotificationIconAreaController.setupShelf(mNotificationShelfController);
-        mNotificationPanelViewController.setOnReinflationListener(this::updateAodIconArea);
         mNotificationPanelViewController.addExpansionListener(mWakeUpCoordinator);
 
         // Allow plugins to reference DarkIconDispatcher and StatusBarStateController
@@ -1143,8 +1144,8 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         ScrimView scrimBehind = mNotificationShadeWindowView.findViewById(R.id.scrim_behind);
         ScrimView scrimInFront = mNotificationShadeWindowView.findViewById(R.id.scrim_in_front);
-        ScrimView scrimForBubble = mBubblesOptional.isPresent()
-                ? mBubblesOptional.get().getScrimForBubble() : null;
+        ScrimView scrimForBubble = mBubblesManagerOptional.isPresent()
+                ? mBubblesManagerOptional.get().getScrimForBubble() : null;
 
         mScrimController.setScrimVisibleListener(scrimsVisible -> {
             mNotificationShadeWindowController.setScrimsVisibility(scrimsVisible);
@@ -1200,8 +1201,8 @@ public class StatusBar extends SystemUI implements DemoMode,
             fragmentHostManager.addTagListener(QS.TAG, (tag, f) -> {
                 QS qs = (QS) f;
                 if (qs instanceof QSFragment) {
-                    mQSPanel = ((QSFragment) qs).getQsPanel();
-                    mQSPanel.setBrightnessMirror(mBrightnessMirrorController);
+                    mQSPanelController = ((QSFragment) qs).getQSPanelController();
+                    mQSPanelController.setBrightnessMirror(mBrightnessMirrorController);
                 }
             });
         }
@@ -1268,12 +1269,6 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         // Private API call to make the shadows look better for Recents
         ThreadedRenderer.overrideProperty("ambientRatio", String.valueOf(1.5f));
-    }
-
-    private void updateAodIconArea() {
-        mNotificationIconAreaController.setupAodIcons(
-                getNotificationShadeWindowView()
-                        .findViewById(R.id.clock_notification_icon_container));
     }
 
     @NonNull
@@ -1593,19 +1588,19 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     public void addQsTile(ComponentName tile) {
-        if (mQSPanel != null && mQSPanel.getHost() != null) {
-            mQSPanel.getHost().addTile(tile);
+        if (mQSPanelController != null && mQSPanelController.getHost() != null) {
+            mQSPanelController.getHost().addTile(tile);
         }
     }
 
     public void remQsTile(ComponentName tile) {
-        if (mQSPanel != null && mQSPanel.getHost() != null) {
-            mQSPanel.getHost().removeTile(tile);
+        if (mQSPanelController != null && mQSPanelController.getHost() != null) {
+            mQSPanelController.getHost().removeTile(tile);
         }
     }
 
     public void clickTile(ComponentName tile) {
-        mQSPanel.clickTile(tile);
+        mQSPanelController.clickTile(tile);
     }
 
     /**
@@ -2197,7 +2192,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (!mUserSetup) return;
 
         if (subPanel != null) {
-            mQSPanel.openDetails(subPanel);
+            mQSPanelController.openDetails(subPanel);
         }
         mNotificationPanelViewController.expandWithQs();
 
@@ -2845,7 +2840,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 resetUserExpandedStates();
             }
             else if (DevicePolicyManager.ACTION_SHOW_DEVICE_MONITORING_DIALOG.equals(action)) {
-                mQSPanel.showDeviceMonitoringDialog();
+                mQSPanelController.showDeviceMonitoringDialog();
             }
             Trace.endSection();
         }
@@ -2936,8 +2931,8 @@ public class StatusBar extends SystemUI implements DemoMode,
      */
     void updateResources() {
         // Update the quick setting tiles
-        if (mQSPanel != null) {
-            mQSPanel.updateResources();
+        if (mQSPanelController != null) {
+            mQSPanelController.updateResources();
         }
 
         if (mStatusBarWindowController != null) {
@@ -3402,8 +3397,8 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         // Keyguard state has changed, but QS is not listening anymore. Make sure to update the tile
         // visibilities so next time we open the panel we know the correct height already.
-        if (mQSPanel != null) {
-            mQSPanel.refreshAllTiles();
+        if (mQSPanelController != null) {
+            mQSPanelController.refreshAllTiles();
         }
         mHandler.removeMessages(MSG_LAUNCH_TRANSITION_TIMEOUT);
         releaseGestureWakeLock();
@@ -3988,7 +3983,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         PackageManager pm = mContext.getPackageManager();
         ResolveInfo resolveInfo = pm.resolveActivity(emergencyIntent, /*flags=*/0);
         if (resolveInfo == null) {
-            Log.wtf(TAG, "Couldn't find an app to process the emergency intent.");
+            // TODO(b/171084088) Upgrade log to wtf when we have default app in main branch.
+            Log.d(TAG, "Couldn't find an app to process the emergency intent.");
             return;
         }
 

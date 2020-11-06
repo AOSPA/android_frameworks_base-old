@@ -3046,6 +3046,9 @@
   <public-group type="attr" first-id="0x01010617">
     <public name="rollbackDataPolicy" />
     <public name="allowClickWhenDisabled" />
+    <public name="windowLayoutAffinity" />
+    <!-- @hide -->
+    <public name="windowBackgroundBlurRadius"/>
   </public-group>
 
   <public-group type="drawable" first-id="0x010800b5">
@@ -3073,6 +3076,8 @@
     <public name="config_systemAutomotiveCluster" />
     <!-- @hide @SystemApi @TestApi -->
     <public name="config_systemVideoCall" />
+    <!-- @hide @SystemApi @TestApi -->
+    <public name="config_systemAutomotiveProjection" />
   </public-group>
 
   <public-group type="id" first-id="0x01020055">

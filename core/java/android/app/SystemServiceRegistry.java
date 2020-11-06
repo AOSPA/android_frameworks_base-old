@@ -136,6 +136,8 @@ import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
 import android.net.nsd.INsdManager;
 import android.net.nsd.NsdManager;
+import android.net.vcn.IVcnManagementService;
+import android.net.vcn.VcnManager;
 import android.net.wifi.WifiFrameworkInitializer;
 import android.net.wifi.nl80211.WifiNl80211Manager;
 import android.nfc.NfcManager;
@@ -385,6 +387,14 @@ public final class SystemServiceRegistry {
                         ctx, () -> ServiceManager.getService(Context.TETHERING_SERVICE));
             }});
 
+        registerService(Context.VCN_MANAGEMENT_SERVICE, VcnManager.class,
+                new CachedServiceFetcher<VcnManager>() {
+            @Override
+            public VcnManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                IBinder b = ServiceManager.getService(Context.VCN_MANAGEMENT_SERVICE);
+                IVcnManagementService service = IVcnManagementService.Stub.asInterface(b);
+                return new VcnManager(ctx, service);
+            }});
 
         registerService(Context.IPSEC_SERVICE, IpSecManager.class,
                 new CachedServiceFetcher<IpSecManager>() {
@@ -1377,8 +1387,8 @@ public final class SystemServiceRegistry {
 
     /** Throws {@link IllegalStateException} if not during a static initialization. */
     private static void ensureInitializing(String methodName) {
-        Preconditions.checkState(sInitializing, "Internal error: " + methodName
-                + " can only be called during class initialization.");
+        Preconditions.checkState(sInitializing, "Internal error: %s"
+                + " can only be called during class initialization.", methodName);
     }
     /**
      * Creates an array which is used to cache per-Context service instances.

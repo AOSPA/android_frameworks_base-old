@@ -18,6 +18,7 @@ package android.net.wifi;
 
 import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_EAP;
 import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_EAP_SUITE_B;
+import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_EAP_WPA3_ENTERPRISE;
 import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_OPEN;
 import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_OWE;
 import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_PSK;
@@ -69,6 +70,7 @@ public class WifiConfigurationTest {
         config.setPasspointManagementObjectTree(cookie);
         config.trusted = false;
         config.oemPaid = true;
+        config.oemPrivate = true;
         config.updateIdentifier = "1234";
         config.fromWifiNetworkSpecifier = true;
         config.fromWifiNetworkSuggestion = true;
@@ -91,8 +93,10 @@ public class WifiConfigurationTest {
         assertEquals(macBeforeParcel, reconfig.getRandomizedMacAddress());
         assertEquals(config.updateIdentifier, reconfig.updateIdentifier);
         assertFalse(reconfig.trusted);
-        assertTrue(config.fromWifiNetworkSpecifier);
-        assertTrue(config.fromWifiNetworkSuggestion);
+        assertTrue(reconfig.fromWifiNetworkSpecifier);
+        assertTrue(reconfig.fromWifiNetworkSuggestion);
+        assertTrue(reconfig.oemPaid);
+        assertTrue(reconfig.oemPrivate);
 
         Parcel parcelWW = Parcel.obtain();
         reconfig.writeToParcel(parcelWW, 0);
@@ -100,6 +104,32 @@ public class WifiConfigurationTest {
         parcelWW.recycle();
 
         assertArrayEquals(bytes, rebytes);
+    }
+
+    @Test
+    public void testWifiConfigurationCopyConstructor() {
+        WifiConfiguration config = new WifiConfiguration();
+        config.trusted = false;
+        config.oemPaid = true;
+        config.oemPrivate = true;
+        config.updateIdentifier = "1234";
+        config.fromWifiNetworkSpecifier = true;
+        config.fromWifiNetworkSuggestion = true;
+        config.setRandomizedMacAddress(MacAddressUtils.createRandomUnicastAddress());
+        MacAddress macBeforeParcel = config.getRandomizedMacAddress();
+        config.subscriptionId = 1;
+        config.carrierId = 1189;
+
+        WifiConfiguration reconfig = new WifiConfiguration(config);
+
+        // lacking a useful config.equals, check two fields near the end.
+        assertEquals(macBeforeParcel, reconfig.getRandomizedMacAddress());
+        assertEquals(config.updateIdentifier, reconfig.updateIdentifier);
+        assertFalse(reconfig.trusted);
+        assertTrue(reconfig.fromWifiNetworkSpecifier);
+        assertTrue(reconfig.fromWifiNetworkSuggestion);
+        assertTrue(reconfig.oemPaid);
+        assertTrue(reconfig.oemPrivate);
     }
 
     @Test
@@ -552,6 +582,26 @@ public class WifiConfigurationTest {
     }
 
     /**
+     * Ensure that {@link WifiConfiguration#setSecurityParams(int)} sets up the
+     * {@link WifiConfiguration} object correctly for WPA3 Enterprise security type.
+     * @throws Exception
+     */
+    @Test
+    public void testSetSecurityParamsForWpa3Enterprise() throws Exception {
+        WifiConfiguration config = new WifiConfiguration();
+
+        config.setSecurityParams(SECURITY_TYPE_EAP_WPA3_ENTERPRISE);
+
+        assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.WPA_EAP));
+        assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.IEEE8021X));
+        assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.CCMP));
+        assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.GCMP_256));
+        assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.GCMP_256));
+        assertTrue(config.requirePmf);
+    }
+
+    /**
      * Test that the NetworkSelectionStatus Builder returns the same values that was set, and that
      * calling build multiple times returns different instances.
      */
@@ -612,6 +662,9 @@ public class WifiConfigurationTest {
         configuration.setSecurityParams(SECURITY_TYPE_EAP);
         assertFalse(configuration.needsPreSharedKey());
 
+        configuration.setSecurityParams(SECURITY_TYPE_EAP_WPA3_ENTERPRISE);
+        assertFalse(configuration.needsPreSharedKey());
+
         configuration.setSecurityParams(SECURITY_TYPE_EAP_SUITE_B);
         assertFalse(configuration.needsPreSharedKey());
     }
@@ -636,6 +689,9 @@ public class WifiConfigurationTest {
         assertEquals(KeyMgmt.OWE, configuration.getAuthType());
 
         configuration.setSecurityParams(SECURITY_TYPE_EAP);
+        assertEquals(KeyMgmt.WPA_EAP, configuration.getAuthType());
+
+        configuration.setSecurityParams(SECURITY_TYPE_EAP_WPA3_ENTERPRISE);
         assertEquals(KeyMgmt.WPA_EAP, configuration.getAuthType());
 
         configuration.setSecurityParams(SECURITY_TYPE_EAP_SUITE_B);

@@ -191,8 +191,8 @@ public class KeyguardPatternViewController
     }
 
     @Override
-    public void init() {
-        super.init();
+    public void onInit() {
+        super.onInit();
         mMessageAreaController.init();
     }
 

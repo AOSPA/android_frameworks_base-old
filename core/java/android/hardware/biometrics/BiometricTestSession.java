@@ -22,6 +22,7 @@ import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
 import android.content.Context;
+import android.hardware.fingerprint.FingerprintManager;
 import android.os.RemoteException;
 import android.util.ArraySet;
 
@@ -45,7 +46,7 @@ public class BiometricTestSession implements AutoCloseable {
         mContext = context;
         mTestSession = testSession;
         mTestedUsers = new ArraySet<>();
-        enableTestHal(true);
+        setTestHalEnabled(true);
     }
 
     /**
@@ -55,13 +56,12 @@ public class BiometricTestSession implements AutoCloseable {
      * secure pathways such as HAT/Keystore are not testable, since they depend on the TEE or its
      * equivalent for the secret key.
      *
-     * @param enableTestHal If true, enable testing with a fake HAL instead of the real HAL.
-     * @hide
+     * @param enabled If true, enable testing with a fake HAL instead of the real HAL.
      */
     @RequiresPermission(TEST_BIOMETRIC)
-    private void enableTestHal(boolean enableTestHal) {
+    private void setTestHalEnabled(boolean enabled) {
         try {
-            mTestSession.enableTestHal(enableTestHal);
+            mTestSession.setTestHalEnabled(enabled);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -129,11 +129,14 @@ public class BiometricTestSession implements AutoCloseable {
      * Simulates an acquired message from the HAL.
      *
      * @param userId User that this command applies to.
+     * @param acquireInfo See
+     * {@link BiometricPrompt.AuthenticationCallback#onAuthenticationAcquired(int)} and
+     * {@link FingerprintManager.AuthenticationCallback#onAuthenticationAcquired(int)}
      */
     @RequiresPermission(TEST_BIOMETRIC)
-    public void notifyAcquired(int userId) {
+    public void notifyAcquired(int userId, int acquireInfo) {
         try {
-            mTestSession.notifyAcquired(userId);
+            mTestSession.notifyAcquired(userId, acquireInfo);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -143,11 +146,14 @@ public class BiometricTestSession implements AutoCloseable {
      * Simulates an error message from the HAL.
      *
      * @param userId User that this command applies to.
+     * @param errorCode See
+     * {@link BiometricPrompt.AuthenticationCallback#onAuthenticationError(int, CharSequence)} and
+     * {@link FingerprintManager.AuthenticationCallback#onAuthenticationError(int, CharSequence)}
      */
     @RequiresPermission(TEST_BIOMETRIC)
-    public void notifyError(int userId) {
+    public void notifyError(int userId, int errorCode) {
         try {
-            mTestSession.notifyError(userId);
+            mTestSession.notifyError(userId, errorCode);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -172,10 +178,12 @@ public class BiometricTestSession implements AutoCloseable {
     @Override
     @RequiresPermission(TEST_BIOMETRIC)
     public void close() {
+        // Disable the test HAL first, so that enumerate is run on the real HAL, which should have
+        // no enrollments. Test-only framework enrollments will be deleted.
+        setTestHalEnabled(false);
+
         for (int user : mTestedUsers) {
             cleanupInternalState(user);
         }
-
-        enableTestHal(false);
     }
 }

@@ -20,6 +20,7 @@ import static android.graphics.Matrix.MSCALE_X;
 import static android.graphics.Matrix.MSCALE_Y;
 import static android.graphics.Matrix.MSKEW_X;
 import static android.graphics.Matrix.MSKEW_Y;
+import static android.view.View.SYSTEM_UI_FLAG_VISIBLE;
 
 import android.annotation.FloatRange;
 import android.annotation.Nullable;
@@ -33,6 +34,7 @@ import android.app.WallpaperManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -125,7 +127,7 @@ public abstract class WallpaperService extends Service {
     private static final int MSG_VISIBILITY_CHANGED = 10010;
     private static final int MSG_WALLPAPER_OFFSETS = 10020;
     private static final int MSG_WALLPAPER_COMMAND = 10025;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private static final int MSG_WINDOW_RESIZED = 10030;
     private static final int MSG_WINDOW_MOVED = 10035;
     private static final int MSG_TOUCH_EVENT = 10040;
@@ -226,9 +228,6 @@ public abstract class WallpaperService extends Service {
         private int mDisplayState;
 
         SurfaceControl mSurfaceControl = new SurfaceControl();
-
-        // Unused relayout out-param
-        SurfaceControl mTmpSurfaceControl = new SurfaceControl();
 
         final BaseSurfaceHolder mSurfaceHolder = new BaseSurfaceHolder() {
             {
@@ -880,9 +879,9 @@ public abstract class WallpaperService extends Service {
                         InputChannel inputChannel = new InputChannel();
 
                         if (mSession.addToDisplay(mWindow, mLayout, View.VISIBLE,
-                                mDisplay.getDisplayId(), mWinFrames.frame, mWinFrames.contentInsets,
-                                mWinFrames.stableInsets, mWinFrames.displayCutout, inputChannel,
-                                mInsetsState, mTempControls) < 0) {
+                                mDisplay.getDisplayId(), mInsetsState, mWinFrames.frame,
+                                mWinFrames.displayCutout, inputChannel, mInsetsState,
+                                mTempControls) < 0) {
                             Log.w(TAG, "Failed to add window while updating wallpaper surface.");
                             return;
                         }
@@ -905,7 +904,7 @@ public abstract class WallpaperService extends Service {
                     final int relayoutResult = mSession.relayout(
                             mWindow, mLayout, mWidth, mHeight,
                             View.VISIBLE, 0, -1, mWinFrames, mMergedConfiguration, mSurfaceControl,
-                            mInsetsState, mTempControls, mSurfaceSize, mTmpSurfaceControl);
+                            mInsetsState, mTempControls, mSurfaceSize);
                     if (mSurfaceControl.isValid()) {
                         mSurfaceHolder.mSurface.copyFrom(mSurfaceControl);
                     }
@@ -916,20 +915,22 @@ public abstract class WallpaperService extends Service {
                     int w = mWinFrames.frame.width();
                     int h = mWinFrames.frame.height();
 
+                    final DisplayCutout rawCutout = mWinFrames.displayCutout.get();
+                    final Configuration config = getResources().getConfiguration();
+                    final Rect visibleFrame = new Rect(mWinFrames.frame);
+                    visibleFrame.intersect(mInsetsState.getDisplayFrame());
+                    WindowInsets windowInsets = mInsetsState.calculateInsets(visibleFrame,
+                            null /* ignoringVisibilityState */, config.isScreenRound(),
+                            false /* alwaysConsumeSystemBars */, rawCutout, mLayout.softInputMode,
+                            mLayout.flags, SYSTEM_UI_FLAG_VISIBLE, mLayout.type,
+                            config.windowConfiguration.getWindowingMode(), null /* typeSideMap */);
+
                     if (!fixedSize) {
                         final Rect padding = mIWallpaperEngine.mDisplayPadding;
                         w += padding.left + padding.right;
                         h += padding.top + padding.bottom;
-                        mWinFrames.contentInsets.left += padding.left;
-                        mWinFrames.contentInsets.top += padding.top;
-                        mWinFrames.contentInsets.right += padding.right;
-                        mWinFrames.contentInsets.bottom += padding.bottom;
-                        mWinFrames.stableInsets.left += padding.left;
-                        mWinFrames.stableInsets.top += padding.top;
-                        mWinFrames.stableInsets.right += padding.right;
-                        mWinFrames.stableInsets.bottom += padding.bottom;
-                        mWinFrames.displayCutout.set(mWinFrames.displayCutout.get().inset(
-                                -padding.left, -padding.top, -padding.right, -padding.bottom));
+                        windowInsets = windowInsets.insetUnchecked(
+                                -padding.left, -padding.top, -padding.right, -padding.bottom);
                     } else {
                         w = myWidth;
                         h = myHeight;
@@ -948,9 +949,12 @@ public abstract class WallpaperService extends Service {
                         Log.v(TAG, "Wallpaper size has changed: (" + mCurWidth + ", " + mCurHeight);
                     }
 
-                    final DisplayCutout displayCutout = mWinFrames.displayCutout.get();
-                    insetsChanged |= !mDispatchedContentInsets.equals(mWinFrames.contentInsets);
-                    insetsChanged |= !mDispatchedStableInsets.equals(mWinFrames.stableInsets);
+                    final Rect contentInsets = windowInsets.getSystemWindowInsets().toRect();
+                    final Rect stableInsets = windowInsets.getStableInsets().toRect();
+                    final DisplayCutout displayCutout = windowInsets.getDisplayCutout() != null
+                            ? windowInsets.getDisplayCutout() : rawCutout;
+                    insetsChanged |= !mDispatchedContentInsets.equals(contentInsets);
+                    insetsChanged |= !mDispatchedStableInsets.equals(stableInsets);
                     insetsChanged |= !mDispatchedDisplayCutout.equals(displayCutout);
 
                     mSurfaceHolder.setSurfaceFrameSize(w, h);
@@ -1010,18 +1014,13 @@ public abstract class WallpaperService extends Service {
                         }
 
                         if (insetsChanged) {
-                            mDispatchedContentInsets.set(mWinFrames.contentInsets);
-                            mDispatchedStableInsets.set(mWinFrames.stableInsets);
+                            mDispatchedContentInsets.set(contentInsets);
+                            mDispatchedStableInsets.set(stableInsets);
                             mDispatchedDisplayCutout = displayCutout;
-                            mFinalStableInsets.set(mDispatchedStableInsets);
-                            WindowInsets insets = new WindowInsets(mFinalSystemInsets,
-                                    mFinalStableInsets,
-                                    getResources().getConfiguration().isScreenRound(), false,
-                                    mDispatchedDisplayCutout);
                             if (DEBUG) {
-                                Log.v(TAG, "dispatching insets=" + insets);
+                                Log.v(TAG, "dispatching insets=" + windowInsets);
                             }
-                            onApplyWindowInsets(insets);
+                            onApplyWindowInsets(windowInsets);
                         }
 
                         if (redrawNeeded) {

@@ -52,6 +52,7 @@ import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.privacy.PrivacyItem;
 import com.android.systemui.privacy.PrivacyItemController;
 import com.android.systemui.privacy.PrivacyType;
+import com.android.systemui.privacy.logging.PrivacyLogger;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.RotationLockTile;
 import com.android.systemui.screenrecord.RecordingController;
@@ -147,6 +148,7 @@ public class PhoneStatusBarPolicy
     private final SensorPrivacyController mSensorPrivacyController;
     private final RecordingController mRecordingController;
     private final RingerModeTracker mRingerModeTracker;
+    private final PrivacyLogger mPrivacyLogger;
 
     private boolean mZenVisible;
     private boolean mVolumeVisible;
@@ -174,7 +176,8 @@ public class PhoneStatusBarPolicy
             @Nullable TelecomManager telecomManager, @DisplayId int displayId,
             @Main SharedPreferences sharedPreferences, DateFormatUtil dateFormatUtil,
             RingerModeTracker ringerModeTracker,
-            PrivacyItemController privacyItemController) {
+            PrivacyItemController privacyItemController,
+            PrivacyLogger privacyLogger) {
         mIconController = iconController;
         mCommandQueue = commandQueue;
         mBroadcastDispatcher = broadcastDispatcher;
@@ -199,6 +202,7 @@ public class PhoneStatusBarPolicy
         mUiBgExecutor = uiBgExecutor;
         mTelecomManager = telecomManager;
         mRingerModeTracker = ringerModeTracker;
+        mPrivacyLogger = privacyLogger;
 
         mSlotCast = resources.getString(com.android.internal.R.string.status_bar_cast);
         mSlotHotspot = resources.getString(com.android.internal.R.string.status_bar_hotspot);
@@ -673,14 +677,19 @@ public class PhoneStatusBarPolicy
 
         mIconController.setIconVisibility(mSlotCamera, showCamera);
         mIconController.setIconVisibility(mSlotMicrophone, showMicrophone);
-        if (mPrivacyItemController.getAllIndicatorsAvailable()) {
+        if (mPrivacyItemController.getAllIndicatorsAvailable()
+                || mPrivacyItemController.getLocationAvailable()) {
             mIconController.setIconVisibility(mSlotLocation, showLocation);
         }
+        mPrivacyLogger.logStatusBarIconsVisible(showCamera, showMicrophone,  showLocation);
     }
 
     @Override
     public void onLocationActiveChanged(boolean active) {
-        if (!mPrivacyItemController.getAllIndicatorsAvailable()) updateLocationFromController();
+        if (!mPrivacyItemController.getAllIndicatorsAvailable()
+                && !mPrivacyItemController.getLocationAvailable()) {
+            updateLocationFromController();
+        }
     }
 
     // Updates the status view based on the current state of location requests.

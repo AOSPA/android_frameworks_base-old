@@ -42,7 +42,6 @@ import androidx.test.filters.SmallTest;
 
 import com.android.systemui.ForegroundServiceController;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.media.MediaFeatureFlag;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
@@ -54,6 +53,7 @@ import com.android.systemui.statusbar.notification.people.PeopleNotificationIden
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationTestHelper;
 import com.android.systemui.statusbar.phone.ShadeController;
+import com.android.wm.shell.bubbles.Bubbles;
 
 import org.junit.After;
 import org.junit.Before;
@@ -116,7 +116,7 @@ public class NotificationFilterTest extends SysuiTestCase {
                 new NotificationGroupManagerLegacy(
                         mock(StatusBarStateController.class),
                         () -> mock(PeopleNotificationIdentifier.class),
-                        Optional.of(() -> mock(Bubbles.class))));
+                        Optional.of(mock(Bubbles.class))));
         mDependency.injectMockDependency(ShadeController.class);
         mDependency.injectMockDependency(NotificationLockscreenUserManager.class);
         mDependency.injectTestDependency(KeyguardEnvironment.class, mEnvironment);

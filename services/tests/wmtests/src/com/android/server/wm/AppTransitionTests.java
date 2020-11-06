@@ -16,15 +16,13 @@
 
 package com.android.server.wm;
 
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
-import static android.view.WindowManager.TRANSIT_ACTIVITY_CLOSE;
-import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
-import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
-import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
-import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
+import static android.view.WindowManager.TRANSIT_OLD_ACTIVITY_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_ACTIVITY_OPEN;
+import static android.view.WindowManager.TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_GOING_AWAY;
+import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_UNOCCLUDE;
 
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
@@ -73,38 +71,40 @@ public class AppTransitionTests extends WindowTestsBase {
 
     @Test
     public void testKeyguardOverride() {
-        mWm.prepareAppTransition(TRANSIT_ACTIVITY_OPEN, false /* alwaysKeepCurrent */);
-        mWm.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
-        assertEquals(TRANSIT_KEYGUARD_GOING_AWAY, mDc.mAppTransition.getAppTransition());
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_ACTIVITY_OPEN, false /* alwaysKeepCurrent */);
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
+        assertEquals(TRANSIT_OLD_KEYGUARD_GOING_AWAY, mDc.mAppTransition.getAppTransitionOld());
     }
 
     @Test
     public void testKeyguardKeep() {
-        mWm.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
-        mWm.prepareAppTransition(TRANSIT_ACTIVITY_OPEN, false /* alwaysKeepCurrent */);
-        assertEquals(TRANSIT_KEYGUARD_GOING_AWAY, mDc.mAppTransition.getAppTransition());
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_ACTIVITY_OPEN, false /* alwaysKeepCurrent */);
+        assertEquals(TRANSIT_OLD_KEYGUARD_GOING_AWAY, mDc.mAppTransition.getAppTransitionOld());
     }
 
     @Test
     public void testForceOverride() {
-        mWm.prepareAppTransition(TRANSIT_KEYGUARD_UNOCCLUDE, false /* alwaysKeepCurrent */);
-        mDc.prepareAppTransition(TRANSIT_ACTIVITY_OPEN,
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_KEYGUARD_UNOCCLUDE, false /* alwaysKeepCurrent */);
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_ACTIVITY_OPEN,
                 false /* alwaysKeepCurrent */, 0 /* flags */, true /* forceOverride */);
-        assertEquals(TRANSIT_ACTIVITY_OPEN, mDc.mAppTransition.getAppTransition());
+        assertEquals(TRANSIT_OLD_ACTIVITY_OPEN, mDc.mAppTransition.getAppTransitionOld());
     }
 
     @Test
     public void testCrashing() {
-        mWm.prepareAppTransition(TRANSIT_ACTIVITY_OPEN, false /* alwaysKeepCurrent */);
-        mWm.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE, false /* alwaysKeepCurrent */);
-        assertEquals(TRANSIT_CRASHING_ACTIVITY_CLOSE, mDc.mAppTransition.getAppTransition());
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_ACTIVITY_OPEN, false /* alwaysKeepCurrent */);
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE,
+                false /* alwaysKeepCurrent */);
+        assertEquals(TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE, mDc.mAppTransition.getAppTransitionOld());
     }
 
     @Test
     public void testKeepKeyguard_withCrashing() {
-        mWm.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
-        mWm.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE, false /* alwaysKeepCurrent */);
-        assertEquals(TRANSIT_KEYGUARD_GOING_AWAY, mDc.mAppTransition.getAppTransition());
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
+        mDc.prepareAppTransitionOld(TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE,
+                false /* alwaysKeepCurrent */);
+        assertEquals(TRANSIT_OLD_KEYGUARD_GOING_AWAY, mDc.mAppTransition.getAppTransitionOld());
     }
 
     @Test
@@ -114,10 +114,8 @@ public class AppTransitionTests extends WindowTestsBase {
         final DisplayContent dc2 = createNewDisplay(Display.STATE_ON);
 
         // Create 2 app window tokens to represent 2 activity window.
-        final ActivityRecord activity1 = createTestActivityRecord(dc1,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
-        final ActivityRecord activity2 = createTestActivityRecord(dc2,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
+        final ActivityRecord activity1 = createActivityRecord(dc1);
+        final ActivityRecord activity2 = createActivityRecord(dc2);
 
         activity1.allDrawn = true;
         activity1.startingDisplayed = true;
@@ -125,12 +123,12 @@ public class AppTransitionTests extends WindowTestsBase {
 
         // Simulate activity resume / finish flows to prepare app transition & set visibility,
         // make sure transition is set as expected for each display.
-        dc1.prepareAppTransition(TRANSIT_ACTIVITY_OPEN,
+        dc1.prepareAppTransitionOld(TRANSIT_OLD_ACTIVITY_OPEN,
                 false /* alwaysKeepCurrent */, 0 /* flags */, false /* forceOverride */);
-        assertEquals(TRANSIT_ACTIVITY_OPEN, dc1.mAppTransition.getAppTransition());
-        dc2.prepareAppTransition(TRANSIT_ACTIVITY_CLOSE,
+        assertEquals(TRANSIT_OLD_ACTIVITY_OPEN, dc1.mAppTransition.getAppTransitionOld());
+        dc2.prepareAppTransitionOld(TRANSIT_OLD_ACTIVITY_CLOSE,
                 false /* alwaysKeepCurrent */, 0 /* flags */, false /* forceOverride */);
-        assertEquals(TRANSIT_ACTIVITY_CLOSE, dc2.mAppTransition.getAppTransition());
+        assertEquals(TRANSIT_OLD_ACTIVITY_CLOSE, dc2.mAppTransition.getAppTransitionOld());
         // One activity window is visible for resuming & the other activity window is invisible
         // for finishing in different display.
         activity1.setVisibility(true, false);
@@ -151,16 +149,16 @@ public class AppTransitionTests extends WindowTestsBase {
 
         final Task stack1 = createTaskStackOnDisplay(dc1);
         final Task task1 = createTaskInStack(stack1, 0 /* userId */);
-        final ActivityRecord activity1 = createTestActivityRecord(dc1);
+        final ActivityRecord activity1 = createNonAttachedActivityRecord(dc1);
         task1.addChild(activity1, 0);
 
         // Simulate same app is during opening / closing transition set stage.
         dc1.mClosingApps.add(activity1);
         assertTrue(dc1.mClosingApps.size() > 0);
 
-        dc1.prepareAppTransition(TRANSIT_ACTIVITY_OPEN,
+        dc1.prepareAppTransitionOld(TRANSIT_OLD_ACTIVITY_OPEN,
                 false /* alwaysKeepCurrent */, 0 /* flags */, false /* forceOverride */);
-        assertEquals(TRANSIT_ACTIVITY_OPEN, dc1.mAppTransition.getAppTransition());
+        assertEquals(TRANSIT_OLD_ACTIVITY_OPEN, dc1.mAppTransition.getAppTransitionOld());
         assertTrue(dc1.mAppTransition.isTransitionSet());
 
         dc1.mOpeningApps.add(activity1);
@@ -201,9 +199,9 @@ public class AppTransitionTests extends WindowTestsBase {
 
         // Simulate activity finish flows to prepare app transition & set visibility,
         // make sure transition is set as expected.
-        dc.prepareAppTransition(TRANSIT_ACTIVITY_CLOSE,
+        dc.prepareAppTransitionOld(TRANSIT_OLD_ACTIVITY_CLOSE,
                 false /* alwaysKeepCurrent */, 0 /* flags */, false /* forceOverride */);
-        assertEquals(TRANSIT_ACTIVITY_CLOSE, dc.mAppTransition.getAppTransition());
+        assertEquals(TRANSIT_OLD_ACTIVITY_CLOSE, dc.mAppTransition.getAppTransitionOld());
         dc.mAppTransition.overridePendingAppTransitionRemote(adapter);
         exitingActivity.setVisibility(false, false);
         assertTrue(dc.mClosingApps.size() > 0);

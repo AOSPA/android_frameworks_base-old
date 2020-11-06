@@ -817,6 +817,30 @@
         <!-- B y-intercept --> <item>-0.198650895</item>
     </string-array>
 
+    <string-array name="config_reduceBrightColorsCoefficientsNative">
+        <!-- R a-coefficient --> <item>-0.691218457</item>
+        <!-- R b-coefficient --> <item>0.050135153</item>
+        <!-- R y-intercept --> <item>0.917684143</item>
+        <!-- G a-coefficient --> <item>-0.691218457</item>
+        <!-- G b-coefficient --> <item>0.050135153</item>
+        <!-- G y-intercept --> <item>0.917684143</item>
+        <!-- B a-coefficient --> <item>-0.691218457</item>
+        <!-- B b-coefficient --> <item>0.050135153</item>
+        <!-- B y-intercept --> <item>0.917684143</item>
+    </string-array>
+
+    <string-array name="config_reduceBrightColorsCoefficients">
+        <!-- R a-coefficient --> <item>0.00000000000000154</item>
+        <!-- R b-coefficient --> <item>-1.0</item>
+        <!-- R y-intercept --> <item>1.045977011</item>
+        <!-- G a-coefficient --> <item>0.00000000000000224</item>
+        <!-- G b-coefficient --> <item>-1.0</item>
+        <!-- G y-intercept --> <item>1.045977011</item>
+        <!-- B a-coefficient --> <item>0.0000000000000022</item>
+        <!-- B b-coefficient --> <item>-1.0</item>
+        <!-- B y-intercept --> <item>1.045977011</item>
+    </string-array>
+
     <!-- Boolean indicating whether display white balance is supported. -->
     <bool name="config_displayWhiteBalanceAvailable">false</bool>
 
@@ -1686,6 +1710,21 @@
         -->
     </string-array>
 
+    <!-- Optional IPsec algorithms enabled by this device, defaulting to empty. OEMs can override
+         it by providing a list of algorithm names in an overlay config.xml file.
+
+         As Android releases new versions, more algorithms are becoming mandatory. Mandatory
+         algorithms will be automatically enabled on the device. Optional algorithms need
+         to be explicitly declared in this resource to be enabled.
+             * SDK level 28 makes the following algorithms mandatory : "cbc(aes)", "hmac(md5)",
+               "hmac(sha1)", "hmac(sha256)", "hmac(sha384)", "hmac(sha512)", "rfc4106(gcm(aes))"
+             * SDK level 31 makes the following algorithms mandatory : "rfc3686(ctr(aes))",
+               "xcbc(aes)", "rfc7539esp(chacha20,poly1305)"
+     -->
+    <string-array name="config_optionalIpSecAlgorithms" translatable="false">
+        <!-- Add algorithm here -->
+    </string-array>
+
     <!-- Component name of the combo network location provider. -->
     <string name="config_comboNetworkLocationProvider" translatable="false">com.qualcomm.location</string>
 
@@ -1806,6 +1845,9 @@
          Note: This config is deprecated, please use config_defaultSms instead. -->
     <string name="default_sms_application" translatable="false">com.android.messaging</string>
 
+    <!-- Flag indicating whether the current device supports "Ask every time" for sms-->
+    <bool name="config_sms_ask_every_time_support">true</bool>
+
     <!-- Flag indicating whether the current device allows data.
          If true, this means that the device supports data connectivity through
          the telephony network.
@@ -1842,6 +1884,8 @@
     <string name="config_defaultCallScreening" translatable="false"></string>
     <!-- The name of the package that will hold the system gallery role. -->
     <string name="config_systemGallery" translatable="false">com.android.gallery3d</string>
+    <!-- The names of the packages that will hold the automotive projection role. -->
+    <string name="config_systemAutomotiveProjection" translatable="false"></string>
     <!-- The name of the package that will hold the system cluster service role. -->
     <string name="config_systemAutomotiveCluster" translatable="false"></string>
     <!-- The name of the package that will hold the system video call role. -->
@@ -3344,6 +3388,10 @@
          ratio larger than this is considered to wide and short to be usable. Currently 2.39:1. -->
     <item name="config_pictureInPictureMaxAspectRatio" format="float" type="dimen">2.39</item>
 
+    <!-- The maximum number of actions that is supported for picture-in-picture. This number
+         must be no less than 3 for back compatibility. -->
+    <integer name="config_pictureInPictureMaxNumberOfActions">3</integer>
+
     <!-- Controls the snap mode for the docked stack divider
              0 - 3 snap targets: left/top has 16:9 ratio, 1:1, and right/bottom has 16:9 ratio
              1 - 3 snap targets: fixed ratio, 1:1, (1 - fixed ratio)
@@ -4459,4 +4507,19 @@
 
     <!-- WindowsManager JetPack display features -->
     <string name="config_display_features" translatable="false" />
+
+    <!-- Physical Display IDs of the display-devices that are swapped when a folding device folds.
+         This list is expected to contain two elements: the first is the display to use
+         when the device is folded, the second is the display to use when unfolded. If the array
+         is empty or the display IDs are not recognized, this feature is turned off and the value
+         ignored.
+         TODO: b/170470621 - remove once we can have multiple Internal displays in DMS as
+               well as a notification from DisplayStateManager. -->
+    <string-array name="config_internalFoldedPhysicalDisplayIds" translatable="false" />
+
+    <!-- Aspect ratio of task level letterboxing. Values <= 1.0 will be ignored.
+         Note: Activity min/max aspect ratio restrictions will still be respected by the
+         activity-level letterboxing (size-compat mode). Therefore this override can control the
+         maximum screen area that can be occupied by the app in the letterbox mode. -->
+    <item name="config_taskLetterboxAspectRatio" format="float" type="dimen">0.0</item>
 </resources>

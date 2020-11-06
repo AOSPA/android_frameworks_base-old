@@ -63,8 +63,6 @@ import java.util.StringJoiner;
  */
 public class InsetsState implements Parcelable {
 
-    public static final InsetsState EMPTY = new InsetsState();
-
     /**
      * Internal representation of inset source types. This is different from the public API in
      * {@link WindowInsets.Type} as one type from the public API might indicate multiple windows
@@ -429,6 +427,25 @@ public class InsetsState implements Parcelable {
         }
     }
 
+    /**
+     * Scales the frame and the visible frame (if there is one) of each source.
+     *
+     * @param scale the scale to be applied
+     */
+    public void scale(float scale) {
+        mDisplayFrame.scale(scale);
+        for (int i = 0; i < SIZE; i++) {
+            final InsetsSource source = mSources[i];
+            if (source != null) {
+                source.getFrame().scale(scale);
+                final Rect visibleFrame = source.getVisibleFrame();
+                if (visibleFrame != null) {
+                    visibleFrame.scale(scale);
+                }
+            }
+        }
+    }
+
     public void set(InsetsState other) {
         set(other, false /* copySources */);
     }
@@ -606,7 +623,7 @@ public class InsetsState implements Parcelable {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         return equals(o, false, false);
     }
 
@@ -621,7 +638,7 @@ public class InsetsState implements Parcelable {
      * @return {@code true} if the two InsetsState objects are equal, {@code false} otherwise.
      */
     @VisibleForTesting
-    public boolean equals(Object o, boolean excludingCaptionInsets,
+    public boolean equals(@Nullable Object o, boolean excludingCaptionInsets,
             boolean excludeInvisibleImeFrames) {
         if (this == o) { return true; }
         if (o == null || getClass() != o.getClass()) { return false; }

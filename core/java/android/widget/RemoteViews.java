@@ -21,6 +21,7 @@ import android.annotation.DimenRes;
 import android.annotation.IntDef;
 import android.annotation.LayoutRes;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.StyleRes;
 import android.app.Activity;
 import android.app.ActivityOptions;
@@ -260,7 +261,7 @@ public class RemoteViews implements Parcelable, Filter {
      * RemoteViews.
      */
     private RemoteViews mLandscape = null;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private RemoteViews mPortrait = null;
 
     @ApplyFlags
@@ -348,7 +349,7 @@ public class RemoteViews implements Parcelable, Filter {
         public String methodName;
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (!(o instanceof MethodKey)) {
                 return false;
             }
@@ -438,7 +439,7 @@ public class RemoteViews implements Parcelable, Filter {
             // Do nothing
         }
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public int mergeBehavior() {
             return MERGE_REPLACE;
         }
@@ -507,7 +508,7 @@ public class RemoteViews implements Parcelable, Filter {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void mergeRemoteViews(RemoteViews newRv) {
         if (newRv == null) return;
         // We first copy the new RemoteViews, as the process of merging modifies the way the actions
@@ -699,7 +700,7 @@ public class RemoteViews implements Parcelable, Filter {
             return SET_PENDING_INTENT_TEMPLATE_TAG;
         }
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         PendingIntent pendingIntentTemplate;
     }
 
@@ -1147,7 +1148,7 @@ public class RemoteViews implements Parcelable, Filter {
 
     private static class BitmapCache {
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         ArrayList<Bitmap> mBitmaps;
         int mBitmapMemory = -1;
 
@@ -1563,7 +1564,7 @@ public class RemoteViews implements Parcelable, Filter {
      * ViewGroup methods that are related to adding Views.
      */
     private class ViewGroupActionAdd extends Action {
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         private RemoteViews mNestedViews;
         private int mIndex;
 
@@ -2478,7 +2479,7 @@ public class RemoteViews implements Parcelable, Filter {
      * Returns an estimate of the bitmap heap memory usage for this RemoteViews.
      */
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int estimateMemoryUsage() {
         return mBitmapCache.getBitmapMemory();
     }
@@ -3003,7 +3004,7 @@ public class RemoteViews implements Parcelable, Filter {
      * @hide
      * @deprecated this appears to have no users outside of UnsupportedAppUsage?
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @Deprecated
     public void setRemoteAdapter(int viewId, ArrayList<RemoteViews> list, int viewTypeCount) {
         addAction(new SetRemoteViewsAdapterList(viewId, list, viewTypeCount));

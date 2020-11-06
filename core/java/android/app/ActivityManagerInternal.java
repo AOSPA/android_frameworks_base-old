@@ -476,6 +476,12 @@ public abstract class ActivityManagerInternal {
      */
     public abstract boolean isPendingTopUid(int uid);
 
+    /**
+     * @return the intent for the given intent sender.
+     */
+    @Nullable
+    public abstract Intent getIntentForIntentSender(IIntentSender sender);
+
     // Starts a process as empty.
     public abstract int startActivityAsUserEmpty(Bundle options);
 }

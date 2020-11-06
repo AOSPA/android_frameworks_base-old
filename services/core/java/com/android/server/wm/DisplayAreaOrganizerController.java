@@ -16,21 +16,22 @@
 
 package com.android.server.wm;
 
-import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
-
-
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_ORGANIZER;
 
+import android.content.pm.ParceledListSlice;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.SurfaceControl;
+import android.window.DisplayAreaAppearedInfo;
 import android.window.IDisplayAreaOrganizer;
 import android.window.IDisplayAreaOrganizerController;
 
 import com.android.internal.protolog.common.ProtoLog;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerController.Stub {
     private static final String TAG = "DisplayAreaOrganizerController";
@@ -62,13 +63,14 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
         mGlobalLock = atm.mGlobalLock;
     }
 
-    private void enforceStackPermission(String func) {
-        mService.mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, func);
+    private void enforceTaskPermission(String func) {
+        mService.enforceTaskPermission(func);
     }
 
     @Override
-    public void registerOrganizer(IDisplayAreaOrganizer organizer, int feature) {
-        enforceStackPermission("registerOrganizer()");
+    public ParceledListSlice<DisplayAreaAppearedInfo> registerOrganizer(
+            IDisplayAreaOrganizer organizer, int feature) {
+        enforceTaskPermission("registerOrganizer()");
         final long uid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {
@@ -86,12 +88,18 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
                 } catch (RemoteException e) {
                     // Oh well...
                 }
+
+                final List<DisplayAreaAppearedInfo> displayAreaInfos = new ArrayList<>();
                 mService.mRootWindowContainer.forAllDisplayAreas((da) -> {
                     if (da.mFeatureId != feature) return;
-                    da.setOrganizer(organizer);
+                    da.setOrganizer(organizer, true /* skipDisplayAreaAppeared */);
+                    displayAreaInfos.add(new DisplayAreaAppearedInfo(da.getDisplayAreaInfo(),
+                            new SurfaceControl(da.getSurfaceControl(),
+                                    "DisplayAreaOrganizerController.registerOrganizer")));
                 });
 
                 mOrganizersByFeatureIds.put(feature, organizer);
+                return new ParceledListSlice<>(displayAreaInfos);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -100,7 +108,7 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
 
     @Override
     public void unregisterOrganizer(IDisplayAreaOrganizer organizer) {
-        enforceStackPermission("unregisterTaskOrganizer()");
+        enforceTaskPermission("unregisterTaskOrganizer()");
         final long uid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {

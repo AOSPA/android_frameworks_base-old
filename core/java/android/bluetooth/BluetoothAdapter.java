@@ -18,6 +18,7 @@
 package android.bluetooth;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -40,6 +41,7 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.os.BatteryStats;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
@@ -686,6 +688,8 @@ public final class BluetoothAdapter {
     private final Map<LeScanCallback, ScanCallback> mLeScanClients;
     private static final Map<BluetoothDevice, List<Pair<OnMetadataChangedListener, Executor>>>
                 sMetadataListeners = new HashMap<>();
+    private final Map<BluetoothConnectionCallback, Executor>
+            mBluetoothConnectionCallbackExecutorMap = new HashMap<>();
 
     /**
      * Bluetooth metadata listener. Overrides the default BluetoothMetadataListener
@@ -1175,7 +1179,7 @@ public final class BluetoothAdapter {
      * @return true to indicate adapter shutdown has begun, or false on immediate error
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean disable(boolean persist) {
         android.util.SeempLog.record(57);
 
@@ -1225,7 +1229,7 @@ public final class BluetoothAdapter {
      * @return true to indicate that the config file was successfully cleared
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean factoryReset() {
         try {
@@ -2637,7 +2641,7 @@ public final class BluetoothAdapter {
      * permissions, or channel in use.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public BluetoothServerSocket listenUsingEncryptedRfcommWithServiceRecord(String name, UUID uuid)
             throws IOException {
         return createNewRfcommSocketAndRecord(name, uuid, false, true);
@@ -3609,6 +3613,133 @@ public final class BluetoothAdapter {
          */
         void onMetadataChanged(@NonNull BluetoothDevice device, int key,
                 @Nullable byte[] value);
+    }
+
+    private final IBluetoothConnectionCallback mConnectionCallback =
+            new IBluetoothConnectionCallback.Stub() {
+        @Override
+        public void onDeviceConnected(BluetoothDevice device) {
+            for (Map.Entry<BluetoothConnectionCallback, Executor> callbackExecutorEntry:
+                    mBluetoothConnectionCallbackExecutorMap.entrySet()) {
+                BluetoothConnectionCallback callback = callbackExecutorEntry.getKey();
+                Executor executor = callbackExecutorEntry.getValue();
+                executor.execute(() -> callback.onDeviceConnected(device));
+            }
+        }
+
+        @Override
+        public void onDeviceDisconnected(BluetoothDevice device) {
+            for (Map.Entry<BluetoothConnectionCallback, Executor> callbackExecutorEntry:
+                    mBluetoothConnectionCallbackExecutorMap.entrySet()) {
+                BluetoothConnectionCallback callback = callbackExecutorEntry.getKey();
+                Executor executor = callbackExecutorEntry.getValue();
+                executor.execute(() -> callback.onDeviceDisconnected(device));
+            }
+        }
+    };
+
+    /**
+     * Registers the BluetoothConnectionCallback to receive callback events when a bluetooth device
+     * (classic or low energy) is connected or disconnected.
+     *
+     * @param executor is the callback executor
+     * @param callback is the connection callback you wish to register
+     * @return true if the callback was registered successfully, false otherwise
+     * @throws IllegalArgumentException if the callback is already registered
+     * @hide
+     */
+    public boolean registerBluetoothConnectionCallback(@NonNull @CallbackExecutor Executor executor,
+            @NonNull BluetoothConnectionCallback callback) {
+        if (DBG) Log.d(TAG, "registerBluetoothConnectionCallback()");
+        if (callback == null) {
+            return false;
+        }
+
+        // If the callback map is empty, we register the service-to-app callback
+        if (mBluetoothConnectionCallbackExecutorMap.isEmpty()) {
+            try {
+                mServiceLock.readLock().lock();
+                if (mService != null) {
+                    if (!mService.registerBluetoothConnectionCallback(mConnectionCallback)) {
+                        return false;
+                    }
+                }
+            } catch (RemoteException e) {
+                Log.e(TAG, "", e);
+                mBluetoothConnectionCallbackExecutorMap.remove(callback);
+            } finally {
+                mServiceLock.readLock().unlock();
+            }
+        }
+
+        // Adds the passed in callback to our map of callbacks to executors
+        synchronized (mBluetoothConnectionCallbackExecutorMap) {
+            if (mBluetoothConnectionCallbackExecutorMap.containsKey(callback)) {
+                throw new IllegalArgumentException("This callback has already been registered");
+            }
+            mBluetoothConnectionCallbackExecutorMap.put(callback, executor);
+        }
+
+        return true;
+    }
+
+    /**
+     * Unregisters the BluetoothConnectionCallback that was previously registered by the application
+     *
+     * @param callback is the connection callback you wish to unregister
+     * @return true if the callback was unregistered successfully, false otherwise
+     * @hide
+     */
+    public boolean unregisterBluetoothConnectionCallback(
+            @NonNull BluetoothConnectionCallback callback) {
+        if (DBG) Log.d(TAG, "unregisterBluetoothConnectionCallback()");
+        if (callback == null) {
+            return false;
+        }
+
+        synchronized (mBluetoothConnectionCallbackExecutorMap) {
+            if (mBluetoothConnectionCallbackExecutorMap.remove(callback) != null) {
+                return false;
+            }
+        }
+
+        if (!mBluetoothConnectionCallbackExecutorMap.isEmpty()) {
+            return true;
+        }
+
+        // If the callback map is empty, we unregister the service-to-app callback
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                return mService.unregisterBluetoothConnectionCallback(mConnectionCallback);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+
+        return false;
+    }
+
+    /**
+     * This abstract class is used to implement callbacks for when a bluetooth classic or Bluetooth
+     * Low Energy (BLE) device is either connected or disconnected.
+     *
+     * @hide
+     */
+    public abstract class BluetoothConnectionCallback {
+        /**
+         * Callback triggered when a bluetooth device (classic or BLE) is connected
+         * @param device is the connected bluetooth device
+         */
+        public void onDeviceConnected(BluetoothDevice device) {}
+
+        /**
+         * Callback triggered when a bluetooth device (classic or BLE) is disconnected
+         * @param device is the disconnected bluetooth device
+         */
+        public void onDeviceDisconnected(BluetoothDevice device) {}
     }
 
     /**

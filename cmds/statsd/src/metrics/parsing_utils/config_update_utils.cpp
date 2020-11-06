@@ -115,7 +115,6 @@ bool updateAtomMatchingTrackers(const StatsdConfig& config, const sp<UidMap>& ui
                                 vector<sp<AtomMatchingTracker>>& newAtomMatchingTrackers,
                                 set<int64_t>& replacedMatchers) {
     const int atomMatcherCount = config.atom_matcher_size();
-
     vector<AtomMatcher> matcherProtos;
     matcherProtos.reserve(atomMatcherCount);
     newAtomMatchingTrackers.reserve(atomMatcherCount);
@@ -546,7 +545,21 @@ bool determineAllMetricUpdateStatuses(const StatsdConfig& config,
             return false;
         }
     }
-
+    for (int i = 0; i < config.value_metric_size(); i++, metricIndex++) {
+        const ValueMetric& metric = config.value_metric(i);
+        set<int64_t> conditionDependencies;
+        if (metric.has_condition()) {
+            conditionDependencies.insert(metric.condition());
+        }
+        if (!determineMetricUpdateStatus(
+                    config, metric, metric.id(), METRIC_TYPE_VALUE, {metric.what()},
+                    conditionDependencies, metric.slice_by_state(), metric.links(),
+                    oldMetricProducerMap, oldMetricProducers, metricToActivationMap,
+                    replacedMatchers, replacedConditions, replacedStates,
+                    metricsToUpdate[metricIndex])) {
+            return false;
+        }
+    }
     for (int i = 0; i < config.gauge_metric_size(); i++, metricIndex++) {
         const GaugeMetric& metric = config.gauge_metric(i);
         set<int64_t> conditionDependencies;
@@ -566,7 +579,6 @@ bool determineAllMetricUpdateStatuses(const StatsdConfig& config,
             return false;
         }
     }
-    // TODO: determine update status for value metrics.
     return true;
 }
 
@@ -630,7 +642,7 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
                    set<int64_t>& noReportMetricIds,
                    unordered_map<int, vector<int>>& activationAtomTrackerToMetricMap,
                    unordered_map<int, vector<int>>& deactivationAtomTrackerToMetricMap,
-                   vector<int>& metricsWithActivation) {
+                   vector<int>& metricsWithActivation, set<int64_t>& replacedMetrics) {
     sp<ConditionWizard> wizard = new ConditionWizard(allConditionTrackers);
     sp<EventMatcherWizard> matcherWizard = new EventMatcherWizard(allAtomMatchingTrackers);
     const int allMetricsCount = config.count_metric_size() + config.duration_metric_size() +
@@ -676,6 +688,8 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
                 break;
             }
             case UPDATE_REPLACE:
+                replacedMetrics.insert(metric.id());
+                [[fallthrough]];  // Intentionally fallthrough to create the new metric producer.
             case UPDATE_NEW: {
                 producer = createCountMetricProducerAndUpdateMetadata(
                         key, config, timeBaseNs, currentTimeNs, metric, metricIndex,
@@ -697,9 +711,9 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
         }
         newMetricProducers.push_back(producer.value());
     }
-    for (int i = 0; i < config.event_metric_size(); i++, metricIndex++) {
-        newMetricProducerMap[config.event_metric(i).id()] = metricIndex;
-        const EventMetric& metric = config.event_metric(i);
+    for (int i = 0; i < config.duration_metric_size(); i++, metricIndex++) {
+        const DurationMetric& metric = config.duration_metric(i);
+        newMetricProducerMap[metric.id()] = metricIndex;
         optional<sp<MetricProducer>> producer;
         switch (metricsToUpdate[metricIndex]) {
             case UPDATE_PRESERVE: {
@@ -713,6 +727,47 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
                 break;
             }
             case UPDATE_REPLACE:
+                replacedMetrics.insert(metric.id());
+                [[fallthrough]];  // Intentionally fallthrough to create the new metric producer.
+            case UPDATE_NEW: {
+                producer = createDurationMetricProducerAndUpdateMetadata(
+                        key, config, timeBaseNs, currentTimeNs, metric, metricIndex,
+                        allAtomMatchingTrackers, newAtomMatchingTrackerMap, allConditionTrackers,
+                        conditionTrackerMap, initialConditionCache, wizard, stateAtomIdMap,
+                        allStateGroupMaps, metricToActivationMap, trackerToMetricMap,
+                        conditionToMetricMap, activationAtomTrackerToMetricMap,
+                        deactivationAtomTrackerToMetricMap, metricsWithActivation);
+                break;
+            }
+            default: {
+                ALOGE("Metric \"%lld\" update state is unknown. This should never happen",
+                      (long long)metric.id());
+                return false;
+            }
+        }
+        if (!producer) {
+            return false;
+        }
+        newMetricProducers.push_back(producer.value());
+    }
+    for (int i = 0; i < config.event_metric_size(); i++, metricIndex++) {
+        const EventMetric& metric = config.event_metric(i);
+        newMetricProducerMap[metric.id()] = metricIndex;
+        optional<sp<MetricProducer>> producer;
+        switch (metricsToUpdate[metricIndex]) {
+            case UPDATE_PRESERVE: {
+                producer = updateMetric(
+                        config, i, metricIndex, metric.id(), allAtomMatchingTrackers,
+                        oldAtomMatchingTrackerMap, newAtomMatchingTrackerMap, matcherWizard,
+                        allConditionTrackers, conditionTrackerMap, wizard, oldMetricProducerMap,
+                        oldMetricProducers, metricToActivationMap, trackerToMetricMap,
+                        conditionToMetricMap, activationAtomTrackerToMetricMap,
+                        deactivationAtomTrackerToMetricMap, metricsWithActivation);
+                break;
+            }
+            case UPDATE_REPLACE:
+                replacedMetrics.insert(metric.id());
+                [[fallthrough]];  // Intentionally fallthrough to create the new metric producer.
             case UPDATE_NEW: {
                 producer = createEventMetricProducerAndUpdateMetadata(
                         key, config, timeBaseNs, metric, metricIndex, allAtomMatchingTrackers,
@@ -733,6 +788,47 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
         }
         newMetricProducers.push_back(producer.value());
     }
+
+    for (int i = 0; i < config.value_metric_size(); i++, metricIndex++) {
+        const ValueMetric& metric = config.value_metric(i);
+        newMetricProducerMap[metric.id()] = metricIndex;
+        optional<sp<MetricProducer>> producer;
+        switch (metricsToUpdate[metricIndex]) {
+            case UPDATE_PRESERVE: {
+                producer = updateMetric(
+                        config, i, metricIndex, metric.id(), allAtomMatchingTrackers,
+                        oldAtomMatchingTrackerMap, newAtomMatchingTrackerMap, matcherWizard,
+                        allConditionTrackers, conditionTrackerMap, wizard, oldMetricProducerMap,
+                        oldMetricProducers, metricToActivationMap, trackerToMetricMap,
+                        conditionToMetricMap, activationAtomTrackerToMetricMap,
+                        deactivationAtomTrackerToMetricMap, metricsWithActivation);
+                break;
+            }
+            case UPDATE_REPLACE:
+                replacedMetrics.insert(metric.id());
+                [[fallthrough]];  // Intentionally fallthrough to create the new metric producer.
+            case UPDATE_NEW: {
+                producer = createValueMetricProducerAndUpdateMetadata(
+                        key, config, timeBaseNs, currentTimeNs, pullerManager, metric, metricIndex,
+                        allAtomMatchingTrackers, newAtomMatchingTrackerMap, allConditionTrackers,
+                        conditionTrackerMap, initialConditionCache, wizard, matcherWizard,
+                        stateAtomIdMap, allStateGroupMaps, metricToActivationMap,
+                        trackerToMetricMap, conditionToMetricMap, activationAtomTrackerToMetricMap,
+                        deactivationAtomTrackerToMetricMap, metricsWithActivation);
+                break;
+            }
+            default: {
+                ALOGE("Metric \"%lld\" update state is unknown. This should never happen",
+                      (long long)metric.id());
+                return false;
+            }
+        }
+        if (!producer) {
+            return false;
+        }
+        newMetricProducers.push_back(producer.value());
+    }
+
     for (int i = 0; i < config.gauge_metric_size(); i++, metricIndex++) {
         const GaugeMetric& metric = config.gauge_metric(i);
         newMetricProducerMap[metric.id()] = metricIndex;
@@ -749,6 +845,8 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
                 break;
             }
             case UPDATE_REPLACE:
+                replacedMetrics.insert(metric.id());
+                [[fallthrough]];  // Intentionally fallthrough to create the new metric producer.
             case UPDATE_NEW: {
                 producer = createGaugeMetricProducerAndUpdateMetadata(
                         key, config, timeBaseNs, currentTimeNs, pullerManager, metric, metricIndex,
@@ -770,7 +868,6 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
         }
         newMetricProducers.push_back(producer.value());
     }
-    // TODO: perform update for value, duration metric.
 
     const set<int> atomsAllowedFromAnyUid(config.whitelisted_atom_ids().begin(),
                                           config.whitelisted_atom_ids().end());
@@ -793,6 +890,111 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
     return true;
 }
 
+bool determineAlertUpdateStatus(const Alert& alert,
+                                const unordered_map<int64_t, int>& oldAlertTrackerMap,
+                                const vector<sp<AnomalyTracker>>& oldAnomalyTrackers,
+                                const set<int64_t>& replacedMetrics, UpdateStatus& updateStatus) {
+    // Check if new alert.
+    const auto& oldAnomalyTrackerIt = oldAlertTrackerMap.find(alert.id());
+    if (oldAnomalyTrackerIt == oldAlertTrackerMap.end()) {
+        updateStatus = UPDATE_NEW;
+        return true;
+    }
+
+    // This is an existing alert, check if it has changed.
+    string serializedAlert;
+    if (!alert.SerializeToString(&serializedAlert)) {
+        ALOGW("Unable to serialize alert %lld", (long long)alert.id());
+        return false;
+    }
+    uint64_t newProtoHash = Hash64(serializedAlert);
+    const auto [success, oldProtoHash] =
+            oldAnomalyTrackers[oldAnomalyTrackerIt->second]->getProtoHash();
+    if (!success) {
+        return false;
+    }
+    if (newProtoHash != oldProtoHash) {
+        updateStatus = UPDATE_REPLACE;
+        return true;
+    }
+
+    // Check if the metric this alert relies on has changed.
+    if (replacedMetrics.find(alert.metric_id()) != replacedMetrics.end()) {
+        updateStatus = UPDATE_REPLACE;
+        return true;
+    }
+
+    updateStatus = UPDATE_PRESERVE;
+    return true;
+}
+
+bool updateAlerts(const StatsdConfig& config, const unordered_map<int64_t, int>& metricProducerMap,
+                  const set<int64_t>& replacedMetrics,
+                  const unordered_map<int64_t, int>& oldAlertTrackerMap,
+                  const vector<sp<AnomalyTracker>>& oldAnomalyTrackers,
+                  const sp<AlarmMonitor>& anomalyAlarmMonitor,
+                  vector<sp<MetricProducer>>& allMetricProducers,
+                  unordered_map<int64_t, int>& newAlertTrackerMap,
+                  vector<sp<AnomalyTracker>>& newAnomalyTrackers) {
+    int alertCount = config.alert_size();
+    vector<UpdateStatus> alertUpdateStatuses(alertCount);
+    for (int i = 0; i < alertCount; i++) {
+        if (!determineAlertUpdateStatus(config.alert(i), oldAlertTrackerMap, oldAnomalyTrackers,
+                                        replacedMetrics, alertUpdateStatuses[i])) {
+            return false;
+        }
+    }
+
+    for (int i = 0; i < alertCount; i++) {
+        const Alert& alert = config.alert(i);
+        newAlertTrackerMap[alert.id()] = newAnomalyTrackers.size();
+        switch (alertUpdateStatuses[i]) {
+            case UPDATE_PRESERVE: {
+                // Find the alert and update it.
+                const auto& oldAnomalyTrackerIt = oldAlertTrackerMap.find(alert.id());
+                if (oldAnomalyTrackerIt == oldAlertTrackerMap.end()) {
+                    ALOGW("Could not find AnomalyTracker %lld in the previous config, but "
+                          "expected it to be there",
+                          (long long)alert.id());
+                    return false;
+                }
+                sp<AnomalyTracker> anomalyTracker = oldAnomalyTrackers[oldAnomalyTrackerIt->second];
+                anomalyTracker->onConfigUpdated();
+                // Add the alert to the relevant metric.
+                const auto& metricProducerIt = metricProducerMap.find(alert.metric_id());
+                if (metricProducerIt == metricProducerMap.end()) {
+                    ALOGW("alert \"%lld\" has unknown metric id: \"%lld\"", (long long)alert.id(),
+                          (long long)alert.metric_id());
+                    return false;
+                }
+                allMetricProducers[metricProducerIt->second]->addAnomalyTracker(anomalyTracker);
+                newAnomalyTrackers.push_back(anomalyTracker);
+                break;
+            }
+            case UPDATE_REPLACE:
+            case UPDATE_NEW: {
+                optional<sp<AnomalyTracker>> anomalyTracker = createAnomalyTracker(
+                        alert, anomalyAlarmMonitor, metricProducerMap, allMetricProducers);
+                if (!anomalyTracker) {
+                    return false;
+                }
+                newAnomalyTrackers.push_back(anomalyTracker.value());
+                break;
+            }
+            default: {
+                ALOGE("Alert \"%lld\" update state is unknown. This should never happen",
+                      (long long)alert.id());
+                return false;
+            }
+        }
+    }
+    if (!initSubscribersForSubscriptionType(config, Subscription::ALERT, newAlertTrackerMap,
+                                            newAnomalyTrackers)) {
+        return false;
+    }
+    return true;
+}
+
 bool updateStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const sp<UidMap>& uidMap,
                         const sp<StatsPullerManager>& pullerManager,
                         const sp<AlarmMonitor>& anomalyAlarmMonitor,
@@ -804,6 +1006,8 @@ bool updateStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const 
                         const unordered_map<int64_t, int>& oldConditionTrackerMap,
                         const vector<sp<MetricProducer>>& oldMetricProducers,
                         const unordered_map<int64_t, int>& oldMetricProducerMap,
+                        const vector<sp<AnomalyTracker>>& oldAnomalyTrackers,
+                        const unordered_map<int64_t, int>& oldAlertTrackerMap,
                         const map<int64_t, uint64_t>& oldStateProtoHashes, set<int>& allTagIds,
                         vector<sp<AtomMatchingTracker>>& newAtomMatchingTrackers,
                         unordered_map<int64_t, int>& newAtomMatchingTrackerMap,
@@ -811,6 +1015,9 @@ bool updateStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const 
                         unordered_map<int64_t, int>& newConditionTrackerMap,
                         vector<sp<MetricProducer>>& newMetricProducers,
                         unordered_map<int64_t, int>& newMetricProducerMap,
+                        vector<sp<AnomalyTracker>>& newAnomalyTrackers,
+                        unordered_map<int64_t, int>& newAlertTrackerMap,
+                        vector<sp<AlarmTracker>>& newPeriodicAlarmTrackers,
                         unordered_map<int, vector<int>>& conditionToMetricMap,
                         unordered_map<int, vector<int>>& trackerToMetricMap,
                         unordered_map<int, vector<int>>& trackerToConditionMap,
@@ -821,6 +1028,7 @@ bool updateStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const 
                         set<int64_t>& noReportMetricIds) {
     set<int64_t> replacedMatchers;
     set<int64_t> replacedConditions;
+    set<int64_t> replacedMetrics;
     vector<ConditionState> conditionCache;
     unordered_map<int64_t, int> stateAtomIdMap;
     unordered_map<int64_t, unordered_map<int, int64_t>> allStateGroupMaps;
@@ -862,11 +1070,24 @@ bool updateStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const 
                        replacedStates, oldMetricProducerMap, oldMetricProducers,
                        newMetricProducerMap, newMetricProducers, conditionToMetricMap,
                        trackerToMetricMap, noReportMetricIds, activationTrackerToMetricMap,
-                       deactivationTrackerToMetricMap, metricsWithActivation)) {
-        ALOGE("initMetricProducers failed");
+                       deactivationTrackerToMetricMap, metricsWithActivation, replacedMetrics)) {
+        ALOGE("updateMetrics failed");
         return false;
     }
 
+    if (!updateAlerts(config, newMetricProducerMap, replacedMetrics, oldAlertTrackerMap,
+                      oldAnomalyTrackers, anomalyAlarmMonitor, newMetricProducers,
+                      newAlertTrackerMap, newAnomalyTrackers)) {
+        ALOGE("updateAlerts failed");
+        return false;
+    }
+
+    // Alarms do not have any state, so we can reuse the initialization logic.
+    if (!initAlarms(config, key, periodicAlarmMonitor, timeBaseNs, currentTimeNs,
+                    newPeriodicAlarmTrackers)) {
+        ALOGE("initAlarms failed");
+        return false;
+    }
     return true;
 }
 

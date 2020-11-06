@@ -20,7 +20,6 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.net.util.NetUtils;
 import android.os.Build;
@@ -87,17 +86,14 @@ public final class RouteInfo implements Parcelable {
 
     /** Unicast route. @hide */
     @SystemApi
-    @TestApi
     public static final int RTN_UNICAST = 1;
 
     /** Unreachable route. @hide */
     @SystemApi
-    @TestApi
     public static final int RTN_UNREACHABLE = 7;
 
     /** Throw route. @hide */
     @SystemApi
-    @TestApi
     public static final int RTN_THROW = 9;
 
     /**
@@ -135,7 +131,6 @@ public final class RouteInfo implements Parcelable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public RouteInfo(@Nullable IpPrefix destination, @Nullable InetAddress gateway,
             @Nullable String iface, @RouteType int type) {
         this(destination, gateway, iface, type, 0);
@@ -237,7 +232,7 @@ public final class RouteInfo implements Parcelable {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public RouteInfo(@Nullable IpPrefix destination, @Nullable InetAddress gateway,
             @Nullable String iface) {
         this(destination, gateway, iface, RTN_UNICAST);
@@ -397,7 +392,6 @@ public final class RouteInfo implements Parcelable {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RouteType
     public int getType() {
@@ -507,7 +501,7 @@ public final class RouteInfo implements Parcelable {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @Nullable
     public static RouteInfo selectBestRoute(Collection<RouteInfo> routes, InetAddress dest) {
         return NetUtils.selectBestRoute(routes, dest);
@@ -539,7 +533,7 @@ public final class RouteInfo implements Parcelable {
      * Compares this RouteInfo object against the specified object and indicates if they are equal.
      * @return {@code true} if the objects are equal, {@code false} otherwise.
      */
-    public boolean equals(Object obj) {
+    public boolean equals(@Nullable Object obj) {
         if (this == obj) return true;
 
         if (!(obj instanceof RouteInfo)) return false;
@@ -575,7 +569,7 @@ public final class RouteInfo implements Parcelable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (!(o instanceof RouteKey)) {
                 return false;
             }

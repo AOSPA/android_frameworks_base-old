@@ -924,6 +924,15 @@ public final class WindowInsets {
         Preconditions.checkArgumentNonnegative(right);
         Preconditions.checkArgumentNonnegative(bottom);
 
+        return insetUnchecked(left, top, right, bottom);
+    }
+
+    /**
+     * @see #inset(int, int, int, int)
+     * @hide
+     */
+    @NonNull
+    public WindowInsets insetUnchecked(int left, int top, int right, int bottom) {
         return new WindowInsets(
                 mSystemWindowInsetsConsumed
                         ? null
@@ -942,7 +951,7 @@ public final class WindowInsets {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || !(o instanceof WindowInsets)) return false;
         WindowInsets that = (WindowInsets) o;

@@ -63,6 +63,7 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -120,7 +121,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public interface OnPermissionsChangedListener {
 
         /**
@@ -302,7 +302,10 @@ public abstract class PackageManager {
     /**
      * {@link PackageInfo} flag: return information about the
      * intent filters supported by the activity.
+     *
+     * @deprecated The platform does not support getting {@link IntentFilter}s for the package.
      */
+    @Deprecated
     public static final int GET_INTENT_FILTERS          = 0x00000020;
 
     /**
@@ -479,7 +482,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int MATCH_FACTORY_ONLY = 0x00200000;
 
     /**
@@ -565,9 +567,11 @@ public abstract class PackageManager {
     public static final int MATCH_DEBUG_TRIAGED_MISSING = MATCH_DIRECT_BOOT_AUTO;
 
     /**
-     * Internal {@link PackageInfo} flag used to indicate that a package is a hidden system app.
+     * {@link PackageInfo} flag: include system apps that are in the uninstalled state and have
+     * been set to be hidden until installed via {@link #setSystemAppState}.
      * @hide
      */
+    @SystemApi
     public static final int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS =  0x20000000;
 
     /**
@@ -611,7 +615,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int MODULE_APEX_NAME = 0x00000001;
 
     /** @hide */
@@ -1577,6 +1580,26 @@ public abstract class PackageManager {
      */
     public static final int INSTALL_PARSE_FAILED_SKIPPED = -125;
 
+    /**
+     * Installation failed return code: this is passed in the
+     * {@link PackageInstaller#EXTRA_LEGACY_STATUS} if the system failed to install the package
+     * because it is attempting to define a permission group that is already defined by some
+     * existing package.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_DUPLICATE_PERMISSION_GROUP = -126;
+
+    /**
+     * Installation failed return code: this is passed in the
+     * {@link PackageInstaller#EXTRA_LEGACY_STATUS} if the system failed to install the package
+     * because it is attempting to define a permission in a group that does not exists or that is
+     * defined by an packages with an incompatible certificate.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_BAD_PERMISSION_GROUP = -127;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
             DELETE_KEEP_DATA,
@@ -1689,6 +1712,15 @@ public abstract class PackageManager {
     public static final int DELETE_FAILED_USED_SHARED_LIBRARY = -6;
 
     /**
+     * Deletion failed return code: this is passed to the
+     * {@link IPackageDeleteObserver} if the system failed to delete the package
+     * because there is an app pinned.
+     *
+     * @hide
+     */
+    public static final int DELETE_FAILED_APP_PINNED = -7;
+
+    /**
      * Return code that is passed to the {@link IPackageMoveObserver} when the
      * package has been successfully moved by the system.
      *
@@ -1771,7 +1803,7 @@ public abstract class PackageManager {
      * @hide
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int MOVE_INTERNAL = 0x00000001;
 
     /**
@@ -1780,7 +1812,7 @@ public abstract class PackageManager {
      * @hide
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int MOVE_EXTERNAL_MEDIA = 0x00000002;
 
     /** {@hide} */
@@ -3319,7 +3351,6 @@ public abstract class PackageManager {
     * @hide
     */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_USER_SET = 1 << 0;
 
     /**
@@ -3330,7 +3361,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_USER_FIXED =  1 << 1;
 
     /**
@@ -3341,7 +3371,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_POLICY_FIXED =  1 << 2;
 
     /**
@@ -3358,7 +3387,6 @@ public abstract class PackageManager {
      */
     @Deprecated
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_REVOKE_ON_UPGRADE =  1 << 3;
 
     /**
@@ -3368,7 +3396,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_SYSTEM_FIXED =  1 << 4;
 
     /**
@@ -3380,7 +3407,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_GRANTED_BY_DEFAULT =  1 << 5;
 
     /**
@@ -3390,7 +3416,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_REVIEW_REQUIRED =  1 << 6;
 
     /**
@@ -3428,7 +3453,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT =  1 << 11;
 
@@ -3440,7 +3464,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT =  1 << 12;
 
@@ -3453,7 +3476,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT =  1 << 13;
 
@@ -3466,7 +3488,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_APPLY_RESTRICTION =  1 << 14;
 
@@ -3476,7 +3497,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_GRANTED_BY_ROLE =  1 << 15;
 
     /**
@@ -3488,7 +3508,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_REVOKED_COMPAT =  FLAG_PERMISSION_REVOKE_ON_UPGRADE;
 
     /**
@@ -3498,7 +3517,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_ONE_TIME = 1 << 16;
 
     /**
@@ -3516,7 +3534,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT =  1 << 18;
 
@@ -3655,7 +3672,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final String SYSTEM_SHARED_LIBRARY_SERVICES = "android.ext.services";
 
@@ -3668,7 +3685,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final String SYSTEM_SHARED_LIBRARY_SHARED = "android.ext.shared";
 
@@ -3762,27 +3779,34 @@ public abstract class PackageManager {
     public @interface SystemAppState {}
 
     /**
-     * Constant for noting system app state as hidden before installation
+     * Constant for use with {@link #setSystemAppState} to mark a system app as hidden until
+     * installation.
      * @hide
      */
+    @SystemApi
     public static final int SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN = 0;
 
     /**
-     * Constant for noting system app state as visible before installation
+     * Constant for use with {@link #setSystemAppState} to mark a system app as not hidden until
+     * installation.
      * @hide
      */
+    @SystemApi
     public static final int SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_VISIBLE = 1;
 
     /**
-     * Constant for noting system app state as installed
+     * Constant for use with {@link #setSystemAppState} to change a system app's state to installed.
      * @hide
      */
+    @SystemApi
     public static final int SYSTEM_APP_STATE_INSTALLED = 2;
 
     /**
-     * Constant for noting system app state as not installed
+     * Constant for use with {@link #setSystemAppState} to change a system app's state to
+     * uninstalled.
      * @hide
      */
+    @SystemApi
     public static final int SYSTEM_APP_STATE_UNINSTALLED = 3;
 
     /**
@@ -3800,18 +3824,21 @@ public abstract class PackageManager {
      * Unstartable state with no root cause specified. E.g., data loader seeing missing pages but
      * unclear about the cause. This corresponds to a generic alert window shown to the user when
      * the user attempts to launch the app.
+     * @hide
      */
     public static final int UNSTARTABLE_REASON_UNKNOWN = 0;
 
     /**
      * Unstartable state due to connection issues that interrupt package loading.
      * This corresponds to an alert window shown to the user indicating connection errors.
+     * @hide
      */
     public static final int UNSTARTABLE_REASON_CONNECTION_ERROR = 1;
 
     /**
      * Unstartable state after encountering storage limitations.
      * This corresponds to an alert window indicating limited storage.
+     * @hide
      */
     public static final int UNSTARTABLE_REASON_INSUFFICIENT_STORAGE = 2;
 
@@ -4083,7 +4110,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi @SystemApi
+    @SystemApi
     public abstract boolean arePermissionsIndividuallyControlled();
 
     /**
@@ -4334,7 +4361,6 @@ public abstract class PackageManager {
      * @hide
      */
     @NonNull
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public abstract List<PackageInfo> getInstalledPackagesAsUser(@PackageInfoFlags int flags,
@@ -4495,7 +4521,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS)
     public abstract void grantRuntimePermission(@NonNull String packageName,
@@ -4522,7 +4547,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS)
     public abstract void revokeRuntimePermission(@NonNull String packageName,
@@ -4550,7 +4574,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS)
     public void revokeRuntimePermission(@NonNull String packageName,
@@ -4569,7 +4592,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS,
             android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS,
@@ -4592,7 +4614,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS,
             android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS
@@ -6192,9 +6213,30 @@ public abstract class PackageManager {
     public abstract Resources getResourcesForApplication(@NonNull String packageName)
             throws NameNotFoundException;
 
-    /** @hide */
+    /**
+     * Please don't use this function because it is no longer supported.
+     *
+     * @deprecated Instead of using this function, please use
+     *             {@link Context#createContextAsUser(UserHandle, int)} to create the specified user
+     *             context, {@link Context#getPackageManager()} to get PackageManager instance for
+     *             the specified user, and then
+     *             {@link PackageManager#getResourcesForApplication(String)} to get the same
+     *             Resources instance.
+     * @see {@link Context#createContextAsUser(android.os.UserHandle, int)}
+     * @see {@link Context#getPackageManager()}
+     * @see {@link android.content.pm.PackageManager#getResourcesForApplication(java.lang.String)}
+     * TODO(b/170852794): mark maxTargetSdk as {@code Build.VERSION_CODES.S}
+     * @hide
+     */
     @NonNull
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170928809,
+            publicAlternatives = "Use {@code Context#createContextAsUser(UserHandle, int)}"
+                    + " to create the relevant user context,"
+                    + " {@link android.content.Context#getPackageManager()} and"
+                    + " {@link android.content.pm.PackageManager#getResourcesForApplication("
+                    + "java.lang.String)}"
+                    + " instead.")
+    @Deprecated
     public abstract Resources getResourcesForApplicationAsUser(@NonNull String packageName,
             @UserIdInt int userId) throws NameNotFoundException;
 
@@ -6440,7 +6482,6 @@ public abstract class PackageManager {
      * @hide
      */
     @Nullable
-    @TestApi
     @SystemApi
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public abstract String getDefaultBrowserPackageNameAsUser(@UserIdInt int userId);
@@ -7072,11 +7113,18 @@ public abstract class PackageManager {
             @NonNull UserHandle userHandle);
 
     /**
-     * Sets system app state
+     * Sets the state of a system app.
+     *
+     * This method can be used to change a system app's hidden-until-installed state (via
+     * {@link #SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN} and
+     * {@link #SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_VISIBLE} or its installation state (via
+     * {@link #SYSTEM_APP_STATE_INSTALLED} and {@link #SYSTEM_APP_STATE_UNINSTALLED}.
+     *
      * @param packageName Package name of the app.
      * @param state State of the app.
      * @hide
      */
+    @SystemApi
     public void setSystemAppState(@NonNull String packageName, @SystemAppState int state) {
         throw new RuntimeException("Not implemented. Must override in a subclass");
     }
@@ -7094,7 +7142,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS)
     public abstract void addOnPermissionsChangeListener(
             @NonNull OnPermissionsChangedListener listener);
@@ -7107,7 +7154,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS)
     public abstract void removeOnPermissionsChangeListener(
             @NonNull OnPermissionsChangedListener listener);
@@ -7466,14 +7512,14 @@ public abstract class PackageManager {
     public abstract void unregisterMoveCallback(@NonNull MoveCallback callback);
 
     /** {@hide} */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public abstract int movePackage(@NonNull String packageName, @NonNull VolumeInfo vol);
     /** {@hide} */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public abstract @Nullable VolumeInfo getPackageCurrentVolume(@NonNull ApplicationInfo app);
     /** {@hide} */
     @NonNull
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public abstract List<VolumeInfo> getPackageCandidateVolumes(
             @NonNull ApplicationInfo app);
 
@@ -7564,7 +7610,7 @@ public abstract class PackageManager {
 
     /** {@hide} */
     @NonNull
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static String installStatusToString(int status, @Nullable String msg) {
         final String str = installStatusToString(status);
         if (msg != null) {
@@ -7705,6 +7751,7 @@ public abstract class PackageManager {
             case DELETE_FAILED_OWNER_BLOCKED: return "DELETE_FAILED_OWNER_BLOCKED";
             case DELETE_FAILED_ABORTED: return "DELETE_FAILED_ABORTED";
             case DELETE_FAILED_USED_SHARED_LIBRARY: return "DELETE_FAILED_USED_SHARED_LIBRARY";
+            case DELETE_FAILED_APP_PINNED: return "DELETE_FAILED_APP_PINNED";
             default: return Integer.toString(status);
         }
     }
@@ -7719,6 +7766,7 @@ public abstract class PackageManager {
             case DELETE_FAILED_OWNER_BLOCKED: return PackageInstaller.STATUS_FAILURE_BLOCKED;
             case DELETE_FAILED_ABORTED: return PackageInstaller.STATUS_FAILURE_ABORTED;
             case DELETE_FAILED_USED_SHARED_LIBRARY: return PackageInstaller.STATUS_FAILURE_CONFLICT;
+            case DELETE_FAILED_APP_PINNED: return PackageInstaller.STATUS_FAILURE_BLOCKED;
             default: return PackageInstaller.STATUS_FAILURE;
         }
     }
@@ -8126,7 +8174,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @Nullable
     public String getIncidentReportApproverPackageName() {
         throw new UnsupportedOperationException(
@@ -8268,7 +8315,7 @@ public abstract class PackageManager {
         }
 
         @Override
-        public boolean equals(Object rval) {
+        public boolean equals(@Nullable Object rval) {
             if (rval == null) {
                 return false;
             }
@@ -8371,7 +8418,7 @@ public abstract class PackageManager {
         }
 
         @Override
-        public boolean equals(Object rval) {
+        public boolean equals(@Nullable Object rval) {
             if (rval == null) {
                 return false;
             }
@@ -8446,15 +8493,30 @@ public abstract class PackageManager {
     }
 
     /**
+     * Returns the token to be used by the subsequent calls to holdLock().
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.INJECT_EVENTS)
+    @TestApi
+    public IBinder getHoldLockToken() {
+        try {
+            return ActivityThread.getPackageManager().getHoldLockToken();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Holds the PM lock for the specified amount of milliseconds.
      * Intended for use by the tests that need to imitate lock contention.
+     * The token should be obtained by
+     * {@link android.content.pm.PackageManager#getHoldLockToken()}.
      * @hide
      */
     @TestApi
-    @RequiresPermission(android.Manifest.permission.INJECT_EVENTS)
-    public void holdLock(int durationMs) {
+    public void holdLock(IBinder token, int durationMs) {
         try {
-            ActivityThread.getPackageManager().holdLock(durationMs);
+            ActivityThread.getPackageManager().holdLock(token, durationMs);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

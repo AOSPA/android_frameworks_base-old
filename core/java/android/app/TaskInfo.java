@@ -16,6 +16,8 @@
 
 package android.app;
 
+import static android.app.ActivityTaskManager.INVALID_TASK_ID;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
@@ -24,10 +26,16 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.os.Build;
+import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.util.Log;
 import android.window.WindowContainerToken;
+
+import java.util.ArrayList;
 
 /**
  * Stores information about a particular Task.
@@ -40,7 +48,7 @@ public class TaskInfo {
      * running user of the system otherwise.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int userId;
 
     /**
@@ -177,6 +185,34 @@ public class TaskInfo {
      */
     public boolean isResizeable;
 
+    /**
+     * Activity bounds if this task or its top activity is presented in letterbox mode and
+     * {@code null} otherwise.
+     * @hide
+     */
+    @Nullable
+    public Rect letterboxActivityBounds;
+
+    /**
+     * Relative position of the task's top left corner in the parent container.
+     * @hide
+     */
+    public Point positionInParent;
+
+    /**
+     * The launch cookies associated with activities in this task if any.
+     * @see ActivityOptions#setLaunchCookie(IBinder)
+     * @hide
+     */
+    public ArrayList<IBinder> launchCookies = new ArrayList<>();
+
+    /**
+     * The identifier of the parent task that is created by organizer, otherwise
+     * {@link ActivityTaskManager#INVALID_TASK_ID}.
+     * @hide
+     */
+    public int parentTaskId;
+
     TaskInfo() {
         // Do nothing
     }
@@ -213,6 +249,37 @@ public class TaskInfo {
         return configuration;
     }
 
+    /** @hide */
+    @Nullable
+    @TestApi
+    public PictureInPictureParams getPictureInPictureParams() {
+        return pictureInPictureParams;
+    }
+
+    /** @hide */
+    @WindowConfiguration.WindowingMode
+    public int getWindowingMode() {
+        return configuration.windowConfiguration.getWindowingMode();
+    }
+
+    /** @hide */
+    @WindowConfiguration.ActivityType
+    public int getActivityType() {
+        return configuration.windowConfiguration.getActivityType();
+    }
+
+    /** @hide */
+    public void addLaunchCookie(IBinder cookie) {
+        if (cookie == null || launchCookies.contains(cookie)) return;
+        launchCookies.add(cookie);
+    }
+
+    /** @hide */
+    @TestApi
+    public boolean hasParentTask() {
+        return parentTaskId != INVALID_TASK_ID;
+    }
+
     /**
      * Reads the TaskInfo from a parcel.
      */
@@ -222,9 +289,7 @@ public class TaskInfo {
         taskId = source.readInt();
         displayId = source.readInt();
         isRunning = source.readBoolean();
-        baseIntent = source.readInt() != 0
-                ? Intent.CREATOR.createFromParcel(source)
-                : null;
+        baseIntent = source.readTypedObject(Intent.CREATOR);
         baseActivity = ComponentName.readFromParcel(source);
         topActivity = ComponentName.readFromParcel(source);
         origActivity = ComponentName.readFromParcel(source);
@@ -233,21 +298,19 @@ public class TaskInfo {
         numActivities = source.readInt();
         lastActiveTime = source.readLong();
 
-        taskDescription = source.readInt() != 0
-                ? ActivityManager.TaskDescription.CREATOR.createFromParcel(source)
-                : null;
+        taskDescription = source.readTypedObject(ActivityManager.TaskDescription.CREATOR);
         supportsSplitScreenMultiWindow = source.readBoolean();
         resizeMode = source.readInt();
         configuration.readFromParcel(source);
         token = WindowContainerToken.CREATOR.createFromParcel(source);
         topActivityType = source.readInt();
-        pictureInPictureParams = source.readInt() != 0
-                ? PictureInPictureParams.CREATOR.createFromParcel(source)
-                : null;
-        topActivityInfo = source.readInt() != 0
-                ? ActivityInfo.CREATOR.createFromParcel(source)
-                : null;
+        pictureInPictureParams = source.readTypedObject(PictureInPictureParams.CREATOR);
+        topActivityInfo = source.readTypedObject(ActivityInfo.CREATOR);
         isResizeable = source.readBoolean();
+        source.readBinderList(launchCookies);
+        letterboxActivityBounds = source.readTypedObject(Rect.CREATOR);
+        positionInParent = source.readTypedObject(Point.CREATOR);
+        parentTaskId = source.readInt();
     }
 
     /**
@@ -259,13 +322,8 @@ public class TaskInfo {
         dest.writeInt(taskId);
         dest.writeInt(displayId);
         dest.writeBoolean(isRunning);
+        dest.writeTypedObject(baseIntent, 0);
 
-        if (baseIntent != null) {
-            dest.writeInt(1);
-            baseIntent.writeToParcel(dest, 0);
-        } else {
-            dest.writeInt(0);
-        }
         ComponentName.writeToParcel(baseActivity, dest);
         ComponentName.writeToParcel(topActivity, dest);
         ComponentName.writeToParcel(origActivity, dest);
@@ -274,30 +332,19 @@ public class TaskInfo {
         dest.writeInt(numActivities);
         dest.writeLong(lastActiveTime);
 
-        if (taskDescription != null) {
-            dest.writeInt(1);
-            taskDescription.writeToParcel(dest, flags);
-        } else {
-            dest.writeInt(0);
-        }
+        dest.writeTypedObject(taskDescription, flags);
         dest.writeBoolean(supportsSplitScreenMultiWindow);
         dest.writeInt(resizeMode);
         configuration.writeToParcel(dest, flags);
         token.writeToParcel(dest, flags);
         dest.writeInt(topActivityType);
-        if (pictureInPictureParams == null) {
-            dest.writeInt(0);
-        } else {
-            dest.writeInt(1);
-            pictureInPictureParams.writeToParcel(dest, flags);
-        }
-        if (topActivityInfo == null) {
-            dest.writeInt(0);
-        } else {
-            dest.writeInt(1);
-            topActivityInfo.writeToParcel(dest, flags);
-        }
+        dest.writeTypedObject(pictureInPictureParams, flags);
+        dest.writeTypedObject(topActivityInfo, flags);
         dest.writeBoolean(isResizeable);
+        dest.writeBinderList(launchCookies);
+        dest.writeTypedObject(letterboxActivityBounds, flags);
+        dest.writeTypedObject(positionInParent, flags);
+        dest.writeInt(parentTaskId);
     }
 
     @Override
@@ -316,6 +363,11 @@ public class TaskInfo {
                 + " token=" + token
                 + " topActivityType=" + topActivityType
                 + " pictureInPictureParams=" + pictureInPictureParams
-                + " topActivityInfo=" + topActivityInfo;
+                + " topActivityInfo=" + topActivityInfo
+                + " launchCookies" + launchCookies
+                + " letterboxActivityBounds=" + letterboxActivityBounds
+                + " positionInParent=" + positionInParent
+                + " parentTaskId: " + parentTaskId
+                + "}";
     }
 }

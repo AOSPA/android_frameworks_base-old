@@ -489,7 +489,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         final ActivityStarter starter = prepareStarter(0);
 
         final LockTaskController lockTaskController = mAtm.getLockTaskController();
-        doReturn(true).when(lockTaskController).isLockTaskModeViolation(any());
+        doReturn(true).when(lockTaskController).isNewTaskLockTaskModeViolation(any());
 
         final int result = starter.setReason("testTaskModeViolation").execute();
 
@@ -717,10 +717,10 @@ public class ActivityStarterTests extends WindowTestsBase {
         // Put 2 tasks in the same stack (simulate the behavior of home stack).
         final Task rootTask = new TaskBuilder(mSupervisor).build();
         final ActivityRecord activity = new ActivityBuilder(mAtm)
-                .setStack(rootTask)
+                .setParentTask(rootTask)
                 .setCreateTask(true).build();
         new ActivityBuilder(mAtm)
-                .setStack(activity.getRootTask())
+                .setParentTask(activity.getRootTask())
                 .setCreateTask(true).build();
 
         // Create a top finishing activity.
@@ -1027,7 +1027,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         assertThat(outActivity[0].inSplitScreenWindowingMode()).isFalse();
 
         // Move activity to split-screen-primary stack and make sure it has the focus.
-        TestSplitOrganizer splitOrg = new TestSplitOrganizer(mAtm, top.getDisplayId());
+        TestSplitOrganizer splitOrg = new TestSplitOrganizer(mAtm, top.getDisplayContent());
         top.getRootTask().reparent(splitOrg.mPrimary, POSITION_BOTTOM);
         top.getRootTask().moveToFront("testWindowingModeOptionsLaunchAdjacent");
 

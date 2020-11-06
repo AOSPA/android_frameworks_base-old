@@ -84,7 +84,6 @@ public class LockscreenIconControllerTest extends SysuiTestCase {
     private LockscreenLockIconController mLockIconController;
     private OnAttachStateChangeListener mOnAttachStateChangeListener;
 
-
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);

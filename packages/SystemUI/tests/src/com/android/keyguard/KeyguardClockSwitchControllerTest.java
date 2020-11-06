@@ -16,7 +16,6 @@
 
 package com.android.keyguard;
 
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
@@ -24,6 +23,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.content.res.Resources;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.view.View;
@@ -37,6 +37,8 @@ import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.plugins.ClockPlugin;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.phone.NotificationIconAreaController;
+import com.android.systemui.statusbar.phone.NotificationIconContainer;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -59,11 +61,17 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
     @Mock
     private KeyguardClockSwitch mView;
     @Mock
+    private NotificationIconContainer mNotificationIcons;
+    @Mock
     private ClockPlugin mClockPlugin;
     @Mock
     ColorExtractor.GradientColors mGradientColors;
     @Mock
     KeyguardSliceViewController mKeyguardSliceViewController;
+    @Mock
+    Resources mResources;
+    @Mock
+    NotificationIconAreaController mNotificationIconAreaController;
 
     private KeyguardClockSwitchController mController;
 
@@ -71,11 +79,18 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
     public void setup() {
         MockitoAnnotations.initMocks(this);
 
+        when(mView.findViewById(com.android.systemui.R.id.left_aligned_notification_icon_container))
+                .thenReturn(mNotificationIcons);
         when(mView.isAttachedToWindow()).thenReturn(true);
-
+        when(mResources.getString(anyInt())).thenReturn("h:mm");
         mController = new KeyguardClockSwitchController(
-                mView, mStatusBarStateController, mColorExtractor, mClockManager,
-                mKeyguardSliceViewController);
+                mView,
+                mResources,
+                mStatusBarStateController,
+                mColorExtractor,
+                mClockManager,
+                mKeyguardSliceViewController,
+                mNotificationIconAreaController);
 
         when(mStatusBarStateController.getState()).thenReturn(StatusBarState.SHADE);
         when(mColorExtractor.getColors(anyInt())).thenReturn(mGradientColors);

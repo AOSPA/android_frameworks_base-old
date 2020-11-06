@@ -24,10 +24,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 
 import com.android.systemui.dagger.SysUISingleton;
-import com.android.systemui.qs.QSFooterImpl;
 import com.android.systemui.qs.QSPanel;
 import com.android.systemui.qs.QuickQSPanel;
-import com.android.systemui.qs.customize.QSCustomizer;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 
 import java.lang.reflect.InvocationTargetException;
@@ -92,11 +90,6 @@ public class InjectionInflationController {
         }
 
         /**
-         * Creates the QSFooterImpl.
-         */
-        QSFooterImpl createQsFooter();
-
-        /**
          * Creates the NotificationStackScrollLayout.
          */
         NotificationStackScrollLayout createNotificationStackScrollLayout();
@@ -110,11 +103,6 @@ public class InjectionInflationController {
          * Creates the QuickQSPanel.
          */
         QuickQSPanel createQuickQSPanel();
-
-        /**
-         * Creates the QSCustomizer.
-         */
-        QSCustomizer createQSCustomizer();
     }
 
 

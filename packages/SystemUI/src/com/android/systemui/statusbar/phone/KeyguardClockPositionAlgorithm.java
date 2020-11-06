@@ -86,9 +86,14 @@ public class KeyguardClockPositionAlgorithm {
     private int mMaxShadeBottom;
 
     /**
-     * Minimum distance from the status bar.
+     * Recommended distance from the status bar without the lock icon.
      */
-    private int mContainerTopPadding;
+    private int mContainerTopPaddingWithoutLockIcon;
+
+    /**
+     * Recommended distance from the status bar with the lock icon.
+     */
+    private int mContainerTopPaddingWithLockIcon;
 
     /**
      * @see NotificationPanelViewController#getExpandedFraction()
@@ -131,24 +136,31 @@ public class KeyguardClockPositionAlgorithm {
     public void loadDimens(Resources res) {
         mClockNotificationsMargin = res.getDimensionPixelSize(
                 R.dimen.keyguard_clock_notifications_margin);
+
+        mContainerTopPaddingWithoutLockIcon =
+                res.getDimensionPixelSize(R.dimen.keyguard_clock_top_margin) / 2;
         // Consider the lock icon when determining the minimum top padding between the status bar
         // and top of the clock.
-        mContainerTopPadding = Math.max(res.getDimensionPixelSize(
-                R.dimen.keyguard_clock_top_margin),
-                res.getDimensionPixelSize(R.dimen.keyguard_lock_height)
-                        + res.getDimensionPixelSize(R.dimen.keyguard_lock_padding)
-                        + res.getDimensionPixelSize(R.dimen.keyguard_clock_lock_margin));
+        mContainerTopPaddingWithLockIcon =
+                Math.max(res.getDimensionPixelSize(R.dimen.keyguard_clock_top_margin),
+                        res.getDimensionPixelSize(R.dimen.keyguard_lock_height)
+                                + res.getDimensionPixelSize(R.dimen.keyguard_lock_padding)
+                                + res.getDimensionPixelSize(R.dimen.keyguard_clock_lock_margin));
         mBurnInPreventionOffsetX = res.getDimensionPixelSize(
                 R.dimen.burn_in_prevention_offset_x);
         mBurnInPreventionOffsetY = res.getDimensionPixelSize(
                 R.dimen.burn_in_prevention_offset_y);
     }
 
-    public void setup(int minTopMargin, int maxShadeBottom, int notificationStackHeight,
+    /**
+     * Sets up algorithm values.
+     */
+    public void setup(int statusBarMinHeight, int maxShadeBottom, int notificationStackHeight,
             float panelExpansion, int parentHeight, int keyguardStatusHeight, int clockPreferredY,
             boolean hasCustomClock, boolean hasVisibleNotifs, float dark, float emptyDragAmount,
-            boolean bypassEnabled, int unlockedStackScrollerPadding) {
-        mMinTopMargin = minTopMargin + mContainerTopPadding;
+            boolean bypassEnabled, int unlockedStackScrollerPadding, boolean udfpsEnrolled) {
+        mMinTopMargin = statusBarMinHeight + (udfpsEnrolled ? mContainerTopPaddingWithoutLockIcon :
+                mContainerTopPaddingWithLockIcon);
         mMaxShadeBottom = maxShadeBottom;
         mNotificationStackHeight = notificationStackHeight;
         mPanelExpansion = panelExpansion;
@@ -175,8 +187,8 @@ public class KeyguardClockPositionAlgorithm {
     }
 
     /**
-      * Update lock screen mode for testing different layouts
-      */
+     * Update lock screen mode for testing different layouts
+     */
     public void onLockScreenModeChanged(int mode) {
         mLockScreenMode = mode;
     }
@@ -241,6 +253,13 @@ public class KeyguardClockPositionAlgorithm {
         clockYDark = MathUtils.lerp(clockYBouncer, clockYDark, shadeExpansion);
 
         float darkAmount = mBypassEnabled && !mHasCustomClock ? 1.0f : mDarkAmount;
+
+        // TODO(b/12836565) - prototyping only adjustment
+        if (mLockScreenMode != KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL) {
+            // This will keep the clock at the top for AOD
+            return (int) (clockY + burnInPreventionOffsetY() + mEmptyDragAmount);
+        }
+
         return (int) (MathUtils.lerp(clockY, clockYDark, darkAmount) + mEmptyDragAmount);
     }
 

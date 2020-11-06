@@ -303,7 +303,6 @@ interface IActivityTaskManager {
     boolean enterPictureInPictureMode(in IBinder token, in PictureInPictureParams params);
     void setPictureInPictureParams(in IBinder token, in PictureInPictureParams params);
     void requestPictureInPictureMode(in IBinder token);
-    int getMaxNumPictureInPictureActions(in IBinder token);
     IBinder getUriPermissionOwnerForActivity(in IBinder activityToken);
 
     /**
@@ -432,12 +431,6 @@ interface IActivityTaskManager {
      * Clears launch params for given packages.
      */
     void clearLaunchParamsForPackages(in List<String> packageNames);
-
-    /**
-     * Makes the display with the given id a single task instance display. I.e the display can only
-     * contain one task.
-     */
-    void setDisplayToSingleTaskInstance(int displayId);
 
     /**
      * Restarts the activity by killing its process if it is visible. If the activity is not
