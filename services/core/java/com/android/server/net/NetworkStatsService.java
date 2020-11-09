@@ -1078,6 +1078,10 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
     @Override
     public long getIfaceStats(String iface, int type) {
+        if (iface == null) {
+            Log.e(TAG, "getIfaceStats called with null iface, returning -1");
+            return -1;
+        }
         long nativeIfaceStats = nativeGetIfaceStat(iface, type, checkBpfStatsEnable());
         if (nativeIfaceStats == -1) {
             return nativeIfaceStats;
