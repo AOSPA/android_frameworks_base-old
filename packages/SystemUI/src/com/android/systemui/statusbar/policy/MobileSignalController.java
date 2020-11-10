@@ -540,6 +540,8 @@ public class MobileSignalController extends SignalController<
                 || mConfig.alwaysShowNetworkTypeIcon) ? icons.mDataType : 0;
         if ( mConfig.enableRatIconEnhancement ) {
             typeIcon = getEnhancementDataRatIcon();
+        }else if ( mConfig.enableDdsRatIconEnhancement ) {
+            typeIcon = getEnhancementDdsRatIcon();
         }
         int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
         MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
@@ -940,17 +942,21 @@ public class MobileSignalController extends SignalController<
     }
 
     private int getEnhancementDataRatIcon() {
-        int ratIcon = 0;
-        if ( showDataRatIcon() ) {
-            MobileIconGroup iconGroup = mDefaultIcons;
-            if ( mFiveGState.isNrIconTypeValid() ) {
-                iconGroup = mFiveGState.getIconGroup();
-            }else {
-                iconGroup = getNetworkTypeIconGroup();
-            }
-            ratIcon = iconGroup.mDataType;
+        return showDataRatIcon() ? getRatIconGroup().mDataType : 0;
+    }
+
+    private int getEnhancementDdsRatIcon() {
+        return mCurrentState.dataSim ? getRatIconGroup().mDataType : 0;
+    }
+
+    private MobileIconGroup getRatIconGroup() {
+        MobileIconGroup iconGroup = mDefaultIcons;
+        if ( mFiveGState.isNrIconTypeValid() ) {
+            iconGroup = mFiveGState.getIconGroup();
+        }else {
+            iconGroup = getNetworkTypeIconGroup();
         }
-        return ratIcon;
+        return iconGroup;
     }
 
     private boolean isVowifiAvailable() {
