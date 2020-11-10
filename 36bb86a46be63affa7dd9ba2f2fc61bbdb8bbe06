@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "90804030_9c7a8360",
+        "filename": "core/java/android/view/ViewRootImpl.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 6003,
+      "author": {
+        "id": 1000316
+      },
+      "writtenOn": "2020-11-10T00:41:50Z",
+      "side": 1,
+      "message": "I would remove the Log here, or give it a more appropriate tag, just feels a little unprofessional if anything",
+      "revId": "36bb86a46be63affa7dd9ba2f2fc61bbdb8bbe06",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "efaf1a1f_a32c64bf",
+        "filename": "core/java/android/view/ViewRootImpl.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 9865,
+      "author": {
+        "id": 1000316
+      },
+      "writtenOn": "2020-11-10T00:41:50Z",
+      "side": 1,
+      "message": "Same as #6003",
+      "revId": "36bb86a46be63affa7dd9ba2f2fc61bbdb8bbe06",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
