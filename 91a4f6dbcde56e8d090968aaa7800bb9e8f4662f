@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5cee1a39_829e9beb",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationModeController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 136,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-11-12T23:17:40Z",
+      "side": 1,
+      "message": "move this boolean to the method switchToDefaultGestureNavOverlayIfNecessary. There\u0027s no point in passing it as argument here. Also rename immnav to something more descriptive like hasImmersiveNavigation",
+      "revId": "91a4f6dbcde56e8d090968aaa7800bb9e8f4662f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
