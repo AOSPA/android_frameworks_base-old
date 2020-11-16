@@ -269,7 +269,8 @@ public class TaskRecordTests extends WindowTestsBase {
         assertEquals(fullScreenBounds.height(), task.getBounds().height());
 
         // Top activity gets used
-        final ActivityRecord top = new ActivityBuilder(mAtm).setTask(task).setStack(stack).build();
+        final ActivityRecord top = new ActivityBuilder(mAtm).setTask(task).setParentTask(stack)
+                .build();
         assertEquals(top, task.getTopNonFinishingActivity());
         top.setRequestedOrientation(SCREEN_ORIENTATION_LANDSCAPE);
         assertThat(task.getBounds().width()).isGreaterThan(task.getBounds().height());
@@ -420,8 +421,9 @@ public class TaskRecordTests extends WindowTestsBase {
 
         // Without limiting to be inside the parent bounds, the out screen size should keep relative
         // to the input bounds.
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(task).build();
         final ActivityRecord.CompatDisplayInsets compatIntsets =
-                new ActivityRecord.CompatDisplayInsets(display, task);
+                new ActivityRecord.CompatDisplayInsets(display, activity);
         task.computeConfigResourceOverrides(inOutConfig, parentConfig, compatIntsets);
 
         assertEquals(largerLandscapeBounds, inOutConfig.windowConfiguration.getAppBounds());
@@ -1000,7 +1002,8 @@ public class TaskRecordTests extends WindowTestsBase {
 
     @Test
     public void testNotSpecifyOrientationByFloatingTask() {
-        final Task task = getTestTask();
+        final Task task = new TaskBuilder(mSupervisor)
+                .setCreateActivity(true).setCreateParentTask(true).build();
         final ActivityRecord activity = task.getTopMostActivity();
         final WindowContainer<?> parentContainer = task.getParent();
         final TaskDisplayArea taskDisplayArea = task.getDisplayArea();
@@ -1026,10 +1029,10 @@ public class TaskRecordTests extends WindowTestsBase {
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
         final Task secondStack = secondTaskDisplayArea.createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
-        final ActivityRecord firstActivity = new ActivityBuilder(mAtm).setCreateTask(true)
-                .setStack(firstStack).build();
-        final ActivityRecord secondActivity = new ActivityBuilder(mAtm).setCreateTask(true)
-                .setStack(secondStack).build();
+        final ActivityRecord firstActivity = new ActivityBuilder(mAtm)
+                .setTask(firstStack).build();
+        final ActivityRecord secondActivity = new ActivityBuilder(mAtm)
+                .setTask(secondStack).build();
         firstActivity.setRequestedOrientation(SCREEN_ORIENTATION_LANDSCAPE);
         secondActivity.setRequestedOrientation(SCREEN_ORIENTATION_PORTRAIT);
 

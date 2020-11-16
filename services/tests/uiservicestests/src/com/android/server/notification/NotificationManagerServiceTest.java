@@ -111,9 +111,9 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.Context;
+import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.IIntentSender;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
@@ -1883,7 +1883,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testGroupInstanceIds() throws Exception {
         final NotificationRecord group1 = generateNotificationRecord(
                 mTestNotificationChannel, 1, "group1", true);
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, "testFindGroupNotificationsLocked",
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "testGroupInstanceIds",
                 group1.getSbn().getId(), group1.getSbn().getNotification(),
                 group1.getSbn().getUserId());
         waitForIdle();
@@ -1891,7 +1891,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // same group, child, should be returned
         final NotificationRecord group1Child = generateNotificationRecord(
                 mTestNotificationChannel, 2, "group1", false);
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, "testFindGroupNotificationsLocked",
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "testGroupInstanceIds",
                 group1Child.getSbn().getId(),
                 group1Child.getSbn().getNotification(), group1Child.getSbn().getUserId());
         waitForIdle();
@@ -2880,16 +2880,17 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testSetListenerAccessForUser() throws Exception {
         UserHandle user = UserHandle.of(10);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
-        mBinderService.setNotificationListenerAccessGrantedForUser(c, user.getIdentifier(), true);
+        mBinderService.setNotificationListenerAccessGrantedForUser(
+                c, user.getIdentifier(), true, true);
 
 
         verify(mContext, times(1)).sendBroadcastAsUser(any(), eq(user), any());
         verify(mListeners, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), user.getIdentifier(), true, true);
+                c.flattenToString(), user.getIdentifier(), true, true, true);
         verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), user.getIdentifier(), false, true);
+                c.flattenToString(), user.getIdentifier(), false, true, true);
         verify(mAssistants, never()).setPackageOrComponentEnabled(
-                any(), anyInt(), anyBoolean(), anyBoolean());
+                any(), anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
     }
 
     @Test
@@ -2958,12 +2959,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testSetListenerAccess() throws Exception {
         ComponentName c = ComponentName.unflattenFromString("package/Component");
-        mBinderService.setNotificationListenerAccessGranted(c, true);
+        mBinderService.setNotificationListenerAccessGranted(c, true, true);
 
         verify(mListeners, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), 0, true, true);
+                c.flattenToString(), 0, true, true, true);
         verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), 0, false, true);
+                c.flattenToString(), 0, false, true, true);
         verify(mAssistants, never()).setPackageOrComponentEnabled(
                 any(), anyInt(), anyBoolean(), anyBoolean());
     }
@@ -3112,12 +3113,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testSetListenerAccess_onLowRam() throws Exception {
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
-        mBinderService.setNotificationListenerAccessGranted(c, true);
+        mBinderService.setNotificationListenerAccessGranted(c, true, true);
 
         verify(mListeners).setPackageOrComponentEnabled(
-                anyString(), anyInt(), anyBoolean(), anyBoolean());
+                anyString(), anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
         verify(mConditionProviders).setPackageOrComponentEnabled(
-                anyString(), anyInt(), anyBoolean(), anyBoolean());
+                anyString(), anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
         verify(mAssistants).migrateToXml();
         verify(mAssistants).resetDefaultAssistantsIfNecessary();
     }
@@ -3160,14 +3161,14 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
 
-        mBinderService.setNotificationListenerAccessGranted(c, true);
+        mBinderService.setNotificationListenerAccessGranted(c, true, true);
 
         verify(mListeners, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), 0, true, true);
+                c.flattenToString(), 0, true, true, true);
         verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), 0, false, true);
+                c.flattenToString(), 0, false, true, true);
         verify(mAssistants, never()).setPackageOrComponentEnabled(
-                any(), anyInt(), anyBoolean(), anyBoolean());
+                any(), anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
     }
 
     @Test
@@ -6691,7 +6692,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 orig)));
 
         mBinderService.createConversationNotificationChannelForPackage(
-                PKG, mUid, "key", orig, "friend");
+                PKG, mUid, orig, "friend");
 
         NotificationChannel friendChannel = mBinderService.getConversationNotificationChannel(
                 PKG, 0, PKG, original.getId(), false, "friend");
@@ -6726,10 +6727,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         String conversationId = "friend";
 
         mBinderService.createConversationNotificationChannelForPackage(
-                PKG, mUid, "key", NotificationChannel.CREATOR.createFromParcel(msgParcel),
+                PKG, mUid, NotificationChannel.CREATOR.createFromParcel(msgParcel),
                 conversationId);
         mBinderService.createConversationNotificationChannelForPackage(
-                PKG, mUid, "key", NotificationChannel.CREATOR.createFromParcel(callParcel),
+                PKG, mUid, NotificationChannel.CREATOR.createFromParcel(callParcel),
                 conversationId);
 
         NotificationChannel messagesChild = mBinderService.getConversationNotificationChannel(
@@ -7145,7 +7146,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         inOrder.verify(child).recordDismissalSentiment(anyInt());
     }
 
-    @Test
+    // TODO (b/171418004): renable after app outreach
+    /*@Test
     public void testImmutableBubbleIntent() throws Exception {
         when(mAmi.getPendingIntentFlags(pi1))
                 .thenReturn(FLAG_IMMUTABLE | FLAG_ONE_SHOT);
@@ -7160,7 +7162,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         } catch (IllegalArgumentException e) {
             // good
         }
-    }
+    }*/
 
     @Test
     public void testMutableBubbleIntent() throws Exception {

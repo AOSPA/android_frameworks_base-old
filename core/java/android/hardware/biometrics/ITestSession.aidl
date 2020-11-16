@@ -27,7 +27,7 @@ interface ITestSession {
     // portion of the framework code that would otherwise require human interaction. Note that
     // secure pathways such as HAT/Keystore are not testable, since they depend on the TEE or its
     // equivalent for the secret key.
-    void enableTestHal(boolean enableTestHal);
+    void setTestHalEnabled(boolean enableTestHal);
 
     // Starts the enrollment process. This should generally be used when the test HAL is enabled.
     void startEnroll(int userId);
@@ -42,10 +42,10 @@ interface ITestSession {
     void rejectAuthentication(int userId);
 
     // Simulates an acquired message from the HAL.
-    void notifyAcquired(int userId);
+    void notifyAcquired(int userId, int acquireInfo);
 
     // Simulates an error message from the HAL.
-    void notifyError(int userId);
+    void notifyError(int userId, int errorCode);
 
     // Matches the framework's cached enrollments against the HAL's enrollments. Any enrollment
     // that isn't known by both sides are deleted. This should generally be used when the test

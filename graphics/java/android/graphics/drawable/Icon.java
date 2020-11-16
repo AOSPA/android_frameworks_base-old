@@ -39,6 +39,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -169,7 +170,7 @@ public final class Icon implements Parcelable {
      * @return The length of the compressed bitmap byte array held by this {@link #TYPE_DATA} Icon.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int getDataLength() {
         if (mType != TYPE_DATA) {
             throw new IllegalStateException("called getDataLength() on " + this);
@@ -441,10 +442,11 @@ public final class Icon implements Parcelable {
                 resPackage = context.getPackageName();
             }
             if (getResources() == null && !(getResPackage().equals("android"))) {
-                final PackageManager pm = context.getPackageManager();
+                final PackageManager pm = context.createContextAsUser(
+                        UserHandle.of(userId), /* flags */ 0).getPackageManager();
                 try {
                     // assign getResources() as the correct user
-                    mObj1 = pm.getResourcesForApplicationAsUser(resPackage, userId);
+                    mObj1 = pm.getResourcesForApplication(resPackage);
                 } catch (PackageManager.NameNotFoundException e) {
                     Log.e(TAG, String.format("Unable to find pkg=%s user=%d",
                                     getResPackage(),
@@ -597,7 +599,7 @@ public final class Icon implements Parcelable {
      * Version of createWithResource that takes Resources. Do not use.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static Icon createWithResource(Resources res, @DrawableRes int resId) {
         if (res == null) {
             throw new IllegalArgumentException("Resource must not be null.");
@@ -769,7 +771,7 @@ public final class Icon implements Parcelable {
     }
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean hasTint() {
         return (mTintList != null) || (mBlendMode != DEFAULT_BLEND_MODE);
     }

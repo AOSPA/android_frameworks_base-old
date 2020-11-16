@@ -122,6 +122,17 @@ public class Tuner implements AutoCloseable  {
             android.hardware.tv.tuner.V1_1.Constants.Constant
                     .INVALID_MMTP_RECORD_EVENT_MPT_SEQUENCE_NUM;
     /**
+     * Invalid first macroblock address in MmtpRecordEvent and TsRecordEvent.
+     *
+     * <p>Returned by {@link MmtpRecordEvent#getMbInSlice()} and
+     * {@link TsRecordEvent#getMbInSlice()} when the requested sequence number is not available.
+     *
+     * @see android.media.tv.tuner.filter.MmtpRecordEvent#getMbInSlice()
+     * @see android.media.tv.tuner.filter.TsRecordEvent#getMbInSlice()
+     */
+    public static final int INVALID_FIRST_MACROBLOCK_IN_SLICE =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_FIRST_MACROBLOCK_IN_SLICE;
+    /**
      * Invalid local transport stream id.
      *
      * <p>Returned by {@link #linkFrontendToCiCam(int)} when the requested failed
@@ -136,6 +147,11 @@ public class Tuner implements AutoCloseable  {
      */
     public static final long INVALID_FILTER_ID_64BIT =
             android.hardware.tv.tuner.V1_1.Constants.Constant64Bit.INVALID_FILTER_ID_64BIT;
+    /**
+     * Invalid frequency that is used as the default frontend frequency setting.
+     */
+    public static final int INVALID_FRONTEND_SETTING_FREQUENCY =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_FRONTEND_SETTING_FREQUENCY;
 
     /** @hide */
     @IntDef(prefix = "SCAN_TYPE_", value = {SCAN_TYPE_UNDEFINED, SCAN_TYPE_AUTO, SCAN_TYPE_BLIND})
@@ -618,6 +634,10 @@ public class Tuner implements AutoCloseable  {
      * OnTuneEventListener#SIGNAL_NO_SIGNAL} events sent to the {@link OnTuneEventListener}
      * specified in {@link #setOnTuneEventListener(Executor, OnTuneEventListener)}.
      *
+     * <p>Tuning with {@link android.media.tv.tuner.frontend.DtmbFrontendSettings} is only
+     * supported in Tuner 1.1 or higher version. Unsupported version will cause no-op. Use {@link
+     * TunerVersionChecker.getTunerVersion()} to get the version information.
+     *
      * @param settings Signal delivery information the frontend uses to
      *                 search and lock the signal.
      * @return result status of tune operation.
@@ -628,6 +648,12 @@ public class Tuner implements AutoCloseable  {
     public int tune(@NonNull FrontendSettings settings) {
         Log.d(TAG, "Tune to " + settings.getFrequency());
         mFrontendType = settings.getType();
+        if (mFrontendType == FrontendSettings.TYPE_DTMB) {
+            if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
+                    TunerVersionChecker.TUNER_VERSION_1_1, "Tuner with DTMB Frontend")) {
+                return RESULT_UNAVAILABLE;
+            }
+        }
         if (checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND)) {
             mFrontendInfo = null;
             Log.d(TAG, "Write Stats Log for tuning.");
@@ -657,6 +683,10 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>Details for channels found are returned via {@link ScanCallback}.
      *
+     * <p>Scanning with {@link android.media.tv.tuner.frontend.DtmbFrontendSettings} is only
+     * supported in Tuner 1.1 or higher version. Unsupported version will cause no-op. Use {@link
+     * TunerVersionChecker.getTunerVersion()} to get the version information.
+     *
      * @param settings A {@link FrontendSettings} to configure the frontend.
      * @param scanType The scan type.
      * @throws SecurityException     if the caller does not have appropriate permissions.
@@ -672,6 +702,12 @@ public class Tuner implements AutoCloseable  {
                             + "started.");
         }
         mFrontendType = settings.getType();
+        if (mFrontendType == FrontendSettings.TYPE_DTMB) {
+            if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
+                    TunerVersionChecker.TUNER_VERSION_1_1, "Scan with DTMB Frontend")) {
+                return RESULT_UNAVAILABLE;
+            }
+        }
         if (checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND)) {
             mScanCallback = scanCallback;
             mScanCallbackExecutor = executor;
@@ -750,7 +786,8 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>This retrieve the statuses of the frontend for given status types.
      *
-     * @param statusTypes an array of status types which the caller requests.
+     * @param statusTypes an array of status types which the caller requests. Any types that are not
+     *        in {@link FrontendInfo.getStatusCapabilities()} would be ignored.
      * @return statuses which response the caller's requests. {@code null} if the operation failed.
      */
     @Nullable
@@ -1019,6 +1056,27 @@ public class Tuner implements AutoCloseable  {
         if (mScanCallbackExecutor != null && mScanCallback != null) {
             mScanCallbackExecutor.execute(
                     () -> mScanCallback.onAtsc3PlpInfosReported(atsc3PlpInfos));
+        }
+    }
+
+    private void onModulationReported(int modulation) {
+        if (mScanCallbackExecutor != null && mScanCallback != null) {
+            mScanCallbackExecutor.execute(
+                    () -> mScanCallback.onModulationReported(modulation));
+        }
+    }
+
+    private void onPriorityReported(boolean isHighPriority) {
+        if (mScanCallbackExecutor != null && mScanCallback != null) {
+            mScanCallbackExecutor.execute(
+                    () -> mScanCallback.onPriorityReported(isHighPriority));
+        }
+    }
+
+    private void onDvbcAnnexReported(int dvbcAnnex) {
+        if (mScanCallbackExecutor != null && mScanCallback != null) {
+            mScanCallbackExecutor.execute(
+                    () -> mScanCallback.onDvbcAnnexReported(dvbcAnnex));
         }
     }
 

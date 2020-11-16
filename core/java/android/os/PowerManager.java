@@ -1014,7 +1014,7 @@ public final class PowerManager {
      * Gets a float screen brightness setting.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public float getBrightnessConstraint(int constraint) {
         try {
             return mService.getBrightnessConstraint(constraint);
@@ -1565,7 +1565,6 @@ public final class PowerManager {
      * @see #isPowerSaveMode()
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.DEVICE_POWER,
             android.Manifest.permission.POWER_SAVER
@@ -1610,7 +1609,6 @@ public final class PowerManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(permission.POWER_SAVER)
     public boolean setDynamicPowerSaveHint(boolean powerSaveHint, int disableThreshold) {
         try {
@@ -1670,7 +1668,6 @@ public final class PowerManager {
      *  @hide
      */
     @SystemApi
-    @TestApi
     public static final int POWER_SAVE_MODE_TRIGGER_PERCENTAGE = 0;
 
     /**
@@ -1683,7 +1680,6 @@ public final class PowerManager {
      *  @hide
      */
     @SystemApi
-    @TestApi
     public static final int POWER_SAVE_MODE_TRIGGER_DYNAMIC = 1;
 
     /** @hide */
@@ -1708,7 +1704,6 @@ public final class PowerManager {
      */
     @AutoPowerSaveModeTriggers
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.POWER_SAVER)
     public int getPowerSaveModeTrigger() {
         try {
@@ -1732,7 +1727,6 @@ public final class PowerManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.DEVICE_POWER)
     public void setBatteryDischargePrediction(@NonNull Duration timeRemaining,
             boolean isPersonalized) {
@@ -2005,7 +1999,7 @@ public final class PowerManager {
         Preconditions.checkNotNull(listener, "listener cannot be null");
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkArgument(!mListenerMap.containsKey(listener),
-                "Listener already registered: " + listener);
+                "Listener already registered: %s", listener);
         IThermalStatusListener internalListener = new IThermalStatusListener.Stub() {
             @Override
             public void onStatusChange(int status) {
@@ -2310,7 +2304,7 @@ public final class PowerManager {
      * This broadcast is only sent to registered receivers.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_LIGHT_DEVICE_IDLE_MODE_CHANGED
             = "android.os.action.LIGHT_DEVICE_IDLE_MODE_CHANGED";

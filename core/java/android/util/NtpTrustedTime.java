@@ -26,6 +26,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
 import android.net.SntpClient;
+import android.os.Build;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.provider.Settings;
@@ -165,7 +166,7 @@ public class NtpTrustedTime implements TrustedTime {
         return sSingleton;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean forceRefresh() {
         return hasCache() ? forceSync() : false;
     }
@@ -220,7 +221,7 @@ public class NtpTrustedTime implements TrustedTime {
      * @deprecated Use {@link #getCachedTimeResult()} to obtain a {@link TimeResult} atomically.
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean hasCache() {
         return mTimeResult != null;
     }
@@ -247,7 +248,7 @@ public class NtpTrustedTime implements TrustedTime {
      * @deprecated Use {@link #getCachedTimeResult()} to obtain a {@link TimeResult} atomically.
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public long currentTimeMillis() {
         TimeResult timeResult = mTimeResult;
         if (timeResult == null) {
@@ -266,7 +267,7 @@ public class NtpTrustedTime implements TrustedTime {
      * @deprecated Use {@link #getCachedTimeResult()} to obtain a {@link TimeResult} atomically.
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public long getCachedNtpTime() {
         if (LOGD) Log.d(TAG, "getCachedNtpTime() cache hit");
         TimeResult timeResult = mTimeResult;
@@ -279,7 +280,7 @@ public class NtpTrustedTime implements TrustedTime {
      * @deprecated Use {@link #getCachedTimeResult()} to obtain a {@link TimeResult} atomically.
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public long getCachedNtpTimeReference() {
         TimeResult timeResult = mTimeResult;
         return timeResult == null ? 0 : timeResult.getElapsedRealtimeMillis();

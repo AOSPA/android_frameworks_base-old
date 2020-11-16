@@ -96,7 +96,7 @@ interface ITelephony {
     void call(String callingPackage, String number);
 
     /** @deprecated Use {@link #isRadioOnWithFeature(String, String) instead */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean isRadioOn(String callingPackage);
 
     /**
@@ -110,7 +110,7 @@ interface ITelephony {
     /**
      * @deprecated Use {@link #isRadioOnForSubscriberWithFeature(int, String, String) instead
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean isRadioOnForSubscriber(int subId, String callingPackage);
 
     /**
@@ -190,7 +190,7 @@ interface ITelephony {
      * @param subId user preferred subId.
      * @return true if MMI command is executed.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean handlePinMmiForSubscriber(int subId, String dialString);
 
     /**
@@ -614,7 +614,7 @@ interface ITelephony {
      *            successful iccOpenLogicalChannel.
      * @return true if the channel was closed successfully.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean iccCloseLogicalChannel(int subId, int channel);
 
     /**
@@ -656,7 +656,7 @@ interface ITelephony {
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     String iccTransmitApduLogicalChannel(int subId, int channel, int cla, int instruction,
             int p1, int p2, int p3, String data);
 
@@ -2216,4 +2216,20 @@ interface ITelephony {
      * does not exist on the SIM card.
      */
     List<String> getEquivalentHomePlmns(int subId, String callingPackage, String callingFeatureId);
+
+    /**
+     * Enable/Disable E-UTRA-NR Dual Connectivity
+     * @return operation result. See TelephonyManager.EnableNrDualConnectivityResult for
+     * details
+     * @param subId the id of the subscription
+     * @param enable enable/disable dual connectivity
+     */
+    int setNrDualConnectivityState(int subId, int nrDualConnectivityState);
+
+    /**
+     * Is E-UTRA-NR Dual Connectivity enabled
+     * @param subId the id of the subscription
+     * @return true if dual connectivity is enabled else false
+     */
+    boolean isNrDualConnectivityEnabled(int subId);
 }

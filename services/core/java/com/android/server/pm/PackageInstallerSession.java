@@ -144,7 +144,6 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
-import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.dex.DexManager;
@@ -1722,28 +1721,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         dispatchSessionFinished(error, detailedMessage, null);
     }
 
-    private void onStorageHealthStatusChanged(int status) {
-        final String packageName = getPackageName();
-        if (TextUtils.isEmpty(packageName)) {
-            // The package has not been installed.
-            return;
-        }
-        mHandler.post(PooledLambda.obtainRunnable(
-                PackageManagerService::onStorageHealthStatusChanged,
-                mPm, packageName, status, userId).recycleOnUse());
-    }
-
-    private void onStreamHealthStatusChanged(int status) {
-        final String packageName = getPackageName();
-        if (TextUtils.isEmpty(packageName)) {
-            // The package has not been installed.
-            return;
-        }
-        mHandler.post(PooledLambda.obtainRunnable(
-                PackageManagerService::onStreamStatusChanged,
-                mPm, packageName, status, userId).recycleOnUse());
-    }
-
     /**
      * If session should be sealed, then it's sealed to prevent further modification.
      * If the session can't be sealed then it's destroyed.
@@ -3101,6 +3078,31 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
+    /**
+     * Cleans up the relevant stored files and information of all child sessions.
+     * <p>Cleaning up the stored files and session information is necessary for
+     * preventing the orphan children sessions.
+     * <ol>
+     *     <li>To call {@link #destroyInternal()} cleans up the stored files.</li>
+     *     <li>To call {@link #dispatchSessionFinished(int, String, Bundle)} to trigger the
+     *     procedure to clean up the information in PackageInstallerService.</li>
+     * </ol></p>
+     */
+    private void maybeCleanUpChildSessions() {
+        if (!isMultiPackage()) {
+            return;
+        }
+
+        final List<PackageInstallerSession> childSessions = getChildSessions();
+        final int size = childSessions.size();
+        for (int i = 0; i < size; ++i) {
+            final PackageInstallerSession session = childSessions.get(i);
+            session.destroyInternal();
+            session.dispatchSessionFinished(INSTALL_FAILED_ABORTED, "Session was abandoned"
+                            + " because the parent session is abandoned", null);
+        }
+    }
+
     private void abandonNonStaged() {
 
         synchronized (mLock) {
@@ -3112,6 +3114,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             destroyInternal();
         }
         dispatchSessionFinished(INSTALL_FAILED_ABORTED, "Session was abandoned", null);
+        maybeCleanUpChildSessions();
     }
 
     private void abandonStaged() {
@@ -3136,6 +3139,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 cleanStageDir(childSessions);
                 destroyInternal();
                 dispatchSessionFinished(INSTALL_FAILED_ABORTED, "Session was abandoned", null);
+                maybeCleanUpChildSessions();
             };
             if (mInPreRebootVerification) {
                 // Pre-reboot verification is ongoing. It is not safe to clean up the session yet.
@@ -3340,19 +3344,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         return;
                 }
 
-                final boolean isDestroyedOrDataLoaderFinished;
                 synchronized (mLock) {
-                    isDestroyedOrDataLoaderFinished = mDestroyed || mDataLoaderFinished;
-                }
-                if (isDestroyedOrDataLoaderFinished) {
-                    switch (status) {
-                        case IDataLoaderStatusListener.DATA_LOADER_UNRECOVERABLE:
-                            // treat as unhealthy storage
-                            onStorageHealthStatusChanged(
-                                    IStorageHealthListener.HEALTH_STATUS_UNHEALTHY);
-                            return;
+                    if (mDestroyed || mDataLoaderFinished) {
+                        // No need to worry about post installation
+                        return;
                     }
-                    return;
                 }
 
                 try {
@@ -3448,13 +3444,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
             @Override
             public void reportStreamHealth(int dataLoaderId, int streamStatus) {
-                synchronized (mLock) {
-                    if (!mDestroyed && !mDataLoaderFinished) {
-                        // ignore streaming status if package isn't installed
-                        return;
-                    }
-                }
-                onStreamHealthStatusChanged(streamStatus);
+                // Currently the stream status is not used during package installation. It is
+                // technically possible for the data loader to report stream status via this
+                // callback, but if something is wrong with the streaming, it is more likely that
+                // prepareDataLoaderLocked will return false and the installation will be aborted.
             }
         };
 
@@ -3463,20 +3456,16 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             healthCheckParams.blockedTimeoutMs = INCREMENTAL_STORAGE_BLOCKED_TIMEOUT_MS;
             healthCheckParams.unhealthyTimeoutMs = INCREMENTAL_STORAGE_UNHEALTHY_TIMEOUT_MS;
             healthCheckParams.unhealthyMonitoringMs = INCREMENTAL_STORAGE_UNHEALTHY_MONITORING_MS;
-
             final boolean systemDataLoader =
                     params.getComponentName().getPackageName() == SYSTEM_DATA_LOADER_PACKAGE;
             final IStorageHealthListener healthListener = new IStorageHealthListener.Stub() {
                 @Override
                 public void onHealthStatus(int storageId, int status) {
-                    final boolean isDestroyedOrDataLoaderFinished;
                     synchronized (mLock) {
-                        isDestroyedOrDataLoaderFinished = mDestroyed || mDataLoaderFinished;
-                    }
-                    if (isDestroyedOrDataLoaderFinished) {
-                        // App's installed.
-                        onStorageHealthStatusChanged(status);
-                        return;
+                        if (mDestroyed || mDataLoaderFinished) {
+                            // No need to worry about post installation
+                            return;
+                        }
                     }
 
                     switch (status) {

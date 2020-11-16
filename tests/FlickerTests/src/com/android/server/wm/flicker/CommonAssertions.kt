@@ -30,7 +30,7 @@ fun WmAssertion.statusBarWindowIsAlwaysVisible(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("statusBarWindowIsAlwaysVisible", enabled, bugId) {
+    all("statusBarWindowIsAlwaysVisible", bugId, enabled) {
         this.showsAboveAppWindow(STATUS_BAR_WINDOW_TITLE)
     }
 }
@@ -40,8 +40,17 @@ fun WmAssertion.navBarWindowIsAlwaysVisible(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("navBarWindowIsAlwaysVisible", enabled, bugId) {
+    all("navBarWindowIsAlwaysVisible", bugId, enabled) {
         this.showsAboveAppWindow(NAVIGATION_BAR_WINDOW_TITLE)
+    }
+}
+
+fun WmAssertion.visibleWindowsShownMoreThanOneConsecutiveEntry(
+    bugId: Int = 0,
+    enabled: Boolean = bugId == 0
+) {
+    all("visibleWindowShownMoreThanOneConsecutiveEntry", bugId, enabled) {
+        this.visibleWindowsShownMoreThanOneConsecutiveEntry()
     }
 }
 
@@ -56,7 +65,7 @@ fun LayersAssertion.noUncoveredRegions(
     val startingBounds = WindowUtils.getDisplayBounds(beginRotation)
     val endingBounds = WindowUtils.getDisplayBounds(endRotation)
     if (allStates) {
-        all("noUncoveredRegions", enabled, bugId) {
+        all("noUncoveredRegions", bugId, enabled) {
             if (startingBounds == endingBounds) {
                 this.coversAtLeastRegion(startingBounds)
             } else {
@@ -77,21 +86,43 @@ fun LayersAssertion.noUncoveredRegions(
 
 @JvmOverloads
 fun LayersAssertion.navBarLayerIsAlwaysVisible(
+    rotatesScreen: Boolean = false,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("navBarLayerIsAlwaysVisible", enabled, bugId) {
-        this.showsLayer(NAVIGATION_BAR_WINDOW_TITLE)
+    if (rotatesScreen) {
+        all("navBarLayerIsAlwaysVisible", bugId, enabled) {
+            this.showsLayer(NAVIGATION_BAR_WINDOW_TITLE)
+                    .then()
+                    .hidesLayer(NAVIGATION_BAR_WINDOW_TITLE)
+                    .then()
+                    .showsLayer(NAVIGATION_BAR_WINDOW_TITLE)
+        }
+    } else {
+        all("navBarLayerIsAlwaysVisible", bugId, enabled) {
+            this.showsLayer(NAVIGATION_BAR_WINDOW_TITLE)
+        }
     }
 }
 
 @JvmOverloads
 fun LayersAssertion.statusBarLayerIsAlwaysVisible(
+    rotatesScreen: Boolean = false,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("statusBarLayerIsAlwaysVisible", enabled, bugId) {
-        this.showsLayer(STATUS_BAR_WINDOW_TITLE)
+    if (rotatesScreen) {
+        all("statusBarLayerIsAlwaysVisible", bugId, enabled) {
+            this.showsLayer(STATUS_BAR_WINDOW_TITLE)
+                    .then()
+                    hidesLayer(STATUS_BAR_WINDOW_TITLE)
+                    .then()
+                    .showsLayer(STATUS_BAR_WINDOW_TITLE)
+        }
+    } else {
+        all("statusBarLayerIsAlwaysVisible", bugId, enabled) {
+            this.showsLayer(STATUS_BAR_WINDOW_TITLE)
+        }
     }
 }
 
@@ -105,10 +136,10 @@ fun LayersAssertion.navBarLayerRotatesAndScales(
     val startingPos = WindowUtils.getNavigationBarPosition(beginRotation)
     val endingPos = WindowUtils.getNavigationBarPosition(endRotation)
 
-    start("navBarLayerRotatesAndScales_StartingPos", enabled, bugId) {
+    start("navBarLayerRotatesAndScales_StartingPos", bugId, enabled) {
         this.hasVisibleRegion(NAVIGATION_BAR_WINDOW_TITLE, startingPos)
     }
-    end("navBarLayerRotatesAndScales_EndingPost", enabled, bugId) {
+    end("navBarLayerRotatesAndScales_EndingPost", bugId, enabled) {
         this.hasVisibleRegion(NAVIGATION_BAR_WINDOW_TITLE, endingPos)
     }
 
@@ -129,11 +160,20 @@ fun LayersAssertion.statusBarLayerRotatesScales(
     val startingPos = WindowUtils.getStatusBarPosition(beginRotation)
     val endingPos = WindowUtils.getStatusBarPosition(endRotation)
 
-    start("statusBarLayerRotatesScales_StartingPos", enabled, bugId) {
+    start("statusBarLayerRotatesScales_StartingPos", bugId, enabled) {
         this.hasVisibleRegion(STATUS_BAR_WINDOW_TITLE, startingPos)
     }
-    end("statusBarLayerRotatesScales_EndingPos", enabled, bugId) {
+    end("statusBarLayerRotatesScales_EndingPos", bugId, enabled) {
         this.hasVisibleRegion(STATUS_BAR_WINDOW_TITLE, endingPos)
+    }
+}
+
+fun LayersAssertion.visibleLayersShownMoreThanOneConsecutiveEntry(
+    bugId: Int = 0,
+    enabled: Boolean = bugId == 0
+) {
+    all("visibleLayersShownMoreThanOneConsecutiveEntry", bugId, enabled) {
+        this.visibleLayersShownMoreThanOneConsecutiveEntry()
     }
 }
 

@@ -24,7 +24,7 @@ import android.os.Environment;
 import android.os.storage.StorageManager;
 import android.util.SparseArray;
 
-import com.android.server.appsearch.external.localbackend.AppSearchImpl;
+import com.android.server.appsearch.external.localstorage.AppSearchImpl;
 
 import java.io.File;
 
@@ -69,9 +69,7 @@ public final class ImplInstanceManager {
     private static AppSearchImpl createImpl(@NonNull Context context, @UserIdInt int userId)
             throws AppSearchException {
         File appSearchDir = getAppSearchDir(context, userId);
-        AppSearchImpl appSearchImpl = new AppSearchImpl(appSearchDir);
-        appSearchImpl.initialize();
-        return appSearchImpl;
+        return AppSearchImpl.create(appSearchDir);
     }
 
     private static File getAppSearchDir(@NonNull Context context, @UserIdInt int userId) {

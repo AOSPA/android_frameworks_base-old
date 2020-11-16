@@ -111,7 +111,7 @@ public final class AccessibilityManager {
     public static final int DALTONIZER_DISABLED = -1;
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int DALTONIZER_SIMULATE_MONOCHROMACY = 0;
 
     /** @hide */
@@ -1249,7 +1249,6 @@ public final class AccessibilityManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
     public void performAccessibilityShortcut() {
         performAccessibilityShortcut(null);
@@ -1294,7 +1293,6 @@ public final class AccessibilityManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
     public void registerSystemAction(@NonNull RemoteAction action, int actionId) {
         final IAccessibilityManager service;
@@ -1322,7 +1320,6 @@ public final class AccessibilityManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
     public void unregisterSystemAction(int actionId) {
         final IAccessibilityManager service;

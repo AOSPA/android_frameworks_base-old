@@ -40,9 +40,16 @@ import static android.system.OsConstants.W_OK;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
+import android.app.AppGlobals;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ContentResolver;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.content.pm.ProviderInfo;
+import android.content.res.AssetFileDescriptor;
+import android.net.Uri;
 import android.provider.DocumentsContract.Document;
+import android.provider.MediaStore;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.StructStat;
@@ -118,6 +125,7 @@ public final class FileUtils {
 
     // non-final so it can be toggled by Robolectric's ShadowFileUtils
     private static boolean sEnableCopyOptimizations = true;
+    private static volatile int sMediaProviderAppId = -1;
 
     private static final long COPY_CHECKPOINT_BYTES = 524288;
 
@@ -181,7 +189,7 @@ public final class FileUtils {
      * @return 0 on success, otherwise errno.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static int setPermissions(FileDescriptor fd, int mode, int uid, int gid) {
         try {
             Os.fchmod(fd, mode);
@@ -664,7 +672,7 @@ public final class FileUtils {
     }
 
     /** {@hide} */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static void stringToFile(File file, String string) throws IOException {
         stringToFile(file.getAbsolutePath(), string);
     }
@@ -713,7 +721,7 @@ public final class FileUtils {
      *             to its potential for collision.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @Deprecated
     public static long checksumCrc32(File file) throws FileNotFoundException, IOException {
         CRC32 checkSummer = new CRC32();
@@ -800,7 +808,7 @@ public final class FileUtils {
      * @return if any files were deleted.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static boolean deleteOlderFiles(File dir, int minCount, long minAgeMs) {
         if (minCount < 0 || minAgeMs < 0) {
             throw new IllegalArgumentException("Constraints must be positive or 0");
@@ -909,7 +917,7 @@ public final class FileUtils {
     }
 
     /** {@hide} */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static boolean deleteContents(File dir) {
         File[] files = dir.listFiles();
         boolean success = true;
@@ -1422,6 +1430,54 @@ public final class FileUtils {
         } else {
             throw new IllegalArgumentException("Bad mode: " + mode);
         }
+    }
+
+    /** {@hide} */
+    public static FileDescriptor convertToModernFd(FileDescriptor fd) {
+        try {
+            Context context = AppGlobals.getInitialApplication();
+            if (UserHandle.getAppId(Process.myUid()) == getMediaProviderAppId(context)) {
+                // Never convert modern fd for MediaProvider, because this requires
+                // MediaStore#scanFile and can cause infinite loops when MediaProvider scans
+                return null;
+            }
+            File realFile = ParcelFileDescriptor.getFile(fd);
+            Log.i(TAG, "Changing to modern format dataSource for: " + realFile);
+            ContentResolver resolver = context.getContentResolver();
+
+            Uri uri = MediaStore.scanFile(resolver, realFile);
+            if (uri != null) {
+                Bundle opts = new Bundle();
+                // TODO(b/158465539): Use API constant
+                opts.putBoolean("android.provider.extra.ACCEPT_ORIGINAL_MEDIA_FORMAT", true);
+                AssetFileDescriptor afd = resolver.openTypedAssetFileDescriptor(uri, "*/*", opts);
+                Log.i(TAG, "Changed to modern format dataSource for: " + realFile);
+                return afd.getFileDescriptor();
+            } else {
+                Log.i(TAG, "Failed to change to modern format dataSource for: " + realFile);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to change to modern format dataSource");
+        }
+        return null;
+    }
+
+    private static int getMediaProviderAppId(Context context) {
+        if (sMediaProviderAppId != -1) {
+            return sMediaProviderAppId;
+        }
+
+        PackageManager pm = context.getPackageManager();
+        ProviderInfo provider = context.getPackageManager().resolveContentProvider(
+                MediaStore.AUTHORITY, PackageManager.MATCH_DIRECT_BOOT_AWARE
+                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                | PackageManager.MATCH_SYSTEM_ONLY);
+        if (provider == null) {
+            return -1;
+        }
+
+        sMediaProviderAppId = UserHandle.getAppId(provider.applicationInfo.uid);
+        return sMediaProviderAppId;
     }
 
     /** {@hide} */

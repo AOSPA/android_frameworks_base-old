@@ -162,7 +162,7 @@ public abstract class Window {
      * Max value used as a feature ID
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int FEATURE_MAX = FEATURE_ACTIVITY_TRANSITIONS;
 
     /**
@@ -791,7 +791,7 @@ public abstract class Window {
     }
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public final boolean isDestroyed() {
         return mDestroyed;
     }
@@ -1137,7 +1137,7 @@ public abstract class Window {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void addPrivateFlags(int flags) {
         setPrivateFlags(flags, flags);
     }
@@ -2560,19 +2560,20 @@ public abstract class Window {
     /**
      * System request to begin scroll capture.
      *
-     * @param controller the controller to receive responses
+     * @param callbacks to receive responses
      * @hide
      */
-    public void requestScrollCapture(IScrollCaptureController controller) {
+    public void requestScrollCapture(IScrollCaptureCallbacks callbacks) {
     }
 
     /**
-     * Registers a {@link ScrollCaptureCallback} with the root of this window.
+     * Used to provide scroll capture support for an arbitrary window. This registeres the given
+     * callback with the root view of the window.
      *
      * @param callback the callback to add
      * @hide
      */
-    public void addScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
+    public void registerScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
     }
 
     /**
@@ -2581,7 +2582,7 @@ public abstract class Window {
      * @param callback the callback to remove
      * @hide
      */
-    public void removeScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
+    public void unregisterScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
     }
 
     /** @hide */

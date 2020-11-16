@@ -50,12 +50,12 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CLEANUP;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_IDLE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RECENTS;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_STACK;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ROOT_TASK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_IDLE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_PAUSE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_RECENTS;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_STACK;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_ROOT_TASK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_SWITCH;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_TASKS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
@@ -63,18 +63,18 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLAS
 import static com.android.server.wm.ActivityTaskManagerService.ANIMATE;
 import static com.android.server.wm.ActivityTaskManagerService.H.FIRST_SUPERVISOR_STACK_MSG;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
-import static com.android.server.wm.RootWindowContainer.MATCH_TASK_IN_STACKS_OR_RECENT_TASKS;
-import static com.android.server.wm.RootWindowContainer.MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE;
+import static com.android.server.wm.LockTaskController.LOCK_TASK_AUTH_ALLOWLISTED;
+import static com.android.server.wm.LockTaskController.LOCK_TASK_AUTH_LAUNCHABLE;
+import static com.android.server.wm.LockTaskController.LOCK_TASK_AUTH_LAUNCHABLE_PRIV;
+import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS;
+import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_RECENTS;
 import static com.android.server.wm.Task.ActivityState.DESTROYED;
 import static com.android.server.wm.Task.ActivityState.PAUSED;
 import static com.android.server.wm.Task.ActivityState.PAUSING;
 import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_PINNED_TASK;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_ALLOWLISTED;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_LAUNCHABLE;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_LAUNCHABLE_PRIV;
-import static com.android.server.wm.Task.REPARENT_KEEP_STACK_AT_FRONT;
+import static com.android.server.wm.Task.REPARENT_KEEP_ROOT_TASK_AT_FRONT;
 import static com.android.server.wm.Task.TAG_CLEANUP;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -166,7 +166,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     private static final String TAG_IDLE = TAG + POSTFIX_IDLE;
     private static final String TAG_PAUSE = TAG + POSTFIX_PAUSE;
     private static final String TAG_RECENTS = TAG + POSTFIX_RECENTS;
-    private static final String TAG_STACK = TAG + POSTFIX_STACK;
+    private static final String TAG_ROOT_TASK = TAG + POSTFIX_ROOT_TASK;
     private static final String TAG_SWITCH = TAG + POSTFIX_SWITCH;
     static final String TAG_TASKS = TAG + POSTFIX_TASKS;
 
@@ -564,7 +564,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         int candidateTaskId = nextTaskIdForUser(currentTaskId, userId);
         while (mRecentTasks.containsTaskId(candidateTaskId, userId)
                 || mRootWindowContainer.anyTaskForId(
-                        candidateTaskId, MATCH_TASK_IN_STACKS_OR_RECENT_TASKS) != null) {
+                        candidateTaskId, MATCH_ATTACHED_TASK_OR_RECENT_TASKS) != null) {
             candidateTaskId = nextTaskIdForUser(candidateTaskId, userId);
             if (candidateTaskId == currentTaskId) {
                 // Something wrong!
@@ -865,7 +865,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 }
                 mService.getPackageManagerInternalLocked().notifyPackageUse(
                         r.intent.getComponent().getPackageName(), NOTIFY_PACKAGE_USE_ACTIVITY);
-                r.setSleeping(false);
                 r.forceNewConfig = false;
                 mService.getAppWarningsLocked().onStartActivity(r);
                 r.compat = mService.compatibilityInfoForPackageLocked(r.info.applicationInfo);
@@ -1420,8 +1419,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
             if (stack != currentStack) {
                 moveHomeStackToFrontIfNeeded(flags, stack.getDisplayArea(), reason);
-                task.reparent(stack, ON_TOP, REPARENT_KEEP_STACK_AT_FRONT, !ANIMATE, DEFER_RESUME,
-                        reason);
+                task.reparent(stack, ON_TOP, REPARENT_KEEP_ROOT_TASK_AT_FRONT, !ANIMATE,
+                        DEFER_RESUME, reason);
                 currentStack = stack;
                 reparented = true;
                 // task.reparent() should already placed the task on top,
@@ -1445,7 +1444,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         currentStack.moveTaskToFront(task, false /* noAnimation */, options,
                 r == null ? null : r.appTimeTracker, reason);
 
-        if (DEBUG_STACK) Slog.d(TAG_STACK,
+        if (DEBUG_ROOT_TASK) Slog.d(TAG_ROOT_TASK,
                 "findTaskToMoveToFront: moved to front of stack=" + currentStack);
 
         handleNonResizableTaskIfNeeded(task, WINDOWING_MODE_UNDEFINED,
@@ -1562,7 +1561,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     boolean removeTaskById(int taskId, boolean killProcess, boolean removeFromRecents,
             String reason) {
         final Task task =
-                mRootWindowContainer.anyTaskForId(taskId, MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
+                mRootWindowContainer.anyTaskForId(taskId, MATCH_ATTACHED_TASK_OR_RECENT_TASKS);
         if (task != null) {
             removeTask(task, killProcess, removeFromRecents, reason);
             return true;
@@ -2143,6 +2142,11 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         final ActivityRecord prevTopActivity = mTopResumedActivity;
         final Task topStack = mRootWindowContainer.getTopDisplayFocusedStack();
         if (topStack == null || topStack.mResumedActivity == prevTopActivity) {
+            if (mService.isSleepingLocked()) {
+                // There won't be a next resumed activity. The top process should still be updated
+                // according to the current top focused activity.
+                mService.updateTopApp(null /* topResumedActivity */);
+            }
             return;
         }
 
@@ -2262,21 +2266,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             }
 
             final DisplayContent preferredDisplay = preferredTaskDisplayArea.mDisplayContent;
-
-            final boolean singleTaskInstance = preferredDisplay != null
-                    && preferredDisplay.isSingleTaskInstance();
-
             if (preferredDisplay != task.getDisplayContent()) {
-                // Suppress the warning toast if the preferredDisplay was set to singleTask.
-                // The singleTaskInstance displays will only contain one task and any attempt to
-                // launch new task will re-route to the default display.
-                if (singleTaskInstance) {
-                    mService.getTaskChangeNotificationController()
-                            .notifyActivityLaunchOnSecondaryDisplayRerouted(task.getTaskInfo(),
-                                    preferredDisplay.mDisplayId);
-                    return;
-                }
-
                 Slog.w(TAG, "Failed to put " + task + " on display " + preferredDisplay.mDisplayId);
                 // Display a warning toast that we failed to put a task on a secondary display.
                 mService.getTaskChangeNotificationController()
@@ -2591,7 +2581,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         mService.deferWindowLayout();
         try {
             task = mRootWindowContainer.anyTaskForId(taskId,
-                    MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE, activityOptions, ON_TOP);
+                    MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE, activityOptions, ON_TOP);
             if (task == null) {
                 mWindowManager.executeAppTransition();
                 throw new IllegalArgumentException(

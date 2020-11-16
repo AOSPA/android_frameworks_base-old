@@ -24,7 +24,7 @@ fun WmAssertion.wallpaperWindowBecomesInvisible(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("wallpaperWindowBecomesInvisible", enabled, bugId) {
+    all("wallpaperWindowBecomesInvisible", bugId, enabled) {
         this.showsBelowAppWindow("Wallpaper")
                 .then()
                 .hidesBelowAppWindow("Wallpaper")
@@ -36,19 +36,19 @@ fun WmAssertion.appWindowReplacesLauncherAsTopWindow(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("appWindowReplacesLauncherAsTopWindow", enabled, bugId) {
+    all("appWindowReplacesLauncherAsTopWindow", bugId, enabled) {
         this.showsAppWindowOnTop("Launcher")
                 .then()
                 .showsAppWindowOnTop("Snapshot", testApp.getPackage())
     }
 }
 
-fun LayersAssertion.wallpaperLayerBecomesInvisible(
+fun LayersAssertion.appLayerReplacesWallpaperLayer(
     testApp: IAppHelper,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("wallpaperLayerBecomesInvisible", enabled, bugId) {
+    all("appLayerReplacesWallpaperLayer", bugId, enabled) {
         this.showsLayer("Wallpaper")
                 .then()
                 .replaceVisibleLayer("Wallpaper", testApp.getPackage())

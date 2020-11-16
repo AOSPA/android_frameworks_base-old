@@ -21,6 +21,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_APPEARANCE_CO
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_BEHAVIOR_CONTROLLED;
 
 import android.annotation.NonNull;
+import android.content.res.CompatibilityInfo;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -144,7 +145,9 @@ public class ViewRootInsetsControllerHost implements InsetsController.Host {
     @Override
     public void onInsetsModified(InsetsState insetsState) {
         try {
-            mViewRoot.mWindowSession.insetsModified(mViewRoot.mWindow, insetsState);
+            if (mViewRoot.mAdded) {
+                mViewRoot.mWindowSession.insetsModified(mViewRoot.mWindow, insetsState);
+            }
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to call insetsModified", e);
         }
@@ -248,5 +251,13 @@ public class ViewRootInsetsControllerHost implements InsetsController.Host {
             return null;
         }
         return view.getWindowToken();
+    }
+
+    @Override
+    public CompatibilityInfo.Translator getTranslator() {
+        if (mViewRoot != null) {
+            return mViewRoot.mTranslator;
+        }
+        return null;
     }
 }

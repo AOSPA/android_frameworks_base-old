@@ -176,7 +176,7 @@ public class HdmiControlServiceTest {
         mHdmiPortInfo[3] =
             new HdmiPortInfo(4, HdmiPortInfo.PORT_INPUT, 0x3000, true, false, false);
         mNativeWrapper.setPortInfo(mHdmiPortInfo);
-        mHdmiControlService.initPortInfo();
+        mHdmiControlService.initService();
         mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
 
         mTestLooper.dispatchAll();
@@ -203,29 +203,6 @@ public class HdmiControlServiceTest {
         assertTrue(mMyAudioSystemDevice.isStandby());
         assertTrue(mMyPlaybackDevice.isDisabled());
         assertTrue(mMyAudioSystemDevice.isDisabled());
-    }
-
-    @Test
-    public void pathToPort_pathExists_weAreNonTv() {
-        mNativeWrapper.setPhysicalAddress(0x2000);
-        mHdmiControlService.initPortInfo();
-        assertThat(mHdmiControlService.pathToPortId(0x2120)).isEqualTo(1);
-        assertThat(mHdmiControlService.pathToPortId(0x2234)).isEqualTo(2);
-    }
-
-    @Test
-    public void pathToPort_pathExists_weAreTv() {
-        mNativeWrapper.setPhysicalAddress(0x0000);
-        mHdmiControlService.initPortInfo();
-        assertThat(mHdmiControlService.pathToPortId(0x2120)).isEqualTo(3);
-        assertThat(mHdmiControlService.pathToPortId(0x3234)).isEqualTo(4);
-    }
-
-    @Test
-    public void pathToPort_pathInvalid() {
-        mNativeWrapper.setPhysicalAddress(0x2000);
-        mHdmiControlService.initPortInfo();
-        assertThat(mHdmiControlService.pathToPortId(0x1000)).isEqualTo(Constants.INVALID_PORT_ID);
     }
 
     @Test
@@ -403,6 +380,45 @@ public class HdmiControlServiceTest {
         assertThat(callback2.mCallbackReceived).isTrue();
         assertThat(callback1.mVolumeControlEnabled).isTrue();
         assertThat(callback2.mVolumeControlEnabled).isTrue();
+    }
+
+    @Test
+    public void getCecVersion_default() {
+        // Set the Settings value to "null" to emulate it being empty and force the default value.
+        Settings.Global.putString(mContextSpy.getContentResolver(),
+                Settings.Global.HDMI_CEC_VERSION,
+                null);
+        mHdmiControlService.setControlEnabled(true);
+        assertThat(mHdmiControlService.getCecVersion()).isEqualTo(Constants.VERSION_1_4);
+    }
+
+    @Test
+    public void getCecVersion_1_4() {
+        Settings.Global.putInt(mContextSpy.getContentResolver(), Settings.Global.HDMI_CEC_VERSION,
+                Constants.VERSION_1_4);
+        mHdmiControlService.setControlEnabled(true);
+        assertThat(mHdmiControlService.getCecVersion()).isEqualTo(Constants.VERSION_1_4);
+    }
+
+    @Test
+    public void getCecVersion_2_0() {
+        Settings.Global.putInt(mContextSpy.getContentResolver(), Settings.Global.HDMI_CEC_VERSION,
+                Constants.VERSION_2_0);
+        mHdmiControlService.setControlEnabled(true);
+        assertThat(mHdmiControlService.getCecVersion()).isEqualTo(Constants.VERSION_2_0);
+    }
+
+    @Test
+    public void getCecVersion_change() {
+        Settings.Global.putInt(mContextSpy.getContentResolver(), Settings.Global.HDMI_CEC_VERSION,
+                Constants.VERSION_1_4);
+        mHdmiControlService.setControlEnabled(true);
+        assertThat(mHdmiControlService.getCecVersion()).isEqualTo(Constants.VERSION_1_4);
+
+        Settings.Global.putInt(mContextSpy.getContentResolver(), Settings.Global.HDMI_CEC_VERSION,
+                Constants.VERSION_2_0);
+        mHdmiControlService.setControlEnabled(true);
+        assertThat(mHdmiControlService.getCecVersion()).isEqualTo(Constants.VERSION_2_0);
     }
 
 

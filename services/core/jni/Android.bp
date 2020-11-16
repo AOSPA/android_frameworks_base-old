@@ -21,12 +21,12 @@ cc_library_static {
         "BroadcastRadio/TunerCallback.cpp",
         "BroadcastRadio/convert.cpp",
         "BroadcastRadio/regions.cpp",
+        "gnss/GnssConfiguration.cpp",
         "stats/PowerStatsPuller.cpp",
         "stats/SubsystemSleepStatePuller.cpp",
         "com_android_server_adb_AdbDebuggingManager.cpp",
         "com_android_server_am_BatteryStatsService.cpp",
         "com_android_server_biometrics_SurfaceToNativeHandleConverter.cpp",
-        "com_android_server_connectivity_Vpn.cpp",
         "com_android_server_ConsumerIrService.cpp",
         "com_android_server_devicepolicy_CryptoTestHelper.cpp",
         "com_android_server_gpu_GpuService.cpp",
@@ -37,7 +37,6 @@ cc_library_static {
         "com_android_server_locksettings_SyntheticPasswordManager.cpp",
         "com_android_server_net_NetworkStatsService.cpp",
         "com_android_server_power_PowerManagerService.cpp",
-        "com_android_server_powerstats_PowerStatsService.cpp",
         "com_android_server_security_VerityUtils.cpp",
         "com_android_server_SerialService.cpp",
         "com_android_server_soundtrigger_middleware_AudioSessionProviderImpl.cpp",
@@ -63,6 +62,8 @@ cc_library_static {
         "com_android_server_activityTriggerService.cpp",
         "onload.cpp",
         ":lib_networkStatsFactory_native",
+        // TODO: move the file below to the connectivity APEX
+        "com_android_server_connectivity_Vpn.cpp",
     ],
 
     include_dirs: [

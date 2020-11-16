@@ -20,7 +20,6 @@ import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Binder;
@@ -437,7 +436,6 @@ public class PhoneStateListener {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION)
     public static final int LISTEN_OUTGOING_EMERGENCY_CALL                  = 0x10000000;
 
@@ -450,7 +448,6 @@ public class PhoneStateListener {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION)
     public static final int LISTEN_OUTGOING_EMERGENCY_SMS                   = 0x20000000;
 
@@ -846,7 +843,7 @@ public class PhoneStateListener {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void onDataConnectionRealTimeInfoChanged(
             DataConnectionRealTimeInfo dcRtInfo) {
         // default implementation empty
@@ -969,7 +966,6 @@ public class PhoneStateListener {
      * @hide
      */
     @SystemApi
-    @TestApi
     @Deprecated
     public void onOutgoingEmergencyCall(@NonNull EmergencyNumber placedEmergencyNumber) {
         // default implementation empty
@@ -994,7 +990,6 @@ public class PhoneStateListener {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void onOutgoingEmergencyCall(@NonNull EmergencyNumber placedEmergencyNumber,
             int subscriptionId) {
         // Default implementation for backwards compatibility
@@ -1011,7 +1006,6 @@ public class PhoneStateListener {
      * @hide
      */
     @SystemApi
-    @TestApi
     @Deprecated
     public void onOutgoingEmergencySms(@NonNull EmergencyNumber sentEmergencyNumber) {
         // default implementation empty
@@ -1033,7 +1027,6 @@ public class PhoneStateListener {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void onOutgoingEmergencySms(@NonNull EmergencyNumber sentEmergencyNumber,
             int subscriptionId) {
         // Default implementation for backwards compatibility
@@ -1053,7 +1046,7 @@ public class PhoneStateListener {
      * @param rawData is the byte array of the OEM hook raw data.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void onOemHookRawEvent(byte[] rawData) {
         // default implementation empty
     }

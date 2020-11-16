@@ -69,21 +69,27 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
     private final LongSparseArray<LocalDisplayDevice> mDevices = new LongSparseArray<>();
 
-    @SuppressWarnings("unused")  // Becomes active at instantiation time.
-    private PhysicalDisplayEventReceiver mPhysicalDisplayEventReceiver;
+    private final Injector mInjector;
 
 
     // Called with SyncRoot lock held.
     public LocalDisplayAdapter(DisplayManagerService.SyncRoot syncRoot,
             Context context, Handler handler, Listener listener) {
+        this(syncRoot, context, handler, listener, new Injector());
+    }
+
+    LocalDisplayAdapter(DisplayManagerService.SyncRoot syncRoot,
+            Context context, Handler handler, Listener listener, Injector injector) {
         super(syncRoot, context, handler, listener, TAG);
+        mInjector = injector;
     }
 
     @Override
     public void registerLocked() {
         super.registerLocked();
 
-        mPhysicalDisplayEventReceiver = new PhysicalDisplayEventReceiver(getHandler().getLooper());
+        mInjector.setDisplayEventListenerLocked(getHandler().getLooper(),
+                new LocalDisplayEventListener());
 
         for (long physicalDisplayId : SurfaceControl.getPhysicalDisplayIds()) {
             tryConnectDisplayLocked(physicalDisplayId);
@@ -183,13 +189,11 @@ final class LocalDisplayAdapter extends DisplayAdapter {
         private int mDefaultModeId;
         private int mDefaultConfigGroup;
         private int mActiveModeId;
-        private boolean mActiveModeInvalid;
         private DisplayModeDirector.DesiredDisplayModeSpecs mDisplayModeSpecs =
                 new DisplayModeDirector.DesiredDisplayModeSpecs();
         private boolean mDisplayModeSpecsInvalid;
         private int mActiveConfigId;
         private int mActiveColorMode;
-        private boolean mActiveColorModeInvalid;
         private Display.HdrCapabilities mHdrCapabilities;
         private boolean mAllmSupported;
         private boolean mGameContentTypeSupported;
@@ -296,11 +300,16 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 }
             }
 
-            // Check whether surface flinger spontaneously changed modes out from under us.
-            // Schedule traversals to ensure that the correct state is reapplied if necessary.
+            boolean activeModeChanged = false;
+
+            // Check whether SurfaceFlinger or the display device changed the active mode out from
+            // under us.
             if (mActiveModeId != NO_DISPLAY_MODE_ID
                     && mActiveModeId != activeRecord.mMode.getModeId()) {
-                mActiveModeInvalid = true;
+                Slog.d(TAG, "The active mode was changed from SurfaceFlinger or the display"
+                        + "device.");
+                mActiveModeId = activeRecord.mMode.getModeId();
+                activeModeChanged = true;
                 sendTraversalRequestLocked();
             }
 
@@ -330,7 +339,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             boolean recordsChanged = records.size() != mSupportedModes.size() || modesAdded;
             // If the records haven't changed then we're done here.
             if (!recordsChanged) {
-                return false;
+                return activeModeChanged;
             }
 
             mSupportedModes.clear();
@@ -342,10 +351,9 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             if (mDefaultModeId == NO_DISPLAY_MODE_ID) {
                 mDefaultModeId = activeRecord.mMode.getModeId();
                 mDefaultConfigGroup = configs[activeConfigId].configGroup;
-            } else if (modesAdded && mActiveModeId != activeRecord.mMode.getModeId()) {
+            } else if (modesAdded && activeModeChanged) {
                 Slog.d(TAG, "New display modes are added and the active mode has changed, "
                         + "use active mode as default mode.");
-                mActiveModeId = activeRecord.mMode.getModeId();
                 mDefaultModeId = activeRecord.mMode.getModeId();
                 mDefaultConfigGroup = configs[activeConfigId].configGroup;
             } else if (findDisplayConfigIdLocked(mDefaultModeId, mDefaultConfigGroup) < 0) {
@@ -373,7 +381,6 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                             + " mode.");
                 }
                 mActiveModeId = mDefaultModeId;
-                mActiveModeInvalid = true;
             }
 
             // Schedule traversals so that we apply pending changes.
@@ -464,14 +471,12 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                     Slog.w(TAG, "Active color mode no longer available, reverting"
                             + " to default mode.");
                     mActiveColorMode = Display.COLOR_MODE_DEFAULT;
-                    mActiveColorModeInvalid = true;
                 } else {
                     if (!mSupportedColorModes.isEmpty()) {
                         // This should never happen.
                         Slog.e(TAG, "Default and active color mode is no longer available!"
                                 + " Reverting to first available mode.");
                         mActiveColorMode = mSupportedColorModes.get(0);
-                        mActiveColorModeInvalid = true;
                     } else {
                         // This should really never happen.
                         Slog.e(TAG, "No color modes available!");
@@ -833,6 +838,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                         LocalDisplayDevice::setDesiredDisplayModeSpecsAsync, this,
                         getDisplayTokenLocked(),
                         new SurfaceControl.DesiredDisplayConfigSpecs(baseConfigId,
+                                mDisplayModeSpecs.allowGroupSwitching,
                                 mDisplayModeSpecs.primaryRefreshRateRange.min,
                                 mDisplayModeSpecs.primaryRefreshRateRange.max,
                                 mDisplayModeSpecs.appRequestRefreshRateRange.min,
@@ -870,8 +876,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             }
             mActiveConfigId = activeConfigId;
             mActiveModeId = findMatchingModeIdLocked(activeConfigId);
-            mActiveModeInvalid = mActiveModeId == NO_DISPLAY_MODE_ID;
-            if (mActiveModeInvalid) {
+            if (mActiveModeId == NO_DISPLAY_MODE_ID) {
                 Slog.w(TAG, "In unknown mode after setting allowed configs"
                         + ", activeConfigId=" + mActiveConfigId);
             }
@@ -889,7 +894,6 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             }
 
             mActiveColorMode = colorMode;
-            mActiveColorModeInvalid = false;
             getHandler().sendMessage(PooledLambda.obtainMessage(
                     LocalDisplayDevice::requestColorModeAsync, this,
                     getDisplayTokenLocked(), colorMode));
@@ -1074,12 +1078,33 @@ final class LocalDisplayAdapter extends DisplayAdapter {
         }
     }
 
-    private final class PhysicalDisplayEventReceiver extends DisplayEventReceiver {
-        PhysicalDisplayEventReceiver(Looper looper) {
-            super(looper, VSYNC_SOURCE_APP, CONFIG_CHANGED_EVENT_DISPATCH);
+    public static class Injector {
+        private ProxyDisplayEventReceiver mReceiver;
+        public void setDisplayEventListenerLocked(Looper looper, DisplayEventListener listener) {
+            mReceiver = new ProxyDisplayEventReceiver(looper, listener);
         }
+    }
 
-        @Override
+    public interface DisplayEventListener {
+        void onHotplug(long timestampNanos, long physicalDisplayId, boolean connected);
+        void onConfigChanged(long timestampNanos, long physicalDisplayId, int configId);
+    }
+
+    public static final class ProxyDisplayEventReceiver extends DisplayEventReceiver {
+        private final DisplayEventListener mListener;
+        ProxyDisplayEventReceiver(Looper looper, DisplayEventListener listener) {
+            super(looper, VSYNC_SOURCE_APP, CONFIG_CHANGED_EVENT_DISPATCH);
+            mListener = listener;
+        }
+        public void onHotplug(long timestampNanos, long physicalDisplayId, boolean connected) {
+            mListener.onHotplug(timestampNanos, physicalDisplayId, connected);
+        }
+        public void onConfigChanged(long timestampNanos, long physicalDisplayId, int configId) {
+            mListener.onConfigChanged(timestampNanos, physicalDisplayId, configId);
+        }
+    }
+
+    private final class LocalDisplayEventListener implements DisplayEventListener {
         public void onHotplug(long timestampNanos, long physicalDisplayId, boolean connected) {
             synchronized (getSyncRoot()) {
                 if (connected) {
@@ -1089,8 +1114,6 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 }
             }
         }
-
-        @Override
         public void onConfigChanged(long timestampNanos, long physicalDisplayId, int configId) {
             if (DEBUG) {
                 Slog.d(TAG, "onConfigChanged("

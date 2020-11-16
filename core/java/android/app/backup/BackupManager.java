@@ -21,11 +21,14 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
+import android.app.compat.CompatChanges;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -436,6 +439,17 @@ public class BackupManager {
         return false;
     }
 
+
+    /**
+     * If this change is enabled, the {@code BACKUP} permission needed for
+     * {@code isBackupServiceActive()} will be enforced on the service end
+     * rather than client-side in {@link BackupManager}.
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    public static final long IS_BACKUP_SERVICE_ACTIVE_ENFORCE_PERMISSION_IN_SERVICE = 158482162;
+
     /**
      * Report whether the backup mechanism is currently active.
      * When it is inactive, the device will not perform any backup operations, nor will it
@@ -446,8 +460,11 @@ public class BackupManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.BACKUP)
     public boolean isBackupServiceActive(UserHandle user) {
-        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP,
-                "isBackupServiceActive");
+        if (!CompatChanges.isChangeEnabled(
+                IS_BACKUP_SERVICE_ACTIVE_ENFORCE_PERMISSION_IN_SERVICE)) {
+            mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP,
+                    "isBackupServiceActive");
+        }
         checkServiceBinder();
         if (sService != null) {
             try {
@@ -919,7 +936,6 @@ public class BackupManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.BACKUP)
     public Intent getConfigurationIntent(String transportName) {
         checkServiceBinder();
@@ -941,7 +957,6 @@ public class BackupManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.BACKUP)
     public String getDestinationString(String transportName) {
         checkServiceBinder();
@@ -963,7 +978,6 @@ public class BackupManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.BACKUP)
     public Intent getDataManagementIntent(String transportName) {
         checkServiceBinder();
@@ -989,7 +1003,6 @@ public class BackupManager {
      */
     @Deprecated
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.BACKUP)
     @Nullable
     public String getDataManagementLabel(@NonNull String transportName) {
@@ -1006,7 +1019,6 @@ public class BackupManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.BACKUP)
     @Nullable
     public CharSequence getDataManagementIntentLabel(@NonNull String transportName) {

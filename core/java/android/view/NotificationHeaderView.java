@@ -16,19 +16,17 @@
 
 package android.view;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.app.Notification;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.res.Resources;
-import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.util.AttributeSet;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.RemoteViews;
 
 import com.android.internal.R;
@@ -44,30 +42,18 @@ import java.util.ArrayList;
  */
 @RemoteViews.RemoteView
 public class NotificationHeaderView extends ViewGroup {
-    public static final int NO_COLOR = Notification.COLOR_INVALID;
     private final int mChildMinWidth;
     private final int mContentEndMargin;
-    private final int mGravity;
-    private View mAppName;
-    private View mHeaderText;
-    private View mSecondaryHeaderText;
     private OnClickListener mExpandClickListener;
-    private OnClickListener mFeedbackListener;
     private HeaderTouchListener mTouchListener = new HeaderTouchListener();
-    private LinearLayout mTransferChip;
+    private NotificationTopLineView mTopLineView;
     private NotificationExpandButton mExpandButton;
     private CachingIconView mIcon;
-    private View mProfileBadge;
-    private View mFeedbackIcon;
-    private boolean mExpanded;
-    private boolean mShowExpandButtonAtEnd;
-    private boolean mShowWorkBadgeAtEnd;
     private int mHeaderTextMarginEnd;
     private Drawable mBackground;
     private boolean mEntireHeaderClickable;
     private boolean mExpandOnlyOnButton;
     private boolean mAcceptAllTouches;
-    private int mTotalWidth;
 
     ViewOutlineProvider mProvider = new ViewOutlineProvider() {
         @Override
@@ -83,7 +69,7 @@ public class NotificationHeaderView extends ViewGroup {
         this(context, null);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public NotificationHeaderView(Context context, @Nullable AttributeSet attrs) {
         this(context, attrs, 0);
     }
@@ -92,30 +78,22 @@ public class NotificationHeaderView extends ViewGroup {
         this(context, attrs, defStyleAttr, 0);
     }
 
-    public NotificationHeaderView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    public NotificationHeaderView(Context context, AttributeSet attrs, int defStyleAttr,
+            int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
         Resources res = getResources();
         mChildMinWidth = res.getDimensionPixelSize(R.dimen.notification_header_shrink_min_width);
         mContentEndMargin = res.getDimensionPixelSize(R.dimen.notification_content_margin_end);
         mEntireHeaderClickable = res.getBoolean(R.bool.config_notificationHeaderClickableForExpand);
-
-        int[] attrIds = { android.R.attr.gravity };
-        TypedArray ta = context.obtainStyledAttributes(attrs, attrIds, defStyleAttr, defStyleRes);
-        mGravity = ta.getInt(0, 0);
-        ta.recycle();
     }
 
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mAppName = findViewById(com.android.internal.R.id.app_name_text);
-        mHeaderText = findViewById(com.android.internal.R.id.header_text);
-        mSecondaryHeaderText = findViewById(com.android.internal.R.id.header_text_secondary);
-        mTransferChip = findViewById(com.android.internal.R.id.media_seamless);
-        mExpandButton = findViewById(com.android.internal.R.id.expand_button);
-        mIcon = findViewById(com.android.internal.R.id.icon);
-        mProfileBadge = findViewById(com.android.internal.R.id.profile_badge);
-        mFeedbackIcon = findViewById(com.android.internal.R.id.feedback);
+        mIcon = findViewById(R.id.icon);
+        mTopLineView = findViewById(R.id.notification_top_line);
+        mExpandButton = findViewById(R.id.expand_button);
+        setClipToPadding(false);
     }
 
     @Override
@@ -141,10 +119,7 @@ public class NotificationHeaderView extends ViewGroup {
                     lp.topMargin + lp.bottomMargin, lp.height);
             child.measure(childWidthSpec, childHeightSpec);
             // Icons that should go at the end
-            if ((child == mExpandButton && mShowExpandButtonAtEnd)
-                    || child == mProfileBadge
-                    || child == mFeedbackIcon
-                    || child == mTransferChip) {
+            if (child == mExpandButton) {
                 iconWidth += lp.leftMargin + lp.rightMargin + child.getMeasuredWidth();
             } else {
                 totalWidth += lp.leftMargin + lp.rightMargin + child.getMeasuredWidth();
@@ -155,19 +130,10 @@ public class NotificationHeaderView extends ViewGroup {
         int endMargin = Math.max(mHeaderTextMarginEnd, iconWidth);
         if (totalWidth > givenWidth - endMargin) {
             int overFlow = totalWidth - givenWidth + endMargin;
-            // We are overflowing, lets shrink the app name first
-            overFlow = shrinkViewForOverflow(wrapContentHeightSpec, overFlow, mAppName,
+            // We are overflowing; shrink the top line
+            shrinkViewForOverflow(wrapContentHeightSpec, overFlow, mTopLineView,
                     mChildMinWidth);
-
-            // still overflowing, we shrink the header text
-            overFlow = shrinkViewForOverflow(wrapContentHeightSpec, overFlow, mHeaderText, 0);
-
-            // still overflowing, finally we shrink the secondary header text
-            shrinkViewForOverflow(wrapContentHeightSpec, overFlow, mSecondaryHeaderText,
-                    0);
         }
-        totalWidth += getPaddingEnd();
-        mTotalWidth = Math.min(totalWidth, givenWidth);
         setMeasuredDimension(givenWidth, givenHeight);
     }
 
@@ -188,10 +154,6 @@ public class NotificationHeaderView extends ViewGroup {
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         int left = getPaddingStart();
         int end = getMeasuredWidth();
-        final boolean centerAligned = (mGravity & Gravity.CENTER_HORIZONTAL) != 0;
-        if (centerAligned) {
-            left += getMeasuredWidth() / 2 - mTotalWidth / 2;
-        }
         int childCount = getChildCount();
         int ownHeight = getMeasuredHeight() - getPaddingTop() - getPaddingBottom();
         for (int i = 0; i < childCount; i++) {
@@ -206,10 +168,7 @@ public class NotificationHeaderView extends ViewGroup {
             int top = (int) (getPaddingTop() + (ownHeight - childHeight) / 2.0f);
             int bottom = top + childHeight;
             // Icons that should go at the end
-            if ((child == mExpandButton && mShowExpandButtonAtEnd)
-                    || child == mProfileBadge
-                    || child == mFeedbackIcon
-                    || child == mTransferChip) {
+            if (child == mExpandButton) {
                 if (end == getMeasuredWidth()) {
                     layoutRight = end - mContentEndMargin;
                 } else {
@@ -236,7 +195,7 @@ public class NotificationHeaderView extends ViewGroup {
 
     @Override
     public LayoutParams generateLayoutParams(AttributeSet attrs) {
-        return new ViewGroup.MarginLayoutParams(getContext(), attrs);
+        return new MarginLayoutParams(getContext(), attrs);
     }
 
     /**
@@ -265,7 +224,7 @@ public class NotificationHeaderView extends ViewGroup {
     }
 
     @Override
-    protected boolean verifyDrawable(Drawable who) {
+    protected boolean verifyDrawable(@NonNull Drawable who) {
         return super.verifyDrawable(who) || who == mBackground;
     }
 
@@ -277,7 +236,7 @@ public class NotificationHeaderView extends ViewGroup {
     }
 
     private void updateTouchListener() {
-        if (mExpandClickListener == null && mFeedbackListener == null) {
+        if (mExpandClickListener == null) {
             setOnTouchListener(null);
             return;
         }
@@ -285,76 +244,11 @@ public class NotificationHeaderView extends ViewGroup {
         mTouchListener.bindTouchRects();
     }
 
-    /**
-     * Sets onclick listener for feedback icon.
-     */
-    public void setFeedbackOnClickListener(OnClickListener l) {
-        mFeedbackListener = l;
-        mFeedbackIcon.setOnClickListener(mFeedbackListener);
-        updateTouchListener();
-    }
-
     @Override
     public void setOnClickListener(@Nullable OnClickListener l) {
         mExpandClickListener = l;
         mExpandButton.setOnClickListener(mExpandClickListener);
         updateTouchListener();
-    }
-
-    public int getOriginalIconColor() {
-        return mIcon.getOriginalIconColor();
-    }
-
-    public int getOriginalNotificationColor() {
-        return mExpandButton.getOriginalNotificationColor();
-    }
-
-    @RemotableViewMethod
-    public void setExpanded(boolean expanded) {
-        mExpanded = expanded;
-        updateExpandButton();
-    }
-
-    private void updateExpandButton() {
-        int drawableId;
-        int contentDescriptionId;
-        if (mExpanded) {
-            drawableId = R.drawable.ic_collapse_notification;
-            contentDescriptionId = R.string.expand_button_content_description_expanded;
-        } else {
-            drawableId = R.drawable.ic_expand_notification;
-            contentDescriptionId = R.string.expand_button_content_description_collapsed;
-        }
-        mExpandButton.setImageDrawable(getContext().getDrawable(drawableId));
-        mExpandButton.setColorFilter(getOriginalNotificationColor());
-        mExpandButton.setContentDescription(mContext.getText(contentDescriptionId));
-    }
-
-    public void setShowWorkBadgeAtEnd(boolean showWorkBadgeAtEnd) {
-        if (showWorkBadgeAtEnd != mShowWorkBadgeAtEnd) {
-            setClipToPadding(!showWorkBadgeAtEnd);
-            mShowWorkBadgeAtEnd = showWorkBadgeAtEnd;
-        }
-    }
-
-    /**
-     * Sets whether or not the expand button appears at the end of the NotificationHeaderView. If
-     * both this and {@link #setShowWorkBadgeAtEnd(boolean)} have been set to true, then the
-     * expand button will appear closer to the end than the work badge.
-     */
-    public void setShowExpandButtonAtEnd(boolean showExpandButtonAtEnd) {
-        if (showExpandButtonAtEnd != mShowExpandButtonAtEnd) {
-            setClipToPadding(!showExpandButtonAtEnd);
-            mShowExpandButtonAtEnd = showExpandButtonAtEnd;
-        }
-    }
-
-    public View getWorkProfileIcon() {
-        return mProfileBadge;
-    }
-
-    public CachingIconView getIcon() {
-        return mIcon;
     }
 
     /**
@@ -377,11 +271,13 @@ public class NotificationHeaderView extends ViewGroup {
         return mHeaderTextMarginEnd;
     }
 
-    public class HeaderTouchListener implements View.OnTouchListener {
+    /**
+     * Handles clicks on the header based on the region tapped.
+     */
+    public class HeaderTouchListener implements OnTouchListener {
 
         private final ArrayList<Rect> mTouchRects = new ArrayList<>();
         private Rect mExpandButtonRect;
-        private Rect mFeedbackRect;
         private int mTouchSlop;
         private boolean mTrackGesture;
         private float mDownX;
@@ -394,7 +290,6 @@ public class NotificationHeaderView extends ViewGroup {
             mTouchRects.clear();
             addRectAroundView(mIcon);
             mExpandButtonRect = addRectAroundView(mExpandButton);
-            mFeedbackRect = addRectAroundView(mFeedbackIcon);
             addWidthRect();
             mTouchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
         }
@@ -455,11 +350,11 @@ public class NotificationHeaderView extends ViewGroup {
                     break;
                 case MotionEvent.ACTION_UP:
                     if (mTrackGesture) {
-                        if (mFeedbackIcon.isVisibleToUser()
-                                && (mFeedbackRect.contains((int) x, (int) y)
-                                || mFeedbackRect.contains((int) mDownX, (int) mDownY))) {
-                            mFeedbackIcon.performClick();
-                            return true;
+                        float topLineX = mTopLineView.getX();
+                        float topLineY = mTopLineView.getY();
+                        if (mTopLineView.onTouchUp(x - topLineX, y - topLineY,
+                                mDownX - topLineX, mDownY - topLineY)) {
+                            break;
                         }
                         mExpandButton.performClick();
                     }
@@ -481,7 +376,9 @@ public class NotificationHeaderView extends ViewGroup {
                     return true;
                 }
             }
-            return false;
+            float topLineX = x - mTopLineView.getX();
+            float topLineY = y - mTopLineView.getY();
+            return mTopLineView.isInTouchRect(topLineX, topLineY);
         }
     }
 
@@ -493,10 +390,6 @@ public class NotificationHeaderView extends ViewGroup {
             }
         }
         return this;
-    }
-
-    public ImageView getExpandButton() {
-        return mExpandButton;
     }
 
     @Override

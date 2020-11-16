@@ -31,6 +31,9 @@ import android.graphics.SurfaceTexture;
 import android.media.SubtitleController.Anchor;
 import android.media.SubtitleTrack.RenderingWidget;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.FileUtils;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -1104,7 +1107,13 @@ public class MediaPlayer extends PlayerBase
     }
 
     private boolean attemptDataSource(ContentResolver resolver, Uri uri) {
-        try (AssetFileDescriptor afd = resolver.openAssetFileDescriptor(uri, "r")) {
+        boolean optimize = SystemProperties.getBoolean("fuse.sys.transcode_player_optimize",
+                false);
+        Bundle opts = new Bundle();
+        opts.putBoolean("android.provider.extra.ACCEPT_ORIGINAL_MEDIA_FORMAT", true);
+        try (AssetFileDescriptor afd = optimize
+                ? resolver.openTypedAssetFileDescriptor(uri, "*/*", opts)
+                : resolver.openAssetFileDescriptor(uri, "r")) {
             setDataSource(afd);
             return true;
         } catch (NullPointerException | SecurityException | IOException ex) {
@@ -1144,7 +1153,7 @@ public class MediaPlayer extends PlayerBase
         setDataSource(path, headers, null);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private void setDataSource(String path, Map<String, String> headers, List<HttpCookie> cookies)
             throws IOException, IllegalArgumentException, SecurityException, IllegalStateException
     {
@@ -1165,7 +1174,7 @@ public class MediaPlayer extends PlayerBase
         setDataSource(path, keys, values, cookies);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private void setDataSource(String path, String[] keys, String[] values,
             List<HttpCookie> cookies)
             throws IOException, IllegalArgumentException, SecurityException, IllegalStateException {
@@ -1245,7 +1254,13 @@ public class MediaPlayer extends PlayerBase
      */
     public void setDataSource(FileDescriptor fd, long offset, long length)
             throws IOException, IllegalArgumentException, IllegalStateException {
-        _setDataSource(fd, offset, length);
+        boolean optimize = SystemProperties.getBoolean("fuse.sys.transcode_player_optimize", false);
+        FileDescriptor modernFd = optimize ? FileUtils.convertToModernFd(fd) : null;
+        if (modernFd == null) {
+            _setDataSource(fd, offset, length);
+        } else {
+            _setDataSource(modernFd, offset, length);
+        }
     }
 
     private native void _setDataSource(FileDescriptor fd, long offset, long length)
@@ -2899,8 +2914,13 @@ public class MediaPlayer extends PlayerBase
 
         AssetFileDescriptor fd = null;
         try {
+            boolean optimize = SystemProperties.getBoolean("fuse.sys.transcode_player_optimize",
+                    false);
             ContentResolver resolver = context.getContentResolver();
-            fd = resolver.openAssetFileDescriptor(uri, "r");
+            Bundle opts = new Bundle();
+            opts.putBoolean("android.provider.extra.ACCEPT_ORIGINAL_MEDIA_FORMAT", true);
+            fd = optimize ? resolver.openTypedAssetFileDescriptor(uri, "*/*", opts)
+                    : resolver.openAssetFileDescriptor(uri, "r");
             if (fd == null) {
                 return;
             }
@@ -4391,7 +4411,7 @@ public class MediaPlayer extends PlayerBase
      *  JAVA framework to avoid triggering track scanning.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int MEDIA_INFO_EXTERNAL_METADATA_UPDATE = 803;
 
     /** Informs that audio is not playing. Note that playback of the video
@@ -4411,7 +4431,7 @@ public class MediaPlayer extends PlayerBase
      *
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int MEDIA_INFO_TIMED_TEXT_ERROR = 900;
 
     /** Subtitle track was not supported by the media framework.

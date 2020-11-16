@@ -1356,7 +1356,9 @@ public class PackageInstaller {
          * Completely abandon this session, destroying all staged data and
          * rendering it invalid. Abandoned sessions will be reported to
          * {@link SessionCallback} listeners as failures. This is equivalent to
-         * opening the session and calling {@link Session#abandon()}.
+         * {@link #abandonSession(int)}.
+         * <p>If the parent is abandoned, all children will also be abandoned. Any written data
+         * would be destroyed and the created {@link Session} information will be discarded.</p>
          */
         public void abandon() {
             try {
@@ -1419,7 +1421,8 @@ public class PackageInstaller {
          * when this session is committed.
          *
          * <p>If the parent is staged or has rollback enabled, all children must have
-         * the same properties.
+         * the same properties.</p>
+         * <p>If the parent is abandoned, all children will also be abandoned.</p>
          *
          * @param sessionId the session ID to add to this multi-package session.
          */
@@ -1497,13 +1500,13 @@ public class PackageInstaller {
         /** {@hide} */
         public @InstallReason int installReason = PackageManager.INSTALL_REASON_UNKNOWN;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long sizeBytes = -1;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public String appPackageName;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public Bitmap appIcon;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -1513,7 +1516,7 @@ public class PackageInstaller {
         /** {@hide} */
         public Uri originatingUri;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public int originatingUid = UID_UNKNOWN;
         /** {@hide} */
         public Uri referrerUri;
@@ -1722,7 +1725,6 @@ public class PackageInstaller {
          *
          * @hide
          */
-        @TestApi
         @SystemApi
         @RequiresPermission(android.Manifest.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS)
         public void setGrantedRuntimePermissions(String[] permissions) {
@@ -1794,7 +1796,7 @@ public class PackageInstaller {
          * @see SessionParams#setEnableRollback(boolean, int)
          * @hide
          */
-        @SystemApi @TestApi
+        @SystemApi
         public void setEnableRollback(boolean enable) {
             if (enable) {
                 installFlags |= PackageManager.INSTALL_ENABLE_ROLLBACK;
@@ -1818,7 +1820,7 @@ public class PackageInstaller {
          * @param dataPolicy the rollback data policy for this session
          * @hide
          */
-        @SystemApi @TestApi
+        @SystemApi
         public void setEnableRollback(boolean enable,
                 @PackageManager.RollbackDataPolicy int dataPolicy) {
             if (enable) {
@@ -1841,7 +1843,7 @@ public class PackageInstaller {
         }
 
         /** {@hide} */
-        @SystemApi @TestApi
+        @SystemApi
         public void setRequestDowngrade(boolean requestDowngrade) {
             if (requestDowngrade) {
                 installFlags |= PackageManager.INSTALL_REQUEST_DOWNGRADE;
@@ -1880,7 +1882,6 @@ public class PackageInstaller {
 
         /** {@hide} */
         @SystemApi
-        @TestApi
         public void setInstallAsInstantApp(boolean isInstantApp) {
             if (isInstantApp) {
                 installFlags |= PackageManager.INSTALL_INSTANT_APP;
@@ -1965,7 +1966,7 @@ public class PackageInstaller {
          *
          * {@hide}
          */
-        @SystemApi @TestApi
+        @SystemApi
         @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
         public void setStaged() {
             this.isStaged = true;
@@ -1976,7 +1977,7 @@ public class PackageInstaller {
          *
          * {@hide}
          */
-        @SystemApi @TestApi
+        @SystemApi
         @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
         public void setInstallAsApex() {
             installFlags |= PackageManager.INSTALL_APEX;
@@ -2150,13 +2151,13 @@ public class PackageInstaller {
         /** {@hide} */
         public String installerAttributionTag;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public String resolvedBaseCodePath;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public float progress;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public boolean sealed;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -2229,7 +2230,7 @@ public class PackageInstaller {
         public int rollbackDataPolicy;
 
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public SessionInfo() {
         }
 
@@ -2480,7 +2481,6 @@ public class PackageInstaller {
          *
          * @hide
          */
-        @TestApi
         @SystemApi
         public @NonNull Set<String> getWhitelistedRestrictedPermissions() {
             if ((installFlags & PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS) != 0) {
@@ -2504,7 +2504,6 @@ public class PackageInstaller {
          *
          * @hide
          */
-        @TestApi
         @SystemApi
         public int getAutoRevokePermissionsMode() {
             return autoRevokePermissionsMode;
@@ -2633,7 +2632,7 @@ public class PackageInstaller {
          *
          * @hide
          */
-        @SystemApi @TestApi
+        @SystemApi
         @PackageManager.RollbackDataPolicy
         public int getRollbackDataPolicy() {
             return rollbackDataPolicy;

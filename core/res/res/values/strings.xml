@@ -3058,10 +3058,14 @@
     <!-- Default text for a button that can be toggled on and off. -->
     <string name="capital_off">OFF</string>
 
-    <!-- Default state for CompoundButton for on and off. [CHAR LIMIT=32] -->
+    <!-- Default checked text used by accessibility for a button that can be checked or unchecked. [CHAR LIMIT=NONE] -->
     <string name="checked">checked</string>
-    <!-- Default text for a button that can be toggled on and off. [CHAR LIMIT=32] -->
+    <!-- Default not checked text used by accessibility for a button that can be checked or unchecked. [CHAR LIMIT=NONE] -->
     <string name="not_checked">not checked</string>
+    <!-- Default selected text used by accessibility for an element that can be selected or unselected. [CHAR LIMIT=NONE] -->
+    <string name="selected">selected</string>
+    <!-- Default not selected text used by accessibility for an element that can be selected or unselected. [CHAR LIMIT=NONE] -->
+    <string name="not_selected">not selected</string>
 
     <!-- Title of intent resolver dialog when selecting an application to run. -->
     <string name="whichApplication">Complete action using</string>
@@ -4496,8 +4500,9 @@
      shown in the warning dialog about the accessibility shortcut. -->
     <string name="color_correction_feature_name">Color Correction</string>
 
+    <!-- TODO(b/170970602): remove translatable=false when RBC has official name and strings -->
     <!-- Title of Reduce Bright Colors feature, shown in the warning dialog about the accessibility shortcut. [CHAR LIMIT=none] -->
-    <string name="reduce_bright_colors_feature_name">Reduce Bright Colors</string>
+    <string name="reduce_bright_colors_feature_name" translatable="false">Reduce Bright Colors</string>
 
     <!-- Text in toast to alert the user that the accessibility shortcut turned on an accessibility service. [CHAR LIMIT=none] -->
     <string name="accessibility_shortcut_enabling_service">Held volume keys. <xliff:g id="service_name" example="TalkBack">%1$s</xliff:g> turned on.</string>

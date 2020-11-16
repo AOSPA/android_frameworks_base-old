@@ -19,10 +19,12 @@ package android.app.servertransaction;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityThread.ActivityClientRecord;
 import android.app.ClientTransactionHandler;
 import android.app.ResultInfo;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Trace;
@@ -36,7 +38,7 @@ import java.util.Objects;
  */
 public class ActivityResultItem extends ActivityTransactionItem {
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private List<ResultInfo> mResultInfoList;
 
     /* TODO(b/78294732)
@@ -101,7 +103,7 @@ public class ActivityResultItem extends ActivityTransactionItem {
     };
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) {
             return true;
         }

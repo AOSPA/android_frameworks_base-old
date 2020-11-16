@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static android.view.View.GONE;
+
 import static com.android.systemui.statusbar.phone.LockIcon.STATE_BIOMETRICS_ERROR;
 import static com.android.systemui.statusbar.phone.LockIcon.STATE_LOCKED;
 import static com.android.systemui.statusbar.phone.LockIcon.STATE_LOCK_OPEN;
@@ -502,6 +504,11 @@ public class LockscreenLockIconController {
      * @return true if the visibility changed
      */
     private boolean updateIconVisibility() {
+        if (mKeyguardUpdateMonitor.isUdfpsEnrolled()) {
+            boolean changed = mLockIcon.getVisibility() == GONE;
+            mLockIcon.setVisibility(GONE);
+            return changed;
+        }
         boolean onAodOrDocked = mStatusBarStateController.isDozing() || mDocked;
         boolean invisible = onAodOrDocked || mWakeAndUnlockRunning || mShowingLaunchAffordance;
         boolean fingerprintOrBypass = mFingerprintUnlock

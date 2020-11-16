@@ -21,6 +21,7 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -736,7 +737,7 @@ public final class AudioFormat implements Parcelable {
      */
     // Update sound trigger JNI in core/jni/android_hardware_SoundTrigger.cpp when modifying this
     // constructor
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private AudioFormat(int encoding, int sampleRate, int channelMask, int channelIndexMask) {
         this(
              AUDIO_FORMAT_HAS_PROPERTY_ENCODING
@@ -795,11 +796,11 @@ public final class AudioFormat implements Parcelable {
     // This is an immutable class, all member variables are final.
 
     // Essential values.
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private final int mEncoding;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private final int mSampleRate;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private final int mChannelMask;
     private final int mChannelIndexMask;
     private final int mPropertySetMask;
@@ -999,7 +1000,7 @@ public final class AudioFormat implements Parcelable {
          * with named endpoint channels. The samples in the frame correspond to the
          * named set bits in the channel position mask, in ascending bit order.
          * See {@link #setChannelIndexMask(int)} to specify channels
-         * based on endpoint numbered channels. This <a href="#channelPositionMask>description of
+         * based on endpoint numbered channels. This <a href="#channelPositionMask">description of
          * channel position masks</a> covers the concept in more details.
          * @param channelMask describes the configuration of the audio channels.
          *    <p> For output, the channelMask can be an OR-ed combination of

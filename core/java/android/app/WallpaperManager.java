@@ -1766,7 +1766,6 @@ public class WallpaperManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_COMPONENT)
     public boolean setWallpaperComponent(ComponentName name) {
@@ -1978,7 +1977,7 @@ public class WallpaperManager {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static InputStream openDefaultWallpaper(Context context, @SetWallpaperFlags int which) {
         final String whichProp;
         final int defaultResId;

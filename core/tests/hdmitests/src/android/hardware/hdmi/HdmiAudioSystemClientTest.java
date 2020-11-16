@@ -28,6 +28,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -372,6 +373,39 @@ public class HdmiAudioSystemClientTest {
         @Override
         public void removeHdmiCecVolumeControlFeatureListener(
                 IHdmiCecVolumeControlFeatureListener listener) {
+        }
+
+        @Override
+        public List<String> getUserCecSettings() {
+            return new ArrayList<>();
+        }
+
+        @Override
+        public List<String> getAllowedCecSettingStringValues(String name) {
+            return new ArrayList<>();
+        }
+
+        @Override
+        public int[] getAllowedCecSettingIntValues(String name) {
+            return new int[0];
+        }
+
+        @Override
+        public String getCecSettingStringValue(String name) {
+            return "";
+        }
+
+        @Override
+        public void setCecSettingStringValue(String name, String value) {
+        }
+
+        @Override
+        public int getCecSettingIntValue(String name) {
+            return 0;
+        }
+
+        @Override
+        public void setCecSettingIntValue(String name, int value) {
         }
     }
 

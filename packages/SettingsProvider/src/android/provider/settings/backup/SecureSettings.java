@@ -142,7 +142,6 @@ public class SecureSettings {
         Settings.Secure.CHARGING_VIBRATION_ENABLED,
         Settings.Secure.ACCESSIBILITY_NON_INTERACTIVE_UI_TIMEOUT_MS,
         Settings.Secure.ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS,
-        Settings.Secure.NOTIFICATION_NEW_INTERRUPTION_MODEL,
         Settings.Secure.TRUST_AGENTS_EXTEND_UNLOCK,
         Settings.Secure.UI_NIGHT_MODE,
         Settings.Secure.DARK_THEME_CUSTOM_START_TIME,
@@ -176,8 +175,8 @@ public class SecureSettings {
         Settings.Secure.ONE_HANDED_MODE_TIMEOUT,
         Settings.Secure.TAPS_APP_TO_EXIT,
         Settings.Secure.SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED,
-        Settings.Secure.PANIC_GESTURE_ENABLED,
-        Settings.Secure.PANIC_SOUND_ENABLED,
+        Settings.Secure.EMERGENCY_GESTURE_ENABLED,
+        Settings.Secure.EMERGENCY_GESTURE_SOUND_ENABLED,
         Settings.Secure.ADAPTIVE_CONNECTIVITY_ENABLED,
         Settings.Secure.ASSIST_HANDLES_LEARNING_TIME_ELAPSED_MILLIS,
         Settings.Secure.ASSIST_HANDLES_LEARNING_EVENT_COUNT

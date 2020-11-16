@@ -16,6 +16,7 @@
 
 package com.android.server.pm;
 
+import static android.app.PendingIntent.FLAG_IMMUTABLE;
 import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.pm.LauncherApps.FLAG_CACHE_BUBBLE_SHORTCUTS;
@@ -32,6 +33,7 @@ import android.app.IApplicationThread;
 import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
 import android.app.usage.UsageStatsManagerInternal;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -44,6 +46,8 @@ import android.content.pm.IOnAppsChangedListener;
 import android.content.pm.IPackageInstallerCallback;
 import android.content.pm.IPackageManager;
 import android.content.pm.IShortcutChangeCallback;
+import android.content.pm.IncrementalStatesInfo;
+import android.content.pm.LauncherActivityInfoInternal;
 import android.content.pm.LauncherApps;
 import android.content.pm.LauncherApps.ShortcutQuery;
 import android.content.pm.PackageInfo;
@@ -369,18 +373,13 @@ public class LauncherAppsService extends SystemService {
             }
         }
 
-        private ResolveInfo getHiddenAppActivityInfo(String packageName, int callingUid,
-                UserHandle user) {
+        private LauncherActivityInfoInternal getHiddenAppActivityInfo(String packageName,
+                int callingUid, UserHandle user) {
             Intent intent = new Intent();
             intent.setComponent(new ComponentName(packageName,
                     PackageManager.APP_DETAILS_ACTIVITY_CLASS_NAME));
-            final PackageManagerInternal pmInt =
-                    LocalServices.getService(PackageManagerInternal.class);
-            List<ResolveInfo> apps = pmInt.queryIntentActivities(intent,
-                    intent.resolveTypeIfNeeded(mContext.getContentResolver()),
-                    PackageManager.MATCH_DIRECT_BOOT_AWARE
-                            | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
-                    callingUid, user.getIdentifier());
+            final List<LauncherActivityInfoInternal> apps = queryIntentLauncherActivities(intent,
+                    callingUid, user);
             if (apps.size() > 0) {
                 return apps.get(0);
             }
@@ -399,14 +398,14 @@ public class LauncherAppsService extends SystemService {
         }
 
         @Override
-        public ParceledListSlice<ResolveInfo> getLauncherActivities(String callingPackage,
-                String packageName, UserHandle user) throws RemoteException {
-            ParceledListSlice<ResolveInfo> launcherActivities = queryActivitiesForUser(
-                    callingPackage,
-                    new Intent(Intent.ACTION_MAIN)
-                            .addCategory(Intent.CATEGORY_LAUNCHER)
-                            .setPackage(packageName),
-                    user);
+        public ParceledListSlice<LauncherActivityInfoInternal> getLauncherActivities(
+                String callingPackage, String packageName, UserHandle user) throws RemoteException {
+            ParceledListSlice<LauncherActivityInfoInternal> launcherActivities =
+                    queryActivitiesForUser(callingPackage,
+                            new Intent(Intent.ACTION_MAIN)
+                                    .addCategory(Intent.CATEGORY_LAUNCHER)
+                                    .setPackage(packageName),
+                            user);
             if (Settings.Global.getInt(mContext.getContentResolver(),
                     Settings.Global.SHOW_HIDDEN_LAUNCHER_ICON_APPS_ENABLED, 1) == 0) {
                 return launcherActivities;
@@ -428,7 +427,8 @@ public class LauncherAppsService extends SystemService {
                     return launcherActivities;
                 }
 
-                final ArrayList<ResolveInfo> result = new ArrayList<>(launcherActivities.getList());
+                final ArrayList<LauncherActivityInfoInternal> result = new ArrayList<>(
+                        launcherActivities.getList());
                 final PackageManagerInternal pmInt =
                         LocalServices.getService(PackageManagerInternal.class);
                 if (packageName != null) {
@@ -440,7 +440,8 @@ public class LauncherAppsService extends SystemService {
                     ApplicationInfo appInfo = pmInt.getApplicationInfo(packageName, /*flags*/ 0,
                             callingUid, user.getIdentifier());
                     if (shouldShowSyntheticActivity(user, appInfo)) {
-                        ResolveInfo info = getHiddenAppActivityInfo(packageName, callingUid, user);
+                        LauncherActivityInfoInternal info = getHiddenAppActivityInfo(packageName,
+                                callingUid, user);
                         if (info != null) {
                             result.add(info);
                         }
@@ -448,8 +449,8 @@ public class LauncherAppsService extends SystemService {
                     return new ParceledListSlice<>(result);
                 }
                 final HashSet<String> visiblePackages = new HashSet<>();
-                for (ResolveInfo info : result) {
-                    visiblePackages.add(info.activityInfo.packageName);
+                for (LauncherActivityInfoInternal info : result) {
+                    visiblePackages.add(info.getActivityInfo().packageName);
                 }
                 List<ApplicationInfo> installedPackages = pmInt.getInstalledApplications(0,
                         user.getIdentifier(), callingUid);
@@ -458,8 +459,8 @@ public class LauncherAppsService extends SystemService {
                         if (!shouldShowSyntheticActivity(user, applicationInfo)) {
                             continue;
                         }
-                        ResolveInfo info = getHiddenAppActivityInfo(applicationInfo.packageName,
-                                callingUid, user);
+                        LauncherActivityInfoInternal info = getHiddenAppActivityInfo(
+                                applicationInfo.packageName, callingUid, user);
                         if (info != null) {
                             result.add(info);
                         }
@@ -533,7 +534,7 @@ public class LauncherAppsService extends SystemService {
         }
 
         @Override
-        public ActivityInfo resolveActivity(
+        public LauncherActivityInfoInternal resolveLauncherActivityInternal(
                 String callingPackage, ComponentName component, UserHandle user)
                 throws RemoteException {
             if (!canAccessProfile(user.getIdentifier(), "Cannot resolve activity")) {
@@ -545,10 +546,24 @@ public class LauncherAppsService extends SystemService {
             try {
                 final PackageManagerInternal pmInt =
                         LocalServices.getService(PackageManagerInternal.class);
-                return pmInt.getActivityInfo(component,
+                final ActivityInfo activityInfo = pmInt.getActivityInfo(component,
                         PackageManager.MATCH_DIRECT_BOOT_AWARE
                                 | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
                         callingUid, user.getIdentifier());
+                if (activityInfo == null) {
+                    return null;
+                }
+                if (component == null || component.getPackageName() == null) {
+                    // should not happen
+                    return null;
+                }
+                final IncrementalStatesInfo incrementalStatesInfo = pmInt.getIncrementalStatesInfo(
+                            component.getPackageName(), callingUid, user.getIdentifier());
+                if (incrementalStatesInfo == null) {
+                    // package does not exist; should not happen
+                    return null;
+                }
+                return new LauncherActivityInfoInternal(activityInfo, incrementalStatesInfo);
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -562,26 +577,49 @@ public class LauncherAppsService extends SystemService {
                     new Intent(Intent.ACTION_CREATE_SHORTCUT).setPackage(packageName), user);
         }
 
-        private ParceledListSlice<ResolveInfo> queryActivitiesForUser(String callingPackage,
-                Intent intent, UserHandle user) {
+        private ParceledListSlice<LauncherActivityInfoInternal> queryActivitiesForUser(
+                String callingPackage, Intent intent, UserHandle user) {
             if (!canAccessProfile(user.getIdentifier(), "Cannot retrieve activities")) {
                 return null;
             }
-
             final int callingUid = injectBinderCallingUid();
             long ident = injectClearCallingIdentity();
             try {
-                final PackageManagerInternal pmInt =
-                        LocalServices.getService(PackageManagerInternal.class);
-                List<ResolveInfo> apps = pmInt.queryIntentActivities(intent,
-                        intent.resolveTypeIfNeeded(mContext.getContentResolver()),
-                        PackageManager.MATCH_DIRECT_BOOT_AWARE
-                                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
-                        callingUid, user.getIdentifier());
-                return new ParceledListSlice<>(apps);
+                return new ParceledListSlice<>(queryIntentLauncherActivities(intent, callingUid,
+                        user));
             } finally {
                 injectRestoreCallingIdentity(ident);
             }
+        }
+
+        private List<LauncherActivityInfoInternal> queryIntentLauncherActivities(
+                Intent intent, int callingUid, UserHandle user) {
+            final PackageManagerInternal pmInt =
+                    LocalServices.getService(PackageManagerInternal.class);
+            List<ResolveInfo> apps = pmInt.queryIntentActivities(intent,
+                    intent.resolveTypeIfNeeded(mContext.getContentResolver()),
+                    PackageManager.MATCH_DIRECT_BOOT_AWARE
+                            | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
+                    callingUid, user.getIdentifier());
+            final int numResolveInfos = apps.size();
+            List<LauncherActivityInfoInternal> results = new ArrayList<>();
+            for (int i = 0; i < numResolveInfos; i++) {
+                final ResolveInfo ri = apps.get(i);
+                final String packageName = ri.activityInfo.packageName;
+                if (packageName == null) {
+                    // should not happen
+                    continue;
+                }
+                final IncrementalStatesInfo incrementalStatesInfo = pmInt.getIncrementalStatesInfo(
+                        packageName, callingUid, user.getIdentifier());
+                if (incrementalStatesInfo == null) {
+                    // package doesn't exist any more; should not happen
+                    continue;
+                }
+                results.add(new LauncherActivityInfoInternal(ri.activityInfo,
+                        incrementalStatesInfo));
+            }
+            return results;
         }
 
         @Override
@@ -982,6 +1020,32 @@ public class LauncherAppsService extends SystemService {
         }
 
         @Override
+        public PendingIntent getActivityLaunchIntent(ComponentName component, Bundle opts,
+                UserHandle user) {
+            if (!canAccessProfile(user.getIdentifier(), "Cannot start activity")) {
+                throw new ActivityNotFoundException("Activity could not be found");
+            }
+
+            final Intent launchIntent = getMainActivityLaunchIntent(component, user);
+            if (launchIntent == null) {
+                throw new SecurityException("Attempt to launch activity without "
+                        + " category Intent.CATEGORY_LAUNCHER " + component);
+            }
+
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                // If we reach here, we've verified that the caller has access to the profile and
+                // is launching an exported activity with CATEGORY_LAUNCHER so we can clear the
+                // calling identity to mirror the startActivityAsUser() call which does not validate
+                // the calling user
+                return PendingIntent.getActivityAsUser(mContext, 0 /* requestCode */, launchIntent,
+                        FLAG_IMMUTABLE, opts, user);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override
         public void startActivityAsUser(IApplicationThread caller, String callingPackage,
                 String callingFeatureId, ComponentName component, Rect sourceBounds,
                 Bundle opts, UserHandle user) throws RemoteException {
@@ -989,9 +1053,24 @@ public class LauncherAppsService extends SystemService {
                 return;
             }
 
+            Intent launchIntent = getMainActivityLaunchIntent(component, user);
+            if (launchIntent == null) {
+                throw new SecurityException("Attempt to launch activity without "
+                        + " category Intent.CATEGORY_LAUNCHER " + component);
+            }
+            launchIntent.setSourceBounds(sourceBounds);
+
+            mActivityTaskManagerInternal.startActivityAsUser(caller, callingPackage,
+                    callingFeatureId, launchIntent, /* resultTo= */ null,
+                    Intent.FLAG_ACTIVITY_NEW_TASK, opts, user.getIdentifier());
+        }
+
+        /**
+         * Returns the main activity launch intent for the given component package.
+         */
+        private Intent getMainActivityLaunchIntent(ComponentName component, UserHandle user) {
             Intent launchIntent = new Intent(Intent.ACTION_MAIN);
             launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-            launchIntent.setSourceBounds(sourceBounds);
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                     | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             launchIntent.setPackage(component.getPackageName());
@@ -1030,15 +1109,12 @@ public class LauncherAppsService extends SystemService {
                     }
                 }
                 if (!canLaunch) {
-                    throw new SecurityException("Attempt to launch activity without "
-                            + " category Intent.CATEGORY_LAUNCHER " + component);
+                    return null;
                 }
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
-            mActivityTaskManagerInternal.startActivityAsUser(caller, callingPackage,
-                    callingFeatureId, launchIntent, /* resultTo= */ null,
-                    Intent.FLAG_ACTIVITY_NEW_TASK, opts, user.getIdentifier());
+            return launchIntent;
         }
 
         @Override
@@ -1238,7 +1314,10 @@ public class LauncherAppsService extends SystemService {
                 } finally {
                     mListeners.finishBroadcast();
                 }
-
+                PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
+                pmi.registerInstalledLoadingProgressCallback(packageName,
+                        new PackageLoadingProgressCallback(packageName, user),
+                        user.getIdentifier());
                 super.onPackageAdded(packageName, uid);
             }
 
@@ -1266,6 +1345,11 @@ public class LauncherAppsService extends SystemService {
 
             @Override
             public void onPackageModified(String packageName) {
+                onPackageChanged(packageName);
+                super.onPackageModified(packageName);
+            }
+
+            private void onPackageChanged(String packageName) {
                 UserHandle user = new UserHandle(getChangingUserId());
                 final int n = mListeners.beginBroadcast();
                 try {
@@ -1282,8 +1366,6 @@ public class LauncherAppsService extends SystemService {
                 } finally {
                     mListeners.finishBroadcast();
                 }
-
-                super.onPackageModified(packageName);
             }
 
             @Override
@@ -1435,6 +1517,7 @@ public class LauncherAppsService extends SystemService {
                         } catch (RemoteException re) {
                             Slog.d(TAG, "Callback failed ", re);
                         }
+
                     }
                 } catch (RuntimeException e) {
                     // When the user is locked we get IllegalState, so just catch all.
@@ -1443,12 +1526,51 @@ public class LauncherAppsService extends SystemService {
                     mListeners.finishBroadcast();
                 }
             }
+
+            @Override
+            public void onPackageStateChanged(String packageName, int uid) {
+                onPackageChanged(packageName);
+                super.onPackageStateChanged(packageName, uid);
+            }
         }
 
         class PackageCallbackList<T extends IInterface> extends RemoteCallbackList<T> {
             @Override
             public void onCallbackDied(T callback, Object cookie) {
                 checkCallbackCount();
+            }
+        }
+
+        class PackageLoadingProgressCallback extends
+                PackageManagerInternal.InstalledLoadingProgressCallback {
+            private String mPackageName;
+            private UserHandle mUser;
+
+            PackageLoadingProgressCallback(String packageName, UserHandle user) {
+                super(mCallbackHandler);
+                mPackageName = packageName;
+                mUser = user;
+            }
+
+            @Override
+            public void onLoadingProgressChanged(float progress) {
+                final int n = mListeners.beginBroadcast();
+                try {
+                    for (int i = 0; i < n; i++) {
+                        IOnAppsChangedListener listener = mListeners.getBroadcastItem(i);
+                        BroadcastCookie cookie = (BroadcastCookie) mListeners.getBroadcastCookie(i);
+                        if (!isEnabledProfileOf(cookie.user, mUser, "onLoadingProgressChanged")) {
+                            continue;
+                        }
+                        try {
+                            listener.onPackageLoadingProgressChanged(mUser, mPackageName, progress);
+                        } catch (RemoteException re) {
+                            Slog.d(TAG, "Callback failed ", re);
+                        }
+                    }
+                } finally {
+                    mListeners.finishBroadcast();
+                }
             }
         }
     }

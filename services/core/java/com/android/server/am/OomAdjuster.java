@@ -538,6 +538,7 @@ public final class OomAdjuster {
         final ProcessRecord topApp = mService.getTopAppLocked();
         // Clear any pending ones because we are doing a full update now.
         mPendingProcessSet.clear();
+        mService.mAppProfiler.mHasPreviousProcess = mService.mAppProfiler.mHasHomeProcess = false;
         updateOomAdjLockedInner(oomAdjReason, topApp , null, null, true, true);
     }
 
@@ -1225,7 +1226,7 @@ public final class OomAdjuster {
                 uidRec.setWhitelist = uidRec.curWhitelist;
                 uidRec.setIdle = uidRec.idle;
                 mService.mAtmInternal.onUidProcStateChanged(uidRec.uid, uidRec.setProcState);
-                mService.mUidObserverController.enqueueUidChangeLocked(uidRec, -1, uidChange);
+                mService.enqueueUidChangeLocked(uidRec, -1, uidChange);
                 mService.noteUidProcessState(uidRec.uid, uidRec.getCurProcState(),
                         uidRec.curCapability);
                 if (uidRec.foregroundServices) {

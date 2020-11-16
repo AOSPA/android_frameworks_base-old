@@ -97,6 +97,7 @@ import android.os.Environment;
 import android.os.IStoraged;
 import android.os.IThermalEventListener;
 import android.os.IThermalService;
+import android.os.OutcomeReceiver;
 import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
 import android.os.RemoteException;
@@ -167,6 +168,7 @@ import com.android.server.stats.pull.netstats.SubInfo;
 import com.android.server.storage.DiskStatsFileLogger;
 import com.android.server.storage.DiskStatsLoggingService;
 
+import java.util.concurrent.ExecutionException;
 import libcore.io.IoUtils;
 
 import org.json.JSONArray;
@@ -244,6 +246,13 @@ public class StatsPullAtomService extends SystemService {
     // Hence, we can allow a little more room in each shard before moving to the next. Make this
     // 20% as a conservative estimate.
     private static final int MAX_PROCSTATS_RAW_SHARD_SIZE = (int) (MAX_PROCSTATS_SHARD_SIZE * 1.20);
+
+    /**
+     * Threshold to filter out small CPU times at frequency per UID. Those small values appear
+     * because of more precise accounting in a BPF program. Discarding them reduces the data by at
+     * least 20% with negligible error.
+     */
+    private static final int MIN_CPU_TIME_PER_UID_FREQ = 10;
 
     private final Object mThermalLock = new Object();
     @GuardedBy("mThermalLock")
@@ -1507,7 +1516,7 @@ public class StatsPullAtomService extends SystemService {
     int pullCpuTimePerUidFreqLocked(int atomTag, List<StatsEvent> pulledData) {
         mCpuUidFreqTimeReader.readAbsolute((uid, cpuFreqTimeMs) -> {
             for (int freqIndex = 0; freqIndex < cpuFreqTimeMs.length; ++freqIndex) {
-                if (cpuFreqTimeMs[freqIndex] != 0) {
+                if (cpuFreqTimeMs[freqIndex] >= MIN_CPU_TIME_PER_UID_FREQ) {
                     pulledData.add(FrameworkStatsLog.buildStatsEvent(
                             atomTag, uid, freqIndex, cpuFreqTimeMs[freqIndex]));
                 }
@@ -1624,9 +1633,34 @@ public class StatsPullAtomService extends SystemService {
     int pullModemActivityInfoLocked(int atomTag, List<StatsEvent> pulledData) {
         final long token = Binder.clearCallingIdentity();
         try {
-            SynchronousResultReceiver modemReceiver = new SynchronousResultReceiver("telephony");
-            mTelephony.requestModemActivityInfo(modemReceiver);
-            final ModemActivityInfo modemInfo = awaitControllerInfo(modemReceiver);
+            CompletableFuture<ModemActivityInfo> modemFuture = new CompletableFuture<>();
+            mTelephony.requestModemActivityInfo(Runnable::run,
+                    new OutcomeReceiver<ModemActivityInfo,
+                            TelephonyManager.ModemActivityInfoException>() {
+                        @Override
+                        public void onResult(ModemActivityInfo result) {
+                            modemFuture.complete(result);
+                        }
+
+                        @Override
+                        public void onError(TelephonyManager.ModemActivityInfoException e) {
+                            Slog.w(TAG, "error reading modem stats:" + e);
+                            modemFuture.complete(null);
+                        }
+                    });
+
+            ModemActivityInfo modemInfo;
+            try {
+                modemInfo = modemFuture.get(EXTERNAL_STATS_SYNC_TIMEOUT_MILLIS,
+                        TimeUnit.MILLISECONDS);
+            } catch (TimeoutException | InterruptedException e) {
+                Slog.w(TAG, "timeout or interrupt reading modem stats: " + e);
+                return StatsManager.PULL_SKIP;
+            } catch (ExecutionException e) {
+                Slog.w(TAG, "exception reading modem stats: " + e.getCause());
+                return StatsManager.PULL_SKIP;
+            }
+
             if (modemInfo == null) {
                 return StatsManager.PULL_SKIP;
             }

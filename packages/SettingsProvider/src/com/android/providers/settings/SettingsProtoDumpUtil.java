@@ -52,6 +52,8 @@ class SettingsProtoDumpUtil {
                 ConfigSettingsProto.ALARM_MANAGER_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_APP_COMPAT,
                 ConfigSettingsProto.APP_COMPAT_SETTINGS);
+        namespaceToFieldMap.put(DeviceConfig.NAMESPACE_APP_STANDBY,
+                ConfigSettingsProto.APP_STANDBY_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_AUTOFILL,
                 ConfigSettingsProto.AUTOFILL_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_BLOBSTORE,
@@ -219,9 +221,6 @@ class SettingsProtoDumpUtil {
         p.end(apnDbToken);
 
         final long appToken = p.start(GlobalSettingsProto.APP);
-        dumpSetting(s, p,
-                Settings.Global.APP_IDLE_CONSTANTS,
-                GlobalSettingsProto.App.IDLE_CONSTANTS);
         dumpSetting(s, p,
                 Settings.Global.APP_STANDBY_ENABLED,
                 GlobalSettingsProto.App.STANDBY_ENABLED);
@@ -749,25 +748,25 @@ class SettingsProtoDumpUtil {
                 Settings.Global.GPU_DEBUG_LAYERS,
                 GlobalSettingsProto.Gpu.DEBUG_LAYERS);
         dumpSetting(s, p,
-                Settings.Global.GLOBAL_SETTINGS_ANGLE_DEBUG_PACKAGE,
+                Settings.Global.ANGLE_DEBUG_PACKAGE,
                 GlobalSettingsProto.Gpu.ANGLE_DEBUG_PACKAGE);
         dumpSetting(s, p,
-                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE,
+                Settings.Global.ANGLE_GL_DRIVER_ALL_ANGLE,
                 GlobalSettingsProto.Gpu.ANGLE_GL_DRIVER_ALL_ANGLE);
         dumpSetting(s, p,
-                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS,
+                Settings.Global.ANGLE_GL_DRIVER_SELECTION_PKGS,
                 GlobalSettingsProto.Gpu.ANGLE_GL_DRIVER_SELECTION_PKGS);
         dumpSetting(s, p,
-                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES,
+                Settings.Global.ANGLE_GL_DRIVER_SELECTION_VALUES,
                 GlobalSettingsProto.Gpu.ANGLE_GL_DRIVER_SELECTION_VALUES);
         dumpSetting(s, p,
-                Settings.Global.GLOBAL_SETTINGS_ANGLE_ALLOWLIST,
+                Settings.Global.ANGLE_ALLOWLIST,
                 GlobalSettingsProto.Gpu.ANGLE_ALLOWLIST);
         dumpSetting(s, p,
                 Settings.Global.ANGLE_EGL_FEATURES,
                 GlobalSettingsProto.Gpu.ANGLE_EGL_FEATURES);
         dumpSetting(s, p,
-                Settings.Global.GLOBAL_SETTINGS_SHOW_ANGLE_IN_USE_DIALOG_BOX,
+                Settings.Global.SHOW_ANGLE_IN_USE_DIALOG_BOX,
                 GlobalSettingsProto.Gpu.SHOW_ANGLE_IN_USE_DIALOG);
         dumpSetting(s, p,
                 Settings.Global.GPU_DEBUG_LAYER_APP,
@@ -862,9 +861,6 @@ class SettingsProtoDumpUtil {
                 GlobalSettingsProto.IntentFirewall.UPDATE_METADATA_URL);
         p.end(intentFirewallToken);
 
-        dumpSetting(s, p,
-                Settings.Global.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS,
-                GlobalSettingsProto.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS);
         dumpSetting(s, p,
                 Settings.Global.KEEP_PROFILE_IN_BACKGROUND,
                 GlobalSettingsProto.KEEP_PROFILE_IN_BACKGROUND);
@@ -1497,9 +1493,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.WEBVIEW_DATA_REDUCTION_PROXY_KEY,
                 GlobalSettingsProto.Webview.DATA_REDUCTION_PROXY_KEY);
         dumpSetting(s, p,
-                Settings.Global.WEBVIEW_FALLBACK_LOGIC_ENABLED,
-                GlobalSettingsProto.Webview.FALLBACK_LOGIC_ENABLED);
-        dumpSetting(s, p,
                 Settings.Global.WEBVIEW_PROVIDER,
                 GlobalSettingsProto.Webview.PROVIDER);
         dumpSetting(s, p,
@@ -2041,11 +2034,11 @@ class SettingsProtoDumpUtil {
 
         final long emergencyResponseToken = p.start(SecureSettingsProto.EMERGENCY_RESPONSE);
         dumpSetting(s, p,
-                Settings.Secure.PANIC_GESTURE_ENABLED,
-                SecureSettingsProto.EmergencyResponse.PANIC_GESTURE_ENABLED);
+                Settings.Secure.EMERGENCY_GESTURE_ENABLED,
+                SecureSettingsProto.EmergencyResponse.EMERGENCY_GESTURE_ENABLED);
         dumpSetting(s, p,
-                Settings.Secure.PANIC_SOUND_ENABLED,
-                SecureSettingsProto.EmergencyResponse.PANIC_SOUND_ENABLED);
+                Settings.Secure.EMERGENCY_GESTURE_SOUND_ENABLED,
+                SecureSettingsProto.EmergencyResponse.EMERGENCY_GESTURE_SOUND_ENABLED);
         p.end(emergencyResponseToken);
 
         dumpSetting(s, p,

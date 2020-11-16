@@ -839,7 +839,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      * {@link ActivityInfo#CONFIG_ASSETS_PATHS}.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public int assetsSeq;
 
@@ -2128,7 +2128,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         return this.compareTo(that) == 0;
     }
 
-    public boolean equals(Object that) {
+    public boolean equals(@Nullable Object that) {
         try {
             return equals((Configuration)that);
         } catch (ClassCastException e) {
@@ -2336,7 +2336,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static String resourceQualifierString(Configuration config) {
         return resourceQualifierString(config, null);
     }

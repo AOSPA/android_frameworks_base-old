@@ -583,8 +583,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mDownloadPsdsWakeLock.setReferenceCounted(true);
 
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
-        mWakeupIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_WAKEUP), 0);
-        mTimeoutIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_TIMEOUT), 0);
+        mWakeupIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_WAKEUP),
+                PendingIntent.FLAG_IMMUTABLE);
+        mTimeoutIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_TIMEOUT),
+                PendingIntent.FLAG_IMMUTABLE);
 
         // App ops service to keep track of who is accessing the GPS
         mAppOps = mContext.getSystemService(AppOpsManager.class);
@@ -708,12 +710,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             // For fast GNSS TTFF
             provider = LocationManager.NETWORK_PROVIDER;
             locationListener = mNetworkLocationListener;
-            locationRequest.setQuality(LocationRequest.POWER_LOW);
+            locationRequest.setQuality(LocationRequest.QUALITY_LOW_POWER);
         } else {
             // For Device-Based Hybrid (E911)
             provider = LocationManager.FUSED_PROVIDER;
             locationListener = mFusedLocationListener;
-            locationRequest.setQuality(LocationRequest.ACCURACY_FINE);
+            locationRequest.setQuality(LocationRequest.QUALITY_HIGH_ACCURACY);
         }
 
         // Ignore location settings if in emergency mode. This is only allowed for

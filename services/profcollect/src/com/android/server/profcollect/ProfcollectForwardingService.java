@@ -29,6 +29,9 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
+import android.os.UpdateEngine;
+import android.os.UpdateEngineCallback;
+import android.provider.DeviceConfig;
 import android.util.Log;
 
 import com.android.server.IoThread;
@@ -64,6 +67,14 @@ public final class ProfcollectForwardingService extends SystemService {
             throw new AssertionError("only one service instance allowed");
         }
         sSelfService = this;
+    }
+
+    /**
+     * Check whether profcollect is enabled through device config.
+     */
+    public static boolean enabled() {
+        return DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_PROFCOLLECT_NATIVE_BOOT, "enabled",
+            false);
     }
 
     @Override
@@ -198,6 +209,7 @@ public final class ProfcollectForwardingService extends SystemService {
     // Event observers
     private void registerObservers() {
         registerAppLaunchObserver();
+        registerOTAObserver();
     }
 
     private final AppLaunchObserver mAppLaunchObserver = new AppLaunchObserver();
@@ -259,6 +271,35 @@ public final class ProfcollectForwardingService extends SystemService {
         @Override
         public void onReportFullyDrawn(byte[] activity, long timestampNanos) {
             // Ignored
+        }
+    }
+
+    private void registerOTAObserver() {
+        UpdateEngine updateEngine = new UpdateEngine();
+        updateEngine.bind(new UpdateEngineCallback() {
+            @Override
+            public void onStatusUpdate(int status, float percent) {
+                if (status == UpdateEngine.UpdateStatusConstants.UPDATED_NEED_REBOOT) {
+                    packProfileReport();
+                }
+            }
+
+            @Override
+            public void onPayloadApplicationComplete(int errorCode) {
+                // Ignored
+            }
+        });
+    }
+
+    private void packProfileReport() {
+        if (mIProfcollect == null) {
+            return;
+        }
+
+        try {
+            mIProfcollect.CreateProfileReport();
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, e.getMessage());
         }
     }
 }

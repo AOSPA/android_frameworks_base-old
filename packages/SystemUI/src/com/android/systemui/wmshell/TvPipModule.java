@@ -17,16 +17,15 @@
 package com.android.systemui.wmshell;
 
 import android.content.Context;
-import android.os.Handler;
-import android.view.LayoutInflater;
 
-import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.WMSingleton;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.PipBoundsHandler;
 import com.android.wm.shell.pip.PipBoundsState;
+import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
 import com.android.wm.shell.pip.PipTaskOrganizer;
 import com.android.wm.shell.pip.PipUiEventLogger;
@@ -46,52 +45,61 @@ import dagger.Provides;
  */
 @Module
 public abstract class TvPipModule {
-
-    @SysUISingleton
+    @WMSingleton
     @Provides
-    static Pip providePipController(Context context,
+    static Optional<Pip> providePip(
+            Context context,
+            PipBoundsState pipBoundsState,
             PipBoundsHandler pipBoundsHandler,
             PipTaskOrganizer pipTaskOrganizer,
+            PipMediaController pipMediaController,
+            PipNotification pipNotification,
             WindowManagerShellWrapper windowManagerShellWrapper) {
-        return new PipController(context, pipBoundsHandler, pipTaskOrganizer,
-                windowManagerShellWrapper);
+        return Optional.of(
+                new PipController(
+                        context,
+                        pipBoundsState,
+                        pipBoundsHandler,
+                        pipTaskOrganizer,
+                        pipMediaController,
+                        pipNotification,
+                        windowManagerShellWrapper));
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
-    static PipControlsViewController providePipControlsViewContrller(
-            PipControlsView pipControlsView, PipController pipController,
-            LayoutInflater layoutInflater, Handler handler) {
-        return new PipControlsViewController(pipControlsView, pipController, layoutInflater,
-                handler);
+    static PipControlsViewController providePipControlsViewController(
+            PipControlsView pipControlsView, PipController pipController) {
+        return new PipControlsViewController(pipControlsView, pipController);
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
     static PipControlsView providePipControlsView(Context context) {
         return new PipControlsView(context, null);
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
     static PipNotification providePipNotification(Context context,
-            PipController pipController) {
-        return new PipNotification(context, pipController);
+            PipMediaController pipMediaController) {
+        return new PipNotification(context, pipMediaController);
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
-    static PipBoundsHandler providePipBoundsHandler(Context context) {
-        return new PipBoundsHandler(context);
+    static PipBoundsHandler providePipBoundsHandler(Context context,
+            PipBoundsState pipBoundsState) {
+        return new PipBoundsHandler(context, pipBoundsState);
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
     static PipBoundsState providePipBoundsState() {
         return new PipBoundsState();
     }
 
-    @SysUISingleton
+    @WMSingleton
     @Provides
     static PipTaskOrganizer providePipTaskOrganizer(Context context,
             PipBoundsState pipBoundsState,
@@ -100,7 +108,7 @@ public abstract class TvPipModule {
             Optional<SplitScreen> splitScreenOptional, DisplayController displayController,
             PipUiEventLogger pipUiEventLogger, ShellTaskOrganizer shellTaskOrganizer) {
         return new PipTaskOrganizer(context, pipBoundsState, pipBoundsHandler,
-                pipSurfaceTransactionHelper, splitScreenOptional, displayController,
-                pipUiEventLogger, shellTaskOrganizer);
+                null /* menuActivityController */, pipSurfaceTransactionHelper, splitScreenOptional,
+                displayController, pipUiEventLogger, shellTaskOrganizer);
     }
 }

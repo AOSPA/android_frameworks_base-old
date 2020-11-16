@@ -23,12 +23,14 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
 import android.app.ActivityManager;
+import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.SurfaceControl;
 
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
  * Interface for ActivityTaskManager/WindowManager to delegate control of tasks.
@@ -37,15 +39,19 @@ import java.util.List;
 @TestApi
 public class TaskOrganizer extends WindowOrganizer {
 
-    private ITaskOrganizerController mTaskOrganizerController;
+    private final ITaskOrganizerController mTaskOrganizerController;
+    // Callbacks WM Core are posted on this executor if it isn't null, otherwise direct calls are
+    // made on the incoming binder call.
+    private final Executor mExecutor;
 
     public TaskOrganizer() {
-        this(null);
+        this(null /*taskOrganizerController*/, null /*executor*/);
     }
 
     /** @hide */
     @VisibleForTesting
-    public TaskOrganizer(ITaskOrganizerController taskOrganizerController) {
+    public TaskOrganizer(ITaskOrganizerController taskOrganizerController, Executor executor) {
+        mExecutor = executor != null ? executor : command -> command.run();
         mTaskOrganizerController = taskOrganizerController != null
                 ? taskOrganizerController : getController();
     }
@@ -56,7 +62,7 @@ public class TaskOrganizer extends WindowOrganizer {
      * @return a list of the tasks that should be managed by the organizer, not including tasks
      *         created via {@link #createRootTask}.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     @CallSuper
     @NonNull
     public List<TaskAppearedInfo> registerOrganizer() {
@@ -68,7 +74,7 @@ public class TaskOrganizer extends WindowOrganizer {
     }
 
     /** Unregisters a previously registered task organizer. */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     @CallSuper
     public void unregisterOrganizer() {
         try {
@@ -96,19 +102,25 @@ public class TaskOrganizer extends WindowOrganizer {
     @BinderThread
     public void onBackPressedOnTaskRoot(@NonNull ActivityManager.RunningTaskInfo taskInfo) {}
 
-    /** Creates a persistent root task in WM for a particular windowing-mode. */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    /**
+     * Creates a persistent root task in WM for a particular windowing-mode.
+     * @param displayId The display to create the root task on.
+     * @param windowingMode Windowing mode to put the root task in.
+     * @param launchCookie Launch cookie to associate with the task so that is can be identified
+     *                     when the {@link ITaskOrganizer#onTaskAppeared} callback is called.
+     */
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     @Nullable
-    public ActivityManager.RunningTaskInfo createRootTask(int displayId, int windowingMode) {
+    public void createRootTask(int displayId, int windowingMode, @Nullable IBinder launchCookie) {
         try {
-            return mTaskOrganizerController.createRootTask(displayId, windowingMode);
+            mTaskOrganizerController.createRootTask(displayId, windowingMode, launchCookie);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /** Deletes a persistent root task in WM */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public boolean deleteRootTask(@NonNull WindowContainerToken task) {
         try {
             return mTaskOrganizerController.deleteRootTask(task);
@@ -118,7 +130,7 @@ public class TaskOrganizer extends WindowOrganizer {
     }
 
     /** Gets direct child tasks (ordered from top-to-bottom) */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     @Nullable
     public List<ActivityManager.RunningTaskInfo> getChildTasks(
             @NonNull WindowContainerToken parent, @NonNull int[] activityTypes) {
@@ -130,7 +142,7 @@ public class TaskOrganizer extends WindowOrganizer {
     }
 
     /** Gets all root tasks on a display (ordered from top-to-bottom) */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     @Nullable
     public List<ActivityManager.RunningTaskInfo> getRootTasks(
             int displayId, @NonNull int[] activityTypes) {
@@ -142,7 +154,7 @@ public class TaskOrganizer extends WindowOrganizer {
     }
 
     /** Get the root task which contains the current ime target */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     @Nullable
     public WindowContainerToken getImeTarget(int display) {
         try {
@@ -156,7 +168,7 @@ public class TaskOrganizer extends WindowOrganizer {
      * Set's the root task to launch new tasks into on a display. {@code null} means no launch
      * root and thus new tasks just end up directly on the display.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public void setLaunchRoot(int displayId, @NonNull WindowContainerToken root) {
         try {
             mTaskOrganizerController.setLaunchRoot(displayId, root);
@@ -169,7 +181,7 @@ public class TaskOrganizer extends WindowOrganizer {
      * Requests that the given task organizer is notified when back is pressed on the root activity
      * of one of its controlled tasks.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public void setInterceptBackPressedOnTaskRoot(@NonNull WindowContainerToken task,
             boolean interceptBackPressed) {
         try {
@@ -183,22 +195,22 @@ public class TaskOrganizer extends WindowOrganizer {
 
         @Override
         public void onTaskAppeared(ActivityManager.RunningTaskInfo taskInfo, SurfaceControl leash) {
-            TaskOrganizer.this.onTaskAppeared(taskInfo, leash);
+            mExecutor.execute(() -> TaskOrganizer.this.onTaskAppeared(taskInfo, leash));
         }
 
         @Override
         public void onTaskVanished(ActivityManager.RunningTaskInfo taskInfo) {
-            TaskOrganizer.this.onTaskVanished(taskInfo);
+            mExecutor.execute(() -> TaskOrganizer.this.onTaskVanished(taskInfo));
         }
 
         @Override
         public void onTaskInfoChanged(ActivityManager.RunningTaskInfo info) {
-            TaskOrganizer.this.onTaskInfoChanged(info);
+            mExecutor.execute(() -> TaskOrganizer.this.onTaskInfoChanged(info));
         }
 
         @Override
         public void onBackPressedOnTaskRoot(ActivityManager.RunningTaskInfo info) {
-            TaskOrganizer.this.onBackPressedOnTaskRoot(info);
+            mExecutor.execute(() -> TaskOrganizer.this.onBackPressedOnTaskRoot(info));
         }
     };
 

@@ -71,8 +71,7 @@ public class QSContainerImpl extends FrameLayout {
 
     private int mSideMargins;
     private boolean mQsDisabled;
-    private int mContentPaddingStart = -1;
-    private int mContentPaddingEnd = -1;
+    private int mContentPadding = -1;
     private boolean mAnimateBottomOnNextLayout;
 
     public QSContainerImpl(Context context, AttributeSet attrs) {
@@ -205,12 +204,10 @@ public class QSContainerImpl extends FrameLayout {
         mQSPanelContainer.setLayoutParams(layoutParams);
 
         mSideMargins = getResources().getDimensionPixelSize(R.dimen.notification_side_paddings);
-        mContentPaddingStart = getResources().getDimensionPixelSize(
-                com.android.internal.R.dimen.notification_content_margin_start);
-        int newPaddingEnd = getResources().getDimensionPixelSize(
-                com.android.internal.R.dimen.notification_content_margin_end);
-        boolean marginsChanged = newPaddingEnd != mContentPaddingEnd;
-        mContentPaddingEnd = newPaddingEnd;
+        int padding = getResources().getDimensionPixelSize(
+                R.dimen.notification_shade_content_margin_horizontal);
+        boolean marginsChanged = padding != mContentPadding;
+        mContentPadding = padding;
         if (marginsChanged) {
             updatePaddingsAndMargins();
         }
@@ -291,19 +288,19 @@ public class QSContainerImpl extends FrameLayout {
             lp.leftMargin = mSideMargins;
             if (view == mQSPanelContainer) {
                 // QS panel lays out some of its content full width
-                mQSPanel.setContentMargins(mContentPaddingStart, mContentPaddingEnd);
+                mQSPanel.setContentMargins(mContentPadding, mContentPadding);
                 Pair<Integer, Integer> margins = mQSPanel.getVisualSideMargins();
                 // Apply paddings based on QSPanel
                 mQSCustomizer.setContentPaddings(margins.first, margins.second);
             } else if (view == mHeader) {
                 // The header contains the QQS panel which needs to have special padding, to
                 // visually align them.
-                mHeader.setContentMargins(mContentPaddingStart, mContentPaddingEnd);
+                mHeader.setContentMargins(mContentPadding, mContentPadding);
             } else {
                 view.setPaddingRelative(
-                        mContentPaddingStart,
+                        mContentPadding,
                         view.getPaddingTop(),
-                        mContentPaddingEnd,
+                        mContentPadding,
                         view.getPaddingBottom());
             }
         }

@@ -16,6 +16,7 @@
 
 package android.content;
 
+import android.annotation.NonNull;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PersistableBundle;
@@ -64,6 +65,29 @@ public class ClipDescription implements Parcelable {
     public static final String MIMETYPE_TEXT_INTENT = "text/vnd.android.intent";
 
     /**
+     * The MIME type for an activity. The ClipData must include intents with required extras
+     * {@link #EXTRA_PENDING_INTENT} and {@link Intent#EXTRA_USER}, and an optional
+     * {@link #EXTRA_ACTIVITY_OPTIONS}.
+     * @hide
+     */
+    public static final String MIMETYPE_APPLICATION_ACTIVITY = "application/vnd.android.activity";
+
+    /**
+     * The MIME type for a shortcut. The ClipData must include intents with required extras
+     * {@link Intent#EXTRA_SHORTCUT_ID}, {@link Intent#EXTRA_PACKAGE_NAME} and
+     * {@link Intent#EXTRA_USER}, and an optional {@link #EXTRA_ACTIVITY_OPTIONS}.
+     * @hide
+     */
+    public static final String MIMETYPE_APPLICATION_SHORTCUT = "application/vnd.android.shortcut";
+
+    /**
+     * The MIME type for a task. The ClipData must include an intent with a required extra
+     * {@link Intent#EXTRA_TASK_ID} of the task to launch.
+     * @hide
+     */
+    public static final String MIMETYPE_APPLICATION_TASK = "application/vnd.android.task";
+
+    /**
      * The MIME type for data whose type is otherwise unknown.
      * <p>
      * Per RFC 2046, the "application" media type is to be used for discrete
@@ -74,31 +98,22 @@ public class ClipDescription implements Parcelable {
     public static final String MIMETYPE_UNKNOWN = "application/octet-stream";
 
     /**
-     * The name of the extra used to define a component name when copying/dragging
-     * an app icon from Launcher.
+     * The pending intent for the activity to launch.
      * <p>
-     * Type: String
-     * </p>
-     * <p>
-     * Use {@link ComponentName#unflattenFromString(String)}
-     * and {@link ComponentName#flattenToString()} to convert the extra value
-     * to/from {@link ComponentName}.
+     * Type: PendingIntent
      * </p>
      * @hide
      */
-    public static final String EXTRA_TARGET_COMPONENT_NAME =
-            "android.content.extra.TARGET_COMPONENT_NAME";
+    public static final String EXTRA_PENDING_INTENT = "android.intent.extra.PENDING_INTENT";
 
     /**
-     * The name of the extra used to define a user serial number when copying/dragging
-     * an app icon from Launcher.
+     * The activity options bundle to use when launching an activity.
      * <p>
-     * Type: long
+     * Type: Bundle
      * </p>
      * @hide
      */
-    public static final String EXTRA_USER_SERIAL_NUMBER =
-            "android.content.extra.USER_SERIAL_NUMBER";
+    public static final String EXTRA_ACTIVITY_OPTIONS = "android.intent.extra.ACTIVITY_OPTIONS";
 
 
     final CharSequence mLabel;
@@ -203,6 +218,24 @@ public class ClipDescription implements Parcelable {
     }
 
     /**
+     * Check whether the clip description contains any of the given MIME types.
+     *
+     * @param targetMimeTypes The target MIME types. May use patterns.
+     * @return Returns true if at least one of the MIME types in the clip description matches at
+     * least one of the target MIME types, else false.
+     *
+     * @hide
+     */
+    public boolean hasMimeType(@NonNull String[] targetMimeTypes) {
+        for (String targetMimeType : targetMimeTypes) {
+            if (hasMimeType(targetMimeType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Filter the clip description MIME types by the given MIME type.  Returns
      * all MIME types in the clip that match the given MIME type.
      *
@@ -297,30 +330,45 @@ public class ClipDescription implements Parcelable {
         StringBuilder b = new StringBuilder(128);
 
         b.append("ClipDescription { ");
-        toShortString(b);
+        toShortString(b, true);
         b.append(" }");
 
         return b.toString();
     }
 
-    /** @hide */
-    public boolean toShortString(StringBuilder b) {
+    /**
+     * Appends this description to the given builder.
+     * @param redactContent If true, redacts common forms of PII; otherwise appends full details.
+     * @hide
+     */
+    public boolean toShortString(StringBuilder b, boolean redactContent) {
         boolean first = !toShortStringTypesOnly(b);
         if (mLabel != null) {
             if (!first) {
                 b.append(' ');
             }
             first = false;
-            b.append('"');
-            b.append(mLabel);
-            b.append('"');
+            if (redactContent) {
+                b.append("hasLabel(").append(mLabel.length()).append(')');
+            } else {
+                b.append('"').append(mLabel).append('"');
+            }
         }
         if (mExtras != null) {
             if (!first) {
                 b.append(' ');
             }
             first = false;
-            b.append(mExtras.toString());
+            if (redactContent) {
+                if (mExtras.isParcelled()) {
+                    // We don't want this toString function to trigger un-parcelling.
+                    b.append("hasExtras");
+                } else {
+                    b.append("hasExtras(").append(mExtras.size()).append(')');
+                }
+            } else {
+                b.append(mExtras.toString());
+            }
         }
         if (mTimeStamp > 0) {
             if (!first) {

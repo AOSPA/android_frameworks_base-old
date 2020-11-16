@@ -42,7 +42,7 @@ import android.view.IDisplayFoldListener;
 import android.view.IDisplayWindowRotationController;
 import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
-import android.view.IScrollCaptureController;
+import android.view.IScrollCaptureCallbacks;
 import android.view.RemoteAnimationAdapter;
 import android.view.IRotationWatcher;
 import android.view.ISystemGestureExclusionListener;
@@ -140,7 +140,6 @@ interface IWindowManager
      * @displayId The ID of the display where this token should be removed.
      */
     void removeWindowToken(IBinder token, int displayId);
-    void prepareAppTransition(int transit, boolean alwaysKeepCurrent);
 
     /**
      * Sets a singular remote controller of display rotations. There can only be one. The
@@ -154,11 +153,10 @@ interface IWindowManager
      * WindowlessWindowManager).
      *
      * @param client an IWindow used for window-level communication (ime, finish draw, etc.).
-     * @param windowType used by WM to determine the z-order. This is the same as the window type
-     *                   used in {@link WindowManager.LayoutParams}.
+     * @param shellRootLayer The container's layer. See WindowManager#ShellRootLayer.
      * @return a SurfaceControl to add things to.
      */
-    SurfaceControl addShellRoot(int displayId, IWindow client, int windowType);
+    SurfaceControl addShellRoot(int displayId, IWindow client, int shellRootLayer);
 
     /**
      * Sets the window token sent to accessibility for a particular shell root. The
@@ -166,7 +164,7 @@ interface IWindowManager
      *
      * @param target The IWindow that accessibility service interfaces with.
      */
-    void setShellRootAccessibilityWindow(int displayId, int windowType, IWindow target);
+    void setShellRootAccessibilityWindow(int displayId, int shellRootLayer, IWindow target);
 
     /**
      * Like overridePendingAppTransitionMultiThumb, but uses a future to supply the specs. This is
@@ -180,14 +178,12 @@ interface IWindowManager
     @UnsupportedAppUsage
     void overridePendingAppTransitionRemote(in RemoteAnimationAdapter remoteAnimationAdapter,
             int displayId);
-    @UnsupportedAppUsage
-    void executeAppTransition();
 
     /**
       * Used by system ui to report that recents has shown itself.
       * @deprecated to be removed once prebuilts are updated
       */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void endProlongedAnimations();
 
     void startFreezingScreen(int exitAnim, int enterAnim);
@@ -201,7 +197,7 @@ interface IWindowManager
     void exitKeyguardSecurely(IOnKeyguardExitResult callback);
     @UnsupportedAppUsage
     boolean isKeyguardLocked();
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean isKeyguardSecure(int userId);
     void dismissKeyguard(IKeyguardDismissCallback callback, CharSequence message);
 
@@ -213,11 +209,11 @@ interface IWindowManager
     // These can only be called with the SET_ANIMATON_SCALE permission.
     @UnsupportedAppUsage
     float getAnimationScale(int which);
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     float[] getAnimationScales();
     @UnsupportedAppUsage
     void setAnimationScale(int which, float scale);
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void setAnimationScales(in float[] scales);
 
     float getCurrentAnimatorScale();
@@ -238,7 +234,7 @@ interface IWindowManager
     // should be enabled.  The 'enabled' value is null or blank for
     // the system default (differs per build variant) or any valid
     // boolean string as parsed by SystemProperties.getBoolean().
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void setStrictModeVisualIndicatorPreference(String enabled);
 
     /**
@@ -337,10 +333,15 @@ interface IWindowManager
      */
     boolean isDisplayRotationFrozen(int displayId);
 
-    /**
+   /**
     *  Sets if display rotation is fixed to user specified value for given displayId.
     */
     void setFixedToUserRotation(int displayId, int fixedToUserRotation);
+
+   /**
+    *  Sets if all requested fixed orientation should be ignored for given displayId.
+    */
+    void setIgnoreOrientationRequest(int displayId, boolean ignoreOrientationRequest);
 
     /**
      * Screenshot the current wallpaper layer, including the whole screen.
@@ -409,7 +410,7 @@ interface IWindowManager
     /**
      * Lock the device immediately with the specified options (can be null).
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void lockNow(in Bundle options);
 
     /**
@@ -724,7 +725,6 @@ interface IWindowManager
      * @return {@code true} if system bars are always comsumed.
      */
     boolean getWindowInsets(in WindowManager.LayoutParams attrs, int displayId,
-            out Rect outContentInsets, out Rect outStableInsets,
             out DisplayCutout.ParcelableWrapper outDisplayCutout, out InsetsState outInsetsState);
 
     /**
@@ -746,16 +746,16 @@ interface IWindowManager
      * @param behindClient token for a window, used to filter the search to windows behind it, or
      *                     {@code null} to accept a window at any zOrder
      * @param taskId specifies the id of a task the result must belong to, or -1 to ignore task ids
-     * @param controller the controller to receive results, a call to either
-     *      {@link IScrollCaptureController#onClientConnected} or
-     *      {@link IScrollCaptureController#onClientUnavailable}.
+     * @param callbacks the object to receive replies
      */
     void requestScrollCapture(int displayId, IBinder behindClient, int taskId,
-            IScrollCaptureController controller);
+            IScrollCaptureCallbacks callbacks);
 
     /**
      * Holds the WM lock for the specified amount of milliseconds.
      * Intended for use by the tests that need to imitate lock contention.
+     * The token should be obtained by
+     * {@link android.content.pm.PackageManager#getHoldLockToken()}.
      */
-    void holdLock(in int durationMs);
+    void holdLock(in IBinder token, in int durationMs);
 }

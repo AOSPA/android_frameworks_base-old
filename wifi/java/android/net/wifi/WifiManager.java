@@ -44,7 +44,6 @@ import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.OsuProvider;
 import android.net.wifi.hotspot2.PasspointConfiguration;
 import android.net.wifi.hotspot2.ProvisioningCallback;
-import android.net.wifi.util.SdkLevelUtil;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -62,6 +61,7 @@ import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.modules.utils.build.SdkLevel;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -1105,7 +1105,7 @@ public class WifiManager {
      * @see #ACTION_LINK_CONFIGURATION_CHANGED
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final String LINK_CONFIGURATION_CHANGED_ACTION =
             "android.net.wifi.LINK_CONFIGURATION_CHANGED";
 
@@ -1354,7 +1354,7 @@ public class WifiManager {
      * change is significant enough to change the RSSI signal level.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int RSSI_LEVELS = 5;
 
     //TODO (b/146346676): This needs to be removed, not used in the code.
@@ -2642,7 +2642,7 @@ public class WifiManager {
      * @return true if this device supports multiple STA concurrency, false otherwise.
      */
     public boolean isMultiStaConcurrencySupported() {
-        if (!SdkLevelUtil.isAtLeastS()) {
+        if (!SdkLevel.isAtLeastS()) {
             throw new UnsupportedOperationException();
         }
         return isFeatureSupported(WIFI_FEATURE_ADDITIONAL_STA);

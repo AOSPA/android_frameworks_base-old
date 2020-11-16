@@ -19,7 +19,6 @@ package com.android.server.wm;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManagerPolicyConstants.APPLICATION_LAYER;
 import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
 import static android.window.DisplayAreaOrganizer.FEATURE_WINDOW_TOKENS;
@@ -145,6 +144,11 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         return super.getOrientation(candidate);
     }
 
+    @Override
+    boolean handlesOrientationChangeFromDescendant() {
+        return !mIgnoreOrientationRequest && super.handlesOrientationChangeFromDescendant();
+    }
+
     /**
      * Sets whether this {@link DisplayArea} should ignore fixed-orientation request from apps and
      * windows below it.
@@ -179,6 +183,10 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
             return mDisplayContent.updateOrientation();
         }
         return false;
+    }
+
+    boolean getIgnoreOrientationRequest() {
+        return mIgnoreOrientationRequest;
     }
 
     /**
@@ -258,6 +266,26 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         super.dump(pw, prefix, dumpAll);
         if (mIgnoreOrientationRequest) {
             pw.println(prefix + "mIgnoreOrientationRequest=true");
+        }
+        if (hasRequestedOverrideConfiguration()) {
+            pw.println(prefix + "overrideConfig=" + getRequestedOverrideConfiguration());
+        }
+    }
+
+    void dumpChildDisplayArea(PrintWriter pw, String prefix, boolean dumpAll) {
+        final String doublePrefix = prefix + "  ";
+        for (int i = getChildCount() - 1; i >= 0; i--) {
+            final DisplayArea<?> childArea = getChildAt(i).asDisplayArea();
+            if (childArea == null) {
+                continue;
+            }
+            pw.println(prefix + "* " + childArea.getName());
+            if (childArea.isTaskDisplayArea()) {
+                // TaskDisplayArea can only contain task. And it is already printed by display.
+                continue;
+            }
+            childArea.dump(pw, doublePrefix, dumpAll);
+            childArea.dumpChildDisplayArea(pw, doublePrefix, dumpAll);
         }
     }
 
@@ -369,6 +397,10 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
     }
 
     void setOrganizer(IDisplayAreaOrganizer organizer) {
+        setOrganizer(organizer, false /* skipDisplayAreaAppeared */);
+    }
+
+    void setOrganizer(IDisplayAreaOrganizer organizer, boolean skipDisplayAreaAppeared) {
         if (mOrganizer == organizer) return;
         IDisplayAreaOrganizer lastOrganizer = mOrganizer;
         // Update the new display area organizer before calling sendDisplayAreaVanished since it
@@ -376,7 +408,9 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         // about it.
         mOrganizer = organizer;
         sendDisplayAreaVanished(lastOrganizer);
-        sendDisplayAreaAppeared();
+        if (!skipDisplayAreaAppeared) {
+            sendDisplayAreaAppeared();
+        }
     }
 
     void sendDisplayAreaAppeared() {
@@ -443,8 +477,7 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
                 // Consider unoccluding only when all unknown visibilities have been
                 // resolved, as otherwise we just may be starting another occluding activity.
                 final boolean isUnoccluding =
-                        mDisplayContent.mAppTransition.getAppTransition()
-                                == TRANSIT_KEYGUARD_UNOCCLUDE
+                        mDisplayContent.mAppTransition.isUnoccluding()
                                 && mDisplayContent.mUnknownAppVisibilityController.allResolved();
                 // If keyguard is showing, or we're unoccluding, force the keyguard's orientation,
                 // even if SystemUI hasn't updated the attrs yet.

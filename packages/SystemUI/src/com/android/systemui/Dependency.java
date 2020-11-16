@@ -37,7 +37,6 @@ import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.systemui.appops.AppOpsController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
-import com.android.systemui.bubbles.Bubbles;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
@@ -119,13 +118,11 @@ import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.tuner.TunablePadding.TunablePaddingService;
 import com.android.systemui.tuner.TunerService;
+import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.leak.GarbageMonitor;
 import com.android.systemui.util.leak.LeakDetector;
 import com.android.systemui.util.leak.LeakReporter;
 import com.android.systemui.util.sensors.AsyncSensorManager;
-import com.android.wm.shell.common.DisplayController;
-import com.android.wm.shell.common.DisplayImeController;
-import com.android.wm.shell.common.SystemWindows;
 
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -310,7 +307,6 @@ public class Dependency {
     @Inject Lazy<KeyguardDismissUtil> mKeyguardDismissUtil;
     @Inject Lazy<SmartReplyController> mSmartReplyController;
     @Inject Lazy<RemoteInputQuickSettingsDisabler> mRemoteInputQuickSettingsDisabler;
-    @Inject Lazy<Bubbles> mBubbles;
     @Inject Lazy<NotificationEntryManager> mNotificationEntryManager;
     @Inject Lazy<SensorPrivacyManager> mSensorPrivacyManager;
     @Inject Lazy<AutoHideController> mAutoHideController;
@@ -340,12 +336,10 @@ public class Dependency {
     @Inject Lazy<CommandQueue> mCommandQueue;
     @Inject Lazy<Recents> mRecents;
     @Inject Lazy<StatusBar> mStatusBar;
-    @Inject Lazy<DisplayController> mDisplayController;
-    @Inject Lazy<SystemWindows> mSystemWindows;
-    @Inject Lazy<DisplayImeController> mDisplayImeController;
     @Inject Lazy<RecordingController> mRecordingController;
     @Inject Lazy<ProtoTracer> mProtoTracer;
     @Inject Lazy<MediaOutputDialogFactory> mMediaOutputDialogFactory;
+    @Inject Lazy<DeviceConfigProxy> mDeviceConfigProxy;
 
     @Inject
     public Dependency() {
@@ -510,7 +504,6 @@ public class Dependency {
         mProviders.put(SmartReplyController.class, mSmartReplyController::get);
         mProviders.put(RemoteInputQuickSettingsDisabler.class,
                 mRemoteInputQuickSettingsDisabler::get);
-        mProviders.put(Bubbles.class, mBubbles::get);
         mProviders.put(NotificationEntryManager.class, mNotificationEntryManager::get);
         mProviders.put(ForegroundServiceNotificationListener.class,
                 mForegroundServiceNotificationListener::get);
@@ -530,10 +523,8 @@ public class Dependency {
         mProviders.put(CommandQueue.class, mCommandQueue::get);
         mProviders.put(Recents.class, mRecents::get);
         mProviders.put(StatusBar.class, mStatusBar::get);
-        mProviders.put(DisplayController.class, mDisplayController::get);
-        mProviders.put(SystemWindows.class, mSystemWindows::get);
-        mProviders.put(DisplayImeController.class, mDisplayImeController::get);
         mProviders.put(ProtoTracer.class, mProtoTracer::get);
+        mProviders.put(DeviceConfigProxy.class, mDeviceConfigProxy::get);
 
         // TODO(b/118592525): to support multi-display , we start to add something which is
         //                    per-display, while others may be global. I think it's time to add

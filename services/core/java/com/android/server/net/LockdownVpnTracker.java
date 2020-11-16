@@ -65,6 +65,7 @@ public class LockdownVpnTracker {
 
     @NonNull private final Context mContext;
     @NonNull private final ConnectivityService mConnService;
+    @NonNull private final NotificationManager mNotificationManager;
     @NonNull private final Handler mHandler;
     @NonNull private final Vpn mVpn;
     @NonNull private final VpnProfile mProfile;
@@ -93,13 +94,16 @@ public class LockdownVpnTracker {
         mHandler = Objects.requireNonNull(handler);
         mVpn = Objects.requireNonNull(vpn);
         mProfile = Objects.requireNonNull(profile);
+        mNotificationManager = mContext.getSystemService(NotificationManager.class);
 
         final Intent configIntent = new Intent(ACTION_VPN_SETTINGS);
-        mConfigIntent = PendingIntent.getActivity(mContext, 0, configIntent, 0);
+        mConfigIntent = PendingIntent.getActivity(mContext, 0 /* requestCode */, configIntent,
+                PendingIntent.FLAG_IMMUTABLE);
 
         final Intent resetIntent = new Intent(ACTION_LOCKDOWN_RESET);
         resetIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
-        mResetIntent = PendingIntent.getBroadcast(mContext, 0, resetIntent, 0);
+        mResetIntent = PendingIntent.getBroadcast(mContext, 0 /* requestCode */, resetIntent,
+                PendingIntent.FLAG_IMMUTABLE);
     }
 
     /**
@@ -264,11 +268,11 @@ public class LockdownVpnTracker {
                         .setColor(mContext.getColor(
                                 com.android.internal.R.color.system_notification_accent_color));
 
-        NotificationManager.from(mContext).notify(null, SystemMessage.NOTE_VPN_STATUS,
+        mNotificationManager.notify(null /* tag */, SystemMessage.NOTE_VPN_STATUS,
                 builder.build());
     }
 
     private void hideNotification() {
-        NotificationManager.from(mContext).cancel(null, SystemMessage.NOTE_VPN_STATUS);
+        mNotificationManager.cancel(null, SystemMessage.NOTE_VPN_STATUS);
     }
 }

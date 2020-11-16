@@ -22,7 +22,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
 import android.app.ActivityManager;
 import android.app.INotificationManager;
 import android.app.Notification;
@@ -312,7 +311,7 @@ public abstract class NotificationListenerService extends Service {
     private Handler mHandler;
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected NotificationListenerWrapper mWrapper = null;
     private boolean isConnected = false;
 
@@ -452,7 +451,6 @@ public abstract class NotificationListenerService extends Service {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public void onNotificationRemoved(@NonNull StatusBarNotification sbn,
             @NonNull RankingMap rankingMap, @NonNull NotificationStats stats, int reason) {
@@ -1887,7 +1885,7 @@ public abstract class NotificationListenerService extends Service {
          * <p>This might be null even if the notification is a conversation notification, if
          * the posting app hasn't opted into the full conversation feature set yet.</p>
          */
-        public @Nullable ShortcutInfo getShortcutInfo() {
+        public @Nullable ShortcutInfo getConversationShortcutInfo() {
             return mShortcutInfo;
         }
 
@@ -2005,7 +2003,7 @@ public abstract class NotificationListenerService extends Service {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 
@@ -2081,7 +2079,7 @@ public abstract class NotificationListenerService extends Service {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 

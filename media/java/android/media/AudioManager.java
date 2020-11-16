@@ -709,7 +709,7 @@ public class AudioManager {
      * @hide
      * For test purposes only, will throw NPE with some methods that require a Context.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public AudioManager() {
     }
 
@@ -959,7 +959,7 @@ public class AudioManager {
      * @see #setRingerMode(int)
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static boolean isValidRingerMode(int ringerMode) {
         if (ringerMode < 0 || ringerMode > RINGER_MODE_MAX) {
             return false;
@@ -2488,7 +2488,7 @@ public class AudioManager {
      * @see #stopBluetoothSco()
      * @see #ACTION_SCO_AUDIO_STATE_UPDATED
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void startBluetoothScoVirtualCall() {
         Log.i(TAG, "In startBluetoothScoVirtualCall(), calling application: "
                     + mApplicationContext.getOpPackageName());
@@ -2648,7 +2648,7 @@ public class AudioManager {
      * @param on set <var>true</var> to mute the microphone;
      *           <var>false</var> to turn mute off
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void setMicrophoneMuteFromSwitch(boolean on) {
         final IAudioService service = getService();
         try {
@@ -2908,7 +2908,7 @@ public class AudioManager {
      *   display). Note that BT audio sinks are not considered remote devices.
      * @return true if {@link AudioManager#STREAM_MUSIC} is active on a remote device
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean isMusicActiveRemotely() {
         return AudioSystem.isStreamActiveRemotely(STREAM_MUSIC, 0);
     }
@@ -3059,7 +3059,7 @@ public class AudioManager {
     /**
      * @hide Number of sound effects
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int NUM_SOUND_EFFECTS = 10;
 
     /**
@@ -3893,7 +3893,7 @@ public class AudioManager {
      * @param durationHint the type of focus request. AUDIOFOCUS_GAIN_TRANSIENT is recommended so
      *    media applications resume after a call
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void requestAudioFocusForCall(int streamType, int durationHint) {
         final IAudioService service = getService();
         try {
@@ -3934,7 +3934,6 @@ public class AudioManager {
      * @param requestResult the result to the focus request to be passed to the requester
      * @param ap a valid registered {@link AudioPolicy} configured as a focus policy.
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public void setFocusRequestResult(@NonNull AudioFocusInfo afi,
@@ -3974,7 +3973,6 @@ public class AudioManager {
      *     if there was an error sending the request.
      * @throws NullPointerException if the {@link AudioFocusInfo} or {@link AudioPolicy} are null.
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public int dispatchAudioFocusChange(@NonNull AudioFocusInfo afi, int focusChange,
@@ -3999,7 +3997,7 @@ public class AudioManager {
      * when ringing ends and the call is rejected or not answered.
      * Should match one or more calls to {@link #requestAudioFocusForCall(int, int)}.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void abandonAudioFocusForCall() {
         final IAudioService service = getService();
         try {
@@ -4069,7 +4067,8 @@ public class AudioManager {
         //     the associated intent will be handled by the component being registered
         mediaButtonIntent.setComponent(eventReceiver);
         PendingIntent pi = PendingIntent.getBroadcast(getContext(),
-                0/*requestCode, ignored*/, mediaButtonIntent, 0/*flags*/);
+                0/*requestCode, ignored*/, mediaButtonIntent,
+                PendingIntent.FLAG_IMMUTABLE);
         registerMediaButtonIntent(pi, eventReceiver);
     }
 
@@ -4122,7 +4121,8 @@ public class AudioManager {
         //     the associated intent will be handled by the component being registered
         mediaButtonIntent.setComponent(eventReceiver);
         PendingIntent pi = PendingIntent.getBroadcast(getContext(),
-                0/*requestCode, ignored*/, mediaButtonIntent, 0/*flags*/);
+                0/*requestCode, ignored*/, mediaButtonIntent,
+                PendingIntent.FLAG_IMMUTABLE);
         unregisterMediaButtonIntent(pi);
     }
 
@@ -4237,7 +4237,6 @@ public class AudioManager {
      *    {@link android.Manifest.permission#MODIFY_AUDIO_ROUTING} permission,
      *    {@link #SUCCESS} otherwise.
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public int registerAudioPolicy(@NonNull AudioPolicy policy) {
@@ -4272,7 +4271,6 @@ public class AudioManager {
      * Unregisters an {@link AudioPolicy} asynchronously.
      * @param policy the non-null {@link AudioPolicy} to unregister.
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public void unregisterAudioPolicyAsync(@NonNull AudioPolicy policy) {
@@ -4299,7 +4297,6 @@ public class AudioManager {
      * associated with mixes of this policy.
      * @param policy the non-null {@link AudioPolicy} to unregister.
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public void unregisterAudioPolicy(@NonNull AudioPolicy policy) {
@@ -4736,7 +4733,7 @@ public class AudioManager {
      *  agent when audio settings are restored and causes the AudioService
      *  to read and apply restored settings.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void reloadAudioSettings() {
         final IAudioService service = getService();
         try {
@@ -5669,7 +5666,6 @@ public class AudioManager {
      */
 
     /** @hide */
-    @TestApi
     @SystemApi
     public static final int SUCCESS = AudioSystem.SUCCESS;
     /**

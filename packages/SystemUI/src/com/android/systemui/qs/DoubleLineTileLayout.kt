@@ -33,7 +33,7 @@ class DoubleLineTileLayout(
         private const val NUM_LINES = 2
     }
 
-    protected val mRecords = ArrayList<QSPanel.TileRecord>()
+    protected val mRecords = ArrayList<QSPanelControllerBase.TileRecord>()
     private var _listening = false
     private var smallTileSize = 0
     private val twoLineHeight
@@ -50,17 +50,17 @@ class DoubleLineTileLayout(
         updateResources()
     }
 
-    override fun addTile(tile: QSPanel.TileRecord) {
+    override fun addTile(tile: QSPanelControllerBase.TileRecord) {
         mRecords.add(tile)
         tile.tile.setListening(this, _listening)
         addTileView(tile)
     }
 
-    protected fun addTileView(tile: QSPanel.TileRecord) {
+    protected fun addTileView(tile: QSPanelControllerBase.TileRecord) {
         addView(tile.tileView)
     }
 
-    override fun removeTile(tile: QSPanel.TileRecord) {
+    override fun removeTile(tile: QSPanelControllerBase.TileRecord) {
         mRecords.remove(tile)
         tile.tile.setListening(this, false)
         removeView(tile.tileView)
@@ -72,7 +72,7 @@ class DoubleLineTileLayout(
         super.removeAllViews()
     }
 
-    override fun getOffsetTop(tile: QSPanel.TileRecord?) = top
+    override fun getOffsetTop(tile: QSPanelControllerBase.TileRecord?) = top
 
     override fun updateResources(): Boolean {
         with(mContext.resources) {
@@ -99,7 +99,7 @@ class DoubleLineTileLayout(
         }
     }
 
-    override fun getNumVisibleTiles() = tilesToShow
+    override fun getNumVisibleTiles() = Math.min(mRecords.size, tilesToShow)
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
