@@ -28,10 +28,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ParceledListSlice;
 import android.media.AudioManager;
-import android.media.IRemoteVolumeController;
+import android.media.IRemoteVolumeControllerCallback;
 import android.media.MediaFrameworkInitializer;
 import android.media.MediaSession2;
 import android.media.Session2Token;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
@@ -88,6 +89,8 @@ public final class MediaSessionManager {
     private final OnMediaKeyEventSessionChangedListenerStub
             mOnMediaKeyEventSessionChangedListenerStub =
             new OnMediaKeyEventSessionChangedListenerStub();
+    private final RemoteVolumeControllerCallbackStub mRemoteVolumeControllerCallbackStub =
+            new RemoteVolumeControllerCallbackStub();
 
     private final Object mLock = new Object();
     @GuardedBy("mLock")
@@ -106,6 +109,9 @@ public final class MediaSessionManager {
     private String mCurMediaKeyEventSessionPackage;
     @GuardedBy("mLock")
     private MediaSession.Token mCurMediaKeyEventSession;
+    @GuardedBy("mLock")
+    private final Map<RemoteVolumeControllerCallback, Executor>
+            mRemoteVolumeControllerCallbacks = new ArrayMap<>();
 
     private Context mContext;
     private OnVolumeKeyLongPressListenerImpl mOnVolumeKeyLongPressListener;
@@ -204,7 +210,10 @@ public final class MediaSessionManager {
      * @return A list of controllers for ongoing sessions.
      * @hide
      */
-    @UnsupportedAppUsage
+    // TODO: Remove @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, publicAlternatives = "Should only be"
+            + " used by system apps, since non-system apps cannot get other users' sessions."
+            + " Use {@link #getActiveSessions} instead.")
     public @NonNull List<MediaController> getActiveSessionsForUser(
             @Nullable ComponentName notificationListener, int userId) {
         ArrayList<MediaController> controllers = new ArrayList<MediaController>();
@@ -462,33 +471,62 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Set the remote volume controller to receive volume updates on.
+     * Set the remote volume controller callback to receive volume updates on.
      * Only for use by System UI and Settings application.
      *
-     * @param rvc The volume controller to receive updates on.
+     * @param callback The volume controller callback to receive updates on.
      * @hide
      */
-    public void registerRemoteVolumeController(IRemoteVolumeController rvc) {
-        try {
-            mService.registerRemoteVolumeController(rvc);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error in registerRemoteVolumeController.", e);
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public void registerRemoteVolumeControllerCallback(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull RemoteVolumeControllerCallback callback) {
+        Objects.requireNonNull(executor, "executor shouldn't be null");
+        Objects.requireNonNull(callback, "callback shouldn't be null");
+        boolean shouldRegisterCallback = false;
+        synchronized (mLock) {
+            int prevCallbackCount = mRemoteVolumeControllerCallbacks.size();
+            mRemoteVolumeControllerCallbacks.put(callback, executor);
+            if (prevCallbackCount == 0 && mRemoteVolumeControllerCallbacks.size() == 1) {
+                shouldRegisterCallback = true;
+            }
+        }
+        if (shouldRegisterCallback) {
+            try {
+                mService.registerRemoteVolumeControllerCallback(
+                        mRemoteVolumeControllerCallbackStub);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to register remote volume controller callback", e);
+            }
         }
     }
 
     /**
-     * Unregisters the remote volume controller which was previously registered with
-     * {@link #registerRemoteVolumeController(IRemoteVolumeController)}.
+     * Unregisters the remote volume controller callback which was previously registered with
+     * {@link #registerRemoteVolumeControllerCallback(Executor, RemoteVolumeControllerCallback)}.
      * Only for use by System UI and Settings application.
      *
-     * @param rvc The volume controller which was registered.
+     * @param callback The volume controller callback to receive updates on.
      * @hide
      */
-    public void unregisterRemoteVolumeController(IRemoteVolumeController rvc) {
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public void unregisterRemoteVolumeControllerCallback(
+            @NonNull RemoteVolumeControllerCallback callback) {
+        Objects.requireNonNull(callback, "callback shouldn't be null");
+        boolean shouldUnregisterCallback = false;
+        synchronized (mLock) {
+            if (mRemoteVolumeControllerCallbacks.remove(callback) != null
+                    && mRemoteVolumeControllerCallbacks.size() == 0) {
+                shouldUnregisterCallback = true;
+            }
+        }
         try {
-            mService.unregisterRemoteVolumeController(rvc);
+            if (shouldUnregisterCallback) {
+                mService.unregisterRemoteVolumeControllerCallback(
+                        mRemoteVolumeControllerCallbackStub);
+            }
         } catch (RemoteException e) {
-            Log.e(TAG, "Error in unregisterRemoteVolumeController.", e);
+            Log.e(TAG, "Failed to unregister remote volume controller callback", e);
         }
     }
 
@@ -1048,14 +1086,38 @@ public final class MediaSessionManager {
          * has specified the target.
          * <p>
          * The session token can be {@link null} if the media button session is unset. In that case,
-         * framework would dispatch to the last sessions's media button receiver. If the media
-         * button receive isn't set as well, then it
+         * packageName will return the package name of the last session's media button receiver, or
+         * an empty string if the last session didn't set a media button receiver.
          *
-         * @param packageName The package name who would receive the media key event. Can be empty.
+         * @param packageName The package name of the component that will receive the media key
+         *                    event. Can be empty.
          * @param sessionToken The media session's token. Can be {@code null}.
          */
         void onMediaKeyEventSessionChanged(@NonNull String packageName,
                 @Nullable MediaSession.Token sessionToken);
+    }
+
+    /**
+     * Callback to receive changes in the remote volume controller.
+     *
+     * @hide
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public interface RemoteVolumeControllerCallback {
+        /**
+         * Called when the volume is changed.
+         *
+         * @param sessionToken the remote media session token
+         * @param flags any of the flags from {@link AudioManager}
+         */
+        void onVolumeChanged(@NonNull MediaSession.Token sessionToken, int flags);
+
+        /**
+         * Called when the session for the default remote controller is changed.
+         *
+         * @param sessionToken the remote media session token
+         */
+        void onSessionChanged(@Nullable MediaSession.Token sessionToken);
     }
 
     /**
@@ -1287,6 +1349,31 @@ public final class MediaSessionManager {
                     e.getValue().execute(() -> e.getKey().onMediaKeyEventSessionChanged(packageName,
                             sessionToken));
                 }
+            }
+        }
+    }
+
+    private final class RemoteVolumeControllerCallbackStub
+            extends IRemoteVolumeControllerCallback.Stub {
+        @Override
+        public void onVolumeChanged(MediaSession.Token sessionToken, int flags) {
+            Map<RemoteVolumeControllerCallback, Executor> callbacks = new ArrayMap<>();
+            synchronized (mLock) {
+                callbacks.putAll(mRemoteVolumeControllerCallbacks);
+            }
+            for (Map.Entry<RemoteVolumeControllerCallback, Executor> e : callbacks.entrySet()) {
+                e.getValue().execute(() -> e.getKey().onVolumeChanged(sessionToken, flags));
+            }
+        }
+
+        @Override
+        public void onSessionChanged(MediaSession.Token sessionToken) {
+            Map<RemoteVolumeControllerCallback, Executor> callbacks = new ArrayMap<>();
+            synchronized (mLock) {
+                callbacks.putAll(mRemoteVolumeControllerCallbacks);
+            }
+            for (Map.Entry<RemoteVolumeControllerCallback, Executor> e : callbacks.entrySet()) {
+                e.getValue().execute(() -> e.getKey().onSessionChanged(sessionToken));
             }
         }
     }

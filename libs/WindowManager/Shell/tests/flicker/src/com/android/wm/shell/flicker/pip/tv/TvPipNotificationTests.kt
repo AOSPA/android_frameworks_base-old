@@ -17,20 +17,22 @@
 package com.android.wm.shell.flicker.pip.tv
 
 import android.app.Notification
+import android.app.PendingIntent
+import android.os.Bundle
 import android.service.notification.StatusBarNotification
-import android.view.Surface
 import androidx.test.filters.RequiresDevice
+import com.android.wm.shell.flicker.NotificationListener.Companion.findNotification
 import com.android.wm.shell.flicker.NotificationListener.Companion.startNotificationListener
 import com.android.wm.shell.flicker.NotificationListener.Companion.stopNotificationListener
 import com.android.wm.shell.flicker.NotificationListener.Companion.waitForNotificationToAppear
 import com.android.wm.shell.flicker.NotificationListener.Companion.waitForNotificationToDisappear
 import org.junit.After
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
 /**
@@ -39,7 +41,6 @@ import org.junit.runners.Parameterized
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class TvPipNotificationTests(rotationName: String, rotation: Int)
     : TvPipTestBase(rotationName, rotation) {
 
@@ -55,7 +56,6 @@ class TvPipNotificationTests(rotationName: String, rotation: Int)
     @After
     override fun tearDown() {
         stopNotificationListener()
-        testApp.forceStop()
         super.tearDown()
     }
 
@@ -64,7 +64,7 @@ class TvPipNotificationTests(rotationName: String, rotation: Int)
         testApp.launchViaIntent()
         testApp.clickEnterPipButton()
 
-        assertTrue("Pip notification should have been posted",
+        assertNotNull("Pip notification should have been posted",
                 waitForNotificationToAppear { it.isPipNotificationWithTitle(testApp.label) })
 
         testApp.closePipWindow()
@@ -73,20 +73,111 @@ class TvPipNotificationTests(rotationName: String, rotation: Int)
                 waitForNotificationToDisappear { it.isPipNotificationWithTitle(testApp.label) })
     }
 
+    @Test
+    fun pipNotification_closeIntent() {
+        testApp.launchViaIntent()
+        testApp.clickEnterPipButton()
+
+        val notification: StatusBarNotification = waitForNotificationToAppear {
+            it.isPipNotificationWithTitle(testApp.label)
+        } ?: fail("Pip notification should have been posted")
+
+        notification.deleteIntent?.send()
+            ?: fail("Pip notification should contain `delete_intent`")
+
+        assertTrue("Pip should have closed by sending the `delete_intent`",
+                testApp.waitUntilClosed())
+        assertTrue("Pip notification should have been dismissed",
+                waitForNotificationToDisappear { it.isPipNotificationWithTitle(testApp.label) })
+    }
+
+    @Test
+    fun pipNotification_menuIntent() {
+        testApp.launchViaIntent()
+        testApp.clickEnterPipButton()
+
+        val notification: StatusBarNotification = waitForNotificationToAppear {
+            it.isPipNotificationWithTitle(testApp.label)
+        } ?: fail("Pip notification should have been posted")
+
+        notification.contentIntent?.send()
+            ?: fail("Pip notification should contain `content_intent`")
+
+        assertNotNull("Pip menu should have been shown after sending `content_intent`",
+                uiDevice.waitForTvPipMenu())
+
+        uiDevice.pressBack()
+        testApp.closePipWindow()
+    }
+
+    @Test
+    fun pipNotification_mediaSessionTitle_isDisplayed() {
+        testApp.launchViaIntent()
+        // Start media session and to PiP
+        testApp.clickStartMediaSessionButton()
+        testApp.clickEnterPipButton()
+
+        // Wait for the correct notification to show up...
+        waitForNotificationToAppear {
+            it.isPipNotificationWithTitle(TITLE_MEDIA_SESSION_PLAYING)
+        } ?: fail("Pip notification with media session title should have been posted")
+        // ... and make sure "regular" PiP notification is now shown
+        assertNull("Regular notification should not have been posted",
+            findNotification { it.isPipNotificationWithTitle(testApp.label) })
+
+        // Pause the media session. When paused the application updates the title for the media
+        // session. This change should be reflected in the notification.
+        testApp.pauseMedia()
+
+        // Wait for the "paused" notification to show up...
+        waitForNotificationToAppear {
+            it.isPipNotificationWithTitle(TITLE_MEDIA_SESSION_PAUSED)
+        } ?: fail("Pip notification with media session title should have been posted")
+        // ... and make sure "playing" PiP notification is gone
+        assertNull("Regular notification should not have been posted",
+                findNotification { it.isPipNotificationWithTitle(TITLE_MEDIA_SESSION_PLAYING) })
+
+        // Now stop the media session, which should revert the title to the "default" one.
+        testApp.stopMedia()
+
+        // Wait for the "regular" notification to show up...
+        waitForNotificationToAppear {
+            it.isPipNotificationWithTitle(testApp.label)
+        } ?: fail("Pip notification with media session title should have been posted")
+        // ... and make sure previous ("paused") notification is gone
+        assertNull("Regular notification should not have been posted",
+                findNotification { it.isPipNotificationWithTitle(TITLE_MEDIA_SESSION_PAUSED) })
+
+        testApp.closePipWindow()
+    }
+
     companion object {
+        private const val TITLE_MEDIA_SESSION_PLAYING = "TestApp media is playing"
+        private const val TITLE_MEDIA_SESSION_PAUSED = "TestApp media is paused"
+
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
-        fun getParams(): Collection<Array<Any>> {
-            val supportedRotations = intArrayOf(Surface.ROTATION_0)
-            return supportedRotations.map { arrayOf(Surface.rotationToString(it), it) }
-        }
+        fun getParams(): Collection<Array<Any>> = rotationParams
     }
 }
 
-private const val PIP_NOTIFICATION_TAG = "PipNotification"
+private val StatusBarNotification.extras: Bundle?
+    get() = notification?.extras
 
 private val StatusBarNotification.title: String
-    get() = notification?.extras?.getString(Notification.EXTRA_TITLE) ?: ""
+    get() = extras?.getString(Notification.EXTRA_TITLE) ?: ""
+
+/** Get TV extensions with [android.app.Notification.TvExtender.EXTRA_TV_EXTENDER]. */
+private val StatusBarNotification.tvExtensions: Bundle?
+    get() = extras?.getBundle("android.tv.EXTENSIONS")
+
+/** "Content" TV intent with key [android.app.Notification.TvExtender.EXTRA_CONTENT_INTENT]. */
+private val StatusBarNotification.contentIntent: PendingIntent?
+    get() = tvExtensions?.getParcelable("content_intent")
+
+/** "Delete" TV intent with key [android.app.Notification.TvExtender.EXTRA_DELETE_INTENT]. */
+private val StatusBarNotification.deleteIntent: PendingIntent?
+    get() = tvExtensions?.getParcelable("delete_intent")
 
 private fun StatusBarNotification.isPipNotificationWithTitle(expectedTitle: String): Boolean =
-    tag == PIP_NOTIFICATION_TAG && title == expectedTitle
+    tag == "PipNotification" && title == expectedTitle

@@ -139,8 +139,6 @@ import android.net.metrics.IpConnectivityLog;
 import android.net.metrics.NetworkEvent;
 import android.net.netlink.InetDiagMessage;
 import android.net.shared.PrivateDnsConfig;
-import android.net.util.LinkPropertiesUtils.CompareOrUpdateResult;
-import android.net.util.LinkPropertiesUtils.CompareResult;
 import android.net.util.MultinetworkPolicyTracker;
 import android.net.util.NetdService;
 import android.os.BasicShellCommandHandler;
@@ -198,6 +196,8 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.LocationPermissionChecker;
 import com.android.internal.util.MessageUtils;
 import com.android.internal.util.XmlUtils;
+import com.android.net.module.util.LinkPropertiesUtils.CompareOrUpdateResult;
+import com.android.net.module.util.LinkPropertiesUtils.CompareResult;
 import com.android.server.am.BatteryStatsService;
 import com.android.server.connectivity.AutodestructReference;
 import com.android.server.connectivity.DataConnectionStats;
@@ -241,6 +241,7 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
@@ -1133,23 +1134,26 @@ public class ConnectivityService extends IConnectivityManager.Stub
         intentFilter.addAction(Intent.ACTION_USER_ADDED);
         intentFilter.addAction(Intent.ACTION_USER_REMOVED);
         intentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
-        mContext.registerReceiverAsUser(
+
+        final Context userAllContext = mContext.createContextAsUser(UserHandle.ALL, 0 /* flags */);
+        userAllContext.registerReceiver(
                 mIntentReceiver,
-                UserHandle.ALL,
                 intentFilter,
                 null /* broadcastPermission */,
                 mHandler);
-        mContext.registerReceiverAsUser(mUserPresentReceiver, UserHandle.SYSTEM,
-                new IntentFilter(Intent.ACTION_USER_PRESENT), null, null);
+        mContext.createContextAsUser(UserHandle.SYSTEM, 0 /* flags */).registerReceiver(
+                mUserPresentReceiver,
+                new IntentFilter(Intent.ACTION_USER_PRESENT),
+                null /* broadcastPermission */,
+                null /* scheduler */);
 
         // Listen to package add and removal events for all users.
         intentFilter = new IntentFilter();
         intentFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
         intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
         intentFilter.addDataScheme("package");
-        mContext.registerReceiverAsUser(
+        userAllContext.registerReceiver(
                 mIntentReceiver,
-                UserHandle.ALL,
                 intentFilter,
                 null /* broadcastPermission */,
                 mHandler);
@@ -1157,8 +1161,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // Listen to lockdown VPN reset.
         intentFilter = new IntentFilter();
         intentFilter.addAction(LockdownVpnTracker.ACTION_LOCKDOWN_RESET);
-        mContext.registerReceiverAsUser(
-                mIntentReceiver, UserHandle.ALL, intentFilter, NETWORK_STACK, mHandler);
+        userAllContext.registerReceiver(
+                mIntentReceiver, intentFilter, NETWORK_STACK, mHandler);
 
         try {
             mNMS.registerObserver(mDataActivityObserver);
@@ -1941,10 +1945,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
         if (DBG) log("Adding legacy route " + bestRoute +
                 " for UID/PID " + uid + "/" + Binder.getCallingPid());
+
+        final String dst = bestRoute.getDestinationLinkAddress().toString();
+        final String nextHop = bestRoute.hasGateway()
+                ? bestRoute.getGateway().getHostAddress() : "";
         try {
-            mNMS.addLegacyRouteForNetId(netId, bestRoute, uid);
-        } catch (Exception e) {
-            // never crash - catch them all
+            mNetd.networkAddLegacyRoute(netId, bestRoute.getInterface(), dst, nextHop , uid);
+        } catch (RemoteException | ServiceSpecificException e) {
             if (DBG) loge("Exception trying to add a route: " + e);
             return false;
         }
@@ -5301,7 +5308,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // Try creating lockdown tracker, since user present usually means
             // unlocked keystore.
             updateLockdownVpn();
-            mContext.unregisterReceiver(this);
+            // Use the same context that registered receiver before to unregister it. Because use
+            // different context to unregister receiver will cause exception.
+            context.unregisterReceiver(this);
         }
     };
 
@@ -5395,7 +5404,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
      * Also used to notice when the calling process dies so we can self-expire
      */
     private class NetworkRequestInfo implements IBinder.DeathRecipient {
+        final List<NetworkRequest> mRequests;
         final NetworkRequest request;
+
         // The network currently satisfying this request, or null if none. Must only be touched
         // on the handler thread. This only makes sense for network requests and not for listens,
         // as defined by NetworkRequest#isRequest(). For listens, this is always null.
@@ -5410,6 +5421,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         NetworkRequestInfo(NetworkRequest r, PendingIntent pi) {
             request = r;
+            mRequests = initializeRequests(r);
             ensureNetworkRequestHasType(request);
             mPendingIntent = pi;
             messenger = null;
@@ -5423,6 +5435,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             super();
             messenger = m;
             request = r;
+            mRequests = initializeRequests(r);
             ensureNetworkRequestHasType(request);
             mBinder = binder;
             mPid = getCallingPid();
@@ -5440,6 +5453,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
         NetworkRequestInfo(NetworkRequest r) {
             this(r, null);
         }
+
+        private List<NetworkRequest> initializeRequests(NetworkRequest r) {
+            final ArrayList<NetworkRequest> tempRequests = new ArrayList<>();
+            tempRequests.add(new NetworkRequest(r));
+            return Collections.unmodifiableList(tempRequests);
+        }
+
 
         private void enforceRequestCountLimit() {
             synchronized (mUidToNetworkRequestCount) {
@@ -6468,8 +6488,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 && !nai.networkAgentConfig.allowBypass
                 && nc.getOwnerUid() != Process.SYSTEM_UID
                 && lp.getInterfaceName() != null
-                && (lp.hasIPv4DefaultRoute() || lp.hasIpv4UnreachableDefaultRoute())
-                && (lp.hasIPv6DefaultRoute() || lp.hasIpv6UnreachableDefaultRoute());
+                && (lp.hasIpv4DefaultRoute() || lp.hasIpv4UnreachableDefaultRoute())
+                && (lp.hasIpv6DefaultRoute() || lp.hasIpv6UnreachableDefaultRoute());
     }
 
     private void updateUids(NetworkAgentInfo nai, NetworkCapabilities prevNc,

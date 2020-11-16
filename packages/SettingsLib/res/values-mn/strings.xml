@@ -70,7 +70,7 @@
     <string name="bluetooth_pairing" msgid="4269046942588193600">"Хослуулж байна…"</string>
     <string name="bluetooth_connected_no_headset" msgid="2224101138659967604">"Холбогдсон (утас байхгүй)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_a2dp" msgid="8566874395813947092">"Холбогдсон (медиа байхгүй)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
-    <string name="bluetooth_connected_no_map" msgid="3381860077002724689">"Холбогдсон (зурвасын хандалт байхгүй)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_connected_no_map" msgid="3381860077002724689">"Холбогдсон (мессежийн хандалт байхгүй)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_no_a2dp" msgid="2893204819854215433">"Холбогдсон (утас эсвэл медиа байхгүй)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
     <string name="bluetooth_connected_battery_level" msgid="5410325759372259950">"Холбогдсон, батерей <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_battery_level" msgid="2661863370509206428">"Холбогдсон (утас байхгүй), батерей <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
@@ -399,6 +399,12 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"Идэвхгүй байна. Унтраах/асаахын тулд дарна уу."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"Идэвхтэй байна. Унтраах/асаахын тулд дарна уу."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"Апп зогсолтын горимын төлөв:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <!-- no translation found for transcode_settings_title (6700974145733932357) -->
+    <skip />
+    <!-- no translation found for transcode_enable_all (4719796495995795404) -->
+    <skip />
+    <!-- no translation found for transcode_skip_apps (5680997722349545778) -->
+    <skip />
     <string name="runningservices_settings_title" msgid="6460099290493086515">"Ажиллаж байгаа үйлчилгээнүүд"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"Одоо ажиллаж байгаа үйлчилгээнүүдийг харах болон хянах"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"WebView хэрэгжилт"</string>
@@ -558,4 +564,6 @@
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"Идэвхжүүлсэн"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"Энэ өөрчлөлтийг хэрэгжүүлэхийн тулд таны төхөөрөмжийг дахин асаах ёстой. Одоо дахин асаах эсвэл цуцлана уу."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"Утастай чихэвч"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"Асаах"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"Унтраах"</string>
 </resources>

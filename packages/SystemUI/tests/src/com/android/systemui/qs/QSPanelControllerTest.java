@@ -37,9 +37,11 @@ import com.android.systemui.media.MediaHost;
 import com.android.systemui.plugins.qs.QSTileView;
 import com.android.systemui.qs.customize.QSCustomizerController;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
-import com.android.systemui.settings.BrightnessController;
-import com.android.systemui.settings.ToggleSlider;
+import com.android.systemui.settings.brightness.BrightnessController;
+import com.android.systemui.settings.brightness.BrightnessSlider;
+import com.android.systemui.settings.brightness.ToggleSlider;
 import com.android.systemui.tuner.TunerService;
+import com.android.systemui.util.animation.DisappearParameters;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -79,6 +81,10 @@ public class QSPanelControllerTest extends SysuiTestCase {
     @Mock
     private BrightnessController mBrightnessController;
     @Mock
+    private BrightnessSlider.Factory mToggleSliderViewControllerFactory;
+    @Mock
+    private BrightnessSlider mBrightnessSlider;
+    @Mock
     QSTileImpl mQSTile;
     @Mock
     QSTileView mQSTileView;
@@ -92,19 +98,23 @@ public class QSPanelControllerTest extends SysuiTestCase {
     public void setup() throws Exception {
         MockitoAnnotations.initMocks(this);
 
-        when(mQSPanel.getMediaHost()).thenReturn(mMediaHost);
         when(mQSPanel.isAttachedToWindow()).thenReturn(true);
         when(mQSPanel.getDumpableTag()).thenReturn("QSPanel");
         when(mQSPanel.createRegularTileLayout()).thenReturn(mPagedTileLayout);
         when(mQSTileHost.getTiles()).thenReturn(Collections.singleton(mQSTile));
         when(mQSTileHost.createTileView(eq(mQSTile), anyBoolean())).thenReturn(mQSTileView);
+        when(mToggleSliderViewControllerFactory.create(any(), any()))
+                .thenReturn(mBrightnessSlider);
         when(mBrightnessControllerFactory.create(any(ToggleSlider.class)))
                 .thenReturn(mBrightnessController);
-        when(mQSTileRevealControllerFactory.create(any())).thenReturn(mQSTileRevealController);
+        when(mQSTileRevealControllerFactory.create(any(), any()))
+                .thenReturn(mQSTileRevealController);
+        when(mMediaHost.getDisappearParameters()).thenReturn(new DisappearParameters());
 
         mController = new QSPanelController(mQSPanel, mQSSecurityFooter, mTunerService,
-                mQSTileHost, mQSCustomizerController, mQSTileRevealControllerFactory, mDumpManager,
-                mMetricsLogger, mUiEventLogger, mBrightnessControllerFactory);
+                mQSTileHost, mQSCustomizerController, mMediaHost, mQSTileRevealControllerFactory,
+                mDumpManager, mMetricsLogger, mUiEventLogger, mBrightnessControllerFactory,
+                mToggleSliderViewControllerFactory);
 
         mController.init();
     }

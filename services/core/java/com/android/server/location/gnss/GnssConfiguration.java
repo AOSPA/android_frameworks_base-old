@@ -71,6 +71,11 @@ class GnssConfiguration {
     private static final String CONFIG_GPS_LOCK = "GPS_LOCK";
     private static final String CONFIG_ES_EXTENSION_SEC = "ES_EXTENSION_SEC";
     public static final String CONFIG_NFW_PROXY_APPS = "NFW_PROXY_APPS";
+    private static final String CONFIG_LONGTERM_PSDS_SERVER_1 = "LONGTERM_PSDS_SERVER_1";
+    private static final String CONFIG_LONGTERM_PSDS_SERVER_2 = "LONGTERM_PSDS_SERVER_2";
+    private static final String CONFIG_LONGTERM_PSDS_SERVER_3 = "LONGTERM_PSDS_SERVER_3";
+    private static final String CONFIG_NORMAL_PSDS_SERVER = "NORMAL_PSDS_SERVER";
+    private static final String CONFIG_REALTIME_PSDS_SERVER = "REALTIME_PSDS_SERVER";
 
     // Limit on NI emergency mode time extension after emergency sessions ends
     private static final int MAX_EMERGENCY_MODE_EXTENSION_SECONDS = 300;  // 5 minute maximum
@@ -202,8 +207,8 @@ class GnssConfiguration {
     /**
      * Updates the GNSS HAL satellite denylist.
      */
-    void setSatelliteBlacklist(int[] constellations, int[] svids) {
-        native_set_satellite_blacklist(constellations, svids);
+    void setSatelliteBlocklist(int[] constellations, int[] svids) {
+        native_set_satellite_blocklist(constellations, svids);
     }
 
     HalInterfaceVersion getHalInterfaceVersion() {
@@ -227,11 +232,14 @@ class GnssConfiguration {
             // override default value of this if lpp_prof is not empty
             mProperties.setProperty(CONFIG_LPP_PROFILE, lpp_prof);
         }
+
+        // Load Psds servers from resources
+        loadPsdsServersFromResources();
+
         /*
          * Overlay carrier properties from a debug configuration file.
          */
         loadPropertiesFromGpsDebugConfig(mProperties);
-
         mEsExtensionSec = getRangeCheckedConfigEsExtensionSec();
 
         logConfigurations();
@@ -380,6 +388,34 @@ class GnssConfiguration {
         }
     }
 
+    void loadPsdsServersFromResources() {
+        String longTermPsdsServer1 = mContext.getResources().getString(
+                com.android.internal.R.string.config_longterm_psds_server_1);
+        if (!TextUtils.isEmpty(longTermPsdsServer1)) {
+            mProperties.setProperty(CONFIG_LONGTERM_PSDS_SERVER_1, longTermPsdsServer1);
+        }
+        String longTermPsdsServer2 = mContext.getResources().getString(
+                com.android.internal.R.string.config_longterm_psds_server_2);
+        if (!TextUtils.isEmpty(longTermPsdsServer2)) {
+            mProperties.setProperty(CONFIG_LONGTERM_PSDS_SERVER_2, longTermPsdsServer2);
+        }
+        String longTermPsdsServer3 = mContext.getResources().getString(
+                com.android.internal.R.string.config_longterm_psds_server_3);
+        if (!TextUtils.isEmpty(longTermPsdsServer3)) {
+            mProperties.setProperty(CONFIG_LONGTERM_PSDS_SERVER_3, longTermPsdsServer3);
+        }
+        String normalPsdsServer = mContext.getResources().getString(
+                com.android.internal.R.string.config_normal_psds_server);
+        if (!TextUtils.isEmpty(normalPsdsServer)) {
+            mProperties.setProperty(CONFIG_NORMAL_PSDS_SERVER, normalPsdsServer);
+        }
+        String realtimePsdsServer = mContext.getResources().getString(
+                com.android.internal.R.string.config_realtime_psds_server);
+        if (!TextUtils.isEmpty(realtimePsdsServer)) {
+            mProperties.setProperty(CONFIG_REALTIME_PSDS_SERVER, realtimePsdsServer);
+        }
+    }
+
     private static boolean isConfigEsExtensionSecSupported(
             HalInterfaceVersion gnssConfiguartionIfaceVersion) {
         // ES_EXTENSION_SEC is introduced in @2.0::IGnssConfiguration.hal
@@ -414,7 +450,7 @@ class GnssConfiguration {
 
     private static native boolean native_set_emergency_supl_pdn(int emergencySuplPdn);
 
-    private static native boolean native_set_satellite_blacklist(int[] constellations, int[] svIds);
+    private static native boolean native_set_satellite_blocklist(int[] constellations, int[] svIds);
 
     private static native boolean native_set_es_extension_sec(int emergencyExtensionSeconds);
 }

@@ -1199,7 +1199,23 @@ class ActivityStarter {
             }
         }
 
-        mService.onStartActivitySetDidAppSwitch();
+        if (mService.getBalAppSwitchesProtectionEnabled()) {
+            // Only allow app switching to be resumed if activity is not a restricted background
+            // activity and target app is not home process, otherwise any background activity
+            // started in background task can stop home button protection mode.
+            // As the targeted app is not a home process and we don't need to wait for the 2nd
+            // activity to be started to resume app switching, we can just enable app switching
+            // directly.
+            WindowProcessController homeProcess = mService.mHomeProcess;
+            boolean isHomeProcess = homeProcess != null
+                    && aInfo.applicationInfo.uid == homeProcess.mUid;
+            if (!restrictedBgActivity && !isHomeProcess) {
+                mService.resumeAppSwitches();
+            }
+        } else {
+            mService.onStartActivitySetDidAppSwitch();
+        }
+
         mController.doPendingActivityLaunches(false);
 
         mLastStartActivityResult = startActivityUnchecked(r, sourceRecord, voiceSession,
@@ -1264,6 +1280,20 @@ class ActivityStarter {
             return false;
         }
 
+        // Always allow home application to start activities.
+        if (mService.mHomeProcess != null && callingUid == mService.mHomeProcess.mUid) {
+            if (DEBUG_ACTIVITY_STARTS) {
+                Slog.d(TAG, "Activity start allowed for home app callingUid (" + callingUid + ")");
+            }
+            return false;
+        }
+
+        // App switching will be allowed if BAL app switching flag is not enabled, or if
+        // its app switching rule allows it.
+        // This is used to block background activity launch even if the app is still
+        // visible to user after user clicking home button.
+        final boolean appSwitchAllowed = mService.getBalAppSwitchesAllowed();
+
         // don't abort if the callingUid has a visible window or is a persistent system process
         final int callingUidProcState = mService.getUidState(callingUid);
         final boolean callingUidHasAnyVisibleWindow =
@@ -1273,7 +1303,8 @@ class ActivityStarter {
                 || callingUidProcState == ActivityManager.PROCESS_STATE_BOUND_TOP;
         final boolean isCallingUidPersistentSystemProcess =
                 callingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
-        if (callingUidHasAnyVisibleWindow || isCallingUidPersistentSystemProcess) {
+        if ((appSwitchAllowed && callingUidHasAnyVisibleWindow)
+                || isCallingUidPersistentSystemProcess) {
             if (DEBUG_ACTIVITY_STARTS) {
                 Slog.d(TAG, "Activity start allowed: callingUidHasAnyVisibleWindow = " + callingUid
                         + ", isCallingUidPersistentSystemProcess = "
@@ -1299,6 +1330,7 @@ class ActivityStarter {
                         || realCallingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
         if (realCallingUid != callingUid) {
             // don't abort if the realCallingUid has a visible window
+            // TODO(b/171459802): We should check appSwitchAllowed also
             if (realCallingUidHasAnyVisibleWindow) {
                 if (DEBUG_ACTIVITY_STARTS) {
                     Slog.d(TAG, "Activity start allowed: realCallingUid (" + realCallingUid
@@ -1380,7 +1412,7 @@ class ActivityStarter {
         // don't abort if the callerApp or other processes of that uid are allowed in any way
         if (callerApp != null) {
             // first check the original calling process
-            if (callerApp.areBackgroundActivityStartsAllowed()) {
+            if (callerApp.areBackgroundActivityStartsAllowed(appSwitchAllowed)) {
                 if (DEBUG_ACTIVITY_STARTS) {
                     Slog.d(TAG, "Background activity start allowed: callerApp process (pid = "
                             + callerApp.getPid() + ", uid = " + callerAppUid + ") is allowed");
@@ -1393,7 +1425,8 @@ class ActivityStarter {
             if (uidProcesses != null) {
                 for (int i = uidProcesses.size() - 1; i >= 0; i--) {
                     final WindowProcessController proc = uidProcesses.valueAt(i);
-                    if (proc != callerApp && proc.areBackgroundActivityStartsAllowed()) {
+                    if (proc != callerApp
+                            && proc.areBackgroundActivityStartsAllowed(appSwitchAllowed)) {
                         if (DEBUG_ACTIVITY_STARTS) {
                             Slog.d(TAG,
                                     "Background activity start allowed: process " + proc.getPid()
@@ -1407,6 +1440,8 @@ class ActivityStarter {
         // anything that has fallen through would currently be aborted
         Slog.w(TAG, "Background activity start [callingPackage: " + callingPackage
                 + "; callingUid: " + callingUid
+                + "; appSwitchAllowed: " + appSwitchAllowed
+                + "; balAppSwitchEnabled: " + mService.getBalAppSwitchesProtectionEnabled()
                 + "; isCallingUidForeground: " + isCallingUidForeground
                 + "; callingUidHasAnyVisibleWindow: " + callingUidHasAnyVisibleWindow
                 + "; callingUidProcState: " + DebugUtils.valueToString(ActivityManager.class,
@@ -1841,7 +1876,14 @@ class ActivityStarter {
             }
         }
 
-        if (mRestrictedBgActivity && (newTask || !targetTask.isUidPresent(mCallingUid))
+        // Do not allow background activity start in new task or in a task that uid is not present.
+        // Also do not allow pinned window to start single instance activity in background,
+        // as it will recreate the window and makes it to foreground.
+        boolean blockBalInTask = (newTask
+                || !targetTask.isUidPresent(mCallingUid)
+                || (LAUNCH_SINGLE_INSTANCE == mLaunchMode && targetTask.inPinnedWindowingMode()));
+
+        if (mRestrictedBgActivity && blockBalInTask
                 && handleBackgroundActivityAbort(mStartActivity)) {
             Slog.e(TAG, "Abort background activity starts from " + mCallingUid);
             return START_ABORTED;

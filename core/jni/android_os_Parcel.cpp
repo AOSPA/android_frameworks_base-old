@@ -90,6 +90,14 @@ void recycleJavaParcelObject(JNIEnv* env, jobject parcelObj)
     env->CallVoidMethod(parcelObj, gParcelOffsets.recycle);
 }
 
+static void android_os_Parcel_markSensitive(jlong nativePtr)
+{
+    Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
+    if (parcel) {
+        parcel->markSensitive();
+    }
+}
+
 static jint android_os_Parcel_dataSize(jlong nativePtr)
 {
     Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
@@ -252,20 +260,25 @@ static void android_os_Parcel_nativeSignalExceptionForError(JNIEnv* env, jclass 
     signalExceptionForError(env, clazz, err);
 }
 
-static void android_os_Parcel_writeString8(JNIEnv* env, jclass clazz, jlong nativePtr, jstring val)
-{
+static void android_os_Parcel_writeString8(JNIEnv *env, jclass clazz, jlong nativePtr,
+        jstring val) {
     Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
-    if (parcel != NULL) {
-        status_t err = NO_MEMORY;
+    if (parcel != nullptr) {
+        status_t err = NO_ERROR;
         if (val) {
-            const size_t len = env->GetStringUTFLength(val);
-            const char* str = env->GetStringUTFChars(val, 0);
-            if (str) {
-                err = parcel->writeString8(str, len);
-                env->ReleaseStringUTFChars(val, str);
+            // NOTE: Keep this logic in sync with Parcel.cpp
+            const size_t len = env->GetStringLength(val);
+            const size_t allocLen = env->GetStringUTFLength(val);
+            err = parcel->writeInt32(allocLen);
+            char *data = reinterpret_cast<char*>(parcel->writeInplace(allocLen + sizeof(char)));
+            if (data != nullptr) {
+                env->GetStringUTFRegion(val, 0, len, data);
+                *(data + allocLen) = 0;
+            } else {
+                err = NO_MEMORY;
             }
         } else {
-            err = parcel->writeString8(NULL, 0);
+            err = parcel->writeString8(nullptr, 0);
         }
         if (err != NO_ERROR) {
             signalExceptionForError(env, clazz, err);
@@ -273,21 +286,25 @@ static void android_os_Parcel_writeString8(JNIEnv* env, jclass clazz, jlong nati
     }
 }
 
-static void android_os_Parcel_writeString16(JNIEnv* env, jclass clazz, jlong nativePtr, jstring val)
-{
+static void android_os_Parcel_writeString16(JNIEnv *env, jclass clazz, jlong nativePtr,
+        jstring val) {
     Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
-    if (parcel != NULL) {
-        status_t err = NO_MEMORY;
+    if (parcel != nullptr) {
+        status_t err = NO_ERROR;
         if (val) {
-            const jchar* str = env->GetStringCritical(val, 0);
-            if (str) {
-                err = parcel->writeString16(
-                    reinterpret_cast<const char16_t*>(str),
-                    env->GetStringLength(val));
-                env->ReleaseStringCritical(val, str);
+            // NOTE: Keep this logic in sync with Parcel.cpp
+            const size_t len = env->GetStringLength(val);
+            const size_t allocLen = len * sizeof(char16_t);
+            err = parcel->writeInt32(len);
+            char *data = reinterpret_cast<char*>(parcel->writeInplace(allocLen + sizeof(char16_t)));
+            if (data != nullptr) {
+                env->GetStringRegion(val, 0, len, reinterpret_cast<jchar*>(data));
+                *reinterpret_cast<char16_t*>(data + allocLen) = 0;
+            } else {
+                err = NO_MEMORY;
             }
         } else {
-            err = parcel->writeString16(NULL, 0);
+            err = parcel->writeString16(nullptr, 0);
         }
         if (err != NO_ERROR) {
             signalExceptionForError(env, clazz, err);
@@ -731,6 +748,8 @@ static jboolean android_os_Parcel_replaceCallingWorkSourceUid(jlong nativePtr, j
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gParcelMethods[] = {
+    // @CriticalNative
+    {"nativeMarkSensitive",             "(J)V", (void*)android_os_Parcel_markSensitive},
     // @CriticalNative
     {"nativeDataSize",            "(J)I", (void*)android_os_Parcel_dataSize},
     // @CriticalNative

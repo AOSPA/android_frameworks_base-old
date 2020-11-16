@@ -173,6 +173,12 @@ public class ActivityManager {
      */
     public static final int INSTR_FLAG_DISABLE_TEST_API_CHECKS = 1 << 2;
 
+    /**
+     * Do not restart the target process when starting or finishing instrumentation.
+     * @hide
+     */
+    public static final int INSTR_FLAG_NO_RESTART = 1 << 3;
+
     static final class UidObserver extends IUidObserver.Stub {
         final OnUidImportanceListener mListener;
         final Context mContext;
@@ -490,89 +496,98 @@ public class ActivityManager {
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProcessState {}
 
+    /*
+     * PROCESS_STATE_* must come from frameworks/base/core/java/android/app/ProcessStateEnum.aidl.
+     * This is to make sure that Java side uses the same values as native.
+     */
 
     /** @hide Not a real process state. */
-    public static final int PROCESS_STATE_UNKNOWN = -1;
+    public static final int PROCESS_STATE_UNKNOWN = ProcessStateEnum.UNKNOWN;
 
     /** @hide Process is a persistent system process. */
-    public static final int PROCESS_STATE_PERSISTENT = 0;
+    public static final int PROCESS_STATE_PERSISTENT = ProcessStateEnum.PERSISTENT;
 
     /** @hide Process is a persistent system process and is doing UI. */
-    public static final int PROCESS_STATE_PERSISTENT_UI = 1;
+    public static final int PROCESS_STATE_PERSISTENT_UI = ProcessStateEnum.PERSISTENT_UI;
 
     /** @hide Process is hosting the current top activities.  Note that this covers
      * all activities that are visible to the user. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_TOP = 2;
+    public static final int PROCESS_STATE_TOP = ProcessStateEnum.TOP;
 
     /** @hide Process is bound to a TOP app. */
-    public static final int PROCESS_STATE_BOUND_TOP = 3;
+    public static final int PROCESS_STATE_BOUND_TOP = ProcessStateEnum.BOUND_TOP;
 
     /** @hide Process is hosting a foreground service. */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int PROCESS_STATE_FOREGROUND_SERVICE = 4;
+    public static final int PROCESS_STATE_FOREGROUND_SERVICE = ProcessStateEnum.FOREGROUND_SERVICE;
 
     /** @hide Process is hosting a foreground service due to a system binding. */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE = 5;
+    public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE =
+            ProcessStateEnum.BOUND_FOREGROUND_SERVICE;
 
     /** @hide Process is important to the user, and something they are aware of. */
-    public static final int PROCESS_STATE_IMPORTANT_FOREGROUND = 6;
+    public static final int PROCESS_STATE_IMPORTANT_FOREGROUND =
+            ProcessStateEnum.IMPORTANT_FOREGROUND;
 
     /** @hide Process is important to the user, but not something they are aware of. */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int PROCESS_STATE_IMPORTANT_BACKGROUND = 7;
+    public static final int PROCESS_STATE_IMPORTANT_BACKGROUND =
+            ProcessStateEnum.IMPORTANT_BACKGROUND;
 
     /** @hide Process is in the background transient so we will try to keep running. */
-    public static final int PROCESS_STATE_TRANSIENT_BACKGROUND = 8;
+    public static final int PROCESS_STATE_TRANSIENT_BACKGROUND =
+            ProcessStateEnum.TRANSIENT_BACKGROUND;
 
     /** @hide Process is in the background running a backup/restore operation. */
-    public static final int PROCESS_STATE_BACKUP = 9;
+    public static final int PROCESS_STATE_BACKUP = ProcessStateEnum.BACKUP;
 
     /** @hide Process is in the background running a service.  Unlike oom_adj, this level
      * is used for both the normal running in background state and the executing
      * operations state. */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int PROCESS_STATE_SERVICE = 10;
+    public static final int PROCESS_STATE_SERVICE = ProcessStateEnum.SERVICE;
 
     /** @hide Process is in the background running a receiver.   Note that from the
      * perspective of oom_adj, receivers run at a higher foreground level, but for our
      * prioritization here that is not necessary and putting them below services means
      * many fewer changes in some process states as they receive broadcasts. */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int PROCESS_STATE_RECEIVER = 11;
+    public static final int PROCESS_STATE_RECEIVER = ProcessStateEnum.RECEIVER;
 
     /** @hide Same as {@link #PROCESS_STATE_TOP} but while device is sleeping. */
-    public static final int PROCESS_STATE_TOP_SLEEPING = 12;
+    public static final int PROCESS_STATE_TOP_SLEEPING = ProcessStateEnum.TOP_SLEEPING;
 
     /** @hide Process is in the background, but it can't restore its state so we want
      * to try to avoid killing it. */
-    public static final int PROCESS_STATE_HEAVY_WEIGHT = 13;
+    public static final int PROCESS_STATE_HEAVY_WEIGHT = ProcessStateEnum.HEAVY_WEIGHT;
 
     /** @hide Process is in the background but hosts the home activity. */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int PROCESS_STATE_HOME = 14;
+    public static final int PROCESS_STATE_HOME = ProcessStateEnum.HOME;
 
     /** @hide Process is in the background but hosts the last shown activity. */
-    public static final int PROCESS_STATE_LAST_ACTIVITY = 15;
+    public static final int PROCESS_STATE_LAST_ACTIVITY = ProcessStateEnum.LAST_ACTIVITY;
 
     /** @hide Process is being cached for later use and contains activities. */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int PROCESS_STATE_CACHED_ACTIVITY = 16;
+    public static final int PROCESS_STATE_CACHED_ACTIVITY = ProcessStateEnum.CACHED_ACTIVITY;
 
     /** @hide Process is being cached for later use and is a client of another cached
      * process that contains activities. */
-    public static final int PROCESS_STATE_CACHED_ACTIVITY_CLIENT = 17;
+    public static final int PROCESS_STATE_CACHED_ACTIVITY_CLIENT =
+            ProcessStateEnum.CACHED_ACTIVITY_CLIENT;
 
     /** @hide Process is being cached for later use and has an activity that corresponds
      * to an existing recent task. */
-    public static final int PROCESS_STATE_CACHED_RECENT = 18;
+    public static final int PROCESS_STATE_CACHED_RECENT = ProcessStateEnum.CACHED_RECENT;
 
     /** @hide Process is being cached for later use and is empty. */
-    public static final int PROCESS_STATE_CACHED_EMPTY = 19;
+    public static final int PROCESS_STATE_CACHED_EMPTY = ProcessStateEnum.CACHED_EMPTY;
 
     /** @hide Process does not exist. */
-    public static final int PROCESS_STATE_NONEXISTENT = 20;
+    public static final int PROCESS_STATE_NONEXISTENT = ProcessStateEnum.NONEXISTENT;
 
     /**
      * The set of flags for process capability.
@@ -1936,7 +1951,7 @@ public class ActivityManager {
         ArrayList<AppTask> tasks = new ArrayList<AppTask>();
         List<IBinder> appTasks;
         try {
-            appTasks = getTaskService().getAppTasks(mContext.getPackageName());
+            appTasks = getTaskService().getAppTasks(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2471,7 +2486,7 @@ public class ActivityManager {
         try {
             ActivityThread thread = ActivityThread.currentActivityThread();
             IApplicationThread appThread = thread.getApplicationThread();
-            String packageName = mContext.getPackageName();
+            String packageName = mContext.getOpPackageName();
             getTaskService().moveTaskToFront(appThread, packageName, taskId, flags, options);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -4200,15 +4215,18 @@ public class ActivityManager {
     }
 
     /**
-     * Updates mcc mnc configuration and applies changes to the entire system.
+     * Updates the MCC (Mobile Country Code) and MNC (Mobile Network Code) in the
+     * system configuration.
      *
-     * @param mcc mcc configuration to update.
-     * @param mnc mnc configuration to update.
+     * @param mcc The new MCC.
+     * @param mnc The new MNC.
      * @throws RemoteException; IllegalArgumentException if mcc or mnc is null;
      * @return Returns {@code true} if the configuration was updated successfully;
      *         {@code false} otherwise.
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
     @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION)
     public boolean updateMccMncConfiguration(@NonNull String mcc, @NonNull String mnc) {
         if (mcc == null || mnc == null) {

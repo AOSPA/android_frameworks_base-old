@@ -16,37 +16,88 @@
 
 package com.android.wm.shell.pip;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
+import android.content.Context;
 import android.graphics.Rect;
 import android.util.Size;
 import android.view.DisplayInfo;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.wm.shell.R;
 import com.android.wm.shell.common.DisplayLayout;
 
 import java.io.PrintWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 
 /**
  * Singleton source of truth for the current state of PIP bounds.
  */
 public final class PipBoundsState {
+    public static final int STASH_TYPE_NONE = 0;
+    public static final int STASH_TYPE_LEFT = 1;
+    public static final int STASH_TYPE_RIGHT = 2;
+
+    @IntDef(prefix = { "STASH_TYPE_" }, value =  {
+            STASH_TYPE_NONE,
+            STASH_TYPE_LEFT,
+            STASH_TYPE_RIGHT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface StashType {}
+
     private static final String TAG = PipBoundsState.class.getSimpleName();
 
     private final @NonNull Rect mBounds = new Rect();
+    private final @NonNull Rect mMovementBounds = new Rect();
+    private final @NonNull Rect mNormalBounds = new Rect();
+    private final @NonNull Rect mExpandedBounds = new Rect();
+    private final @NonNull Rect mNormalMovementBounds = new Rect();
+    private final @NonNull Rect mExpandedMovementBounds = new Rect();
+    private final Context mContext;
     private float mAspectRatio;
-    private boolean mIsStashed;
+    private int mStashedState = STASH_TYPE_NONE;
+    private int mStashOffset;
     private PipReentryState mPipReentryState;
     private ComponentName mLastPipComponentName;
     private final DisplayInfo mDisplayInfo = new DisplayInfo();
     private final DisplayLayout mDisplayLayout = new DisplayLayout();
+    /** The current minimum edge size of PIP. */
+    private int mMinEdgeSize;
+    /** The preferred minimum (and default) size specified by apps. */
+    private Size mOverrideMinSize;
     private final @NonNull AnimatingBoundsState mAnimatingBoundsState = new AnimatingBoundsState();
+    private boolean mIsImeShowing;
+    private int mImeHeight;
+    private boolean mIsShelfShowing;
+    private int mShelfHeight;
+
+    private Runnable mOnMinimalSizeChangeCallback;
+    private BiConsumer<Boolean, Integer> mOnShelfVisibilityChangeCallback;
+
+    public PipBoundsState(Context context) {
+        mContext = context;
+        reloadResources();
+    }
 
     /**
-     * Set the current PIP bounds.
+     * Reloads the resources.
      */
+    public void onConfigurationChanged() {
+        reloadResources();
+    }
+
+    private void reloadResources() {
+        mStashOffset = mContext.getResources()
+                .getDimensionPixelSize(R.dimen.pip_stash_offset);
+    }
+
+    /** Set the current PIP bounds. */
     public void setBounds(@NonNull Rect bounds) {
         mBounds.set(bounds);
     }
@@ -56,18 +107,80 @@ public final class PipBoundsState {
         return new Rect(mBounds);
     }
 
+    /** Returns the current movement bounds. */
+    public Rect getMovementBounds() {
+        return mMovementBounds;
+    }
+
+    /** Set the current normal PIP bounds. */
+    public void setNormalBounds(@NonNull Rect bounds) {
+        mNormalBounds.set(bounds);
+    }
+
+    /** Get the current normal PIP bounds. */
+    @NonNull
+    public Rect getNormalBounds() {
+        return mNormalBounds;
+    }
+
+    /** Set the expanded bounds of PIP. */
+    public void setExpandedBounds(@NonNull Rect bounds) {
+        mExpandedBounds.set(bounds);
+    }
+
+    /** Get the PIP expanded bounds. */
+    @NonNull
+    public Rect getExpandedBounds() {
+        return mExpandedBounds;
+    }
+
+    /** Set the normal movement bounds. */
+    public void setNormalMovementBounds(Rect bounds) {
+        mNormalMovementBounds.set(bounds);
+    }
+
+    /** Returns the normal movement bounds. */
+    public Rect getNormalMovementBounds() {
+        return mNormalMovementBounds;
+    }
+
+    /** Set the expanded movement bounds. */
+    public void setExpandedMovementBounds(Rect bounds) {
+        mExpandedMovementBounds.set(bounds);
+    }
+
+    /** Returns the expanded movement bounds. */
+    public Rect getExpandedMovementBounds() {
+        return mExpandedMovementBounds;
+    }
+
     /**
-     * Dictate where PiP currently should be stashed or not.
+     * Dictate where PiP currently should be stashed, if at all.
      */
-    public void setStashed(boolean isStashed) {
-        mIsStashed = isStashed;
+    public void setStashed(@StashType int stashedState) {
+        mStashedState = stashedState;
+    }
+
+    /**
+     * Return where the PiP is stashed, if at all.
+     * @return {@code STASH_NONE}, {@code STASH_LEFT} or {@code STASH_RIGHT}.
+     */
+    public @StashType int getStashedState() {
+        return mStashedState;
     }
 
     /**
      * Whether PiP is stashed or not.
      */
     public boolean isStashed() {
-        return mIsStashed;
+        return mStashedState != STASH_TYPE_NONE;
+    }
+
+    /**
+     * Returns the offset from the edge of the screen for PiP stash.
+     */
+    public int getStashOffset() {
+        return mStashOffset;
     }
 
     public void setAspectRatio(float aspectRatio) {
@@ -152,8 +265,93 @@ public final class PipBoundsState {
         mPipReentryState = null;
     }
 
+    /** Set the PIP minimum edge size. */
+    public void setMinEdgeSize(int minEdgeSize) {
+        mMinEdgeSize = minEdgeSize;
+    }
+
+    /** Returns the PIP's current minimum edge size. */
+    public int getMinEdgeSize() {
+        return mMinEdgeSize;
+    }
+
+    /**
+     * Sets the preferred size of PIP as specified by the activity in PIP mode.
+     */
+    public void setOverrideMinSize(Size overrideMinSize) {
+        final boolean changed = !Objects.equals(overrideMinSize, mOverrideMinSize);
+        mOverrideMinSize = overrideMinSize;
+        if (changed && mOnMinimalSizeChangeCallback != null) {
+            mOnMinimalSizeChangeCallback.run();
+        }
+    }
+
+    /** Returns the preferred minimal size specified by the activity in PIP. */
+    public Size getOverrideMinSize() {
+        return mOverrideMinSize;
+    }
+
+    /** Returns the minimum edge size of the override minimum size, or 0 if not set. */
+    public int getOverrideMinEdgeSize() {
+        if (mOverrideMinSize == null) return 0;
+        return Math.min(mOverrideMinSize.getWidth(), mOverrideMinSize.getHeight());
+    }
+
     public AnimatingBoundsState getAnimatingBoundsState() {
         return mAnimatingBoundsState;
+    }
+
+    /** Set whether the IME is currently showing and its height. */
+    public void setImeVisibility(boolean imeShowing, int imeHeight) {
+        mIsImeShowing = imeShowing;
+        mImeHeight = imeHeight;
+    }
+
+    /** Returns whether the IME is currently showing. */
+    public boolean isImeShowing() {
+        return mIsImeShowing;
+    }
+
+    /** Returns the IME height. */
+    public int getImeHeight() {
+        return mImeHeight;
+    }
+
+    /** Set whether the shelf is showing and its height. */
+    public void setShelfVisibility(boolean showing, int height) {
+        final boolean shelfShowing = showing && height > 0;
+        if (shelfShowing == mIsShelfShowing && height == mShelfHeight) {
+            return;
+        }
+
+        mIsShelfShowing = showing;
+        mShelfHeight = height;
+        if (mOnShelfVisibilityChangeCallback != null) {
+            mOnShelfVisibilityChangeCallback.accept(mIsShelfShowing, mShelfHeight);
+        }
+    }
+
+    /** Returns whether the shelf is currently showing. */
+    public boolean isShelfShowing() {
+        return mIsShelfShowing;
+    }
+
+    /** Returns the shelf height. */
+    public int getShelfHeight() {
+        return mShelfHeight;
+    }
+
+    /**
+     * Registers a callback when the minimal size of PIP that is set by the app changes.
+     */
+    public void setOnMinimalSizeChangeCallback(Runnable onMinimalSizeChangeCallback) {
+        mOnMinimalSizeChangeCallback = onMinimalSizeChangeCallback;
+    }
+
+    /** Set a callback to be notified when the shelf visibility changes. */
+    public void setOnShelfVisibilityChangeCallback(
+            BiConsumer<Boolean, Integer> onShelfVisibilityChangeCallback) {
+        mOnShelfVisibilityChangeCallback = onShelfVisibilityChangeCallback;
     }
 
     /** Source of truth for the current animation bounds of PIP. */
@@ -241,11 +439,23 @@ public final class PipBoundsState {
         final String innerPrefix = prefix + "  ";
         pw.println(prefix + TAG);
         pw.println(innerPrefix + "mBounds=" + mBounds);
+        pw.println(innerPrefix + "mNormalBounds=" + mNormalBounds);
+        pw.println(innerPrefix + "mExpandedBounds=" + mExpandedBounds);
+        pw.println(innerPrefix + "mMovementBounds=" + mMovementBounds);
+        pw.println(innerPrefix + "mNormalMovementBounds=" + mNormalMovementBounds);
+        pw.println(innerPrefix + "mExpandedMovementBounds=" + mExpandedMovementBounds);
         pw.println(innerPrefix + "mLastPipComponentName=" + mLastPipComponentName);
         pw.println(innerPrefix + "mAspectRatio=" + mAspectRatio);
         pw.println(innerPrefix + "mDisplayInfo=" + mDisplayInfo);
         pw.println(innerPrefix + "mDisplayLayout=" + mDisplayLayout);
-        pw.println(innerPrefix + "mIsStashed=" + mIsStashed);
+        pw.println(innerPrefix + "mStashedState=" + mStashedState);
+        pw.println(innerPrefix + "mStashOffset=" + mStashOffset);
+        pw.println(innerPrefix + "mMinEdgeSize=" + mMinEdgeSize);
+        pw.println(innerPrefix + "mOverrideMinSize=" + mOverrideMinSize);
+        pw.println(innerPrefix + "mIsImeShowing=" + mIsImeShowing);
+        pw.println(innerPrefix + "mImeHeight=" + mImeHeight);
+        pw.println(innerPrefix + "mIsShelfShowing=" + mIsShelfShowing);
+        pw.println(innerPrefix + "mShelfHeight=" + mShelfHeight);
         if (mPipReentryState == null) {
             pw.println(innerPrefix + "mPipReentryState=null");
         } else {

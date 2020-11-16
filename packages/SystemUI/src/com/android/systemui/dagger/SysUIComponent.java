@@ -22,12 +22,12 @@ import com.android.systemui.InitController;
 import com.android.systemui.SystemUIAppComponentFactory;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardSliceProvider;
-import com.android.systemui.shared.system.InputConsumerController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.util.InjectionInflationController;
 import com.android.wm.shell.ShellDump;
-import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.apppairs.AppPairs;
 import com.android.wm.shell.bubbles.Bubbles;
+import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.splitscreen.SplitScreen;
@@ -62,16 +62,16 @@ public interface SysUIComponent {
         Builder setSplitScreen(Optional<SplitScreen> s);
 
         @BindsInstance
+        Builder setAppPairs(Optional<AppPairs> s);
+
+        @BindsInstance
         Builder setOneHanded(Optional<OneHanded> o);
 
         @BindsInstance
         Builder setBubbles(Optional<Bubbles> b);
 
         @BindsInstance
-        Builder setInputConsumerController(InputConsumerController i);
-
-        @BindsInstance
-        Builder setShellTaskOrganizer(ShellTaskOrganizer s);
+        Builder setHideDisplayCutout(Optional<HideDisplayCutout> h);
 
         @BindsInstance
         Builder setShellDump(Optional<ShellDump> shellDump);

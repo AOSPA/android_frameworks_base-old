@@ -48,12 +48,14 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.wm.shell.R;
 import com.android.wm.shell.common.FloatingContentCoordinator;
 import com.android.wm.shell.pip.PipAnimationController;
-import com.android.wm.shell.pip.PipBoundsHandler;
+import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipTaskOrganizer;
 import com.android.wm.shell.pip.PipUiEventLogger;
 
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
+import java.util.function.Consumer;
 
 /**
  * Manages all the touch handling for PIP on the Phone, including moving, dismissing and expanding
@@ -62,44 +64,32 @@ import java.io.PrintWriter;
 public class PipTouchHandler {
     private static final String TAG = "PipTouchHandler";
 
-    /** Duration of the dismiss scrim fading in/out. */
-    private static final int DISMISS_TRANSITION_DURATION_MS = 200;
-
-    /* The multiplier to apply scale the target size by when applying the magnetic field radius */
-    private static final float MAGNETIC_FIELD_RADIUS_MULTIPLIER = 1.25f;
+    private static final float STASH_MINIMUM_VELOCITY_X = 3000.f;
 
     // Allow PIP to resize to a slightly bigger state upon touch
     private final boolean mEnableResize;
     private final Context mContext;
-    private final PipBoundsHandler mPipBoundsHandler;
+    private final PipBoundsAlgorithm mPipBoundsAlgorithm;
     private final @NonNull PipBoundsState mPipBoundsState;
     private final PipUiEventLogger mPipUiEventLogger;
     private final PipDismissTargetHandler mPipDismissTargetHandler;
 
     private PipResizeGestureHandler mPipResizeGestureHandler;
     private IPinnedStackController mPinnedStackController;
+    private WeakReference<Consumer<Rect>> mPipExclusionBoundsChangeListener;
 
     private final PipMenuActivityController mMenuController;
     private final AccessibilityManager mAccessibilityManager;
     private boolean mShowPipMenuOnAnimationEnd = false;
 
     /**
-     * Whether PIP stash is enabled or not. When enabled, if at the time of fling-release the
-     * PIP bounds is outside the left/right edge of the screen, it will be shown in "stashed" mode,
-     * where PIP will only show partially.
+     * Whether PIP stash is enabled or not. When enabled, if the user flings toward the edge of the
+     * screen, it will be shown in "stashed" mode, where PIP will only show partially.
      */
-    private boolean mEnableStash = false;
-
-    // The current movement bounds
-    private Rect mMovementBounds = new Rect();
+    private boolean mEnableStash = true;
 
     // The reference inset bounds, used to determine the dismiss fraction
     private Rect mInsetBounds = new Rect();
-    // The reference bounds used to calculate the normal/expanded target bounds
-    private Rect mNormalBounds = new Rect();
-    @VisibleForTesting public Rect mNormalMovementBounds = new Rect();
-    private Rect mExpandedBounds = new Rect();
-    @VisibleForTesting public Rect mExpandedMovementBounds = new Rect();
     private int mExpandedShortestEdgeSize;
 
     // Used to workaround an issue where the WM rotation happens before we are notified, allowing
@@ -163,7 +153,7 @@ public class PipTouchHandler {
     @SuppressLint("InflateParams")
     public PipTouchHandler(Context context,
             PipMenuActivityController menuController,
-            PipBoundsHandler pipBoundsHandler,
+            PipBoundsAlgorithm pipBoundsAlgorithm,
             @NonNull PipBoundsState pipBoundsState,
             PipTaskOrganizer pipTaskOrganizer,
             FloatingContentCoordinator floatingContentCoordinator,
@@ -171,15 +161,16 @@ public class PipTouchHandler {
         // Initialize the Pip input consumer
         mContext = context;
         mAccessibilityManager = context.getSystemService(AccessibilityManager.class);
-        mPipBoundsHandler = pipBoundsHandler;
+        mPipBoundsAlgorithm = pipBoundsAlgorithm;
         mPipBoundsState = pipBoundsState;
         mMenuController = menuController;
         mMenuController.addListener(new PipMenuListener());
         mGesture = new DefaultPipTouchGesture();
         mMotionHelper = new PipMotionHelper(mContext, pipBoundsState, pipTaskOrganizer,
-                mMenuController, mPipBoundsHandler.getSnapAlgorithm(), floatingContentCoordinator);
+                mMenuController, mPipBoundsAlgorithm.getSnapAlgorithm(),
+                floatingContentCoordinator);
         mPipResizeGestureHandler =
-                new PipResizeGestureHandler(context, pipBoundsHandler, pipBoundsState,
+                new PipResizeGestureHandler(context, pipBoundsAlgorithm, pipBoundsState,
                         mMotionHelper, pipTaskOrganizer, this::getMovementBounds,
                         this::updateMovementBounds, pipUiEventLogger, menuController);
         mPipDismissTargetHandler = new PipDismissTargetHandler(context, pipUiEventLogger,
@@ -195,7 +186,7 @@ public class PipTouchHandler {
 
         mFloatingContentCoordinator = floatingContentCoordinator;
         mConnection = new PipAccessibilityInteractionConnection(mContext, pipBoundsState,
-                mMotionHelper, pipTaskOrganizer, mPipBoundsHandler.getSnapAlgorithm(),
+                mMotionHelper, pipTaskOrganizer, mPipBoundsAlgorithm.getSnapAlgorithm(),
                 this::onAccessibilityShowMenu, this::updateMovementBounds, mHandler);
 
         mPipUiEventLogger = pipUiEventLogger;
@@ -203,13 +194,13 @@ public class PipTouchHandler {
         mEnableStash = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 PIP_STASHING,
-                /* defaultValue = */ false);
+                /* defaultValue = */ true);
         DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI,
                 context.getMainExecutor(),
                 properties -> {
                     if (properties.getKeyset().contains(PIP_STASHING)) {
                         mEnableStash = properties.getBoolean(
-                                PIP_STASHING, /* defaultValue = */ false);
+                                PIP_STASHING, /* defaultValue = */ true);
                     }
                 });
     }
@@ -221,7 +212,6 @@ public class PipTouchHandler {
                 R.dimen.pip_expanded_shortest_edge_size);
         mImeOffset = res.getDimensionPixelSize(R.dimen.pip_ime_offset);
         mPipDismissTargetHandler.updateMagneticTargetSize();
-        mMotionHelper.reloadResources();
     }
 
     private boolean shouldShowResizeHandle() {
@@ -259,6 +249,11 @@ public class PipTouchHandler {
             mPipDismissTargetHandler.cleanUpDismissTarget();
 
             mFloatingContentCoordinator.onContentRemoved(mMotionHelper);
+        }
+        // Reset exclusion to none.
+        if (mPipExclusionBoundsChangeListener != null
+                && mPipExclusionBoundsChangeListener.get() != null) {
+            mPipExclusionBoundsChangeListener.get().accept(new Rect());
         }
         mPipResizeGestureHandler.onActivityUnpinned();
     }
@@ -311,9 +306,10 @@ public class PipTouchHandler {
 
     public void adjustBoundsForRotation(Rect outBounds, Rect curBounds, Rect insetBounds) {
         final Rect toMovementBounds = new Rect();
-        mPipBoundsHandler.getSnapAlgorithm().getMovementBounds(outBounds, insetBounds,
+        mPipBoundsAlgorithm.getSnapAlgorithm().getMovementBounds(outBounds, insetBounds,
                 toMovementBounds, 0);
-        final int prevBottom = mMovementBounds.bottom - mMovementBoundsExtraOffsets;
+        final int prevBottom = mPipBoundsState.getMovementBounds().bottom
+                - mMovementBoundsExtraOffsets;
         if ((prevBottom - mBottomOffsetBufferPx) <= curBounds.top) {
             outBounds.offsetTo(outBounds.left, toMovementBounds.bottom);
         }
@@ -341,31 +337,33 @@ public class PipTouchHandler {
         }
 
         // Re-calculate the expanded bounds
-        mNormalBounds.set(normalBounds);
         Rect normalMovementBounds = new Rect();
-        mPipBoundsHandler.getSnapAlgorithm().getMovementBounds(mNormalBounds, insetBounds,
+        mPipBoundsAlgorithm.getSnapAlgorithm().getMovementBounds(normalBounds, insetBounds,
                 normalMovementBounds, bottomOffset);
 
-        if (mMovementBounds.isEmpty()) {
+        if (mPipBoundsState.getMovementBounds().isEmpty()) {
             // mMovementBounds is not initialized yet and a clean movement bounds without
             // bottom offset shall be used later in this function.
-            mPipBoundsHandler.getSnapAlgorithm().getMovementBounds(curBounds, insetBounds,
-                    mMovementBounds, 0 /* bottomOffset */);
+            mPipBoundsAlgorithm.getSnapAlgorithm().getMovementBounds(curBounds, insetBounds,
+                    mPipBoundsState.getMovementBounds(), 0 /* bottomOffset */);
         }
 
         // Calculate the expanded size
         float aspectRatio = (float) normalBounds.width() / normalBounds.height();
         Point displaySize = new Point();
         mContext.getDisplay().getRealSize(displaySize);
-        Size expandedSize = mPipBoundsHandler.getSnapAlgorithm().getSizeForAspectRatio(aspectRatio,
-                mExpandedShortestEdgeSize, displaySize.x, displaySize.y);
-        mExpandedBounds.set(0, 0, expandedSize.getWidth(), expandedSize.getHeight());
+        Size expandedSize = mPipBoundsAlgorithm.getSnapAlgorithm().getSizeForAspectRatio(
+                aspectRatio, mExpandedShortestEdgeSize, displaySize.x, displaySize.y);
+        mPipBoundsState.setExpandedBounds(
+                new Rect(0, 0, expandedSize.getWidth(), expandedSize.getHeight()));
         Rect expandedMovementBounds = new Rect();
-        mPipBoundsHandler.getSnapAlgorithm().getMovementBounds(mExpandedBounds, insetBounds,
-                expandedMovementBounds, bottomOffset);
+        mPipBoundsAlgorithm.getSnapAlgorithm().getMovementBounds(
+                mPipBoundsState.getExpandedBounds(), insetBounds, expandedMovementBounds,
+                bottomOffset);
 
-        mPipResizeGestureHandler.updateMinSize(mNormalBounds.width(), mNormalBounds.height());
-        mPipResizeGestureHandler.updateMaxSize(mExpandedBounds.width(), mExpandedBounds.height());
+        mPipResizeGestureHandler.updateMinSize(normalBounds.width(), normalBounds.height());
+        mPipResizeGestureHandler.updateMaxSize(mPipBoundsState.getExpandedBounds().width(),
+                mPipBoundsState.getExpandedBounds().height());
 
         // The extra offset does not really affect the movement bounds, but are applied based on the
         // current state (ime showing, or shelf offset) when we need to actually shift
@@ -382,9 +380,10 @@ public class PipTouchHandler {
             } else {
                 final boolean isExpanded = mMenuState == MENU_STATE_FULL && willResizeMenu();
                 final Rect toMovementBounds = new Rect();
-                mPipBoundsHandler.getSnapAlgorithm().getMovementBounds(curBounds, insetBounds,
+                mPipBoundsAlgorithm.getSnapAlgorithm().getMovementBounds(curBounds, insetBounds,
                         toMovementBounds, mIsImeShowing ? mImeHeight : 0);
-                final int prevBottom = mMovementBounds.bottom - mMovementBoundsExtraOffsets;
+                final int prevBottom = mPipBoundsState.getMovementBounds().bottom
+                        - mMovementBoundsExtraOffsets;
                 // This is to handle landscape fullscreen IMEs, don't apply the extra offset in this
                 // case
                 final int toBottom = toMovementBounds.bottom < toMovementBounds.top
@@ -392,8 +391,8 @@ public class PipTouchHandler {
                         : toMovementBounds.bottom - extraOffset;
 
                 if (isExpanded) {
-                    curBounds.set(mExpandedBounds);
-                    mPipBoundsHandler.getSnapAlgorithm().applySnapFraction(curBounds,
+                    curBounds.set(mPipBoundsState.getExpandedBounds());
+                    mPipBoundsAlgorithm.getSnapAlgorithm().applySnapFraction(curBounds,
                             toMovementBounds, mSavedSnapFraction);
                 }
 
@@ -413,19 +412,21 @@ public class PipTouchHandler {
 
         // Update the movement bounds after doing the calculations based on the old movement bounds
         // above
-        mNormalMovementBounds.set(normalMovementBounds);
-        mExpandedMovementBounds.set(expandedMovementBounds);
+        mPipBoundsState.setNormalMovementBounds(normalMovementBounds);
+        mPipBoundsState.setExpandedMovementBounds(expandedMovementBounds);
         mDisplayRotation = displayRotation;
         mInsetBounds.set(insetBounds);
         updateMovementBounds();
         mMovementBoundsExtraOffsets = extraOffset;
-        mConnection.onMovementBoundsChanged(mNormalBounds, mExpandedBounds, mNormalMovementBounds,
-                mExpandedMovementBounds);
+        mConnection.onMovementBoundsChanged(normalBounds, mPipBoundsState.getExpandedBounds(),
+                mPipBoundsState.getNormalMovementBounds(),
+                mPipBoundsState.getExpandedMovementBounds());
 
         // If we have a deferred resize, apply it now
         if (mDeferResizeToNormalBoundsUntilRotation == displayRotation) {
             mMotionHelper.animateToUnexpandedState(normalBounds, mSavedSnapFraction,
-                    mNormalMovementBounds, mMovementBounds, true /* immediate */);
+                    mPipBoundsState.getNormalMovementBounds(), mPipBoundsState.getMovementBounds(),
+                    true /* immediate */);
             mSavedSnapFraction = -1f;
             mDeferResizeToNormalBoundsUntilRotation = -1;
         }
@@ -649,17 +650,18 @@ public class PipTouchHandler {
     }
 
     private void animateToExpandedState(Runnable callback) {
-        Rect expandedBounds = new Rect(mExpandedBounds);
+        Rect expandedBounds = new Rect(mPipBoundsState.getExpandedBounds());
         mSavedSnapFraction = mMotionHelper.animateToExpandedState(expandedBounds,
-                mMovementBounds, mExpandedMovementBounds, callback);
+                mPipBoundsState.getMovementBounds(), mPipBoundsState.getExpandedMovementBounds(),
+                callback);
     }
 
     private void animateToUnexpandedState(Rect restoreBounds) {
         Rect restoredMovementBounds = new Rect();
-        mPipBoundsHandler.getSnapAlgorithm().getMovementBounds(restoreBounds,
+        mPipBoundsAlgorithm.getSnapAlgorithm().getMovementBounds(restoreBounds,
                 mInsetBounds, restoredMovementBounds, mIsImeShowing ? mImeHeight : 0);
         mMotionHelper.animateToUnexpandedState(restoreBounds, mSavedSnapFraction,
-                restoredMovementBounds, mMovementBounds, false /* immediate */);
+                restoredMovementBounds, mPipBoundsState.getMovementBounds(), false /* immediate */);
         mSavedSnapFraction = -1f;
     }
 
@@ -685,13 +687,6 @@ public class PipTouchHandler {
         mMotionHelper = pipMotionHelper;
     }
 
-    /**
-     * @return the unexpanded bounds.
-     */
-    public Rect getNormalBounds() {
-        return mNormalBounds;
-    }
-
     Rect getUserResizeBounds() {
         return mPipResizeGestureHandler.getUserResizeBounds();
     }
@@ -703,6 +698,7 @@ public class PipTouchHandler {
         private final Point mStartPosition = new Point();
         private final PointF mDelta = new PointF();
         private boolean mShouldHideMenuAfterFling;
+        private float mDownSavedFraction = -1f;
 
         @Override
         public void onDown(PipTouchState touchState) {
@@ -713,8 +709,10 @@ public class PipTouchHandler {
             Rect bounds = getPossiblyAnimatingBounds();
             mDelta.set(0f, 0f);
             mStartPosition.set(bounds.left, bounds.top);
-            mMovementWithinDismiss = touchState.getDownTouchPosition().y >= mMovementBounds.bottom;
+            mMovementWithinDismiss = touchState.getDownTouchPosition().y
+                    >= mPipBoundsState.getMovementBounds().bottom;
             mMotionHelper.setSpringingToTouch(false);
+            mDownSavedFraction = mPipBoundsAlgorithm.getSnapFraction(mPipBoundsState.getBounds());
 
             // If the menu is still visible then just poke the menu
             // so that it will timeout after the user stops touching it
@@ -730,7 +728,7 @@ public class PipTouchHandler {
             }
 
             if (touchState.startedDragging()) {
-                mPipBoundsState.setStashed(false);
+                mPipBoundsState.setStashed(PipBoundsState.STASH_TYPE_NONE);
                 mSavedSnapFraction = -1f;
                 mPipDismissTargetHandler.showDismissTargetMaybe();
             }
@@ -754,7 +752,7 @@ public class PipTouchHandler {
                 final PointF curPos = touchState.getLastTouchPosition();
                 if (mMovementWithinDismiss) {
                     // Track if movement remains near the bottom edge to identify swipe to dismiss
-                    mMovementWithinDismiss = curPos.y >= mMovementBounds.bottom;
+                    mMovementWithinDismiss = curPos.y >= mPipBoundsState.getMovementBounds().bottom;
                 }
                 return true;
             }
@@ -783,14 +781,15 @@ public class PipTouchHandler {
 
                 // Reset the touch state on up before the fling settles
                 mTouchState.reset();
-                final Rect animatingBounds = getPossiblyAnimatingBounds();
-                // If User releases the PIP window while it's out of the display bounds, put
-                // PIP into stashed mode.
-                if (mEnableStash
-                        && (animatingBounds.right > mPipBoundsState.getDisplayBounds().right
-                        || animatingBounds.left < mPipBoundsState.getDisplayBounds().left)) {
-                    mPipBoundsState.setStashed(true);
-                    mMotionHelper.stashToEdge(vel.x, vel.y, this::flingEndAction /* endAction */);
+                // If user flings the PIP window above the minimum velocity, stash PIP.
+                // Only allow stashing to the edge if the user starts dragging the PIP from that
+                // edge.
+                if (mEnableStash && !mPipBoundsState.isStashed()
+                        && ((vel.x > STASH_MINIMUM_VELOCITY_X
+                        && mDownSavedFraction > 1f && mDownSavedFraction < 2f)
+                        || (vel.x < -STASH_MINIMUM_VELOCITY_X
+                        && mDownSavedFraction > 3f && mDownSavedFraction < 4f))) {
+                    mMotionHelper.stashToEdge(vel.x, this::stashEndAction /* endAction */);
                 } else {
                     mMotionHelper.flingToSnapTarget(vel.x, vel.y,
                             this::flingEndAction /* endAction */);
@@ -798,15 +797,17 @@ public class PipTouchHandler {
             } else if (mTouchState.isDoubleTap() && !mPipBoundsState.isStashed()) {
                 // If using pinch to zoom, double-tap functions as resizing between max/min size
                 if (mPipResizeGestureHandler.isUsingPinchToZoom()) {
-                    final boolean toExpand =
-                            mMotionHelper.getBounds().width() < mExpandedBounds.width()
-                            && mMotionHelper.getBounds().height() < mExpandedBounds.height();
-                    mPipResizeGestureHandler.setUserResizeBounds(toExpand ? mExpandedBounds
-                            : mNormalBounds);
+                    final boolean toExpand = mMotionHelper.getBounds().width()
+                            < mPipBoundsState.getExpandedBounds().width()
+                            && mMotionHelper.getBounds().height()
+                            < mPipBoundsState.getExpandedBounds().height();
+                    mPipResizeGestureHandler.setUserResizeBounds(toExpand
+                            ? mPipBoundsState.getExpandedBounds()
+                            : mPipBoundsState.getNormalBounds());
                     if (toExpand) {
                         animateToExpandedState(null);
                     } else {
-                        animateToUnexpandedState(mNormalBounds);
+                        animateToUnexpandedState(mPipBoundsState.getNormalBounds());
                     }
                 } else {
                     // Expand to fullscreen if this is a double tap
@@ -828,7 +829,15 @@ public class PipTouchHandler {
                     mTouchState.scheduleDoubleTapTimeoutCallback();
                 }
             }
+            mDownSavedFraction = -1f;
             return true;
+        }
+
+        private void stashEndAction() {
+            if (mPipExclusionBoundsChangeListener != null
+                    && mPipExclusionBoundsChangeListener.get() != null) {
+                mPipExclusionBoundsChangeListener.get().accept(mPipBoundsState.getBounds());
+            }
         }
 
         private void flingEndAction() {
@@ -837,7 +846,17 @@ public class PipTouchHandler {
                 // dismiss overlay, so just finish it after the animation completes
                 mMenuController.hideMenu();
             }
+            // Reset exclusion to none.
+            if (mPipExclusionBoundsChangeListener != null
+                    && mPipExclusionBoundsChangeListener.get() != null) {
+                mPipExclusionBoundsChangeListener.get().accept(new Rect());
+            }
         }
+    }
+
+    void setPipExclusionBoundsChangeListener(Consumer<Rect> pipExclusionBoundsChangeListener) {
+        mPipExclusionBoundsChangeListener = new WeakReference<>(pipExclusionBoundsChangeListener);
+        pipExclusionBoundsChangeListener.accept(mPipBoundsState.getBounds());
     }
 
     /**
@@ -845,18 +864,19 @@ public class PipTouchHandler {
      * resized.
      */
     private void updateMovementBounds() {
-        mPipBoundsHandler.getSnapAlgorithm().getMovementBounds(mMotionHelper.getBounds(),
-                mInsetBounds, mMovementBounds, mIsImeShowing ? mImeHeight : 0);
-        mMotionHelper.setCurrentMovementBounds(mMovementBounds);
+        mPipBoundsAlgorithm.getSnapAlgorithm().getMovementBounds(mMotionHelper.getBounds(),
+                mInsetBounds, mPipBoundsState.getMovementBounds(), mIsImeShowing ? mImeHeight : 0);
+        mMotionHelper.onMovementBoundsChanged();
 
         boolean isMenuExpanded = mMenuState == MENU_STATE_FULL;
-        mPipBoundsHandler.setMinEdgeSize(
-                isMenuExpanded && willResizeMenu() ? mExpandedShortestEdgeSize : 0);
+        mPipBoundsState.setMinEdgeSize(
+                isMenuExpanded && willResizeMenu() ? mExpandedShortestEdgeSize
+                        : mPipBoundsAlgorithm.getDefaultMinSize());
     }
 
     private Rect getMovementBounds(Rect curBounds) {
         Rect movementBounds = new Rect();
-        mPipBoundsHandler.getSnapAlgorithm().getMovementBounds(curBounds, mInsetBounds,
+        mPipBoundsAlgorithm.getSnapAlgorithm().getMovementBounds(curBounds, mInsetBounds,
                 movementBounds, mIsImeShowing ? mImeHeight : 0);
         return movementBounds;
     }
@@ -868,8 +888,10 @@ public class PipTouchHandler {
         if (!mEnableResize) {
             return false;
         }
-        return mExpandedBounds.width() != mNormalBounds.width()
-                || mExpandedBounds.height() != mNormalBounds.height();
+        return mPipBoundsState.getExpandedBounds().width()
+                != mPipBoundsState.getNormalBounds().width()
+                || mPipBoundsState.getExpandedBounds().height()
+                != mPipBoundsState.getNormalBounds().height();
     }
 
     /**
@@ -885,11 +907,6 @@ public class PipTouchHandler {
     public void dump(PrintWriter pw, String prefix) {
         final String innerPrefix = prefix + "  ";
         pw.println(prefix + TAG);
-        pw.println(innerPrefix + "mMovementBounds=" + mMovementBounds);
-        pw.println(innerPrefix + "mNormalBounds=" + mNormalBounds);
-        pw.println(innerPrefix + "mNormalMovementBounds=" + mNormalMovementBounds);
-        pw.println(innerPrefix + "mExpandedBounds=" + mExpandedBounds);
-        pw.println(innerPrefix + "mExpandedMovementBounds=" + mExpandedMovementBounds);
         pw.println(innerPrefix + "mMenuState=" + mMenuState);
         pw.println(innerPrefix + "mIsImeShowing=" + mIsImeShowing);
         pw.println(innerPrefix + "mImeHeight=" + mImeHeight);
@@ -897,7 +914,7 @@ public class PipTouchHandler {
         pw.println(innerPrefix + "mShelfHeight=" + mShelfHeight);
         pw.println(innerPrefix + "mSavedSnapFraction=" + mSavedSnapFraction);
         pw.println(innerPrefix + "mMovementBoundsExtraOffsets=" + mMovementBoundsExtraOffsets);
-        mPipBoundsHandler.dump(pw, innerPrefix);
+        mPipBoundsAlgorithm.dump(pw, innerPrefix);
         mTouchState.dump(pw, innerPrefix);
         if (mPipResizeGestureHandler != null) {
             mPipResizeGestureHandler.dump(pw, innerPrefix);

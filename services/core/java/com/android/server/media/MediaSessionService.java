@@ -44,7 +44,7 @@ import android.content.pm.UserInfo;
 import android.media.AudioManager;
 import android.media.AudioPlaybackConfiguration;
 import android.media.AudioSystem;
-import android.media.IRemoteVolumeController;
+import android.media.IRemoteVolumeControllerCallback;
 import android.media.Session2Token;
 import android.media.session.IActiveSessionsListener;
 import android.media.session.IOnMediaKeyEventDispatchedListener;
@@ -83,9 +83,7 @@ import android.view.ViewConfiguration;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.util.DumpUtils;
 import com.android.server.SystemService;
-import com.android.server.SystemService.TargetUser;
 import com.android.server.Watchdog;
 import com.android.server.Watchdog.Monitor;
 
@@ -146,7 +144,7 @@ public class MediaSessionService extends SystemService implements Monitor {
 
     // Used to notify System UI and Settings when remote volume was changed.
     @GuardedBy("mLock")
-    final RemoteCallbackList<IRemoteVolumeController> mRemoteVolumeControllers =
+    final RemoteCallbackList<IRemoteVolumeControllerCallback> mRemoteVolumeControllers =
             new RemoteCallbackList<>();
 
     private SessionPolicyProvider mCustomSessionPolicyProvider;
@@ -309,8 +307,9 @@ public class MediaSessionService extends SystemService implements Monitor {
             MediaSession.Token token = session.getSessionToken();
             for (int i = size - 1; i >= 0; i--) {
                 try {
-                    IRemoteVolumeController cb = mRemoteVolumeControllers.getBroadcastItem(i);
-                    cb.remoteVolumeChanged(token, flags);
+                    IRemoteVolumeControllerCallback cb =
+                            mRemoteVolumeControllers.getBroadcastItem(i);
+                    cb.onVolumeChanged(token, flags);
                 } catch (Exception e) {
                     Log.w(TAG, "Error sending volume change.", e);
                 }
@@ -715,8 +714,9 @@ public class MediaSessionService extends SystemService implements Monitor {
 
             for (int i = size - 1; i >= 0; i--) {
                 try {
-                    IRemoteVolumeController cb = mRemoteVolumeControllers.getBroadcastItem(i);
-                    cb.updateRemoteController(token);
+                    IRemoteVolumeControllerCallback cb =
+                            mRemoteVolumeControllers.getBroadcastItem(i);
+                    cb.onSessionChanged(token);
                 } catch (Exception e) {
                     Log.w(TAG, "Error sending default remote volume.", e);
                 }
@@ -991,6 +991,8 @@ public class MediaSessionService extends SystemService implements Monitor {
                 } else if (mCurrentFullUserRecord.mLastMediaButtonReceiverHolder != null) {
                     String packageName = mLastMediaButtonReceiverHolder.getPackageName();
                     callback.onMediaKeyEventSessionChanged(packageName, null);
+                } else {
+                    callback.onMediaKeyEventSessionChanged("", null);
                 }
             } catch (RemoteException e) {
                 Log.w(TAG, "Failed to pushAddressedPlayerChangedLocked", e);
@@ -1843,7 +1845,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         }
 
         @Override
-        public void registerRemoteVolumeController(IRemoteVolumeController rvc) {
+        public void registerRemoteVolumeControllerCallback(IRemoteVolumeControllerCallback rvc) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
@@ -1858,7 +1860,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         }
 
         @Override
-        public void unregisterRemoteVolumeController(IRemoteVolumeController rvc) {
+        public void unregisterRemoteVolumeControllerCallback(IRemoteVolumeControllerCallback rvc) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
@@ -1881,7 +1883,7 @@ public class MediaSessionService extends SystemService implements Monitor {
 
         @Override
         public void dump(FileDescriptor fd, final PrintWriter pw, String[] args) {
-            if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
+            if (!MediaServerUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
             pw.println("MEDIA SESSION SERVICE (dumpsys media_session)");
             pw.println();

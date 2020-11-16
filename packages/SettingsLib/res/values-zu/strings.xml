@@ -113,7 +113,7 @@
     <string name="bluetooth_hid_profile_summary_use_for" msgid="4289460627406490952">"Isetshenziselwa okufakwayo"</string>
     <string name="bluetooth_hearing_aid_profile_summary_use_for" msgid="7689393730163320483">"Sebenzisa izinsiza zokuzwa"</string>
     <string name="bluetooth_pairing_accept" msgid="2054232610815498004">"Bhangqa"</string>
-    <string name="bluetooth_pairing_accept_all_caps" msgid="2734383073450506220">"BHANQA"</string>
+    <string name="bluetooth_pairing_accept_all_caps" msgid="2734383073450506220">"BHANGQA"</string>
     <string name="bluetooth_pairing_decline" msgid="6483118841204885890">"Khansela"</string>
     <string name="bluetooth_pairing_will_share_phonebook" msgid="3064334458659165176">"Ukubhanqa kunika ukufinyelela koxhumana nabo nomlando wekholi uma uxhumekile."</string>
     <string name="bluetooth_pairing_error_message" msgid="6626399020672335565">"Ayikwazanga ukuhlangana ne <xliff:g id="DEVICE_NAME">%1$s</xliff:g>."</string>
@@ -399,6 +399,9 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"Akusebenzi. Thepha ukuze ushintshe."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"Kuyasebenza. Thepha ukuze ushintshe."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"Isimo sokulinda kohlelo lokusebenza:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <string name="transcode_settings_title" msgid="6700974145733932357">"Amasethingi emidiya yokudlulisela ikhodi"</string>
+    <string name="transcode_enable_all" msgid="4719796495995795404">"Nikela amandla ukudlulisela ikhodi kuzonke izinhlelo zokusebenza"</string>
+    <string name="transcode_skip_apps" msgid="5680997722349545778">"Khubaza ukudlulisela ikhodi kwezinhlelo zokusebenza"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"Amasevisi asebenzayo"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"Buka futhi ulawule amasevisi  asebenzayo okwamanje"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"Ukufakwa ke-WebView"</string>
@@ -558,4 +561,6 @@
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"Inikwe amandla"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"Kufanele idivayisi yakho iqaliswe ukuze lolu shintsho lusebenze. Qalisa manje noma khansela."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"Ama-headphone anentambo"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"Vuliwe"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"Valiwe"</string>
 </resources>

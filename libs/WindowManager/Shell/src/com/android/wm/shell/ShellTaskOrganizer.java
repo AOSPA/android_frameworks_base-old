@@ -26,7 +26,7 @@ import static com.android.wm.shell.protolog.ShellProtoLogGroup.WM_SHELL_TASK_ORG
 
 import android.annotation.IntDef;
 import android.app.ActivityManager.RunningTaskInfo;
-import android.app.WindowConfiguration.WindowingMode;
+import android.content.Context;
 import android.os.Binder;
 import android.os.IBinder;
 import android.util.ArrayMap;
@@ -38,12 +38,14 @@ import android.window.TaskAppearedInfo;
 import android.window.TaskOrganizer;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TransactionPool;
+import com.android.wm.shell.startingsurface.StartingSurfaceDrawer;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -104,21 +106,26 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     private final Transitions mTransitions;
 
     private final Object mLock = new Object();
+    private final StartingSurfaceDrawer mStartingSurfaceDrawer;
 
     public ShellTaskOrganizer(SyncTransactionQueue syncQueue, TransactionPool transactionPool,
-            ShellExecutor mainExecutor, ShellExecutor animExecutor) {
-        this(null, syncQueue, transactionPool, mainExecutor, animExecutor);
+            ShellExecutor mainExecutor, ShellExecutor animExecutor, Context context) {
+        this(null, syncQueue, transactionPool, mainExecutor, animExecutor, context);
     }
 
     @VisibleForTesting
     ShellTaskOrganizer(ITaskOrganizerController taskOrganizerController,
             SyncTransactionQueue syncQueue, TransactionPool transactionPool,
-            ShellExecutor mainExecutor, ShellExecutor animExecutor) {
+            ShellExecutor mainExecutor, ShellExecutor animExecutor, Context context) {
         super(taskOrganizerController, mainExecutor);
         addListenerForType(new FullscreenTaskListener(syncQueue), TASK_LISTENER_TYPE_FULLSCREEN);
         addListenerForType(new LetterboxTaskListener(syncQueue), TASK_LISTENER_TYPE_LETTERBOX);
         mTransitions = new Transitions(this, transactionPool, mainExecutor, animExecutor);
         if (Transitions.ENABLE_SHELL_TRANSITIONS) registerTransitionPlayer(mTransitions);
+        // TODO(b/131727939) temporarily live here, the starting surface drawer should be controlled
+        //  by a controller, that class should be create while porting
+        //  ActivityRecord#addStartingWindow to WMShell.
+        mStartingSurfaceDrawer = new StartingSurfaceDrawer(context);
     }
 
     @Override
@@ -235,6 +242,16 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     }
 
     @Override
+    public void addStartingWindow(RunningTaskInfo taskInfo, IBinder appToken) {
+        mStartingSurfaceDrawer.addStartingWindow(taskInfo, appToken);
+    }
+
+    @Override
+    public void removeStartingWindow(RunningTaskInfo taskInfo) {
+        mStartingSurfaceDrawer.removeStartingWindow(taskInfo);
+    }
+
+    @Override
     public void onTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) {
         synchronized (mLock) {
             onTaskAppeared(new TaskAppearedInfo(taskInfo, leash));
@@ -292,6 +309,15 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         }
     }
 
+    /** Gets running task by taskId. Returns {@code null} if no such task observed. */
+    @Nullable
+    public RunningTaskInfo getRunningTaskInfo(int taskId) {
+        synchronized (mLock) {
+            final TaskAppearedInfo info = mTasks.get(taskId);
+            return info != null ? info.getTaskInfo() : null;
+        }
+    }
+
     private boolean updateTaskListenerIfNeeded(RunningTaskInfo taskInfo, SurfaceControl leash,
             TaskListener oldListener, TaskListener newListener) {
         if (oldListener == newListener) return false;
@@ -346,15 +372,9 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         return mTaskListeners.get(taskListenerType);
     }
 
-    @WindowingMode
-    public static int getWindowingMode(RunningTaskInfo taskInfo) {
-        return taskInfo.configuration.windowConfiguration.getWindowingMode();
-    }
-
     @VisibleForTesting
     static @TaskListenerType int taskInfoToTaskListenerType(RunningTaskInfo runningTaskInfo) {
-        final int windowingMode = getWindowingMode(runningTaskInfo);
-        switch (windowingMode) {
+        switch (runningTaskInfo.getWindowingMode()) {
             case WINDOWING_MODE_FULLSCREEN:
                 return runningTaskInfo.letterboxActivityBounds != null
                         ? TASK_LISTENER_TYPE_LETTERBOX

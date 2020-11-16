@@ -61,7 +61,7 @@
     <string name="ColpMmi" msgid="4736462893284419302">"Қосылған желі идентификаторы"</string>
     <string name="ColrMmi" msgid="5889782479745764278">"Қосылған желі идентификаторын шектеу"</string>
     <string name="CfMmi" msgid="8390012691099787178">"Қоңырауды басқа нөмірге бағыттау"</string>
-    <string name="CwMmi" msgid="3164609577675404761">"Күтудегі қоңырау"</string>
+    <string name="CwMmi" msgid="3164609577675404761">"Қоңырауды ұстап тұру"</string>
     <string name="BaMmi" msgid="7205614070543372167">"Қоңырауды бөгеу"</string>
     <string name="PwdMmi" msgid="3360991257288638281">"Құпия сөз өзгерту"</string>
     <string name="PinMmi" msgid="7133542099618330959">"PIN өзгерту"</string>
@@ -1228,9 +1228,9 @@
     <string name="volume_music" msgid="7727274216734955095">"Mультимeдиа дыбыс деңгейі"</string>
     <string name="volume_music_hint_playing_through_bluetooth" msgid="2614142915948898228">"Bluetooth арқылы ойнату"</string>
     <string name="volume_music_hint_silent_ringtone_selected" msgid="1514829655029062233">"Үнсіз қоңырау әуенін орнату"</string>
-    <string name="volume_call" msgid="7625321655265747433">"Келетін қоңырау дыбысының қаттылығы"</string>
+    <string name="volume_call" msgid="7625321655265747433">"Сөйлесу кезіндегі дыбыс деңгейі"</string>
     <string name="volume_bluetooth_call" msgid="2930204618610115061">"Bluetooth қоңырауының қаттылығы"</string>
-    <string name="volume_alarm" msgid="4486241060751798448">"Дабыл дыбысының қаттылығы"</string>
+    <string name="volume_alarm" msgid="4486241060751798448">"Дабыл дыбысының деңгейі"</string>
     <string name="volume_notification" msgid="6864412249031660057">"Хабар дыбысының қаттылығы"</string>
     <string name="volume_unknown" msgid="4041914008166576293">"Дыбыс қаттылығы"</string>
     <string name="volume_icon_description_bluetooth" msgid="7540388479345558400">"Bluetooth дыбысының қаттылығы"</string>

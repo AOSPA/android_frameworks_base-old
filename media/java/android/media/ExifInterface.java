@@ -32,7 +32,6 @@ import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.FileUtils;
-import android.os.SystemProperties;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -79,7 +78,8 @@ import java.util.zip.CRC32;
 /**
  * This is a class for reading and writing Exif tags in various image file formats.
  * <p>
- * Supported for reading: JPEG, PNG, WebP, HEIF, DNG, CR2, NEF, NRW, ARW, RW2, ORF, PEF, SRW, RAF.
+ * Supported for reading: JPEG, PNG, WebP, HEIF, DNG, CR2, NEF, NRW, ARW, RW2, ORF, PEF, SRW, RAF,
+ * AVIF.
  * <p>
  * Supported for writing: JPEG, PNG, WebP.
  * <p>
@@ -543,6 +543,8 @@ public class ExifInterface {
     private static final byte[] HEIF_TYPE_FTYP = new byte[] {'f', 't', 'y', 'p'};
     private static final byte[] HEIF_BRAND_MIF1 = new byte[] {'m', 'i', 'f', '1'};
     private static final byte[] HEIF_BRAND_HEIC = new byte[] {'h', 'e', 'i', 'c'};
+    private static final byte[] HEIF_BRAND_AVIF = new byte[] {'a', 'v', 'i', 'f'};
+    private static final byte[] HEIF_BRAND_AVIS = new byte[] {'a', 'v', 'i', 's'};
 
     // See http://fileformats.archiveteam.org/wiki/Olympus_ORF
     private static final short ORF_SIGNATURE_1 = 0x4f52;
@@ -1525,8 +1527,7 @@ public class ExifInterface {
         if (fileDescriptor == null) {
             throw new NullPointerException("fileDescriptor cannot be null");
         }
-        boolean optimize = SystemProperties.getBoolean("fuse.sys.transcode_exif_optimize", false);
-        FileDescriptor modernFd = optimize ? FileUtils.convertToModernFd(fileDescriptor) : null;
+        FileDescriptor modernFd = FileUtils.convertToModernFd(fileDescriptor);
         if (modernFd != null) {
             fileDescriptor = modernFd;
         }
@@ -2546,9 +2547,7 @@ public class ExifInterface {
         mIsInputStream = false;
         try {
             in = new FileInputStream(filename);
-            boolean optimize = SystemProperties.getBoolean("fuse.sys.transcode_exif_optimize",
-                    false);
-            FileDescriptor modernFd = optimize ? FileUtils.convertToModernFd(in.getFD()) : null;
+            FileDescriptor modernFd = FileUtils.convertToModernFd(in.getFD());
             if (modernFd != null) {
                 legacyInputStream = in;
                 in = new FileInputStream(modernFd);
@@ -2662,6 +2661,7 @@ public class ExifInterface {
             byte[] brand = new byte[4];
             boolean isMif1 = false;
             boolean isHeic = false;
+            boolean isAvif = false;
             for (long i = 0; i < chunkDataSize / 4;  ++i) {
                 if (signatureInputStream.read(brand) != brand.length) {
                     return false;
@@ -2674,8 +2674,11 @@ public class ExifInterface {
                     isMif1 = true;
                 } else if (Arrays.equals(brand, HEIF_BRAND_HEIC)) {
                     isHeic = true;
+                } else if (Arrays.equals(brand, HEIF_BRAND_AVIF)
+                        || Arrays.equals(brand, HEIF_BRAND_AVIS)) {
+                    isAvif = true;
                 }
-                if (isMif1 && isHeic) {
+                if (isMif1 && (isHeic || isAvif)) {
                     return true;
                 }
             }

@@ -7772,6 +7772,21 @@ public final class Settings {
                 "minimal_post_processing_allowed";
 
         /**
+         * User's preference for refresh rate switching.
+         *
+         * <p>Values:
+         * 0 - Never switch refresh rates.
+         * 1 - Switch refresh rates only when it can be done seamlessly. (Default behaviour)
+         * 2 - Always prefer refresh rate switching even if it's going to have visual interruptions
+         *     for the user.
+         *
+         * @see android.view.Surface#setFrameRate
+         * @hide
+         */
+        public static final String MATCH_CONTENT_FRAME_RATE =
+                "match_content_frame_rate";
+
+        /**
          * INCALL_POWER_BUTTON_BEHAVIOR value for "turn off screen".
          * @hide
          */
@@ -10721,7 +10736,7 @@ public final class Settings {
          *    0 = Disabled
          *    1 = Enabled
          *
-         * Most readers of this setting should simply check if value == 1 to determined the
+         * Most readers of this setting should simply check if value == 1 to determine the
          * enabled state.
          * @hide
          * @deprecated To be removed.
@@ -14312,18 +14327,17 @@ public final class Settings {
                 "backup_agent_timeout_parameters";
 
         /**
-         * Blacklist of GNSS satellites.
+         * Blocklist of GNSS satellites.
          *
          * This is a list of integers separated by commas to represent pairs of (constellation,
          * svid). Thus, the number of integers should be even.
          *
          * E.g.: "3,0,5,24" denotes (constellation=3, svid=0) and (constellation=5, svid=24) are
-         * blacklisted. Note that svid=0 denotes all svids in the
-         * constellation are blacklisted.
+         * blocklisted. Note that svid=0 denotes all svids in the constellation are blocklisted.
          *
          * @hide
          */
-        public static final String GNSS_SATELLITE_BLACKLIST = "gnss_satellite_blacklist";
+        public static final String GNSS_SATELLITE_BLOCKLIST = "gnss_satellite_blocklist";
 
         /**
          * Duration of updates in millisecond for GNSS location request from HAL to framework.

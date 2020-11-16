@@ -1602,6 +1602,9 @@
          config_timeZoneRulesUpdateTrackingEnabled are true.] -->
     <integer name="config_timeZoneRulesCheckRetryCount">5</integer>
 
+    <!-- Whether the geolocation time zone detection feature is enabled. -->
+    <bool name="config_enableGeolocationTimeZoneDetection" translatable="false">false</bool>
+
     <!-- Whether to enable primary location time zone provider overlay which allows the primary
          location time zone provider to be replaced by an app at run-time. When disabled, only the
          config_primaryLocationTimeZoneProviderPackageName package will be searched for the primary
@@ -1694,6 +1697,13 @@
         <!-- The standard AOSP fused location provider -->
         <item>com.android.location.fused</item>
     </string-array>
+
+    <!-- Gnss Psds Servers -->
+    <string name="config_longterm_psds_server_1" translatable="false"></string>
+    <string name="config_longterm_psds_server_2" translatable="false"></string>
+    <string name="config_longterm_psds_server_3" translatable="false"></string>
+    <string name="config_normal_psds_server" translatable="false"></string>
+    <string name="config_realtime_psds_server" translatable="false"></string>
 
     <!-- This string array can be overriden to enable test location providers initially. -->
     <!-- Array of "[locationProviderName],[requiresNetwork],
@@ -4522,4 +4532,7 @@
          activity-level letterboxing (size-compat mode). Therefore this override can control the
          maximum screen area that can be occupied by the app in the letterbox mode. -->
     <item name="config_taskLetterboxAspectRatio" format="float" type="dimen">0.0</item>
+
+    <!-- If true, hide the display cutout with display area -->
+    <bool name="config_hideDisplayCutoutWithDisplayArea">false</bool>
 </resources>

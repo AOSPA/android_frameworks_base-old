@@ -25,13 +25,14 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
 import static android.net.RouteInfo.RTN_THROW;
 import static android.net.RouteInfo.RTN_UNREACHABLE;
 
+import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.internal.util.Preconditions.checkNotNull;
+import static com.android.server.connectivity.NetworkNotificationManager.NOTIFICATION_VPN;
 
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
-import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -110,7 +111,6 @@ import com.android.internal.net.LegacyVpnInfo;
 import com.android.internal.net.VpnConfig;
 import com.android.internal.net.VpnInfo;
 import com.android.internal.net.VpnProfile;
-import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.ConnectivityService;
 import com.android.server.DeviceIdleInternal;
@@ -865,7 +865,7 @@ public class Vpn {
             Intent serviceIntent = new Intent(VpnConfig.SERVICE_INTERFACE);
             serviceIntent.setPackage(alwaysOnPackage);
             try {
-                return mContext.startServiceAsUser(serviceIntent, UserHandle.of(mUserId)) != null;
+                return mUserIdContext.startService(serviceIntent) != null;
             } catch (RuntimeException e) {
                 Log.e(TAG, "VpnService " + serviceIntent + " failed to start", e);
                 return false;
@@ -1036,20 +1036,21 @@ public class Vpn {
 
         final long token = Binder.clearCallingIdentity();
         try {
-            final int[] toChange;
+            final String[] toChange;
 
             // Clear all AppOps if the app is being unauthorized.
             switch (vpnType) {
                 case VpnManager.TYPE_VPN_NONE:
-                    toChange = new int[] {
-                            AppOpsManager.OP_ACTIVATE_VPN, AppOpsManager.OP_ACTIVATE_PLATFORM_VPN
+                    toChange = new String[] {
+                            AppOpsManager.OPSTR_ACTIVATE_VPN,
+                            AppOpsManager.OPSTR_ACTIVATE_PLATFORM_VPN
                     };
                     break;
                 case VpnManager.TYPE_VPN_PLATFORM:
-                    toChange = new int[] {AppOpsManager.OP_ACTIVATE_PLATFORM_VPN};
+                    toChange = new String[] {AppOpsManager.OPSTR_ACTIVATE_PLATFORM_VPN};
                     break;
                 case VpnManager.TYPE_VPN_SERVICE:
-                    toChange = new int[] {AppOpsManager.OP_ACTIVATE_VPN};
+                    toChange = new String[] {AppOpsManager.OPSTR_ACTIVATE_VPN};
                     break;
                 default:
                     Log.wtf(TAG, "Unrecognized VPN type while granting authorization");
@@ -1058,9 +1059,9 @@ public class Vpn {
 
             final AppOpsManager appOpMgr =
                     (AppOpsManager) mContext.getSystemService(Context.APP_OPS_SERVICE);
-            for (final int appOp : toChange) {
+            for (final String appOpStr : toChange) {
                 appOpMgr.setMode(
-                        appOp,
+                        appOpStr,
                         uid,
                         packageName,
                         vpnType == VpnManager.TYPE_VPN_NONE
@@ -1086,21 +1087,22 @@ public class Vpn {
         }
     }
 
-    private static boolean doesPackageHaveAppop(Context context, String packageName, int appop) {
+    private static boolean doesPackageHaveAppop(Context context, String packageName,
+            String appOpStr) {
         final AppOpsManager appOps =
                 (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
 
         // Verify that the caller matches the given package and has the required permission.
-        return appOps.noteOpNoThrow(appop, Binder.getCallingUid(), packageName)
-                == AppOpsManager.MODE_ALLOWED;
+        return appOps.noteOpNoThrow(appOpStr, Binder.getCallingUid(), packageName,
+                null /* attributionTag */, null /* message */) == AppOpsManager.MODE_ALLOWED;
     }
 
     private static boolean isVpnServicePreConsented(Context context, String packageName) {
-        return doesPackageHaveAppop(context, packageName, AppOpsManager.OP_ACTIVATE_VPN);
+        return doesPackageHaveAppop(context, packageName, AppOpsManager.OPSTR_ACTIVATE_VPN);
     }
 
     private static boolean isVpnProfilePreConsented(Context context, String packageName) {
-        return doesPackageHaveAppop(context, packageName, AppOpsManager.OP_ACTIVATE_PLATFORM_VPN)
+        return doesPackageHaveAppop(context, packageName, AppOpsManager.OPSTR_ACTIVATE_PLATFORM_VPN)
                 || isVpnServicePreConsented(context, packageName);
     }
 
@@ -1330,16 +1332,17 @@ public class Vpn {
             // Restricted users are not allowed to create VPNs, they are tied to Owner
             enforceNotRestrictedUser();
 
-            ResolveInfo info = AppGlobals.getPackageManager().resolveService(intent,
-                    null, 0, mUserId);
+            final PackageManager packageManager = mUserIdContext.getPackageManager();
+            if (packageManager == null) {
+                throw new UnsupportedOperationException("Cannot get PackageManager.");
+            }
+            final ResolveInfo info = packageManager.resolveService(intent, 0 /* flags */);
             if (info == null) {
                 throw new SecurityException("Cannot find " + config.user);
             }
             if (!BIND_VPN_SERVICE.equals(info.serviceInfo.permission)) {
                 throw new SecurityException(config.user + " does not require " + BIND_VPN_SERVICE);
             }
-        } catch (RemoteException e) {
-            throw new SecurityException("Cannot find " + config.user);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -1942,7 +1945,7 @@ public class Vpn {
             final PendingIntent configIntent = mSystemServices.pendingIntentGetActivityAsUser(
                     intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT, user);
             final Notification.Builder builder =
-                    new Notification.Builder(mContext, SystemNotificationChannels.VPN)
+                    new Notification.Builder(mContext, NOTIFICATION_VPN)
                             .setSmallIcon(R.drawable.vpn_connected)
                             .setContentTitle(mContext.getString(R.string.vpn_lockdown_disconnected))
                             .setContentText(mContext.getString(R.string.vpn_lockdown_config))
@@ -2757,6 +2760,8 @@ public class Vpn {
 
         LegacyVpnRunner(VpnConfig config, String[] racoon, String[] mtpd, VpnProfile profile) {
             super(TAG);
+            checkArgument(racoon != null || mtpd != null, "Arguments to racoon and mtpd "
+                    + "must not both be null");
             mConfig = config;
             mDaemons = new String[] {"racoon", "mtpd"};
             // TODO: clear arguments from memory once launched
@@ -2913,15 +2918,6 @@ public class Vpn {
                 }
                 new File("/data/misc/vpn/abort").delete();
 
-                // Check if we need to restart any of the daemons.
-                boolean restart = false;
-                for (String[] arguments : mArguments) {
-                    restart = restart || (arguments != null);
-                }
-                if (!restart) {
-                    agentDisconnect();
-                    return;
-                }
                 updateState(DetailedState.CONNECTING, "execute");
 
                 // Start the daemon with arguments.

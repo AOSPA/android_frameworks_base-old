@@ -2702,12 +2702,18 @@ public class Activity extends ContextThemeWrapper
      */
     public void reportFullyDrawn() {
         if (mDoReportFullyDrawn) {
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                        "reportFullyDrawn() for " + mComponent.toShortString());
+            }
             mDoReportFullyDrawn = false;
             try {
                 ActivityTaskManager.getService().reportActivityFullyDrawn(
                         mToken, mRestoredFromBundle);
                 VMRuntime.getRuntime().notifyStartupCompleted();
             } catch (RemoteException e) {
+            } finally {
+                Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
             }
         }
     }
@@ -5815,7 +5821,7 @@ public class Activity extends ContextThemeWrapper
                 intent.migrateExtraStreamToClipData(this);
                 intent.prepareToLeaveProcess(this);
                 result = ActivityTaskManager.getService()
-                    .startActivity(mMainThread.getApplicationThread(), getBasePackageName(),
+                    .startActivity(mMainThread.getApplicationThread(), getOpPackageName(),
                             getAttributionTag(), intent,
                             intent.resolveTypeIfNeeded(getContentResolver()), mToken, mEmbeddedID,
                             requestCode, ActivityManager.START_FLAG_ONLY_IF_NEEDED, null, options);

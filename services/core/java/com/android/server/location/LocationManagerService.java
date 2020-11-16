@@ -32,6 +32,7 @@ import static com.android.server.location.LocationPermissions.PERMISSION_FINE;
 
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
+import android.Manifest;
 import android.Manifest.permission;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -47,7 +48,6 @@ import android.location.Geofence;
 import android.location.GnssCapabilities;
 import android.location.GnssMeasurementCorrections;
 import android.location.GnssRequest;
-import android.location.IBatchedLocationCallback;
 import android.location.IGeocodeListener;
 import android.location.IGnssAntennaInfoListener;
 import android.location.IGnssMeasurementsListener;
@@ -224,6 +224,10 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     private GeocoderProxy mGeocodeProvider;
 
+    private final Object mDeprecatedGnssBatchingLock = new Object();
+    @GuardedBy("mDeprecatedGnssBatchingLock")
+    private @Nullable ILocationListener mDeprecatedGnssBatchingListener;
+
     @GuardedBy("mLock")
     private String mExtraLocationControllerPackage;
     @GuardedBy("mLock")
@@ -250,7 +254,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         // set up passive provider first since it will be required for all other location providers,
         // which are loaded later once the system is ready.
         mPassiveManager = new PassiveLocationProviderManager(mContext, injector);
-        addLocationProviderManager(mPassiveManager, new PassiveProvider(mContext));
+        addLocationProviderManager(mPassiveManager, new PassiveLocationProvider(mContext));
 
         // TODO: load the gps provider here as well, which will require refactoring
 
@@ -325,7 +329,9 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     void onSystemThirdPartyAppsCanStart() {
-        LocationProviderProxy networkProvider = LocationProviderProxy.createAndRegister(
+        // network provider should always be initialized before the gps provider since the gps
+        // provider has unfortunate hard dependencies on the network provider
+        ProxyLocationProvider networkProvider = ProxyLocationProvider.createAndRegister(
                 mContext,
                 NETWORK_LOCATION_SERVICE_ACTION,
                 com.android.internal.R.bool.config_enableNetworkLocationOverlay,
@@ -344,7 +350,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 MATCH_DIRECT_BOOT_AWARE | MATCH_SYSTEM_ONLY, UserHandle.USER_SYSTEM).isEmpty(),
                 "Unable to find a direct boot aware fused location provider");
 
-        LocationProviderProxy fusedProvider = LocationProviderProxy.createAndRegister(
+        ProxyLocationProvider fusedProvider = ProxyLocationProvider.createAndRegister(
                 mContext,
                 FUSED_LOCATION_SERVICE_ACTION,
                 com.android.internal.R.bool.config_enableFusedLocationOverlay,
@@ -416,7 +422,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                     Integer.parseInt(fragments[8]) /* powerRequirement */,
                     Integer.parseInt(fragments[9]) /* accuracy */);
             getOrAddLocationProviderManager(name).setMockProvider(
-                    new MockProvider(properties, CallerIdentity.fromContext(mContext)));
+                    new MockLocationProvider(properties, CallerIdentity.fromContext(mContext)));
         }
     }
 
@@ -454,40 +460,63 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     @Override
-    public void setGnssBatchingCallback(IBatchedLocationCallback callback, String packageName,
-            String attributionTag) {
-        if (mGnssManagerService != null) {
-            mGnssManagerService.setGnssBatchingCallback(callback, packageName, attributionTag);
-        }
-    }
+    public void startGnssBatch(long periodNanos, ILocationListener listener, String packageName,
+            String attributionTag, String listenerId) {
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.LOCATION_HARDWARE, null);
 
-    @Override
-    public void removeGnssBatchingCallback() {
-        if (mGnssManagerService != null) {
-            mGnssManagerService.removeGnssBatchingCallback();
+        if (mGnssManagerService == null) {
+            return;
         }
-    }
 
-    @Override
-    public void startGnssBatch(long periodNanos, boolean wakeOnFifoFull, String packageName,
-            String attributionTag) {
-        if (mGnssManagerService != null) {
-            mGnssManagerService.startGnssBatch(periodNanos, wakeOnFifoFull, packageName,
-                    attributionTag);
+        long intervalMs = NANOSECONDS.toMillis(periodNanos);
+
+        synchronized (mDeprecatedGnssBatchingLock) {
+            stopGnssBatch();
+
+            registerLocationListener(
+                    GPS_PROVIDER,
+                    new LocationRequest.Builder(intervalMs)
+                            .setMaxUpdateDelayMillis(
+                                    intervalMs * mGnssManagerService.getGnssBatchSize())
+                            .setHiddenFromAppOps(true)
+                            .build(),
+                    listener,
+                    packageName,
+                    attributionTag,
+                    listenerId);
+            mDeprecatedGnssBatchingListener = listener;
         }
     }
 
     @Override
     public void flushGnssBatch() {
-        if (mGnssManagerService != null) {
-            mGnssManagerService.flushGnssBatch();
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.LOCATION_HARDWARE, null);
+
+        if (mGnssManagerService == null) {
+            return;
+        }
+
+        synchronized (mDeprecatedGnssBatchingLock) {
+            if (mDeprecatedGnssBatchingListener != null) {
+                requestListenerFlush(GPS_PROVIDER, mDeprecatedGnssBatchingListener, 0);
+            }
         }
     }
 
     @Override
     public void stopGnssBatch() {
-        if (mGnssManagerService != null) {
-            mGnssManagerService.stopGnssBatch();
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.LOCATION_HARDWARE, null);
+
+        if (mGnssManagerService == null) {
+            return;
+        }
+
+        synchronized (mDeprecatedGnssBatchingLock) {
+            if (mDeprecatedGnssBatchingListener != null) {
+                ILocationListener listener = mDeprecatedGnssBatchingListener;
+                mDeprecatedGnssBatchingListener = null;
+                unregisterLocationListener(listener);
+            }
         }
     }
 
@@ -682,6 +711,25 @@ public class LocationManagerService extends ILocationManager.Stub {
         sanitized.setWorkSource(workSource);
 
         return sanitized.build();
+    }
+
+    @Override
+    public void requestListenerFlush(String provider, ILocationListener listener, int requestCode) {
+        LocationProviderManager manager = getLocationProviderManager(provider);
+        Preconditions.checkArgument(manager != null,
+                "provider \"" + provider + "\" does not exist");
+
+        manager.flush(Objects.requireNonNull(listener), requestCode);
+    }
+
+    @Override
+    public void requestPendingIntentFlush(String provider, PendingIntent pendingIntent,
+            int requestCode) {
+        LocationProviderManager manager = getLocationProviderManager(provider);
+        Preconditions.checkArgument(manager != null,
+                "provider \"" + provider + "\" does not exist");
+
+        manager.flush(Objects.requireNonNull(pendingIntent), requestCode);
     }
 
     @Override
@@ -1000,9 +1048,13 @@ public class LocationManagerService extends ILocationManager.Stub {
     @Override
     public void getFromLocation(double latitude, double longitude, int maxResults,
             GeocoderParams params, IGeocodeListener listener) {
+        // validate identity
+        CallerIdentity identity = CallerIdentity.fromBinder(mContext, params.getClientPackage(),
+                params.getClientAttributionTag());
+        Preconditions.checkArgument(identity.getUid() == params.getClientUid());
+
         if (mGeocodeProvider != null) {
-            mGeocodeProvider.getFromLocation(latitude, longitude, maxResults,
-                    params, listener);
+            mGeocodeProvider.getFromLocation(latitude, longitude, maxResults, params, listener);
         } else {
             try {
                 listener.onResults(null, Collections.emptyList());
@@ -1017,6 +1069,11 @@ public class LocationManagerService extends ILocationManager.Stub {
             double lowerLeftLatitude, double lowerLeftLongitude,
             double upperRightLatitude, double upperRightLongitude, int maxResults,
             GeocoderParams params, IGeocodeListener listener) {
+        // validate identity
+        CallerIdentity identity = CallerIdentity.fromBinder(mContext, params.getClientPackage(),
+                params.getClientAttributionTag());
+        Preconditions.checkArgument(identity.getUid() == params.getClientUid());
+
         if (mGeocodeProvider != null) {
             mGeocodeProvider.getFromLocationName(locationName, lowerLeftLatitude,
                     lowerLeftLongitude, upperRightLatitude, upperRightLongitude,
@@ -1040,7 +1097,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         getOrAddLocationProviderManager(provider).setMockProvider(
-                new MockProvider(properties, identity));
+                new MockLocationProvider(properties, identity));
     }
 
     @Override
@@ -1167,9 +1224,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         ipw.println("Event Log:");
         ipw.increaseIndent();
-        for (String log : mInjector.getLocationEventLog()) {
-            ipw.println(log);
-        }
+        mInjector.getLocationEventLog().iterate(ipw::println);
         ipw.decreaseIndent();
     }
 
@@ -1219,13 +1274,6 @@ public class LocationManagerService extends ILocationManager.Stub {
         public void sendNiResponse(int notifId, int userResponse) {
             if (mGnssManagerService != null) {
                 mGnssManagerService.sendNiResponse(notifId, userResponse);
-            }
-        }
-
-        @Override
-        public void reportGnssBatchLocations(List<Location> locations) {
-            if (mGnssManagerService != null) {
-                mGnssManagerService.onReportLocation(locations);
             }
         }
     }

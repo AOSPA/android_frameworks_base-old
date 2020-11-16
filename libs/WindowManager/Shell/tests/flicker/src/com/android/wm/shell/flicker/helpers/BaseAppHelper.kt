@@ -26,6 +26,7 @@ import android.content.pm.PackageManager.FEATURE_LEANBACK_ONLY
 import android.support.test.launcherhelper.LauncherStrategyFactory
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.helpers.StandardAppHelper
 import com.android.wm.shell.flicker.TEST_APP_PACKAGE_NAME
@@ -42,7 +43,7 @@ abstract class BaseAppHelper(
 ) {
     protected val uiDevice: UiDevice = UiDevice.getInstance(instrumentation)
 
-    private val context: Context
+    protected val context: Context
         get() = mInstrumentation.context
 
     private val activityManager: ActivityManager?
@@ -60,10 +61,17 @@ abstract class BaseAppHelper(
             getApplicationLabel(getApplicationInfo(packageName, 0)).toString()
         }
 
+    val ui: UiObject2?
+        get() = uiDevice.findObject(appSelector)
+
     fun launchViaIntent() {
         context.startActivity(openAppIntent)
 
         uiDevice.wait(Until.hasObject(appSelector), APP_LAUNCH_WAIT_TIME_MS)
+    }
+
+    fun waitUntilClosed(): Boolean {
+        return uiDevice.wait(Until.gone(appSelector), APP_CLOSE_WAIT_TIME_MS)
     }
 
     fun forceStop() = activityManager?.forceStopPackage(packageName)
@@ -77,5 +85,6 @@ abstract class BaseAppHelper(
 
     companion object {
         private const val APP_LAUNCH_WAIT_TIME_MS = 10_000L
+        private const val APP_CLOSE_WAIT_TIME_MS = 3_000L
     }
 }

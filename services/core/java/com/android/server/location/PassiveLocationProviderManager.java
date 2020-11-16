@@ -18,8 +18,8 @@ package com.android.server.location;
 
 import android.annotation.Nullable;
 import android.content.Context;
-import android.location.Location;
 import android.location.LocationManager;
+import android.location.LocationResult;
 import android.os.Binder;
 
 import com.android.internal.location.ProviderRequest;
@@ -36,25 +36,25 @@ class PassiveLocationProviderManager extends LocationProviderManager {
 
     @Override
     public void setRealProvider(AbstractLocationProvider provider) {
-        Preconditions.checkArgument(provider instanceof PassiveProvider);
+        Preconditions.checkArgument(provider instanceof PassiveLocationProvider);
         super.setRealProvider(provider);
     }
 
     @Override
-    public void setMockProvider(@Nullable MockProvider provider) {
+    public void setMockProvider(@Nullable MockLocationProvider provider) {
         if (provider != null) {
             throw new IllegalArgumentException("Cannot mock the passive provider");
         }
     }
 
-    public void updateLocation(Location location) {
+    public void updateLocation(LocationResult locationResult) {
         synchronized (mLock) {
-            PassiveProvider passiveProvider = (PassiveProvider) mProvider.getProvider();
-            Preconditions.checkState(passiveProvider != null);
+            PassiveLocationProvider passive = (PassiveLocationProvider) mProvider.getProvider();
+            Preconditions.checkState(passive != null);
 
             final long identity = Binder.clearCallingIdentity();
             try {
-                passiveProvider.updateLocation(location);
+                passive.updateLocation(locationResult);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }

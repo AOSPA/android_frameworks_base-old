@@ -137,10 +137,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
 
         updateResources();
 
-        Rect tintArea = new Rect(0, 0, 0, 0);
-        // Set light text on the header icons because they will always be on a black background
-        applyDarkness(R.id.clock, tintArea, 0, DarkIconDispatcher.DEFAULT_ICON_TINT);
-
         mClockView = findViewById(R.id.clock);
         mSpace = findViewById(R.id.space);
 
@@ -153,6 +149,19 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
         mBatteryRemainingIcon.setPercentShowMode(BatteryMeterView.MODE_ESTIMATE);
         mRingerModeTextView.setSelected(true);
         mNextAlarmTextView.setSelected(true);
+
+        int colorForeground = Utils.getColorAttrDefaultColor(getContext(),
+                android.R.attr.colorForeground);
+        float intensity = getColorIntensity(colorForeground);
+        int fillColor = mDualToneHandler.getSingleColor(intensity);
+
+        Rect tintArea = new Rect(0, 0, 0, 0);
+        mBatteryRemainingIcon.onDarkChanged(tintArea, intensity, fillColor);
+
+        // The quick settings status bar clock depends on the color of the background scrim and
+        // can be different from the status bar clock color.
+        mClockView.setTextColor(
+                Utils.getColorAttrDefaultColor(mContext, R.attr.wallpaperTextColor));
     }
 
     void onAttach(TintedIconManager iconManager) {
@@ -223,13 +232,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
 
         return isOriginalVisible != alarmVisible ||
                 !Objects.equals(originalAlarmText, mNextAlarmTextView.getText());
-    }
-
-    private void applyDarkness(int id, Rect tintArea, float intensity, int color) {
-        View v = findViewById(id);
-        if (v instanceof DarkReceiver) {
-            ((DarkReceiver) v).onDarkChanged(tintArea, intensity, color);
-        }
     }
 
     @Override
@@ -439,18 +441,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
         post(() -> setClickable(!mExpanded));
     }
 
-    public void setQSPanel(final QSPanel qsPanel) {
-        //host.setHeaderView(mExpandIndicator);
-        mHeaderQsPanel.setQSPanelAndHeader(qsPanel, this);
-
-        Rect tintArea = new Rect(0, 0, 0, 0);
-        int colorForeground = Utils.getColorAttrDefaultColor(getContext(),
-                android.R.attr.colorForeground);
-        float intensity = getColorIntensity(colorForeground);
-        int fillColor = mDualToneHandler.getSingleColor(intensity);
-        mBatteryRemainingIcon.onDarkChanged(tintArea, intensity, fillColor);
-    }
-
     public void setCallback(Callback qsPanelCallback) {
         mHeaderQsPanel.setCallback(qsPanelCallback);
     }
@@ -475,6 +465,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
         return mLifecycle;
     }
 
+    /** */
     public void setContentMargins(int marginStart, int marginEnd) {
         mContentMarginStart = marginStart;
         mContentMarginEnd = marginEnd;

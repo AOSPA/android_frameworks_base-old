@@ -176,15 +176,14 @@ public final class UwbManager {
      * arrangement, a platform may only support hemi-spherical azimuth angles
      * ranging from -pi/2 to pi/2
      */
-    public static final int ANGLE_OF_ARRIVAL_SUPPORT_TYPE_3D_HEMISPHERICAL = 2;
+    public static final int ANGLE_OF_ARRIVAL_SUPPORT_TYPE_3D_HEMISPHERICAL = 3;
 
     /**
      * Indicate support for three dimensional angle of arrival measurement.
      * Typically requires at least three antennas. This mode supports full
      * azimuth angles ranging from -pi to pi.
      */
-    public static final int ANGLE_OF_ARRIVAL_SUPPORT_TYPE_3D_SPHERICAL = 3;
-
+    public static final int ANGLE_OF_ARRIVAL_SUPPORT_TYPE_3D_SPHERICAL = 4;
 
     /**
      * Gets the {@link AngleOfArrivalSupportType} supported on this platform
@@ -280,7 +279,10 @@ public final class UwbManager {
      * <p>An open {@link RangingSession} will be automatically closed if client application process
      * dies.
      *
-     * @param params {@link RangingParams} used to initialize this {@link RangingSession}
+     * <p>A UWB support library must be used in order to construct the {@code parameter}
+     * {@link PersistableBundle}.
+     *
+     * @param parameters the parameters that define the ranging session
      * @param executor {@link Executor} to run callbacks
      * @param callbacks {@link RangingSession.Callback} to associate with the
      *                  {@link RangingSession} that is being opened.
@@ -291,8 +293,9 @@ public final class UwbManager {
      *         {@link RangingSession.Callback#onOpenSuccess}.
      */
     @NonNull
-    public AutoCloseable openRangingSession(@NonNull RangingParams params,
-            @NonNull Executor executor, @NonNull RangingSession.Callback callbacks) {
+    public AutoCloseable openRangingSession(@NonNull PersistableBundle parameters,
+            @NonNull Executor executor,
+            @NonNull RangingSession.Callback callbacks) {
         throw new UnsupportedOperationException();
     }
 }

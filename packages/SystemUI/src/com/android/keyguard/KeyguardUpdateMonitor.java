@@ -239,6 +239,16 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private final boolean mIsAutomotive;
     private final AuthController mAuthController;
     private final StatusBarStateController mStatusBarStateController;
+    private int mStatusBarState;
+    private final StatusBarStateController.StateListener mStatusBarStateControllerListener =
+            new StatusBarStateController.StateListener() {
+        @Override
+        public void onStateChanged(int newState) {
+            mStatusBarState = newState;
+            updateBiometricListeningState();
+        }
+    };
+
     HashMap<Integer, SimData> mSimDatas = new HashMap<>();
     HashMap<Integer, ServiceState> mServiceStates = new HashMap<Integer, ServiceState>();
 
@@ -248,7 +258,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mCredentialAttempted;
     private boolean mKeyguardGoingAway;
     private boolean mGoingToSleep;
-    private boolean mBouncer;
+    private boolean mBouncer; // true if bouncerIsOrWillBeShowing
     private boolean mAuthInterruptActive;
     private boolean mNeedsSlowUnlockTransition;
     private boolean mHasLockscreenWallpaper;
@@ -1596,6 +1606,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mBroadcastDispatcher = broadcastDispatcher;
         mRingerModeTracker = ringerModeTracker;
         mStatusBarStateController = statusBarStateController;
+        mStatusBarStateController.addCallback(mStatusBarStateControllerListener);
+        mStatusBarState = mStatusBarStateController.getState();
         mLockPatternUtils = lockPatternUtils;
         mAuthController = authController;
         dumpManager.registerDumpable(getClass().getName(), this);
@@ -1906,7 +1918,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             return;
         }
 
-        boolean shouldListenForFingerprint = shouldListenForFingerprint();
+        boolean shouldListenForFingerprint =
+                isUdfpsEnrolled() ? shouldListenForUdfps() : shouldListenForFingerprint();
         boolean runningOrRestarting = mFingerprintRunningState == BIOMETRIC_STATE_RUNNING
                 || mFingerprintRunningState == BIOMETRIC_STATE_CANCELLING_RESTARTING;
         if (runningOrRestarting && !shouldListenForFingerprint) {
@@ -2003,12 +2016,20 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         return shouldListen;
     }
 
+    @VisibleForTesting
+    boolean shouldListenForUdfps() {
+        return shouldListenForFingerprint()
+                && !mBouncer
+                && mStatusBarState != StatusBarState.SHADE_LOCKED
+                && mStatusBarState != StatusBarState.FULLSCREEN_USER_SWITCHER
+                && mStrongAuthTracker.hasUserAuthenticatedSinceBoot();
+    }
+
     /**
      * If face auth is allows to scan on this exact moment.
      */
     public boolean shouldListenForFace() {
-        final boolean statusBarShadeLocked =
-                mStatusBarStateController.getState() == StatusBarState.SHADE_LOCKED;
+        final boolean statusBarShadeLocked = mStatusBarState == StatusBarState.SHADE_LOCKED;
         final boolean awakeKeyguard = mKeyguardIsVisible && mDeviceInteractive && !mGoingToSleep
                 && !statusBarShadeLocked;
         final int user = getCurrentUser();
@@ -2604,13 +2625,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      *
      * @see #sendKeyguardBouncerChanged(boolean)
      */
-    private void handleKeyguardBouncerChanged(int bouncer) {
+    private void handleKeyguardBouncerChanged(int bouncerVisible) {
         Assert.isMainThread();
-        if (DEBUG) Log.d(TAG, "handleKeyguardBouncerChanged(" + bouncer + ")");
-        boolean isBouncer = (bouncer == 1);
-        mBouncer = isBouncer;
+        if (DEBUG) Log.d(TAG, "handleKeyguardBouncerChanged(" + bouncerVisible + ")");
+        mBouncer = bouncerVisible == 1;
 
-        if (isBouncer) {
+        if (mBouncer) {
             // If the bouncer is shown, always clear this flag. This can happen in the following
             // situations: 1) Default camera with SHOW_WHEN_LOCKED is not chosen yet. 2) Secure
             // camera requests dismiss keyguard (tapping on photos for example). When these happen,
@@ -2623,7 +2643,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
-                cb.onKeyguardBouncerChanged(isBouncer);
+                cb.onKeyguardBouncerChanged(mBouncer);
             }
         }
         updateBiometricListeningState();
@@ -2756,10 +2776,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     /**
      * @see #handleKeyguardBouncerChanged(int)
      */
-    public void sendKeyguardBouncerChanged(boolean showingBouncer) {
-        if (DEBUG) Log.d(TAG, "sendKeyguardBouncerChanged(" + showingBouncer + ")");
+    public void sendKeyguardBouncerChanged(boolean bouncerIsOrWillBeShowing) {
+        if (DEBUG) Log.d(TAG, "sendKeyguardBouncerChanged(" + bouncerIsOrWillBeShowing + ")");
         Message message = mHandler.obtainMessage(MSG_KEYGUARD_BOUNCER_CHANGED);
-        message.arg1 = showingBouncer ? 1 : 0;
+        message.arg1 = bouncerIsOrWillBeShowing ? 1 : 0;
         message.sendToTarget();
     }
 
@@ -3145,6 +3165,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             pw.println("    strongAuthFlags=" + Integer.toHexString(strongAuthFlags));
             pw.println("    trustManaged=" + getUserTrustIsManaged(userId));
             pw.println("    udfpsEnrolled=" + isUdfpsEnrolled());
+            if (isUdfpsEnrolled()) {
+                pw.println("        shouldListenForUdfps=" + shouldListenForUdfps());
+                pw.println("        bouncerVisible=" + mBouncer);
+                pw.println("        mStatusBarState="
+                        + StatusBarState.toShortString(mStatusBarState));
+            }
         }
         if (mFaceManager != null && mFaceManager.isHardwareDetected()) {
             final int userId = ActivityManager.getCurrentUser();
