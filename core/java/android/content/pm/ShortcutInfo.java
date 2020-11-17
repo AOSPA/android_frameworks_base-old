@@ -630,7 +630,7 @@ public final class ShortcutInfo implements Parcelable {
      * This will set {@link #FLAG_STRINGS_RESOLVED}.
      *
      * @param res {@link Resources} for the publisher.  Must have been loaded with
-     * {@link PackageManager#getResourcesForApplicationAsUser}.
+     * {@link PackageManager#getResourcesForApplication(String)}.
      *
      * @hide
      */
@@ -752,7 +752,7 @@ public final class ShortcutInfo implements Parcelable {
      * aforementioned method would do internally, but not documented, so doing here explicitly.)
      *
      * @param res {@link Resources} for the publisher.  Must have been loaded with
-     * {@link PackageManager#getResourcesForApplicationAsUser}.
+     * {@link PackageManager#getResourcesForApplication(String)}.
      *
      * @hide
      */
@@ -782,7 +782,7 @@ public final class ShortcutInfo implements Parcelable {
      * in the resource name fields.
      *
      * @param res {@link Resources} for the publisher.  Must have been loaded with
-     * {@link PackageManager#getResourcesForApplicationAsUser}.
+     * {@link PackageManager#getResourcesForApplication(String)}.
      *
      * @hide
      */
@@ -1212,8 +1212,13 @@ public final class ShortcutInfo implements Parcelable {
         }
 
         /**
-         * Sets categories for a shortcut.  Launcher apps may use this information to
-         * categorize shortcuts.
+         * Sets categories for a shortcut.
+         * <ul>
+         * <li>Launcher apps may use this information to categorize shortcuts
+         * <li> Used by the system to associate a published Sharing Shortcut with supported
+         * mimeTypes. Required for published Sharing Shortcuts with a matching category
+         * declared in share targets, defined in the app's manifest linked shortcuts xml file.
+         * </ul>
          *
          * @see #SHORTCUT_CATEGORY_CONVERSATION
          * @see ShortcutInfo#getCategories()

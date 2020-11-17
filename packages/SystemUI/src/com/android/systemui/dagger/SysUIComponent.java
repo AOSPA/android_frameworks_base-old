@@ -22,8 +22,17 @@ import com.android.systemui.InitController;
 import com.android.systemui.SystemUIAppComponentFactory;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardSliceProvider;
+import com.android.systemui.shared.system.InputConsumerController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.util.InjectionInflationController;
+import com.android.wm.shell.ShellDump;
+import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.bubbles.Bubbles;
+import com.android.wm.shell.onehanded.OneHanded;
+import com.android.wm.shell.pip.Pip;
+import com.android.wm.shell.splitscreen.SplitScreen;
+
+import java.util.Optional;
 
 import dagger.BindsInstance;
 import dagger.Subcomponent;
@@ -43,12 +52,38 @@ public interface SysUIComponent {
     /**
      * Builder for a SysUIComponent.
      */
+    @SysUISingleton
     @Subcomponent.Builder
     interface Builder {
         @BindsInstance
-        Builder setStubAPIClass(WMComponent.StubAPIClass stubAPIClass);
+        Builder setPip(Optional<Pip> p);
+
+        @BindsInstance
+        Builder setSplitScreen(Optional<SplitScreen> s);
+
+        @BindsInstance
+        Builder setOneHanded(Optional<OneHanded> o);
+
+        @BindsInstance
+        Builder setBubbles(Optional<Bubbles> b);
+
+        @BindsInstance
+        Builder setInputConsumerController(InputConsumerController i);
+
+        @BindsInstance
+        Builder setShellTaskOrganizer(ShellTaskOrganizer s);
+
+        @BindsInstance
+        Builder setShellDump(Optional<ShellDump> shellDump);
 
         SysUIComponent build();
+    }
+
+    /**
+     * Initializes all the SysUI components.
+     */
+    default void init() {
+        // Do nothing
     }
 
     /**

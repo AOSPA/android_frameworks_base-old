@@ -38,6 +38,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -198,8 +199,11 @@ public class Vpn {
     // automated reconnection
 
     private final Context mContext;
+    // The context is for specific user which is created from mUserId
+    private final Context mUserIdContext;
     @VisibleForTesting final Dependencies mDeps;
     private final NetworkInfo mNetworkInfo;
+    private int mLegacyState;
     @VisibleForTesting protected String mPackage;
     private int mOwnerUID;
     private boolean mIsPackageTargetingAtLeastQ;
@@ -397,6 +401,7 @@ public class Vpn {
             int userId, @NonNull KeyStore keyStore, SystemServices systemServices,
             Ikev2SessionCreator ikev2SessionCreator) {
         mContext = context;
+        mUserIdContext = context.createContextAsUser(UserHandle.of(userId), 0 /* flags */);
         mDeps = deps;
         mNetd = netService;
         mUserId = userId;
@@ -414,6 +419,7 @@ public class Vpn {
             Log.wtf(TAG, "Problem registering observer", e);
         }
 
+        mLegacyState = LegacyVpnInfo.STATE_DISCONNECTED;
         mNetworkInfo = new NetworkInfo(ConnectivityManager.TYPE_VPN, 0 /* subtype */, NETWORKTYPE,
                 "" /* subtypeName */);
         mNetworkCapabilities = new NetworkCapabilities();
@@ -439,6 +445,7 @@ public class Vpn {
     @VisibleForTesting
     protected void updateState(DetailedState detailedState, String reason) {
         if (LOGD) Log.d(TAG, "setting state=" + detailedState + ", reason=" + reason);
+        mLegacyState = LegacyVpnInfo.stateFromNetworkInfo(detailedState);
         mNetworkInfo.setDetailedState(detailedState, reason, null);
         if (mNetworkAgent != null) {
             mNetworkAgent.sendNetworkInfo(mNetworkInfo);
@@ -1242,6 +1249,7 @@ public class Vpn {
         // behaves the same as when it uses the default network.
         mNetworkCapabilities.addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
 
+        mLegacyState = LegacyVpnInfo.STATE_CONNECTING;
         mNetworkInfo.setDetailedState(DetailedState.CONNECTING, null, null);
 
         NetworkAgentConfig networkAgentConfig = new NetworkAgentConfig();
@@ -1920,9 +1928,10 @@ public class Vpn {
         final UserHandle user = UserHandle.of(mUserId);
         final long token = Binder.clearCallingIdentity();
         try {
-            final NotificationManager notificationManager = NotificationManager.from(mContext);
+            final NotificationManager notificationManager =
+                    mUserIdContext.getSystemService(NotificationManager.class);
             if (!visible) {
-                notificationManager.cancelAsUser(TAG, SystemMessage.NOTE_VPN_DISCONNECTED, user);
+                notificationManager.cancel(TAG, SystemMessage.NOTE_VPN_DISCONNECTED);
                 return;
             }
             final Intent intent = new Intent();
@@ -1942,8 +1951,7 @@ public class Vpn {
                             .setVisibility(Notification.VISIBILITY_PUBLIC)
                             .setOngoing(true)
                             .setColor(mContext.getColor(R.color.system_notification_accent_color));
-            notificationManager.notifyAsUser(TAG, SystemMessage.NOTE_VPN_DISCONNECTED,
-                    builder.build(), user);
+            notificationManager.notify(TAG, SystemMessage.NOTE_VPN_DISCONNECTED, builder.build());
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -1968,36 +1976,42 @@ public class Vpn {
          */
         public PendingIntent pendingIntentGetActivityAsUser(
                 Intent intent, int flags, UserHandle user) {
-            return PendingIntent.getActivityAsUser(mContext, 0 /*request*/, intent, flags,
-                    null /*options*/, user);
+            return PendingIntent.getActivity(
+                    mContext.createContextAsUser(user, 0 /* flags */), 0 /* requestCode */,
+                    intent, flags);
         }
 
         /**
          * @see Settings.Secure#putStringForUser
          */
         public void settingsSecurePutStringForUser(String key, String value, int userId) {
-            Settings.Secure.putStringForUser(mContext.getContentResolver(), key, value, userId);
+            Settings.Secure.putString(getContentResolverAsUser(userId), key, value);
         }
 
         /**
          * @see Settings.Secure#putIntForUser
          */
         public void settingsSecurePutIntForUser(String key, int value, int userId) {
-            Settings.Secure.putIntForUser(mContext.getContentResolver(), key, value, userId);
+            Settings.Secure.putInt(getContentResolverAsUser(userId), key, value);
         }
 
         /**
          * @see Settings.Secure#getStringForUser
          */
         public String settingsSecureGetStringForUser(String key, int userId) {
-            return Settings.Secure.getStringForUser(mContext.getContentResolver(), key, userId);
+            return Settings.Secure.getString(getContentResolverAsUser(userId), key);
         }
 
         /**
          * @see Settings.Secure#getIntForUser
          */
         public int settingsSecureGetIntForUser(String key, int def, int userId) {
-            return Settings.Secure.getIntForUser(mContext.getContentResolver(), key, def, userId);
+            return Settings.Secure.getInt(getContentResolverAsUser(userId), key, def);
+        }
+
+        private ContentResolver getContentResolverAsUser(int userId) {
+            return mContext.createContextAsUser(
+                    UserHandle.of(userId), 0 /* flags */).getContentResolver();
         }
 
         public boolean isCallerSystem() {
@@ -2258,7 +2272,7 @@ public class Vpn {
 
         final LegacyVpnInfo info = new LegacyVpnInfo();
         info.key = mConfig.user;
-        info.state = LegacyVpnInfo.stateFromNetworkInfo(mNetworkInfo);
+        info.state = mLegacyState;
         if (mNetworkInfo.isConnected()) {
             info.intent = mStatusIntent;
         }

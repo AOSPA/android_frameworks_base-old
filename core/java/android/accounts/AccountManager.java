@@ -19,6 +19,7 @@ package android.accounts;
 import android.annotation.BroadcastBehavior;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
@@ -357,7 +358,7 @@ public class AccountManager {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (o == null) {
                 return false;
             }
@@ -419,7 +420,7 @@ public class AccountManager {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (o == null) {
                 return false;
             }
@@ -545,7 +546,7 @@ public class AccountManager {
     /**
      * @hide used for testing only
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public AccountManager(Context context, IAccountManager service, Handler handler) {
         mContext = context;
         mService = service;
@@ -832,7 +833,7 @@ public class AccountManager {
 
     /** @hide Same as {@link #getAccountsByType(String)} but for a specific user. */
     @NonNull
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public Account[] getAccountsByTypeAsUser(String type, UserHandle userHandle) {
         try {
             return mService.getAccountsAsUser(type, userHandle.getIdentifier(),
@@ -2141,7 +2142,7 @@ public class AccountManager {
      * Same as {@link #confirmCredentials(Account, Bundle, Activity, AccountManagerCallback, Handler)}
      * but for the specified user.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public AccountManagerFuture<Bundle> confirmCredentialsAsUser(final Account account,
             final Bundle options,
             final Activity activity,

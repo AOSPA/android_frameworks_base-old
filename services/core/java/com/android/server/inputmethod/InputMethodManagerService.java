@@ -15,6 +15,7 @@
 
 package com.android.server.inputmethod;
 
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.server.inputmethod.InputMethodManagerServiceProto.ACCESSIBILITY_REQUESTING_NO_SOFT_KEYBOARD;
 import static android.server.inputmethod.InputMethodManagerServiceProto.BACK_DISPOSITION;
 import static android.server.inputmethod.InputMethodManagerServiceProto.BOUND_TO_METHOD;
@@ -110,6 +111,7 @@ import android.os.ShellCallback;
 import android.os.ShellCommand;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
@@ -119,6 +121,7 @@ import android.text.style.SuggestionSpan;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.EventLog;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.LruCache;
 import android.util.Pair;
@@ -161,7 +164,6 @@ import com.android.internal.os.HandlerCaller;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.util.DumpUtils;
-import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.view.IInlineSuggestionsRequestCallback;
 import com.android.internal.view.IInlineSuggestionsResponseCallback;
 import com.android.internal.view.IInputContext;
@@ -234,7 +236,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     static final int MSG_SET_ACTIVE = 3020;
     static final int MSG_SET_INTERACTIVE = 3030;
     static final int MSG_REPORT_FULLSCREEN_MODE = 3045;
-    static final int MSG_REPORT_PRE_RENDERED = 3060;
     static final int MSG_APPLY_IME_VISIBILITY = 3070;
 
     static final int MSG_HARD_KEYBOARD_SWITCH_CHANGED = 4000;
@@ -317,8 +318,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private static final class DebugFlags {
         static final DebugFlag FLAG_OPTIMIZE_START_INPUT =
                 new DebugFlag("debug.optimize_startinput", false);
-        static final DebugFlag FLAG_PRE_RENDER_IME_VIEWS =
-                new DebugFlag("persist.pre_render_ime_views", false);
     }
 
     @UserIdInt
@@ -448,10 +447,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         final ClientDeathRecipient clientDeathRecipient;
 
         boolean sessionRequested;
-        // Determines if IMEs should be pre-rendered.
-        // DebugFlag can be flipped anytime. This flag is kept per-client to maintain behavior
-        // through the life of the current client.
-        boolean shouldPreRenderIme;
         SessionState curSession;
 
         @Override
@@ -1713,7 +1708,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 mSettings, context);
         mMenuController = new InputMethodMenuController(this);
 
-        mTracingThread = new HandlerThread("android.tracing", Process.THREAD_PRIORITY_BACKGROUND);
+        mTracingThread = new HandlerThread("android.tracing", Process.THREAD_PRIORITY_FOREGROUND);
         mTracingThread.start();
     }
 
@@ -3113,6 +3108,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     @Override
     public boolean showSoftInput(IInputMethodClient client, IBinder windowToken, int flags,
             ResultReceiver resultReceiver) {
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.showSoftInput");
         int uid = Binder.getCallingUid();
         synchronized (mMethodMap) {
             if (!calledFromValidUserLocked()) {
@@ -3140,6 +3136,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         SoftInputShowHideReason.SHOW_SOFT_INPUT);
             } finally {
                 Binder.restoreCallingIdentity(ident);
+                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
             }
         }
     }
@@ -3232,6 +3229,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             }
             final long ident = Binder.clearCallingIdentity();
             try {
+                Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.hideSoftInput");
                 if (mCurClient == null || client == null
                         || mCurClient.client.asBinder() != client.asBinder()) {
                     // We need to check if this is the current client with
@@ -3255,15 +3253,13 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         SoftInputShowHideReason.HIDE_SOFT_INPUT);
             } finally {
                 Binder.restoreCallingIdentity(ident);
+                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
             }
         }
     }
 
     boolean hideCurrentInputLocked(IBinder windowToken, int flags, ResultReceiver resultReceiver,
             @SoftInputShowHideReason int reason) {
-        if (mCurClient == null || mCurClient.curSession == null) {
-            return false;
-        }
         if ((flags&InputMethodManager.HIDE_IMPLICIT_ONLY) != 0
                 && (mShowExplicitlyRequested || mShowForced)) {
             if (DEBUG) Slog.v(TAG, "Not hiding: explicit show not cancelled by non-explicit hide");
@@ -3320,43 +3316,52 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             Slog.e(TAG, "windowToken cannot be null.");
             return InputBindResult.NULL;
         }
-        final int callingUserId = UserHandle.getCallingUserId();
-        final int userId;
-        if (attribute != null && attribute.targetInputMethodUser != null
-                && attribute.targetInputMethodUser.getIdentifier() != callingUserId) {
-            mContext.enforceCallingPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL,
-                    "Using EditorInfo.targetInputMethodUser requires INTERACT_ACROSS_USERS_FULL.");
-            userId = attribute.targetInputMethodUser.getIdentifier();
-            if (!mUserManagerInternal.isUserRunning(userId)) {
-                // There is a chance that we hit here because of race condition.  Let's just return
-                // an error code instead of crashing the caller process, which at least has
-                // INTERACT_ACROSS_USERS_FULL permission thus is likely to be an important process.
-                Slog.e(TAG, "User #" + userId + " is not running.");
-                return InputBindResult.INVALID_USER;
+        try {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER,
+                    "IMMS.startInputOrWindowGainedFocus");
+            final int callingUserId = UserHandle.getCallingUserId();
+            final int userId;
+            if (attribute != null && attribute.targetInputMethodUser != null
+                    && attribute.targetInputMethodUser.getIdentifier() != callingUserId) {
+                mContext.enforceCallingPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL,
+                        "Using EditorInfo.targetInputMethodUser requires"
+                                + " INTERACT_ACROSS_USERS_FULL.");
+                userId = attribute.targetInputMethodUser.getIdentifier();
+                if (!mUserManagerInternal.isUserRunning(userId)) {
+                    // There is a chance that we hit here because of race condition.  Let's just
+                    // return an error code instead of crashing the caller process, which at least
+                    // has INTERACT_ACROSS_USERS_FULL permission thus is likely to be an important
+                    // process.
+                    Slog.e(TAG, "User #" + userId + " is not running.");
+                    return InputBindResult.INVALID_USER;
+                }
+            } else {
+                userId = callingUserId;
             }
-        } else {
-            userId = callingUserId;
-        }
-        final InputBindResult result;
-        synchronized (mMethodMap) {
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                result = startInputOrWindowGainedFocusInternalLocked(startInputReason, client,
-                        windowToken, startInputFlags, softInputMode, windowFlags, attribute,
-                        inputContext, missingMethods, unverifiedTargetSdkVersion, userId);
-            } finally {
-                Binder.restoreCallingIdentity(ident);
+            final InputBindResult result;
+            synchronized (mMethodMap) {
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    result = startInputOrWindowGainedFocusInternalLocked(startInputReason, client,
+                            windowToken, startInputFlags, softInputMode, windowFlags, attribute,
+                            inputContext, missingMethods, unverifiedTargetSdkVersion, userId);
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                }
             }
+            if (result == null) {
+                // This must never happen, but just in case.
+                Slog.wtf(TAG, "InputBindResult is @NonNull. startInputReason="
+                        + InputMethodDebug.startInputReasonToString(startInputReason)
+                        + " windowFlags=#" + Integer.toHexString(windowFlags)
+                        + " editorInfo=" + attribute);
+                return InputBindResult.NULL;
+            }
+
+            return result;
+        } finally {
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
-        if (result == null) {
-            // This must never happen, but just in case.
-            Slog.wtf(TAG, "InputBindResult is @NonNull. startInputReason="
-                    + InputMethodDebug.startInputReasonToString(startInputReason)
-                    + " windowFlags=#" + Integer.toHexString(windowFlags)
-                    + " editorInfo=" + attribute);
-            return InputBindResult.NULL;
-        }
-        return result;
     }
 
     @NonNull
@@ -3439,14 +3444,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             scheduleSwitchUserTaskLocked(userId, cs.client);
             return InputBindResult.USER_SWITCHING;
         }
-
-        // Main feature flag that overrides other conditions and forces IME preRendering.
-        if (DEBUG) {
-            Slog.v(TAG, "IME PreRendering main flag: "
-                    + DebugFlags.FLAG_PRE_RENDER_IME_VIEWS.value() + ", LowRam: " + mIsLowRam);
-        }
-        // pre-rendering not supported on low-ram devices.
-        cs.shouldPreRenderIme = DebugFlags.FLAG_PRE_RENDER_IME_VIEWS.value() && !mIsLowRam;
 
         final boolean sameWindowFocused = mCurFocusedWindow == windowToken;
         final boolean isTextEditor = (startInputFlags & StartInputFlags.IS_TEXT_EDITOR) != 0;
@@ -4141,20 +4138,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @BinderThread
-    private void reportPreRendered(IBinder token, EditorInfo info) {
-        synchronized (mMethodMap) {
-            if (!calledWithValidTokenLocked(token)) {
-                return;
-            }
-            if (mCurClient != null && mCurClient.client != null) {
-                executeOrSendMessage(mCurClient.client, mCaller.obtainMessageOO(
-                        MSG_REPORT_PRE_RENDERED, info, mCurClient));
-            }
-        }
-    }
-
-    @BinderThread
     private void applyImeVisibility(IBinder token, IBinder windowToken, boolean setVisible) {
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.applyImeVisibility");
         synchronized (mMethodMap) {
             if (!calledWithValidTokenLocked(token)) {
                 return;
@@ -4176,6 +4161,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 mWindowManagerInternal.showImePostLayout(mShowRequestWindowMap.get(windowToken));
             }
         }
+        Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
 
     private void setInputMethodWithSubtypeIdLocked(IBinder token, String id, int subtypeId) {
@@ -4203,6 +4189,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     @BinderThread
     private void hideMySoftInput(@NonNull IBinder token, int flags) {
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.hideMySoftInput");
         synchronized (mMethodMap) {
             if (!calledWithValidTokenLocked(token)) {
                 return;
@@ -4217,10 +4204,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 Binder.restoreCallingIdentity(ident);
             }
         }
+        Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
 
     @BinderThread
     private void showMySoftInput(@NonNull IBinder token, int flags) {
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.showMySoftInput");
         synchronized (mMethodMap) {
             if (!calledWithValidTokenLocked(token)) {
                 return;
@@ -4233,6 +4222,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 Binder.restoreCallingIdentity(ident);
             }
         }
+        Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
 
     void setEnabledSessionInMainThread(SessionState session) {
@@ -4430,7 +4420,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 try {
                     setEnabledSessionInMainThread(session);
                     session.method.startInput(startInputToken, inputContext, missingMethods,
-                            editorInfo, restarting, session.client.shouldPreRenderIme);
+                            editorInfo, restarting);
                 } catch (RemoteException e) {
                 }
                 args.recycle();
@@ -4486,20 +4476,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                             + "reportFullscreen(" + fullscreen + ") notification to pid="
                             + clientState.pid + " uid=" + clientState.uid);
                 }
-                return true;
-            }
-            case MSG_REPORT_PRE_RENDERED: {
-                args = (SomeArgs) msg.obj;
-                final EditorInfo info = (EditorInfo) args.arg1;
-                final ClientState clientState = (ClientState) args.arg2;
-                try {
-                    clientState.client.reportPreRendered(info);
-                } catch (RemoteException e) {
-                    Slog.w(TAG, "Got RemoteException sending "
-                            + "reportPreRendered(" + info + ") notification to pid="
-                            + clientState.pid + " uid=" + clientState.uid);
-                }
-                args.recycle();
                 return true;
             }
             case MSG_APPLY_IME_VISIBILITY: {
@@ -5347,7 +5323,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         @ShellCommandResult
         private int refreshDebugProperties() {
             DebugFlags.FLAG_OPTIMIZE_START_INPUT.refresh();
-            DebugFlags.FLAG_PRE_RENDER_IME_VIEWS.refresh();
             return ShellCommandResult.SUCCESS;
         }
 
@@ -5818,12 +5793,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         @Override
         public void notifyUserAction() {
             mImms.notifyUserAction(mToken);
-        }
-
-        @BinderThread
-        @Override
-        public void reportPreRendered(EditorInfo info) {
-            mImms.reportPreRendered(mToken, info);
         }
 
         @BinderThread

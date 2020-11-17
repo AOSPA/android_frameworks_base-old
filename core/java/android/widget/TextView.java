@@ -80,6 +80,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -889,13 +890,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @UnsupportedAppUsage
     private Editor mEditor;
-
-    /**
-     * The default content insertion callback used by {@link TextView}. See
-     * {@link #setOnReceiveContentCallback} for more info.
-     */
-    private static final TextViewOnReceiveContentCallback DEFAULT_ON_RECEIVE_CONTENT_CALLBACK =
-            new TextViewOnReceiveContentCallback();
 
     private static final int DEVICE_PROVISIONED_UNKNOWN = 0;
     private static final int DEVICE_PROVISIONED_NO = 1;
@@ -4370,7 +4364,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 shouldRequestLayout);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private void setRawTextSize(float size, boolean shouldRequestLayout) {
         if (size != mTextPaint.getTextSize()) {
             mTextPaint.setTextSize(size);
@@ -7882,7 +7876,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return drawableState;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private Path getUpdatedHighlightPath() {
         Path highlight = null;
         Paint highlightPaint = mHighlightPaint;
@@ -8753,12 +8747,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 outAttrs.initialSelEnd = getSelectionEnd();
                 outAttrs.initialCapsMode = ic.getCursorCapsMode(getInputType());
                 outAttrs.setInitialSurroundingText(mText);
-                // If a custom `OnReceiveContentCallback` is set, pass its supported MIME types.
-                OnReceiveContentCallback<TextView> receiver = getOnReceiveContentCallback();
-                if (receiver != null) {
-                    outAttrs.contentMimeTypes = receiver.getSupportedMimeTypes(this)
-                            .toArray(new String[0]);
-                }
+                outAttrs.contentMimeTypes = getOnReceiveContentMimeTypes();
                 return ic;
             }
         }
@@ -11057,12 +11046,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     MotionEvent.actionToString(event.getActionMasked()),
                     event.getX(), event.getY());
         }
-        if (!isFromPrimePointer(event, false)) {
-            return true;
-        }
-
         final int action = event.getActionMasked();
         if (mEditor != null) {
+            if (!isFromPrimePointer(event, false)) {
+                return true;
+            }
+
             mEditor.onTouchEvent(event);
 
             if (mEditor.mInsertionPointCursorController != null
@@ -12365,7 +12354,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *         be {@code null} if no text is set
      */
     @Nullable
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private CharSequence getTextForAccessibility() {
         // If the text is empty, we must be showing the hint text.
         if (TextUtils.isEmpty(mText)) {
@@ -12507,7 +12496,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return false;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     CharSequence getTransformedText(int start, int end) {
         return removeSuggestionSpans(mTransformed.subSequence(start, end));
     }
@@ -12995,7 +12984,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return x;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     int getLineAtCoordinate(float y) {
         y -= getTotalPaddingTop();
         // Clamp the position to inside of the view.
@@ -13184,7 +13173,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Deletes the range of text [start, end[.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected void deleteText_internal(int start, int end) {
         ((Editable) mText).delete(start, end);
     }
@@ -13236,7 +13225,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @hide
      */
     @Override
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public CharSequence getIterableTextForAccessibility() {
         return mText;
     }
@@ -13723,18 +13712,21 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
-    /**
-     * Returns the callback used for handling insertion of content into this view. See
-     * {@link #setOnReceiveContentCallback} for more info.
-     *
-     * @return The callback for handling insertion of content. Returns null if no callback has been
-     * {@link #setOnReceiveContentCallback set}.
-     */
-    @SuppressWarnings("unchecked")
-    @Nullable
+    /** @hide */
     @Override
-    public OnReceiveContentCallback<TextView> getOnReceiveContentCallback() {
-        return (OnReceiveContentCallback<TextView>) super.getOnReceiveContentCallback();
+    public void onInputConnectionOpenedInternal(@NonNull InputConnection ic,
+            @NonNull EditorInfo editorInfo, @Nullable Handler handler) {
+        if (mEditor != null) {
+            mEditor.getDefaultOnReceiveContentCallback().setInputConnectionInfo(ic, editorInfo);
+        }
+    }
+
+    /** @hide */
+    @Override
+    public void onInputConnectionClosedInternal() {
+        if (mEditor != null) {
+            mEditor.getDefaultOnReceiveContentCallback().clearInputConnectionInfo();
+        }
     }
 
     /**
@@ -13750,32 +13742,51 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *     <li>{@link Intent#ACTION_PROCESS_TEXT} replacement
      * </ol>
      *
-     * <p>The callback will only be invoked if the MIME type of the content is
-     * {@link OnReceiveContentCallback#getSupportedMimeTypes declared as supported} by the callback.
-     * If the content type is not supported by the callback, the default platform handling will be
-     * executed instead.
+     * <p>This callback is only invoked for content whose MIME type matches a type specified via
+     * the {code mimeTypes} parameter. If the MIME type is not supported by the callback, the
+     * default platform handling will be executed instead (no-op for the default {@link View}).
      *
+     * <p><em>Note: MIME type matching in the Android framework is case-sensitive, unlike formal RFC
+     * MIME types. As a result, you should always write your MIME types with lower case letters, or
+     * use {@link android.content.Intent#normalizeMimeType} to ensure that it is converted to lower
+     * case.</em>
+     *
+     * @param mimeTypes The type of content for which the callback should be invoked. This may use
+     * wildcards such as "text/*", "image/*", etc. This must not be null or empty if a non-null
+     * callback is passed in.
      * @param callback The callback to use. This can be null to reset to the default behavior.
      */
+    @SuppressWarnings("rawtypes")
     @Override
     public void setOnReceiveContentCallback(
-            @Nullable OnReceiveContentCallback<? extends View> callback) {
-        super.setOnReceiveContentCallback(callback);
+            @Nullable String[] mimeTypes,
+            @Nullable OnReceiveContentCallback callback) {
+        super.setOnReceiveContentCallback(mimeTypes, callback);
     }
 
     /**
-     * Handles the request to insert content using the configured callback or the default callback.
+     * Receives the given content. The default implementation invokes the callback set via
+     * {@link #setOnReceiveContentCallback}. If no callback is set or if the callback does not
+     * support the given content (based on the MIME type), executes the default platform handling
+     * (e.g. coerces content to text if the source is
+     * {@link OnReceiveContentCallback.Payload#SOURCE_CLIPBOARD} and this is an editable
+     * {@link TextView}).
      *
-     * @hide
+     * @param payload The content to insert and related metadata.
+     *
+     * @return Returns true if the content was handled in some way, false otherwise. Actual
+     * insertion may be processed asynchronously in the background and may or may not succeed even
+     * if this method returns true. For example, an app may not end up inserting an item if it
+     * exceeds the app's size limit for that type of content.
      */
-    void onReceiveContent(@NonNull OnReceiveContentCallback.Payload payload) {
-        OnReceiveContentCallback<TextView> receiver = getOnReceiveContentCallback();
-        ClipDescription description = payload.getClip().getDescription();
-        if (receiver != null && receiver.supports(this, description)) {
-            receiver.onReceiveContent(this, payload);
-        } else {
-            DEFAULT_ON_RECEIVE_CONTENT_CALLBACK.onReceiveContent(this, payload);
+    @Override
+    public boolean onReceiveContent(@NonNull OnReceiveContentCallback.Payload payload) {
+        if (super.onReceiveContent(payload)) {
+            return true;
+        } else if (mEditor != null) {
+            return mEditor.getDefaultOnReceiveContentCallback().onReceiveContent(this, payload);
         }
+        return false;
     }
 
     private static void logCursor(String location, @Nullable String msgFormat, Object ... msgArgs) {

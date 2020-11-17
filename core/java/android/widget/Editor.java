@@ -206,6 +206,10 @@ public class Editor {
         int TEXT_LINK = 2;
     }
 
+    // Default content insertion handler.
+    private final TextViewOnReceiveContentCallback mDefaultOnReceiveContentCallback =
+            new TextViewOnReceiveContentCallback();
+
     // Each Editor manages its own undo stack.
     private final UndoManager mUndoManager = new UndoManager();
     private UndoOwner mUndoOwner = mUndoManager.getOwner(UNDO_OWNER_TAG, this);
@@ -319,7 +323,7 @@ public class Editor {
     private boolean mShowErrorAfterAttach;
 
     boolean mInBatchEditControllers;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     boolean mShowSoftInputOnFocus = true;
     private boolean mPreserveSelection;
     private boolean mRestartActionModeOnNextRefresh;
@@ -351,7 +355,7 @@ public class Editor {
     Callback mCustomInsertionActionModeCallback;
 
     // Set when this TextView gained focus with some text selected. Will start selection mode.
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     boolean mCreatedWithASelection;
 
     // The button state as of the last time #onTouchEvent is called.
@@ -584,6 +588,11 @@ public class Editor {
         mUndoOwner = mUndoManager.getOwner(UNDO_OWNER_TAG, this);
     }
 
+    @VisibleForTesting
+    public @NonNull TextViewOnReceiveContentCallback getDefaultOnReceiveContentCallback() {
+        return mDefaultOnReceiveContentCallback;
+    }
+
     /**
      * Forgets all undo and redo operations for this Editor.
      */
@@ -709,6 +718,8 @@ public class Editor {
 
         hideCursorAndSpanControllers();
         stopTextActionModeWithPreservingSelection();
+
+        mDefaultOnReceiveContentCallback.clearInputConnectionInfo();
     }
 
     private void discardTextDisplayLists() {

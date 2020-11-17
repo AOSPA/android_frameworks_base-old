@@ -36,10 +36,12 @@ import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE;
 import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
-import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
+import static android.view.WindowManager.TRANSIT_CLOSE;
+import static android.view.WindowManager.TRANSIT_FLAG_APP_CRASHED;
 import static android.view.WindowManager.TRANSIT_NONE;
-import static android.view.WindowManager.TRANSIT_SHOW_SINGLE_TASK_DISPLAY;
-import static android.view.WindowManager.TRANSIT_TASK_TO_BACK;
+import static android.view.WindowManager.TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_NONE;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_TO_BACK;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_KEEP_SCREEN_ON;
@@ -53,10 +55,11 @@ import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_L
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.ActivityStackSupervisor.DEFER_RESUME;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
+import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ActivityStackSupervisor.dumpHistoryList;
 import static com.android.server.wm.ActivityStackSupervisor.printThisActivity;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RECENTS;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_STACK;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ROOT_TASK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_RECENTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_STATES;
@@ -73,9 +76,9 @@ import static com.android.server.wm.Task.ActivityState.PAUSED;
 import static com.android.server.wm.Task.ActivityState.RESUMED;
 import static com.android.server.wm.Task.ActivityState.STOPPED;
 import static com.android.server.wm.Task.ActivityState.STOPPING;
-import static com.android.server.wm.Task.REPARENT_LEAVE_STACK_IN_PLACE;
-import static com.android.server.wm.Task.REPARENT_MOVE_STACK_TO_FRONT;
-import static com.android.server.wm.Task.STACK_VISIBILITY_INVISIBLE;
+import static com.android.server.wm.Task.REPARENT_LEAVE_ROOT_TASK_IN_PLACE;
+import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
+import static com.android.server.wm.Task.TASK_VISIBILITY_INVISIBLE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_TRACE;
@@ -229,20 +232,19 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
      */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
-            MATCH_TASK_IN_STACKS_ONLY,
-            MATCH_TASK_IN_STACKS_OR_RECENT_TASKS,
-            MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE
+            MATCH_ATTACHED_TASK_ONLY,
+            MATCH_ATTACHED_TASK_OR_RECENT_TASKS,
+            MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE
     })
     public @interface AnyTaskForIdMatchTaskMode {
     }
 
-    // Match only tasks in the current stacks
-    static final int MATCH_TASK_IN_STACKS_ONLY = 0;
-    // Match either tasks in the current stacks, or in the recent tasks if not found in the stacks
-    static final int MATCH_TASK_IN_STACKS_OR_RECENT_TASKS = 1;
-    // Match either tasks in the current stacks, or in the recent tasks, restoring it to the
-    // provided stack id
-    static final int MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE = 2;
+    // Match only tasks that are attached to the hierarchy
+    static final int MATCH_ATTACHED_TASK_ONLY = 0;
+    // Match either attached tasks, or in the recent tasks if the tasks are detached
+    static final int MATCH_ATTACHED_TASK_OR_RECENT_TASKS = 1;
+    // Match either attached tasks, or in the recent tasks, restoring it to the provided task id
+    static final int MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE = 2;
 
     ActivityTaskManagerService mService;
     ActivityStackSupervisor mStackSupervisor;
@@ -512,6 +514,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void onChildPositionChanged(WindowContainer child) {
         mWmService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
                 !mWmService.mPerDisplayFocusEnabled /* updateInputWindows */);
+        mStackSupervisor.updateTopResumedActivityIfNeeded();
     }
 
     /**
@@ -864,6 +867,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mWmService.openSurfaceTransaction();
         try {
             applySurfaceChangesTransaction();
+            mWmService.mSyncEngine.onSurfacePlacement();
         } catch (RuntimeException e) {
             Slog.wtf(TAG, "Unhandled exception in Window Manager", e);
         } finally {
@@ -1948,7 +1952,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
                 for (int taskNdx = displayArea.getStackCount() - 1; taskNdx >= 0; --taskNdx) {
                     final Task rootTask = displayArea.getStackAt(taskNdx);
-                    if (rootTask.getVisibility(null /*starting*/) == STACK_VISIBILITY_INVISIBLE) {
+                    if (rootTask.getVisibility(null /*starting*/) == TASK_VISIBILITY_INVISIBLE) {
                         break;
                     }
 
@@ -2131,13 +2135,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     + displayId);
         }
 
-        if (displayContent.isSingleTaskInstance() && displayContent.getStackCount() > 0) {
-            // We don't allow moving stacks to single instance display that already has a child.
-            Slog.e(TAG, "Can not move stackId=" + stackId
-                    + " to single task instance display=" + displayContent);
-            return;
-        }
-
         moveStackToTaskDisplayArea(stackId, displayContent.getDefaultTaskDisplayArea(), onTop);
     }
 
@@ -2182,7 +2179,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
             // Set a transition to ensure that we don't immediately try and update the visibility
             // of the activity entering PIP
-            r.getDisplayContent().prepareAppTransition(TRANSIT_NONE, false);
+            r.getDisplayContent().prepareAppTransitionOld(TRANSIT_OLD_NONE, false);
+            r.getDisplayContent().prepareAppTransition(TRANSIT_NONE);
 
             final boolean singleActivity = task.getChildCount() == 1;
             final Task stack;
@@ -2213,8 +2211,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // to the list of apps being closed, and request its transition to be ran.
                 final ActivityRecord oldTopActivity = task.getTopMostActivity();
                 if (oldTopActivity != null && oldTopActivity.isState(STOPPED)
-                        && task.getDisplayContent().mAppTransition.getAppTransition()
-                        == TRANSIT_TASK_TO_BACK) {
+                        && task.getDisplayContent().mAppTransition.getAppTransitionOld()
+                        == TRANSIT_OLD_TASK_TO_BACK) {
                     task.getDisplayContent().mClosingApps.add(oldTopActivity);
                     oldTopActivity.mRequestForceTransition = true;
                 }
@@ -2418,21 +2416,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     if (displayShouldSleep) {
                         stack.goToSleepIfPossible(false /* shuttingDown */);
                     } else {
-                        // When the display which can only contain one task turns on, start a
-                        // special transition.
-                        // {@link AppTransitionController#handleAppTransitionReady} later picks up
-                        // the transition, and schedules
-                        // {@link ITaskStackListener#onSingleTaskDisplayDrawn} callback which is
-                        // triggered after contents are drawn on the display.
-                        if (display.isSingleTaskInstance()) {
-                            display.mDisplayContent.prepareAppTransition(
-                                    TRANSIT_SHOW_SINGLE_TASK_DISPLAY, false,
-                                    0 /* flags */, true /* forceOverride*/);
-                        }
                         stack.awakeFromSleepingLocked();
-                        if (display.isSingleTaskInstance()) {
-                            display.executeAppTransition();
-                        }
                         if (stack.isFocusedStackOnDisplay()
                                 && !mStackSupervisor.getKeyguardController()
                                 .isKeyguardOrAodShowing(display.mDisplayId)) {
@@ -2571,7 +2555,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @Override
     public void onDisplayAdded(int displayId) {
-        if (DEBUG_STACK) Slog.v(TAG, "Display added displayId=" + displayId);
+        if (DEBUG_ROOT_TASK) Slog.v(TAG, "Display added displayId=" + displayId);
         synchronized (mService.mGlobalLock) {
             final DisplayContent display = getDisplayContentOrCreate(displayId);
             if (display == null) {
@@ -2593,7 +2577,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @Override
     public void onDisplayRemoved(int displayId) {
-        if (DEBUG_STACK) Slog.v(TAG, "Display removed displayId=" + displayId);
+        if (DEBUG_ROOT_TASK) Slog.v(TAG, "Display removed displayId=" + displayId);
         if (displayId == DEFAULT_DISPLAY) {
             throw new IllegalArgumentException("Can't remove the primary display.");
         }
@@ -2610,7 +2594,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @Override
     public void onDisplayChanged(int displayId) {
-        if (DEBUG_STACK) Slog.v(TAG, "Display changed displayId=" + displayId);
+        if (DEBUG_ROOT_TASK) Slog.v(TAG, "Display changed displayId=" + displayId);
         synchronized (mService.mGlobalLock) {
             final DisplayContent displayContent = getDisplayContent(displayId);
             if (displayContent != null) {
@@ -2645,12 +2629,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
         throw new IllegalStateException("Failed to find a stack behind stack=" + stack
                 + " in=" + taskDisplayArea);
-    }
-
-    @Override
-    void positionChildAt(int position, DisplayContent child, boolean includingParents) {
-        super.positionChildAt(position, child, includingParents);
-        mStackSupervisor.updateTopResumedActivityIfNeeded();
     }
 
     Configuration getDisplayOverrideConfiguration(int displayId) {
@@ -2749,8 +2727,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }, true /* traverseTopToBottom */);
 
         for (int i = mTmpTaskLayerChangedProcs.size() - 1; i >= 0; i--) {
-            mTmpTaskLayerChangedProcs.valueAt(i).invalidateOomScoreReferenceState(
-                    true /* computeNow */);
+            mTmpTaskLayerChangedProcs.valueAt(i).computeProcessActivityState();
         }
         mTmpTaskLayerChangedProcs.clear();
     }
@@ -2801,7 +2778,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 if (allowDelay) {
                     result &= stack.goToSleepIfPossible(shuttingDown);
                 } else {
-                    stack.goToSleep();
+                    stack.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                            !PRESERVE_WINDOWS);
                 }
             }
             return result;
@@ -2820,8 +2798,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         Slog.w(TAG, "  Force finishing activity "
                 + r.intent.getComponent().flattenToShortString());
         r.detachFromProcess();
-        r.mDisplayContent.prepareAppTransition(
-                TRANSIT_CRASHING_ACTIVITY_CLOSE, false /* alwaysKeepCurrent */);
+        r.mDisplayContent.prepareAppTransitionOld(TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE,
+                false /* alwaysKeepCurrent */);
+        r.mDisplayContent.prepareAppTransition(TRANSIT_CLOSE, TRANSIT_FLAG_APP_CRASHED);
         r.destroyIfPossible("handleAppCrashed");
     }
 
@@ -2908,7 +2887,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             // Temporarily set the task id to invalid in case in re-entry.
             options.setLaunchTaskId(INVALID_TASK_ID);
             final Task task = anyTaskForId(taskId,
-                    MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE, options, onTop);
+                    MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE, options, onTop);
             options.setLaunchTaskId(taskId);
             if (task != null) {
                 return task.getRootTask();
@@ -3464,7 +3443,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     Task anyTaskForId(int id) {
-        return anyTaskForId(id, MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE);
+        return anyTaskForId(id, MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE);
     }
 
     Task anyTaskForId(int id, @RootWindowContainer.AnyTaskForIdMatchTaskMode int matchMode) {
@@ -3482,7 +3461,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     Task anyTaskForId(int id, @RootWindowContainer.AnyTaskForIdMatchTaskMode int matchMode,
             @Nullable ActivityOptions aOptions, boolean onTop) {
         // If options are set, ensure that we are attempting to actually restore a task
-        if (matchMode != MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE && aOptions != null) {
+        if (matchMode != MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE && aOptions != null) {
             throw new IllegalArgumentException("Should not specify activity options for non-restore"
                     + " lookup");
         }
@@ -3500,7 +3479,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                         getLaunchStack(null, aOptions, task, onTop);
                 if (launchStack != null && task.getRootTask() != launchStack) {
                     final int reparentMode = onTop
-                            ? REPARENT_MOVE_STACK_TO_FRONT : REPARENT_LEAVE_STACK_IN_PLACE;
+                            ? REPARENT_MOVE_ROOT_TASK_TO_FRONT : REPARENT_LEAVE_ROOT_TASK_IN_PLACE;
                     task.reparent(launchStack, onTop, reparentMode, ANIMATE, DEFER_RESUME,
                             "anyTaskForId");
                 }
@@ -3509,7 +3488,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
 
         // If we are matching stack tasks only, return now
-        if (matchMode == MATCH_TASK_IN_STACKS_ONLY) {
+        if (matchMode == MATCH_ATTACHED_TASK_ONLY) {
             return null;
         }
 
@@ -3526,11 +3505,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return null;
         }
 
-        if (matchMode == MATCH_TASK_IN_STACKS_OR_RECENT_TASKS) {
+        if (matchMode == MATCH_ATTACHED_TASK_OR_RECENT_TASKS) {
             return task;
         }
 
-        // Implicitly, this case is MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE
+        // Implicitly, this case is MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE
         if (!mStackSupervisor.restoreRecentTaskLocked(task, aOptions, onTop)) {
             if (DEBUG_RECENTS) {
                 Slog.w(TAG_RECENTS,

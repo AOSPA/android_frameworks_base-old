@@ -117,6 +117,7 @@ import android.database.ContentObserver;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
+import android.hardware.display.DisplayManagerInternal;
 import android.hardware.hdmi.HdmiAudioSystemClient;
 import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiPlaybackClient;
@@ -366,6 +367,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     StatusBarManagerInternal mStatusBarManagerInternal;
     AudioManagerInternal mAudioManagerInternal;
     DisplayManager mDisplayManager;
+    DisplayManagerInternal mDisplayManagerInternal;
     boolean mPreloadedRecentApps;
     final Object mServiceAquireLock = new Object();
     Vibrator mVibrator; // Vibrator for giving feedback of orientation changes
@@ -1475,8 +1477,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 Settings.Secure.USER_SETUP_COMPLETE, 0, UserHandle.USER_CURRENT) != 0;
         if (mHasFeatureLeanback) {
             isSetupComplete &= isTvUserSetupComplete();
+        } else if (mHasFeatureAuto) {
+            isSetupComplete &= isAutoUserSetupComplete();
         }
         return isSetupComplete;
+    }
+
+    private boolean isAutoUserSetupComplete() {
+        return Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                "android.car.SETUP_WIZARD_IN_PROGRESS", 0, UserHandle.USER_CURRENT) == 0;
     }
 
     private boolean isTvUserSetupComplete() {
@@ -1761,6 +1770,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
         mAppOpsManager = mContext.getSystemService(AppOpsManager.class);
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
+        mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
         mPackageManager = mContext.getPackageManager();
         mHasFeatureWatch = mPackageManager.hasSystemFeature(FEATURE_WATCH);
         mHasFeatureLeanback = mPackageManager.hasSystemFeature(FEATURE_LEANBACK);
@@ -2427,6 +2437,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
             wm = (WindowManager) context.getSystemService(WINDOW_SERVICE);
             view = win.getDecorView();
+
+            // Ignore to show splash screen if the decorView is not opaque.
+            if (!view.isOpaque()) {
+                if (DEBUG_SPLASH_SCREEN) {
+                    Slog.d(TAG, "addSplashScreen: the view of " + packageName
+                            + " is not opaque, cancel it");
+                }
+                return null;
+            }
 
             if (DEBUG_SPLASH_SCREEN) Slog.d(TAG, "Adding splash screen window for "
                 + packageName + " / " + appToken + ": " + (view.getParent() != null ? view : null));

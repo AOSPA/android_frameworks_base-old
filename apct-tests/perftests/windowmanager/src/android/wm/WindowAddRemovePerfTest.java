@@ -84,9 +84,8 @@ public class WindowAddRemovePerfTest extends WindowManagerPerfTestBase
 
     private static class TestWindow extends BaseIWindow {
         final WindowManager.LayoutParams mLayoutParams = new WindowManager.LayoutParams();
+        final InsetsState mRequestedVisibility = new InsetsState();
         final Rect mOutFrame = new Rect();
-        final Rect mOutContentInsets = new Rect();
-        final Rect mOutStableInsets = new Rect();
         final DisplayCutout.ParcelableWrapper mOutDisplayCutout =
                 new DisplayCutout.ParcelableWrapper();
         final InsetsState mOutInsetsState = new InsetsState();
@@ -108,7 +107,7 @@ public class WindowAddRemovePerfTest extends WindowManagerPerfTestBase
 
                 long startTime = SystemClock.elapsedRealtimeNanos();
                 session.addToDisplay(this, mLayoutParams, View.VISIBLE,
-                        Display.DEFAULT_DISPLAY, mOutFrame, mOutContentInsets, mOutStableInsets,
+                        Display.DEFAULT_DISPLAY, mRequestedVisibility, mOutFrame,
                         mOutDisplayCutout, inputChannel, mOutInsetsState, mOutControls);
                 final long elapsedTimeNsOfAdd = SystemClock.elapsedRealtimeNanos() - startTime;
                 state.addExtraResult("add", elapsedTimeNsOfAdd);

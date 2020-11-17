@@ -24,6 +24,7 @@ import android.hardware.camera2.impl.CaptureResultExtras;
 import android.hardware.camera2.impl.PublicKey;
 import android.hardware.camera2.impl.SyntheticKey;
 import android.hardware.camera2.utils.TypeReference;
+import android.os.Build;
 import android.util.Log;
 import android.util.Rational;
 
@@ -79,7 +80,7 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
          *
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public Key(String name, Class<T> type, long vendorId) {
             mKey = new CameraMetadataNative.Key<T>(name, type, vendorId);
         }
@@ -190,6 +191,7 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
         }
     }
 
+    private final String mCameraId;
     @UnsupportedAppUsage
     private final CameraMetadataNative mResults;
     private final CaptureRequest mRequest;
@@ -202,7 +204,7 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <p>For internal use only</p>
      * @hide
      */
-    public CaptureResult(CameraMetadataNative results, CaptureRequest parent,
+    public CaptureResult(String cameraId, CameraMetadataNative results, CaptureRequest parent,
             CaptureResultExtras extras) {
         if (results == null) {
             throw new IllegalArgumentException("results was null");
@@ -221,6 +223,7 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
             throw new AssertionError("Results must not be empty");
         }
         setNativeInstance(mResults);
+        mCameraId = cameraId;
         mRequest = parent;
         mSequenceId = extras.getRequestId();
         mFrameNumber = extras.getFrameNumber();
@@ -251,9 +254,24 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
         }
 
         setNativeInstance(mResults);
+        mCameraId = "none";
         mRequest = null;
         mSequenceId = sequenceId;
         mFrameNumber = -1;
+    }
+
+    /**
+     * Get the camera ID of the camera that produced this capture result.
+     *
+     * For a logical multi-camera, the ID may be the logical or the physical camera ID, depending on
+     * whether the capture result was obtained from
+     * {@link TotalCaptureResult#getPhysicalCameraResults} or not.
+     *
+     * @return The camera ID for the camera that produced this capture result.
+     */
+    @NonNull
+    public String getCameraId() {
+        return mCameraId;
     }
 
     /**

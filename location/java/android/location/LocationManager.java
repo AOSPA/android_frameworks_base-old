@@ -76,17 +76,26 @@ import java.util.function.Consumer;
  * obtain periodic updates of the device's geographical location, or to be notified when the device
  * enters the proximity of a given geographical location.
  *
- * <p class="note">Unless noted, all Location API methods require the {@link
- * android.Manifest.permission#ACCESS_COARSE_LOCATION} or {@link
- * android.Manifest.permission#ACCESS_FINE_LOCATION} permissions. If your application only has the
- * coarse permission then it will not have access to fine location providers. Other providers will
- * still return location results, but the exact location will be obfuscated to a coarse level of
- * accuracy.
+ * <p class="note">Unless otherwise noted, all Location API methods require the
+ * {@link android.Manifest.permission#ACCESS_COARSE_LOCATION} or
+ * {@link android.Manifest.permission#ACCESS_FINE_LOCATION} permissions. If your application only
+ * has the coarse permission then providers will still return location results, but the exact
+ * location will be obfuscated to a coarse level of accuracy.
  */
 @SuppressWarnings({"deprecation"})
 @SystemService(Context.LOCATION_SERVICE)
 @RequiresFeature(PackageManager.FEATURE_LOCATION)
 public class LocationManager {
+
+    /**
+     * For apps targeting Android S and above, immutable PendingIntents passed into location APIs
+     * will generate an IllegalArgumentException.
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    public static final long BLOCK_IMMUTABLE_PENDING_INTENTS = 171317480L;
 
     /**
      * For apps targeting Android S and above, LocationRequest system APIs may not be used with
@@ -96,7 +105,7 @@ public class LocationManager {
      */
     @ChangeId
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
-    public static final long PREVENT_PENDING_INTENT_SYSTEM_API_USAGE = 169887240L;
+    public static final long BLOCK_PENDING_INTENT_SYSTEM_API_USAGE = 169887240L;
 
     /**
      * For apps targeting Android S and above, location clients may receive historical locations
@@ -116,7 +125,7 @@ public class LocationManager {
      */
     @ChangeId
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
-    private static final long GET_PROVIDER_SECURITY_EXCEPTIONS = 150935354L;
+    public static final long GET_PROVIDER_SECURITY_EXCEPTIONS = 150935354L;
 
     /**
      * For apps targeting Android K and above, supplied {@link PendingIntent}s must be targeted to a
@@ -126,7 +135,7 @@ public class LocationManager {
      */
     @ChangeId
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.JELLY_BEAN)
-    private static final long TARGETED_PENDING_INTENT = 148963590L;
+    public static final long BLOCK_UNTARGETED_PENDING_INTENTS = 148963590L;
 
     /**
      * For apps targeting Android K and above, incomplete locations may not be passed to
@@ -136,7 +145,7 @@ public class LocationManager {
      */
     @ChangeId
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.JELLY_BEAN)
-    private static final long INCOMPLETE_LOCATION = 148964793L;
+    public static final long BLOCK_INCOMPLETE_LOCATIONS = 148964793L;
 
     /**
      * For apps targeting Android S and above, all {@link GpsStatus} API usage must be replaced with
@@ -146,7 +155,7 @@ public class LocationManager {
      */
     @ChangeId
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
-    private static final long GPS_STATUS_USAGE = 144027538L;
+    public static final long BLOCK_GPS_STATUS_USAGE = 144027538L;
 
     /**
      * Name of the network location provider.
@@ -216,15 +225,15 @@ public class LocationManager {
      * Key used for an extra holding a boolean enabled/disabled status value when a provider
      * enabled/disabled event is broadcast using a PendingIntent.
      *
-     * @see #requestLocationUpdates(String, long, float, PendingIntent)
+     * @see #requestLocationUpdates(String, LocationRequest, PendingIntent)
      */
     public static final String KEY_PROVIDER_ENABLED = "providerEnabled";
 
     /**
-     * Key used for an extra holding a {@link Location} value when a location change is broadcast
-     * using a PendingIntent.
+     * Key used for an extra holding a {@link Location} value when a location change is sent using
+     * a PendingIntent.
      *
-     * @see #requestLocationUpdates(String, long, float, PendingIntent)
+     * @see #requestLocationUpdates(String, LocationRequest, PendingIntent)
      */
     public static final String KEY_LOCATION_CHANGED = "location";
 
@@ -575,7 +584,6 @@ public class LocationManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(WRITE_SECURE_SETTINGS)
     public void setLocationEnabledForUser(boolean enabled, @NonNull UserHandle userHandle) {
         try {
@@ -752,7 +760,6 @@ public class LocationManager {
      */
     @Deprecated
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION})
     public void getCurrentLocation(@NonNull LocationRequest locationRequest,
             @Nullable CancellationSignal cancellationSignal,
@@ -1204,7 +1211,6 @@ public class LocationManager {
      */
     @Deprecated
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION})
     public void requestLocationUpdates(
             @Nullable LocationRequest locationRequest,
@@ -1236,7 +1242,6 @@ public class LocationManager {
      */
     @Deprecated
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION})
     public void requestLocationUpdates(
             @Nullable LocationRequest locationRequest,
@@ -1269,7 +1274,6 @@ public class LocationManager {
      */
     @Deprecated
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION})
     public void requestLocationUpdates(
             @Nullable LocationRequest locationRequest,
@@ -1341,27 +1345,26 @@ public class LocationManager {
         Preconditions.checkArgument(provider != null, "invalid null provider");
         Preconditions.checkArgument(locationRequest != null, "invalid null location request");
 
-        synchronized (sLocationListeners) {
-            WeakReference<LocationListenerTransport> reference = sLocationListeners.get(listener);
-            LocationListenerTransport transport = reference != null ? reference.get() : null;
-            if (transport == null) {
-                transport = new LocationListenerTransport(listener, executor);
-                sLocationListeners.put(listener, new WeakReference<>(transport));
-            } else {
-                transport.setExecutor(executor);
-            }
+        try {
+            synchronized (sLocationListeners) {
+                WeakReference<LocationListenerTransport> reference = sLocationListeners.get(
+                        listener);
+                LocationListenerTransport transport = reference != null ? reference.get() : null;
+                if (transport == null) {
+                    transport = new LocationListenerTransport(listener, executor);
+                } else {
+                    Preconditions.checkState(transport.isRegistered());
+                    transport.setExecutor(executor);
+                }
 
-            try {
-                // making the service call while under lock is less than ideal since LMS must
-                // make sure that callbacks are not made on the same thread - however it is the
-                // easiest way to guarantee that clients will not receive callbacks after
-                // unregistration is complete.
                 mService.registerLocationListener(provider, locationRequest, transport,
                         mContext.getPackageName(), mContext.getAttributionTag(),
                         AppOpsManager.toReceiverId(listener));
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
+
+                sLocationListeners.put(listener, new WeakReference<>(transport));
             }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -1393,9 +1396,14 @@ public class LocationManager {
         Preconditions.checkArgument(locationRequest != null, "invalid null location request");
         Preconditions.checkArgument(pendingIntent != null, "invalid null pending intent");
 
-        if (Compatibility.isChangeEnabled(TARGETED_PENDING_INTENT)) {
+        if (Compatibility.isChangeEnabled(BLOCK_UNTARGETED_PENDING_INTENTS)) {
             Preconditions.checkArgument(pendingIntent.isTargetedToPackage(),
                     "pending intent must be targeted to a package");
+        }
+
+        if (Compatibility.isChangeEnabled(BLOCK_IMMUTABLE_PENDING_INTENTS)) {
+            Preconditions.checkArgument(!pendingIntent.isImmutable(),
+                    "pending intent must be mutable");
         }
 
         try {
@@ -1449,23 +1457,17 @@ public class LocationManager {
     public void removeUpdates(@NonNull LocationListener listener) {
         Preconditions.checkArgument(listener != null, "invalid null listener");
 
-        synchronized (sLocationListeners) {
-            WeakReference<LocationListenerTransport> reference = sLocationListeners.remove(
-                    listener);
-            LocationListenerTransport transport = reference != null ? reference.get() : null;
-            if (transport != null) {
-                transport.unregister();
-
-                try {
-                    // making the service call while under lock is less than ideal since LMS must
-                    // make sure that callbacks are not made on the same thread - however it is the
-                    // easiest way to guarantee that clients will not receive callbacks after
-                    // unregistration is complete.
+        try {
+            synchronized (sLocationListeners) {
+                WeakReference<LocationListenerTransport> ref = sLocationListeners.remove(listener);
+                LocationListenerTransport transport = ref != null ? ref.get() : null;
+                if (transport != null) {
+                    transport.unregister();
                     mService.unregisterLocationListener(transport);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
                 }
             }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -1757,7 +1759,7 @@ public class LocationManager {
         Preconditions.checkArgument(provider != null, "invalid null provider");
         Preconditions.checkArgument(location != null, "invalid null location");
 
-        if (Compatibility.isChangeEnabled(INCOMPLETE_LOCATION)) {
+        if (Compatibility.isChangeEnabled(BLOCK_INCOMPLETE_LOCATIONS)) {
             Preconditions.checkArgument(location.isComplete(),
                     "incomplete location object, missing timestamp or accuracy?");
         } else {
@@ -1849,30 +1851,38 @@ public class LocationManager {
      * {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}. From API version 17 and onwards,
      * this method requires {@link android.Manifest.permission#ACCESS_FINE_LOCATION} permission.
      *
-     * @param latitude   the latitude of the central point of the alert region
-     * @param longitude  the longitude of the central point of the alert region
-     * @param radius     the radius of the central point of the alert region in meters
-     * @param expiration expiration realtime for this proximity alert in milliseconds, or -1 to
-     *                   indicate no expiration
-     * @param intent     a {@link PendingIntent} that will sent when entry to or exit from the alert
-     *                   region is detected
+     * @param latitude      the latitude of the central point of the alert region
+     * @param longitude     the longitude of the central point of the alert region
+     * @param radius        the radius of the central point of the alert region in meters
+     * @param expiration    expiration realtime for this proximity alert in milliseconds, or -1 to
+     *                      indicate no expiration
+     * @param pendingIntent a {@link PendingIntent} that will sent when entry to or exit from the
+     *                      alert region is detected
      * @throws SecurityException if {@link android.Manifest.permission#ACCESS_FINE_LOCATION}
      *                           permission is not present
      */
     @RequiresPermission(anyOf = {ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION})
     public void addProximityAlert(double latitude, double longitude, float radius, long expiration,
-            @NonNull PendingIntent intent) {
+            @NonNull PendingIntent pendingIntent) {
         android.util.SeempLog.record(45);
-        Preconditions.checkArgument(intent != null, "invalid null pending intent");
-        if (Compatibility.isChangeEnabled(TARGETED_PENDING_INTENT)) {
-            Preconditions.checkArgument(intent.isTargetedToPackage(),
+        Preconditions.checkArgument(pendingIntent != null, "invalid null pending intent");
+        if (Compatibility.isChangeEnabled(BLOCK_UNTARGETED_PENDING_INTENTS)) {
+            Preconditions.checkArgument(pendingIntent.isTargetedToPackage(),
                     "pending intent must be targeted to a package");
         }
-        if (expiration < 0) expiration = Long.MAX_VALUE;
+
+        if (Compatibility.isChangeEnabled(BLOCK_IMMUTABLE_PENDING_INTENTS)) {
+            Preconditions.checkArgument(!pendingIntent.isImmutable(),
+                    "pending intent must be mutable");
+        }
+
+        if (expiration < 0) {
+            expiration = Long.MAX_VALUE;
+        }
 
         try {
             Geofence fence = Geofence.createCircle(latitude, longitude, radius, expiration);
-            mService.requestGeofence(fence, intent, mContext.getPackageName(),
+            mService.requestGeofence(fence, pendingIntent, mContext.getPackageName(),
                     mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -1970,7 +1980,7 @@ public class LocationManager {
     @Deprecated
     @RequiresPermission(ACCESS_FINE_LOCATION)
     public @Nullable GpsStatus getGpsStatus(@Nullable GpsStatus status) {
-        if (Compatibility.isChangeEnabled(GPS_STATUS_USAGE)) {
+        if (Compatibility.isChangeEnabled(BLOCK_GPS_STATUS_USAGE)) {
             throw new UnsupportedOperationException(
                     "GpsStatus APIs not supported, please use GnssStatus APIs instead");
         }
@@ -2006,7 +2016,7 @@ public class LocationManager {
     @RequiresPermission(ACCESS_FINE_LOCATION)
     public boolean addGpsStatusListener(GpsStatus.Listener listener) {
         android.util.SeempLog.record(43);
-        if (Compatibility.isChangeEnabled(GPS_STATUS_USAGE)) {
+        if (Compatibility.isChangeEnabled(BLOCK_GPS_STATUS_USAGE)) {
             throw new UnsupportedOperationException(
                     "GpsStatus APIs not supported, please use GnssStatus APIs instead");
         }
@@ -2026,7 +2036,7 @@ public class LocationManager {
      */
     @Deprecated
     public void removeGpsStatusListener(GpsStatus.Listener listener) {
-        if (Compatibility.isChangeEnabled(GPS_STATUS_USAGE)) {
+        if (Compatibility.isChangeEnabled(BLOCK_GPS_STATUS_USAGE)) {
             throw new UnsupportedOperationException(
                     "GpsStatus APIs not supported, please use GnssStatus APIs instead");
         }
@@ -2592,7 +2602,7 @@ public class LocationManager {
         @Nullable private volatile LocationListener mListener;
 
         LocationListenerTransport(LocationListener listener, Executor executor) {
-            Preconditions.checkArgument(listener != null, "invalid null listener/callback");
+            Preconditions.checkArgument(listener != null, "invalid null listener");
             mListener = listener;
             setExecutor(executor);
         }
@@ -2600,6 +2610,10 @@ public class LocationManager {
         void setExecutor(Executor executor) {
             Preconditions.checkArgument(executor != null, "invalid null executor");
             mExecutor = executor;
+        }
+
+        boolean isRegistered() {
+            return mListener != null;
         }
 
         void unregister() {

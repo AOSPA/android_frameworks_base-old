@@ -33,6 +33,7 @@ import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.dock.DockManagerImpl;
 import com.android.systemui.doze.DozeHost;
+import com.android.systemui.media.dagger.MediaModule;
 import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.EnhancedEstimates;
@@ -61,7 +62,6 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedControllerImpl;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
-import com.android.systemui.wmshell.WMShellModule;
 
 import javax.inject.Named;
 
@@ -74,9 +74,9 @@ import dagger.Provides;
  * overridden by the System UI implementation.
  */
 @Module(includes = {
-            QSModule.class,
-            WMShellModule.class
-        })
+        MediaModule.class,
+        QSModule.class
+})
 public abstract class SystemUIDefaultModule {
 
     @SysUISingleton

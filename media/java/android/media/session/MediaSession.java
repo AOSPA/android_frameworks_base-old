@@ -33,6 +33,7 @@ import android.media.VolumeProvider;
 import android.media.session.MediaSessionManager.RemoteUserInfo;
 import android.net.Uri;
 import android.os.BadParcelableException;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -606,25 +607,6 @@ public final class MediaSession {
             return mCallback.mCurrentControllerInfo.getPackageName();
         }
         return null;
-    }
-
-    /**
-     * Return true if this is considered an active playback state.
-     *
-     * @hide
-     */
-    public static boolean isActiveState(int state) {
-        switch (state) {
-            case PlaybackState.STATE_FAST_FORWARDING:
-            case PlaybackState.STATE_REWINDING:
-            case PlaybackState.STATE_SKIPPING_TO_PREVIOUS:
-            case PlaybackState.STATE_SKIPPING_TO_NEXT:
-            case PlaybackState.STATE_BUFFERING:
-            case PlaybackState.STATE_CONNECTING:
-            case PlaybackState.STATE_PLAYING:
-                return true;
-        }
-        return false;
     }
 
     /**
@@ -1409,7 +1391,7 @@ public final class MediaSession {
         public static final int UNKNOWN_ID = -1;
 
         private final MediaDescription mDescription;
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         private final long mId;
 
         /**

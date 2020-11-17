@@ -100,7 +100,7 @@
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
     <uses-permission android:name="android.permission.GET_TOP_ACTIVITY_INFO" />
-    <uses-permission android:name="android.permission.MANAGE_ACTIVITY_STACKS" />
+    <uses-permission android:name="android.permission.MANAGE_ACTIVITY_TASKS" />
     <uses-permission android:name="android.permission.START_ACTIVITY_AS_CALLER" />
     <uses-permission android:name="android.permission.START_TASKS_FROM_RECENTS" />
     <uses-permission android:name="android.permission.GET_INTENT_SENDER_INTENT" />
@@ -353,7 +353,7 @@
                 android:exported="true" />
 
         <activity
-            android:name=".bubbles.BubbleOverflowActivity"
+            android:name="com.android.wm.shell.bubbles.BubbleOverflowActivity"
             android:theme="@style/BubbleOverflow"
             android:excludeFromRecents="true"
             android:documentLaunchMode="always"
@@ -574,11 +574,38 @@
         </activity>
 
         <!-- People Space UI Screen -->
-        <activity
-            android:name=".people.PeopleSpaceActivity"
+        <activity android:name=".people.PeopleSpaceActivity"
+            android:label="People"
+            android:icon="@drawable/ic_music_note"
             android:exported="true"
-            android:theme="@android:style/Theme.Material.NoActionBar">
+            android:enabled="false"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:launchMode="singleInstance">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
         </activity>
+
+        <activity android:name=".people.widget.LaunchConversationActivity" />
+
+        <!-- People Space Widget -->
+        <receiver
+            android:name=".people.widget.PeopleSpaceWidgetProvider"
+            android:label="People Space"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/people_space_widget_info" />
+        </receiver>
+
+        <!-- Widget service -->
+        <service android:name=".people.widget.PeopleSpaceWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
 
         <!-- a gallery of delicious treats -->
         <service

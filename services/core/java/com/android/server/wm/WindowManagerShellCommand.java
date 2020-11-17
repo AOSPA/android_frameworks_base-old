@@ -28,7 +28,6 @@ import android.util.DisplayMetrics;
 import android.util.Pair;
 import android.view.Display;
 import android.view.IWindowManager;
-import android.view.Surface;
 import android.view.ViewDebug;
 
 import com.android.internal.os.ByteTransferPipe;
@@ -102,12 +101,22 @@ public class WindowManagerShellCommand extends ShellCommand {
                         }
                     }
                     return result;
-                case "set-user-rotation":
-                    return runSetDisplayUserRotation(pw);
-                case "set-fix-to-user-rotation":
-                    return runSetFixToUserRotation(pw);
+                case "user-rotation":
+                    return runDisplayUserRotation(pw);
+                case "fixed-to-user-rotation":
+                    return runFixedToUserRotation(pw);
+                case "set-ignore-orientation-request":
+                    return runSetIgnoreOrientationRequest(pw);
+                case "get-ignore-orientation-request":
+                    return runGetIgnoreOrientationRequest(pw);
                 case "dump-visible-window-views":
                     return runDumpVisibleWindowViews(pw);
+                case "set-task-letterbox-aspect-ratio":
+                    return runSetTaskLetterboxAspectRatio(pw);
+                case "get-task-letterbox-aspect-ratio":
+                    return runGetTaskLetterboxAspectRatio(pw);
+                case "reset":
+                    return runReset(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -309,14 +318,21 @@ public class WindowManagerShellCommand extends ShellCommand {
         return Integer.parseInt(s);
     }
 
-    private int runSetDisplayUserRotation(PrintWriter pw) {
-        final String lockMode = getNextArgRequired();
-
+    private int runDisplayUserRotation(PrintWriter pw) {
         int displayId = Display.DEFAULT_DISPLAY;
         String arg = getNextArg();
+        if (arg == null) {
+            return printDisplayUserRotation(pw, displayId);
+        }
+
         if ("-d".equals(arg)) {
             displayId = Integer.parseInt(getNextArgRequired());
             arg = getNextArg();
+        }
+
+        final String lockMode = arg;
+        if (lockMode == null) {
+            return printDisplayUserRotation(pw, displayId);
         }
 
         if ("free".equals(lockMode)) {
@@ -324,13 +340,15 @@ public class WindowManagerShellCommand extends ShellCommand {
             return 0;
         }
 
-        if (!lockMode.equals("lock")) {
-            getErrPrintWriter().println("Error: lock mode needs to be either free or lock.");
+        if (!"lock".equals(lockMode)) {
+            getErrPrintWriter().println("Error: argument needs to be either -d, free or lock.");
             return -1;
         }
 
+        arg = getNextArg();
         try {
-            final int rotation = arg != null ? Integer.parseInt(arg) : Surface.ROTATION_0;
+            final int rotation =
+                    arg != null ? Integer.parseInt(arg) : -1 /* lock to current rotation */;
             mInternal.freezeDisplayRotation(displayId, rotation);
             return 0;
         } catch (IllegalArgumentException e) {
@@ -339,12 +357,36 @@ public class WindowManagerShellCommand extends ShellCommand {
         }
     }
 
-    private int runSetFixToUserRotation(PrintWriter pw) throws RemoteException {
+    private int printDisplayUserRotation(PrintWriter pw, int displayId) {
+        final int displayUserRotation = mInternal.getDisplayUserRotation(displayId);
+        if (displayUserRotation < 0) {
+            getErrPrintWriter().println("Error: check logcat for more details.");
+            return -1;
+        }
+        if (!mInternal.isDisplayRotationFrozen(displayId)) {
+            pw.println("free");
+            return 0;
+        }
+        pw.print("lock ");
+        pw.println(displayUserRotation);
+        return 0;
+    }
+
+    private int runFixedToUserRotation(PrintWriter pw) throws RemoteException {
         int displayId = Display.DEFAULT_DISPLAY;
-        String arg = getNextArgRequired();
+        String arg = getNextArg();
+        if (arg == null) {
+            printFixedToUserRotation(pw, displayId);
+            return 0;
+        }
+
         if ("-d".equals(arg)) {
             displayId = Integer.parseInt(getNextArgRequired());
-            arg = getNextArgRequired();
+            arg = getNextArg();
+        }
+
+        if (arg == null) {
+            return printFixedToUserRotation(pw, displayId);
         }
 
         final int fixedToUserRotation;
@@ -365,6 +407,65 @@ public class WindowManagerShellCommand extends ShellCommand {
         }
 
         mInterface.setFixedToUserRotation(displayId, fixedToUserRotation);
+        return 0;
+    }
+
+    private int printFixedToUserRotation(PrintWriter pw, int displayId) {
+        int fixedToUserRotationMode = mInternal.getFixedToUserRotation(displayId);
+        switch (fixedToUserRotationMode) {
+            case IWindowManager.FIXED_TO_USER_ROTATION_DEFAULT:
+                pw.println("default");
+                return 0;
+            case IWindowManager.FIXED_TO_USER_ROTATION_DISABLED:
+                pw.println("disabled");
+                return 0;
+            case IWindowManager.FIXED_TO_USER_ROTATION_ENABLED:
+                pw.println("enabled");
+                return 0;
+            default:
+                getErrPrintWriter().println("Error: check logcat for more details.");
+                return -1;
+        }
+    }
+
+    private int runSetIgnoreOrientationRequest(PrintWriter pw) throws RemoteException {
+        int displayId = Display.DEFAULT_DISPLAY;
+        String arg = getNextArgRequired();
+        if ("-d".equals(arg)) {
+            displayId = Integer.parseInt(getNextArgRequired());
+            arg = getNextArgRequired();
+        }
+
+        final boolean ignoreOrientationRequest;
+        switch (arg) {
+            case "true":
+            case "1":
+                ignoreOrientationRequest = true;
+                break;
+            case "false":
+            case "0":
+                ignoreOrientationRequest = false;
+                break;
+            default:
+                getErrPrintWriter().println("Error: expecting true, 1, false, 0, but we "
+                        + "get " + arg);
+                return -1;
+        }
+
+        mInterface.setIgnoreOrientationRequest(displayId, ignoreOrientationRequest);
+        return 0;
+    }
+
+    private int runGetIgnoreOrientationRequest(PrintWriter pw) throws RemoteException {
+        int displayId = Display.DEFAULT_DISPLAY;
+        String arg = getNextArg();
+        if ("-d".equals(arg)) {
+            displayId = Integer.parseInt(getNextArgRequired());
+        }
+
+        final boolean ignoreOrientationRequest = mInternal.getIgnoreOrientationRequest(displayId);
+        pw.println("ignoreOrientationRequest " + ignoreOrientationRequest
+                + " for displayId=" + displayId);
         return 0;
     }
 
@@ -412,6 +513,69 @@ public class WindowManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int runSetTaskLetterboxAspectRatio(PrintWriter pw) throws RemoteException {
+        final float aspectRatio;
+        try {
+            String arg = getNextArgRequired();
+            if ("reset".equals(arg)) {
+                mInternal.resetTaskLetterboxAspectRatio();
+                return 0;
+            }
+            aspectRatio = Float.parseFloat(arg);
+        } catch (NumberFormatException  e) {
+            getErrPrintWriter().println("Error: bad aspect ratio format " + e);
+            return -1;
+        } catch (IllegalArgumentException  e) {
+            getErrPrintWriter().println(
+                    "Error: 'reset' or aspect ratio should be provided as an argument " + e);
+            return -1;
+        }
+
+        mInternal.setTaskLetterboxAspectRatio(aspectRatio);
+        return 0;
+    }
+
+    private int runGetTaskLetterboxAspectRatio(PrintWriter pw) throws RemoteException {
+        final float aspectRatio = mInternal.getTaskLetterboxAspectRatio();
+        if (aspectRatio <= WindowManagerService.MIN_TASK_LETTERBOX_ASPECT_RATIO) {
+            pw.println("Letterbox aspect ratio is not set");
+        } else {
+            pw.println("Letterbox aspect ratio is " + aspectRatio);
+        }
+        return 0;
+    }
+
+    private int runReset(PrintWriter pw) throws RemoteException {
+        int displayId = getDisplayId(getNextArg());
+
+        // size
+        mInterface.clearForcedDisplaySize(displayId);
+
+        // density
+        mInterface.clearForcedDisplayDensityForUser(displayId, UserHandle.USER_CURRENT);
+
+        // folded-area
+        mInternal.setOverrideFoldedArea(new Rect());
+
+        // scaling
+        mInterface.setForcedDisplayScalingMode(displayId, DisplayContent.FORCE_SCALING_MODE_AUTO);
+
+        // user-rotation
+        mInternal.thawDisplayRotation(displayId);
+
+        // fixed-to-user-rotation
+        mInterface.setFixedToUserRotation(displayId, IWindowManager.FIXED_TO_USER_ROTATION_DEFAULT);
+
+        // set-ignore-orientation-request
+        mInterface.setIgnoreOrientationRequest(displayId, false /* ignoreOrientationRequest */);
+
+        // set-task-letterbox-aspect-ratio
+        mInternal.resetTaskLetterboxAspectRatio();
+
+        pw.println("Reset all settings for displayId=" + displayId);
+        return 0;
+    }
+
     @Override
     public void onHelp() {
         PrintWriter pw = getOutPrintWriter();
@@ -429,12 +593,23 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("    Set display scaling mode.");
         pw.println("  dismiss-keyguard");
         pw.println("    Dismiss the keyguard, prompting user for auth if necessary.");
-        pw.println("  set-user-rotation [free|lock] [-d DISPLAY_ID] [rotation]");
-        pw.println("    Set user rotation mode and user rotation.");
+        pw.println("  user-rotation [-d DISPLAY_ID] [free|lock] [rotation]");
+        pw.println("    Print or set user rotation mode and user rotation.");
         pw.println("  dump-visible-window-views");
         pw.println("    Dumps the encoded view hierarchies of visible windows");
-        pw.println("  set-fix-to-user-rotation [-d DISPLAY_ID] [enabled|disabled]");
-        pw.println("    Enable or disable rotating display for app requested orientation.");
+        pw.println("  fixed-to-user-rotation [-d DISPLAY_ID] [enabled|disabled|default]");
+        pw.println("    Print or set rotating display for app requested orientation.");
+        pw.println("  set-ignore-orientation-request [-d DISPLAY_ID] [true|1|false|0]");
+        pw.println("  get-ignore-orientation-request [-d DISPLAY_ID] ");
+        pw.println("    If app requested orientation should be ignored.");
+        pw.println("  set-task-letterbox-aspect-ratio [reset|aspectRatio]");
+        pw.println("  get-task-letterbox-aspect-ratio");
+        pw.println("    Aspect ratio of task level letterboxing. If aspectRatio <= "
+                + WindowManagerService.MIN_TASK_LETTERBOX_ASPECT_RATIO);
+        pw.println("    both it and R.dimen.config_taskLetterboxAspectRatio will be ignored");
+        pw.println("    and framework implementation will be used to determine aspect ratio.");
+        pw.println("  reset [-d DISPLAY_ID]");
+        pw.println("    Reset all override settings.");
         if (!IS_USER) {
             pw.println("  tracing (start | stop)");
             pw.println("    Start or stop window tracing.");

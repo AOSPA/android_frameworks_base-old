@@ -194,7 +194,7 @@ public final class InputManager {
      */
     @BlockUntrustedTouchesMode
     public static final int DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE =
-            BlockUntrustedTouchesMode.DISABLED;
+            BlockUntrustedTouchesMode.PERMISSIVE;
 
     /**
      * Prevent touches from being consumed by apps if these touches passed through a non-trusted
@@ -231,7 +231,7 @@ public final class InputManager {
      * Waits for the event to be delivered to the application and handled.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(trackingBug = 171972397)
     public static final int INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH =
             InputEventInjectionSync.WAIT_FOR_FINISHED;
 

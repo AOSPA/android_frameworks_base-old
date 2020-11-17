@@ -1129,6 +1129,8 @@
     <string name="capital_off" msgid="7443704171014626777">"ӨЧҮК"</string>
     <string name="checked" msgid="9179896827054513119">"белгиленген"</string>
     <string name="not_checked" msgid="7972320087569023342">"белгилене элек"</string>
+    <string name="selected" msgid="6614607926197755875">"тандалган"</string>
+    <string name="not_selected" msgid="410652016565864475">"тандалган жок"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Кайсынысын колдоносуз?"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"%1$s аркылуу аракетти аягына чейин чыгаруу"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Аракетти аягына чыгаруу"</string>
@@ -2007,8 +2009,8 @@
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Батарея кубаттоого чейин отуруп калышы мүмкүн"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Батареянын отуруп калбашы үчүн Батареяны үнөмдөгүч режими иштетилди"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Батареяны үнөмдөгүч"</string>
-    <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Батареяны үнөмдөгүч режими өчүрүлдү"</string>
-    <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Телефон жеткиликтүү кубатталды. Функцияны колдоно берсеңиз болот."</string>
+    <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Батареяны үнөмдөө режими өчүк"</string>
+    <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Телефондун кубаты жетиштүү. Функциялар мындан ары чектелбейт."</string>
     <string name="battery_saver_charged_notification_summary" product="tablet" msgid="4426317048139996888">"Планшет жеткиликтүү кубатталды. Функцияны колдоно берсеңиз болот."</string>
     <string name="battery_saver_charged_notification_summary" product="device" msgid="1031562417867646649">"Түзмөк жеткиликтүү кубатталды. Функцияны колдоно берсеңиз болот."</string>
     <string name="mime_type_folder" msgid="2203536499348787650">"Папка"</string>

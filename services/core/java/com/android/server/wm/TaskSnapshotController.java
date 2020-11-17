@@ -157,7 +157,6 @@ class TaskSnapshotController {
         if (shouldDisableSnapshots()) {
             return;
         }
-
         // We need to take a snapshot of the task if and only if all activities of the task are
         // either closing or hidden.
         getClosingTasks(closingApps, mTmpTasks);
@@ -445,10 +444,17 @@ class TaskSnapshotController {
         for (int i = closingApps.size() - 1; i >= 0; i--) {
             final ActivityRecord activity = closingApps.valueAt(i);
             final Task task = activity.getTask();
+            if (task == null) continue;
 
+            // Since RecentsAnimation will handle task snapshot while switching apps with the
+            // best capture timing (e.g. IME window capture),
+            // No need additional task capture while task is controlled by RecentsAnimation.
+            if (task.isAnimatingByRecents()) {
+                mSkipClosingAppSnapshotTasks.add(task);
+            }
             // If the task of the app is not visible anymore, it means no other app in that task
             // is opening. Thus, the task is closing.
-            if (task != null && !task.isVisible() && !mSkipClosingAppSnapshotTasks.contains(task)) {
+            if (!task.isVisible() && !mSkipClosingAppSnapshotTasks.contains(task)) {
                 outClosingTasks.add(task);
             }
         }
@@ -482,8 +488,7 @@ class TaskSnapshotController {
         final int color = ColorUtils.setAlphaComponent(
                 task.getTaskDescription().getBackgroundColor(), 255);
         final LayoutParams attrs = mainWindow.getAttrs();
-        final InsetsState insetsState = new InsetsState(mainWindow.getInsetsState());
-        mergeInsetsSources(insetsState, mainWindow.getRequestedInsetsState());
+        final InsetsState insetsState = getInsetsStateWithVisibilityOverride(mainWindow);
         final Rect systemBarInsets = getSystemBarInsets(mainWindow.getFrame(), insetsState);
         final SystemBarBackgroundPainter decorPainter = new SystemBarBackgroundPainter(attrs.flags,
                 attrs.privateFlags, attrs.insetsFlags.appearance, task.getTaskDescription(),
@@ -572,7 +577,10 @@ class TaskSnapshotController {
                 synchronized (mService.mGlobalLock) {
                     mTmpTasks.clear();
                     mService.mRoot.forAllTasks(task -> {
-                        if (task.isVisible()) {
+                        // Since RecentsAnimation will handle task snapshot while switching apps
+                        // with the best capture timing (e.g. IME window capture), No need
+                        // additional task capture while task is controlled by RecentsAnimation.
+                        if (task.isVisible() && !task.isAnimatingByRecents()) {
                             mTmpTasks.add(task);
                         }
                     });
@@ -603,13 +611,18 @@ class TaskSnapshotController {
         return 0;
     }
 
-    static void mergeInsetsSources(InsetsState base, InsetsState other) {
+    static InsetsState getInsetsStateWithVisibilityOverride(WindowState win) {
+        final InsetsState state = new InsetsState(win.getInsetsState());
         for (@InternalInsetsType int type = 0; type < InsetsState.SIZE; type++) {
-            final InsetsSource source = other.peekSource(type);
-            if (source != null) {
-                base.addSource(source);
+            final boolean requestedVisible = win.getRequestedVisibility(type);
+            InsetsSource source = state.peekSource(type);
+            if (source != null && source.isVisible() != requestedVisible) {
+                source = new InsetsSource(source);
+                source.setVisible(requestedVisible);
+                state.addSource(source);
             }
         }
+        return state;
     }
 
     static Rect getSystemBarInsets(Rect frame, InsetsState state) {

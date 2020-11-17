@@ -23,10 +23,10 @@ import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
-import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
+import android.os.Build;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.service.carrier.CarrierService;
@@ -2766,7 +2766,7 @@ public class CarrierConfigManager {
      * Key identifying if voice call barring notification is required to be shown to the user.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final String KEY_DISABLE_VOICE_BARRING_NOTIFICATION_BOOL =
             "disable_voice_barring_notification_bool";
 
@@ -3875,11 +3875,26 @@ public class CarrierConfigManager {
         public static final String KEY_WIFI_OFF_DEFERRING_TIME_MILLIS_INT =
                 KEY_PREFIX + "wifi_off_deferring_time_millis_int";
 
+        /**
+         * A boolean flag specifying whether or not this carrier requires one IMS registration for
+         * all IMS services (MMTEL and RCS).
+         * <p>
+         * If set to {@code true}, the IMS Service must use one IMS registration for all IMS
+         * services. If set to {@code false}, IMS services may use separate IMS registrations for
+         * MMTEL and RCS.
+         * <p>
+         * The default value for this configuration is {@code false}.
+         * @see android.telephony.ims.SipDelegateManager
+         */
+        public static final String KEY_IMS_SINGLE_REGISTRATION_REQUIRED_BOOL =
+                KEY_PREFIX + "ims_single_registration_required_bool";
+
         private Ims() {}
 
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
             defaults.putInt(KEY_WIFI_OFF_DEFERRING_TIME_MILLIS_INT, 4000);
+            defaults.putBoolean(KEY_IMS_SINGLE_REGISTRATION_REQUIRED_BOOL, false);
             return defaults;
         }
     }
@@ -4670,7 +4685,6 @@ public class CarrierConfigManager {
      */
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     @SystemApi
-    @TestApi
     public void overrideConfig(int subscriptionId, @Nullable PersistableBundle overrideValues) {
         overrideConfig(subscriptionId, overrideValues, false);
     }

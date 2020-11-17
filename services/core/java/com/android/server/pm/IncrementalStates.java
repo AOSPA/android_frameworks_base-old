@@ -16,18 +16,21 @@
 
 package com.android.server.pm;
 
-import android.content.pm.IDataLoaderStatusListener;
+import static android.os.incremental.IStorageHealthListener.HEALTH_STATUS_OK;
+import static android.os.incremental.IStorageHealthListener.HEALTH_STATUS_UNHEALTHY;
+import static android.os.incremental.IStorageHealthListener.HEALTH_STATUS_UNHEALTHY_STORAGE;
+import static android.os.incremental.IStorageHealthListener.HEALTH_STATUS_UNHEALTHY_TRANSPORT;
+
 import android.content.pm.IncrementalStatesInfo;
 import android.content.pm.PackageManager;
 import android.os.Handler;
-import android.os.incremental.IStorageHealthListener;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.function.pooled.PooledLambda;
 
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Manages state transitions of a package installed on Incremental File System. Currently manages:
@@ -36,8 +39,7 @@ import java.util.function.BiConsumer;
  *
  * The following events might change the states of a package:
  * 1. Installation commit
- * 2. Incremental storage health
- * 3. Data loader stream health
+ * 2. Incremental storage health changes
  * 4. Loading progress changes
  *
  * @hide
@@ -48,16 +50,14 @@ public final class IncrementalStates {
     private final Handler mHandler = BackgroundThread.getHandler();
     private final Object mLock = new Object();
     @GuardedBy("mLock")
-    private int mStreamStatus = IDataLoaderStatusListener.STREAM_HEALTHY;
-    @GuardedBy("mLock")
-    private int mStorageHealthStatus = IStorageHealthListener.HEALTH_STATUS_OK;
+    private int mStorageHealthStatus = HEALTH_STATUS_OK;
     @GuardedBy("mLock")
     private final LoadingState mLoadingState;
     @GuardedBy("mLock")
     private StartableState mStartableState;
     @GuardedBy("mLock")
     private Callback mCallback = null;
-    private final BiConsumer<Integer, Integer> mStatusConsumer;
+    private final Consumer<Integer> mStatusConsumer;
 
     public IncrementalStates() {
         // By default the package is not startable and not fully loaded (i.e., is loading)
@@ -101,22 +101,48 @@ public final class IncrementalStates {
         if (DEBUG) {
             Slog.i(TAG, "received package commit event");
         }
+        final boolean startableStateChanged;
         synchronized (mLock) {
-            if (!mStartableState.isStartable()) {
-                mStartableState.adoptNewStartableStateLocked(true);
-            }
-            if (mLoadingState.isLoading() != isIncremental) {
-                mLoadingState.adoptNewLoadingStateLocked(isIncremental);
+            startableStateChanged = mStartableState.adoptNewStartableStateLocked(true);
+            if (!isIncremental) {
+                updateProgressLocked(1);
             }
         }
-        mHandler.post(PooledLambda.obtainRunnable(
-                IncrementalStates::reportStartableState,
-                IncrementalStates.this).recycleOnUse());
+        if (startableStateChanged) {
+            onStartableStateChanged();
+        }
         if (!isIncremental) {
-            mHandler.post(PooledLambda.obtainRunnable(
-                    IncrementalStates::reportFullyLoaded,
-                    IncrementalStates.this).recycleOnUse());
+            onLoadingStateChanged();
         }
+    }
+
+    /**
+     * Change the startable state if the app has crashed or ANR'd during loading.
+     * If the app is not loading (i.e., fully loaded), this event doesn't change startable state.
+     */
+    public void onCrashOrAnr() {
+        if (DEBUG) {
+            Slog.i(TAG, "received package crash or ANR event");
+        }
+        final boolean startableStateChanged;
+        synchronized (mLock) {
+            if (mStartableState.isStartable() && mLoadingState.isLoading()) {
+                // Changing from startable -> unstartable only if app is still loading.
+                startableStateChanged = mStartableState.adoptNewStartableStateLocked(false);
+            } else {
+                // If the app is fully loaded, the crash or ANR is caused by the app itself, so
+                // we do not change the startable state.
+                startableStateChanged = false;
+            }
+        }
+        if (startableStateChanged) {
+            onStartableStateChanged();
+        }
+    }
+
+    private void onStartableStateChanged() {
+        // Disable startable state broadcasts
+        // TODO(b/171920377): completely remove unstartable state.
     }
 
     private void reportStartableState() {
@@ -138,6 +164,12 @@ public final class IncrementalStates {
         }
     }
 
+    private void onLoadingStateChanged() {
+        mHandler.post(PooledLambda.obtainRunnable(
+                IncrementalStates::reportFullyLoaded,
+                IncrementalStates.this).recycleOnUse());
+    }
+
     private void reportFullyLoaded() {
         final Callback callback;
         synchronized (mLock) {
@@ -148,34 +180,23 @@ public final class IncrementalStates {
         }
     }
 
-    private class StatusConsumer implements BiConsumer<Integer, Integer> {
+    private class StatusConsumer implements Consumer<Integer> {
         @Override
-        public void accept(Integer streamStatus, Integer storageStatus) {
-            if (streamStatus == null && storageStatus == null) {
-                return;
-            }
-            final boolean oldState, newState;
+        public void accept(Integer storageStatus) {
+            final boolean startableStateChanged;
             synchronized (mLock) {
                 if (!mLoadingState.isLoading()) {
                     // Do nothing if the package is already fully loaded
                     return;
                 }
-                oldState = mStartableState.isStartable();
-                if (streamStatus != null) {
-                    mStreamStatus = (Integer) streamStatus;
-                }
-                if (storageStatus != null) {
-                    mStorageHealthStatus = (Integer) storageStatus;
-                }
-                updateStartableStateLocked();
-                newState = mStartableState.isStartable();
+                mStorageHealthStatus = storageStatus;
+                startableStateChanged = updateStartableStateLocked();
             }
-            if (oldState != newState) {
-                mHandler.post(PooledLambda.obtainRunnable(IncrementalStates::reportStartableState,
-                        IncrementalStates.this).recycleOnUse());
+            if (startableStateChanged) {
+                onStartableStateChanged();
             }
         }
-    };
+    }
 
     /**
      * By calling this method, the caller indicates that there issues with the Incremental
@@ -188,21 +209,7 @@ public final class IncrementalStates {
             Slog.i(TAG, "received storage health status changed event : storageHealthStatus="
                     + storageHealthStatus);
         }
-        mStatusConsumer.accept(null, storageHealthStatus);
-    }
-
-    /**
-     * By calling this method, the caller indicates that the stream status of the package has
-     * been
-     * changed. This could indicate a streaming error. The state will change according to the
-     * status
-     * code defined in {@code IDataLoaderStatusListener}.
-     */
-    public void onStreamStatusChanged(int streamState) {
-        if (DEBUG) {
-            Slog.i(TAG, "received stream status changed event : streamState=" + streamState);
-        }
-        mStatusConsumer.accept(streamState, null);
+        mStatusConsumer.accept(storageHealthStatus);
     }
 
     /**
@@ -234,14 +241,10 @@ public final class IncrementalStates {
             newStartableState = mStartableState.isStartable();
         }
         if (!newLoadingState) {
-            mHandler.post(PooledLambda.obtainRunnable(
-                    IncrementalStates::reportFullyLoaded,
-                    IncrementalStates.this).recycleOnUse());
+            onLoadingStateChanged();
         }
         if (newStartableState != oldStartableState) {
-            mHandler.post(PooledLambda.obtainRunnable(
-                    IncrementalStates::reportStartableState,
-                    IncrementalStates.this).recycleOnUse());
+            onStartableStateChanged();
         }
     }
 
@@ -279,46 +282,28 @@ public final class IncrementalStates {
      * health
      * status. If the next state is different from the current state, proceed with state
      * change.
+     * @return True if the new startable state is different from the old one.
      */
-    private void updateStartableStateLocked() {
+    private boolean updateStartableStateLocked() {
         final boolean currentState = mStartableState.isStartable();
         boolean nextState = currentState;
         if (!currentState) {
-            if (mStorageHealthStatus == IStorageHealthListener.HEALTH_STATUS_OK
-                    && mStreamStatus == IDataLoaderStatusListener.STREAM_HEALTHY) {
-                // change from unstartable -> startable when both stream and storage are healthy
+            if (mStorageHealthStatus == HEALTH_STATUS_OK) {
+                // change from unstartable -> startable
                 nextState = true;
             }
         } else {
-            if (mStorageHealthStatus == IStorageHealthListener.HEALTH_STATUS_UNHEALTHY) {
-                // unrecoverable if storage is unhealthy
+            if (mStorageHealthStatus == HEALTH_STATUS_UNHEALTHY
+                    || mStorageHealthStatus == HEALTH_STATUS_UNHEALTHY_STORAGE
+                    || mStorageHealthStatus == HEALTH_STATUS_UNHEALTHY_TRANSPORT) {
+                // change from startable -> unstartable
                 nextState = false;
-            } else {
-                switch (mStreamStatus) {
-                    case IDataLoaderStatusListener.STREAM_INTEGRITY_ERROR:
-                        // unrecoverable, fall through
-                    case IDataLoaderStatusListener.STREAM_SOURCE_ERROR: {
-                        // unrecoverable
-                        nextState = false;
-                        break;
-                    }
-                    case IDataLoaderStatusListener.STREAM_STORAGE_ERROR: {
-                        if (mStorageHealthStatus != IStorageHealthListener.HEALTH_STATUS_OK) {
-                            // unrecoverable if there is a pending read AND storage is limited
-                            nextState = false;
-                        }
-                        break;
-                    }
-                    default:
-                        // anything else, remain startable
-                        break;
-                }
             }
         }
         if (nextState == currentState) {
-            return;
+            return false;
         }
-        mStartableState.adoptNewStartableStateLocked(nextState);
+        return mStartableState.adoptNewStartableStateLocked(nextState);
     }
 
     private void updateProgressLocked(float progress) {
@@ -357,12 +342,30 @@ public final class IncrementalStates {
             return mUnstartableReason;
         }
 
-        public void adoptNewStartableStateLocked(boolean nextState) {
+        /**
+         * Adopt new startable state if it is different from the current state.
+         * @param nextState True if startable, false if unstartable.
+         * @return True if the state has changed, false otherwise.
+         */
+        public boolean adoptNewStartableStateLocked(boolean nextState) {
+            if (mIsStartable == nextState) {
+                return false;
+            }
+            if (!nextState) {
+                // Do nothing if the next state is "unstartable"; keep package always startable.
+                // TODO(b/171920377): completely remove unstartable state.
+                if (DEBUG) {
+                    Slog.i(TAG, "Attempting to set startable state to false. Abort.");
+                }
+                return false;
+            }
             if (DEBUG) {
-                Slog.i(TAG, "startable state changed from " + mIsStartable + " to " + nextState);
+                Slog.i(TAG,
+                        "startable state changed from " + mIsStartable + " to " + nextState);
             }
             mIsStartable = nextState;
             mUnstartableReason = getUnstartableReasonLocked();
+            return true;
         }
 
         private int getUnstartableReasonLocked() {
@@ -370,17 +373,11 @@ public final class IncrementalStates {
                 return PackageManager.UNSTARTABLE_REASON_UNKNOWN;
             }
             // Translate stream status to reason for unstartable state
-            switch (mStreamStatus) {
-                case IDataLoaderStatusListener.STREAM_TRANSPORT_ERROR:
-                    // fall through
-                case IDataLoaderStatusListener.STREAM_INTEGRITY_ERROR:
-                    // fall through
-                case IDataLoaderStatusListener.STREAM_SOURCE_ERROR: {
-                    return PackageManager.UNSTARTABLE_REASON_CONNECTION_ERROR;
-                }
-                case IDataLoaderStatusListener.STREAM_STORAGE_ERROR: {
+            switch (mStorageHealthStatus) {
+                case HEALTH_STATUS_UNHEALTHY_STORAGE:
                     return PackageManager.UNSTARTABLE_REASON_INSUFFICIENT_STORAGE;
-                }
+                case HEALTH_STATUS_UNHEALTHY_TRANSPORT:
+                    return PackageManager.UNSTARTABLE_REASON_CONNECTION_ERROR;
                 default:
                     return PackageManager.UNSTARTABLE_REASON_UNKNOWN;
             }
@@ -464,7 +461,6 @@ public final class IncrementalStates {
         }
         IncrementalStates l = (IncrementalStates) o;
         return l.mStorageHealthStatus == mStorageHealthStatus
-                && l.mStreamStatus == mStreamStatus
                 && l.mStartableState.equals(mStartableState)
                 && l.mLoadingState.equals(mLoadingState);
     }
@@ -474,7 +470,6 @@ public final class IncrementalStates {
         int hashCode = mStartableState.hashCode();
         hashCode = 31 * hashCode + mLoadingState.hashCode();
         hashCode = 31 * hashCode + mStorageHealthStatus;
-        hashCode = 31 * hashCode + mStreamStatus;
         return hashCode;
     }
 }

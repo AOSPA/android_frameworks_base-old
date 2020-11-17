@@ -135,6 +135,8 @@ public final class SurfaceControl implements Parcelable {
             int blurRadius);
     private static native void nativeSetLayerStack(long transactionObj, long nativeObject,
             int layerStack);
+    private static native void nativeSetBlurRegions(long transactionObj, long nativeObj,
+            float[][] regions, int length);
 
     private static native boolean nativeClearContentFrameStats(long nativeObject);
     private static native boolean nativeGetContentFrameStats(long nativeObject, WindowContentFrameStats outStats);
@@ -309,7 +311,7 @@ public final class SurfaceControl implements Parcelable {
      * Surface creation flag: Surface is created hidden
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int HIDDEN = 0x00000004;
 
     /**
@@ -549,6 +551,12 @@ public final class SurfaceControl implements Parcelable {
     public static final int METADATA_ACCESSIBILITY_ID = 5;
 
     /**
+     * owner PID.
+     * @hide
+     */
+    public static final int METADATA_OWNER_PID = 6;
+
+    /**
      * A wrapper around HardwareBuffer that contains extra information about how to
      * interpret the screenshot HardwareBuffer.
      *
@@ -656,12 +664,16 @@ public final class SurfaceControl implements Parcelable {
         private final Rect mSourceCrop = new Rect();
         private final float mFrameScale;
         private final boolean mCaptureSecureLayers;
+        private final boolean mAllowProtected;
+        private final long mUid;
 
         private CaptureArgs(Builder<? extends Builder<?>> builder) {
             mPixelFormat = builder.mPixelFormat;
             mSourceCrop.set(builder.mSourceCrop);
             mFrameScale = builder.mFrameScale;
             mCaptureSecureLayers = builder.mCaptureSecureLayers;
+            mAllowProtected = builder.mAllowProtected;
+            mUid = builder.mUid;
         }
 
         /**
@@ -674,6 +686,8 @@ public final class SurfaceControl implements Parcelable {
             private final Rect mSourceCrop = new Rect();
             private float mFrameScale = 1;
             private boolean mCaptureSecureLayers;
+            private boolean mAllowProtected;
+            private long mUid = -1;
 
             /**
              * The desired pixel format of the returned buffer.
@@ -708,6 +722,26 @@ public final class SurfaceControl implements Parcelable {
              */
             public T setCaptureSecureLayers(boolean captureSecureLayers) {
                 mCaptureSecureLayers = captureSecureLayers;
+                return getThis();
+            }
+
+            /**
+             * Whether to allow the screenshot of protected (DRM) content. Warning: The screenshot
+             * cannot be read in unprotected space.
+             *
+             * @see HardwareBuffer#USAGE_PROTECTED_CONTENT
+             */
+            public T setAllowProtected(boolean allowProtected) {
+                mAllowProtected = allowProtected;
+                return getThis();
+            }
+
+            /**
+             * Set the uid of the content that should be screenshot. The code will skip any surfaces
+             * that don't belong to the specified uid.
+             */
+            public T setUid(long uid) {
+                mUid = uid;
                 return getThis();
             }
 
@@ -1626,6 +1660,16 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
+    public void setBackgroundBlurRadius(int blur) {
+        checkNotReleased();
+        synchronized (SurfaceControl.class) {
+            sGlobalTransaction.setBackgroundBlurRadius(this, blur);
+        }
+    }
+
+    /**
+     * @hide
+     */
     public void setMatrix(float dsdx, float dtdx, float dtdy, float dsdy) {
         checkNotReleased();
         synchronized(SurfaceControl.class) {
@@ -1739,7 +1783,7 @@ public final class SurfaceControl implements Parcelable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             DisplayInfo that = (DisplayInfo) o;
@@ -1900,16 +1944,23 @@ public final class SurfaceControl implements Parcelable {
         public float appRequestRefreshRateMin;
         public float appRequestRefreshRateMax;
 
+        /**
+         * If true this will allow switching between modes in different display configuration
+         * groups. This way the user may see visual interruptions when the display mode changes.
+         */
+        public boolean allowGroupSwitching;
+
         public DesiredDisplayConfigSpecs() {}
 
         public DesiredDisplayConfigSpecs(DesiredDisplayConfigSpecs other) {
             copyFrom(other);
         }
 
-        public DesiredDisplayConfigSpecs(int defaultConfig, float primaryRefreshRateMin,
-                float primaryRefreshRateMax, float appRequestRefreshRateMin,
-                float appRequestRefreshRateMax) {
+        public DesiredDisplayConfigSpecs(int defaultConfig, boolean allowGroupSwitching,
+                float primaryRefreshRateMin, float primaryRefreshRateMax,
+                float appRequestRefreshRateMin, float appRequestRefreshRateMax) {
             this.defaultConfig = defaultConfig;
+            this.allowGroupSwitching = allowGroupSwitching;
             this.primaryRefreshRateMin = primaryRefreshRateMin;
             this.primaryRefreshRateMax = primaryRefreshRateMax;
             this.appRequestRefreshRateMin = appRequestRefreshRateMin;
@@ -1917,7 +1968,7 @@ public final class SurfaceControl implements Parcelable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             return o instanceof DesiredDisplayConfigSpecs && equals((DesiredDisplayConfigSpecs) o);
         }
 
@@ -2891,7 +2942,7 @@ public final class SurfaceControl implements Parcelable {
          * @return Itself.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public Transaction setCornerRadius(SurfaceControl sc, float cornerRadius) {
             checkPreconditions(sc);
             nativeSetCornerRadius(mNativeObject, sc.mNativeObject, cornerRadius);
@@ -2910,6 +2961,21 @@ public final class SurfaceControl implements Parcelable {
         public Transaction setBackgroundBlurRadius(SurfaceControl sc, int radius) {
             checkPreconditions(sc);
             nativeSetBackgroundBlurRadius(mNativeObject, sc.mNativeObject, radius);
+            return this;
+        }
+
+        /**
+         * Specify what regions should be blurred on the {@link SurfaceControl}.
+         *
+         * @param sc SurfaceControl.
+         * @param regions List of regions that will have blurs.
+         * @return itself.
+         * @see BlurRegion#toFloatArray()
+         * @hide
+         */
+        public Transaction setBlurRegions(SurfaceControl sc, float[][] regions) {
+            checkPreconditions(sc);
+            nativeSetBlurRegions(mNativeObject, sc.mNativeObject, regions, regions.length);
             return this;
         }
 
@@ -3441,5 +3507,65 @@ public final class SurfaceControl implements Parcelable {
      */
     public static Transaction getGlobalTransaction() {
         return sGlobalTransaction;
+    }
+
+    /**
+     * Wrapper for sending blur data to SurfaceFlinger.
+     * @hide
+     */
+    public static final class BlurRegion {
+        public int blurRadius;
+        public float cornerRadiusTL;
+        public float cornerRadiusTR;
+        public float cornerRadiusBL;
+        public float cornerRadiusBR;
+        public float alpha = 1;
+        public boolean visible = true;
+        public final Rect rect = new Rect();
+
+        private final float[] mFloatArray = new float[10];
+
+        public BlurRegion() {
+        }
+
+        public BlurRegion(BlurRegion other) {
+            rect.set(other.rect);
+            blurRadius = other.blurRadius;
+            alpha = other.alpha;
+            cornerRadiusTL = other.cornerRadiusTL;
+            cornerRadiusTR = other.cornerRadiusTR;
+            cornerRadiusBL = other.cornerRadiusBL;
+            cornerRadiusBR = other.cornerRadiusBR;
+        }
+
+        /**
+         * Serializes this class into a float array that's more JNI friendly.
+         */
+        public float[] toFloatArray() {
+            mFloatArray[0] = blurRadius;
+            mFloatArray[1] = alpha;
+            mFloatArray[2] = rect.left;
+            mFloatArray[3] = rect.top;
+            mFloatArray[4] = rect.right;
+            mFloatArray[5] = rect.bottom;
+            mFloatArray[6] = cornerRadiusTL;
+            mFloatArray[7] = cornerRadiusTR;
+            mFloatArray[8] = cornerRadiusBL;
+            mFloatArray[9] = cornerRadiusBR;
+            return mFloatArray;
+        }
+
+        @Override
+        public String toString() {
+            return "BlurRegion{"
+                    + "blurRadius=" + blurRadius
+                    + ", corners={" + cornerRadiusTL
+                    + "," + cornerRadiusTR
+                    + "," + cornerRadiusBL
+                    + "," + cornerRadiusBR
+                    + "}, alpha=" + alpha
+                    + ", rect=" + rect
+                    + "}";
+        }
     }
 }

@@ -67,7 +67,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -242,7 +241,6 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
@@ -955,13 +953,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         /**
-         * @see ServiceManager#checkService(String)
-         */
-        public boolean hasService(@NonNull String name) {
-            return ServiceManager.checkService(name) != null;
-        }
-
-        /**
          * @see IpConnectivityMetrics.Logger
          */
         public IpConnectivityMetrics.Logger getMetricsLogger() {
@@ -1107,7 +1098,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         // Do the same for Ethernet, since it's often not specified in the configs, although many
         // devices can use it via USB host adapters.
-        if (mNetConfigs[TYPE_ETHERNET] == null && mDeps.hasService(Context.ETHERNET_SERVICE)) {
+        if (mNetConfigs[TYPE_ETHERNET] == null
+                && mContext.getSystemService(Context.ETHERNET_SERVICE) != null) {
             mLegacyTypeTracker.addSupportedType(TYPE_ETHERNET);
             mNetworksDefined++;
         }
@@ -1181,8 +1173,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         dataConnectionStats.startMonitoring();
 
         mKeepaliveTracker = new KeepaliveTracker(mContext, mHandler);
-        mNotifier = new NetworkNotificationManager(mContext, mTelephonyManager,
-                mContext.getSystemService(NotificationManager.class));
+        mNotifier = new NetworkNotificationManager(mContext, mTelephonyManager);
 
         final int dailyLimit = Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.NETWORK_SWITCH_NOTIFICATION_DAILY_LIMIT,
@@ -1198,7 +1189,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         mMultipathPolicyTracker = new MultipathPolicyTracker(mContext, mHandler);
 
-        mDnsManager = new DnsManager(mContext, mDnsResolver, mSystemProperties);
+        mDnsManager = new DnsManager(mContext, mDnsResolver);
         registerPrivateDnsSettingsCallbacks();
     }
 
@@ -2329,10 +2320,21 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     /**
-     * Called when the system is ready and ConnectivityService can initialize remaining components.
+     * Called by SystemServer through ConnectivityManager when the system is ready.
+     */
+    @Override
+    public void systemReady() {
+        if (Binder.getCallingUid() != Process.SYSTEM_UID) {
+            throw new SecurityException("Calling Uid is not system uid.");
+        }
+        systemReadyInternal();
+    }
+
+    /**
+     * Called when ConnectivityService can initialize remaining components.
      */
     @VisibleForTesting
-    public void systemReady() {
+    public void systemReadyInternal() {
         // Let PermissionMonitor#startMonitoring() running in the beginning of the systemReady
         // before MultipathPolicyTracker.start(). Since mApps in PermissionMonitor needs to be
         // populated first to ensure that listening network request which is sent by
@@ -2455,9 +2457,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         try {
             if (VDBG || DDBG) log("Setting MTU size: " + iface + ", " + mtu);
-            mNMS.setMtu(iface, mtu);
-        } catch (Exception e) {
-            Slog.e(TAG, "exception in setMtu()" + e);
+            mNetd.interfaceSetMtu(iface, mtu);
+        } catch (RemoteException | ServiceSpecificException e) {
+            Slog.e(TAG, "exception in interfaceSetMtu()" + e);
         }
     }
 
@@ -2497,12 +2499,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
             loge("Can't set TCP buffer sizes:" + e);
         }
 
-        Integer rwndValue = Settings.Global.getInt(mContext.getContentResolver(),
-            Settings.Global.TCP_DEFAULT_INIT_RWND,
+        final Integer rwndValue = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.TCP_DEFAULT_INIT_RWND,
                     mSystemProperties.getInt("net.tcp.default_init_rwnd", 0));
-        final String sysctlKey = "sys.sysctl.tcp_def_init_rwnd";
         if (rwndValue != 0) {
-            mSystemProperties.set(sysctlKey, rwndValue.toString());
+            mSystemProperties.setTcpInitRwnd(rwndValue);
         }
     }
 
@@ -4034,13 +4035,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     settingsPkgName + ".wifi.WifiNoInternetDialog");
         }
 
-        PendingIntent pendingIntent = PendingIntent.getActivityAsUser(
-                mContext,
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                mContext.createContextAsUser(UserHandle.CURRENT, 0 /* flags */),
                 0 /* requestCode */,
                 intent,
-                PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE,
-                null /* options */,
-                UserHandle.CURRENT);
+                PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         mNotifier.showNotification(nai.network.netId, type, nai, null, pendingIntent, highPriority);
     }
@@ -6119,7 +6118,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             for (final String iface : interfaceDiff.added) {
                 try {
                     if (DBG) log("Adding iface " + iface + " to network " + netId);
-                    mNMS.addInterfaceToNetwork(iface, netId);
+                    mNetd.networkAddInterface(netId, iface);
                     wakeupModifyInterface(iface, caps, true);
                     bs.noteNetworkInterfaceType(iface, legacyType);
                 } catch (Exception e) {
@@ -6131,7 +6130,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             try {
                 if (DBG) log("Removing iface " + iface + " from network " + netId);
                 wakeupModifyInterface(iface, caps, false);
-                mNMS.removeInterfaceFromNetwork(iface, netId);
+                mNetd.networkRemoveInterface(netId, iface);
             } catch (Exception e) {
                 loge("Exception removing interface: " + e);
             }
@@ -6234,20 +6233,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return;  // no updating necessary
         }
 
-        final NetworkAgentInfo defaultNai = getDefaultNetwork();
-        final boolean isDefaultNetwork = (defaultNai != null && defaultNai.network.netId == netId);
-
         if (DBG) {
             final Collection<InetAddress> dnses = newLp.getDnsServers();
             log("Setting DNS servers for network " + netId + " to " + dnses);
         }
         try {
             mDnsManager.noteDnsServersForNetwork(netId, newLp);
-            // TODO: netd should listen on [::1]:53 and proxy queries to the current
-            // default network, and we should just set net.dns1 to ::1, not least
-            // because applications attempting to use net.dns resolvers will bypass
-            // the privacy protections of things like DNS-over-TLS.
-            if (isDefaultNetwork) mDnsManager.setDefaultDnsSystemProperties(newLp.getDnsServers());
             mDnsManager.flushVmDnsCache();
         } catch (Exception e) {
             loge("Exception in setDnsConfigurationForNetwork: " + e);
@@ -6305,9 +6296,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final int newPermission = getNetworkPermission(newNc);
         if (oldPermission != newPermission && nai.created && !nai.isVPN()) {
             try {
-                mNMS.setNetworkPermission(nai.network.netId, newPermission);
-            } catch (RemoteException e) {
-                loge("Exception in setNetworkPermission: " + e);
+                mNetd.networkSetPermissionForNetwork(nai.network.netId, newPermission);
+            } catch (RemoteException | ServiceSpecificException e) {
+                loge("Exception in networkSetPermissionForNetwork: " + e);
             }
         }
     }
@@ -6749,11 +6740,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         try {
             if (null != newNetwork) {
-                mNMS.setDefaultNetId(newNetwork.network.netId);
+                mNetd.networkSetDefault(newNetwork.network.netId);
             } else {
-                mNMS.clearDefaultNetId();
+                mNetd.networkClearDefault();
             }
-        } catch (Exception e) {
+        } catch (RemoteException | ServiceSpecificException e) {
             loge("Exception setting default network :" + e);
         }
 
@@ -6762,8 +6753,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 ? newNetwork.linkProperties.getHttpProxy() : null);
         updateTcpBufferSizes(null != newNetwork
                 ? newNetwork.linkProperties.getTcpBufferSizes() : null);
-        mDnsManager.setDefaultDnsSystemProperties(null != newNetwork
-                ? newNetwork.linkProperties.getDnsServers() : Collections.EMPTY_LIST);
         notifyIfacesChangedForNetworkStats();
         // Fix up the NetworkCapabilities of any VPNs that don't specify underlying networks.
         updateAllVpnsCapabilities();
@@ -6995,7 +6984,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // restore permission to actual value if it becomes the default network again..
             if (newDefaultNetwork != null && !newDefaultNetwork.isVPN()) {
                 try {
-                    mNMS.setNetworkPermission(newDefaultNetwork.network.netId,
+                    mNetd.networkSetPermissionForNetwork(newDefaultNetwork.network.netId,
                             getNetworkPermission(newDefaultNetwork.networkCapabilities));
                 } catch (RemoteException | ServiceSpecificException e) {
                     loge("Exception in setNetworkPermission: " + e);
@@ -7071,7 +7060,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 !event.mOldNetwork.isVPN()) {
                 // Force trigger permission change on non-DDS network to close all live connections
                 try {
-                    mNMS.setNetworkPermission(event.mOldNetwork.network.netId,
+                    mNetd.networkSetPermissionForNetwork(event.mOldNetwork.network.netId,
                                                          INetd.PERMISSION_NETWORK);
                 } catch (RemoteException e) {
                     loge("Exception in setNetworkPermission: " + e);

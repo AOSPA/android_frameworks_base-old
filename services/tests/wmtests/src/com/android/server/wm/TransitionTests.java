@@ -18,7 +18,7 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.view.WindowManager.TRANSIT_TASK_OPEN;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -51,15 +51,15 @@ public class TransitionTests extends WindowTestsBase {
                 ACTIVITY_TYPE_STANDARD, mDisplayContent);
         newTask.setHasBeenVisible(true);
         oldTask.setHasBeenVisible(false);
-        final ActivityRecord closing = createActivityRecordInTask(oldTask);
-        final ActivityRecord opening = createActivityRecordInTask(newTask);
+        final ActivityRecord closing = createActivityRecord(oldTask);
+        final ActivityRecord opening = createActivityRecord(newTask);
         closing.setVisible(true);
         closing.mVisibleRequested = false;
         opening.setVisible(false);
         opening.mVisibleRequested = true;
         ArrayMap<WindowContainer, Transition.ChangeInfo> participants = new ArrayMap<>();
 
-        int transitType = TRANSIT_TASK_OPEN;
+        int transitType = TRANSIT_OLD_TASK_OPEN;
 
         // Check basic both tasks participating
         participants.put(oldTask, new Transition.ChangeInfo());
@@ -102,9 +102,9 @@ public class TransitionTests extends WindowTestsBase {
                 ACTIVITY_TYPE_STANDARD, mDisplayContent);
         newTask.setHasBeenVisible(true);
         oldTask.setHasBeenVisible(false);
-        final ActivityRecord closing = createActivityRecordInTask(oldTask);
-        final ActivityRecord opening = createActivityRecordInTask(newNestedTask);
-        final ActivityRecord opening2 = createActivityRecordInTask(newNestedTask2);
+        final ActivityRecord closing = createActivityRecord(oldTask);
+        final ActivityRecord opening = createActivityRecord(newNestedTask);
+        final ActivityRecord opening2 = createActivityRecord(newNestedTask2);
         closing.setVisible(true);
         closing.mVisibleRequested = false;
         opening.setVisible(false);
@@ -113,7 +113,7 @@ public class TransitionTests extends WindowTestsBase {
         opening2.mVisibleRequested = true;
         ArrayMap<WindowContainer, Transition.ChangeInfo> participants = new ArrayMap<>();
 
-        int transitType = TRANSIT_TASK_OPEN;
+        int transitType = TRANSIT_OLD_TASK_OPEN;
 
         // Check full promotion from leaf
         participants.put(oldTask, new Transition.ChangeInfo());
@@ -144,15 +144,15 @@ public class TransitionTests extends WindowTestsBase {
         final DisplayArea tda = showTask.getDisplayArea();
         showTask.setHasBeenVisible(true);
         showTask2.setHasBeenVisible(true);
-        final ActivityRecord showing = createActivityRecordInTask(showNestedTask);
-        final ActivityRecord showing2 = createActivityRecordInTask(showTask2);
+        final ActivityRecord showing = createActivityRecord(showNestedTask);
+        final ActivityRecord showing2 = createActivityRecord(showTask2);
         showing.setVisible(false);
         showing.mVisibleRequested = true;
         showing2.setVisible(false);
         showing2.mVisibleRequested = true;
         ArrayMap<WindowContainer, Transition.ChangeInfo> participants = new ArrayMap<>();
 
-        int transitType = TRANSIT_TASK_OPEN;
+        int transitType = TRANSIT_OLD_TASK_OPEN;
 
         // Check promotion to DisplayArea
         participants.put(showing, new Transition.ChangeInfo());

@@ -16,17 +16,24 @@
 
 package com.android.wm.shell;
 
+import static com.android.wm.shell.ShellTaskOrganizer.TASK_LISTENER_TYPE_FULLSCREEN;
+import static com.android.wm.shell.ShellTaskOrganizer.taskListenerTypeToString;
+
 import android.app.ActivityManager;
 import android.util.ArraySet;
 import android.util.Slog;
 import android.view.SurfaceControl;
 
+import androidx.annotation.NonNull;
+
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.protolog.ShellProtoLogGroup;
 
+import java.io.PrintWriter;
+
 class FullscreenTaskListener implements ShellTaskOrganizer.TaskListener {
-    private static final String TAG = "FullscreenTaskOrg";
+    private static final String TAG = "FullscreenTaskListener";
 
     private final SyncTransactionQueue mSyncQueue;
 
@@ -48,8 +55,8 @@ class FullscreenTaskListener implements ShellTaskOrganizer.TaskListener {
             mSyncQueue.runInSync(t -> {
                 // Reset several properties back to fullscreen (PiP, for example, leaves all these
                 // properties in a bad state).
-                t.setPosition(leash, 0, 0);
                 t.setWindowCrop(leash, null);
+                t.setPosition(leash, 0, 0);
                 // TODO(shell-transitions): Eventually set everything in transition so there's no
                 //                          SF Transaction here.
                 if (!Transitions.ENABLE_SHELL_TRANSITIONS) {
@@ -74,6 +81,16 @@ class FullscreenTaskListener implements ShellTaskOrganizer.TaskListener {
     }
 
     @Override
-    public void onTaskInfoChanged(ActivityManager.RunningTaskInfo taskInfo) {
+    public void dump(@NonNull PrintWriter pw, String prefix) {
+        final String innerPrefix = prefix + "  ";
+        final String childPrefix = innerPrefix + "  ";
+        pw.println(prefix + this);
+        pw.println(innerPrefix + mTasks.size() + " Tasks");
     }
+
+    @Override
+    public String toString() {
+        return TAG + ":" + taskListenerTypeToString(TASK_LISTENER_TYPE_FULLSCREEN);
+    }
+
 }

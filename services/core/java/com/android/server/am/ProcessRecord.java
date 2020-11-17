@@ -1494,6 +1494,12 @@ class ProcessRecord implements WindowProcessListener {
             if (updateServiceConnectionActivities) {
                 mService.mServices.updateServiceConnectionActivitiesLocked(this);
             }
+            if (thread == null) {
+                // Only update lru and oom-adj if the process is alive. Because it may be called
+                // when cleaning up the last activity from handling process died, the dead process
+                // should not be added to lru list again.
+                return;
+            }
             mService.mProcessList.updateLruProcessLocked(this, activityChange, null /* client */);
             if (updateOomAdj) {
                 mService.updateOomAdjLocked(this, OomAdjuster.OOM_ADJ_REASON_ACTIVITY);
@@ -1790,6 +1796,12 @@ class ProcessRecord implements WindowProcessListener {
             makeAppNotRespondingLocked(activityShortComponentName,
                     annotation != null ? "ANR " + annotation : "ANR", info.toString());
 
+            // Notify package manager service to possibly update package state
+            if (aInfo != null && aInfo.packageName != null) {
+                mService.getPackageManagerInternalLocked().notifyPackageCrashOrAnr(
+                        aInfo.packageName);
+            }
+
             // mUiHandler can be null if the AMS is constructed with injector only. This will only
             // happen in tests.
             if (mService.mUiHandler != null) {
@@ -1895,16 +1907,24 @@ class ProcessRecord implements WindowProcessListener {
 
     boolean getCachedIsHomeProcess() {
         if (mCachedIsHomeProcess == VALUE_INVALID) {
-            mCachedIsHomeProcess = getWindowProcessController().isHomeProcess()
-                    ? VALUE_TRUE : VALUE_FALSE;
+            if (getWindowProcessController().isHomeProcess()) {
+                mCachedIsHomeProcess = VALUE_TRUE;
+                mService.mAppProfiler.mHasHomeProcess = true;
+            } else {
+                mCachedIsHomeProcess = VALUE_FALSE;
+            }
         }
         return mCachedIsHomeProcess == VALUE_TRUE;
     }
 
     boolean getCachedIsPreviousProcess() {
         if (mCachedIsPreviousProcess == VALUE_INVALID) {
-            mCachedIsPreviousProcess = getWindowProcessController().isPreviousProcess()
-                    ? VALUE_TRUE : VALUE_FALSE;
+            if (getWindowProcessController().isPreviousProcess()) {
+                mCachedIsPreviousProcess = VALUE_TRUE;
+                mService.mAppProfiler.mHasPreviousProcess = true;
+            } else {
+                mCachedIsPreviousProcess = VALUE_FALSE;
+            }
         }
         return mCachedIsPreviousProcess == VALUE_TRUE;
     }

@@ -27,6 +27,7 @@ import android.graphics.drawable.Drawable;
 import android.location.Country;
 import android.location.CountryDetector;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.ContactsContract.CommonDataKinds.Phone;
 import android.provider.ContactsContract.Contacts;
 import android.provider.ContactsContract.Data;
@@ -186,7 +187,7 @@ public class CallerInfo {
     private boolean mIsVoiceMail;
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public CallerInfo() {
         // TODO: Move all the basic initialization here?
         mIsEmergency = false;
@@ -348,7 +349,7 @@ public class CallerInfo {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static CallerInfo getCallerInfo(Context context, Uri contactRef) {
         CallerInfo info = null;
         ContentResolver cr = CallerInfoAsyncQuery.getCurrentProfileContentResolver(context);
@@ -375,7 +376,7 @@ public class CallerInfo {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static CallerInfo getCallerInfo(Context context, String number) {
         if (VDBG) Log.v(TAG, "getCallerInfo() based on number...");
 
@@ -396,7 +397,7 @@ public class CallerInfo {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static CallerInfo getCallerInfo(Context context, String number, int subId) {
         android.util.SeempLog.record_str(12, "number="+number+",subId="+subId);
 

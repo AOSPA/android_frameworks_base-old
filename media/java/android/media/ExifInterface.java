@@ -31,6 +31,8 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.FileUtils;
+import android.os.SystemProperties;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -70,7 +72,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.CRC32;
@@ -1524,6 +1525,11 @@ public class ExifInterface {
         if (fileDescriptor == null) {
             throw new NullPointerException("fileDescriptor cannot be null");
         }
+        boolean optimize = SystemProperties.getBoolean("fuse.sys.transcode_exif_optimize", false);
+        FileDescriptor modernFd = optimize ? FileUtils.convertToModernFd(fileDescriptor) : null;
+        if (modernFd != null) {
+            fileDescriptor = modernFd;
+        }
 
         mAssetInputStream = null;
         mFilename = null;
@@ -2088,28 +2094,18 @@ public class ExifInterface {
 
         FileInputStream in = null;
         FileOutputStream out = null;
-        File originalFile = null;
-        if (mFilename != null) {
-            originalFile = new File(mFilename);
-        }
         File tempFile = null;
         try {
-            // Move the original file to temporary file.
+            // Copy the original file to temporary file.
+            tempFile = File.createTempFile("temp", "tmp");
             if (mFilename != null) {
-                String parent = originalFile.getParent();
-                String name = originalFile.getName();
-                String tempPrefix = UUID.randomUUID().toString() + "_";
-                tempFile = new File(parent, tempPrefix + name);
-                if (!originalFile.renameTo(tempFile)) {
-                    throw new IOException("Couldn't rename to " + tempFile.getAbsolutePath());
-                }
+                in = new FileInputStream(mFilename);
             } else if (mSeekableFileDescriptor != null) {
-                tempFile = File.createTempFile("temp", "tmp");
                 Os.lseek(mSeekableFileDescriptor, 0, OsConstants.SEEK_SET);
                 in = new FileInputStream(mSeekableFileDescriptor);
-                out = new FileOutputStream(tempFile);
-                copy(in, out);
             }
+            out = new FileOutputStream(tempFile);
+            copy(in, out);
         } catch (Exception e) {
             throw new IOException("Failed to copy original file to temp file", e);
         } finally {
@@ -2139,12 +2135,23 @@ public class ExifInterface {
                 }
             }
         } catch (Exception e) {
+            // Restore original file
+            in = new FileInputStream(tempFile);
             if (mFilename != null) {
-                if (!tempFile.renameTo(originalFile)) {
-                    throw new IOException("Couldn't restore original file: "
-                            + originalFile.getAbsolutePath());
+                out = new FileOutputStream(mFilename);
+            } else if (mSeekableFileDescriptor != null) {
+                try {
+                    Os.lseek(mSeekableFileDescriptor, 0, OsConstants.SEEK_SET);
+                } catch (ErrnoException exception) {
+                    throw new IOException("Failed to save new file. Original file may be "
+                            + "corrupted since error occurred while trying to restore it.",
+                            exception);
                 }
+                out = new FileOutputStream(mSeekableFileDescriptor);
             }
+            copy(in, out);
+            closeQuietly(in);
+            closeQuietly(out);
             throw new IOException("Failed to save new file", e);
         } finally {
             closeQuietly(in);
@@ -2533,11 +2540,20 @@ public class ExifInterface {
 
     private void initForFilename(String filename) throws IOException {
         FileInputStream in = null;
+        FileInputStream legacyInputStream = null;
         mAssetInputStream = null;
         mFilename = filename;
         mIsInputStream = false;
         try {
             in = new FileInputStream(filename);
+            boolean optimize = SystemProperties.getBoolean("fuse.sys.transcode_exif_optimize",
+                    false);
+            FileDescriptor modernFd = optimize ? FileUtils.convertToModernFd(in.getFD()) : null;
+            if (modernFd != null) {
+                legacyInputStream = in;
+                in = new FileInputStream(modernFd);
+            }
+
             if (isSeekableFD(in.getFD())) {
                 mSeekableFileDescriptor = in.getFD();
             } else {
@@ -2546,6 +2562,7 @@ public class ExifInterface {
             loadAttributes(in);
         } finally {
             closeQuietly(in);
+            closeQuietly(legacyInputStream);
         }
     }
 

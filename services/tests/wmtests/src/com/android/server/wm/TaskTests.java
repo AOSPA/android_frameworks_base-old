@@ -17,12 +17,17 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -32,6 +37,8 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
 
+import android.app.WindowConfiguration;
+import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
@@ -56,7 +63,7 @@ public class TaskTests extends WindowTestsBase {
     public void testRemoveContainer() {
         final Task stackController1 = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stackController1, 0 /* userId */);
-        final ActivityRecord activity = createActivityRecordInTask(mDisplayContent, task);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
 
         task.removeIfPossible();
         // Assert that the container was removed.
@@ -69,7 +76,7 @@ public class TaskTests extends WindowTestsBase {
     public void testRemoveContainer_deferRemoval() {
         final Task stackController1 = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stackController1, 0 /* userId */);
-        final ActivityRecord activity = createActivityRecordInTask(mDisplayContent, task);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
 
         doReturn(true).when(task).shouldDeferRemoval();
 
@@ -151,8 +158,8 @@ public class TaskTests extends WindowTestsBase {
     public void testIsInStack() {
         final Task task1 = createTaskStackOnDisplay(mDisplayContent);
         final Task task2 = createTaskStackOnDisplay(mDisplayContent);
-        final ActivityRecord activity1 = createActivityRecordInTask(mDisplayContent, task1);
-        final ActivityRecord activity2 = createActivityRecordInTask(mDisplayContent, task2);
+        final ActivityRecord activity1 = createActivityRecord(mDisplayContent, task1);
+        final ActivityRecord activity2 = createActivityRecord(mDisplayContent, task2);
         assertEquals(activity1, task1.isInTask(activity1));
         assertNull(task1.isInTask(activity2));
     }
@@ -161,9 +168,9 @@ public class TaskTests extends WindowTestsBase {
     public void testRemoveChildForOverlayTask() {
         final Task task = createTaskStackOnDisplay(mDisplayContent);
         final int taskId = task.mTaskId;
-        final ActivityRecord activity1 = createActivityRecordInTask(mDisplayContent, task);
-        final ActivityRecord activity2 = createActivityRecordInTask(mDisplayContent, task);
-        final ActivityRecord activity3 = createActivityRecordInTask(mDisplayContent, task);
+        final ActivityRecord activity1 = createActivityRecord(mDisplayContent, task);
+        final ActivityRecord activity2 = createActivityRecord(mDisplayContent, task);
+        final ActivityRecord activity3 = createActivityRecord(mDisplayContent, task);
         activity1.setTaskOverlay(true);
         activity2.setTaskOverlay(true);
         activity3.setTaskOverlay(true);
@@ -193,5 +200,61 @@ public class TaskTests extends WindowTestsBase {
         rootTask.switchUser(10);
         assertEquals(1, rootTask.getChildCount());
         assertEquals(leafTask1, childTask.getTopChild());
+    }
+
+    @Test
+    public void testEnsureActivitiesVisible() {
+        final Task rootTask = createTaskStackOnDisplay(mDisplayContent);
+        final Task leafTask1 = createTaskInStack(rootTask, 0 /* userId */);
+        final Task leafTask2 = createTaskInStack(rootTask, 0 /* userId */);
+        final ActivityRecord activity1 = createActivityRecord(mDisplayContent, leafTask1);
+        final ActivityRecord activity2 = createActivityRecord(mDisplayContent, leafTask2);
+
+        // Check visibility of occluded tasks
+        doReturn(false).when(leafTask1).shouldBeVisible(any());
+        doReturn(true).when(leafTask2).shouldBeVisible(any());
+        rootTask.ensureActivitiesVisible(
+                null /* starting */ , 0 /* configChanges */, false /* preserveWindows */);
+        assertFalse(activity1.isVisible());
+        assertTrue(activity2.isVisible());
+
+        // Check visibility of not occluded tasks
+        doReturn(true).when(leafTask1).shouldBeVisible(any());
+        doReturn(true).when(leafTask2).shouldBeVisible(any());
+        rootTask.ensureActivitiesVisible(
+                null /* starting */ , 0 /* configChanges */, false /* preserveWindows */);
+        assertTrue(activity1.isVisible());
+        assertTrue(activity2.isVisible());
+    }
+
+    @Test
+    public void testResolveNonResizableTaskWindowingMode() {
+        final Task task = createTaskStackOnDisplay(mDisplayContent);
+        Configuration parentConfig = task.getParent().getConfiguration();
+        parentConfig.windowConfiguration.setWindowingMode(WINDOWING_MODE_FREEFORM);
+        doReturn(false).when(task).isResizeable();
+        WindowConfiguration requestedOverride =
+                task.getRequestedOverrideConfiguration().windowConfiguration;
+        WindowConfiguration resolvedOverride =
+                task.getResolvedOverrideConfiguration().windowConfiguration;
+
+        // The resolved override windowing mode of a non-resizeable task should be resolved as
+        // fullscreen even as a child of a freeform display.
+        requestedOverride.setWindowingMode(WINDOWING_MODE_UNDEFINED);
+        task.resolveOverrideConfiguration(parentConfig);
+        assertThat(resolvedOverride.getWindowingMode()).isEqualTo(WINDOWING_MODE_FULLSCREEN);
+
+        // The resolved override windowing mode of a non-resizeable task should be resolved as
+        // fullscreen, even when requested as freeform windowing mode
+        requestedOverride.setWindowingMode(WINDOWING_MODE_FREEFORM);
+        task.resolveOverrideConfiguration(parentConfig);
+        assertThat(resolvedOverride.getWindowingMode()).isEqualTo(WINDOWING_MODE_FULLSCREEN);
+
+        // The resolved override windowing mode of a non-resizeable task can be undefined as long
+        // as its parents is not in multi-window mode.
+        parentConfig.windowConfiguration.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+        requestedOverride.setWindowingMode(WINDOWING_MODE_UNDEFINED);
+        task.resolveOverrideConfiguration(parentConfig);
+        assertThat(resolvedOverride.getWindowingMode()).isEqualTo(WINDOWING_MODE_UNDEFINED);
     }
 }

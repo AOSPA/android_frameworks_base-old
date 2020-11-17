@@ -64,15 +64,14 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.tracing.nano.SystemUiTraceProto;
-import com.android.wm.shell.ShellTaskOrganizer;
-import com.android.wm.shell.common.DisplayImeController;
+import com.android.wm.shell.ShellDump;
 import com.android.wm.shell.nano.WmShellTraceProto;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedEvents;
 import com.android.wm.shell.onehanded.OneHandedGestureHandler.OneHandedGestureEventCallback;
 import com.android.wm.shell.onehanded.OneHandedTransitionCallback;
 import com.android.wm.shell.pip.Pip;
-import com.android.wm.shell.pip.phone.PipUtils;
+import com.android.wm.shell.pip.PipUtils;
 import com.android.wm.shell.protolog.ShellProtoLogImpl;
 import com.android.wm.shell.splitscreen.SplitScreen;
 
@@ -101,7 +100,6 @@ public final class WMShell extends SystemUI
 
     private final CommandQueue mCommandQueue;
     private final ConfigurationController mConfigurationController;
-    private final DisplayImeController mDisplayImeController;
     private final InputConsumerController mInputConsumerController;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final TaskStackChangeListeners mTaskStackChangeListeners;
@@ -111,10 +109,9 @@ public final class WMShell extends SystemUI
     private final Optional<Pip> mPipOptional;
     private final Optional<SplitScreen> mSplitScreenOptional;
     private final Optional<OneHanded> mOneHandedOptional;
-    // Inject the organizer directly in case the optionals aren't loaded to depend on it. There
-    // are non-optional windowing features like FULLSCREEN.
-    private final ShellTaskOrganizer mShellTaskOrganizer;
     private final ProtoTracer mProtoTracer;
+    private final Optional<ShellDump> mShellDump;
+
     private boolean mIsSysUiStateValid;
     private KeyguardUpdateMonitorCallback mSplitScreenKeyguardCallback;
     private KeyguardUpdateMonitorCallback mPipKeyguardCallback;
@@ -126,40 +123,34 @@ public final class WMShell extends SystemUI
             InputConsumerController inputConsumerController,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
             TaskStackChangeListeners taskStackChangeListeners,
-            DisplayImeController displayImeController,
             NavigationModeController navigationModeController,
             ScreenLifecycle screenLifecycle,
             SysUiState sysUiState,
             Optional<Pip> pipOptional,
             Optional<SplitScreen> splitScreenOptional,
             Optional<OneHanded> oneHandedOptional,
-            ShellTaskOrganizer shellTaskOrganizer,
-            ProtoTracer protoTracer) {
+            ProtoTracer protoTracer,
+            Optional<ShellDump> shellDump) {
         super(context);
         mCommandQueue = commandQueue;
         mConfigurationController = configurationController;
         mInputConsumerController = inputConsumerController;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mTaskStackChangeListeners = taskStackChangeListeners;
-        mDisplayImeController = displayImeController;
         mNavigationModeController = navigationModeController;
         mScreenLifecycle = screenLifecycle;
         mSysUiState = sysUiState;
         mPipOptional = pipOptional;
         mSplitScreenOptional = splitScreenOptional;
         mOneHandedOptional = oneHandedOptional;
-        mShellTaskOrganizer = shellTaskOrganizer;
         mProtoTracer = protoTracer;
         mProtoTracer.add(this);
+        mShellDump = shellDump;
     }
 
     @Override
     public void start() {
         mCommandQueue.addCallback(this);
-        // This is to prevent circular init problem by separating registration step out of its
-        // constructor. And make sure the initialization of DisplayImeController won't depend on
-        // specific feature anymore.
-        mDisplayImeController.startMonitorDisplays();
         mPipOptional.ifPresent(this::initPip);
         mSplitScreenOptional.ifPresent(this::initSplitScreen);
         mOneHandedOptional.ifPresent(this::initOneHanded);
@@ -167,9 +158,6 @@ public final class WMShell extends SystemUI
 
     @VisibleForTesting
     void initPip(Pip pip) {
-        if (!PipUtils.hasSystemFeature(mContext)) {
-            return;
-        }
         mCommandQueue.addCallback(new CommandQueue.Callbacks() {
             @Override
             public void showPictureInPictureMenu() {
@@ -204,6 +192,7 @@ public final class WMShell extends SystemUI
             }
         });
 
+        // TODO: Move this into the shell
         // Handle for system task stack changes.
         mTaskStackChangeListeners.registerTaskStackListener(
                 new TaskStackChangeListener() {
@@ -222,8 +211,7 @@ public final class WMShell extends SystemUI
                     @Override
                     public void onActivityUnpinned() {
                         final Pair<ComponentName, Integer> topPipActivityInfo =
-                                PipUtils.getTopPipActivity(
-                                        mContext, ActivityManager.getService());
+                                PipUtils.getTopPipActivity(mContext);
                         final ComponentName topActivity = topPipActivityInfo.first;
                         pip.onActivityUnpinned(topActivity);
                         mInputConsumerController.unregisterInputConsumer();
@@ -420,7 +408,7 @@ public final class WMShell extends SystemUI
             return;
         }
         // Dump WMShell stuff here if no commands were handled
-        mOneHandedOptional.ifPresent(oneHanded -> oneHanded.dump(pw));
+        mShellDump.ifPresent((shellDump) -> shellDump.dump(pw));
     }
 
     @Override

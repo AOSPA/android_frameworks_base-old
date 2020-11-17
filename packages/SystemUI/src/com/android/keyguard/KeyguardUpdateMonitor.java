@@ -94,6 +94,7 @@ import com.android.settingslib.fuelgauge.BatteryStatus;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
+import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
@@ -236,6 +237,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private final Context mContext;
     private final boolean mIsPrimaryUser;
     private final boolean mIsAutomotive;
+    private final AuthController mAuthController;
     private final StatusBarStateController mStatusBarStateController;
     HashMap<Integer, SimData> mSimDatas = new HashMap<>();
     HashMap<Integer, ServiceState> mServiceStates = new HashMap<Integer, ServiceState>();
@@ -288,6 +290,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private final DevicePolicyManager mDevicePolicyManager;
     private final BroadcastDispatcher mBroadcastDispatcher;
     private boolean mLogoutEnabled;
+    // cached value to avoid IPCs
+    private boolean mIsUdfpsEnrolled;
     // If the user long pressed the lock icon, disabling face auth for the current session.
     private boolean mLockIconPressed;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -1582,7 +1586,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             RingerModeTracker ringerModeTracker,
             @Background Executor backgroundExecutor,
             StatusBarStateController statusBarStateController,
-            LockPatternUtils lockPatternUtils) {
+            LockPatternUtils lockPatternUtils,
+            AuthController authController) {
         mContext = context;
         mSubscriptionManager = SubscriptionManager.from(context);
         mDeviceProvisioned = isDeviceProvisionedInSettingsDb();
@@ -1592,6 +1597,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mRingerModeTracker = ringerModeTracker;
         mStatusBarStateController = statusBarStateController;
         mLockPatternUtils = lockPatternUtils;
+        mAuthController = authController;
         dumpManager.registerDumpable(getClass().getName(), this);
 
         mHandler = new Handler(mainLooper) {
@@ -1718,7 +1724,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         }
 
         // Take a guess at initial SIM state, battery status and PLMN until we get an update
-        mBatteryStatus = new BatteryStatus(BATTERY_STATUS_UNKNOWN, 100, 0, 0, 0);
+        mBatteryStatus = new BatteryStatus(BATTERY_STATUS_UNKNOWN, 100, 0, 0, 0, true);
 
         // Watch for interesting updates
         final IntentFilter filter = new IntentFilter();
@@ -1854,7 +1860,15 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
     private void updateLockScreenMode() {
         mLockScreenMode = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.SHOW_NEW_LOCKSCREEN, 0);
+                Settings.Global.SHOW_NEW_LOCKSCREEN,
+                isUdfpsEnrolled() ? 1 : 0);
+    }
+
+    private void updateUdfpsEnrolled(int userId) {
+        mIsUdfpsEnrolled = mAuthController.isUdfpsEnrolled(userId);
+    }
+    public boolean isUdfpsEnrolled() {
+        return mIsUdfpsEnrolled;
     }
 
     private final UserSwitchObserver mUserSwitchObserver = new UserSwitchObserver() {
@@ -2095,6 +2109,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         }
         if (DEBUG) Log.v(TAG, "startListeningForFingerprint()");
         int userId = getCurrentUser();
+        updateUdfpsEnrolled(userId);
         if (isUnlockWithFingerprintPossible(userId)) {
             if (mFingerprintCancelSignal != null) {
                 mFingerprintCancelSignal.cancel();
@@ -2103,7 +2118,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
             if (isEncryptedOrLockdown(userId)) {
                 mFpm.detectFingerprint(mFingerprintCancelSignal, mFingerprintDetectionCallback,
-                        userId, null /* surface */);
+                        userId);
             } else {
                 mFpm.authenticate(null /* crypto */, mFingerprintCancelSignal,
                         mFingerprintAuthenticationCallback, null /* handler */, userId);
@@ -2632,6 +2647,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         final boolean wasPluggedIn = old.isPluggedIn();
         final boolean stateChangedWhilePluggedIn = wasPluggedIn && nowPluggedIn
                 && (old.status != current.status);
+        final boolean nowPresent = current.present;
+        final boolean wasPresent = old.present;
 
         // change in plug state is always interesting
         if (wasPluggedIn != nowPluggedIn || stateChangedWhilePluggedIn) {
@@ -2645,6 +2662,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
         // change in charging current while plugged in
         if (nowPluggedIn && current.maxChargingWattage != old.maxChargingWattage) {
+            return true;
+        }
+
+        // Battery either showed up or disappeared
+        if (wasPresent != nowPresent) {
             return true;
         }
 
@@ -3122,6 +3144,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     + " expected=" + (shouldListenForFingerprint() ? 1 : 0));
             pw.println("    strongAuthFlags=" + Integer.toHexString(strongAuthFlags));
             pw.println("    trustManaged=" + getUserTrustIsManaged(userId));
+            pw.println("    udfpsEnrolled=" + isUdfpsEnrolled());
         }
         if (mFaceManager != null && mFaceManager.isHardwareDetected()) {
             final int userId = ActivityManager.getCurrentUser();

@@ -47,6 +47,7 @@ import android.annotation.UiThread;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.AutofillOptions;
 import android.content.ClipData;
+import android.content.ClipDescription;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
@@ -80,7 +81,6 @@ import android.graphics.drawable.GradientDrawable;
 import android.hardware.display.DisplayManagerGlobal;
 import android.net.Uri;
 import android.os.Build;
-import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -144,6 +144,7 @@ import android.widget.ScrollBarDrawable;
 
 import com.android.internal.R;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.internal.util.Preconditions;
 import com.android.internal.view.ScrollCaptureInternal;
 import com.android.internal.view.TooltipPopup;
 import com.android.internal.view.menu.MenuBuilder;
@@ -810,7 +811,7 @@ import java.util.function.Predicate;
 @UiThread
 public class View implements Drawable.Callback, KeyEvent.Callback,
         AccessibilityEventSource {
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private static final boolean DBG = false;
 
     /** @hide */
@@ -2410,7 +2411,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private int mAutofillViewId = NO_ID;
 
     // ID for accessibility purposes. This ID must be unique for every window
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private int mAccessibilityViewId = NO_ID;
 
     private int mAccessibilityCursorPosition = ACCESSIBILITY_CURSOR_POSITION_UNDEFINED;
@@ -2422,7 +2423,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setTag(Object)
      * @see #getTag()
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected Object mTag = null;
 
     /*
@@ -3889,7 +3890,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Flag to make the status bar not expandable.  Unless you also
      * set {@link #STATUS_BAR_DISABLE_NOTIFICATION_ICONS}, new notifications will continue to show.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int STATUS_BAR_DISABLE_EXPAND = 0x00010000;
 
     /**
@@ -4552,7 +4553,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private LongSparseLongArray mMeasureCache;
 
     @ViewDebug.ExportedProperty(deepExport = true, prefix = "bg_")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private Drawable mBackground;
     private TintInfo mBackgroundTint;
 
@@ -4670,7 +4671,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * This field should be made private, so it is hidden from the SDK.
          * {@hide}
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         protected OnCreateContextMenuListener mOnCreateContextMenuListener;
 
         @UnsupportedAppUsage
@@ -4679,13 +4680,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         @UnsupportedAppUsage
         private OnTouchListener mOnTouchListener;
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         private OnHoverListener mOnHoverListener;
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         private OnGenericMotionListener mOnGenericMotionListener;
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         private OnDragListener mOnDragListener;
 
         private OnSystemUiVisibilityChangeListener mOnSystemUiVisibilityChangeListener;
@@ -5114,7 +5115,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean mCachingFailed;
     @UnsupportedAppUsage
     private Bitmap mDrawingCache;
@@ -5244,7 +5245,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     int mUnbufferedInputSource = InputDevice.SOURCE_CLASS_NONE;
 
     @Nullable
-    private OnReceiveContentCallback<? extends View> mOnReceiveContentCallback;
+    private String[] mOnReceiveContentMimeTypes;
+    @Nullable
+    private OnReceiveContentCallback mOnReceiveContentCallback;
 
     /**
      * Simple constructor to use when creating a view from code.
@@ -6150,6 +6153,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * was set.
      */
     @NonNull
+    @SuppressWarnings("AndroidFrameworkEfficientCollections")
     public Map<Integer, Integer> getAttributeSourceResourceMap() {
         HashMap<Integer, Integer> map = new HashMap<>();
         if (!sDebugViewAttributes || mAttributeSourceResId == null) {
@@ -6850,7 +6854,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private ScrollabilityCache getScrollCache() {
         initScrollCache();
         return mScrollCache;
@@ -9001,33 +9005,75 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Returns the callback used for handling insertion of content into this view. See
-     * {@link #setOnReceiveContentCallback} for more info.
-     *
-     * @return The callback for handling insertion of content. Returns null if no callback has been
-     * {@link #setOnReceiveContentCallback set}.
-     */
-    @Nullable
-    public OnReceiveContentCallback<? extends View> getOnReceiveContentCallback() {
-        return mOnReceiveContentCallback;
-    }
-
-    /**
      * Sets the callback to handle insertion of content into this view.
      *
      * <p>Depending on the view, this callback may be invoked for scenarios such as content
      * insertion from the IME, Autofill, etc.
      *
-     * <p>The callback will only be invoked if the MIME type of the content is
-     * {@link OnReceiveContentCallback#getSupportedMimeTypes declared as supported} by the callback.
-     * If the content type is not supported by the callback, the default platform handling will be
-     * executed instead.
+     * <p>This callback is only invoked for content whose MIME type matches a type specified via
+     * the {code mimeTypes} parameter. If the MIME type is not supported by the callback, the
+     * default platform handling will be executed instead (no-op for the default {@link View}).
      *
+     * <p><em>Note: MIME type matching in the Android framework is case-sensitive, unlike formal RFC
+     * MIME types. As a result, you should always write your MIME types with lower case letters, or
+     * use {@link android.content.Intent#normalizeMimeType} to ensure that it is converted to lower
+     * case.</em>
+     *
+     * @param mimeTypes The type of content for which the callback should be invoked. This may use
+     * wildcards such as "text/*", "image/*", etc. This must not be null or empty if a non-null
+     * callback is passed in.
      * @param callback The callback to use. This can be null to reset to the default behavior.
      */
-    public void setOnReceiveContentCallback(
-            @Nullable OnReceiveContentCallback<? extends View> callback) {
+    @SuppressWarnings("rawtypes")
+    public void setOnReceiveContentCallback(@Nullable String[] mimeTypes,
+            @Nullable OnReceiveContentCallback callback) {
+        if (callback != null) {
+            Preconditions.checkArgument(mimeTypes != null && mimeTypes.length > 0,
+                    "When the callback is set, MIME types must also be set");
+        }
+        mOnReceiveContentMimeTypes = mimeTypes;
         mOnReceiveContentCallback = callback;
+    }
+
+    /**
+     * Receives the given content. The default implementation invokes the callback set via
+     * {@link #setOnReceiveContentCallback}. If no callback is set or if the callback does not
+     * support the given content (based on the MIME type), returns false.
+     *
+     * @param payload The content to insert and related metadata.
+     *
+     * @return Returns true if the content was handled in some way, false otherwise. Actual
+     * insertion may be processed asynchronously in the background and may or may not succeed even
+     * if this method returns true. For example, an app may not end up inserting an item if it
+     * exceeds the app's size limit for that type of content.
+     */
+    public boolean onReceiveContent(@NonNull OnReceiveContentCallback.Payload payload) {
+        ClipDescription description = payload.getClip().getDescription();
+        if (mOnReceiveContentCallback != null && mOnReceiveContentMimeTypes != null
+                && description.hasMimeType(mOnReceiveContentMimeTypes)) {
+            return mOnReceiveContentCallback.onReceiveContent(this, payload);
+        }
+        return false;
+    }
+
+    /**
+     * Returns the MIME types that can be handled by {@link #onReceiveContent} for this view, as
+     * configured via {@link #setOnReceiveContentCallback}. By default returns null.
+     *
+     * <p>Different platform features (e.g. pasting from the clipboard, inserting stickers from the
+     * keyboard, etc) may use this function to conditionally alter their behavior. For example, the
+     * soft keyboard may choose to hide its UI for inserting GIFs for a particular input field if
+     * the MIME types returned here for that field don't include "image/gif".
+     *
+     * <p>Note: Comparisons of MIME types should be performed using utilities such as
+     * {@link ClipDescription#compareMimeTypes} rather than simple string equality, in order to
+     * correctly handle patterns (e.g. "text/*").
+     *
+     * @return The MIME types supported by {@link #onReceiveContent} for this view. The returned
+     * MIME types may contain wildcards such as "text/*", "image/*", etc.
+     */
+    public @Nullable String[] getOnReceiveContentMimeTypes() {
+        return mOnReceiveContentMimeTypes;
     }
 
     /**
@@ -10368,7 +10414,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected boolean isVisibleToUser(Rect boundInView) {
         if (mAttachInfo != null) {
             // Attached to invisible window means this view is not visible.
@@ -10756,7 +10802,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @hide pending API council approval
      */
     @CallSuper
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected void onFocusLost() {
         resetPressedState();
     }
@@ -11648,7 +11694,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean fitsSystemWindows() {
         return getFitsSystemWindows();
     }
@@ -13709,7 +13755,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void notifyViewAccessibilityStateChangedIfNeeded(int changeType) {
         if (!AccessibilityManager.getInstance(mContext).isEnabled() || mAttachInfo == null) {
             return;
@@ -14129,7 +14175,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public TextSegmentIterator getIteratorForGranularity(int granularity) {
         switch (granularity) {
             case AccessibilityNodeInfo.MOVEMENT_GRANULARITY_CHARACTER: {
@@ -14597,7 +14643,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return True if the event was handled by the view, false otherwise.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public final boolean dispatchPointerEvent(MotionEvent event) {
         if (event.isTouchEvent()) {
             return dispatchTouchEvent(event);
@@ -14862,15 +14908,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void getWindowVisibleDisplayFrame(Rect outRect) {
         if (mAttachInfo != null) {
-            mAttachInfo.mViewRootImpl.getDisplayFrame(outRect);
-            // XXX This is really broken, and probably all needs to be done
-            // in the window manager, and we need to know more about whether
-            // we want the area behind or in front of the IME.
-            final Rect insets = mAttachInfo.mVisibleInsets;
-            outRect.left += insets.left;
-            outRect.top += insets.top;
-            outRect.right -= insets.right;
-            outRect.bottom -= insets.bottom;
+            mAttachInfo.mViewRootImpl.getWindowVisibleDisplayFrame(outRect);
             return;
         }
         // The view is not attached to a display so we don't have a context.
@@ -15928,7 +15966,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean isInScrollingContainer() {
         ViewParent p = getParent();
         while (p != null && p instanceof ViewGroup) {
@@ -16658,7 +16696,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return The inverse of the current matrix of this view.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public final Matrix getInverseMatrix() {
         ensureTransformationInfo();
         if (mTransformationInfo.mInverseMatrix == null) {
@@ -18700,7 +18738,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected void invalidateParentIfNeeded() {
         if (isHardwareAccelerated() && mParent instanceof View) {
             ((View) mParent).invalidate(true);
@@ -18807,7 +18845,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public ThreadedRenderer getThreadedRenderer() {
         return mAttachInfo != null ? mAttachInfo.mThreadedRenderer : null;
     }
@@ -19944,7 +19982,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #computeHorizontalScrollOffset()
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected void onDrawHorizontalScrollBar(Canvas canvas, Drawable scrollBar,
             int l, int t, int r, int b) {
         scrollBar.setBounds(l, t, r, b);
@@ -20127,7 +20165,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Return true if the application tag in the AndroidManifest has set "supportRtl" to true
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private boolean hasRtlSupport() {
         return mContext.getApplicationInfo().hasRtlSupport();
     }
@@ -20285,7 +20323,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void resolvePadding() {
         final int resolvedLayoutDirection = getLayoutDirection();
 
@@ -20383,7 +20421,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @hide
      */
     @CallSuper
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected void onDetachedFromWindowInternal() {
         mPrivateFlags &= ~PFLAG_CANCEL_NEXT_UP_EVENT;
         mPrivateFlags3 &= ~PFLAG3_IS_LAID_OUT;
@@ -21100,7 +21138,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @hide
      */
     @CallSuper
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected void destroyHardwareResources() {
         if (mOverlay != null) {
             mOverlay.getOverlayView().destroyHardwareResources();
@@ -21236,7 +21274,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @hide
      */
     @NonNull
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public RenderNode updateDisplayListIfDirty() {
         final RenderNode renderNode = mRenderNode;
         if (!canHaveDisplayList()) {
@@ -21307,7 +21345,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return renderNode;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private void resetDisplayList() {
         mRenderNode.discardDisplayList();
         if (mBackgroundRenderNode != null) {
@@ -23577,8 +23615,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if ((privateFlags & PFLAG_SELECTED) != 0) viewStateIndex |= StateSet.VIEW_STATE_SELECTED;
         if (hasWindowFocus()) viewStateIndex |= StateSet.VIEW_STATE_WINDOW_FOCUSED;
         if ((privateFlags & PFLAG_ACTIVATED) != 0) viewStateIndex |= StateSet.VIEW_STATE_ACTIVATED;
-        if (mAttachInfo != null && mAttachInfo.mHardwareAccelerationRequested &&
-                ThreadedRenderer.isAvailable()) {
+        if (mAttachInfo != null && mAttachInfo.mHardwareAccelerationRequested) {
             // This is set if HW acceleration is requested, even if the current
             // process doesn't allow it.  This is just to allow app preview
             // windows to better match their app.
@@ -24762,7 +24799,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return false if the transformation could not be applied
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean toGlobalMotionEvent(MotionEvent ev) {
         final AttachInfo info = mAttachInfo;
         if (info == null) {
@@ -24784,7 +24821,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return false if the transformation could not be applied
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean toLocalMotionEvent(MotionEvent ev) {
         final AttachInfo info = mAttachInfo;
         if (info == null) {
@@ -26206,7 +26243,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void setDisabledSystemUiVisibility(int flags) {
         if (mAttachInfo != null) {
             if (mAttachInfo.mDisabledSystemUiVisibility != flags) {
@@ -26255,7 +26292,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * </div>
      */
     public static class DragShadowBuilder {
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         private final WeakReference<View> mView;
 
         /**
@@ -26456,7 +26493,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         surface.copyFrom(surfaceControl);
         IBinder token = null;
         try {
-            final Canvas canvas = surface.lockCanvas(null);
+            final Canvas canvas = isHardwareAccelerated()
+                    ? surface.lockHardwareCanvas()
+                    : surface.lockCanvas(null);
             try {
                 canvas.drawColor(0, PorterDuff.Mode.CLEAR);
                 shadowBuilder.onDrawShadow(canvas);
@@ -26547,7 +26586,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
         if (mAttachInfo.mDragToken != null) {
             try {
-                Canvas canvas = mAttachInfo.mDragSurface.lockCanvas(null);
+                Canvas canvas = isHardwareAccelerated()
+                        ? mAttachInfo.mDragSurface.lockHardwareCanvas()
+                        : mAttachInfo.mDragSurface.lockCanvas(null);
                 try {
                     canvas.drawColor(0, PorterDuff.Mode.CLEAR);
                     shadowBuilder.onDrawShadow(canvas);
@@ -26719,7 +26760,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Drawable that are not transparent.
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void applyDrawableToTransparentRegion(Drawable dr, Region region) {
         if (DBG) {
             Log.i("View", "Getting transparent region for: " + this);
@@ -27287,7 +27328,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             @EnumEntry(value = TEXT_DIRECTION_FIRST_STRONG_LTR, name = "firstStrongLtr"),
             @EnumEntry(value = TEXT_DIRECTION_FIRST_STRONG_RTL, name = "firstStrongRtl"),
     })
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int getRawTextDirection() {
         return (mPrivateFlags2 & PFLAG2_TEXT_DIRECTION_MASK) >> PFLAG2_TEXT_DIRECTION_MASK_SHIFT;
     }
@@ -27544,7 +27585,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             @EnumEntry(value = TEXT_ALIGNMENT_VIEW_END, name = "viewEnd")
     })
     @TextAlignment
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int getRawTextAlignment() {
         return (mPrivateFlags2 & PFLAG2_TEXT_ALIGNMENT_MASK) >> PFLAG2_TEXT_ALIGNMENT_MASK_SHIFT;
     }
@@ -28894,7 +28935,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * constants declared by {@link View} (there are more display states than
          * screen states).
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         int mDisplayState = Display.STATE_UNKNOWN;
 
         /**
@@ -28923,33 +28964,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * Indicates whether views need to use 32-bit drawing caches
          */
         boolean mUse32BitDrawingCache;
-
-        /**
-         * For windows that are full-screen but using insets to layout inside
-         * of the screen decorations, these are the current insets for the
-         * content of the window.
-         */
-        @UnsupportedAppUsage(maxTargetSdk = VERSION_CODES.Q,
-                publicAlternatives = "Use {@link WindowInsets#getInsets(int)}")
-        final Rect mContentInsets = new Rect();
-
-        /**
-         * For windows that are full-screen but using insets to layout inside
-         * of the screen decorations, these are the current insets for the
-         * actual visible parts of the window.
-         */
-        @UnsupportedAppUsage(maxTargetSdk = VERSION_CODES.Q,
-                publicAlternatives = "Use {@link WindowInsets#getInsets(int)}")
-        final Rect mVisibleInsets = new Rect();
-
-        /**
-         * For windows that are full-screen but using insets to layout inside
-         * of the screen decorations, these are the current insets for the
-         * stable system windows.
-         */
-        @UnsupportedAppUsage(maxTargetSdk = VERSION_CODES.Q,
-                publicAlternatives = "Use {@link WindowInsets#getInsets(int)}")
-        final Rect mStableInsets = new Rect();
 
         /**
          * Current caption insets to the display coordinate.
@@ -29401,7 +29415,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         /**
          * The current state of the scrollbars: ON, OFF, or FADING
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public int state = OFF;
 
         private int mLastColor;
@@ -29853,7 +29867,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          *
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public AccessibilityNodeInfo createAccessibilityNodeInfo(View host) {
             return host.createAccessibilityNodeInfoInternal();
         }
@@ -30271,7 +30285,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return true;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     void hideTooltip() {
         if (mTooltipInfo == null) {
             return;

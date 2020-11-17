@@ -20,11 +20,16 @@ import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_CRITICAL;
 import static android.os.Process.FIRST_APPLICATION_UID;
 
+import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_CRITICAL;
+import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_LOW;
+import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_MODERATE;
+import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_NORMAL;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_OOM_ADJ;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_PSS;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_PSS;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.am.LowMemDetector.ADJ_MEM_FACTOR_NOTHING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 
 import android.annotation.BroadcastBehavior;
@@ -72,6 +77,7 @@ import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.MemInfoReader;
+import com.android.server.am.LowMemDetector.MemFactor;
 import com.android.server.am.ProcessList.ProcStateMemTracker;
 import com.android.server.utils.PriorityDump;
 
@@ -202,7 +208,10 @@ public class AppProfiler {
      * processes are going away for other reasons.
      */
     @GuardedBy("mService")
-    private int mLastMemoryLevel = ProcessStats.ADJ_MEM_FACTOR_NORMAL;
+    private @MemFactor int mLastMemoryLevel = ADJ_MEM_FACTOR_NORMAL;
+
+    @GuardedBy("mService")
+    private @MemFactor int mMemFactorOverride = ADJ_MEM_FACTOR_NOTHING;
 
     /**
      * The last total number of process we have, to determine if changes actually look
@@ -237,6 +246,9 @@ public class AppProfiler {
     private int mMemWatchDumpPid;
     private int mMemWatchDumpUid;
     private boolean mMemWatchIsUserInitiated;
+
+    boolean mHasHomeProcess;
+    boolean mHasPreviousProcess;
 
     /**
      * Used to collect per-process CPU use for ANRs, battery stats, etc.
@@ -851,7 +863,7 @@ public class AppProfiler {
 
     @GuardedBy("mService")
     boolean isLastMemoryLevelNormal() {
-        return mLastMemoryLevel <= ProcessStats.ADJ_MEM_FACTOR_NORMAL;
+        return mLastMemoryLevel <= ADJ_MEM_FACTOR_NORMAL;
     }
 
     @GuardedBy("mService")
@@ -873,6 +885,11 @@ public class AppProfiler {
     }
 
     @GuardedBy("mService")
+    void setMemFactorOverrideLocked(@MemFactor int factor) {
+        mMemFactorOverride = factor;
+    }
+
+    @GuardedBy("mService")
     boolean updateLowMemStateLocked(int numCached, int numEmpty, int numTrimming) {
         final int numOfLru = mService.mProcessList.getLruSizeLocked();
         final long now = SystemClock.uptimeMillis();
@@ -890,28 +907,32 @@ public class AppProfiler {
                     && numEmpty <= mService.mConstants.CUR_TRIM_EMPTY_PROCESSES) {
                 final int numCachedAndEmpty = numCached + numEmpty;
                 if (numCachedAndEmpty <= ProcessList.TRIM_CRITICAL_THRESHOLD) {
-                    memFactor = ProcessStats.ADJ_MEM_FACTOR_CRITICAL;
+                    memFactor = ADJ_MEM_FACTOR_CRITICAL;
                 } else if (numCachedAndEmpty <= ProcessList.TRIM_LOW_THRESHOLD) {
-                    memFactor = ProcessStats.ADJ_MEM_FACTOR_LOW;
+                    memFactor = ADJ_MEM_FACTOR_LOW;
                 } else {
-                    memFactor = ProcessStats.ADJ_MEM_FACTOR_MODERATE;
+                    memFactor = ADJ_MEM_FACTOR_MODERATE;
                 }
             } else {
-                memFactor = ProcessStats.ADJ_MEM_FACTOR_NORMAL;
+                memFactor = ADJ_MEM_FACTOR_NORMAL;
             }
         }
         // We always allow the memory level to go up (better).  We only allow it to go
         // down if we are in a state where that is allowed, *and* the total number of processes
         // has gone down since last time.
         if (DEBUG_OOM_ADJ) {
-            Slog.d(TAG_OOM_ADJ, "oom: memFactor=" + memFactor
+            Slog.d(TAG_OOM_ADJ, "oom: memFactor=" + memFactor + " override=" + mMemFactorOverride
                     + " last=" + mLastMemoryLevel + " allowLow=" + mAllowLowerMemLevel
                     + " numProcs=" + mService.mProcessList.getLruSizeLocked()
                     + " last=" + mLastNumProcesses);
         }
+        boolean override;
+        if (override = (mMemFactorOverride != ADJ_MEM_FACTOR_NOTHING)) {
+            memFactor = mMemFactorOverride;
+        }
         if (memFactor > mLastMemoryLevel) {
-            if (!mAllowLowerMemLevel
-                    || mService.mProcessList.getLruSizeLocked() >= mLastNumProcesses) {
+            if (!override && (!mAllowLowerMemLevel
+                    || mService.mProcessList.getLruSizeLocked() >= mLastNumProcesses)) {
                 memFactor = mLastMemoryLevel;
                 if (DEBUG_OOM_ADJ) Slog.d(TAG_OOM_ADJ, "Keeping last mem factor!");
             }
@@ -929,17 +950,17 @@ public class AppProfiler {
                     mService.mAtmInternal == null || !mService.mAtmInternal.isSleeping(), now);
             trackerMemFactor = mService.mProcessStats.getMemFactorLocked();
         }
-        if (memFactor != ProcessStats.ADJ_MEM_FACTOR_NORMAL) {
+        if (memFactor != ADJ_MEM_FACTOR_NORMAL) {
             if (mLowRamStartTime == 0) {
                 mLowRamStartTime = now;
             }
             int step = 0;
             int fgTrimLevel;
             switch (memFactor) {
-                case ProcessStats.ADJ_MEM_FACTOR_CRITICAL:
+                case ADJ_MEM_FACTOR_CRITICAL:
                     fgTrimLevel = ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL;
                     break;
-                case ProcessStats.ADJ_MEM_FACTOR_LOW:
+                case ADJ_MEM_FACTOR_LOW:
                     fgTrimLevel = ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW;
                     break;
                 default:
@@ -948,11 +969,11 @@ public class AppProfiler {
             }
             int factor = numTrimming / 3;
             int minFactor = 2;
-            if (mService.mAtmInternal.getHomeProcess() != null) minFactor++;
-            if (mService.mAtmInternal.getPreviousProcess() != null) minFactor++;
+            if (mHasHomeProcess) minFactor++;
+            if (mHasPreviousProcess) minFactor++;
             if (factor < minFactor) factor = minFactor;
             int curLevel = ComponentCallbacks2.TRIM_MEMORY_COMPLETE;
-            for (int i = numOfLru - 1; i >= 0; i--) {
+            for (int i = 0; i < numOfLru; i++) {
                 ProcessRecord app = mService.mProcessList.mLruProcesses.get(i);
                 if (allChanged || app.procStateChanged) {
                     mService.setProcessTrackerStateLocked(app, trackerMemFactor, now);
@@ -1037,7 +1058,7 @@ public class AppProfiler {
                 mLowRamTimeSinceLastIdle += now - mLowRamStartTime;
                 mLowRamStartTime = 0;
             }
-            for (int i = numOfLru - 1; i >= 0; i--) {
+            for (int i = 0; i < numOfLru; i++) {
                 ProcessRecord app = mService.mProcessList.mLruProcesses.get(i);
                 if (allChanged || app.procStateChanged) {
                     mService.setProcessTrackerStateLocked(app, trackerMemFactor, now);
@@ -1627,16 +1648,16 @@ public class AppProfiler {
     @GuardedBy("mService")
     void dumpLastMemoryLevelLocked(PrintWriter pw) {
         switch (mLastMemoryLevel) {
-            case ProcessStats.ADJ_MEM_FACTOR_NORMAL:
+            case ADJ_MEM_FACTOR_NORMAL:
                 pw.println("normal)");
                 break;
-            case ProcessStats.ADJ_MEM_FACTOR_MODERATE:
+            case ADJ_MEM_FACTOR_MODERATE:
                 pw.println("moderate)");
                 break;
-            case ProcessStats.ADJ_MEM_FACTOR_LOW:
+            case ADJ_MEM_FACTOR_LOW:
                 pw.println("low)");
                 break;
-            case ProcessStats.ADJ_MEM_FACTOR_CRITICAL:
+            case ADJ_MEM_FACTOR_CRITICAL:
                 pw.println("critical)");
                 break;
             default:

@@ -31,6 +31,7 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 import android.annotation.IntDef;
+import android.annotation.Nullable;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.res.TypedArray;
@@ -38,6 +39,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.Paint;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.LogPrinter;
@@ -2221,7 +2223,7 @@ public class GridLayout extends ViewGroup {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 
@@ -2496,7 +2498,7 @@ public class GridLayout extends ViewGroup {
          *         {@code Interval}, {@code false} otherwise.
          */
         @Override
-        public boolean equals(Object that) {
+        public boolean equals(@Nullable Object that) {
             if (this == that) {
                 return true;
             }
@@ -2609,7 +2611,7 @@ public class GridLayout extends ViewGroup {
          *         {@code Spec}; {@code false} otherwise
          */
         @Override
-        public boolean equals(Object that) {
+        public boolean equals(@Nullable Object that) {
             if (this == that) {
                 return true;
             }
@@ -2814,7 +2816,7 @@ public class GridLayout extends ViewGroup {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     static final Alignment UNDEFINED_ALIGNMENT = new Alignment() {
         @Override
         int getGravityOffset(View view, int cellDelta) {

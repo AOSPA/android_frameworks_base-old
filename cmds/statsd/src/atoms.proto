@@ -59,6 +59,7 @@ import "frameworks/base/core/proto/android/stats/mediaprovider/mediaprovider_enu
 import "frameworks/base/core/proto/android/stats/storage/storage_enums.proto";
 import "frameworks/base/core/proto/android/stats/style/style_enums.proto";
 import "frameworks/base/core/proto/android/stats/sysui/notification_enums.proto";
+import "frameworks/base/core/proto/android/stats/tls/enums.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
@@ -495,13 +496,20 @@ message Atom {
         HdmiCecMessageReported hdmi_cec_message_reported = 310 [(module) = "framework"];
         AirplaneMode airplane_mode = 311 [(module) = "telephony"];
         ModemRestart modem_restart = 312 [(module) = "telephony"];
+        CarrierIdMismatchReported carrier_id_mismatch_reported = 313 [(module) = "telephony"];
+        CarrierIdTableUpdated carrier_id_table_updated = 314 [(module) = "telephony"];
+        DataStallRecoveryReported data_stall_recovery_reported = 315 [(module) = "telephony"];
+        MediametricsMediaParserReported mediametrics_mediaparser_reported = 316;
+        TlsHandshakeReported tls_handshake_reported = 317 [(module) = "conscrypt"];
+        TextClassifierApiUsageReported text_classifier_api_usage_reported = 318  [(module) = "textclassifier"];
+        KilledAppStatsReported killed_app_stats_reported = 319 [(module) = "carwatchdogd"];
 
         // StatsdStats tracks platform atoms with ids upto 500.
         // Update StatsdStats::kMaxPushedAtomId when atom ids here approach that value.
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10088
+    // Next: 10092
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000 [(module) = "framework"];
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001 [(module) = "framework"];
@@ -602,6 +610,10 @@ message Atom {
             10085 [(module) = "mediaprovider"];
         IncomingSms incoming_sms = 10086 [(module) = "telephony"];
         OutgoingSms outgoing_sms = 10087 [(module) = "telephony"];
+        CarrierIdTableVersion carrier_id_table_version = 10088 [(module) = "telephony"];
+        DataCallSession data_call_session = 10089 [(module) = "telephony"];
+        CellularServiceState cellular_service_state = 10090 [(module) = "telephony"];
+        CellularDataServiceSwitch cellular_data_service_switch = 10091 [(module) = "telephony"];
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -3354,6 +3366,7 @@ message StyleUIChanged {
     optional int32 color_preference = 9;
     optional android.stats.style.LocationPreference location_preference = 10;
     optional android.stats.style.DatePreference date_preference = 11;
+    optional android.stats.style.LaunchedPreference launched_preference = 12;
 }
 
 /**
@@ -4268,8 +4281,15 @@ message NotificationChannelModified {
     optional android.stats.sysui.NotificationImportance old_importance = 5;
     // New importance setting
     optional android.stats.sysui.NotificationImportance importance = 6;
+    // whether or not this channel represents a conversation
+    optional bool is_conversation = 7;
+    // Hash of app-assigned notification conversation id
+    optional int32 conversation_id_hash = 8;
+    // whether or not the user demoted this channel out of the conversation space
+    optional bool is_conversation_demoted = 9;
+    // whether this conversation is marked as being a priority
+    optional bool is_conversation_priority = 10;
 }
-
 
 /**
  * Logs when a biometric acquire event occurs.
@@ -4651,7 +4671,7 @@ message PrivacyIndicatorsInteracted {
         UNKNOWN = 0;
         CHIP_VIEWED = 1;
         CHIP_CLICKED = 2;
-        reserved 3; // Used only in beta builds, never shipped 
+        reserved 3; // Used only in beta builds, never shipped
         DIALOG_DISMISS = 4;
         DIALOG_LINE_ITEM = 5;
     }
@@ -5292,6 +5312,11 @@ message UIInteractionFrameInfoReported {
         LAUNCHER_APP_CLOSE_TO_HOME = 10;
         LAUNCHER_APP_CLOSE_TO_PIP = 11;
         LAUNCHER_QUICK_SWITCH = 12;
+        SHADE_HEADS_UP_APPEAR = 13;
+        SHADE_HEADS_UP_DISAPPEAR = 14;
+        SHADE_NOTIFICATION_ADD = 15;
+        SHADE_NOTIFICATION_REMOVE = 16;
+        SHADE_APP_LAUNCH = 17;
     }
 
     optional InteractionType interaction_type = 1;
@@ -8189,6 +8214,72 @@ message MediametricsExtractorReported {
 }
 
 /**
+ * Track MediaParser (parsing video/audio streams from containers) usage
+ * Logged from:
+ *
+ *   frameworks/av/services/mediametrics/statsd_mediaparser.cpp
+ *   frameworks/base/apex/media/framework/jni/android_media_MediaParserJNI.cpp
+ */
+message MediametricsMediaParserReported {
+    optional int64 timestamp_nanos = 1;
+    optional string package_name = 2;
+    optional int64 package_version_code = 3;
+
+    // MediaParser specific data.
+    /**
+     * The name of the parser selected for parsing the media, or an empty string
+     * if no parser was selected.
+     */
+    optional string parser_name = 4;
+    /**
+     * Whether the parser was created by name. 1 represents true, and 0
+     * represents false.
+     */
+    optional int32 created_by_name = 5;
+    /**
+     * The parser names in the sniffing pool separated by "|".
+     */
+    optional string parser_pool = 6;
+    /**
+     * The fully qualified name of the last encountered exception, or an empty
+     * string if no exception was encountered.
+     */
+    optional string last_exception = 7;
+    /**
+     * The size of the parsed media in bytes, or -1 if unknown. Note this value
+     * contains intentional random error to prevent media content
+     * identification.
+     */
+    optional int64 resource_byte_count = 8;
+    /**
+     * The duration of the media in milliseconds, or -1 if unknown. Note this
+     * value contains intentional random error to prevent media content
+     * identification.
+     */
+    optional int64 duration_millis = 9;
+    /**
+     * The MIME types of the tracks separated by "|".
+     */
+    optional string track_mime_types = 10;
+    /**
+     * The tracks' RFC 6381 codec strings separated by "|".
+     */
+    optional string track_codecs = 11;
+    /**
+     * Concatenation of the parameters altered by the client, separated by "|".
+     */
+    optional string altered_parameters = 12;
+    /**
+     * The video width in pixels, or -1 if unknown or not applicable.
+     */
+    optional int32 video_width = 13;
+    /**
+     * The video height in pixels, or -1 if unknown or not applicable.
+     */
+    optional int32 video_height = 14;
+}
+
+/**
  * Track how we arbitrate between microphone/input requests.
  * Logged from
  *   frameworks/av/services/audiopolicy/service/AudioPolicyInterfaceImpl.cpp
@@ -9676,6 +9767,7 @@ message RebootEscrowRecoveryReported {
 
 /**
  * Global display pipeline metrics reported by SurfaceFlinger.
+ * Metrics exist beginning in Android 11.
  * Pulled from:
  *    frameworks/native/services/surfaceflinger/TimeStats/TimeStats.cpp
  */
@@ -9707,18 +9799,48 @@ message SurfaceflingerStatsGlobalInfo {
     // perform due to falling back into GPU composition.
     optional FrameTimingHistogram render_engine_timing = 8
         [(android.os.statsd.log_mode) = MODE_BYTES];
+    // Number of frames where SF saw a frame, based on its frame timeline.
+    // Frame timelines may include transactions without updating buffer contents.
+    // Introduced in Android 12.
+    optional int32 total_timeline_frames = 9;
+    // Number of frames where SF saw a janky frame.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames = 10;
+    // Number of janky frames where SF spent a long time on the CPU.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_with_long_cpu = 11;
+    // Number of janky frames where SF spent a long time on the GPU.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_with_long_gpu = 12;
+    // Number of janky frames where SF missed the frame deadline, but there
+    // was not an attributed reason (e.g., maybe HWC missed?)
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_sf_unattributed = 13;
+    // Number of janky frames where the app missed the frame deadline, but
+    // there was not an attributed reason
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_app_unattributed = 14;
+
+    // Next ID: 15
 }
 
 /**
  * Per-layer display pipeline metrics reported by SurfaceFlinger.
- * The number of layers uploaded will be restricted due to size limitations.
+ * Metrics exist beginning in Android 11.
+ * The number of layers uploaded may be restricted due to size limitations.
  * Pulled from:
  *    frameworks/native/services/surfaceflinger/TimeStats/TimeStats.cpp
  */
 message SurfaceflingerStatsLayerInfo {
+    // UID of the application who submitted this layer for presentation
+    // This is intended to be used as a dimension for surfacing rendering
+    // statistics to applications.
+    // Introduced in Android 12.
+    optional int32 uid = 12 [(is_uid) = true];
     // The layer for this set of metrics
-    // For now we can infer that the package name is included in the layer
-    // name.
+    // In many scenarios the package name is included in the layer name, e.g.,
+    // layers created by Window Manager. But this is not a guarantee - in the
+    // general case layer names are arbitrary debug names.
     optional string layer_name = 1;
     // Total number of frames presented
     optional int64 total_frames = 2;
@@ -9752,6 +9874,29 @@ message SurfaceflingerStatsLayerInfo {
     optional int64 late_acquire_frames = 10;
     // Frames latched early because the desired present time was bad
     optional int64 bad_desired_present_frames = 11;
+    // Number of frames where SF saw a frame, based on its frame timeline.
+    // Frame timelines may include transactions without updating buffer contents.
+    // Introduced in Android 12.
+    optional int32 total_timeline_frames = 13;
+    // Number of frames where SF saw a janky frame.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames = 14;
+    // Number of janky frames where SF spent a long time on the CPU.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_with_long_cpu = 15;
+    // Number of janky frames where SF spent a long time on the GPU.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_with_long_gpu = 16;
+    // Number of janky frames where SF missed the frame deadline, but there
+    // was not an attributed reason (e.g., maybe HWC missed?)
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_sf_unattributed = 17;
+    // Number of janky frames where the app missed the frame deadline, but
+    // there was not an attributed reason
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_app_unattributed = 18;
+
+    // Next ID: 19
 }
 
 /**
@@ -10393,7 +10538,7 @@ message VoiceCallSession {
     // Number of other calls going on during call termination, for the same SIM slot.
     optional int32 concurrent_call_count_at_end = 14;
 
-    // Index of the SIM is used, 0 for single-SIM devices.
+    // Index of the SIM used, 0 for single-SIM devices.
     optional int32 sim_slot_index = 15;
 
     // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
@@ -10445,12 +10590,88 @@ message VoiceCallRatUsage {
     // Radio access technology.
     optional android.telephony.NetworkTypeEnum rat = 2;
 
-    // Total duration that voice calls spent on this carrier and RAT.
+    // Total duration that voice calls spent on this carrier and RAT, rounded to 5 minute.
     optional int64 total_duration_seconds = 3;
 
     // Total number of calls using this carrier and RAT.
     // A call is counted once even if it used the RAT multiple times.
     optional int64 call_count = 4;
+}
+
+/**
+ * Pulls amount of time spend in each cellular service state.
+ *
+ * Each pull creates multiple atoms, one for each SIM slot/carrier/RAT(including ENDC), the order of
+ * which is irrelevant to time. If multi SIM settings changes during the period, durations will be
+ * counted separately before and after the change. Airplane mode does not count towards durations.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message CellularServiceState {
+    // Radio access technology (RAT) for voice.
+    // NETWORK_TYPE_UNKNOWN when the device is out of service.
+    // NETWORK_TYPE_IWLAN when the device is using VoWiFi.
+    optional android.telephony.NetworkTypeEnum voice_rat = 1;
+
+    // Radio access technology (RAT) for data.
+    // NETWORK_TYPE_UNKNOWN when the device is out of service.
+    // Only cellular RATs are valid and show where the device is camped.
+    optional android.telephony.NetworkTypeEnum data_rat = 2;
+
+    // Whether the device was in roaming (domestic or international) for voice.
+    optional android.telephony.RoamingTypeEnum voice_roaming_type = 3;
+
+    // Whether the device was in roaming (domestic or international) for data.
+    optional android.telephony.RoamingTypeEnum data_roaming_type = 4;
+
+    // Whether the device is on LTE and has access to NR NSA, i.e. cell supports 5G (ENDC) and UE
+    // registration (attach/TAU) indicates ENDC is not restricted.
+    optional bool is_endc = 5;
+
+    // Index of the SIM used, 0 for single-SIM devices.
+    optional int32 sim_slot_index = 6;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 7;
+
+    // Carrier ID of the SIM card.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 8;
+
+    // Total time spent in this service state, rounded to 5 minutes.
+    optional int32 total_time_seconds = 9;
+}
+
+/**
+ * Pulls the number of times cellular data service state switches.
+ *
+ * Each pull creates multiple atoms, one for each RAT combination, the order of which is irrelevant
+ * to time. Switches for different SIM slots, carrier IDs, or multi-SIM settings are counted
+ * separately.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message CellularDataServiceSwitch {
+    // Cellular RAT of the DATA domain from where the switch occurred.
+    optional android.telephony.NetworkTypeEnum rat_from = 1;
+
+    // Cellular RAT of the DATA domain to where the switch occurred.
+    optional android.telephony.NetworkTypeEnum rat_to = 2;
+
+    // Index of the SIM used, 0 for single-SIM devices.
+    optional int32 sim_slot_index = 3;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 4;
+
+    // Carrier ID of the SIM card.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 5;
+
+    // Number of switches from rat_from to rat_to.
+    optional int32 switch_count = 6;
 }
 
 /**
@@ -10522,7 +10743,7 @@ message IncomingSms {
     // Whether the SMS was received while roaming.
     optional bool is_roaming = 9;
 
-    // Index of the SIM is used, 0 for single-SIM devices.
+    // Index of the SIM used, 0 for single-SIM devices.
     optional int32 sim_slot_index = 10;
 
     // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
@@ -10574,7 +10795,7 @@ message OutgoingSms {
     // Whether the default SMS application generated the SMS (regardless of which application).
     optional bool is_from_default_app = 7;
 
-    // Index of the SIM is used, 0 for single-SIM devices.
+    // Index of the SIM used, 0 for single-SIM devices.
     optional int32 sim_slot_index = 8;
 
     // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
@@ -10595,7 +10816,7 @@ message OutgoingSms {
 }
 
 /**
- * Push information about usage of airplane mode.
+ * Logs information about usage of airplane mode.
  *
  * Logged from:
  *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/AirplaneModeStats.java
@@ -10614,7 +10835,7 @@ message AirplaneMode {
 }
 
 /**
- * Push information about modem restarts.
+ * Logs information about modem restarts.
  *
  * Logged from:
  *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/ModemRestartStats.java
@@ -10629,6 +10850,154 @@ message ModemRestart {
     // Carrier ID of the first SIM card.
     // See https://source.android.com/devices/tech/config/carrierid.
     optional int32 carrier_id = 3;
+}
+
+/**
+ * Logs the SIM card details when the carrier ID match is not complete.
+ *
+ * The atom is pushed when a SIM card is initialized and the MCC/MNC is not present in the
+ * carrier ID table, or the SIM card contains a GID1 value that is not present in the carrier ID
+ * table. This atom is pushed only once for each type of SIM card.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/CarrierIdMatchStats.java
+ */
+message CarrierIdMismatchReported {
+    // Matched carrier ID. The value -1 is used if no match is found.
+    optional int32 carrier_id = 1;
+
+    // MCC/MNC of the SIM card.
+    optional string mcc_mnc = 2;
+
+    // Group identifier (level 1) of the SIM card.
+    optional string gid1 = 3;
+
+    // SPN value of the SIM card.
+    optional string spn = 4;
+
+    // First record of the PNN in the SIM card. This field is populated only if the SPN is missing
+    // or empty.
+    optional string pnn = 5;
+}
+
+/**
+ * Logs the version of the carrier ID matching table at first power up and when it is updated.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/CarrierIdMatchStats.java
+ */
+message CarrierIdTableUpdated {
+    // Version of the CarrierId matching table.
+    optional int32 table_version = 1;
+}
+
+/**
+ * Pulls the version of the carrier ID matching table.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message CarrierIdTableVersion {
+    // Version of the CarrierId matching table.
+    optional int32 table_version = 1;
+}
+
+/**
+ * Pulls information for a single data call session
+ *
+ * Each pull creates multiple atoms, one for each data call session.
+ * The sequence is randomized when pulled.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message DataCallSession {
+    // A random number to be used as dimension to capture multiple atoms
+    optional int32 dimension = 1;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 2;
+
+    // Whether the call was made with an eSIM profile.
+    optional bool is_esim = 3;
+
+    // Data profile of this call (for what purpose this call was made)
+    optional android.telephony.DataProfileEnum profile = 4;
+
+    // APN type bitmask of the APN used:
+    // @ApnType in frameworks/base/telephony/java/android/telephony/Annotation.java.
+    optional int32 apn_type_bitmask = 5;
+
+    // Carrier ID of the SIM
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 6;
+
+    // Whether the subscription is roaming
+    optional bool is_roaming = 7;
+
+    // Data RAT when the call ended, can be IWLAN for IMS/MMS, otherwise should be WWAN PS RAT.
+    // In the case that the connection hasn't ended yet, this field holds the current RAT.
+    // In the case the call ended due to Out Of Service (OOS),
+    // this field should be the last known RAT.
+    optional android.telephony.NetworkTypeEnum rat_at_end = 8;
+
+    // Was the data call ended due to OOS
+    optional bool oos_at_end = 9;
+
+    // Number of RAT switches during the data call
+    optional int64 rat_switch_count = 10;
+
+    // Whether the call is on an opportunistic subscription
+    optional bool is_opportunistic = 11;
+
+    // Packet data protocol used
+    optional android.telephony.ApnProtocolEnum ip_type = 12;
+
+    // Whether the data call terminated before being established
+    optional bool setup_failed = 13;
+
+    // Reason why the data call terminated, as in RIL_DataCallFailCause from ril.h
+    optional int32 failure_cause = 14;
+
+    // Suggested retry back-off timer value from RIL
+    optional int32 suggested_retry_millis = 15;
+
+    // Why the data call was deactivated
+    // Set by telephony for MO deactivations (unrelated to failure_cause)
+    optional android.telephony.DataDeactivateReasonEnum deactivate_reason = 16;
+
+    // Duration of the data call, rounded into the closest 5 minutes.
+    optional int64 duration_minutes = 17;
+
+    // Whether the data call is still connected when the atom is collected.
+    optional bool ongoing = 18;
+}
+
+/**
+ * Logs data stall recovery event
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java
+ */
+message DataStallRecoveryReported {
+    // Carrier ID of the SIM
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 1;
+
+    // Data RAT when the stall happened
+    optional android.telephony.NetworkTypeEnum rat = 2;
+
+    // Signal strength when stall happened
+    optional android.telephony.SignalStrengthEnum signal_strength = 3;
+
+    // Action taken to recover
+    optional android.telephony.DataStallRecoveryActionEnum action = 4;
+
+    // Whether the subscription is opportunistic
+    optional bool is_opportunistic = 5;
+
+    // Whether the device is in multi-SIM mode
+    optional bool is_multi_sim = 6;
 }
 
 /**
@@ -11668,4 +12037,186 @@ message HdmiCecMessageReported {
 
     // The reason for the feature abort.
     optional android.stats.hdmi.FeatureAbortReason feature_abort_reason = 9;
+}
+
+/**
+  * Pushes TLS handshake counters from Conscrypt.
+  * Pulled from:
+  *   external/conscrypt/common/src/main/java/org/conscrypt/ConscryptEngineSocket.java
+  *   external/conscrypt/common/src/main/java/org/conscrypt/ConscryptFileDescriptorSocket.java
+  */
+message TlsHandshakeReported {
+    optional bool success = 1;
+
+    optional android.stats.tls.Protocol protocol = 2;
+
+    optional android.stats.tls.CipherSuite cipher_suite = 3;
+
+    optional int32 handshake_duration_millis = 4;
+}
+
+/**
+ * Logs when a TextClassifier API is invoked.
+ *
+ * See frameworks/base/core/java/android/view/textclassifier/TextClassifier.java
+ * Logged from: external/libtextclassifier/java/
+ */
+message TextClassifierApiUsageReported {
+    enum ApiType {
+        UNKNOWN_API = 0;
+        SUGGEST_SELECTION = 1;
+        CLASSIFY_TEXT = 2;
+        GENERATE_LINKS = 3;
+        DETECT_LANGUAGES = 4;
+        SUGGEST_CONVERSATION_ACTIONS = 5;
+    }
+    optional ApiType api_type = 1;
+
+    enum ResultType {
+        UNKNOWN_RESULT = 0;
+        SUCCESS = 1;
+        FAIL = 2;
+    }
+    optional ResultType result_type = 2;
+    optional int64 latency_millis = 3;
+}
+
+/**
+ * Logs the current state of an application before it is killed.
+ *
+ * Pushed from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message KilledAppStatsReported {
+    // Linux process uid for the package.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Name of the package that was killed.
+    optional string package_name = 2;
+
+    // State of the application when it was killed.
+    enum AppState {
+        UNKNOWN_APP_STATE = 0;
+        BACKGROUND = 1;
+        FOREGROUND = 2;
+    }
+    optional AppState app_state = 3;
+
+    // System state indicating whether the system was in normal mode or garage mode.
+    enum SystemState {
+        UNKNOWN_SYSTEM_STATE = 0;
+        USER_INTERACTION_MODE = 1;
+        NO_USER_INTERACTION_MODE = 2;
+    }
+    optional SystemState system_state = 4;
+
+    // Reason for killing the application.
+    // Keep in sync between:
+    //   packages/services/Car/watchdog/server/src/ApplicationTerminator.h
+    //   frameworks/base/cmds/statsd/src/atoms.proto
+    enum KillReason {
+        UNKNOWN_KILL_REASON = 0;
+        KILLED_ON_ANR = 1;
+        KILLED_ON_IO_OVERUSE = 2;
+        KILLED_ON_MEMORY_OVERUSE = 3;
+    }
+    optional KillReason kill_reason = 5;
+
+    // Stats of the processes owned by the application when the application was killed.
+    // The process stack traces are not collected when the application was killed due to IO_OVERUSE.
+    optional ProcessStats process_stat = 6 [(log_mode) = MODE_BYTES];
+
+    // The application's I/O overuse stats logged only when the kill reason is KILLED_ON_IO_OVERUSE.
+    optional IoOveruseStats io_overuse_stats = 7 [(log_mode) = MODE_BYTES];
+}
+
+/**
+ * Logs I/O overuse stats for a package.
+ *
+ * Keep in sync between:
+ *  packages/services/Car/watchdog/server/src/proto/statsd.proto
+ *  frameworks/base/cmds/statsd/src/atoms.proto
+ *
+ * Logged from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message IoOveruseStats {
+    enum Period {
+        DAILY = 0;
+        WEEKLY = 1;
+    }
+
+    // Threshold and usage stats period.
+    optional Period period = 1;
+
+    // Threshold in-terms of write bytes defined for the package.
+    optional PerStateBytes threshold = 2;
+
+    // Number of write bytes in each state for the specified period.
+    optional PerStateBytes written_bytes = 3;
+};
+
+/**
+ * Logs bytes attributed to each application and system states.
+ *
+ * Keep in sync between:
+ *  packages/services/Car/watchdog/server/src/proto/statsd.proto
+ *  frameworks/base/cmds/statsd/src/atoms.proto
+ *
+ * Logged from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message PerStateBytes {
+    // Number of bytes attributed to the application foreground.
+    optional int64 foreground_bytes = 1;
+
+    // Number of bytes attributed to the application background.
+    optional int64 background_bytes = 2;
+
+    // Number of bytes attributed to the garage mode.
+    optional int64 garage_mode_bytes = 3;
+}
+
+/**
+ * Logs each ProcessStat in ProcessStats.
+ * Keep in sync between:
+ *  packages/services/Car/watchdog/server/src/proto/statsd.proto
+ *  frameworks/base/cmds/statsd/src/atoms.proto
+ * Logged from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message ProcessStats {
+    // Records the stats of the processes owned by an application.
+    repeated ProcessStat process_stat = 1;
+}
+
+/**
+ * Logs a process's stats.
+ * Keep in sync between:
+ *  packages/services/Car/watchdog/server/src/proto/statsd.proto
+ *  frameworks/base/cmds/statsd/src/atoms.proto
+ * Logged from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message ProcessStat {
+    // Command name of the process.
+    optional string process_name = 1;
+
+    // Process uptime.
+    optional uint64 uptime_milliseconds = 2;
+
+    // Number of major page faults caused by the process and its children.
+    optional uint64 major_page_faults = 3;
+
+    // Peak virtual memory size in kb.
+    optional uint64 vm_peak_kb = 4;
+
+    // Virtual memory size in kb.
+    optional uint64 vm_size_kb = 5;
+
+    // Peak resident set size (high water mark) in kb.
+    optional uint64 vm_hwm_kb = 6;
+
+    // Resident set size in kb.
+    optional uint64 vm_rss_kb = 7;
 }

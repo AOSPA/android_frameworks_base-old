@@ -45,8 +45,6 @@ import android.widget.RemoteViews;
 
 import com.android.systemui.R;
 import com.android.systemui.TestableDependency;
-import com.android.systemui.bubbles.Bubbles;
-import com.android.systemui.bubbles.BubblesTestActivity;
 import com.android.systemui.media.MediaFeatureFlag;
 import com.android.systemui.media.dialog.MediaOutputDialogFactory;
 import com.android.systemui.plugins.FalsingManager;
@@ -70,6 +68,9 @@ import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.policy.InflatedSmartReplies;
+import com.android.systemui.wmshell.BubblesManager;
+import com.android.systemui.wmshell.BubblesTestActivity;
+import com.android.wm.shell.bubbles.Bubbles;
 
 import org.mockito.ArgumentCaptor;
 
@@ -121,7 +122,7 @@ public class NotificationTestHelper {
         mGroupMembershipManager = new NotificationGroupManagerLegacy(
                 mStatusBarStateController,
                 () -> mock(PeopleNotificationIdentifier.class),
-                Optional.of(() -> mock(Bubbles.class)));
+                Optional.of((mock(Bubbles.class))));
         mGroupExpansionManager = mGroupMembershipManager;
         mHeadsUpManager = new HeadsUpManagerPhone(mContext, mStatusBarStateController,
                 mock(KeyguardBypassController.class), mock(NotificationGroupManagerLegacy.class),
@@ -430,7 +431,9 @@ public class NotificationTestHelper {
                 mock(FalsingManager.class),
                 mStatusBarStateController,
                 mPeopleNotificationIdentifier,
-                mock(OnUserInteractionCallback.class));
+                mock(OnUserInteractionCallback.class),
+                Optional.of(mock(BubblesManager.class)),
+                mock(NotificationGutsManager.class));
 
         row.setAboveShelfChangedListener(aboveShelf -> { });
         mBindStage.getStageParams(entry).requireContentViews(extraInflationFlags);

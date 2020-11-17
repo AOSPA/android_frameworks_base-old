@@ -43,7 +43,9 @@ import com.android.systemui.privacy.OngoingPrivacyChip;
 import com.android.systemui.privacy.PrivacyChipEvent;
 import com.android.systemui.privacy.PrivacyItem;
 import com.android.systemui.privacy.PrivacyItemController;
+import com.android.systemui.privacy.logging.PrivacyLogger;
 import com.android.systemui.qs.carrier.QSCarrierGroupController;
+import com.android.systemui.qs.dagger.QSScope;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
@@ -64,6 +66,7 @@ import javax.inject.Inject;
 /**
  * Controller for {@link QuickStatusBarHeader}.
  */
+@QSScope
 class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader> {
     private static final String TAG = "QuickStatusBarHeader";
 
@@ -74,7 +77,7 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
     private final ActivityStarter mActivityStarter;
     private final UiEventLogger mUiEventLogger;
     private final QSCarrierGroupController mQSCarrierGroupController;
-    private final QuickQSPanel mHeaderQsPanel;
+    private final QuickQSPanelController mHeaderQsPanelController;
     private final LifecycleRegistry mLifecycle;
     private final OngoingPrivacyChip mPrivacyChip;
     private final Clock mClockView;
@@ -88,11 +91,13 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
     private final StatusIconContainer mIconContainer;
     private final StatusBarIconController.TintedIconManager mIconManager;
     private final DemoMode mDemoModeReceiver;
+    private final PrivacyLogger mPrivacyLogger;
 
     private boolean mListening;
     private AlarmClockInfo mNextAlarm;
     private boolean mAllIndicatorsEnabled;
     private boolean mMicCameraIndicatorsEnabled;
+    private boolean mLocationIndicatorsEnabled;
     private boolean mPrivacyChipLogged;
     private int mRingerMode = AudioManager.RINGER_MODE_NORMAL;
 
@@ -156,6 +161,14 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
             }
         }
 
+        @Override
+        public void onFlagLocationChanged(boolean flag) {
+            if (mLocationIndicatorsEnabled != flag) {
+                mLocationIndicatorsEnabled = flag;
+                update();
+            }
+        }
+
         private void update() {
             StatusIconContainer iconContainer = mView.requireViewById(R.id.statusIcons);
             iconContainer.setIgnoredSlots(getIgnoredIconSlots());
@@ -194,14 +207,16 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
         }
     };
 
-    private QuickStatusBarHeaderController(QuickStatusBarHeader view,
+    @Inject
+    QuickStatusBarHeaderController(QuickStatusBarHeader view,
             ZenModeController zenModeController, NextAlarmController nextAlarmController,
             PrivacyItemController privacyItemController, RingerModeTracker ringerModeTracker,
             ActivityStarter activityStarter, UiEventLogger uiEventLogger,
             QSTileHost qsTileHost, StatusBarIconController statusBarIconController,
             CommandQueue commandQueue, DemoModeController demoModeController,
-            UserTracker userTracker,
-            QSCarrierGroupController.Builder qsCarrierGroupControllerBuilder) {
+            UserTracker userTracker, QuickQSPanelController quickQSPanelController,
+            QSCarrierGroupController.Builder qsCarrierGroupControllerBuilder,
+            PrivacyLogger privacyLogger) {
         super(view);
         mZenModeController = zenModeController;
         mNextAlarmController = nextAlarmController;
@@ -215,6 +230,8 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
         mDemoModeController = demoModeController;
         mUserTracker = userTracker;
         mLifecycle = new LifecycleRegistry(mLifecycleOwner);
+        mHeaderQsPanelController = quickQSPanelController;
+        mPrivacyLogger = privacyLogger;
 
         mQSCarrierGroupController = qsCarrierGroupControllerBuilder
                 .setQSCarrierGroup(mView.findViewById(R.id.carrier_group))
@@ -222,7 +239,6 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
 
 
         mPrivacyChip = mView.findViewById(R.id.privacy_chip);
-        mHeaderQsPanel = mView.findViewById(R.id.quick_qs_panel);
         mNextAlarmContainer = mView.findViewById(R.id.alarm_container);
         mClockView = mView.findViewById(R.id.clock);
         mRingerContainer = mView.findViewById(R.id.ringer_container);
@@ -245,13 +261,14 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
         mRingerContainer.setOnClickListener(mOnClickListener);
         mPrivacyChip.setOnClickListener(mOnClickListener);
 
-        // Ignore privacy icons because they show in the space above QQS
-        mIconContainer.addIgnoredSlots(getIgnoredIconSlots());
-        mIconContainer.setShouldRestrictIcons(false);
-        mStatusBarIconController.addIconGroup(mIconManager);
-
         mAllIndicatorsEnabled = mPrivacyItemController.getAllIndicatorsAvailable();
         mMicCameraIndicatorsEnabled = mPrivacyItemController.getMicCameraAvailable();
+        mLocationIndicatorsEnabled = mPrivacyItemController.getLocationAvailable();
+
+        // Ignore privacy icons because they show in the space above QQS
+        mIconContainer.setIgnoredSlots(getIgnoredIconSlots());
+        mIconContainer.setShouldRestrictIcons(false);
+        mStatusBarIconController.addIconGroup(mIconManager);
 
         setChipVisibility(mPrivacyChip.getVisibility() == View.VISIBLE);
 
@@ -280,8 +297,12 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
         }
         mListening = listening;
 
-        mHeaderQsPanel.setListening(listening);
-        if (mHeaderQsPanel.switchTileLayout()) {
+        mHeaderQsPanelController.setListening(listening);
+        if (mHeaderQsPanelController.isListening()) {
+            mHeaderQsPanelController.refreshAllTiles();
+        }
+
+        if (mHeaderQsPanelController.switchTileLayout(false)) {
             mView.updateResources();
         }
 
@@ -292,6 +313,7 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
             // Get the most up to date info
             mAllIndicatorsEnabled = mPrivacyItemController.getAllIndicatorsAvailable();
             mMicCameraIndicatorsEnabled = mPrivacyItemController.getMicCameraAvailable();
+            mLocationIndicatorsEnabled = mPrivacyItemController.getLocationAvailable();
             mPrivacyItemController.addCallback(mPICCallback);
         } else {
             mZenModeController.removeCallback(mZenModeControllerCallback);
@@ -305,6 +327,7 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
     private void setChipVisibility(boolean chipVisible) {
         if (chipVisible && getChipEnabled()) {
             mPrivacyChip.setVisibility(View.VISIBLE);
+            mPrivacyLogger.logChipVisible(true);
             // Makes sure that the chip is logged as viewed at most once each time QS is opened
             // mListening makes sure that the callback didn't return after the user closed QS
             if (!mPrivacyChipLogged && mListening) {
@@ -312,6 +335,7 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
                 mUiEventLogger.log(PrivacyChipEvent.ONGOING_INDICATORS_CHIP_VIEW);
             }
         } else {
+            mPrivacyLogger.logChipVisible(false);
             mPrivacyChip.setVisibility(View.GONE);
         }
     }
@@ -319,21 +343,22 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
     private List<String> getIgnoredIconSlots() {
         ArrayList<String> ignored = new ArrayList<>();
         if (getChipEnabled()) {
-            ignored.add(mView.getResources().getString(
-                    com.android.internal.R.string.status_bar_camera));
-            ignored.add(mView.getResources().getString(
-                    com.android.internal.R.string.status_bar_microphone));
-            if (mAllIndicatorsEnabled) {
+            if (mAllIndicatorsEnabled || mMicCameraIndicatorsEnabled) {
+                ignored.add(mView.getResources().getString(
+                        com.android.internal.R.string.status_bar_camera));
+                ignored.add(mView.getResources().getString(
+                        com.android.internal.R.string.status_bar_microphone));
+            }
+            if (mAllIndicatorsEnabled || mLocationIndicatorsEnabled) {
                 ignored.add(mView.getResources().getString(
                         com.android.internal.R.string.status_bar_location));
             }
         }
-
         return ignored;
     }
 
     private boolean getChipEnabled() {
-        return mMicCameraIndicatorsEnabled || mAllIndicatorsEnabled;
+        return mMicCameraIndicatorsEnabled || mLocationIndicatorsEnabled || mAllIndicatorsEnabled;
     }
 
     private boolean isZenOverridingRinger() {
@@ -367,57 +392,6 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
         @Override
         public void onDemoModeFinished() {
             mClockView.onDemoModeFinished();
-        }
-    }
-
-    static class Builder {
-        private final ZenModeController mZenModeController;
-        private final NextAlarmController mNextAlarmController;
-        private final PrivacyItemController mPrivacyItemController;
-        private final RingerModeTracker mRingerModeTracker;
-        private final ActivityStarter mActivityStarter;
-        private final UiEventLogger mUiEventLogger;
-        private final QSTileHost mQsTileHost;
-        private final StatusBarIconController mStatusBarIconController;
-        private final CommandQueue mCommandQueue;
-        private final DemoModeController mDemoModeController;
-        private final UserTracker mUserTracker;
-        private final QSCarrierGroupController.Builder mQSCarrierGroupControllerBuilder;
-        private QuickStatusBarHeader mView;
-
-        @Inject
-        Builder(ZenModeController zenModeController, NextAlarmController nextAlarmController,
-                PrivacyItemController privacyItemController, RingerModeTracker ringerModeTracker,
-                ActivityStarter activityStarter, UiEventLogger uiEventLogger, QSTileHost qsTileHost,
-                StatusBarIconController statusBarIconController, CommandQueue commandQueue,
-                DemoModeController demoModeController, UserTracker userTracker,
-                QSCarrierGroupController.Builder qsCarrierGroupControllerBuilder) {
-            mZenModeController = zenModeController;
-            mNextAlarmController = nextAlarmController;
-            mPrivacyItemController = privacyItemController;
-            mRingerModeTracker = ringerModeTracker;
-            mActivityStarter = activityStarter;
-            mUiEventLogger = uiEventLogger;
-            mQsTileHost = qsTileHost;
-            mStatusBarIconController = statusBarIconController;
-            mCommandQueue = commandQueue;
-            mDemoModeController = demoModeController;
-            mUserTracker = userTracker;
-            mQSCarrierGroupControllerBuilder = qsCarrierGroupControllerBuilder;
-        }
-
-        public Builder setQuickStatusBarHeader(QuickStatusBarHeader view) {
-            mView = view;
-            return this;
-        }
-
-
-        QuickStatusBarHeaderController build() {
-            return new QuickStatusBarHeaderController(mView, mZenModeController,
-                    mNextAlarmController, mPrivacyItemController, mRingerModeTracker,
-                    mActivityStarter, mUiEventLogger, mQsTileHost, mStatusBarIconController,
-                    mCommandQueue, mDemoModeController, mUserTracker,
-                    mQSCarrierGroupControllerBuilder);
         }
     }
 }

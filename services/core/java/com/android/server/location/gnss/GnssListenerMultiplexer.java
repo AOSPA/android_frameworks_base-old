@@ -32,7 +32,6 @@ import android.os.IInterface;
 import android.os.Process;
 import android.util.ArraySet;
 
-import com.android.internal.listeners.ListenerExecutor.ListenerOperation;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.location.listeners.BinderListenerRegistration;
@@ -60,14 +59,14 @@ import java.util.Objects;
  */
 public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInterface,
         TMergedRegistration> extends
-        ListenerMultiplexer<IBinder, TListener, ListenerOperation<TListener>,
+        ListenerMultiplexer<IBinder, TListener,
                 GnssListenerMultiplexer<TRequest, TListener, TMergedRegistration>
                         .GnssListenerRegistration, TMergedRegistration> {
 
     /**
      * Registration object for GNSS listeners.
      */
-    protected final class GnssListenerRegistration extends
+    protected class GnssListenerRegistration extends
             BinderListenerRegistration<TRequest, TListener> {
 
         // we store these values because we don't trust the listeners not to give us dupes, not to
@@ -231,11 +230,19 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
             TListener listener) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            addRegistration(listener.asBinder(),
-                    new GnssListenerRegistration(request, callerIdentity, listener));
+            putRegistration(listener.asBinder(),
+                    createRegistration(request, callerIdentity, listener));
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
+    }
+
+    /**
+     * May be overridden by subclasses to change the registration type.
+     */
+    protected GnssListenerRegistration createRegistration(TRequest request,
+            CallerIdentity callerIdentity, TListener listener) {
+        return new GnssListenerRegistration(request, callerIdentity, listener);
     }
 
     /**

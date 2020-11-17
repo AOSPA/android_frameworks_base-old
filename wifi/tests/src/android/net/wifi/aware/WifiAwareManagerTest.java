@@ -16,11 +16,13 @@
 
 package android.net.wifi.aware;
 
+import static android.net.wifi.aware.WifiAwareManager.WIFI_AWARE_DISCOVERY_LOST_REASON_PEER_NOT_VISIBLE;
 import static android.net.wifi.aware.WifiAwareNetworkSpecifier.NETWORK_SPECIFIER_TYPE_IB;
 
 import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -44,6 +46,8 @@ import android.os.Parcel;
 import android.os.test.TestLooper;
 
 import androidx.test.filters.SmallTest;
+
+import com.android.modules.utils.build.SdkLevel;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -151,8 +155,32 @@ public class WifiAwareManagerTest {
      */
     @Test
     public void testIsAttached() throws Exception {
+        assumeTrue(SdkLevel.isAtLeastS());
         mDut.isDeviceAttached();
         verify(mockAwareService).isDeviceAttached();
+    }
+
+    /**
+     * Validate pass-through of isInstantCommunicationModeEnabled() and
+     * enableInstantCommunicationMode() API
+     */
+    @Test
+    public void testEnableInstantCommunicationMode() throws Exception {
+        assumeTrue(SdkLevel.isAtLeastS());
+        mDut.isInstantCommunicationModeEnabled();
+        verify(mockAwareService).isInstantCommunicationModeEnabled();
+        mDut.enableInstantCommunicationMode(true);
+        verify(mockAwareService).enableInstantCommunicationMode(anyString(), eq(true));
+    }
+
+    /**
+     * Validate pass-through of getAvailableAwareResources() API.
+     */
+    @Test
+    public void testGetAvailableAwareResource() throws Exception {
+        assumeTrue(SdkLevel.isAtLeastS());
+        mDut.getAvailableAwareResources();
+        verify(mockAwareService).getAvailableAwareResources();
     }
 
     /*
@@ -372,7 +400,8 @@ public class WifiAwareManagerTest {
         // (5) discovery session is no longer visible
         sessionProxyCallback.getValue().onMatchExpired(peerHandle.peerId);
         mMockLooper.dispatchAll();
-        inOrder.verify(mockSessionCallback).onServiceLost(peerIdCaptor.capture());
+        inOrder.verify(mockSessionCallback).onServiceLost(peerIdCaptor.capture(),
+                eq(WIFI_AWARE_DISCOVERY_LOST_REASON_PEER_NOT_VISIBLE));
         assertEquals(peerHandle.peerId, peerIdCaptor.getValue().peerId);
 
         // (6) terminate
@@ -520,7 +549,8 @@ public class WifiAwareManagerTest {
         // (5) discovery session is no longer visible
         sessionProxyCallback.getValue().onMatchExpired(peerHandle.peerId);
         mMockLooper.dispatchAll();
-        inOrder.verify(mockSessionCallback).onServiceLost(peerIdCaptor.capture());
+        inOrder.verify(mockSessionCallback).onServiceLost(peerIdCaptor.capture(),
+                eq(WIFI_AWARE_DISCOVERY_LOST_REASON_PEER_NOT_VISIBLE));
         assertEquals(peerHandle.peerId, peerIdCaptor.getValue().peerId);
 
         // (6) terminate

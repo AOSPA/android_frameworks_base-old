@@ -41,6 +41,7 @@ import static org.mockito.Mockito.when;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -73,6 +74,7 @@ import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.telecom.TelecomManager;
 import android.telephony.TelephonyManager;
+import android.text.format.DateUtils;
 import android.util.Range;
 
 import com.android.internal.app.ChooserActivity;
@@ -100,6 +102,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 @RunWith(JUnit4.class)
 public final class DataManagerTest {
@@ -660,6 +663,26 @@ public final class DataManagerTest {
     }
 
     @Test
+    public void testConversationLastEventTimestampUpdate() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+
+        PackageData packageData = mDataManager.getPackage(TEST_PKG_NAME, USER_ID_PRIMARY);
+        ConversationInfo conversationInfo =
+                packageData.getConversationStore().getConversation(TEST_SHORTCUT_ID);
+        Event event = new Event(123L, Event.TYPE_IN_APP_CONVERSATION);
+
+        mInjector.mUsageStatsQueryHelper.mEventListener.onEvent(packageData, conversationInfo,
+                event);
+        ConversationInfo newConversationInfo =
+                packageData.getConversationStore().getConversation(TEST_SHORTCUT_ID);
+        assertEquals(123L, newConversationInfo.getLastEventTimestamp());
+    }
+
+    @Test
     public void testDeleteUninstalledPackageDataOnPackageRemoved() {
         mDataManager.onUserUnlocked(USER_ID_PRIMARY);
 
@@ -835,6 +858,30 @@ public final class DataManagerTest {
                 result.get(0).getParentNotificationChannel().getId());
         assertEquals(mStatusBarNotification.getPostTime(), result.get(0).getLastEventTimestamp());
         assertTrue(result.get(0).hasActiveNotifications());
+    }
+
+    @Test
+    public void testPruneOldRecentConversations() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        shortcut.setCached(ShortcutInfo.FLAG_CACHED_NOTIFICATIONS);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+
+        NotificationListenerService listenerService =
+                mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
+        when(mNotification.getShortcutId()).thenReturn(TEST_SHORTCUT_ID);
+        listenerService.onNotificationPosted(mStatusBarNotification);
+        listenerService.onNotificationRemoved(mStatusBarNotification, null,
+                NotificationListenerService.REASON_CLICK);
+
+        mDataManager.pruneOldRecentConversations(USER_ID_PRIMARY,
+                System.currentTimeMillis() + (10 * DateUtils.DAY_IN_MILLIS) + 1);
+
+        verify(mShortcutServiceInternal).uncacheShortcuts(
+                anyInt(), any(), eq(TEST_PKG_NAME), eq(Collections.singletonList(TEST_SHORTCUT_ID)),
+                eq(USER_ID_PRIMARY), eq(ShortcutInfo.FLAG_CACHED_NOTIFICATIONS));
     }
 
     @Test
@@ -1122,6 +1169,18 @@ public final class DataManagerTest {
         }
     }
 
+    private class TestUsageStatsQueryHelper extends UsageStatsQueryHelper {
+
+        private final EventListener mEventListener;
+
+        TestUsageStatsQueryHelper(int userId,
+                Function<String, PackageData> packageDataGetter,
+                EventListener eventListener) {
+            super(userId, packageDataGetter, eventListener);
+            mEventListener = eventListener;
+        }
+    }
+
     private class TestInjector extends DataManager.Injector {
 
         private final TestContactsQueryHelper mContactsQueryHelper =
@@ -1129,6 +1188,7 @@ public final class DataManagerTest {
         private TestCallLogQueryHelper mCallLogQueryHelper;
         private TestMmsQueryHelper mMmsQueryHelper;
         private TestSmsQueryHelper mSmsQueryHelper;
+        private TestUsageStatsQueryHelper mUsageStatsQueryHelper;
 
         @Override
         ScheduledExecutorService createScheduledExecutor() {
@@ -1164,6 +1224,15 @@ public final class DataManagerTest {
                 BiConsumer<String, Event> eventConsumer) {
             mSmsQueryHelper = new TestSmsQueryHelper(context, eventConsumer);
             return mSmsQueryHelper;
+        }
+
+        @Override
+        UsageStatsQueryHelper createUsageStatsQueryHelper(@UserIdInt int userId,
+                Function<String, PackageData> packageDataGetter,
+                UsageStatsQueryHelper.EventListener eventListener) {
+            mUsageStatsQueryHelper =
+                    new TestUsageStatsQueryHelper(userId, packageDataGetter, eventListener);
+            return mUsageStatsQueryHelper;
         }
     }
 }

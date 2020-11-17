@@ -27,7 +27,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CO
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
-import static android.view.WindowManager.TRANSIT_NONE;
+import static android.view.WindowManager.TRANSIT_OLD_NONE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_DRAW;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
@@ -359,8 +359,8 @@ class WindowStateAnimator {
             // surface before destroying it.
             if (mSurfaceController != null && mPendingDestroySurface != null) {
                 mPostDrawTransaction.reparentChildren(
-                    mSurfaceController.getClientViewRootSurface(),
-                    mPendingDestroySurface.getClientViewRootSurface()).apply();
+                    mSurfaceController.mSurfaceControl,
+                    mPendingDestroySurface.mSurfaceControl).apply();
             }
             destroySurfaceLocked();
             mSurfaceDestroyDeferred = true;
@@ -371,7 +371,7 @@ class WindowStateAnimator {
             // Our SurfaceControl is always at layer 0 within the parent Surface managed by
             // window-state. We want this old Surface to stay on top of the new one
             // until we do the swap, so we place it at a positive layer.
-            t.setLayer(mSurfaceController.getClientViewRootSurface(), PRESERVED_SURFACE_LAYER);
+            t.setLayer(mSurfaceController.mSurfaceControl, PRESERVED_SURFACE_LAYER);
         }
         mDestroyPreservedSurfaceUponRedraw = true;
         mSurfaceDestroyDeferred = true;
@@ -393,8 +393,8 @@ class WindowStateAnimator {
                 && !mPendingDestroySurface.mChildrenDetached
                 && (mWin.mActivityRecord == null || !mWin.mActivityRecord.isRelaunching())) {
             mPostDrawTransaction.reparentChildren(
-                    mPendingDestroySurface.getClientViewRootSurface(),
-                    mSurfaceController.getClientViewRootSurface()).apply();
+                    mPendingDestroySurface.mSurfaceControl,
+                    mSurfaceController.mSurfaceControl).apply();
         }
 
         destroyDeferredSurfaceLocked();
@@ -488,6 +488,9 @@ class WindowStateAnimator {
             mSurfaceFormat = format;
 
             w.setHasSurface(true);
+            // The surface instance is changed. Make sure the input info can be applied to the
+            // new surface, e.g. relaunch activity.
+            w.mInputWindowHandle.forceChange();
 
             ProtoLog.i(WM_SHOW_SURFACE_ALLOC,
                         "  CREATE SURFACE %s IN SESSION %s: pid=%d format=%d flags=0x%x / %s",
@@ -624,32 +627,32 @@ class WindowStateAnimator {
 
         mShownAlpha = mAlpha;
         mHaveMatrix = false;
-        mDsDx = mWin.mGlobalScale;
+        mDsDx = 1;
         mDtDx = 0;
         mDtDy = 0;
-        mDsDy = mWin.mGlobalScale;
+        mDsDy = 1;
     }
 
     private boolean shouldConsumeMainWindowSizeTransaction() {
-      // If we use BLASTSync we always consume the transaction when finishing
-      // the sync.
-      if (mService.useBLASTSync()) {
-          return false;
-      }
-      // We only consume the transaction when the client is calling relayout
-      // because this is the only time we know the frameNumber will be valid
-      // due to the client renderer being paused. Put otherwise, only when
-      // mInRelayout is true can we guarantee the next frame will contain
-      // the most recent configuration.
-      if (!mWin.mInRelayout) return false;
-      // Since we can only do this for one window, we focus on the main application window
-      if (mAttrType != TYPE_BASE_APPLICATION) return false;
-      final Task task = mWin.getTask();
-      if (task == null) return false;
-      if (task.getMainWindowSizeChangeTransaction() == null) return false;
-      // Likewise we only focus on the task root, since we can only use one window
-      if (!mWin.mActivityRecord.isRootOfTask()) return false;
-      return true;
+        // If we use BLASTSync we always consume the transaction when finishing
+        // the sync.
+        if (mService.useBLASTSync() && mWin.useBLASTSync()) {
+            return false;
+        }
+        // We only consume the transaction when the client is calling relayout
+        // because this is the only time we know the frameNumber will be valid
+        // due to the client renderer being paused. Put otherwise, only when
+        // mInRelayout is true can we guarantee the next frame will contain
+        // the most recent configuration.
+        if (!mWin.mInRelayout) return false;
+        // Since we can only do this for one window, we focus on the main application window
+        if (mAttrType != TYPE_BASE_APPLICATION) return false;
+        final Task task = mWin.getTask();
+        if (task == null) return false;
+        if (task.getMainWindowSizeChangeTransaction() == null) return false;
+        // Likewise we only focus on the task root, since we can only use one window
+        if (!mWin.mActivityRecord.isRootOfTask()) return false;
+        return true;
     }
 
     void setSurfaceBoundariesLocked(SurfaceControl.Transaction t, final boolean recoveringMemory) {
@@ -859,6 +862,7 @@ class WindowStateAnimator {
 
         if (displayed) {
             w.mToken.hasVisible = true;
+            mSurfaceController.setBackgroundBlurRadius(w.mAttrs.backgroundBlurRadius);
         }
     }
 
@@ -984,8 +988,8 @@ class WindowStateAnimator {
             // Instead let the children get removed when the old surface is deleted.
             if (!mPendingDestroySurface.mChildrenDetached) {
                 mPostDrawTransaction.reparentChildren(
-                        mPendingDestroySurface.getClientViewRootSurface(),
-                        mSurfaceController.getClientViewRootSurface());
+                        mPendingDestroySurface.mSurfaceControl,
+                        mSurfaceController.mSurfaceControl);
             }
         }
 
@@ -1074,7 +1078,7 @@ class WindowStateAnimator {
                 }
                 if (attr >= 0) {
                     a = mWin.getDisplayContent().mAppTransition.loadAnimationAttr(
-                            mWin.mAttrs, attr, TRANSIT_NONE);
+                            mWin.mAttrs, attr, TRANSIT_OLD_NONE);
                 }
             }
             if (DEBUG_ANIM) Slog.v(TAG,
@@ -1201,10 +1205,10 @@ class WindowStateAnimator {
         mOffsetPositionForStackResize = offsetPositionForStackResize;
     }
 
-    SurfaceControl getClientViewRootSurface() {
+    SurfaceControl getSurfaceControl() {
         if (!hasSurface()) {
             return null;
         }
-        return mSurfaceController.getClientViewRootSurface();
+        return mSurfaceController.mSurfaceControl;
     }
 }

@@ -1478,8 +1478,11 @@ public final class Call {
 
         /**
          * Writes the string {@param input} into the outgoing text stream for this RTT call. Since
-         * RTT transmits text in real-time, this method should be called once for each character
-         * the user enters into the device.
+         * RTT transmits text in real-time, this method should be called once for each user action.
+         * For example, when the user enters text as discrete characters using the keyboard, this
+         * method should be called once for each character. However, if the user enters text by
+         * pasting or autocomplete, the entire contents of the pasted or autocompleted text should
+         * be sent in one call to this method.
          *
          * This method is not thread-safe -- calling it from multiple threads simultaneously may
          * lead to interleaved text.
@@ -1693,7 +1696,6 @@ public final class Call {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void enterBackgroundAudioProcessing() {
         if (mState != STATE_ACTIVE && mState != STATE_RINGING) {
             throw new IllegalStateException("Call must be active or ringing");
@@ -1714,7 +1716,6 @@ public final class Call {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void exitBackgroundAudioProcessing(boolean shouldRing) {
         if (mState != STATE_AUDIO_PROCESSING) {
             throw new IllegalStateException("Call must in the audio processing state");

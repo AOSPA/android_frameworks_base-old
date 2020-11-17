@@ -53,7 +53,8 @@ public class WindowMagnification extends SystemUI implements WindowMagnifierCall
         CommandQueue.Callbacks {
     private static final String TAG = "WindowMagnification";
     private static final int CONFIG_MASK =
-            ActivityInfo.CONFIG_DENSITY | ActivityInfo.CONFIG_ORIENTATION;
+            ActivityInfo.CONFIG_DENSITY | ActivityInfo.CONFIG_ORIENTATION
+                    | ActivityInfo.CONFIG_LOCALE;
 
     @VisibleForTesting
     protected WindowMagnificationAnimationController mWindowMagnificationAnimationController;
@@ -72,8 +73,7 @@ public class WindowMagnification extends SystemUI implements WindowMagnifierCall
         super(context);
         mHandler = mainHandler;
         mLastConfiguration = new Configuration(context.getResources().getConfiguration());
-        mAccessibilityManager = (AccessibilityManager) mContext.getSystemService(
-                Context.ACCESSIBILITY_SERVICE);
+        mAccessibilityManager = mContext.getSystemService(AccessibilityManager.class);
         mCommandQueue = commandQueue;
         mModeSwitchesController = modeSwitchesController;
         final WindowMagnificationController controller = new WindowMagnificationController(mContext,

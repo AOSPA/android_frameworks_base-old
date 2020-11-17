@@ -19,6 +19,7 @@ import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.NotificationChannel.CONVERSATION_CHANNEL_ID_FORMAT;
+import static android.app.NotificationChannel.USER_LOCKED_IMPORTANCE;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_ALL;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_NONE;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_SELECTED;
@@ -217,6 +218,22 @@ public class PreferencesHelperTest extends UiServiceTestCase {
             });
             return null;
         }).when(mTestIContentProvider).canonicalizeAsync(any(), any(), any(), any());
+        doAnswer(invocation -> {
+            String callingPkg = invocation.getArgument(0);
+            String featureId = invocation.getArgument(1);
+            Uri uri = invocation.getArgument(2);
+            RemoteCallback cb = invocation.getArgument(3);
+            IContentProvider mock = (IContentProvider) (invocation.getMock());
+            AsyncTask.SERIAL_EXECUTOR.execute(() -> {
+                final Bundle bundle = new Bundle();
+                try {
+                    bundle.putParcelable(ContentResolver.REMOTE_CALLBACK_RESULT,
+                            mock.uncanonicalize(callingPkg, featureId, uri));
+                } catch (RemoteException e) { /* consume */ }
+                cb.sendResult(bundle);
+            });
+            return null;
+        }).when(mTestIContentProvider).uncanonicalizeAsync(any(), any(), any(), any());
         doAnswer(invocation -> {
             Uri uri = invocation.getArgument(0);
             RemoteCallback cb = invocation.getArgument(1);
@@ -3779,5 +3796,41 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                         IS_IMPORTANT_CONVERSATION_FIELD_NUMBER));
             }
         }
+    }
+
+    @Test
+    public void testUnlockNotificationChannelImportance() {
+        NotificationChannel channel = new NotificationChannel("a", "a", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG_O, UID_O, channel, true, false);
+        channel.lockFields(USER_LOCKED_IMPORTANCE);
+        assertTrue((channel.getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0);
+
+        mHelper.unlockNotificationChannelImportance(PKG_O, UID_O, channel.getId());
+        assertTrue((channel.getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0);
+
+    }
+
+    @Test
+    public void testUnlockAllNotificationChannels() {
+        NotificationChannel channelA = new NotificationChannel("a", "a", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG_O, UID_O, channelA, true, false);
+        NotificationChannel channelB = new NotificationChannel("b", "b", IMPORTANCE_DEFAULT);
+        mHelper.createNotificationChannel(PKG_P, UID_P, channelB, true, false);
+        NotificationChannel channelC = new NotificationChannel("c", "c", IMPORTANCE_HIGH);
+        mHelper.createNotificationChannel(PKG_P, UID_O, channelC, false, false);
+
+        channelA.lockFields(USER_LOCKED_IMPORTANCE);
+        channelB.lockFields(USER_LOCKED_IMPORTANCE);
+        channelC.lockFields(USER_LOCKED_IMPORTANCE);
+
+        assertTrue((channelA.getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0);
+        assertTrue((channelB.getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0);
+        assertTrue((channelC.getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0);
+
+        mHelper.unlockAllNotificationChannels();
+        assertTrue((channelA.getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0);
+        assertTrue((channelB.getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0);
+        assertTrue((channelC.getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0);
+
     }
 }

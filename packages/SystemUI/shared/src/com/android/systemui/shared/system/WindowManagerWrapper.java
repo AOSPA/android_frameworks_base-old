@@ -39,29 +39,29 @@ public class WindowManagerWrapper {
 
     private static final String TAG = "WindowManagerWrapper";
 
-    public static final int TRANSIT_UNSET = WindowManager.TRANSIT_UNSET;
-    public static final int TRANSIT_NONE = WindowManager.TRANSIT_NONE;
-    public static final int TRANSIT_ACTIVITY_OPEN = WindowManager.TRANSIT_ACTIVITY_OPEN;
-    public static final int TRANSIT_ACTIVITY_CLOSE = WindowManager.TRANSIT_ACTIVITY_CLOSE;
-    public static final int TRANSIT_TASK_OPEN = WindowManager.TRANSIT_TASK_OPEN;
-    public static final int TRANSIT_TASK_CLOSE = WindowManager.TRANSIT_TASK_CLOSE;
-    public static final int TRANSIT_TASK_TO_FRONT = WindowManager.TRANSIT_TASK_TO_FRONT;
-    public static final int TRANSIT_TASK_TO_BACK = WindowManager.TRANSIT_TASK_TO_BACK;
-    public static final int TRANSIT_WALLPAPER_CLOSE = WindowManager.TRANSIT_WALLPAPER_CLOSE;
-    public static final int TRANSIT_WALLPAPER_OPEN = WindowManager.TRANSIT_WALLPAPER_OPEN;
+    public static final int TRANSIT_UNSET = WindowManager.TRANSIT_OLD_UNSET;
+    public static final int TRANSIT_NONE = WindowManager.TRANSIT_OLD_NONE;
+    public static final int TRANSIT_ACTIVITY_OPEN = WindowManager.TRANSIT_OLD_ACTIVITY_OPEN;
+    public static final int TRANSIT_ACTIVITY_CLOSE = WindowManager.TRANSIT_OLD_ACTIVITY_CLOSE;
+    public static final int TRANSIT_TASK_OPEN = WindowManager.TRANSIT_OLD_TASK_OPEN;
+    public static final int TRANSIT_TASK_CLOSE = WindowManager.TRANSIT_OLD_TASK_CLOSE;
+    public static final int TRANSIT_TASK_TO_FRONT = WindowManager.TRANSIT_OLD_TASK_TO_FRONT;
+    public static final int TRANSIT_TASK_TO_BACK = WindowManager.TRANSIT_OLD_TASK_TO_BACK;
+    public static final int TRANSIT_WALLPAPER_CLOSE = WindowManager.TRANSIT_OLD_WALLPAPER_CLOSE;
+    public static final int TRANSIT_WALLPAPER_OPEN = WindowManager.TRANSIT_OLD_WALLPAPER_OPEN;
     public static final int TRANSIT_WALLPAPER_INTRA_OPEN =
-            WindowManager.TRANSIT_WALLPAPER_INTRA_OPEN;
+            WindowManager.TRANSIT_OLD_WALLPAPER_INTRA_OPEN;
     public static final int TRANSIT_WALLPAPER_INTRA_CLOSE =
-            WindowManager.TRANSIT_WALLPAPER_INTRA_CLOSE;
-    public static final int TRANSIT_TASK_OPEN_BEHIND = WindowManager.TRANSIT_TASK_OPEN_BEHIND;
-    public static final int TRANSIT_ACTIVITY_RELAUNCH = WindowManager.TRANSIT_ACTIVITY_RELAUNCH;
-    public static final int TRANSIT_DOCK_TASK_FROM_RECENTS =
-            WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
-    public static final int TRANSIT_KEYGUARD_GOING_AWAY = WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
+            WindowManager.TRANSIT_OLD_WALLPAPER_INTRA_CLOSE;
+    public static final int TRANSIT_TASK_OPEN_BEHIND = WindowManager.TRANSIT_OLD_TASK_OPEN_BEHIND;
+    public static final int TRANSIT_ACTIVITY_RELAUNCH = WindowManager.TRANSIT_OLD_ACTIVITY_RELAUNCH;
+    public static final int TRANSIT_KEYGUARD_GOING_AWAY =
+            WindowManager.TRANSIT_OLD_KEYGUARD_GOING_AWAY;
     public static final int TRANSIT_KEYGUARD_GOING_AWAY_ON_WALLPAPER =
-            WindowManager.TRANSIT_KEYGUARD_GOING_AWAY_ON_WALLPAPER;
-    public static final int TRANSIT_KEYGUARD_OCCLUDE = WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
-    public static final int TRANSIT_KEYGUARD_UNOCCLUDE = WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
+            WindowManager.TRANSIT_OLD_KEYGUARD_GOING_AWAY_ON_WALLPAPER;
+    public static final int TRANSIT_KEYGUARD_OCCLUDE = WindowManager.TRANSIT_OLD_KEYGUARD_OCCLUDE;
+    public static final int TRANSIT_KEYGUARD_UNOCCLUDE =
+            WindowManager.TRANSIT_OLD_KEYGUARD_UNOCCLUDE;
 
     public static final int NAV_BAR_POS_INVALID = NAV_BAR_INVALID;
     public static final int NAV_BAR_POS_LEFT = NAV_BAR_LEFT;
@@ -99,6 +99,18 @@ public class WindowManagerWrapper {
     public void setProvidesInsetsTypes(WindowManager.LayoutParams params,
             int[] providesInsetsTypes) {
         params.providesInsetsTypes = providesInsetsTypes;
+    }
+
+    /**
+     *  Sets if app requested fixed orientation should be ignored for given displayId.
+     */
+    public void setIgnoreOrientationRequest(int displayId, boolean ignoreOrientationRequest) {
+        try {
+            WindowManagerGlobal.getWindowManagerService().setIgnoreOrientationRequest(
+                    displayId, ignoreOrientationRequest);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to setIgnoreOrientationRequest()", e);
+        }
     }
 
     /**

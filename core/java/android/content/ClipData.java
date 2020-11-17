@@ -22,6 +22,7 @@ import static android.content.ContentResolver.SCHEME_CONTENT;
 import static android.content.ContentResolver.SCHEME_FILE;
 
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.pm.ActivityInfo;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.net.Uri;
@@ -201,6 +202,8 @@ public class ClipData implements Parcelable {
         final Intent mIntent;
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         Uri mUri;
+        // Additional activity info resolved by the system
+        ActivityInfo mActivityInfo;
 
         /** @hide */
         public Item(Item other) {
@@ -310,6 +313,22 @@ public class ClipData implements Parcelable {
          */
         public Uri getUri() {
             return mUri;
+        }
+
+        /**
+         * Retrieve the activity info contained in this Item.
+         * @hide
+         */
+        public ActivityInfo getActivityInfo() {
+            return mActivityInfo;
+        }
+
+        /**
+         * Updates the activity info for in this Item.
+         * @hide
+         */
+        public void setActivityInfo(ActivityInfo info) {
+            mActivityInfo = info;
         }
 
         /**
@@ -632,45 +651,57 @@ public class ClipData implements Parcelable {
             StringBuilder b = new StringBuilder(128);
 
             b.append("ClipData.Item { ");
-            toShortString(b);
+            toShortString(b, true);
             b.append(" }");
 
             return b.toString();
         }
 
-        /** @hide */
-        public void toShortString(StringBuilder b) {
+        /**
+         * Appends this item to the given builder.
+         * @param redactContent If true, redacts common forms of PII; otherwise appends full
+         *                      details.
+         * @hide
+         */
+        public void toShortString(StringBuilder b, boolean redactContent) {
+            boolean first = true;
             if (mHtmlText != null) {
-                b.append("H:");
-                b.append(mHtmlText);
-            } else if (mText != null) {
-                b.append("T:");
-                b.append(mText);
-            } else if (mUri != null) {
-                b.append("U:");
-                b.append(mUri);
-            } else if (mIntent != null) {
-                b.append("I:");
-                mIntent.toShortString(b, true, true, true, true);
-            } else {
-                b.append("NULL");
+                first = false;
+                if (redactContent) {
+                    b.append("H(").append(mHtmlText.length()).append(')');
+                } else {
+                    b.append("H:").append(mHtmlText);
+                }
             }
-        }
-
-        /** @hide */
-        public void toShortSummaryString(StringBuilder b) {
-            if (mHtmlText != null) {
-                b.append("HTML");
-            } else if (mText != null) {
-                b.append("TEXT");
-            } else if (mUri != null) {
-                b.append("U:");
-                b.append(mUri);
-            } else if (mIntent != null) {
+            if (mText != null) {
+                if (!first) {
+                    b.append(' ');
+                }
+                first = false;
+                if (redactContent) {
+                    b.append("T(").append(mText.length()).append(')');
+                } else {
+                    b.append("T:").append(mText);
+                }
+            }
+            if (mUri != null) {
+                if (!first) {
+                    b.append(' ');
+                }
+                first = false;
+                if (redactContent) {
+                    b.append("U(").append(mUri.getScheme()).append(')');
+                } else {
+                    b.append("U:").append(mUri);
+                }
+            }
+            if (mIntent != null) {
+                if (!first) {
+                    b.append(' ');
+                }
+                first = false;
                 b.append("I:");
-                mIntent.toShortString(b, true, true, true, true);
-            } else {
-                b.append("NULL");
+                mIntent.toShortString(b, redactContent, true, true, true);
             }
         }
 
@@ -1021,17 +1052,21 @@ public class ClipData implements Parcelable {
         StringBuilder b = new StringBuilder(128);
 
         b.append("ClipData { ");
-        toShortString(b);
+        toShortString(b, true);
         b.append(" }");
 
         return b.toString();
     }
 
-    /** @hide */
-    public void toShortString(StringBuilder b) {
+    /**
+     * Appends this clip to the given builder.
+     * @param redactContent If true, redacts common forms of PII; otherwise appends full details.
+     * @hide
+     */
+    public void toShortString(StringBuilder b, boolean redactContent) {
         boolean first;
         if (mClipDescription != null) {
-            first = !mClipDescription.toShortString(b);
+            first = !mClipDescription.toShortString(b, redactContent);
         } else {
             first = true;
         }
@@ -1045,26 +1080,21 @@ public class ClipData implements Parcelable {
             b.append('x');
             b.append(mIcon.getHeight());
         }
-        for (int i=0; i<mItems.size(); i++) {
+        if (mItems.size() != 1) {
+            if (!first) {
+                b.append(' ');
+            }
+            first = false;
+            b.append(mItems.size()).append(" items:");
+        }
+        for (int i = 0; i < mItems.size(); i++) {
             if (!first) {
                 b.append(' ');
             }
             first = false;
             b.append('{');
-            mItems.get(i).toShortString(b);
+            mItems.get(i).toShortString(b, redactContent);
             b.append('}');
-        }
-    }
-
-    /** @hide */
-    public void toShortStringShortItems(StringBuilder b, boolean first) {
-        if (mItems.size() > 0) {
-            if (!first) {
-                b.append(' ');
-            }
-            for (int i=0; i<mItems.size(); i++) {
-                b.append("{...}");
-            }
         }
     }
 
@@ -1129,18 +1159,9 @@ public class ClipData implements Parcelable {
             Item item = mItems.get(i);
             TextUtils.writeToParcel(item.mText, dest, flags);
             dest.writeString8(item.mHtmlText);
-            if (item.mIntent != null) {
-                dest.writeInt(1);
-                item.mIntent.writeToParcel(dest, flags);
-            } else {
-                dest.writeInt(0);
-            }
-            if (item.mUri != null) {
-                dest.writeInt(1);
-                item.mUri.writeToParcel(dest, flags);
-            } else {
-                dest.writeInt(0);
-            }
+            dest.writeTypedObject(item.mIntent, flags);
+            dest.writeTypedObject(item.mUri, flags);
+            dest.writeTypedObject(item.mActivityInfo, flags);
         }
     }
 
@@ -1151,14 +1172,17 @@ public class ClipData implements Parcelable {
         } else {
             mIcon = null;
         }
-        mItems = new ArrayList<Item>();
+        mItems = new ArrayList<>();
         final int N = in.readInt();
         for (int i=0; i<N; i++) {
             CharSequence text = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(in);
             String htmlText = in.readString8();
-            Intent intent = in.readInt() != 0 ? Intent.CREATOR.createFromParcel(in) : null;
-            Uri uri = in.readInt() != 0 ? Uri.CREATOR.createFromParcel(in) : null;
-            mItems.add(new Item(text, htmlText, intent, uri));
+            Intent intent = in.readTypedObject(Intent.CREATOR);
+            Uri uri = in.readTypedObject(Uri.CREATOR);
+            ActivityInfo info = in.readTypedObject(ActivityInfo.CREATOR);
+            Item item = new Item(text, htmlText, intent, uri);
+            item.setActivityInfo(info);
+            mItems.add(item);
         }
     }
 

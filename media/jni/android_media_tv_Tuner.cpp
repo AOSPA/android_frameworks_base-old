@@ -132,8 +132,35 @@ using ::android::hardware::tv::tuner::V1_0::LnbTone;
 using ::android::hardware::tv::tuner::V1_0::LnbVoltage;
 using ::android::hardware::tv::tuner::V1_0::PlaybackSettings;
 using ::android::hardware::tv::tuner::V1_0::RecordSettings;
+using ::android::hardware::tv::tuner::V1_1::AudioStreamType;
+using ::android::hardware::tv::tuner::V1_1::AvStreamType;
 using ::android::hardware::tv::tuner::V1_1::Constant;
 using ::android::hardware::tv::tuner::V1_1::Constant64Bit;
+using ::android::hardware::tv::tuner::V1_1::FrontendAnalogAftFlag;
+using ::android::hardware::tv::tuner::V1_1::FrontendAnalogSettingsExt1_1;
+using ::android::hardware::tv::tuner::V1_1::FrontendBandwidth;
+using ::android::hardware::tv::tuner::V1_1::FrontendCableTimeInterleaveMode;
+using ::android::hardware::tv::tuner::V1_1::FrontendDvbcBandwidth;
+using ::android::hardware::tv::tuner::V1_1::FrontendDvbsScanType;
+using ::android::hardware::tv::tuner::V1_1::FrontendDvbcSettingsExt1_1;
+using ::android::hardware::tv::tuner::V1_1::FrontendDvbsSettingsExt1_1;
+using ::android::hardware::tv::tuner::V1_1::FrontendDvbtSettingsExt1_1;
+using ::android::hardware::tv::tuner::V1_1::FrontendDtmbBandwidth;
+using ::android::hardware::tv::tuner::V1_1::FrontendDtmbCapabilities;
+using ::android::hardware::tv::tuner::V1_1::FrontendDtmbCodeRate;
+using ::android::hardware::tv::tuner::V1_1::FrontendDtmbGuardInterval;
+using ::android::hardware::tv::tuner::V1_1::FrontendDtmbModulation;
+using ::android::hardware::tv::tuner::V1_1::FrontendDtmbSettings;
+using ::android::hardware::tv::tuner::V1_1::FrontendDtmbTimeInterleaveMode;
+using ::android::hardware::tv::tuner::V1_1::FrontendDtmbTransmissionMode;
+using ::android::hardware::tv::tuner::V1_1::FrontendGuardInterval;
+using ::android::hardware::tv::tuner::V1_1::FrontendInterleaveMode;
+using ::android::hardware::tv::tuner::V1_1::FrontendModulation;
+using ::android::hardware::tv::tuner::V1_1::FrontendSpectralInversion;
+using ::android::hardware::tv::tuner::V1_1::FrontendStatusExt1_1;
+using ::android::hardware::tv::tuner::V1_1::FrontendStatusTypeExt1_1;
+using ::android::hardware::tv::tuner::V1_1::FrontendTransmissionMode;
+using ::android::hardware::tv::tuner::V1_1::VideoStreamType;
 
 struct fields_t {
     jfieldID tunerContext;
@@ -578,9 +605,13 @@ jobjectArray FilterCallback::getTsRecordEvent(
 
         jlong pts = (eventsExt.size() > i) ? static_cast<jlong>(eventsExt[i].tsRecord().pts)
                 : static_cast<jlong>(Constant64Bit::INVALID_PRESENTATION_TIME_STAMP);
+        jlong firstMbInSlice = (eventsExt.size() > i)
+                ? static_cast<jint>(eventsExt[i].tsRecord().firstMbInSlice)
+                : static_cast<jint>(Constant::INVALID_FIRST_MACROBLOCK_IN_SLICE);
 
         jobject obj =
-                env->NewObject(eventClazz, eventInit, jpid, ts, sc, byteNumber, pts);
+                env->NewObject(eventClazz, eventInit, jpid, ts, sc, byteNumber,
+                        pts, firstMbInSlice);
         env->SetObjectArrayElement(arr, i, obj);
     }
     return arr;
@@ -605,10 +636,13 @@ jobjectArray FilterCallback::getMmtpRecordEvent(
                 : static_cast<jint>(Constant::INVALID_MMTP_RECORD_EVENT_MPT_SEQUENCE_NUM);
         jlong pts = (eventsExt.size() > i) ? static_cast<jlong>(eventsExt[i].mmtpRecord().pts)
                 : static_cast<jlong>(Constant64Bit::INVALID_PRESENTATION_TIME_STAMP);
+        jlong firstMbInSlice = (eventsExt.size() > i)
+                ? static_cast<jint>(eventsExt[i].mmtpRecord().firstMbInSlice)
+                : static_cast<jint>(Constant::INVALID_FIRST_MACROBLOCK_IN_SLICE);
 
         jobject obj =
                 env->NewObject(eventClazz, eventInit, scHevcIndexMask, byteNumber,
-                        mpuSequenceNumber, pts);
+                        mpuSequenceNumber, pts, firstMbInSlice);
         env->SetObjectArrayElement(arr, i, obj);
     }
     return arr;
@@ -970,6 +1004,85 @@ Return<void> FrontendCallback::onScanMessage(FrontendScanMessageType type, const
     return Void();
 }
 
+Return<void> FrontendCallback::onScanMessageExt1_1(FrontendScanMessageTypeExt1_1 type,
+        const FrontendScanMessageExt1_1& message) {
+    ALOGD("FrontendCallback::onScanMessageExt1_1, type=%d", type);
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    jclass clazz = env->FindClass("android/media/tv/tuner/Tuner");
+    switch(type) {
+        case FrontendScanMessageTypeExt1_1::MODULATION: {
+            jint modulation = -1;
+            switch (message.modulation().getDiscriminator()) {
+                case FrontendModulation::hidl_discriminator::dvbc: {
+                    modulation = (jint) message.modulation().dvbc();
+                    break;
+                }
+                case FrontendModulation::hidl_discriminator::dvbt: {
+                    modulation = (jint) message.modulation().dvbt();
+                    break;
+                }
+                case FrontendModulation::hidl_discriminator::dvbs: {
+                    modulation = (jint) message.modulation().dvbs();
+                    break;
+                }
+                case FrontendModulation::hidl_discriminator::isdbs: {
+                    modulation = (jint) message.modulation().isdbs();
+                    break;
+                }
+                case FrontendModulation::hidl_discriminator::isdbs3: {
+                    modulation = (jint) message.modulation().isdbs3();
+                    break;
+                }
+                case FrontendModulation::hidl_discriminator::isdbt: {
+                    modulation = (jint) message.modulation().isdbt();
+                    break;
+                }
+                case FrontendModulation::hidl_discriminator::atsc: {
+                    modulation = (jint) message.modulation().atsc();
+                    break;
+                }
+                case FrontendModulation::hidl_discriminator::atsc3: {
+                    modulation = (jint) message.modulation().atsc3();
+                    break;
+                }
+                case FrontendModulation::hidl_discriminator::dtmb: {
+                    modulation = (jint) message.modulation().dtmb();
+                    break;
+                }
+                default: {
+                    break;
+                }
+            }
+            if (modulation > 0) {
+                env->CallVoidMethod(
+                        mObject,
+                        env->GetMethodID(clazz, "onModulationReported", "(I)V"),
+                        modulation);
+            }
+            break;
+        }
+        case FrontendScanMessageTypeExt1_1::HIGH_PRIORITY: {
+            bool isHighPriority = message.isHighPriority();
+            env->CallVoidMethod(
+                    mObject,
+                    env->GetMethodID(clazz, "onPriorityReported", "(B)V"),
+                    isHighPriority);
+            break;
+        }
+        case FrontendScanMessageTypeExt1_1::DVBC_ANNEX: {
+            jint dvbcAnnex = (jint) message.annex();
+            env->CallVoidMethod(
+                    mObject,
+                    env->GetMethodID(clazz, "onDvbcAnnexReported", "(I)V"),
+                    dvbcAnnex);
+            break;
+        }
+        default:
+            break;
+    }
+    return Void();
+}
+
 /////////////// Tuner ///////////////////////
 
 sp<ITuner> JTuner::mTuner;
@@ -1200,6 +1313,33 @@ jobject JTuner::getIsdbtFrontendCaps(JNIEnv *env, FrontendInfo::FrontendCapabili
             guardIntervalCap);
 }
 
+jobject JTuner::getDtmbFrontendCaps(JNIEnv *env, int id) {
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/DtmbFrontendCapabilities");
+    jmethodID capsInit = env->GetMethodID(clazz, "<init>", "(IIIIII)V");
+
+    if (mTuner_1_1 == NULL) {
+        ALOGD("1.1 Tuner is not found. Dtmb Frontend Caps are not supported.");
+        return NULL;
+    }
+
+    Result result;
+    FrontendDtmbCapabilities dtmbCaps;
+    mTuner_1_1->getFrontendDtmbCapabilities(id,
+            [&](Result r, const FrontendDtmbCapabilities& caps) {
+        dtmbCaps = caps;
+        result = r;
+    });
+    jint modulationCap = dtmbCaps.modulationCap;
+    jint transmissionModeCap = dtmbCaps.transmissionModeCap;
+    jint guardIntervalCap = dtmbCaps.guardIntervalCap;
+    jint interleaveModeCap = dtmbCaps.interleaveModeCap;
+    jint codeRateCap = dtmbCaps.codeRateCap;
+    jint bandwidthCap = dtmbCaps.bandwidthCap;
+
+    return env->NewObject(clazz, capsInit, modulationCap, transmissionModeCap, guardIntervalCap,
+            interleaveModeCap, codeRateCap, bandwidthCap);
+}
+
 jobject JTuner::getFrontendInfo(int id) {
     FrontendInfo feInfo;
     Result res;
@@ -1230,6 +1370,15 @@ jobject JTuner::getFrontendInfo(int id) {
     FrontendInfo::FrontendCapabilities caps = feInfo.frontendCaps;
 
     jobject jcaps = NULL;
+
+    if (feInfo.type == static_cast<FrontendType>(
+            ::android::hardware::tv::tuner::V1_1::FrontendType::DTMB)) {
+        if (mTuner_1_1 == NULL) {
+            return NULL;
+        }
+        jcaps = getDtmbFrontendCaps(env, id);
+    }
+
     switch(feInfo.type) {
         case FrontendType::ANALOG:
             if (FrontendInfo::FrontendCapabilities::hidl_discriminator::analogCaps
@@ -1377,12 +1526,21 @@ jobject JTuner::openLnbByName(jstring name) {
     return lnbObj;
 }
 
-int JTuner::tune(const FrontendSettings& settings) {
+int JTuner::tune(const FrontendSettings& settings, const FrontendSettingsExt1_1& settingsExt1_1) {
     if (mFe == NULL) {
         ALOGE("frontend is not initialized");
         return (int)Result::INVALID_STATE;
     }
-    Result result = mFe->tune(settings);
+    Result result;
+    sp<::android::hardware::tv::tuner::V1_1::IFrontend> fe_1_1 =
+            ::android::hardware::tv::tuner::V1_1::IFrontend::castFrom(mFe);
+    if (fe_1_1 == NULL) {
+        ALOGD("1.1 frontend is not found. Using 1.0 instead.");
+        result = mFe->tune(settings);
+        return (int)result;
+    }
+
+    result = fe_1_1->tune_1_1(settings, settingsExt1_1);
     return (int)result;
 }
 
@@ -1395,12 +1553,22 @@ int JTuner::stopTune() {
     return (int)result;
 }
 
-int JTuner::scan(const FrontendSettings& settings, FrontendScanType scanType) {
+int JTuner::scan(const FrontendSettings& settings, FrontendScanType scanType,
+        const FrontendSettingsExt1_1& settingsExt1_1) {
     if (mFe == NULL) {
         ALOGE("frontend is not initialized");
         return (int)Result::INVALID_STATE;
     }
-    Result result = mFe->scan(settings, scanType);
+    Result result;
+    sp<::android::hardware::tv::tuner::V1_1::IFrontend> fe_1_1 =
+            ::android::hardware::tv::tuner::V1_1::IFrontend::castFrom(mFe);
+    if (fe_1_1 == NULL) {
+        ALOGD("1.1 frontend is not found. Using 1.0 instead.");
+        result = mFe->scan(settings, scanType);
+        return (int)result;
+    }
+
+    result = fe_1_1->scan_1_1(settings, scanType, settingsExt1_1);
     return (int)result;
 }
 
@@ -1791,18 +1959,49 @@ jobject JTuner::getFrontendStatus(jintArray types) {
     }
     JNIEnv *env = AndroidRuntime::getJNIEnv();
     jsize size = env->GetArrayLength(types);
-    std::vector<FrontendStatusType> v(size);
-    env->GetIntArrayRegion(types, 0, size, reinterpret_cast<jint*>(&v[0]));
+    jint intTypes[size];
+    env->GetIntArrayRegion(types, 0, size, intTypes);
+    std::vector<FrontendStatusType> v;
+    std::vector<FrontendStatusTypeExt1_1> v_1_1;
+    for (int i = 0; i < size; i++) {
+        if (isV1_1ExtendedStatusType(intTypes[i])) {
+            v_1_1.push_back(static_cast<FrontendStatusTypeExt1_1>(intTypes[i]));
+        } else {
+            v.push_back(static_cast<FrontendStatusType>(intTypes[i]));
+        }
+    }
 
     Result res;
     hidl_vec<FrontendStatus> status;
-    mFe->getStatus(v,
-            [&](Result r, const hidl_vec<FrontendStatus>& s) {
-                res = r;
-                status = s;
-            });
-    if (res != Result::SUCCESS) {
-        return NULL;
+    hidl_vec<FrontendStatusExt1_1> status_1_1;
+
+    if (v.size() > 0) {
+        mFe->getStatus(v,
+                [&](Result r, const hidl_vec<FrontendStatus>& s) {
+                    res = r;
+                    status = s;
+                });
+        if (res != Result::SUCCESS) {
+            return NULL;
+        }
+    }
+
+    if (v_1_1.size() > 0) {
+        sp<::android::hardware::tv::tuner::V1_1::IFrontend> iFeSp_1_1;
+        iFeSp_1_1 = ::android::hardware::tv::tuner::V1_1::IFrontend::castFrom(mFe);
+
+        if (iFeSp_1_1 != NULL) {
+            iFeSp_1_1->getStatusExt1_1(v_1_1,
+                [&](Result r, const hidl_vec<FrontendStatusExt1_1>& s) {
+                    res = r;
+                    status_1_1 = s;
+                });
+            if (res != Result::SUCCESS) {
+                return NULL;
+            }
+        } else {
+            ALOGW("getStatusExt1_1 is not supported with the current HAL implementation.");
+        }
     }
 
     jclass clazz = env->FindClass("android/media/tv/tuner/frontend/FrontendStatus");
@@ -2030,7 +2229,272 @@ jobject JTuner::getFrontendStatus(jintArray types) {
         }
     }
 
+    for (auto s : status_1_1) {
+        switch(s.getDiscriminator()) {
+            case FrontendStatusExt1_1::hidl_discriminator::modulations: {
+                jfieldID field = env->GetFieldID(clazz, "mModulationsExt", "[I");
+                std::vector<FrontendModulation> v = s.modulations();
+
+                jintArray valObj = env->NewIntArray(v.size());
+                bool valid = false;
+                jint m[1];
+                for (int i = 0; i < v.size(); i++) {
+                    auto modulation = v[i];
+                    switch(modulation.getDiscriminator()) {
+                        case FrontendModulation::hidl_discriminator::dvbc: {
+                            m[0] = static_cast<jint>(modulation.dvbc());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                            break;
+                        }
+                        case FrontendModulation::hidl_discriminator::dvbs: {
+                            m[0] = static_cast<jint>(modulation.dvbs());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                           break;
+                        }
+                        case FrontendModulation::hidl_discriminator::dvbt: {
+                            m[0] = static_cast<jint>(modulation.dvbt());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                            break;
+                        }
+                        case FrontendModulation::hidl_discriminator::isdbs: {
+                            m[0] = static_cast<jint>(modulation.isdbs());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                            break;
+                        }
+                        case FrontendModulation::hidl_discriminator::isdbs3: {
+                            m[0] = static_cast<jint>(modulation.isdbs3());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                            break;
+                        }
+                        case FrontendModulation::hidl_discriminator::isdbt: {
+                            m[0] = static_cast<jint>(modulation.isdbt());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                            break;
+                        }
+                        case FrontendModulation::hidl_discriminator::atsc: {
+                            m[0] = static_cast<jint>(modulation.atsc());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                            break;
+                        }
+                        case FrontendModulation::hidl_discriminator::atsc3: {
+                            m[0] = static_cast<jint>(modulation.atsc3());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                            break;
+                        }
+                        case FrontendModulation::hidl_discriminator::dtmb: {
+                            m[0] = static_cast<jint>(modulation.dtmb());
+                            env->SetIntArrayRegion(valObj, i, 1, m);
+                            valid = true;
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+                }
+                if (valid) {
+                    env->SetObjectField(statusObj, field, valObj);
+                }
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::bers: {
+                jfieldID field = env->GetFieldID(clazz, "mBers", "[I");
+                std::vector<uint32_t> v = s.bers();
+
+                jintArray valObj = env->NewIntArray(v.size());
+                env->SetIntArrayRegion(valObj, 0, v.size(), reinterpret_cast<jint*>(&v[0]));
+
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::codeRates: {
+                jfieldID field = env->GetFieldID(clazz, "mCodeRates", "[I");
+                std::vector<::android::hardware::tv::tuner::V1_1::FrontendInnerFec> v
+                        = s.codeRates();
+
+                jintArray valObj = env->NewIntArray(v.size());
+                env->SetIntArrayRegion(valObj, 0, v.size(), reinterpret_cast<jint*>(&v[0]));
+
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::bandwidth: {
+                jfieldID field = env->GetFieldID(clazz, "mBandwidth", "Ljava/lang/Integer;");
+                auto bandwidth = s.bandwidth();
+                jint intBandwidth;
+                bool valid = true;
+                switch(bandwidth.getDiscriminator()) {
+                    case FrontendBandwidth::hidl_discriminator::atsc3: {
+                        intBandwidth = static_cast<jint>(bandwidth.atsc3());
+                        break;
+                    }
+                    case FrontendBandwidth::hidl_discriminator::dvbt: {
+                        intBandwidth = static_cast<jint>(bandwidth.dvbt());
+                        break;
+                    }
+                    case FrontendBandwidth::hidl_discriminator::isdbt: {
+                        intBandwidth = static_cast<jint>(bandwidth.isdbt());
+                        break;
+                    }
+                    case FrontendBandwidth::hidl_discriminator::dtmb: {
+                        intBandwidth = static_cast<jint>(bandwidth.dtmb());
+                        break;
+                    }
+                    default:
+                        valid = false;
+                        break;
+                }
+                if (valid) {
+                    jobject newIntegerObj = env->NewObject(intClazz, initInt, intBandwidth);
+                    env->SetObjectField(statusObj, field, newIntegerObj);
+                }
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::interval: {
+                jfieldID field = env->GetFieldID(clazz, "mGuardInterval", "Ljava/lang/Integer;");
+                auto interval = s.interval();
+                jint intInterval;
+                bool valid = true;
+                switch(interval.getDiscriminator()) {
+                    case FrontendGuardInterval::hidl_discriminator::dvbt: {
+                        intInterval = static_cast<jint>(interval.dvbt());
+                        break;
+                    }
+                    case FrontendGuardInterval::hidl_discriminator::isdbt: {
+                        intInterval = static_cast<jint>(interval.isdbt());
+                        break;
+                    }
+                    case FrontendGuardInterval::hidl_discriminator::dtmb: {
+                        intInterval = static_cast<jint>(interval.dtmb());
+                        break;
+                    }
+                    default:
+                        valid = false;
+                        break;
+                }
+                if (valid) {
+                    jobject newIntegerObj = env->NewObject(intClazz, initInt, intInterval);
+                    env->SetObjectField(statusObj, field, newIntegerObj);
+                }
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::transmissionMode: {
+                jfieldID field = env->GetFieldID(clazz, "mTransmissionMode", "Ljava/lang/Integer;");
+                auto transmissionMode = s.transmissionMode();
+                jint intTransmissionMode;
+                bool valid = true;
+                switch(transmissionMode.getDiscriminator()) {
+                    case FrontendTransmissionMode::hidl_discriminator::dvbt: {
+                        intTransmissionMode = static_cast<jint>(transmissionMode.dvbt());
+                        break;
+                    }
+                    case FrontendTransmissionMode::hidl_discriminator::isdbt: {
+                        intTransmissionMode = static_cast<jint>(transmissionMode.isdbt());
+                        break;
+                    }
+                    case FrontendTransmissionMode::hidl_discriminator::dtmb: {
+                        intTransmissionMode = static_cast<jint>(transmissionMode.dtmb());
+                        break;
+                    }
+                    default:
+                        valid = false;
+                        break;
+                }
+                if (valid) {
+                    jobject newIntegerObj = env->NewObject(intClazz, initInt, intTransmissionMode);
+                    env->SetObjectField(statusObj, field, newIntegerObj);
+                }
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::uec: {
+                jfieldID field = env->GetFieldID(clazz, "mUec", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.uec()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::systemId: {
+                jfieldID field = env->GetFieldID(clazz, "mSystemId", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.systemId()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::interleaving: {
+                jfieldID field = env->GetFieldID(clazz, "mInterleaving", "[I");
+
+                std::vector<FrontendInterleaveMode> v = s.interleaving();
+                jintArray valObj = env->NewIntArray(v.size());
+                bool valid = false;
+                jint in[1];
+                for (int i = 0; i < v.size(); i++) {
+                    auto interleaving = v[i];
+                    switch(interleaving.getDiscriminator()) {
+                        case FrontendInterleaveMode::hidl_discriminator::atsc3: {
+                            in[0] = static_cast<jint>(interleaving.atsc3());
+                            env->SetIntArrayRegion(valObj, i, 1, in);
+                            valid = true;
+                            break;
+                        }
+                        case FrontendInterleaveMode::hidl_discriminator::dvbc: {
+                            in[0] = static_cast<jint>(interleaving.dvbc());
+                            env->SetIntArrayRegion(valObj, i, 1, in);
+                            valid = true;
+                           break;
+                        }
+                        case FrontendInterleaveMode::hidl_discriminator::dtmb: {
+                            in[0] = static_cast<jint>(interleaving.dtmb());
+                            env->SetIntArrayRegion(valObj, i, 1, in);
+                            valid = true;
+                           break;
+                        }
+                        default:
+                            break;
+                    }
+                }
+                if (valid) {
+                    env->SetObjectField(statusObj, field, valObj);
+                }
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::isdbtSegment: {
+                jfieldID field = env->GetFieldID(clazz, "mIsdbtSegment", "[I");
+                std::vector<uint8_t> v = s.isdbtSegment();
+
+                jintArray valObj = env->NewIntArray(v.size());
+                env->SetIntArrayRegion(valObj, 0, v.size(), reinterpret_cast<jint*>(&v[0]));
+
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            case FrontendStatusExt1_1::hidl_discriminator::tsDataRate: {
+                jfieldID field = env->GetFieldID(clazz, "mTsDataRate", "[I");
+                std::vector<uint32_t> v = s.tsDataRate();
+
+                jintArray valObj = env->NewIntArray(v.size());
+                env->SetIntArrayRegion(valObj, 0, v.size(), reinterpret_cast<jint*>(&v[0]));
+
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
     return statusObj;
+}
+
+bool JTuner::isV1_1ExtendedStatusType(int type) {
+    return (type > static_cast<int>(FrontendStatusType::ATSC3_PLP_INFO)
+                && type <= static_cast<int>(FrontendStatusTypeExt1_1::TS_DATA_RATES));
 }
 
 jint JTuner::closeFrontend() {
@@ -2105,6 +2569,22 @@ static uint32_t getFrontendSettingsFreq(JNIEnv *env, const jobject& settings) {
     return freq;
 }
 
+static uint32_t getFrontendSettingsEndFreq(JNIEnv *env, const jobject& settings) {
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/FrontendSettings");
+    jfieldID endFreqField = env->GetFieldID(clazz, "mEndFrequency", "I");
+    uint32_t endFreq = static_cast<uint32_t>(env->GetIntField(settings, endFreqField));
+    return endFreq;
+}
+
+static FrontendSpectralInversion getFrontendSettingsSpectralInversion(
+        JNIEnv *env, const jobject& settings) {
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/FrontendSettings");
+    jfieldID inversionField = env->GetFieldID(clazz, "mSpectralInversion", "I");
+    FrontendSpectralInversion inversion =
+            static_cast<FrontendSpectralInversion>(env->GetIntField(settings, inversionField));
+    return inversion;
+}
+
 static FrontendSettings getAnalogFrontendSettings(JNIEnv *env, const jobject& settings) {
     FrontendSettings frontendSettings;
     uint32_t freq = getFrontendSettingsFreq(env, settings);
@@ -2122,6 +2602,18 @@ static FrontendSettings getAnalogFrontendSettings(JNIEnv *env, const jobject& se
     };
     frontendSettings.analog(frontendAnalogSettings);
     return frontendSettings;
+}
+
+static void getAnalogFrontendSettingsExt1_1(JNIEnv *env, const jobject& settings,
+        FrontendSettingsExt1_1& settingsExt1_1) {
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/AnalogFrontendSettings");
+    FrontendAnalogAftFlag aftFlag =
+            static_cast<FrontendAnalogAftFlag>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mAftFlag", "I")));
+    FrontendAnalogSettingsExt1_1 analogExt1_1 {
+        .aftFlag = aftFlag,
+    };
+    settingsExt1_1.settingExt.analog(analogExt1_1);
 }
 
 static hidl_vec<FrontendAtsc3PlpSettings> getAtsc3PlpSettings(
@@ -2243,6 +2735,23 @@ static FrontendSettings getDvbcFrontendSettings(JNIEnv *env, const jobject& sett
     return frontendSettings;
 }
 
+static void getDvbcFrontendSettingsExt1_1(JNIEnv *env, const jobject& settings,
+        FrontendSettingsExt1_1& settingsExt1_1) {
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/DvbcFrontendSettings");
+    FrontendCableTimeInterleaveMode interleaveMode =
+            static_cast<FrontendCableTimeInterleaveMode>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mInterleaveMode", "I")));
+    FrontendDvbcBandwidth bandwidth =
+            static_cast<FrontendDvbcBandwidth>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mBandwidth", "I")));
+
+    FrontendDvbcSettingsExt1_1 dvbcExt1_1 {
+        .interleaveMode = interleaveMode,
+        .bandwidth = bandwidth,
+    };
+    settingsExt1_1.settingExt.dvbc(dvbcExt1_1);
+}
+
 static FrontendDvbsCodeRate getDvbsCodeRate(JNIEnv *env, const jobject& settings) {
     jclass clazz = env->FindClass("android/media/tv/tuner/frontend/DvbsFrontendSettings");
     jobject jcodeRate =
@@ -2284,7 +2793,6 @@ static FrontendSettings getDvbsFrontendSettings(JNIEnv *env, const jobject& sett
     uint32_t freq = getFrontendSettingsFreq(env, settings);
     jclass clazz = env->FindClass("android/media/tv/tuner/frontend/DvbsFrontendSettings");
 
-
     FrontendDvbsModulation modulation =
             static_cast<FrontendDvbsModulation>(
                     env->GetIntField(settings, env->GetFieldID(clazz, "mModulation", "I")));
@@ -2321,6 +2829,22 @@ static FrontendSettings getDvbsFrontendSettings(JNIEnv *env, const jobject& sett
     };
     frontendSettings.dvbs(frontendDvbsSettings);
     return frontendSettings;
+}
+
+static void getDvbsFrontendSettingsExt1_1(JNIEnv *env, const jobject& settings,
+        FrontendSettingsExt1_1& settingsExt1_1) {
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/DvbsFrontendSettings");
+    FrontendDvbsScanType scanType =
+            static_cast<FrontendDvbsScanType>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mScanType", "I")));
+    bool isDiseqcRxMessage = static_cast<bool>(env->GetBooleanField(
+            settings, env->GetFieldID(clazz, "mIsDiseqcRxMessage", "B")));
+
+    FrontendDvbsSettingsExt1_1 dvbsExt1_1 {
+        .scanType = scanType,
+        .isDiseqcRxMessage = isDiseqcRxMessage,
+    };
+    settingsExt1_1.settingExt.dvbs(dvbsExt1_1);
 }
 
 static FrontendSettings getDvbtFrontendSettings(JNIEnv *env, const jobject& settings) {
@@ -2387,6 +2911,25 @@ static FrontendSettings getDvbtFrontendSettings(JNIEnv *env, const jobject& sett
     };
     frontendSettings.dvbt(frontendDvbtSettings);
     return frontendSettings;
+}
+
+static void getDvbtFrontendSettingsExt1_1(JNIEnv *env, const jobject& settings,
+        FrontendSettingsExt1_1& settingsExt1_1) {
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/DvbtFrontendSettings");
+
+    FrontendDvbtSettingsExt1_1 dvbtExt1_1;
+    int transmissionMode =
+            env->GetIntField(settings, env->GetFieldID(clazz, "mTransmissionMode", "I"));
+    dvbtExt1_1.transmissionMode = static_cast<
+            ::android::hardware::tv::tuner::V1_1::FrontendDvbtTransmissionMode>(
+                    transmissionMode);
+
+    int constellation =
+            env->GetIntField(settings, env->GetFieldID(clazz, "mConstellation", "I"));
+    dvbtExt1_1.constellation = static_cast<
+            ::android::hardware::tv::tuner::V1_1::FrontendDvbtConstellation>(constellation);
+
+    settingsExt1_1.settingExt.dvbt(dvbtExt1_1);
 }
 
 static FrontendSettings getIsdbsFrontendSettings(JNIEnv *env, const jobject& settings) {
@@ -2497,6 +3040,41 @@ static FrontendSettings getIsdbtFrontendSettings(JNIEnv *env, const jobject& set
     return frontendSettings;
 }
 
+static void getDtmbFrontendSettings(JNIEnv *env, const jobject& settings,
+        FrontendSettingsExt1_1& settingsExt1_1) {
+    uint32_t freq = getFrontendSettingsFreq(env, settings);
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/DtmbFrontendSettings");
+    FrontendDtmbModulation modulation =
+            static_cast<FrontendDtmbModulation>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mModulation", "I")));
+    FrontendDtmbBandwidth bandwidth =
+            static_cast<FrontendDtmbBandwidth>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mBandwidth", "I")));
+    FrontendDtmbTransmissionMode transmissionMode =
+            static_cast<FrontendDtmbTransmissionMode>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mTransmissionMode", "I")));
+    FrontendDtmbCodeRate codeRate =
+            static_cast<FrontendDtmbCodeRate>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mCodeRate", "I")));
+    FrontendDtmbGuardInterval guardInterval =
+            static_cast<FrontendDtmbGuardInterval>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mGuardInterval", "I")));
+    FrontendDtmbTimeInterleaveMode interleaveMode =
+            static_cast<FrontendDtmbTimeInterleaveMode>(
+                    env->GetIntField(settings, env->GetFieldID(clazz, "mTimeInterleaveMode", "I")));
+
+    FrontendDtmbSettings frontendDtmbSettings {
+            .frequency = freq,
+            .modulation = modulation,
+            .bandwidth = bandwidth,
+            .transmissionMode = transmissionMode,
+            .codeRate = codeRate,
+            .guardInterval = guardInterval,
+            .interleaveMode = interleaveMode,
+    };
+    settingsExt1_1.settingExt.dtmb(frontendDtmbSettings);
+}
+
 static FrontendSettings getFrontendSettings(JNIEnv *env, int type, jobject settings) {
     ALOGD("getFrontendSettings %d", type);
 
@@ -2527,6 +3105,59 @@ static FrontendSettings getFrontendSettings(JNIEnv *env, int type, jobject setti
                 "Unsupported frontend type %d", type);
             return FrontendSettings();
     }
+}
+
+static FrontendSettingsExt1_1 getFrontendSettingsExt1_1(JNIEnv *env, int type, jobject settings) {
+    ALOGD("getFrontendSettingsExt1_1 %d", type);
+
+    FrontendSettingsExt1_1 settingsExt1_1 {
+        .endFrequency = static_cast<uint32_t>(Constant::INVALID_FRONTEND_SETTING_FREQUENCY),
+        .inversion = FrontendSpectralInversion::UNDEFINED,
+    };
+    settingsExt1_1.settingExt.noinit();
+
+    if (type == static_cast<int>(::android::hardware::tv::tuner::V1_1::FrontendType::DTMB)) {
+        getDtmbFrontendSettings(env, settings, settingsExt1_1);
+    } else {
+        FrontendType feType = static_cast<FrontendType>(type);
+        switch(feType) {
+            case FrontendType::DVBS:
+                getDvbsFrontendSettingsExt1_1(env, settings, settingsExt1_1);
+                break;
+            case FrontendType::DVBT:
+                getDvbtFrontendSettingsExt1_1(env, settings, settingsExt1_1);
+                break;
+            case FrontendType::ANALOG:
+                getAnalogFrontendSettingsExt1_1(env, settings, settingsExt1_1);
+                break;
+            case FrontendType::ATSC3:
+                break;
+            case FrontendType::ATSC:
+                break;
+            case FrontendType::DVBC:
+                getDvbcFrontendSettingsExt1_1(env, settings, settingsExt1_1);
+                break;
+            case FrontendType::ISDBS:
+                break;
+            case FrontendType::ISDBS3:
+                break;
+            case FrontendType::ISDBT:
+                break;
+            default:
+                // should never happen because a type is associated with a subclass of
+                // FrontendSettings and not set by users
+                jniThrowExceptionFmt(env, "java/lang/IllegalArgumentException",
+                    "Unsupported frontend type %d", type);
+                return FrontendSettingsExt1_1();
+        }
+    }
+
+    uint32_t endFreq = getFrontendSettingsEndFreq(env, settings);
+    FrontendSpectralInversion inversion = getFrontendSettingsSpectralInversion(env, settings);
+    settingsExt1_1.endFrequency = endFreq;
+    settingsExt1_1.inversion = inversion;
+
+    return settingsExt1_1;
 }
 
 static sp<Filter> getFilter(JNIEnv *env, jobject filter) {
@@ -2670,7 +3301,9 @@ static jint android_media_tv_Tuner_close_frontend_by_handle(
 
 static int android_media_tv_Tuner_tune(JNIEnv *env, jobject thiz, jint type, jobject settings) {
     sp<JTuner> tuner = getTuner(env, thiz);
-    return tuner->tune(getFrontendSettings(env, type, settings));
+    FrontendSettings setting = getFrontendSettings(env, type, settings);
+    FrontendSettingsExt1_1 settingExt = getFrontendSettingsExt1_1(env, type, settings);
+    return tuner->tune(setting, settingExt);
 }
 
 static int android_media_tv_Tuner_stop_tune(JNIEnv *env, jobject thiz) {
@@ -2681,8 +3314,9 @@ static int android_media_tv_Tuner_stop_tune(JNIEnv *env, jobject thiz) {
 static int android_media_tv_Tuner_scan(
         JNIEnv *env, jobject thiz, jint settingsType, jobject settings, jint scanType) {
     sp<JTuner> tuner = getTuner(env, thiz);
-    return tuner->scan(getFrontendSettings(
-            env, settingsType, settings), static_cast<FrontendScanType>(scanType));
+    FrontendSettings setting = getFrontendSettings(env, settingsType, settings);
+    FrontendSettingsExt1_1 settingExt = getFrontendSettingsExt1_1(env, settingsType, settings);
+    return tuner->scan(setting, static_cast<FrontendScanType>(scanType), settingExt);
 }
 
 static int android_media_tv_Tuner_stop_scan(JNIEnv *env, jobject thiz) {
@@ -2875,6 +3509,31 @@ static DemuxFilterAvSettings getFilterAvSettings(JNIEnv *env, const jobject& set
         .isPassthrough = isPassthrough,
     };
     return filterAvSettings;
+}
+
+static bool getAvStreamType(JNIEnv *env, jobject filterConfigObj, AvStreamType& type) {
+    jobject settingsObj =
+            env->GetObjectField(
+                    filterConfigObj,
+                    env->GetFieldID(
+                            env->FindClass("android/media/tv/tuner/filter/FilterConfiguration"),
+                            "mSettings",
+                            "Landroid/media/tv/tuner/filter/Settings;"));
+    jclass clazz = env->FindClass("android/media/tv/tuner/filter/AvSettings");
+    AvStreamType streamType;
+    AudioStreamType audioStreamType = static_cast<AudioStreamType>(
+            env->GetIntField(settingsObj, env->GetFieldID(clazz, "mAudioStreamType", "I")));
+    if (audioStreamType != AudioStreamType::UNDEFINED) {
+        type.audio(audioStreamType);
+        return true;
+    }
+    VideoStreamType videoStreamType = static_cast<VideoStreamType>(
+            env->GetIntField(settingsObj, env->GetFieldID(clazz, "mVideoStreamType", "I")));
+    if (videoStreamType != VideoStreamType::UNDEFINED) {
+        type.video(videoStreamType);
+        return true;
+    }
+    return false;
 }
 
 static DemuxFilterPesDataSettings getFilterPesDataSettings(JNIEnv *env, const jobject& settings) {
@@ -3199,6 +3858,16 @@ static jint copyData(JNIEnv *env, std::unique_ptr<MQ>& mq, EventFlag* flag, jbyt
     return size;
 }
 
+static bool isAvFilterSettings(DemuxFilterSettings filterSettings) {
+    return (filterSettings.getDiscriminator() == DemuxFilterSettings::hidl_discriminator::ts
+            && filterSettings.ts().filterSettings.getDiscriminator()
+                    == DemuxTsFilterSettings::FilterSettings::hidl_discriminator::av)
+            ||
+            (filterSettings.getDiscriminator() == DemuxFilterSettings::hidl_discriminator::mmtp
+            && filterSettings.mmtp().filterSettings.getDiscriminator()
+                    == DemuxMmtpFilterSettings::FilterSettings::hidl_discriminator::av);
+}
+
 static jint android_media_tv_Tuner_configure_filter(
         JNIEnv *env, jobject filter, int type, int subtype, jobject settings) {
     ALOGD("configure filter type=%d, subtype=%d", type, subtype);
@@ -3217,6 +3886,20 @@ static jint android_media_tv_Tuner_configure_filter(
 
     if (static_cast<DemuxFilterMainType>(type) == DemuxFilterMainType::IP) {
         res = configureIpFilterContextId(env, iFilterSp, settings);
+        if (res != Result::SUCCESS) {
+            return (jint) res;
+        }
+    }
+
+    AvStreamType streamType;
+    if (isAvFilterSettings(filterSettings) && getAvStreamType(env, settings, streamType)) {
+        sp<::android::hardware::tv::tuner::V1_1::IFilter> iFilterSp_1_1;
+        iFilterSp_1_1 = ::android::hardware::tv::tuner::V1_1::IFilter::castFrom(iFilterSp);
+        if (iFilterSp_1_1 != NULL) {
+            res = iFilterSp_1_1->configureAvStreamType(streamType);
+        } else {
+            ALOGW("configureAvStreamType is not supported with the current HAL implementation.");
+        }
         if (res != Result::SUCCESS) {
             return (jint) res;
         }

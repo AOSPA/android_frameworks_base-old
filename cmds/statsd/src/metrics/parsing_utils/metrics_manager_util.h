@@ -112,6 +112,25 @@ optional<sp<MetricProducer>> createCountMetricProducerAndUpdateMetadata(
         std::unordered_map<int, std::vector<int>>& deactivationAtomTrackerToMetricMap,
         std::vector<int>& metricsWithActivation);
 
+// Creates a DurationMetricProducer and updates the vectors/maps used by MetricsManager with
+// the appropriate indices. Returns an sp to the producer, or nullopt if there was an error.
+optional<sp<MetricProducer>> createDurationMetricProducerAndUpdateMetadata(
+        const ConfigKey& key, const StatsdConfig& config, const int64_t timeBaseNs,
+        const int64_t currentTimeNs, const DurationMetric& metric, const int metricIndex,
+        const std::vector<sp<AtomMatchingTracker>>& allAtomMatchingTrackers,
+        const std::unordered_map<int64_t, int>& atomMatchingTrackerMap,
+        std::vector<sp<ConditionTracker>>& allConditionTrackers,
+        const std::unordered_map<int64_t, int>& conditionTrackerMap,
+        const std::vector<ConditionState>& initialConditionCache, const sp<ConditionWizard>& wizard,
+        const std::unordered_map<int64_t, int>& stateAtomIdMap,
+        const std::unordered_map<int64_t, std::unordered_map<int, int64_t>>& allStateGroupMaps,
+        const std::unordered_map<int64_t, int>& metricToActivationMap,
+        std::unordered_map<int, std::vector<int>>& trackerToMetricMap,
+        std::unordered_map<int, std::vector<int>>& conditionToMetricMap,
+        std::unordered_map<int, std::vector<int>>& activationAtomTrackerToMetricMap,
+        std::unordered_map<int, std::vector<int>>& deactivationAtomTrackerToMetricMap,
+        std::vector<int>& metricsWithActivation);
+
 // Creates an EventMetricProducer and updates the vectors/maps used by MetricsManager with
 // the appropriate indices. Returns an sp to the producer, or nullopt if there was an error.
 optional<sp<MetricProducer>> createEventMetricProducerAndUpdateMetadata(
@@ -122,6 +141,27 @@ optional<sp<MetricProducer>> createEventMetricProducerAndUpdateMetadata(
         std::vector<sp<ConditionTracker>>& allConditionTrackers,
         const std::unordered_map<int64_t, int>& conditionTrackerMap,
         const std::vector<ConditionState>& initialConditionCache, const sp<ConditionWizard>& wizard,
+        const std::unordered_map<int64_t, int>& metricToActivationMap,
+        std::unordered_map<int, std::vector<int>>& trackerToMetricMap,
+        std::unordered_map<int, std::vector<int>>& conditionToMetricMap,
+        std::unordered_map<int, std::vector<int>>& activationAtomTrackerToMetricMap,
+        std::unordered_map<int, std::vector<int>>& deactivationAtomTrackerToMetricMap,
+        std::vector<int>& metricsWithActivation);
+
+// Creates a CountMetricProducer and updates the vectors/maps used by MetricsManager with
+// the appropriate indices. Returns an sp to the producer, or nullopt if there was an error.
+optional<sp<MetricProducer>> createValueMetricProducerAndUpdateMetadata(
+        const ConfigKey& key, const StatsdConfig& config, const int64_t timeBaseNs,
+        const int64_t currentTimeNs, const sp<StatsPullerManager>& pullerManager,
+        const ValueMetric& metric, const int metricIndex,
+        const std::vector<sp<AtomMatchingTracker>>& allAtomMatchingTrackers,
+        const std::unordered_map<int64_t, int>& atomMatchingTrackerMap,
+        std::vector<sp<ConditionTracker>>& allConditionTrackers,
+        const std::unordered_map<int64_t, int>& conditionTrackerMap,
+        const std::vector<ConditionState>& initialConditionCache, const sp<ConditionWizard>& wizard,
+        const sp<EventMatcherWizard>& matcherWizard,
+        const std::unordered_map<int64_t, int>& stateAtomIdMap,
+        const std::unordered_map<int64_t, std::unordered_map<int, int64_t>>& allStateGroupMaps,
         const std::unordered_map<int64_t, int>& metricToActivationMap,
         std::unordered_map<int, std::vector<int>>& trackerToMetricMap,
         std::unordered_map<int, std::vector<int>>& conditionToMetricMap,
@@ -147,6 +187,41 @@ optional<sp<MetricProducer>> createGaugeMetricProducerAndUpdateMetadata(
         std::unordered_map<int, std::vector<int>>& activationAtomTrackerToMetricMap,
         std::unordered_map<int, std::vector<int>>& deactivationAtomTrackerToMetricMap,
         std::vector<int>& metricsWithActivation);
+
+// Creates an AnomalyTracker and adds it to the appropriate metric.
+// Returns an sp to the AnomalyTracker, or nullopt if there was an error.
+optional<sp<AnomalyTracker>> createAnomalyTracker(
+        const Alert& alert, const sp<AlarmMonitor>& anomalyAlarmMonitor,
+        const std::unordered_map<int64_t, int>& metricProducerMap,
+        std::vector<sp<MetricProducer>>& allMetricProducers);
+
+// Templated function for adding subscriptions to alarms or alerts. Returns true if successful.
+template <typename T>
+bool initSubscribersForSubscriptionType(const StatsdConfig& config,
+                                        const Subscription_RuleType ruleType,
+                                        const std::unordered_map<int64_t, int>& ruleMap,
+                                        std::vector<T>& allRules) {
+    for (int i = 0; i < config.subscription_size(); ++i) {
+        const Subscription& subscription = config.subscription(i);
+        if (subscription.rule_type() != ruleType) {
+            continue;
+        }
+        if (subscription.subscriber_information_case() ==
+            Subscription::SubscriberInformationCase::SUBSCRIBER_INFORMATION_NOT_SET) {
+            ALOGW("subscription \"%lld\" has no subscriber info.\"", (long long)subscription.id());
+            return false;
+        }
+        const auto& itr = ruleMap.find(subscription.rule_id());
+        if (itr == ruleMap.end()) {
+            ALOGW("subscription \"%lld\" has unknown rule id: \"%lld\"",
+                  (long long)subscription.id(), (long long)subscription.rule_id());
+            return false;
+        }
+        const int ruleIndex = itr->second;
+        allRules[ruleIndex]->addSubscription(subscription);
+    }
+    return true;
+}
 
 // Helper functions for MetricsManager to initialize from StatsdConfig.
 // *Note*: only initStatsdConfig() should be called from outside.
@@ -230,6 +305,12 @@ bool initMetrics(
         std::unordered_map<int, std::vector<int>>& activationAtomTrackerToMetricMap,
         std::unordered_map<int, std::vector<int>>& deactivationAtomTrackerToMetricMap,
         std::vector<int>& metricsWithActivation);
+
+// Initialize alarms
+// Is called both on initialize new configs and config updates since alarms do not have any state.
+bool initAlarms(const StatsdConfig& config, const ConfigKey& key,
+                const sp<AlarmMonitor>& periodicAlarmMonitor, const int64_t timeBaseNs,
+                const int64_t currentTimeNs, std::vector<sp<AlarmTracker>>& allAlarmTrackers);
 
 // Initialize MetricsManager from StatsdConfig.
 // Parameters are the members of MetricsManager. See MetricsManager for declaration.

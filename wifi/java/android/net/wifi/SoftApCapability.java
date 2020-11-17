@@ -21,9 +21,10 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.net.wifi.SoftApConfiguration.BandType;
-import android.net.wifi.util.SdkLevelUtil;
 import android.os.Parcel;
 import android.os.Parcelable;
+
+import com.android.modules.utils.build.SdkLevel;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -45,7 +46,7 @@ public final class SoftApCapability implements Parcelable {
      * Support for automatic channel selection in driver (ACS).
      * Driver will auto select best channel based on interference to optimize performance.
      *
-     * flag when {@link R.bool.config_wifi_softap_acs_supported)} is true.
+     * flag when {@link R.bool.config_wifi_softap_acs_supported} is true.
      *
      * <p>
      * Use {@link WifiManager.SoftApCallback#onInfoChanged(SoftApInfo)} and
@@ -56,7 +57,7 @@ public final class SoftApCapability implements Parcelable {
 
     /**
      * Support for client force disconnect.
-     * flag when {@link R.bool.config_wifi_sofap_client_force_disconnect_supported)} is true
+     * flag when {@link R.bool.config_wifiSofapClientForceDisconnectSupported} is true
      *
      * <p>
      * Several Soft AP client control features, e.g. specifying the maximum number of
@@ -66,13 +67,24 @@ public final class SoftApCapability implements Parcelable {
      */
     public static final long SOFTAP_FEATURE_CLIENT_FORCE_DISCONNECT = 1 << 1;
 
-
     /**
      * Support for WPA3 Simultaneous Authentication of Equals (WPA3-SAE).
      *
-     * flag when {@link config_wifi_softap_sae_supported)} is true.
+     * flag when {@link config_wifi_softap_sae_supported} is true.
      */
     public static final long SOFTAP_FEATURE_WPA3_SAE = 1 << 2;
+
+    /**
+     * Support for MAC address customization.
+     * flag when {@link R.bool.config_wifiSoftapMacAddressCustomizationSupported} is true
+     *
+     * <p>
+     * Check feature support before invoking
+     * {@link SoftApConfiguration.Builder#setBssid(MadAddress)} or
+     * {@link SoftApConfiguration.Builder#setMacRandomizationSetting(int)} with
+     * {@link SoftApConfiguration.RANDOMIZATION_PERSISTENT}
+     */
+    public static final long SOFTAP_FEATURE_MAC_ADDRESS_CUSTOMIZATION = 1 << 3;
 
     /**
      * Support for WPA3 Opportunistic Wireless Encryption (WPA3-OWE).
@@ -80,8 +92,7 @@ public final class SoftApCapability implements Parcelable {
      * flag when {@link config_wifi_softap_owe_supported)} is true.
      * @hide
      */
-    public static final long SOFTAP_FEATURE_WPA3_OWE = 1 << 3;
-
+    public static final long SOFTAP_FEATURE_WPA3_OWE = 1 << 4;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -89,6 +100,7 @@ public final class SoftApCapability implements Parcelable {
             SOFTAP_FEATURE_ACS_OFFLOAD,
             SOFTAP_FEATURE_CLIENT_FORCE_DISCONNECT,
             SOFTAP_FEATURE_WPA3_SAE,
+            SOFTAP_FEATURE_MAC_ADDRESS_CUSTOMIZATION,
             SOFTAP_FEATURE_WPA3_OWE,
     })
     public @interface HotspotFeatures {}
@@ -186,7 +198,7 @@ public final class SoftApCapability implements Parcelable {
      */
     @NonNull
     public int[] getSupportedChannelList(@BandType int band) {
-        if (!SdkLevelUtil.isAtLeastS()) {
+        if (!SdkLevel.isAtLeastS()) {
             throw new UnsupportedOperationException();
         }
         switch (band) {

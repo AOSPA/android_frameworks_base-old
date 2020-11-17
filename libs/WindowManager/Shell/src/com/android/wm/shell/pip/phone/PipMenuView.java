@@ -32,7 +32,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
-import android.app.ActivityManager;
+import android.annotation.Nullable;
 import android.app.PendingIntent.CanceledException;
 import android.app.RemoteAction;
 import android.content.ComponentName;
@@ -51,8 +51,10 @@ import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.SurfaceControl;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewRootImpl;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
@@ -61,6 +63,7 @@ import android.widget.LinearLayout;
 
 import com.android.wm.shell.R;
 import com.android.wm.shell.animation.Interpolators;
+import com.android.wm.shell.pip.PipUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -268,10 +271,12 @@ public class PipMenuView extends FrameLayout {
                         return;
                     }
                     mMenuContainerAnimator.setStartDelay(MENU_SHOW_ON_EXPAND_START_DELAY);
+                    setVisibility(VISIBLE);
                     mMenuContainerAnimator.start();
                 });
             } else {
                 notifyMenuStateChange(menuState, resizeMenuOnShow, null);
+                setVisibility(VISIBLE);
                 mMenuContainerAnimator.start();
             }
         } else {
@@ -281,6 +286,18 @@ public class PipMenuView extends FrameLayout {
                 repostDelayedHide(POST_INTERACTION_DISMISS_DELAY);
             }
         }
+    }
+
+    @Nullable SurfaceControl getWindowSurfaceControl() {
+        final ViewRootImpl root = getViewRootImpl();
+        if (root == null) {
+            return null;
+        }
+        final SurfaceControl out = root.getSurfaceControl();
+        if (out != null && out.isValid()) {
+            return out;
+        }
+        return null;
     }
 
     /**
@@ -338,6 +355,7 @@ public class PipMenuView extends FrameLayout {
             mMenuContainerAnimator.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator animation) {
+                    setVisibility(GONE);
                     if (animationFinishedRunnable != null) {
                         animationFinishedRunnable.run();
                     }
@@ -452,7 +470,7 @@ public class PipMenuView extends FrameLayout {
 
     private void showSettings() {
         final Pair<ComponentName, Integer> topPipActivityInfo =
-                PipUtils.getTopPipActivity(mContext, ActivityManager.getService());
+                PipUtils.getTopPipActivity(mContext);
         if (topPipActivityInfo.first != null) {
             final Intent settingsIntent = new Intent(ACTION_PICTURE_IN_PICTURE_SETTINGS,
                     Uri.fromParts("package", topPipActivityInfo.first.getPackageName(), null));

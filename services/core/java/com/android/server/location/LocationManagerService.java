@@ -21,10 +21,10 @@ import static android.app.compat.CompatChanges.isChangeEnabled;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AWARE;
 import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.location.LocationManager.BLOCK_PENDING_INTENT_SYSTEM_API_USAGE;
 import static android.location.LocationManager.FUSED_PROVIDER;
 import static android.location.LocationManager.GPS_PROVIDER;
 import static android.location.LocationManager.NETWORK_PROVIDER;
-import static android.location.LocationManager.PREVENT_PENDING_INTENT_SYSTEM_API_USAGE;
 import static android.location.LocationRequest.LOW_POWER_EXCEPTIONS;
 
 import static com.android.server.location.LocationPermissions.PERMISSION_COARSE;
@@ -311,9 +311,8 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     private void removeLocationProviderManager(LocationProviderManager manager) {
         synchronized (mProviderManagers) {
-            Preconditions.checkState(getLocationProviderManager(manager.getName()) == manager);
-
-            mProviderManagers.remove(manager);
+            boolean removed = mProviderManagers.remove(manager);
+            Preconditions.checkArgument(removed);
             manager.setMockProvider(null);
             manager.setRealProvider(null);
             manager.stopManager();
@@ -568,8 +567,8 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     @Override
     public void registerLocationListener(String provider, LocationRequest request,
-            ILocationListener listener, String packageName, String attributionTag,
-            String listenerId) {
+            ILocationListener listener, String packageName, @Nullable String attributionTag,
+            @Nullable String listenerId) {
         CallerIdentity identity = CallerIdentity.fromBinder(mContext, packageName, attributionTag,
                 listenerId);
         int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
@@ -594,7 +593,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     @Override
     public void registerLocationPendingIntent(String provider, LocationRequest request,
-            PendingIntent pendingIntent, String packageName, String attributionTag) {
+            PendingIntent pendingIntent, String packageName, @Nullable String attributionTag) {
         CallerIdentity identity = CallerIdentity.fromBinder(mContext, packageName, attributionTag,
                 AppOpsManager.toReceiverId(pendingIntent));
         int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
@@ -610,14 +609,15 @@ public class LocationManagerService extends ILocationManager.Stub {
         // simplest to ensure these apis are simply never set for pending intent requests. the same
         // does not apply for listener requests since those will have the process (including the
         // listener) killed on permission removal
-        boolean usesSystemApi = request.isLowPower()
-                || request.isHiddenFromAppOps()
-                || request.isLocationSettingsIgnored()
-                || !request.getWorkSource().isEmpty();
-        if (usesSystemApi
-                && isChangeEnabled(PREVENT_PENDING_INTENT_SYSTEM_API_USAGE, identity.getUid())) {
-            throw new SecurityException(
-                    "PendingIntent location requests may not use system APIs: " + request);
+        if (isChangeEnabled(BLOCK_PENDING_INTENT_SYSTEM_API_USAGE, identity.getUid())) {
+            boolean usesSystemApi = request.isLowPower()
+                    || request.isHiddenFromAppOps()
+                    || request.isLocationSettingsIgnored()
+                    || !request.getWorkSource().isEmpty();
+            if (usesSystemApi) {
+                throw new SecurityException(
+                        "PendingIntent location requests may not use system APIs: " + request);
+            }
         }
 
         request = validateLocationRequest(request, identity);
