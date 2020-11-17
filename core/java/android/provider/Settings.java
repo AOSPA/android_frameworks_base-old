@@ -4801,6 +4801,20 @@ public final class Settings {
          * @hide
          */
         public static final String ALERT_SLIDER_ORDER = "alert_slider_order";
+        
+        /**
+         * Auxiliary Button
+         * Provides an extra map-able action
+         * @hide
+         */
+        public static final String AUX_BUTTON = "aux_button";
+
+        /**
+         * Auxiliary Button
+         * Provides an extra map-able action
+         * @hide
+         */
+        public static final String AUX_BUTTON = "aux_button";
 
         /**
          * @hide
