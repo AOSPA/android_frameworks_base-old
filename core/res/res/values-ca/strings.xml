@@ -954,7 +954,7 @@
     <string name="autofill_district" msgid="6428712062213557327">"Districte"</string>
     <string name="autofill_department" msgid="9047276226873531529">"Departament"</string>
     <string name="autofill_prefecture" msgid="7267397763720241872">"Prefectura"</string>
-    <string name="autofill_parish" msgid="6847960518334530198">"Districte"</string>
+    <string name="autofill_parish" msgid="6847960518334530198">"Parròquia"</string>
     <string name="autofill_area" msgid="8289022370678448983">"Àrea"</string>
     <string name="autofill_emirate" msgid="2544082046790551168">"Emirat"</string>
     <string name="permlab_readHistoryBookmarks" msgid="9102293913842539697">"lectura dels marcadors i l\'historial web"</string>
@@ -1228,8 +1228,8 @@
     <string name="volume_music" msgid="7727274216734955095">"Volum de multimèdia"</string>
     <string name="volume_music_hint_playing_through_bluetooth" msgid="2614142915948898228">"S\'està reproduint per Bluetooth"</string>
     <string name="volume_music_hint_silent_ringtone_selected" msgid="1514829655029062233">"S\'ha establert el so de silenci"</string>
-    <string name="volume_call" msgid="7625321655265747433">"Volum en trucada"</string>
-    <string name="volume_bluetooth_call" msgid="2930204618610115061">"Volum en trucada per Bluetooth"</string>
+    <string name="volume_call" msgid="7625321655265747433">"Volum a la trucada"</string>
+    <string name="volume_bluetooth_call" msgid="2930204618610115061">"Volum a la trucada per Bluetooth"</string>
     <string name="volume_alarm" msgid="4486241060751798448">"Volum d\'alarma"</string>
     <string name="volume_notification" msgid="6864412249031660057">"Volum de notificacions"</string>
     <string name="volume_unknown" msgid="4041914008166576293">"Volum"</string>

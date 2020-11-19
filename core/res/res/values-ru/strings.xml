@@ -1270,7 +1270,7 @@
     <string name="volume_music_hint_silent_ringtone_selected" msgid="1514829655029062233">"Выбран режим \"Без звука\""</string>
     <string name="volume_call" msgid="7625321655265747433">"Громкость при разговоре"</string>
     <string name="volume_bluetooth_call" msgid="2930204618610115061">"Громкость при разговоре"</string>
-    <string name="volume_alarm" msgid="4486241060751798448">"Громкость сигнала предупреждения"</string>
+    <string name="volume_alarm" msgid="4486241060751798448">"Громкость будильника"</string>
     <string name="volume_notification" msgid="6864412249031660057">"Громкость уведомления"</string>
     <string name="volume_unknown" msgid="4041914008166576293">"Громкость"</string>
     <string name="volume_icon_description_bluetooth" msgid="7540388479345558400">"Громкость Bluetooth-устройства"</string>

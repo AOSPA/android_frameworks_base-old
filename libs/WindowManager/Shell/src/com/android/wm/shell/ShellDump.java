@@ -16,8 +16,8 @@
 
 package com.android.wm.shell;
 
-import com.android.wm.shell.common.DisplayImeController;
-import com.android.wm.shell.draganddrop.DragAndDropController;
+import com.android.wm.shell.apppairs.AppPairs;
+import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.splitscreen.SplitScreen;
@@ -33,16 +33,22 @@ public class ShellDump {
     private final Optional<SplitScreen> mSplitScreenOptional;
     private final Optional<Pip> mPipOptional;
     private final Optional<OneHanded> mOneHandedOptional;
+    private final Optional<HideDisplayCutout> mHideDisplayCutout;
     private final ShellTaskOrganizer mShellTaskOrganizer;
+    private final Optional<AppPairs> mAppPairsOptional;
 
     public ShellDump(ShellTaskOrganizer shellTaskOrganizer,
             Optional<SplitScreen> splitScreenOptional,
             Optional<Pip> pipOptional,
-            Optional<OneHanded> oneHandedOptional) {
+            Optional<OneHanded> oneHandedOptional,
+            Optional<HideDisplayCutout> hideDisplayCutout,
+            Optional<AppPairs> appPairsOptional) {
         mShellTaskOrganizer = shellTaskOrganizer;
         mSplitScreenOptional = splitScreenOptional;
         mPipOptional = pipOptional;
         mOneHandedOptional = oneHandedOptional;
+        mHideDisplayCutout = hideDisplayCutout;
+        mAppPairsOptional = appPairsOptional;
     }
 
     public void dump(PrintWriter pw) {
@@ -52,5 +58,9 @@ public class ShellDump {
         mPipOptional.ifPresent(pip -> pip.dump(pw));
         mSplitScreenOptional.ifPresent(splitScreen -> splitScreen.dump(pw));
         mOneHandedOptional.ifPresent(oneHanded -> oneHanded.dump(pw));
+        mHideDisplayCutout.ifPresent(hideDisplayCutout -> hideDisplayCutout.dump(pw));
+        pw.println();
+        pw.println();
+        mAppPairsOptional.ifPresent(appPairs -> appPairs.dump(pw, ""));
     }
 }

@@ -452,7 +452,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private Task task;              // the task this is in.
     private long createTime = System.currentTimeMillis();
     long lastVisibleTime;         // last time this activity became visible
-    long cpuTimeAtResume;         // the cpu time of host process at the time of resuming activity
     long pauseTime;               // last time we started pausing the activity
     long launchTickTime;          // base time for launch tick messages
     long topResumedStateLossTime; // last time we reported top resumed state loss to an activity
@@ -663,8 +662,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // Information about an application starting window if displayed.
     // Note: these are de-referenced before the starting window animates away.
     StartingData mStartingData;
-    WindowState startingWindow;
-    WindowManagerPolicy.StartingSurface startingSurface;
+    WindowState mStartingWindow;
+    WindowManagerPolicy.StartingSurface mStartingSurface;
     boolean startingDisplayed;
     boolean startingMoved;
 
@@ -962,10 +961,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             pw.print(" firstWindowDrawn="); pw.print(firstWindowDrawn);
             pw.print(" mIsExiting="); pw.println(mIsExiting);
         }
-        if (startingWindow != null || startingSurface != null
+        if (mStartingWindow != null || mStartingSurface != null
                 || startingDisplayed || startingMoved || mVisibleSetFromTransferredStartingWindow) {
-            pw.print(prefix); pw.print("startingWindow="); pw.print(startingWindow);
-            pw.print(" startingSurface="); pw.print(startingSurface);
+            pw.print(prefix); pw.print("startingWindow="); pw.print(mStartingWindow);
+            pw.print(" startingSurface="); pw.print(mStartingSurface);
             pw.print(" startingDisplayed="); pw.print(startingDisplayed);
             pw.print(" startingMoved="); pw.print(startingMoved);
             pw.println(" mVisibleSetFromTransferredStartingWindow="
@@ -1912,16 +1911,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Aborted starting %s: startingData=%s",
                                 ActivityRecord.this, mStartingData);
 
-                        startingWindow = null;
+                        mStartingWindow = null;
                         mStartingData = null;
                         abort = true;
                     } else {
-                        startingSurface = surface;
+                        mStartingSurface = surface;
                     }
                     if (!abort) {
                         ProtoLog.v(WM_DEBUG_STARTING_WINDOW,
                                 "Added starting %s: startingWindow=%s startingView=%s",
-                                ActivityRecord.this, startingWindow, startingSurface);
+                                ActivityRecord.this, mStartingWindow, mStartingSurface);
                     }
                 }
                 if (abort) {
@@ -1973,7 +1972,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     void removeStartingWindow() {
-        if (startingWindow == null) {
+        if (mStartingWindow == null) {
             if (mStartingData != null) {
                 // Starting window has not been added yet, but it is scheduled to be added.
                 // Go ahead and cancel the request.
@@ -1985,10 +1984,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         final WindowManagerPolicy.StartingSurface surface;
         if (mStartingData != null) {
-            surface = startingSurface;
+            surface = mStartingSurface;
             mStartingData = null;
-            startingSurface = null;
-            startingWindow = null;
+            mStartingSurface = null;
+            mStartingWindow = null;
             startingDisplayed = false;
             if (surface == null) {
                 ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "startingWindow was set but "
@@ -2004,7 +2003,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
 
         ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Schedule remove starting %s startingWindow=%s"
-                + " startingView=%s Callers=%s", this, startingWindow, startingSurface,
+                + " startingView=%s Callers=%s", this, mStartingWindow, mStartingSurface,
                 Debug.getCallers(5));
 
 
@@ -2754,7 +2753,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
             if (ensureVisibility) {
                 mDisplayContent.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
-                        false /* preserveWindows */, true /* notifyClients */);
+                        false /* preserveWindows */, true /* notifyClients */,
+                        mStackSupervisor.mUserLeaving);
             }
         }
 
@@ -3467,8 +3467,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return false;
         }
 
-        final WindowState tStartingWindow = fromActivity.startingWindow;
-        if (tStartingWindow != null && fromActivity.startingSurface != null) {
+        final WindowState tStartingWindow = fromActivity.mStartingWindow;
+        if (tStartingWindow != null && fromActivity.mStartingSurface != null) {
             // In this case, the starting icon has already been displayed, so start
             // letting windows get shown immediately without any more transitions.
             getDisplayContent().mSkipAppTransitionAnimation = true;
@@ -3487,14 +3487,14 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
                 // Transfer the starting window over to the new token.
                 mStartingData = fromActivity.mStartingData;
-                startingSurface = fromActivity.startingSurface;
+                mStartingSurface = fromActivity.mStartingSurface;
                 startingDisplayed = fromActivity.startingDisplayed;
                 fromActivity.startingDisplayed = false;
-                startingWindow = tStartingWindow;
+                mStartingWindow = tStartingWindow;
                 reportedVisible = fromActivity.reportedVisible;
                 fromActivity.mStartingData = null;
-                fromActivity.startingSurface = null;
-                fromActivity.startingWindow = null;
+                fromActivity.mStartingSurface = null;
+                fromActivity.mStartingWindow = null;
                 fromActivity.startingMoved = true;
                 tStartingWindow.mToken = this;
                 tStartingWindow.mActivityRecord = this;
@@ -4344,9 +4344,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         } else {
             // If we are being set visible, and the starting window is not yet displayed,
             // then make sure it doesn't get displayed.
-            if (startingWindow != null && !startingWindow.isDrawn()) {
-                startingWindow.clearPolicyVisibilityFlag(LEGACY_POLICY_VISIBILITY);
-                startingWindow.mLegacyPolicyVisibilityAfterAnim = false;
+            if (mStartingWindow != null && !mStartingWindow.isDrawn()) {
+                mStartingWindow.clearPolicyVisibilityFlag(LEGACY_POLICY_VISIBILITY);
+                mStartingWindow.mLegacyPolicyVisibilityAfterAnim = false;
             }
             // We are becoming visible, so better freeze the screen with the windows that are
             // getting visible so we also wait for them.
@@ -4848,7 +4848,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         handleAlreadyVisible();
     }
 
-    void makeInvisible() {
+    void makeInvisible(boolean userLeaving) {
         if (!mVisibleRequested) {
             if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY, "Already invisible: " + this);
             return;
@@ -4889,9 +4889,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     // If the app is capable of entering PIP, we should try pausing it now
                     // so it can PIP correctly.
                     if (deferHidingClient) {
-                        getRootTask().startPausingLocked(
-                                mStackSupervisor.mUserLeaving /* userLeaving */,
-                                false /* uiSleeping */, null /* resuming */, "makeInvisible");
+                        getRootTask().startPausingLocked(userLeaving, false /* uiSleeping */,
+                                null /* resuming */, "makeInvisible");
                         break;
                     }
                 case INITIALIZING:
@@ -5112,16 +5111,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         resumeKeyDispatchingLocked();
         final Task stack = getRootTask();
         mStackSupervisor.mNoAnimActivities.clear();
-
-        // Mark the point when the activity is resuming
-        // TODO: To be more accurate, the mark should be before the onCreate,
-        //       not after the onResume. But for subsequent starts, onResume is fine.
-        if (hasProcess()) {
-            cpuTimeAtResume = app.getCpuTime();
-        } else {
-            cpuTimeAtResume = 0; // Couldn't get the cpu time of process
-        }
-
         returningOptions = null;
 
         if (canTurnScreenOn()) {
@@ -5514,7 +5503,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // We now have a good window to show, remove dead placeholders
         removeDeadWindows();
 
-        if (startingWindow != null) {
+        if (mStartingWindow != null) {
             ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Finish starting %s"
                     + ": first real window is shown, no animation", win.mToken);
             // If this initial window is animating, stop it -- we will do an animation to reveal
@@ -5691,7 +5680,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     boolean updateDrawnWindowStates(WindowState w) {
         w.setDrawnStateEvaluated(true /*evaluated*/);
 
-        if (DEBUG_STARTING_WINDOW_VERBOSE && w == startingWindow) {
+        if (DEBUG_STARTING_WINDOW_VERBOSE && w == mStartingWindow) {
             Slog.d(TAG, "updateWindows: starting " + w + " isOnScreen=" + w.isOnScreen()
                     + " allDrawn=" + allDrawn + " freezingScreen=" + mFreezingScreen);
         }
@@ -5728,7 +5717,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 }
             }
 
-            if (w != startingWindow) {
+            if (w != mStartingWindow) {
                 if (w.isInteresting()) {
                     // Add non-main window as interesting since the main app has already been added
                     if (findMainWindow(false /* includeStartingApp */) != w) {
@@ -5968,7 +5957,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     void postWindowRemoveStartingWindowCleanup(WindowState win) {
         // TODO: Something smells about the code below...Is there a better way?
-        if (startingWindow == win) {
+        if (mStartingWindow == win) {
             ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Notify removed startingWindow %s", win);
             removeStartingWindow();
         } else if (mChildren.size() == 0) {
@@ -5982,7 +5971,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 // window in the token.
                 setVisible(false);
             }
-        } else if (mChildren.size() == 1 && startingSurface != null && !isRelaunching()) {
+        } else if (mChildren.size() == 1 && mStartingSurface != null && !isRelaunching()) {
             // If this is the last window except for a starting transition window,
             // we need to get rid of the starting transition.
             ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Last window, removing starting window %s", win);
@@ -6491,7 +6480,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         final IBinder freezeToken = mayFreezeScreenLocked() ? appToken : null;
-        onDescendantOrientationChanged(freezeToken, this);
+        if (onDescendantOrientationChanged(freezeToken, this)) {
+            // The app is just becoming visible, and the parent Task has updated with the
+            // orientation request. Update the size compat mode.
+            updateSizeCompatMode();
+        }
     }
 
     /**
@@ -6657,6 +6650,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
 
+        if (task == null || (!handlesOrientationChangeFromDescendant()
+                && task.getLastTaskBoundsComputeActivity() != this)) {
+            // Don't compute when Task hasn't computed its bounds for this app, because the Task can
+            // be letterboxed, and its bounds may not be accurate until then.
+            return;
+        }
+
         Configuration overrideConfig = getRequestedOverrideConfiguration();
         final Configuration fullConfig = getConfiguration();
 
@@ -6681,20 +6681,14 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mCompatDisplayInsets = new CompatDisplayInsets(mDisplayContent, this);
     }
 
-    void clearSizeCompatMode(boolean recomputeTask) {
+    @VisibleForTesting
+    void clearSizeCompatMode() {
         mSizeCompatScale = 1f;
         mSizeCompatBounds = null;
         mCompatDisplayInsets = null;
 
-        if (recomputeTask) {
-            // Recompute from Task because letterbox can also happen on Task level.
-            task.onRequestedOverrideConfigurationChanged(task.getRequestedOverrideConfiguration());
-        }
-    }
-
-    @VisibleForTesting
-    void clearSizeCompatMode() {
-        clearSizeCompatMode(true /* recomputeTask */);
+        // Recompute from Task because letterbox can also happen on Task level.
+        task.onRequestedOverrideConfigurationChanged(task.getRequestedOverrideConfiguration());
     }
 
     @Override
@@ -7820,8 +7814,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         proto.write(NUM_DRAWN_WINDOWS, mNumDrawnWindows);
         proto.write(ALL_DRAWN, allDrawn);
         proto.write(LAST_ALL_DRAWN, mLastAllDrawn);
-        if (startingWindow != null) {
-            startingWindow.writeIdentifierToProto(proto, STARTING_WINDOW);
+        if (mStartingWindow != null) {
+            mStartingWindow.writeIdentifierToProto(proto, STARTING_WINDOW);
         }
         proto.write(STARTING_DISPLAYED, startingDisplayed);
         proto.write(STARTING_MOVED, startingMoved);
@@ -7909,15 +7903,23 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return;
             }
 
-            if (container.getTask().isTaskLetterboxed()) {
+            final Task task = container.getTask();
+            if (task != null && task.isTaskLetterboxed()) {
                 // For apps in Task letterbox, it should fill the task bounds.
-                final Rect taskBounds = container.getTask().getBounds();
-                mWidth = taskBounds.width();
-                mHeight = taskBounds.height();
+                final Point dimensions = getRotationZeroDimensions(task);
+                mWidth = dimensions.x;
+                mHeight = dimensions.y;
             } else {
-                // If the activity is not floating nor letterboxed, assume it fills the display.
-                mWidth = display.mBaseDisplayWidth;
-                mHeight = display.mBaseDisplayHeight;
+                // If the activity is not floating nor letterboxed, assume it fills the root.
+                final RootDisplayArea root = container.getRootDisplayArea();
+                if (root == null || root == display) {
+                    mWidth = display.mBaseDisplayWidth;
+                    mHeight = display.mBaseDisplayHeight;
+                } else {
+                    final Point dimensions = getRotationZeroDimensions(root);
+                    mWidth = dimensions.x;
+                    mHeight = dimensions.y;
+                }
             }
             final DisplayPolicy policy = display.getDisplayPolicy();
             for (int rotation = 0; rotation < 4; rotation++) {
@@ -7932,6 +7934,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 mStableInsets[rotation].set(mNonDecorInsets[rotation]);
                 policy.convertNonDecorInsetsToStableInsets(mStableInsets[rotation], rotation);
             }
+        }
+
+        /**
+         * Gets the width and height of the {@code container} when it is not rotated, so that after
+         * the display is rotated, we can calculate the bounds by rotating the dimensions.
+         * @see #getBoundsByRotation
+         */
+        private static Point getRotationZeroDimensions(WindowContainer container) {
+            final Rect bounds = container.getBounds();
+            final int rotation = container.getConfiguration().windowConfiguration.getRotation();
+            final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
+            final int width = bounds.width();
+            final int height = bounds.height();
+            return rotated ? new Point(height, width) : new Point(width, height);
         }
 
         void getBoundsByRotation(Rect outBounds, int rotation) {

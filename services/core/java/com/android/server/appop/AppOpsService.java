@@ -141,6 +141,8 @@ import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.TimeUtils;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
@@ -3026,13 +3028,16 @@ public class AppOpsService extends IAppOpsService.Stub {
                 mContext.getContentResolver(), Settings.Secure.VOICE_INTERACTION_SERVICE);
 
         final String voiceRecognitionServicePackageName =
-                voiceRecognitionComponent != null ? ComponentName.unflattenFromString(
-                        voiceRecognitionComponent).getPackageName() : "";
+                getComponentPackageNameFromString(voiceRecognitionComponent);
         final String voiceInteractionServicePackageName =
-                voiceInteractionComponent != null ? ComponentName.unflattenFromString(
-                        voiceInteractionComponent).getPackageName() : "";
+                getComponentPackageNameFromString(voiceInteractionComponent);
         return Objects.equals(packageName, voiceRecognitionServicePackageName) && Objects.equals(
                 voiceRecognitionServicePackageName, voiceInteractionServicePackageName);
+    }
+
+    private String getComponentPackageNameFromString(String from) {
+        ComponentName componentName = from != null ? ComponentName.unflattenFromString(from) : null;
+        return componentName != null ? componentName.getPackageName() : "";
     }
 
     @Override
@@ -3062,7 +3067,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         final int proxyMode = noteOperationUnchecked(code, proxyUid, resolveProxyPackageName,
                 proxyAttributionTag, Process.INVALID_UID, null, null, proxyFlags,
                 !isProxyTrusted, "proxy " + message, shouldCollectMessage);
-        if (proxyMode != AppOpsManager.MODE_ALLOWED || Binder.getCallingUid() == proxiedUid) {
+        if (proxyMode != AppOpsManager.MODE_ALLOWED) {
             return proxyMode;
         }
 
@@ -3547,8 +3552,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                 resolvedProxyPackageName, proxyAttributionTag, Process.INVALID_UID, null, null,
                 proxyFlags, startIfModeDefault, !isProxyTrusted, "proxy " + message,
                 shouldCollectMessage, false);
-        if (!shouldStartForMode(proxyMode, startIfModeDefault)
-                || Binder.getCallingUid() == proxiedUid) {
+        if (!shouldStartForMode(proxyMode, startIfModeDefault)) {
             return proxyMode;
         }
 
@@ -4289,8 +4293,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                 boolean success = false;
                 mUidStates.clear();
                 try {
-                    XmlPullParser parser = Xml.newPullParser();
-                    parser.setInput(stream, StandardCharsets.UTF_8.name());
+                    TypedXmlPullParser parser = Xml.resolvePullParser(stream);
                     int type;
                     while ((type = parser.next()) != XmlPullParser.START_TAG
                             && type != XmlPullParser.END_DOCUMENT) {
@@ -4548,8 +4551,7 @@ public class AppOpsService extends IAppOpsService.Stub {
             List<AppOpsManager.PackageOps> allOps = getPackagesForOps(null);
 
             try {
-                XmlSerializer out = new FastXmlSerializer();
-                out.setOutput(stream, StandardCharsets.UTF_8.name());
+                TypedXmlSerializer out = Xml.resolveSerializer(stream);
                 out.startDocument(null, true);
                 out.startTag(null, "app-ops");
                 out.attribute(null, "v", String.valueOf(CURRENT_VERSION));

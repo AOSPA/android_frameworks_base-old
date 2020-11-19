@@ -16,12 +16,12 @@
 
 package com.android.systemui.dagger;
 
-import com.android.systemui.shared.system.InputConsumerController;
 import com.android.systemui.wmshell.WMShellModule;
 import com.android.wm.shell.ShellDump;
 import com.android.wm.shell.ShellInit;
-import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.apppairs.AppPairs;
 import com.android.wm.shell.bubbles.Bubbles;
+import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.splitscreen.SplitScreen;
@@ -60,14 +60,6 @@ public interface WMComponent {
     @WMSingleton
     Optional<ShellDump> getShellDump();
 
-    // TODO(b/162923491): Refactor this out so Pip doesn't need to inject this
-    @WMSingleton
-    InputConsumerController getInputConsumerController();
-
-    // TODO(b/162923491): To be removed once Bubbles migrates over to the Shell
-    @WMSingleton
-    ShellTaskOrganizer getShellTaskOrganizer();
-
     // TODO(b/162923491): We currently pass the instances through to SysUI, but that may change
     //                    depending on the threading mechanism we go with
     @WMSingleton
@@ -80,5 +72,11 @@ public interface WMComponent {
     Optional<SplitScreen> getSplitScreen();
 
     @WMSingleton
+    Optional<AppPairs> getAppPairs();
+
+    @WMSingleton
     Optional<Bubbles> getBubbles();
+
+    @WMSingleton
+    Optional<HideDisplayCutout> getHideDisplayCutout();
 }

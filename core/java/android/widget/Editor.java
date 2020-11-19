@@ -16,7 +16,7 @@
 
 package android.widget;
 
-import static android.view.OnReceiveContentCallback.Payload.SOURCE_DRAG_AND_DROP;
+import static android.view.OnReceiveContentListener.Payload.SOURCE_DRAG_AND_DROP;
 
 import android.R;
 import android.animation.ValueAnimator;
@@ -98,7 +98,7 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
-import android.view.OnReceiveContentCallback;
+import android.view.OnReceiveContentListener;
 import android.view.SubMenu;
 import android.view.View;
 import android.view.View.DragShadowBuilder;
@@ -207,8 +207,8 @@ public class Editor {
     }
 
     // Default content insertion handler.
-    private final TextViewOnReceiveContentCallback mDefaultOnReceiveContentCallback =
-            new TextViewOnReceiveContentCallback();
+    private final TextViewOnReceiveContentListener mDefaultOnReceiveContentListener =
+            new TextViewOnReceiveContentListener();
 
     // Each Editor manages its own undo stack.
     private final UndoManager mUndoManager = new UndoManager();
@@ -589,8 +589,8 @@ public class Editor {
     }
 
     @VisibleForTesting
-    public @NonNull TextViewOnReceiveContentCallback getDefaultOnReceiveContentCallback() {
-        return mDefaultOnReceiveContentCallback;
+    public @NonNull TextViewOnReceiveContentListener getDefaultOnReceiveContentListener() {
+        return mDefaultOnReceiveContentListener;
     }
 
     /**
@@ -719,7 +719,7 @@ public class Editor {
         hideCursorAndSpanControllers();
         stopTextActionModeWithPreservingSelection();
 
-        mDefaultOnReceiveContentCallback.clearInputConnectionInfo();
+        mDefaultOnReceiveContentListener.clearInputConnectionInfo();
     }
 
     private void discardTextDisplayLists() {
@@ -2869,8 +2869,8 @@ public class Editor {
             final int originalLength = mTextView.getText().length();
             Selection.setSelection((Spannable) mTextView.getText(), offset);
             final ClipData clip = event.getClipData();
-            final OnReceiveContentCallback.Payload payload =
-                    new OnReceiveContentCallback.Payload.Builder(clip, SOURCE_DRAG_AND_DROP)
+            final OnReceiveContentListener.Payload payload =
+                    new OnReceiveContentListener.Payload.Builder(clip, SOURCE_DRAG_AND_DROP)
                     .build();
             mTextView.onReceiveContent(payload);
             if (dragDropIntoItself) {
@@ -4116,6 +4116,8 @@ public class Editor {
         private final boolean mHasSelection;
         private final int mHandleHeight;
         private final Map<MenuItem, OnClickListener> mAssistClickHandlers = new HashMap<>();
+        @Nullable
+        private TextClassification mPrevTextClassification;
 
         TextActionModeCallback(@TextActionMode int mode) {
             mHasSelection = mode == TextActionMode.SELECTION
@@ -4266,13 +4268,17 @@ public class Editor {
         }
 
         private void updateAssistMenuItems(Menu menu) {
-            clearAssistMenuItems(menu);
-            if (!shouldEnableAssistMenuItems()) {
-                return;
-            }
             final TextClassification textClassification =
                     getSelectionActionModeHelper().getTextClassification();
+            if (mPrevTextClassification == textClassification) {
+                // Already handled.
+                return;
+            }
+            clearAssistMenuItems(menu);
             if (textClassification == null) {
+                return;
+            }
+            if (!shouldEnableAssistMenuItems()) {
                 return;
             }
             if (!textClassification.getActions().isEmpty()) {
@@ -4301,6 +4307,7 @@ public class Editor {
                         MENU_ITEM_ORDER_SECONDARY_ASSIST_ACTIONS_START + i - 1,
                         MenuItem.SHOW_AS_ACTION_NEVER);
             }
+            mPrevTextClassification = textClassification;
         }
 
         private MenuItem addAssistMenuItem(Menu menu, RemoteAction action, int itemId, int order,

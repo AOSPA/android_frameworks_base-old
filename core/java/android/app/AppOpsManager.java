@@ -1464,6 +1464,7 @@ public class AppOpsManager {
     @SystemApi
     public static final String OPSTR_INTERACT_ACROSS_PROFILES = "android:interact_across_profiles";
     /** @hide Start Platform VPN without user intervention */
+    @SystemApi
     public static final String OPSTR_ACTIVATE_PLATFORM_VPN = "android:activate_platform_vpn";
     /** @hide */
     @SystemApi
@@ -7617,14 +7618,16 @@ public class AppOpsManager {
                 mContext.getContentResolver(), Settings.Secure.VOICE_INTERACTION_SERVICE);
 
         final String voiceRecognitionServicePackageName =
-                voiceRecognitionComponent != null ? ComponentName.unflattenFromString(
-                        voiceRecognitionComponent).getPackageName() : "";
+                getComponentPackageNameFromString(voiceRecognitionComponent);
         final String voiceInteractionServicePackageName =
-                voiceInteractionComponent != null ? ComponentName.unflattenFromString(
-                        voiceInteractionComponent).getPackageName() : "";
-
+                getComponentPackageNameFromString(voiceInteractionComponent);
         return Objects.equals(packageName, voiceRecognitionServicePackageName) && Objects.equals(
                 voiceRecognitionServicePackageName, voiceInteractionServicePackageName);
+    }
+
+    private String getComponentPackageNameFromString(String from) {
+        ComponentName componentName = from != null ? ComponentName.unflattenFromString(from) : null;
+        return componentName != null ? componentName.getPackageName() : "";
     }
 
     /**

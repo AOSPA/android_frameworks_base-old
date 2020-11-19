@@ -326,11 +326,12 @@ final class InputMonitor {
                 // the surface hierarchy.
                 // TODO(b/168252846): we have some issues with modal-windows, so we need to cross
                 // that bridge now that we organize full-screen Tasks.
-                inputWindowHandle.replaceTouchableRegionWithCrop(null /* Use this surfaces crop */);
+                inputWindowHandle.setTouchableRegionCrop(null /* Use this surfaces crop */);
+                inputWindowHandle.setReplaceTouchableRegionWithCrop(true);
                 useSurfaceCrop = true;
             } else if (task.cropWindowsToStackBounds() && !w.inFreeformWindowingMode()) {
-                inputWindowHandle.replaceTouchableRegionWithCrop(
-                        task.getRootTask().getSurfaceControl());
+                inputWindowHandle.setTouchableRegionCrop(task.getRootTask().getSurfaceControl());
+                inputWindowHandle.setReplaceTouchableRegionWithCrop(false);
                 useSurfaceCrop = true;
             }
         }
@@ -555,7 +556,7 @@ final class InputMonitor {
             }
 
             if (mAddWallpaperInputConsumerHandle) {
-                if (w.mAttrs.type == TYPE_WALLPAPER && w.isVisibleLw()) {
+                if (w.mAttrs.type == TYPE_WALLPAPER && w.isVisible()) {
                     // Add the wallpaper input consumer above the first visible wallpaper.
                     mWallpaperInputConsumer.show(mInputTransaction, w);
                     mAddWallpaperInputConsumerHandle = false;

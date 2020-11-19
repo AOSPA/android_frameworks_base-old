@@ -16,6 +16,9 @@ package com.android.systemui.qs;
 
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
 
+import static com.android.systemui.media.dagger.MediaModule.QS_PANEL;
+import static com.android.systemui.media.dagger.MediaModule.QUICK_QS_PANEL;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.content.res.Configuration;
@@ -50,6 +53,7 @@ import com.android.systemui.util.LifecycleFragment;
 import com.android.systemui.util.Utils;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 
 public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Callbacks,
         StatusBarStateController.StateListener {
@@ -80,6 +84,10 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
     private final RemoteInputQuickSettingsDisabler mRemoteInputQuickSettingsDisabler;
     private final InjectionInflationController mInjectionInflater;
+    private final CommandQueue mCommandQueue;
+    private final QSDetailDisplayer mQsDetailDisplayer;
+    private final MediaHost mQsMediaHost;
+    private final MediaHost mQqsMediaHost;
     private final QSFragmentComponent.Factory mQsComponentFactory;
     private final QSTileHost mHost;
     private boolean mShowCollapsedOnKeyguard;
@@ -102,9 +110,15 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public QSFragment(RemoteInputQuickSettingsDisabler remoteInputQsDisabler,
             InjectionInflationController injectionInflater, QSTileHost qsTileHost,
             StatusBarStateController statusBarStateController, CommandQueue commandQueue,
+            QSDetailDisplayer qsDetailDisplayer, @Named(QS_PANEL) MediaHost qsMediaHost,
+            @Named(QUICK_QS_PANEL) MediaHost qqsMediaHost,
             QSFragmentComponent.Factory qsComponentFactory) {
         mRemoteInputQuickSettingsDisabler = remoteInputQsDisabler;
         mInjectionInflater = injectionInflater;
+        mCommandQueue = commandQueue;
+        mQsDetailDisplayer = qsDetailDisplayer;
+        mQsMediaHost = qsMediaHost;
+        mQqsMediaHost = qqsMediaHost;
         mQsComponentFactory = qsComponentFactory;
         commandQueue.observe(getLifecycle(), this);
         mHost = qsTileHost;
@@ -143,6 +157,8 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mHeader = view.findViewById(R.id.header);
         mQSPanelController.setHeaderContainer(view.findViewById(R.id.header_text_container));
         mFooter = qsFragmentComponent.getQSFooter();
+
+        mQsDetailDisplayer.setQsPanelController(mQSPanelController);
 
         mQSContainerImplController = qsFragmentComponent.getQSContainerImplController();
         mQSContainerImplController.init();
@@ -183,6 +199,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
             setListening(false);
         }
         mQSCustomizerController.setQs(null);
+        mQsDetailDisplayer.setQsPanelController(null);
     }
 
     @Override
@@ -253,8 +270,6 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     }
 
     public void setHost(QSTileHost qsh) {
-        mHeader.setQSPanel(mQSPanelController.getView());
-        mFooter.setQSPanel(mQSPanelController.getView());
         mQSDetail.setHost(qsh);
     }
 
@@ -319,10 +334,6 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
     public QSPanelController getQSPanelController() {
         return mQSPanelController;
-    }
-
-    public QSPanel getQsPanel() {
-        return mQSPanelController.getView();
     }
 
     @Override
@@ -413,7 +424,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
             }
         }
         mFooter.setExpansion(onKeyguardAndExpanded ? 1 : expansion);
-        mQSPanelController.getQsTileRevealController().setExpansion(expansion);
+        mQSPanelController.setRevealExpansion(expansion);
         mQSPanelController.getTileLayout().setExpansion(expansion);
         mQSPanelScrollView.setTranslationY(translationScaleY * heightDiff);
         if (fullyCollapsed) {
@@ -452,11 +463,9 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
             float expandedMediaPosition = absoluteBottomPosition - mQSPanelScrollView.getScrollY()
                     + mQSPanelScrollView.getScrollRange();
             // The expanded media host should never move below the laid out position
-            pinToBottom(
-                    expandedMediaPosition, mQSPanelController.getMediaHost(), true /* expanded */);
+            pinToBottom(expandedMediaPosition, mQsMediaHost, true /* expanded */);
             // The expanded media host should never move above the laid out position
-            pinToBottom(absoluteBottomPosition, mHeader.getHeaderQsPanel().getMediaHost(),
-                    false /* expanded */);
+            pinToBottom(absoluteBottomPosition, mQqsMediaHost, false /* expanded */);
         }
     }
 

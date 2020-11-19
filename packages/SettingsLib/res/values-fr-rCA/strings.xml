@@ -399,6 +399,12 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"Application inactive. Touchez ici pour l\'activer."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"Application active. Touchez ici pour la désactiver."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"État de l\'application en veille :<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <!-- no translation found for transcode_settings_title (6700974145733932357) -->
+    <skip />
+    <!-- no translation found for transcode_enable_all (4719796495995795404) -->
+    <skip />
+    <!-- no translation found for transcode_skip_apps (5680997722349545778) -->
+    <skip />
     <string name="runningservices_settings_title" msgid="6460099290493086515">"Services en cours d\'exécution"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"Afficher et contrôler les services en cours d\'exécution"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"Mise en œuvre WebView"</string>
@@ -558,4 +564,6 @@
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"Activé"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"Votre appareil doit être redémarré pour que ce changement prenne effet. Redémarrez-le maintenant ou annulez la modification."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"Écouteurs filaires"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"Activé"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"Désactivé"</string>
 </resources>

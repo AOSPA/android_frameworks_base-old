@@ -5428,6 +5428,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      *
      * @param down true if the scroll is going down, false if it is going up
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     abstract void fillGap(boolean down);
 
     void hideSelector() {
@@ -5465,6 +5466,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @param y Where the user touched
      * @return The position of the first (or only) item in the row containing y
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     abstract int findMotionRow(int y);
 
@@ -5512,6 +5514,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      *
      * @param position the position of the new selection
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     abstract void setSelectionInt(int position);
 
     /**

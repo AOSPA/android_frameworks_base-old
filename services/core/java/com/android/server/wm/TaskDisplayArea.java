@@ -1870,13 +1870,13 @@ final class TaskDisplayArea extends DisplayArea<Task> {
     }
 
     void ensureActivitiesVisible(ActivityRecord starting, int configChanges,
-            boolean preserveWindows, boolean notifyClients) {
+            boolean preserveWindows, boolean notifyClients, boolean userLeaving) {
         mAtmService.mStackSupervisor.beginActivityVisibilityUpdate();
         try {
             for (int stackNdx = getStackCount() - 1; stackNdx >= 0; --stackNdx) {
                 final Task stack = getStackAt(stackNdx);
                 stack.ensureActivitiesVisible(starting, configChanges, preserveWindows,
-                        notifyClients);
+                        notifyClients, userLeaving);
             }
         } finally {
             mAtmService.mStackSupervisor.endActivityVisibilityUpdate();
@@ -1915,8 +1915,12 @@ final class TaskDisplayArea extends DisplayArea<Task> {
                 .getTopStackInWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY) : null;
         for (int stackNdx = 0; stackNdx < numStacks; stackNdx++) {
             final Task stack = getStackAt(stackNdx);
-            // Always finish non-standard type stacks.
-            if (destroyContentOnRemoval || !stack.isActivityTypeStandardOrUndefined()) {
+            // Always finish non-standard type stacks and stacks created by a organizer.
+            // TODO: For stacks created by organizer, consider reparenting children tasks if the use
+            //       case arises in the future.
+            if (destroyContentOnRemoval
+                    || !stack.isActivityTypeStandardOrUndefined()
+                    || stack.mCreatedByOrganizer) {
                 stack.finishAllActivitiesImmediately();
             } else {
                 // Reparent the stack to the root task of secondary-split-screen or display area.

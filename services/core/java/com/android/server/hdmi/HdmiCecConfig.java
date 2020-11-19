@@ -229,6 +229,8 @@ public class HdmiCecConfig {
         switch (setting.getName()) {
             case HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_ENABLED:
                 return STORAGE_GLOBAL_SETTINGS;
+            case HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION:
+                return STORAGE_GLOBAL_SETTINGS;
             case HdmiControlManager.CEC_SETTING_NAME_SEND_STANDBY_ON_SLEEP:
                 return STORAGE_GLOBAL_SETTINGS;
             case HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST:
@@ -237,7 +239,7 @@ public class HdmiCecConfig {
                 return STORAGE_SYSPROPS;
             default:
                 throw new RuntimeException("Invalid CEC setting '" + setting.getName()
-                    + "' storage.");
+                        + "' storage.");
         }
     }
 
@@ -245,6 +247,8 @@ public class HdmiCecConfig {
         switch (setting.getName()) {
             case HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_ENABLED:
                 return Global.HDMI_CONTROL_ENABLED;
+            case HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION:
+                return Global.HDMI_CEC_VERSION;
             case HdmiControlManager.CEC_SETTING_NAME_SEND_STANDBY_ON_SLEEP:
                 return Global.HDMI_CONTROL_SEND_STANDBY_ON_SLEEP;
             case HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST:
@@ -280,6 +284,10 @@ public class HdmiCecConfig {
             Slog.d(TAG, "Setting '" + storageKey + "' global setting.");
             mStorageAdapter.storeGlobalSetting(mContext, storageKey, value);
         }
+    }
+
+    private int getIntValue(@NonNull Value value) {
+        return Integer.decode(value.getIntValue());
     }
 
     /**
@@ -380,7 +388,7 @@ public class HdmiCecConfig {
         }
         List<Integer> allowedValues = new ArrayList<Integer>();
         for (Value allowedValue : setting.getAllowedValues().getValue()) {
-            allowedValues.add(allowedValue.getIntValue());
+            allowedValues.add(getIntValue(allowedValue));
         }
         return allowedValues;
     }
@@ -412,7 +420,7 @@ public class HdmiCecConfig {
             throw new IllegalArgumentException("Setting '" + name
                     + "' is not a string-type setting.");
         }
-        return getSetting(name).getDefaultValue().getIntValue();
+        return getIntValue(getSetting(name).getDefaultValue());
     }
 
     /**
@@ -444,7 +452,7 @@ public class HdmiCecConfig {
                     + "' is not a int-type setting.");
         }
         Slog.d(TAG, "Getting CEC setting value '" + name + "'.");
-        String defaultValue = Integer.toString(setting.getDefaultValue().getIntValue());
+        String defaultValue = Integer.toString(getIntValue(setting.getDefaultValue()));
         String value = retrieveValue(setting, defaultValue);
         return Integer.parseInt(value);
     }

@@ -162,7 +162,6 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.ActivityManager.TaskDescription;
 import android.app.ActivityManager.TaskSnapshot;
-import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.AppGlobals;
@@ -570,6 +569,10 @@ class Task extends WindowContainer<WindowContainer> {
 
     /** Current activity that is resumed, or null if there is none. */
     ActivityRecord mResumedActivity = null;
+
+    /** Last activity that is used to compute the Task bounds. */
+    @Nullable
+    private ActivityRecord mLastTaskBoundsComputeActivity;
 
     private boolean mForceShowForAllUsers;
 
@@ -1499,6 +1502,11 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     void cleanUpActivityReferences(ActivityRecord r) {
+        // mLastTaskBoundsComputeActivity is set at leaf Task
+        if (mLastTaskBoundsComputeActivity == r) {
+            mLastTaskBoundsComputeActivity = null;
+        }
+
         final WindowContainer parent = getParent();
         if (parent != null && parent.asTask() != null) {
             parent.asTask().cleanUpActivityReferences(r);
@@ -2836,6 +2844,8 @@ class Task extends WindowContainer<WindowContainer> {
 
     private void resolveLeafOnlyOverrideConfigs(Configuration newParentConfig,
             Rect previousBounds) {
+        mLastTaskBoundsComputeActivity = getTopNonFinishingActivity(false /* includeOverlays */);
+
         int windowingMode =
                 getResolvedOverrideConfiguration().windowConfiguration.getWindowingMode();
         if (windowingMode == WINDOWING_MODE_UNDEFINED) {
@@ -2964,6 +2974,11 @@ class Task extends WindowContainer<WindowContainer> {
             bounds.set(getRequestedOverrideBounds());
         }
         return bounds;
+    }
+
+    @Nullable
+    ActivityRecord getLastTaskBoundsComputeActivity() {
+        return mLastTaskBoundsComputeActivity;
     }
 
     /** Updates the task's bounds and override configuration to match what is expected for the
@@ -3310,18 +3325,6 @@ class Task extends WindowContainer<WindowContainer> {
         // No one in higher hierarchy handles this request, let's adjust our bounds to fulfill
         // it if possible.
         if (getParent() != null) {
-            final ActivityRecord activity = requestingContainer.asActivityRecord();
-            if (activity != null) {
-                // Clear the size compat cache to recompute the bounds for requested orientation;
-                // otherwise when Task#computeFullscreenBounds(), it will not try to do Task level
-                // letterboxing because app may prefer to keep its original size (size compat).
-                //
-                // Normally, ActivityRecord#clearSizeCompatMode() recomputes from its parent Task,
-                // which is the leaf Task. However, because this orientation request is new to all
-                // Tasks, pass false to clearSizeCompatMode, and trigger onConfigurationChanged from
-                // here (root Task) to make sure all Tasks are up-to-date.
-                activity.clearSizeCompatMode(false /* recomputeTask */);
-            }
             onConfigurationChanged(getParent().getConfiguration());
             return true;
         }
@@ -4071,6 +4074,10 @@ class Task extends WindowContainer<WindowContainer> {
         info.taskDescription = new ActivityManager.TaskDescription(getTaskDescription());
         info.supportsSplitScreenMultiWindow = supportsSplitScreenWindowingMode();
         info.configuration.setTo(getConfiguration());
+        // Update to the task's current activity type and windowing mode which may differ from the
+        // window configuration
+        info.configuration.windowConfiguration.setActivityType(getActivityType());
+        info.configuration.windowConfiguration.setWindowingMode(getWindowingMode());
         info.token = mRemoteToken.toWindowContainerToken();
 
         //TODO (AM refactor): Just use local once updateEffectiveIntent is run during all child
@@ -5688,19 +5695,6 @@ class Task extends WindowContainer<WindowContainer> {
 
         if (prev != null) {
             prev.resumeKeyDispatchingLocked();
-
-            if (prev.hasProcess() && prev.cpuTimeAtResume > 0) {
-                final long diff = prev.app.getCpuTime() - prev.cpuTimeAtResume;
-                if (diff > 0) {
-                    final Runnable r = PooledLambda.obtainRunnable(
-                            ActivityManagerInternal::updateForegroundTimeIfOnBattery,
-                            mAtmService.mAmInternal, prev.info.packageName,
-                            prev.info.applicationInfo.uid,
-                            diff);
-                    mAtmService.mH.post(r);
-                }
-            }
-            prev.cpuTimeAtResume = 0; // reset it
         }
 
         mRootWindowContainer.ensureActivitiesVisible(resuming, 0, !PRESERVE_WINDOWS);
@@ -5743,7 +5737,8 @@ class Task extends WindowContainer<WindowContainer> {
      */
     void ensureActivitiesVisible(@Nullable ActivityRecord starting, int configChanges,
             boolean preserveWindows) {
-        ensureActivitiesVisible(starting, configChanges, preserveWindows, true /* notifyClients */);
+        ensureActivitiesVisible(starting, configChanges, preserveWindows, true /* notifyClients */,
+                mStackSupervisor.mUserLeaving);
     }
 
     /**
@@ -5760,14 +5755,16 @@ class Task extends WindowContainer<WindowContainer> {
      * @param configChanges Parts of the configuration that changed for this activity for evaluating
      *                      if the screen should be frozen as part of
      *                      {@link mEnsureActivitiesVisibleHelper}.
+     * @param userLeaving Flag indicating whether a userLeaving callback should be issued in the
+     *                      case an activity is being set to invisible.
      */
     // TODO: Should be re-worked based on the fact that each task as a stack in most cases.
     void ensureActivitiesVisible(@Nullable ActivityRecord starting, int configChanges,
-            boolean preserveWindows, boolean notifyClients) {
+            boolean preserveWindows, boolean notifyClients, boolean userLeaving) {
         mStackSupervisor.beginActivityVisibilityUpdate();
         try {
             forAllLeafTasks(task -> task.mEnsureActivitiesVisibleHelper.process(
-                    starting, configChanges, preserveWindows, notifyClients),
+                    starting, configChanges, preserveWindows, notifyClients, userLeaving),
                     true /* traverseTopToBottom */);
 
             if (mTranslucentActivityWaiting != null &&
@@ -5894,7 +5891,21 @@ class Task extends WindowContainer<WindowContainer> {
         try {
             // Protect against recursion.
             mInResumeTopActivity = true;
-            result = resumeTopActivityInnerLocked(prev, options);
+
+            // TODO(b/172885410): Allow the top activities of all visible leaf tasks to be resumed
+            if (mCreatedByOrganizer && !isLeafTask()
+                    && getConfiguration().windowConfiguration.getWindowingMode()
+                            == WINDOWING_MODE_FULLSCREEN) {
+                for (int i = mChildren.size() - 1; i >= 0; i--) {
+                    final Task child = (Task) getChildAt(i);
+                    if (!child.shouldBeVisible(null /* starting */)) {
+                        break;
+                    }
+                    result |= child.resumeTopActivityUncheckedLocked(prev, options);
+                }
+            } else {
+                result = resumeTopActivityInnerLocked(prev, options);
+            }
 
             // When resuming the top activity, it may be necessary to pause the top activity (for
             // example, returning to the lock screen. We suppress the normal pause logic in
@@ -5949,17 +5960,20 @@ class Task extends WindowContainer<WindowContainer> {
         final TaskDisplayArea taskDisplayArea = getDisplayArea();
 
         // If the top activity is the resumed one, nothing to do.
-        // For devices that are not in fullscreen mode (e.g. freeform windows), it's possible
-        // we still want to proceed if the visibility of other windows have changed (e.g. bringing
-        // a fullscreen window forward to cover another freeform activity.)
         if (mResumedActivity == next && next.isState(RESUMED)
-                && taskDisplayArea.getWindowingMode() != WINDOWING_MODE_FREEFORM
                 && taskDisplayArea.allResumedActivitiesComplete()) {
             // The activity may be waiting for stop, but that is no longer appropriate for it.
             mStackSupervisor.mStoppingActivities.remove(next);
             // Make sure we have executed any pending transitions, since there
             // should be nothing left to do at this point.
             executeAppTransition(options);
+            // For devices that are not in fullscreen mode (e.g. freeform windows), it's possible
+            // we still want to check if the visibility of other windows have changed (e.g. bringing
+            // a fullscreen window forward to cover another freeform activity.)
+            if (taskDisplayArea.inMultiWindowMode()) {
+                taskDisplayArea.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                        false /* preserveWindows */, true /* notifyClients */, userLeaving);
+            }
             ProtoLog.d(WM_DEBUG_STATES, "resumeTopActivityLocked: Top activity "
                     + "resumed %s", next);
             return false;

@@ -485,7 +485,6 @@ java_library {
     name: "framework-internal-utils",
     static_libs: [
         "apex_aidl_interface-java",
-        "suspend_control_aidl_interface-java",
         "framework-protos",
         "updatable-driver-protos",
         "android.hidl.base-V1.0-java",
@@ -520,6 +519,8 @@ java_library {
         "android.hardware.vibrator-V1.1-java",
         "android.hardware.vibrator-V1.2-java",
         "android.hardware.vibrator-V1.3-java",
+        "android.system.keystore2-java",
+        "android.system.suspend.control.internal-java",
         "devicepolicyprotosnano",
 
         "com.android.sysprop.apex",
@@ -785,6 +786,7 @@ filegroup {
         "core/java/android/annotation/RequiresPermission.java",
         "core/java/android/annotation/SdkConstant.java",
         "core/java/android/annotation/StringDef.java",
+        "core/java/android/annotation/SuppressLint.java",
         "core/java/android/annotation/SystemApi.java",
         "core/java/android/annotation/SystemService.java",
         "core/java/android/annotation/TestApi.java",
@@ -1091,6 +1093,14 @@ filegroup {
     path: "core/java",
 }
 
+filegroup {
+    name: "activity_manager_procstate_aidl",
+    srcs: [
+        "core/java/android/app/ProcessStateEnum.aidl",
+    ],
+    path: "core/java",
+}
+
 aidl_interface {
     name: "libincremental_aidl",
     unstable: true,
@@ -1298,7 +1308,8 @@ filegroup {
 // into wifi-service
 java_library {
     name: "framework-wifi-util-lib",
-    sdk_version: "module_30",
+    sdk_version: "module_current",
+    min_sdk_version: "30",
     srcs: [
         "core/java/android/content/pm/BaseParceledListSlice.java",
         "core/java/android/content/pm/ParceledListSlice.java",

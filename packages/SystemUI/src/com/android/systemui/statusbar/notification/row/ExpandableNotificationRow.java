@@ -331,7 +331,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private OnUserInteractionCallback mOnUserInteractionCallback;
     private NotificationGutsManager mNotificationGutsManager;
     private boolean mIsLowPriority;
-    private boolean mIsColorized;
     private boolean mUseIncreasedCollapsedHeight;
     private boolean mUseIncreasedHeadsUpHeight;
     private float mTranslationWhenRemoved;
@@ -541,7 +540,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         for (NotificationContentView l : mLayouts) {
             l.onNotificationUpdated(mEntry);
         }
-        mIsColorized = mEntry.getSbn().getNotification().isColorized();
         mShowingPublicInitialized = false;
         updateNotificationColor();
         if (mMenuRow != null) {
@@ -1165,9 +1163,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      */
     @Nullable
     public NotificationMenuRowPlugin createMenu() {
-        final boolean removeShelf = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.SHOW_NEW_NOTIF_DISMISS, 0 /* show shelf by default */) == 1;
-        if (mMenuRow == null || removeShelf) {
+        if (mMenuRow == null) {
             return null;
         }
         if (mMenuRow.getMenuView() == null) {
@@ -1624,8 +1620,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 R.dimen.notification_max_heads_up_height_increased);
 
         Resources res = getResources();
-        mIncreasedPaddingBetweenElements = res.getDimensionPixelSize(
-                R.dimen.notification_divider_height_increased);
         mEnableNonGroupedNotificationExpand =
                 res.getBoolean(R.bool.config_enableNonGroupedNotificationExpand);
         mShowGroupBackgroundWhenExpanded =
@@ -2841,24 +2835,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             event = MetricsEvent.ACTION_NOTIFICATION_GROUP_GESTURE_EXPANDER;
         }
         MetricsLogger.action(mContext, event, userExpanded);
-    }
-
-    @Override
-    public float getIncreasedPaddingAmount() {
-        if (mIsSummaryWithChildren) {
-            if (isGroupExpanded()) {
-                return 1.0f;
-            } else if (isUserLocked()) {
-                return mChildrenContainer.getIncreasedPaddingAmount();
-            }
-        } else if (isColorized() && (!mIsLowPriority || isExpanded())) {
-            return -1.0f;
-        }
-        return 0.0f;
-    }
-
-    private boolean isColorized() {
-        return mIsColorized && mBgTint != NO_COLOR;
     }
 
     @Override

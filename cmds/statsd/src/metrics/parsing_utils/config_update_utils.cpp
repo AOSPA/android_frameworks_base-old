@@ -396,6 +396,23 @@ bool updateConditions(const ConfigKey& key, const StatsdConfig& config,
     return true;
 }
 
+bool updateStates(const StatsdConfig& config, const map<int64_t, uint64_t>& oldStateProtoHashes,
+                  unordered_map<int64_t, int>& stateAtomIdMap,
+                  unordered_map<int64_t, unordered_map<int, int64_t>>& allStateGroupMaps,
+                  map<int64_t, uint64_t>& newStateProtoHashes, set<int64_t>& replacedStates) {
+    // Share with metrics_manager_util.
+    if (!initStates(config, stateAtomIdMap, allStateGroupMaps, newStateProtoHashes)) {
+        return false;
+    }
+
+    for (const auto& [stateId, stateHash] : oldStateProtoHashes) {
+        const auto& it = newStateProtoHashes.find(stateId);
+        if (it != newStateProtoHashes.end() && it->second != stateHash) {
+            replacedStates.insert(stateId);
+        }
+    }
+    return true;
+}
 // Returns true if any matchers in the metric activation were replaced.
 bool metricActivationDepsChange(const StatsdConfig& config,
                                 const unordered_map<int64_t, int>& metricToActivationMap,
@@ -869,6 +886,14 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
         newMetricProducers.push_back(producer.value());
     }
 
+    for (int i = 0; i < config.no_report_metric_size(); ++i) {
+        const int64_t noReportMetric = config.no_report_metric(i);
+        if (newMetricProducerMap.find(noReportMetric) == newMetricProducerMap.end()) {
+            ALOGW("no_report_metric %" PRId64 " not exist", noReportMetric);
+            return false;
+        }
+        noReportMetricIds.insert(noReportMetric);
+    }
     const set<int> atomsAllowedFromAnyUid(config.whitelisted_atom_ids().begin(),
                                           config.whitelisted_atom_ids().end());
     for (int i = 0; i < allMetricsCount; i++) {
@@ -887,6 +912,12 @@ bool updateMetrics(const ConfigKey& key, const StatsdConfig& config, const int64
         }
     }
 
+    // Init new/replaced metrics.
+    for (size_t i = 0; i < newMetricProducers.size(); i++) {
+        if (metricsToUpdate[i] == UPDATE_REPLACE || metricsToUpdate[i] == UPDATE_NEW) {
+            newMetricProducers[i]->prepareFirstBucket();
+        }
+    }
     return true;
 }
 
@@ -1028,6 +1059,7 @@ bool updateStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const 
                         set<int64_t>& noReportMetricIds) {
     set<int64_t> replacedMatchers;
     set<int64_t> replacedConditions;
+    set<int64_t> replacedStates;
     set<int64_t> replacedMetrics;
     vector<ConditionState> conditionCache;
     unordered_map<int64_t, int> stateAtomIdMap;
@@ -1039,7 +1071,6 @@ bool updateStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const 
         ALOGE("updateAtomMatchingTrackers failed");
         return false;
     }
-    VLOG("updateAtomMatchingTrackers succeeded");
 
     if (!updateConditions(key, config, newAtomMatchingTrackerMap, replacedMatchers,
                           oldConditionTrackerMap, oldConditionTrackers, newConditionTrackerMap,
@@ -1048,20 +1079,11 @@ bool updateStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const 
         ALOGE("updateConditions failed");
         return false;
     }
-    VLOG("updateConditions succeeded");
 
-    // Share with metrics_manager_util,
-    if (!initStates(config, stateAtomIdMap, allStateGroupMaps, newStateProtoHashes)) {
-        ALOGE("initStates failed");
+    if (!updateStates(config, oldStateProtoHashes, stateAtomIdMap, allStateGroupMaps,
+                      newStateProtoHashes, replacedStates)) {
+        ALOGE("updateStates failed");
         return false;
-    }
-
-    set<int64_t> replacedStates;
-    for (const auto& [stateId, stateHash] : oldStateProtoHashes) {
-        const auto& it = newStateProtoHashes.find(stateId);
-        if (it != newStateProtoHashes.end() && it->second != stateHash) {
-            replacedStates.insert(stateId);
-        }
     }
     if (!updateMetrics(key, config, timeBaseNs, currentTimeNs, pullerManager,
                        oldAtomMatchingTrackerMap, newAtomMatchingTrackerMap, replacedMatchers,

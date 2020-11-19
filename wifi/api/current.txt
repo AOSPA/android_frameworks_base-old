@@ -106,6 +106,7 @@ package android.net.wifi {
     field @Deprecated public static final int SECURITY_TYPE_EAP = 3; // 0x3
     field @Deprecated public static final int SECURITY_TYPE_EAP_SUITE_B = 5; // 0x5
     field @Deprecated public static final int SECURITY_TYPE_EAP_WPA3_ENTERPRISE = 9; // 0x9
+    field @Deprecated public static final int SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT = 5; // 0x5
     field @Deprecated public static final int SECURITY_TYPE_OPEN = 0; // 0x0
     field @Deprecated public static final int SECURITY_TYPE_OWE = 6; // 0x6
     field @Deprecated public static final int SECURITY_TYPE_PSK = 2; // 0x2
@@ -322,6 +323,7 @@ package android.net.wifi {
     method public android.net.DhcpInfo getDhcpInfo();
     method public int getMaxNumberOfNetworkSuggestionsPerApp();
     method @IntRange(from=0) public int getMaxSignalLevel();
+    method @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public int getNetworkSuggestionUserApprovalStatus();
     method @NonNull @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public java.util.List<android.net.wifi.WifiNetworkSuggestion> getNetworkSuggestions();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.NETWORK_SETTINGS, android.Manifest.permission.NETWORK_SETUP_WIZARD}) public java.util.List<android.net.wifi.hotspot2.PasspointConfiguration> getPasspointConfigurations();
     method public java.util.List<android.net.wifi.ScanResult> getScanResults();
@@ -343,6 +345,7 @@ package android.net.wifi {
     method public boolean isWapiSupported();
     method public boolean isWifiEnabled();
     method public boolean isWifiStandardSupported(int);
+    method public boolean isWpa3ApValidationSupported();
     method public boolean isWpa3SaeSupported();
     method public boolean isWpa3SuiteBSupported();
     method @Deprecated public boolean pingSupplicant();
@@ -391,6 +394,11 @@ package android.net.wifi {
     field public static final int STATUS_NETWORK_SUGGESTIONS_ERROR_INTERNAL = 1; // 0x1
     field public static final int STATUS_NETWORK_SUGGESTIONS_ERROR_REMOVE_INVALID = 5; // 0x5
     field public static final int STATUS_NETWORK_SUGGESTIONS_SUCCESS = 0; // 0x0
+    field public static final int STATUS_SUGGESTION_APPROVAL_APPROVED_BY_CARRIER_PRIVILEGE = 4; // 0x4
+    field public static final int STATUS_SUGGESTION_APPROVAL_APPROVED_BY_USER = 2; // 0x2
+    field public static final int STATUS_SUGGESTION_APPROVAL_PENDING = 1; // 0x1
+    field public static final int STATUS_SUGGESTION_APPROVAL_REJECTED_BY_USER = 3; // 0x3
+    field public static final int STATUS_SUGGESTION_APPROVAL_UNKNOWN = 0; // 0x0
     field public static final int STATUS_SUGGESTION_CONNECTION_FAILURE_ASSOCIATION = 1; // 0x1
     field public static final int STATUS_SUGGESTION_CONNECTION_FAILURE_AUTHENTICATION = 2; // 0x2
     field public static final int STATUS_SUGGESTION_CONNECTION_FAILURE_IP_PROVISIONING = 3; // 0x3
@@ -497,6 +505,7 @@ package android.net.wifi {
     method @Nullable public String getSsid();
     method public int getSubscriptionId();
     method public boolean isAppInteractionRequired();
+    method public boolean isCarrierMerged();
     method public boolean isCredentialSharedWithUser();
     method public boolean isEnhancedOpen();
     method public boolean isHiddenSsid();
@@ -512,6 +521,7 @@ package android.net.wifi {
     ctor public WifiNetworkSuggestion.Builder();
     method @NonNull public android.net.wifi.WifiNetworkSuggestion build();
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setBssid(@NonNull android.net.MacAddress);
+    method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setCarrierMerged(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setCredentialSharedWithUser(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setIsAppInteractionRequired(boolean);
     method @NonNull public android.net.wifi.WifiNetworkSuggestion.Builder setIsEnhancedMacRandomizationEnabled(boolean);
