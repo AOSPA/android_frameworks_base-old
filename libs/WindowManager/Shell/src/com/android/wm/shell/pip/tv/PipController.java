@@ -48,9 +48,11 @@ import android.view.DisplayInfo;
 
 import com.android.wm.shell.R;
 import com.android.wm.shell.WindowManagerShellWrapper;
+import com.android.wm.shell.common.TaskStackListenerCallback;
+import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.pip.PinnedStackListenerForwarder;
 import com.android.wm.shell.pip.Pip;
-import com.android.wm.shell.pip.PipBoundsHandler;
+import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipTaskOrganizer;
@@ -106,7 +108,7 @@ public class PipController implements Pip, PipTaskOrganizer.PipTransitionCallbac
 
     private final Context mContext;
     private final PipBoundsState mPipBoundsState;
-    private final PipBoundsHandler mPipBoundsHandler;
+    private final PipBoundsAlgorithm mPipBoundsAlgorithm;
     private final PipTaskOrganizer mPipTaskOrganizer;
     private final PipMediaController mPipMediaController;
 
@@ -180,7 +182,7 @@ public class PipController implements Pip, PipTaskOrganizer.PipTransitionCallbac
         @Override
         public void onImeVisibilityChanged(boolean imeVisible, int imeHeight) {
             mHandler.post(() -> {
-                mPipBoundsHandler.onImeVisibilityChanged(imeVisible, imeHeight);
+                mPipBoundsState.setImeVisibility(imeVisible, imeHeight);
                 if (mState == STATE_PIP) {
                     if (mImeVisible != imeVisible) {
                         if (imeVisible) {
@@ -202,9 +204,12 @@ public class PipController implements Pip, PipTaskOrganizer.PipTransitionCallbac
         public void onMovementBoundsChanged(boolean fromImeAdjustment) {
             mHandler.post(() -> {
                 mTmpDisplayInfo.copyFrom(mPipBoundsState.getDisplayInfo());
-                // Populate the inset / normal bounds from mPipBoundsHandler first.
-                mPipBoundsHandler.onMovementBoundsChanged(mTmpInsetBounds, mPipBounds,
-                        mDefaultPipBounds);
+
+                mPipBoundsAlgorithm.getInsetBounds(mTmpInsetBounds);
+                mPipBounds.set(mPipBoundsAlgorithm.getNormalBounds());
+                if (mDefaultPipBounds.isEmpty()) {
+                    mDefaultPipBounds.set(mPipBoundsAlgorithm.getDefaultBounds());
+                }
             });
         }
 
@@ -221,15 +226,16 @@ public class PipController implements Pip, PipTaskOrganizer.PipTransitionCallbac
 
     public PipController(Context context,
             PipBoundsState pipBoundsState,
-            PipBoundsHandler pipBoundsHandler,
+            PipBoundsAlgorithm pipBoundsAlgorithm,
             PipTaskOrganizer pipTaskOrganizer,
             PipMediaController pipMediaController,
             PipNotification pipNotification,
+            TaskStackListenerImpl taskStackListener,
             WindowManagerShellWrapper windowManagerShellWrapper) {
         mContext = context;
         mPipBoundsState = pipBoundsState;
         mPipNotification = pipNotification;
-        mPipBoundsHandler = pipBoundsHandler;
+        mPipBoundsAlgorithm = pipBoundsAlgorithm;
         mPipMediaController = pipMediaController;
         // Ensure that we have the display info in case we get calls to update the bounds
         // before the listener calls back
@@ -262,6 +268,27 @@ public class PipController implements Pip, PipTaskOrganizer.PipTransitionCallbac
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to register pinned stack listener", e);
         }
+
+        // Handle for system task stack changes.
+        taskStackListener.addListener(
+                new TaskStackListenerCallback() {
+                    @Override
+                    public void onTaskStackChanged() {
+                        PipController.this.onTaskStackChanged();
+                    }
+
+                    @Override
+                    public void onActivityPinned(String packageName, int userId, int taskId,
+                            int stackId) {
+                        PipController.this.onActivityPinned(packageName);
+                    }
+
+                    @Override
+                    public void onActivityRestartAttempt(ActivityManager.RunningTaskInfo task,
+                            boolean homeTaskVisible, boolean clearedTask, boolean wasVisible) {
+                        PipController.this.onActivityRestartAttempt(task, clearedTask);
+                    }
+                });
 
         // TODO(b/169395392) Refactor PipMenuActivity to PipMenuView
         PipMenuActivity.setPipController(this);
@@ -351,8 +378,7 @@ public class PipController implements Pip, PipTaskOrganizer.PipTransitionCallbac
         resizePinnedStack(STATE_NO_PIP);
     }
 
-    @Override
-    public void onActivityPinned(String packageName) {
+    private void onActivityPinned(String packageName) {
         if (DEBUG) Log.d(TAG, "onActivityPinned()");
 
         RootTaskInfo taskInfo = getPinnedTaskInfo();
@@ -371,11 +397,9 @@ public class PipController implements Pip, PipTaskOrganizer.PipTransitionCallbac
         }
     }
 
-    @Override
-    public void onActivityRestartAttempt(ActivityManager.RunningTaskInfo task,
+    private void onActivityRestartAttempt(ActivityManager.RunningTaskInfo task,
             boolean clearedTask) {
-        if (task.configuration.windowConfiguration.getWindowingMode()
-                != WINDOWING_MODE_PINNED) {
+        if (task.getWindowingMode() != WINDOWING_MODE_PINNED) {
             return;
         }
         if (DEBUG) Log.d(TAG, "onPinnedActivityRestartAttempt()");
@@ -384,8 +408,7 @@ public class PipController implements Pip, PipTaskOrganizer.PipTransitionCallbac
         movePipToFullscreen();
     }
 
-    @Override
-    public void onTaskStackChanged() {
+    private void onTaskStackChanged() {
         if (DEBUG) Log.d(TAG, "onTaskStackChanged()");
 
         if (getState() != STATE_NO_PIP) {

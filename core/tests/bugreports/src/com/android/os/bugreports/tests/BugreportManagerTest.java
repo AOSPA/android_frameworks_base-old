@@ -118,6 +118,7 @@ public class BugreportManagerTest {
         // Wifi bugreports should not receive any progress.
         assertThat(callback.hasReceivedProgress()).isFalse();
         assertThat(mBugreportFile.length()).isGreaterThan(0L);
+        assertThat(callback.hasEarlyReportFinished()).isTrue();
         assertFdsAreClosed(mBugreportFd);
     }
 
@@ -135,6 +136,7 @@ public class BugreportManagerTest {
         // Interactive bugreports show progress updates.
         assertThat(callback.hasReceivedProgress()).isTrue();
         assertThat(mBugreportFile.length()).isGreaterThan(0L);
+        assertThat(callback.hasEarlyReportFinished()).isTrue();
         assertFdsAreClosed(mBugreportFd);
     }
 
@@ -246,6 +248,7 @@ public class BugreportManagerTest {
         private int mErrorCode = -1;
         private boolean mSuccess = false;
         private boolean mReceivedProgress = false;
+        private boolean mEarlyReportFinished = false;
         private final Object mLock = new Object();
 
         @Override
@@ -268,6 +271,13 @@ public class BugreportManagerTest {
             synchronized (mLock) {
                 Log.d(TAG, "bugreport finished.");
                 mSuccess =  true;
+            }
+        }
+
+        @Override
+        public void onEarlyReportFinished() {
+            synchronized (mLock) {
+                mEarlyReportFinished = true;
             }
         }
 
@@ -295,6 +305,12 @@ public class BugreportManagerTest {
                 return mReceivedProgress;
             }
         }
+
+        public boolean hasEarlyReportFinished() {
+            synchronized (mLock) {
+                return mEarlyReportFinished;
+            }
+        }
     }
 
     public static BugreportManager getBugreportManager() {
@@ -311,6 +327,7 @@ public class BugreportManagerTest {
         final File f = File.createTempFile(prefix, extension);
         f.setReadable(true, true);
         f.setWritable(true, true);
+
         f.deleteOnExit();
         return f;
     }

@@ -2645,18 +2645,12 @@ public final class ViewRootImpl implements ViewParent,
                 || mForceNextWindowRelayout) {
             mForceNextWindowRelayout = false;
 
-            if (isViewVisible) {
-                // If this window is giving internal insets to the window
-                // manager, and it is being added or changing its visibility,
-                // then we want to first give the window manager "fake"
-                // insets to cause it to effectively ignore the content of
-                // the window during layout.  This avoids it briefly causing
-                // other windows to resize/move based on the raw frame of the
-                // window, waiting until we can finish laying out this window
-                // and get back to the window manager with the ultimately
-                // computed insets.
-                insetsPending = computesInternalInsets && (mFirst || viewVisibilityChanged);
-            }
+            // If this window is giving internal insets to the window manager, then we want to first
+            // make the provided insets unchanged during layout. This avoids it briefly causing
+            // other windows to resize/move based on the raw frame of the window, waiting until we
+            // can finish laying out this window and get back to the window manager with the
+            // ultimately computed insets.
+            insetsPending = computesInternalInsets;
 
             if (mSurfaceHolder != null) {
                 mSurfaceHolder.mSurfaceLock.lock();
@@ -3914,7 +3908,8 @@ public final class ViewRootImpl implements ViewParent,
             return;
         }
 
-        final boolean fullRedrawNeeded = mFullRedrawNeeded || mReportNextDraw;
+        final boolean fullRedrawNeeded =
+                mFullRedrawNeeded || mReportNextDraw || mNextDrawUseBLASTSyncTransaction;
         mFullRedrawNeeded = false;
 
         mIsDrawing = true;
@@ -9929,6 +9924,18 @@ public final class ViewRootImpl implements ViewParent,
                 mRtBLASTSyncTransaction.apply();
             } else {
                 t.merge(mRtBLASTSyncTransaction);
+            }
+
+            // There's potential for the frame callback to get called even if nothing was drawn.
+            // When that occurs, we remove the transaction sent to BBQ since the draw we were
+            // waiting on will not happen. We can apply the transaction here but it will not contain
+            // a buffer since nothing new was drawn.
+            //
+            // This is mainly for the case when the SurfaceView has changed and wants to synchronize
+            // with the main window. If the main window doesn't need to draw anything, we can just
+            // apply the transaction without the new buffer from the main window.
+            if (mBlastBufferQueue != null) {
+                mBlastBufferQueue.setNextTransaction(null);
             }
         }
     }

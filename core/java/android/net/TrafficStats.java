@@ -301,7 +301,7 @@ public class TrafficStats {
      * Changes only take effect during subsequent calls to
      * {@link #tagSocket(Socket)}.
      */
-    @SuppressLint("Doclava125")
+    @SuppressLint("RequiresPermission")
     public static void setThreadStatsUid(int uid) {
         NetworkManagementSocketTagger.setThreadSocketStatsUid(uid);
     }
@@ -339,7 +339,7 @@ public class TrafficStats {
      *
      * @see #setThreadStatsUid(int)
      */
-    @SuppressLint("Doclava125")
+    @SuppressLint("RequiresPermission")
     public static void clearThreadStatsUid() {
         NetworkManagementSocketTagger.setThreadSocketStatsUid(-1);
     }
@@ -976,11 +976,17 @@ public class TrafficStats {
         }
     }
 
-    // NOTE: keep these in sync with android_net_TrafficStats.cpp
-    private static final int TYPE_RX_BYTES = 0;
-    private static final int TYPE_RX_PACKETS = 1;
-    private static final int TYPE_TX_BYTES = 2;
-    private static final int TYPE_TX_PACKETS = 3;
-    private static final int TYPE_TCP_RX_PACKETS = 4;
-    private static final int TYPE_TCP_TX_PACKETS = 5;
+    // NOTE: keep these in sync with {@code com_android_server_net_NetworkStatsService.cpp}.
+    /** {@hide} */
+    public static final int TYPE_RX_BYTES = 0;
+    /** {@hide} */
+    public static final int TYPE_RX_PACKETS = 1;
+    /** {@hide} */
+    public static final int TYPE_TX_BYTES = 2;
+    /** {@hide} */
+    public static final int TYPE_TX_PACKETS = 3;
+    /** {@hide} */
+    public static final int TYPE_TCP_RX_PACKETS = 4;
+    /** {@hide} */
+    public static final int TYPE_TCP_TX_PACKETS = 5;
 }

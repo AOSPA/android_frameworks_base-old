@@ -19,7 +19,7 @@ package {
 genrule {
     name: "current-api-xml",
     tools: ["metalava"],
-    srcs: ["current.txt"],
+    srcs: [":frameworks-base-api-current.txt"],
     out: ["current.api"],
     cmd: "$(location metalava) --no-banner -convert2xmlnostrip $(in) $(out)",
     visibility: ["//visibility:public"],
@@ -56,6 +56,27 @@ genrule {
         },
     ],
     visibility: ["//visibility:public"],
+}
+
+genrule {
+    name: "frameworks-base-api-current.srcjar",
+    srcs: [
+        ":api-stubs-docs-non-updatable",
+        ":conscrypt.module.public.api{.public.stubs.source}",
+        ":framework-appsearch{.public.stubs.source}",
+        ":framework-graphics{.public.stubs.source}",
+        ":framework-media{.public.stubs.source}",
+        ":framework-mediaprovider{.public.stubs.source}",
+        ":framework-permission{.public.stubs.source}",
+        ":framework-sdkextensions{.public.stubs.source}",
+        ":framework-statsd{.public.stubs.source}",
+        ":framework-tethering{.public.stubs.source}",
+        ":framework-wifi{.public.stubs.source}",
+    ],
+    out: ["current.srcjar"],
+    tools: ["merge_zips"],
+    cmd: "$(location merge_zips) $(out) $(in)",
+    visibility: ["//visibility:private"], // Used by make module in //development, mind.
 }
 
 genrule {

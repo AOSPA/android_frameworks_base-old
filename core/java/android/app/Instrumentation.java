@@ -1727,7 +1727,7 @@ public class Instrumentation {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
             int result = ActivityTaskManager.getService().startActivity(whoThread,
-                    who.getBasePackageName(), who.getAttributionTag(), intent,
+                    who.getOpPackageName(), who.getAttributionTag(), intent,
                     intent.resolveTypeIfNeeded(who.getContentResolver()), token,
                     target != null ? target.mEmbeddedID : null, requestCode, 0, null, options);
             checkStartActivityResult(result, intent);
@@ -1800,7 +1800,7 @@ public class Instrumentation {
                 resolvedTypes[i] = intents[i].resolveTypeIfNeeded(who.getContentResolver());
             }
             int result = ActivityTaskManager.getService().startActivities(whoThread,
-                    who.getBasePackageName(), who.getAttributionTag(), intents, resolvedTypes,
+                    who.getOpPackageName(), who.getAttributionTag(), intents, resolvedTypes,
                     token, options, userId);
             checkStartActivityResult(result, intents[0]);
             return result;
@@ -1868,7 +1868,7 @@ public class Instrumentation {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
             int result = ActivityTaskManager.getService().startActivity(whoThread,
-                    who.getBasePackageName(), who.getAttributionTag(), intent,
+                    who.getOpPackageName(), who.getAttributionTag(), intent,
                     intent.resolveTypeIfNeeded(who.getContentResolver()), token, target,
                     requestCode, 0, null, options);
             checkStartActivityResult(result, intent);
@@ -1936,7 +1936,7 @@ public class Instrumentation {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
             int result = ActivityTaskManager.getService().startActivityAsUser(whoThread,
-                    who.getBasePackageName(), who.getAttributionTag(), intent,
+                    who.getOpPackageName(), who.getAttributionTag(), intent,
                     intent.resolveTypeIfNeeded(who.getContentResolver()), token, resultWho,
                     requestCode, 0, null, options, user.getIdentifier());
             checkStartActivityResult(result, intent);
@@ -1982,11 +1982,11 @@ public class Instrumentation {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
             int result = ActivityTaskManager.getService()
-                .startActivityAsCaller(whoThread, who.getBasePackageName(), intent,
-                        intent.resolveTypeIfNeeded(who.getContentResolver()),
-                        token, target != null ? target.mEmbeddedID : null,
-                        requestCode, 0, null, options, permissionToken,
-                        ignoreTargetSecurity, userId);
+                    .startActivityAsCaller(whoThread, who.getOpPackageName(), intent,
+                            intent.resolveTypeIfNeeded(who.getContentResolver()),
+                            token, target != null ? target.mEmbeddedID : null,
+                            requestCode, 0, null, options, permissionToken,
+                            ignoreTargetSecurity, userId);
             checkStartActivityResult(result, intent);
         } catch (RemoteException e) {
             throw new RuntimeException("Failure from system", e);
@@ -2029,7 +2029,7 @@ public class Instrumentation {
         try {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
-            int result = appTask.startActivity(whoThread.asBinder(), who.getBasePackageName(),
+            int result = appTask.startActivity(whoThread.asBinder(), who.getOpPackageName(),
                     who.getAttributionTag(), intent,
                     intent.resolveTypeIfNeeded(who.getContentResolver()), options);
             checkStartActivityResult(result, intent);

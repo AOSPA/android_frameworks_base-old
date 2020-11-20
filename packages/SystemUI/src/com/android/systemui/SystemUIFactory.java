@@ -109,19 +109,20 @@ public class SystemUIFactory {
                     .setSplitScreen(mWMComponent.getSplitScreen())
                     .setOneHanded(mWMComponent.getOneHanded())
                     .setBubbles(mWMComponent.getBubbles())
-                    .setShellDump(mWMComponent.getShellDump());
+                    .setHideDisplayCutout(mWMComponent.getHideDisplayCutout())
+                    .setShellDump(mWMComponent.getShellDump())
+                    .setAppPairs(mWMComponent.getAppPairs());
         } else {
             // TODO: Call on prepareSysUIComponentBuilder but not with real components.
             builder = builder.setPip(Optional.ofNullable(null))
                     .setSplitScreen(Optional.ofNullable(null))
                     .setOneHanded(Optional.ofNullable(null))
                     .setBubbles(Optional.ofNullable(null))
-                    .setShellDump(Optional.ofNullable(null));
+                    .setHideDisplayCutout(Optional.ofNullable(null))
+                    .setShellDump(Optional.ofNullable(null))
+                    .setAppPairs(Optional.ofNullable(null));
         }
-        mSysUIComponent = builder
-                .setInputConsumerController(mWMComponent.getInputConsumerController())
-                .setShellTaskOrganizer(mWMComponent.getShellTaskOrganizer())
-                .build();
+        mSysUIComponent = builder.build();
         if (initializeComponents) {
             mSysUIComponent.init();
         }

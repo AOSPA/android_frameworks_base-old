@@ -61,6 +61,7 @@ import com.android.internal.util.FrameworkStatsLog;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -152,6 +153,27 @@ public class Tuner implements AutoCloseable  {
      */
     public static final int INVALID_FRONTEND_SETTING_FREQUENCY =
             android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_FRONTEND_SETTING_FREQUENCY;
+    /**
+     * Invalid frontend id.
+     */
+    public static final int INVALID_FRONTEND_ID =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_FRONTEND_ID;
+    /**
+     * Invalid LNB id.
+     *
+     * @hide
+     */
+    public static final int INVALID_LNB_ID =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_LNB_ID;
+    /**
+     * Invalid key token. It is used to remove the current key from descrambler.
+     *
+     * <p>If the current keyToken comes from a MediaCas session, App is recommended to
+     * to use this constant to remove current key before closing MediaCas session.
+     */
+    @NonNull
+    public static final byte[] INVALID_KEYTOKEN =
+            {android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_KEYTOKEN};
 
     /** @hide */
     @IntDef(prefix = "SCAN_TYPE_", value = {SCAN_TYPE_UNDEFINED, SCAN_TYPE_AUTO, SCAN_TYPE_BLIND})
@@ -346,6 +368,28 @@ public class Tuner implements AutoCloseable  {
             infos[i] = tunerFrontendInfo;
         }
         mTunerResourceManager.setFrontendInfoList(infos);
+    }
+
+    /**
+     * Get frontend info list from native and build them into a {@link FrontendInfo} list. Any
+     * {@code null} FrontendInfo element would be removed.
+     */
+    private FrontendInfo[] getFrontendInfoListInternal() {
+        List<Integer> ids = getFrontendIds();
+        if (ids == null) {
+            return null;
+        }
+        FrontendInfo[] infos = new FrontendInfo[ids.size()];
+        for (int i = 0; i < ids.size(); i++) {
+            int id = ids.get(i);
+            FrontendInfo frontendInfo = getFrontendInfoById(id);
+            if (frontendInfo == null) {
+                Log.e(TAG, "Failed to get a FrontendInfo on frontend id:" + id + "!");
+                continue;
+            }
+            infos[i] = frontendInfo;
+        }
+        return Arrays.stream(infos).filter(Objects::nonNull).toArray(FrontendInfo[]::new);
     }
 
     /** @hide */
@@ -696,10 +740,14 @@ public class Tuner implements AutoCloseable  {
     @Result
     public int scan(@NonNull FrontendSettings settings, @ScanType int scanType,
             @NonNull @CallbackExecutor Executor executor, @NonNull ScanCallback scanCallback) {
-        if (mScanCallback != null || mScanCallbackExecutor != null) {
+        /**
+         * Scan can be called again for blink scan if scanCallback and executor are same as before.
+         */
+        if (((mScanCallback != null) && (mScanCallback != scanCallback))
+                || ((mScanCallbackExecutor != null) && (mScanCallbackExecutor != executor))) {
             throw new IllegalStateException(
-                    "Scan already in progress.  stopScan must be called before a new scan can be "
-                            + "started.");
+                    "Different Scan session already in progress.  stopScan must be called "
+                        + "before a new scan session can be " + "started.");
         }
         mFrontendType = settings.getType();
         if (mFrontendType == FrontendSettings.TYPE_DTMB) {
@@ -911,7 +959,7 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
-     * Gets the frontend information.
+     * Gets the initialized frontend information.
      *
      * @return The frontend information. {@code null} if the operation failed.
      */
@@ -927,6 +975,16 @@ public class Tuner implements AutoCloseable  {
             mFrontendInfo = getFrontendInfoById(mFrontend.mId);
         }
         return mFrontendInfo;
+    }
+
+    /**
+     * Get a list all the existed frontend information.
+     *
+     * @return The list of all the frontend information. {@code null} if the operation failed.
+     */
+    @Nullable
+    public List<FrontendInfo> getFrontendInfoList() {
+        return Arrays.asList(getFrontendInfoListInternal());
     }
 
     /** @hide */

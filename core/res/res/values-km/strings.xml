@@ -1228,8 +1228,8 @@
     <string name="volume_music" msgid="7727274216734955095">"កម្រិត​សំឡេង​មេឌៀ"</string>
     <string name="volume_music_hint_playing_through_bluetooth" msgid="2614142915948898228">"ចាក់​តាម​ប៊្លូធូស"</string>
     <string name="volume_music_hint_silent_ringtone_selected" msgid="1514829655029062233">"កំណត់​សំឡេង​រោទ៍​ស្ងាត់"</string>
-    <string name="volume_call" msgid="7625321655265747433">"កម្រិត​សំឡេង​ហៅ​ចូល"</string>
-    <string name="volume_bluetooth_call" msgid="2930204618610115061">"កម្រិត​សំឡេង​ហៅ​ចូល​តាម​ប៊្លូធូស"</string>
+    <string name="volume_call" msgid="7625321655265747433">"កម្រិត​សំឡេង​ក្នុងពេលនិយាយទូរសព្ទ"</string>
+    <string name="volume_bluetooth_call" msgid="2930204618610115061">"កម្រិត​សំឡេង​ក្នុងពេលនិយាយទូរសព្ទ​តាម​ប៊្លូធូស"</string>
     <string name="volume_alarm" msgid="4486241060751798448">"កម្រិត​សំឡេងម៉ោងរោទ៍"</string>
     <string name="volume_notification" msgid="6864412249031660057">"កម្រិត​សំឡេង​ការ​ជូន​ដំណឹង"</string>
     <string name="volume_unknown" msgid="4041914008166576293">"កម្រិត​សំឡេង"</string>

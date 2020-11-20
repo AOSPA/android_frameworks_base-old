@@ -46,12 +46,11 @@ public class QuickQSPanel extends QSPanel {
 
     public static final String NUM_QUICK_TILES = "sysui_qqs_count";
     private static final String TAG = "QuickQSPanel";
-    // Start it at 6 so a non-zero value can be obtained statically.
-    private static int sDefaultMaxTiles = 6;
+    // A default value so that we never return 0.
+    public static final int DEFAULT_MAX_TILES = 6;
 
     private boolean mDisabledByPolicy;
     private int mMaxTiles;
-    protected QSPanel mFullPanel;
 
 
     @Inject
@@ -62,7 +61,8 @@ public class QuickQSPanel extends QSPanel {
             @Named(QUICK_QS_PANEL) MediaHost mediaHost,
             UiEventLogger uiEventLogger) {
         super(context, attrs, qsLogger, mediaHost, uiEventLogger);
-        sDefaultMaxTiles = getResources().getInteger(R.integer.quick_qs_panel_max_columns);
+        mMaxTiles = Math.min(DEFAULT_MAX_TILES,
+                getResources().getInteger(R.integer.quick_qs_panel_max_columns));
         applyBottomMargin((View) mRegularTileLayout);
     }
 
@@ -74,8 +74,8 @@ public class QuickQSPanel extends QSPanel {
     }
 
     @Override
-    protected void addViewsAboveTiles() {
-        // Nothing to add above the tiles
+    public void setBrightnessView(View view) {
+        // Don't add brightness view
     }
 
     @Override
@@ -117,10 +117,6 @@ public class QuickQSPanel extends QSPanel {
         return TAG;
     }
 
-    public void setQSPanelAndHeader(QSPanel fullPanel, View header) {
-        mFullPanel = fullPanel;
-    }
-
     @Override
     protected boolean shouldShowDetail() {
         return !mExpanded;
@@ -140,7 +136,7 @@ public class QuickQSPanel extends QSPanel {
     }
 
     public void setMaxTiles(int maxTiles) {
-        mMaxTiles = maxTiles;
+        mMaxTiles = Math.min(maxTiles, DEFAULT_MAX_TILES);
     }
 
     @Override
@@ -166,12 +162,8 @@ public class QuickQSPanel extends QSPanel {
             return Integer.parseInt(numTilesValue);
         } catch (NumberFormatException e) {
             // Couldn't read an int from the new setting value. Use default.
-            return sDefaultMaxTiles;
+            return DEFAULT_MAX_TILES;
         }
-    }
-
-    public static int getDefaultMaxTiles() {
-        return sDefaultMaxTiles;
     }
 
     void setDisabledByPolicy(boolean disabled) {

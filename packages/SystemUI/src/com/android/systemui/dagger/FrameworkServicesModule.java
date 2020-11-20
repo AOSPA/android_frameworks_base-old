@@ -31,6 +31,7 @@ import android.app.role.RoleManager;
 import android.app.trust.TrustManager;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.om.OverlayManager;
 import android.content.pm.IPackageManager;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
@@ -65,6 +66,7 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.inputmethod.InputMethodManager;
 
 import com.android.internal.app.IBatteryStats;
+import com.android.internal.appwidget.IAppWidgetService;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.LatencyTracker;
 import com.android.systemui.dagger.qualifiers.DisplayId;
@@ -186,6 +188,13 @@ public class FrameworkServicesModule {
     @Singleton
     static InputMethodManager provideInputMethodManager(Context context) {
         return context.getSystemService(InputMethodManager.class);
+    }
+
+    @Provides
+    @Singleton
+    static IAppWidgetService provideIAppWidgetService() {
+        return IAppWidgetService.Stub.asInterface(
+                ServiceManager.getService(Context.APPWIDGET_SERVICE));
     }
 
     @Provides
@@ -343,7 +352,7 @@ public class FrameworkServicesModule {
 
     @Provides
     static WallpaperManager provideWallpaperManager(Context context) {
-        return (WallpaperManager) context.getSystemService(Context.WALLPAPER_SERVICE);
+        return context.getSystemService(WallpaperManager.class);
     }
 
     @Provides
@@ -351,6 +360,12 @@ public class FrameworkServicesModule {
     @Nullable
     static WifiManager provideWifiManager(Context context) {
         return context.getSystemService(WifiManager.class);
+    }
+
+    @Provides
+    @Singleton
+    static OverlayManager provideOverlayManager(Context context) {
+        return context.getSystemService(OverlayManager.class);
     }
 
     @Provides

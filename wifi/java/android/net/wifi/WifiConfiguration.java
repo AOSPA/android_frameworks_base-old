@@ -29,7 +29,6 @@ import android.net.NetworkSpecifier;
 import android.net.ProxyInfo;
 import android.net.StaticIpConfiguration;
 import android.net.Uri;
-import android.net.util.MacAddressUtils;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -43,6 +42,7 @@ import android.util.Log;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.net.module.util.MacAddressUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -448,8 +448,19 @@ public class WifiConfiguration implements Parcelable {
     public static final int SECURITY_TYPE_EAP = 3;
     /** Security type for an SAE network. */
     public static final int SECURITY_TYPE_SAE = 4;
-    /** Security type for an EAP Suite B network. */
-    public static final int SECURITY_TYPE_EAP_SUITE_B = 5;
+    /**
+     * Security type for a WPA3-Enterprise in 192-bit security network.
+     * This is the same as {@link #SECURITY_TYPE_EAP_SUITE_B} and uses the same value.
+     */
+    public static final int SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT = 5;
+    /**
+     * Security type for a WPA3-Enterprise in 192-bit security network.
+     * @deprecated Use the {@link #SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT} constant
+     * (which is the same value).
+     */
+    @Deprecated
+    public static final int SECURITY_TYPE_EAP_SUITE_B =
+            SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT;
     /** Security type for an OWE network. */
     public static final int SECURITY_TYPE_OWE = 6;
     /** Security type for a WAPI PSK network. */
@@ -475,6 +486,7 @@ public class WifiConfiguration implements Parcelable {
             SECURITY_TYPE_WAPI_PSK,
             SECURITY_TYPE_WAPI_CERT,
             SECURITY_TYPE_EAP_WPA3_ENTERPRISE,
+            SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT,
     })
     public @interface SecurityType {}
 
@@ -492,7 +504,8 @@ public class WifiConfiguration implements Parcelable {
      * {@link #SECURITY_TYPE_OWE},
      * {@link #SECURITY_TYPE_WAPI_PSK},
      * {@link #SECURITY_TYPE_WAPI_CERT},
-     * {@link #SECURITY_TYPE_EAP_WPA3_ENTERPRISE}
+     * {@link #SECURITY_TYPE_EAP_WPA3_ENTERPRISE},
+     * {@link #SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT}
      */
     public void setSecurityParams(@SecurityType int securityType) {
         // Clear all the bitsets.
@@ -531,7 +544,10 @@ public class WifiConfiguration implements Parcelable {
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_256);
                 requirePmf = true;
                 break;
-            case SECURITY_TYPE_EAP_SUITE_B:
+            // The value of {@link SECURITY_TYPE_EAP_SUITE_B} is the same as
+            // {@link SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT}, remove it to avoid
+            // duplicate case label errors.
+            case SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT:
                 allowedProtocols.set(WifiConfiguration.Protocol.RSN);
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_EAP);
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.IEEE8021X);
@@ -1056,6 +1072,15 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      */
     public boolean oemPrivate;
+
+    /**
+     * Indicate whether or not the network is a carrier merged network.
+     * This bit can only be used by suggestion network, see
+     * {@link WifiNetworkSuggestion.Builder#setCarrierMerged(boolean)}
+     * @hide
+     */
+    @SystemApi
+    public boolean carrierMerged;
 
     /**
      * True if this Wifi configuration is created from a {@link WifiNetworkSuggestion},
@@ -2312,6 +2337,7 @@ public class WifiConfiguration implements Parcelable {
         trusted = true; // Networks are considered trusted by default.
         oemPaid = false;
         oemPrivate = false;
+        carrierMerged = false;
         fromWifiNetworkSuggestion = false;
         fromWifiNetworkSpecifier = false;
         meteredHint = false;
@@ -2440,12 +2466,13 @@ public class WifiConfiguration implements Parcelable {
         if (this.trusted) sbuf.append(" trusted");
         if (this.oemPaid) sbuf.append(" oemPaid");
         if (this.oemPrivate) sbuf.append(" oemPrivate");
+        if (this.carrierMerged) sbuf.append(" carrierMerged");
         if (this.fromWifiNetworkSuggestion) sbuf.append(" fromWifiNetworkSuggestion");
         if (this.fromWifiNetworkSpecifier) sbuf.append(" fromWifiNetworkSpecifier");
         if (this.meteredHint) sbuf.append(" meteredHint");
         if (this.useExternalScores) sbuf.append(" useExternalScores");
         if (this.validatedInternetAccess || this.ephemeral || this.trusted || this.oemPaid
-                || this.oemPrivate || this.fromWifiNetworkSuggestion
+                || this.oemPrivate || this.carrierMerged || this.fromWifiNetworkSuggestion
                 || this.fromWifiNetworkSpecifier || this.meteredHint || this.useExternalScores) {
             sbuf.append("\n");
         }
@@ -2785,17 +2812,18 @@ public class WifiConfiguration implements Parcelable {
     }
 
     /**
-     * Get a key for this WifiConfig to generate Persist random Mac Address.
+     * Get a unique key which represent this Wi-Fi network. If two profiles are for
+     * the same Wi-Fi network, but from different provider, they would have the same key.
      * @hide
      */
-    public String getMacRandomKey() {
+    public String getNetworkKey() {
         // Passpoint ephemeral networks have their unique identifier set. Return it as is to be
         // able to match internally.
         if (mPasspointUniqueId != null) {
             return mPasspointUniqueId;
         }
 
-        String key = getSsidAndSecurityTypeString();
+        String key = SSID + getDefaultSecurityType();
         if (!shared) {
             key += "-" + UserHandle.getUserHandleForUid(creatorUid).getIdentifier();
         }
@@ -3031,6 +3059,7 @@ public class WifiConfiguration implements Parcelable {
             trusted = source.trusted;
             oemPaid = source.oemPaid;
             oemPrivate = source.oemPrivate;
+            carrierMerged = source.carrierMerged;
             fromWifiNetworkSuggestion = source.fromWifiNetworkSuggestion;
             fromWifiNetworkSpecifier = source.fromWifiNetworkSpecifier;
             meteredHint = source.meteredHint;
@@ -3119,6 +3148,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(trusted ? 1 : 0);
         dest.writeInt(oemPaid ? 1 : 0);
         dest.writeInt(oemPrivate ? 1 : 0);
+        dest.writeInt(carrierMerged ? 1 : 0);
         dest.writeInt(fromWifiNetworkSuggestion ? 1 : 0);
         dest.writeInt(fromWifiNetworkSpecifier ? 1 : 0);
         dest.writeInt(meteredHint ? 1 : 0);
@@ -3203,6 +3233,7 @@ public class WifiConfiguration implements Parcelable {
                 config.trusted = in.readInt() != 0;
                 config.oemPaid = in.readInt() != 0;
                 config.oemPrivate = in.readInt() != 0;
+                config.carrierMerged = in.readInt() != 0;
                 config.fromWifiNetworkSuggestion =  in.readInt() != 0;
                 config.fromWifiNetworkSpecifier =  in.readInt() != 0;
                 config.meteredHint = in.readInt() != 0;
@@ -3281,6 +3312,58 @@ public class WifiConfiguration implements Parcelable {
         return allowedKeyManagement.get(KeyMgmt.WPA_PSK)
                 || allowedKeyManagement.get(KeyMgmt.SAE)
                 || allowedKeyManagement.get(KeyMgmt.WAPI_PSK);
+    }
+
+    /**
+     * Get a unique key which represent this Wi-Fi configuration profile. If two profiles are for
+     * the same Wi-Fi network, but from different providers (apps, carriers, or data subscriptions),
+     * they would have different keys.
+     * @return a unique key which represent this profile.
+     * @hide
+     */
+    @SystemApi
+    @NonNull public String getProfileKey() {
+        if (mPasspointUniqueId != null) {
+            return mPasspointUniqueId;
+        }
+
+        String key = SSID + getDefaultSecurityType();
+        if (!shared) {
+            key += "-" + UserHandle.getUserHandleForUid(creatorUid).getIdentifier();
+        }
+        if (fromWifiNetworkSuggestion) {
+            key += "_" + creatorName + "-" + carrierId + "-" + subscriptionId;
+        }
+
+        return key;
+    }
+
+    private String getDefaultSecurityType() {
+        String key;
+        if (allowedKeyManagement.get(KeyMgmt.WPA_PSK)) {
+            key = KeyMgmt.strings[KeyMgmt.WPA_PSK];
+        } else if (allowedKeyManagement.get(KeyMgmt.WPA_EAP)
+                || allowedKeyManagement.get(KeyMgmt.IEEE8021X)) {
+            key = KeyMgmt.strings[KeyMgmt.WPA_EAP];
+        } else if (wepTxKeyIndex >= 0 && wepTxKeyIndex < wepKeys.length
+                && wepKeys[wepTxKeyIndex] != null) {
+            key = "WEP";
+        } else if (allowedKeyManagement.get(KeyMgmt.OWE)) {
+            key = KeyMgmt.strings[KeyMgmt.OWE];
+        } else if (allowedKeyManagement.get(KeyMgmt.SAE)) {
+            key = KeyMgmt.strings[KeyMgmt.SAE];
+        } else if (allowedKeyManagement.get(KeyMgmt.SUITE_B_192)) {
+            key = KeyMgmt.strings[KeyMgmt.SUITE_B_192];
+        } else if (allowedKeyManagement.get(KeyMgmt.WAPI_PSK)) {
+            key = KeyMgmt.strings[KeyMgmt.WAPI_PSK];
+        } else if (allowedKeyManagement.get(KeyMgmt.WAPI_CERT)) {
+            key = KeyMgmt.strings[KeyMgmt.WAPI_CERT];
+        } else if (allowedKeyManagement.get(KeyMgmt.OSEN)) {
+            key = KeyMgmt.strings[KeyMgmt.OSEN];
+        } else {
+            key = KeyMgmt.strings[KeyMgmt.NONE];
+        }
+        return key;
     }
 
 }

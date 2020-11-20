@@ -79,21 +79,22 @@ public class LocationTimeZoneManagerService extends Binder {
 
         @Override
         public void onStart() {
-            if (TimeZoneDetectorService.GEOLOCATION_TIME_ZONE_DETECTION_ENABLED) {
-                Context context = getContext();
+            Context context = getContext();
+            if (TimeZoneDetectorService.isGeoLocationTimeZoneDetectionEnabled(context)) {
                 mService = new LocationTimeZoneManagerService(context);
 
                 // The service currently exposes no LocalService or Binder API, but it extends
                 // Binder and is registered as a binder service so it can receive shell commands.
                 publishBinderService("location_time_zone_manager", mService);
             } else {
-                Slog.i(TAG, getClass() + " is compile-time disabled");
+                Slog.i(TAG, getClass() + " is disabled");
             }
         }
 
         @Override
         public void onBootPhase(int phase) {
-            if (TimeZoneDetectorService.GEOLOCATION_TIME_ZONE_DETECTION_ENABLED) {
+            Context context = getContext();
+            if (TimeZoneDetectorService.isGeoLocationTimeZoneDetectionEnabled(context)) {
                 if (phase == PHASE_SYSTEM_SERVICES_READY) {
                     // The location service must be functioning after this boot phase.
                     mService.onSystemReady();

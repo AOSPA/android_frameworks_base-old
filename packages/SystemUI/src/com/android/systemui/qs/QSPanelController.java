@@ -16,26 +16,32 @@
 
 package com.android.systemui.qs;
 
+import static com.android.systemui.media.dagger.MediaModule.QS_PANEL;
 import static com.android.systemui.qs.QSPanel.QS_SHOW_BRIGHTNESS;
 
 import android.annotation.NonNull;
 import android.content.res.Configuration;
+import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
-import com.android.systemui.R;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.media.MediaHost;
+import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.qs.customize.QSCustomizerController;
 import com.android.systemui.qs.dagger.QSScope;
-import com.android.systemui.settings.BrightnessController;
+import com.android.systemui.settings.brightness.BrightnessController;
+import com.android.systemui.settings.brightness.BrightnessSlider;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
 import com.android.systemui.tuner.TunerService;
 
+import java.util.function.Consumer;
+
 import javax.inject.Inject;
+import javax.inject.Named;
 
 /**
  * Controller for {@link QSPanel}.
@@ -45,7 +51,10 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
     private final QSSecurityFooter mQsSecurityFooter;
     private final TunerService mTunerService;
     private final QSCustomizerController mQsCustomizerController;
+    private final QSTileRevealController.Factory mQsTileRevealControllerFactory;
     private final BrightnessController mBrightnessController;
+    private final BrightnessSlider.Factory mBrightnessSliderFactory;
+    private final BrightnessSlider mBrightnessSlider;
 
     private final QSPanel.OnConfigurationChangedListener mOnConfigurationChangedListener =
             new QSPanel.OnConfigurationChangedListener() {
@@ -56,29 +65,42 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
             if (mView.isListening()) {
                 refreshAllTiles();
             }
+            updateBrightnessMirror();
         }
     };
     private BrightnessMirrorController mBrightnessMirrorController;
 
+    private final BrightnessMirrorController.BrightnessMirrorListener mBrightnessMirrorListener =
+            mirror -> updateBrightnessMirror();
+
     @Inject
     QSPanelController(QSPanel view, QSSecurityFooter qsSecurityFooter, TunerService tunerService,
             QSTileHost qstileHost, QSCustomizerController qsCustomizerController,
+            @Named(QS_PANEL) MediaHost mediaHost,
             QSTileRevealController.Factory qsTileRevealControllerFactory,
             DumpManager dumpManager, MetricsLogger metricsLogger, UiEventLogger uiEventLogger,
-            BrightnessController.Factory brightnessControllerFactory) {
-        super(view, qstileHost, qsCustomizerController, qsTileRevealControllerFactory,
-                metricsLogger, uiEventLogger, dumpManager);
+            BrightnessController.Factory brightnessControllerFactory,
+            BrightnessSlider.Factory brightnessSliderFactory) {
+        super(view, qstileHost, qsCustomizerController, mediaHost, metricsLogger, uiEventLogger,
+                dumpManager);
         mQsSecurityFooter = qsSecurityFooter;
         mTunerService = tunerService;
         mQsCustomizerController = qsCustomizerController;
+        mQsTileRevealControllerFactory = qsTileRevealControllerFactory;
         mQsSecurityFooter.setHostEnvironment(qstileHost);
-        mBrightnessController = brightnessControllerFactory.create(
-                mView.findViewById(R.id.brightness_slider));
+        mBrightnessSliderFactory = brightnessSliderFactory;
+
+        mBrightnessSlider = mBrightnessSliderFactory.create(getContext(), mView);
+        mView.setBrightnessView(mBrightnessSlider.getRootView());
+
+        mBrightnessController = brightnessControllerFactory.create(mBrightnessSlider);
     }
 
     @Override
     public void onInit() {
+        super.onInit();
         mQsCustomizerController.init();
+        mBrightnessSlider.init();
     }
 
     @Override
@@ -93,8 +115,14 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
         mView.setSecurityFooter(mQsSecurityFooter.getView());
         switchTileLayout(true);
         if (mBrightnessMirrorController != null) {
-            mBrightnessMirrorController.addCallback(mView);
+            mBrightnessMirrorController.addCallback(mBrightnessMirrorListener);
         }
+    }
+
+    @Override
+    protected QSTileRevealController createTileRevealController() {
+        return mQsTileRevealControllerFactory.create(
+                this, (PagedTileLayout) mView.createRegularTileLayout());
     }
 
     @Override
@@ -102,7 +130,7 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
         mTunerService.removeTunable(mView);
         mView.removeOnConfigurationChangedListener(mOnConfigurationChangedListener);
         if (mBrightnessMirrorController != null) {
-            mBrightnessMirrorController.removeCallback(mView);
+            mBrightnessMirrorController.removeCallback(mBrightnessMirrorListener);
         }
         super.onViewDetached();
     }
@@ -117,10 +145,6 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
      */
     public void setHeaderContainer(@NonNull ViewGroup headerContainer) {
         mView.setHeaderContainer(headerContainer);
-    }
-
-    public QSPanel.QSTileLayout getTileLayout() {
-        return mView.getTileLayout();
     }
 
     /** */
@@ -147,14 +171,22 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
     }
 
     /** */
-    public MediaHost getMediaHost() {
-        return mView.getMediaHost();
-    }
-
-    /** */
     public void setBrightnessMirror(BrightnessMirrorController brightnessMirrorController) {
         mBrightnessMirrorController = brightnessMirrorController;
-        mView.setBrightnessMirror(brightnessMirrorController);
+        if (mBrightnessMirrorController != null) {
+            mBrightnessMirrorController.removeCallback(mBrightnessMirrorListener);
+        }
+        mBrightnessMirrorController = brightnessMirrorController;
+        if (mBrightnessMirrorController != null) {
+            mBrightnessMirrorController.addCallback(mBrightnessMirrorListener);
+        }
+        updateBrightnessMirror();
+    }
+
+    private void updateBrightnessMirror() {
+        if (mBrightnessMirrorController != null) {
+            mBrightnessSlider.setMirrorControllerAndMirror(mBrightnessMirrorController);
+        }
     }
 
     /** Get the QSTileHost this panel uses. */
@@ -209,4 +241,56 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
     public void setGridContentVisibility(boolean visible) {
         mView.setGridContentVisibility(visible);
     }
+
+    public boolean isLayoutRtl() {
+        return mView.isLayoutRtl();
+    }
+
+    public View getBrightnessView() {
+        return mView.getBrightnessView();
+    }
+
+    public View getDivider() {
+        return mView.getDivider();
+    }
+
+    /** */
+    public void setPageListener(PagedTileLayout.PageListener listener) {
+        mView.setPageListener(listener);
+    }
+
+    /** */
+    public void setMediaVisibilityChangedListener(Consumer<Boolean> visibilityChangedListener) {
+        mView.setMediaVisibilityChangedListener(visibilityChangedListener);
+    }
+
+    public boolean isShown() {
+        return mView.isShown();
+    }
+
+    /** */
+    public void setContentMargins(int startMargin, int endMargin) {
+        mView.setContentMargins(startMargin, endMargin);
+    }
+
+    /** */
+    public Pair<Integer, Integer> getVisualSideMargins() {
+        return mView.getVisualSideMargins();
+    }
+
+    /** */
+    public void showDetailDapater(DetailAdapter detailAdapter, int x, int y) {
+        mView.showDetailAdapter(true, detailAdapter, new int[]{x, y});
+    }
+
+    /** */
+    public void setFooterPageIndicator(PageIndicator pageIndicator) {
+        mView.setFooterPageIndicator(pageIndicator);
+    }
+
+    /** */
+    public boolean isExpanded() {
+        return mView.isExpanded();
+    }
 }
+

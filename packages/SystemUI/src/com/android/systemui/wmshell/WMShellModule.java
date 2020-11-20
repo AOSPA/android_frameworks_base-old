@@ -24,15 +24,18 @@ import com.android.systemui.dagger.WMSingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.WindowManagerShellWrapper;
+import com.android.wm.shell.apppairs.AppPairs;
+import com.android.wm.shell.apppairs.AppPairsController;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.common.FloatingContentCoordinator;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.SystemWindows;
+import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.pip.Pip;
-import com.android.wm.shell.pip.PipBoundsHandler;
+import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
@@ -72,36 +75,44 @@ public class WMShellModule {
             DisplayController displayController, SystemWindows systemWindows,
             DisplayImeController displayImeController, @Main Handler handler,
             TransactionPool transactionPool, ShellTaskOrganizer shellTaskOrganizer,
-            SyncTransactionQueue syncQueue) {
+            SyncTransactionQueue syncQueue, TaskStackListenerImpl taskStackListener) {
         return new SplitScreenController(context, displayController, systemWindows,
-                displayImeController, handler, transactionPool, shellTaskOrganizer, syncQueue);
+                displayImeController, handler, transactionPool, shellTaskOrganizer, syncQueue,
+                taskStackListener);
+    }
+
+    @WMSingleton
+    @Provides
+    static AppPairs provideAppPairs(ShellTaskOrganizer shellTaskOrganizer,
+            SyncTransactionQueue syncQueue) {
+        return new AppPairsController(shellTaskOrganizer, syncQueue);
     }
 
     @WMSingleton
     @Provides
     static Optional<Pip> providePip(Context context, DisplayController displayController,
-            PipAppOpsListener pipAppOpsListener, PipBoundsHandler pipBoundsHandler,
+            PipAppOpsListener pipAppOpsListener, PipBoundsAlgorithm pipBoundsAlgorithm,
             PipBoundsState pipBoundsState, PipMediaController pipMediaController,
             PipMenuActivityController pipMenuActivityController, PipTaskOrganizer pipTaskOrganizer,
             PipTouchHandler pipTouchHandler, WindowManagerShellWrapper windowManagerShellWrapper,
-            ShellExecutor mainExecutor) {
+            TaskStackListenerImpl taskStackListener, ShellExecutor mainExecutor) {
         return Optional.ofNullable(PipController.create(context, displayController,
-                pipAppOpsListener, pipBoundsHandler, pipBoundsState, pipMediaController,
+                pipAppOpsListener, pipBoundsAlgorithm, pipBoundsState, pipMediaController,
                 pipMenuActivityController, pipTaskOrganizer, pipTouchHandler,
-                windowManagerShellWrapper, mainExecutor));
+                windowManagerShellWrapper, taskStackListener, mainExecutor));
     }
 
     @WMSingleton
     @Provides
-    static PipBoundsState providePipBoundsState() {
-        return new PipBoundsState();
+    static PipBoundsState providePipBoundsState(Context context) {
+        return new PipBoundsState(context);
     }
 
     @WMSingleton
     @Provides
-    static PipBoundsHandler providesPipBoundsHandler(Context context,
+    static PipBoundsAlgorithm providesPipBoundsHandler(Context context,
             PipBoundsState pipBoundsState) {
-        return new PipBoundsHandler(context, pipBoundsState);
+        return new PipBoundsAlgorithm(context, pipBoundsState);
     }
 
     @WMSingleton
@@ -114,12 +125,12 @@ public class WMShellModule {
     @WMSingleton
     @Provides
     static PipTouchHandler providePipTouchHandler(Context context,
-            PipMenuActivityController menuActivityController, PipBoundsHandler pipBoundsHandler,
+            PipMenuActivityController menuActivityController, PipBoundsAlgorithm pipBoundsAlgorithm,
             PipBoundsState pipBoundsState,
             PipTaskOrganizer pipTaskOrganizer,
             FloatingContentCoordinator floatingContentCoordinator,
             PipUiEventLogger pipUiEventLogger) {
-        return new PipTouchHandler(context, menuActivityController, pipBoundsHandler,
+        return new PipTouchHandler(context, menuActivityController, pipBoundsAlgorithm,
                 pipBoundsState, pipTaskOrganizer, floatingContentCoordinator, pipUiEventLogger);
     }
 
@@ -127,12 +138,12 @@ public class WMShellModule {
     @Provides
     static PipTaskOrganizer providePipTaskOrganizer(Context context,
             PipBoundsState pipBoundsState,
-            PipBoundsHandler pipBoundsHandler,
+            PipBoundsAlgorithm pipBoundsAlgorithm,
             PipMenuActivityController menuActivityController,
             PipSurfaceTransactionHelper pipSurfaceTransactionHelper,
             Optional<SplitScreen> splitScreenOptional, DisplayController displayController,
             PipUiEventLogger pipUiEventLogger, ShellTaskOrganizer shellTaskOrganizer) {
-        return new PipTaskOrganizer(context, pipBoundsState, pipBoundsHandler,
+        return new PipTaskOrganizer(context, pipBoundsState, pipBoundsAlgorithm,
                 menuActivityController, pipSurfaceTransactionHelper, splitScreenOptional,
                 displayController, pipUiEventLogger, shellTaskOrganizer);
     }

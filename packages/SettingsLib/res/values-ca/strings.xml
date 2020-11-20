@@ -399,6 +399,9 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"Aplicació inactiva. Toca per activar-la."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"Aplicació activa. Toca per desactivar-la."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"Estat de les aplicacions inactives: <xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <string name="transcode_settings_title" msgid="6700974145733932357">"Configuració de la transcodificació de contingut multimèdia"</string>
+    <string name="transcode_enable_all" msgid="4719796495995795404">"Activa la transcodificació per a totes les aplicacions"</string>
+    <string name="transcode_skip_apps" msgid="5680997722349545778">"Desactiva la transcodificació per a les aplicacions"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"Serveis en execució"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"Visualitza i controla els serveis en execució"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"Implementació de WebView"</string>
@@ -531,7 +534,7 @@
     <string name="user_add_profile_item_title" msgid="3111051717414643029">"Perfil restringit"</string>
     <string name="user_add_user_title" msgid="5457079143694924885">"Vols afegir un usuari nou?"</string>
     <string name="user_add_user_message_long" msgid="1527434966294733380">"Pots compartir aquest dispositiu amb altres persones creant usuaris addicionals. Cada usuari té el seu propi espai, que pot personalitzar amb aplicacions i fons de pantalla, entre d\'altres. Els usuaris també poden ajustar opcions de configuració del dispositiu, com ara la Wi-Fi, que afecten els altres usuaris.\n\nQuan afegeixis un usuari nou, haurà de configurar el seu espai.\n\nTots els usuaris poden actualitzar les aplicacions de la resta. És possible que la configuració i els serveis d\'accessibilitat no es transfereixin a l\'usuari nou."</string>
-    <string name="user_add_user_message_short" msgid="3295959985795716166">"Quan s\'afegeix un usuari nou, aquest usuari ha de configurar el seu espai.\n\nQualsevol usuari pot actualitzar les aplicacions dels altres usuaris."</string>
+    <string name="user_add_user_message_short" msgid="3295959985795716166">"Quan s\'afegeix un usuari nou, aquesta persona ha de configurar el seu espai.\n\nQualsevol usuari pot actualitzar les aplicacions dels altres usuaris."</string>
     <string name="user_setup_dialog_title" msgid="8037342066381939995">"Vols configurar l\'usuari ara?"</string>
     <string name="user_setup_dialog_message" msgid="269931619868102841">"Assegura\'t que la persona estigui disponible per accedir al dispositiu i configurar el seu espai."</string>
     <string name="user_setup_profile_dialog_message" msgid="4788197052296962620">"Vols configurar el perfil ara?"</string>
@@ -558,4 +561,6 @@
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"Activat"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"Has de reiniciar el teu dispositiu perquè s\'apliquin els canvis. Reinicia\'l ara o cancel·la."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"Auriculars amb cable"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"Activa"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"Desactiva"</string>
 </resources>

@@ -28,11 +28,11 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.dagger.WMSingleton;
 import com.android.systemui.dagger.qualifiers.Main;
-import com.android.systemui.shared.system.InputConsumerController;
 import com.android.wm.shell.ShellDump;
 import com.android.wm.shell.ShellInit;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.WindowManagerShellWrapper;
+import com.android.wm.shell.apppairs.AppPairs;
 import com.android.wm.shell.bubbles.BubbleController;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.common.AnimationThread;
@@ -43,8 +43,11 @@ import com.android.wm.shell.common.HandlerExecutor;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.SystemWindows;
+import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.draganddrop.DragAndDropController;
+import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
+import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedController;
 import com.android.wm.shell.pip.Pip;
@@ -73,11 +76,13 @@ public abstract class WMShellBaseModule {
     static ShellInit provideShellInit(DisplayImeController displayImeController,
             DragAndDropController dragAndDropController,
             ShellTaskOrganizer shellTaskOrganizer,
-            Optional<SplitScreen> splitScreenOptional) {
+            Optional<SplitScreen> splitScreenOptional,
+            Optional<AppPairs> appPairsOptional) {
         return new ShellInit(displayImeController,
                 dragAndDropController,
                 shellTaskOrganizer,
-                splitScreenOptional);
+                splitScreenOptional,
+                appPairsOptional);
     }
 
     /**
@@ -89,9 +94,11 @@ public abstract class WMShellBaseModule {
     static Optional<ShellDump> provideShellDump(ShellTaskOrganizer shellTaskOrganizer,
             Optional<SplitScreen> splitScreenOptional,
             Optional<Pip> pipOptional,
-            Optional<OneHanded> oneHandedOptional) {
+            Optional<OneHanded> oneHandedOptional,
+            Optional<HideDisplayCutout> hideDisplayCutout,
+            Optional<AppPairs> appPairsOptional) {
         return Optional.of(new ShellDump(shellTaskOrganizer, splitScreenOptional, pipOptional,
-                oneHandedOptional));
+                oneHandedOptional, hideDisplayCutout, appPairsOptional));
     }
 
     @WMSingleton
@@ -112,12 +119,6 @@ public abstract class WMShellBaseModule {
     static DragAndDropController provideDragAndDropController(Context context,
             DisplayController displayController) {
         return new DragAndDropController(context, displayController);
-    }
-
-    @WMSingleton
-    @Provides
-    static InputConsumerController provideInputConsumerController() {
-        return InputConsumerController.getPipInputConsumer();
     }
 
     @WMSingleton
@@ -176,13 +177,22 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static ShellTaskOrganizer provideShellTaskOrganizer(SyncTransactionQueue syncQueue,
-            ShellExecutor mainExecutor, TransactionPool transactionPool) {
+            ShellExecutor mainExecutor, TransactionPool transactionPool, Context context) {
         return new ShellTaskOrganizer(syncQueue, transactionPool,
-                mainExecutor, AnimationThread.instance().getExecutor());
+                mainExecutor, AnimationThread.instance().getExecutor(), context);
+    }
+
+    @WMSingleton
+    @Provides
+    static TaskStackListenerImpl providerTaskStackListenerImpl(@Main Handler handler) {
+        return new TaskStackListenerImpl(handler);
     }
 
     @BindsOptionalOf
     abstract SplitScreen optionalSplitScreen();
+
+    @BindsOptionalOf
+    abstract AppPairs optionalAppPairs();
 
     @WMSingleton
     @Provides
@@ -203,8 +213,9 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Optional<OneHanded> provideOneHandedController(Context context,
-            DisplayController displayController) {
-        return Optional.ofNullable(OneHandedController.create(context, displayController));
+            DisplayController displayController, TaskStackListenerImpl taskStackListener) {
+        return Optional.ofNullable(OneHandedController.create(context, displayController,
+                taskStackListener));
     }
 
     @WMSingleton
@@ -213,4 +224,10 @@ public abstract class WMShellBaseModule {
         return new HandlerExecutor(handler);
     }
 
+    @WMSingleton
+    @Provides
+    static Optional<HideDisplayCutout> provideHideDisplayCutoutController(Context context,
+            DisplayController displayController) {
+        return Optional.ofNullable(HideDisplayCutoutController.create(context, displayController));
+    }
 }

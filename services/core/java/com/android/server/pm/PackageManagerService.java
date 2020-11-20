@@ -319,6 +319,8 @@ import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.TimingsTraceLog;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.util.apk.ApkSignatureVerifier;
 import android.util.jar.StrictJarFile;
@@ -2217,14 +2219,15 @@ public class PackageManagerService extends IPackageManager.Stub
             // that the installer requested to be granted at install time.
             if (whitelistedRestrictedPermissions != null
                     && !whitelistedRestrictedPermissions.isEmpty()) {
-                mPermissionManager.setWhitelistedRestrictedPermissions(
-                        res.pkg, res.newUsers, whitelistedRestrictedPermissions,
-                        Process.myUid(), FLAG_PERMISSION_WHITELIST_INSTALLER);
+                mPermissionManager.setAllowlistedRestrictedPermissions(res.pkg,
+                        whitelistedRestrictedPermissions, FLAG_PERMISSION_WHITELIST_INSTALLER,
+                        res.newUsers);
             }
 
-            if (autoRevokePermissionsMode == MODE_ALLOWED || autoRevokePermissionsMode == MODE_IGNORED) {
-                mPermissionManager.setAutoRevokeWhitelisted(res.pkg.getPackageName(),
-                        autoRevokePermissionsMode == MODE_IGNORED, UserHandle.myUserId());
+            if (autoRevokePermissionsMode == MODE_ALLOWED
+                    || autoRevokePermissionsMode == MODE_IGNORED) {
+                mPermissionManager.setAutoRevokeExempted(res.pkg,
+                        autoRevokePermissionsMode == MODE_IGNORED, res.newUsers);
             }
 
             // Now that we successfully installed the package, grant runtime
@@ -2234,8 +2237,9 @@ public class PackageManagerService extends IPackageManager.Stub
             // legacy apps.
             if (grantPermissions) {
                 final int callingUid = Binder.getCallingUid();
-                mPermissionManager.grantRequestedRuntimePermissions(
-                        res.pkg, res.newUsers, grantedPermissions, callingUid);
+                mPermissionManager.grantRequestedRuntimePermissions(res.pkg,
+                        grantedPermissions != null ? Arrays.asList(grantedPermissions) : null,
+                        res.newUsers);
             }
 
             final String installerPackageName =
@@ -6637,14 +6641,16 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     // NOTE: Can't remove due to unsupported app usage
+    @NonNull
     @Override
-    public String[] getAppOpPermissionPackages(String permName) {
-        try {
-            // Because this is accessed via the package manager service AIDL,
-            // go through the permission manager service AIDL
-            return mPermissionManagerService.getAppOpPermissionPackages(permName);
-        } catch (RemoteException ignore) { }
-        return null;
+    public String[] getAppOpPermissionPackages(String permissionName) {
+        if (permissionName == null) {
+            return EmptyArray.STRING;
+        }
+        if (getInstantAppPackageName(getCallingUid()) != null) {
+            return EmptyArray.STRING;
+        }
+        return mPermissionManager.getAppOpPermissionPackages(permissionName);
     }
 
     @Override
@@ -10851,7 +10857,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     continue;
                 }
                 final PackageSetting staticLibPkgSetting = getPackageSetting(
-                        toStaticSharedLibraryPackageName(sharedLibraryInfo.getPackageName(),
+                        toStaticSharedLibraryPackageName(sharedLibraryInfo.getName(),
                                 sharedLibraryInfo.getLongVersion()));
                 if (staticLibPkgSetting == null) {
                     Slog.wtf(TAG, "Shared lib without setting: " + sharedLibraryInfo);
@@ -13577,12 +13583,15 @@ public class PackageManagerService extends IPackageManager.Stub
             }
 
             if (installed) {
-                if ((installFlags & PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS)
-                        != 0 && pkgSetting.pkg != null) {
-                    whiteListedPermissions = pkgSetting.pkg.getRequestedPermissions();
+                if (pkgSetting.pkg != null) {
+                    if ((installFlags & PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS)
+                            != 0) {
+                        whiteListedPermissions = pkgSetting.pkg.getRequestedPermissions();
+                    }
+                    mPermissionManager.setAllowlistedRestrictedPermissions(pkgSetting.pkg,
+                            whiteListedPermissions, FLAG_PERMISSION_WHITELIST_INSTALLER,
+                            new int[] { userId });
                 }
-                mPermissionManager.setWhitelistedRestrictedPermissions(packageName,
-                        whiteListedPermissions, FLAG_PERMISSION_WHITELIST_INSTALLER, userId);
 
                 if (pkgSetting.pkg != null) {
                     synchronized (mInstallLock) {
@@ -19686,6 +19695,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     if (installed) {
                         ps.setUninstallReason(UNINSTALL_REASON_UNKNOWN, userId);
                     }
+
+                    mSettings.writeRuntimePermissionsForUserLPr(userId, false);
                 }
                 // Regardless of writeSettings we need to ensure that this restriction
                 // state propagation is persisted
@@ -20761,7 +20772,7 @@ public class PackageManagerService extends IPackageManager.Stub
      * Common machinery for picking apart a restored XML blob and passing
      * it to a caller-supplied functor to be applied to the running system.
      */
-    private void restoreFromXml(XmlPullParser parser, int userId,
+    private void restoreFromXml(TypedXmlPullParser parser, int userId,
             String expectedStartTag, BlobXmlRestorer functor)
             throws IOException, XmlPullParserException {
         int type;
@@ -20789,7 +20800,8 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private interface BlobXmlRestorer {
-        void apply(XmlPullParser parser, int userId) throws IOException, XmlPullParserException;
+        void apply(TypedXmlPullParser parser, int userId)
+                throws IOException, XmlPullParserException;
     }
 
     /**
@@ -20805,7 +20817,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         ByteArrayOutputStream dataStream = new ByteArrayOutputStream();
         try {
-            final XmlSerializer serializer = new FastXmlSerializer();
+            final TypedXmlSerializer serializer = Xml.newFastSerializer();
             serializer.setOutput(dataStream, StandardCharsets.UTF_8.name());
             serializer.startDocument(null, true);
             serializer.startTag(null, TAG_PREFERRED_BACKUP);
@@ -20834,7 +20846,7 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         try {
-            final XmlPullParser parser = Xml.newPullParser();
+            final TypedXmlPullParser parser = Xml.newFastPullParser();
             parser.setInput(new ByteArrayInputStream(backup), StandardCharsets.UTF_8.name());
             restoreFromXml(parser, userId, TAG_PREFERRED_BACKUP,
                     (readParser, readUserId) -> {
@@ -20863,7 +20875,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         ByteArrayOutputStream dataStream = new ByteArrayOutputStream();
         try {
-            final XmlSerializer serializer = new FastXmlSerializer();
+            final TypedXmlSerializer serializer = Xml.newFastSerializer();
             serializer.setOutput(dataStream, StandardCharsets.UTF_8.name());
             serializer.startDocument(null, true);
             serializer.startTag(null, TAG_DEFAULT_APPS);
@@ -20892,7 +20904,7 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         try {
-            final XmlPullParser parser = Xml.newPullParser();
+            final TypedXmlPullParser parser = Xml.newFastPullParser();
             parser.setInput(new ByteArrayInputStream(backup), StandardCharsets.UTF_8.name());
             restoreFromXml(parser, userId, TAG_DEFAULT_APPS,
                     (parser1, userId1) -> {
@@ -20921,7 +20933,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         ByteArrayOutputStream dataStream = new ByteArrayOutputStream();
         try {
-            final XmlSerializer serializer = new FastXmlSerializer();
+            final TypedXmlSerializer serializer = Xml.newFastSerializer();
             serializer.setOutput(dataStream, StandardCharsets.UTF_8.name());
             serializer.startDocument(null, true);
             serializer.startTag(null, TAG_INTENT_FILTER_VERIFICATION);
@@ -20950,7 +20962,7 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         try {
-            final XmlPullParser parser = Xml.newPullParser();
+            final TypedXmlPullParser parser = Xml.newFastPullParser();
             parser.setInput(new ByteArrayInputStream(backup), StandardCharsets.UTF_8.name());
             restoreFromXml(parser, userId, TAG_INTENT_FILTER_VERIFICATION,
                     (parser1, userId1) -> {
@@ -22714,7 +22726,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 pw.flush();
                 FileOutputStream fout = new FileOutputStream(fd);
                 BufferedOutputStream str = new BufferedOutputStream(fout);
-                XmlSerializer serializer = new FastXmlSerializer();
+                TypedXmlSerializer serializer = Xml.newFastSerializer();
                 try {
                     serializer.setOutput(str, StandardCharsets.UTF_8.name());
                     serializer.startDocument(null, true);
@@ -25104,14 +25116,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public boolean isPermissionsReviewRequired(String packageName, int userId) {
-            synchronized (mLock) {
-                final AndroidPackage pkg = mPackages.get(packageName);
-                if (pkg == null) {
-                    return false;
-                }
-
-                return mPermissionManager.isPermissionsReviewRequired(pkg, userId);
-            }
+            return mPermissionManager.isPermissionsReviewRequired(packageName, userId);
         }
 
         @Override
@@ -25834,7 +25839,6 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         public void writePermissionSettings(int[] userIds, boolean async) {
             synchronized (mLock) {
-                mPermissionManager.writeLegacyPermissionStateTEMP();
                 for (int userId : userIds) {
                     mSettings.writeRuntimePermissionsForUserLPr(userId, !async);
                 }
@@ -26202,26 +26206,28 @@ public class PackageManagerService extends IPackageManager.Stub
             throw new SecurityException(
                     "Caller uid " + callingUid + " does not own package " + packageName);
         }
-        ApplicationInfo info = getApplicationInfo(packageName, flags, userId);
-        if (info == null) {
-            return false;
-        }
-        if (info.targetSdkVersion < Build.VERSION_CODES.O) {
-            return false;
-        }
         if (isInstantApp(packageName, userId)) {
             return false;
         }
-        String appOpPermission = Manifest.permission.REQUEST_INSTALL_PACKAGES;
-        String[] packagesDeclaringPermission =
-                mPermissionManager.getAppOpPermissionPackages(appOpPermission, callingUid);
-        if (!ArrayUtils.contains(packagesDeclaringPermission, packageName)) {
-            if (throwIfPermNotDeclared) {
-                throw new SecurityException("Need to declare " + appOpPermission
-                        + " to call this api");
-            } else {
-                Slog.e(TAG, "Need to declare " + appOpPermission + " to call this api");
+        synchronized (mLock) {
+            final AndroidPackage pkg = mPackages.get(packageName);
+            if (pkg == null) {
                 return false;
+            }
+            if (pkg.getTargetSdkVersion() < Build.VERSION_CODES.O) {
+                return false;
+            }
+            if (!pkg.getRequestedPermissions().contains(
+                    android.Manifest.permission.REQUEST_INSTALL_PACKAGES)) {
+                final String message = "Need to declare "
+                        + android.Manifest.permission.REQUEST_INSTALL_PACKAGES
+                        + " to call this api";
+                if (throwIfPermNotDeclared) {
+                    throw new SecurityException(message);
+                } else {
+                    Slog.e(TAG, message);
+                    return false;
+                }
             }
         }
         if (mUserManager.hasUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES, userId)

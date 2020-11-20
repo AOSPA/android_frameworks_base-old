@@ -131,6 +131,8 @@ import android.util.ExceptionUtils;
 import android.util.MathUtils;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.apk.ApkSignatureVerifier;
 import android.util.BoostFramework;
 
@@ -3968,7 +3970,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
-    private static void writeGrantedRuntimePermissionsLocked(XmlSerializer out,
+    private static void writeGrantedRuntimePermissionsLocked(TypedXmlSerializer out,
             String[] grantedRuntimePermissions) throws IOException {
         if (grantedRuntimePermissions != null) {
             for (String permission : grantedRuntimePermissions) {
@@ -3979,7 +3981,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
-    private static void writeWhitelistedRestrictedPermissionsLocked(@NonNull XmlSerializer out,
+    private static void writeWhitelistedRestrictedPermissionsLocked(@NonNull TypedXmlSerializer out,
             @Nullable List<String> whitelistedRestrictedPermissions) throws IOException {
         if (whitelistedRestrictedPermissions != null) {
             final int permissionCount = whitelistedRestrictedPermissions.size();
@@ -3991,7 +3993,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
-    private static void writeAutoRevokePermissionsMode(@NonNull XmlSerializer out, int mode)
+    private static void writeAutoRevokePermissionsMode(@NonNull TypedXmlSerializer out, int mode)
             throws IOException {
         out.startTag(null, TAG_AUTO_REVOKE_PERMISSIONS_MODE);
         writeIntAttribute(out, ATTR_MODE, mode);
@@ -4004,12 +4006,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     /**
-     * Write this session to a {@link XmlSerializer}.
+     * Write this session to a {@link TypedXmlSerializer}.
      *
      * @param out Where to write the session to
      * @param sessionsDir The directory containing the sessions
      */
-    void write(@NonNull XmlSerializer out, @NonNull File sessionsDir) throws IOException {
+    void write(@NonNull TypedXmlSerializer out, @NonNull File sessionsDir) throws IOException {
         synchronized (mLock) {
             if (mDestroyed && !params.isStaged) {
                 return;
@@ -4152,7 +4154,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     /**
-     * Read new session from a {@link XmlPullParser xml description} and create it.
+     * Read new session from a {@link TypedXmlPullParser xml description} and create it.
      *
      * @param in The source of the description
      * @param callback Callback the session uses to notify about changes of it's state
@@ -4164,7 +4166,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
      * @param sessionProvider
      * @return The newly created session
      */
-    public static PackageInstallerSession readFromXml(@NonNull XmlPullParser in,
+    public static PackageInstallerSession readFromXml(@NonNull TypedXmlPullParser in,
             @NonNull PackageInstallerService.InternalCallback callback, @NonNull Context context,
             @NonNull PackageManagerService pm, Looper installerThread,
             @NonNull StagingManager stagingManager, @NonNull File sessionsDir,
