@@ -46,12 +46,12 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/quick_qs_status_icons"
+        android:layout_marginBottom="@dimen/qs_footer_height"
         android:accessibilityTraversalAfter="@+id/date_time_group"
         android:accessibilityTraversalBefore="@id/expand_indicator"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:focusable="true"
-        android:paddingBottom="10dp"
         android:importantForAccessibility="yes" />
 
     <TextView

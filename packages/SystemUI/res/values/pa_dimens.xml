@@ -41,4 +41,7 @@
     <dimen name="tri_state_up_top_left_radius">24.0dip</dimen>
     <dimen name="tri_state_up_top_right_radius">24.0dip</dimen>
 
+    <dimen name="quick_qs_panel_landscape_side_margin">20dp</dimen>
+    <dimen name="quick_qs_panel_portrait_side_margin">16dp</dimen>
+
 </resources>
