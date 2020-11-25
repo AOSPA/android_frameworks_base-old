@@ -66,7 +66,6 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     private TouchAnimator mNonfirstPageDelayedAnimator;
     // This animates fading of SecurityFooter and media divider
     private TouchAnimator mAllPagesDelayedAnimator;
-    private TouchAnimator mBrightnessAnimator;
     private boolean mNeedsAnimatorUpdate = false;
 
     private boolean mOnKeyguard;
@@ -282,14 +281,11 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             // Make brightness appear static position and alpha in through second half.
             View brightness = mQsPanel.getBrightnessView();
             if (brightness != null) {
-                firstPageBuilder.addFloat(brightness, "translationY", heightDiff, 0);
-                mBrightnessAnimator = new TouchAnimator.Builder()
-                        .addFloat(brightness, "alpha", 0, 1)
-                        .setStartDelay(.5f)
-                        .build();
+                Builder brightnessBuilder = new Builder();
+                brightnessBuilder.addFloat(brightness, "alpha", 0, 1)
+                brightnessBuilder.setStartDelay(.9f)
+                brightnessBuilder.build();
                 mAllViews.add(brightness);
-            } else {
-                mBrightnessAnimator = null;
             }
             mFirstPageAnimator = firstPageBuilder
                     .setListener(this)
@@ -388,9 +384,6 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             mFirstPageDelayedAnimator.setPosition(position);
             mTranslationXAnimator.setPosition(position);
             mTranslationYAnimator.setPosition(position);
-            if (mBrightnessAnimator != null) {
-                mBrightnessAnimator.setPosition(position);
-            }
         } else {
             mNonfirstPageAnimator.setPosition(position);
             mNonfirstPageDelayedAnimator.setPosition(position);
@@ -398,6 +391,8 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         if (mAllowFancy) {
             mAllPagesDelayedAnimator.setPosition(position);
         }
+        mQuickQsPanel.getBrightnessView().setVisibility(position == 0 ?
+                View.VISIBLE : View.INVISIBLE);
     }
 
     @Override
