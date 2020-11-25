@@ -63,6 +63,7 @@ public class QSContainerImpl extends FrameLayout {
     private QSCustomizer mQSCustomizer;
     private View mDragHandle;
     private View mQSPanelContainer;
+    private View mFooter;
 
     private View mBackground;
     private View mBackgroundGradient;
@@ -87,6 +88,7 @@ public class QSContainerImpl extends FrameLayout {
         mHeader = findViewById(R.id.header);
         mQSCustomizer = findViewById(R.id.qs_customize);
         mDragHandle = findViewById(R.id.qs_drag_handle_view);
+        mFooter = findViewById(R.id.qs_footer);
         mBackground = findViewById(R.id.quick_settings_background);
         mStatusBarBackground = findViewById(R.id.quick_settings_status_bar_background);
         mBackgroundGradient = findViewById(R.id.quick_settings_gradient_view);
@@ -234,8 +236,9 @@ public class QSContainerImpl extends FrameLayout {
         int height = calculateContainerHeight();
         setBottom(getTop() + height);
         mQSDetail.setBottom(getTop() + height);
-        // Pin the drag handle to the bottom of the panel.
+        // Pin the drag handle & footer to the bottom of the panel.
         mDragHandle.setTranslationY(height - mDragHandle.getHeight());
+        mFooter.setTranslationY(height - mFooter.getHeight()));
         mBackground.setTop(mQSPanelContainer.getTop());
         updateBackgroundBottom(height, animate);
     }
