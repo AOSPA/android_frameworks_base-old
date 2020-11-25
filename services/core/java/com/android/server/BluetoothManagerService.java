@@ -2051,7 +2051,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         BluetoothAdapter.nameForState(mState) + " mEnableExternal = "
                         + mEnableExternal + " getServiceRestartMs()="
                         + getServiceRestartMs());
-                    if ((mState == BluetoothAdapter.STATE_BLE_ON) && isBleAppPresent()) {
+                    if ((mState == BluetoothAdapter.STATE_BLE_ON) && (isBleAppPresent() ||
+                                mWaitForEnableRetry > 0)) {
+                        Slog.d(TAG, "isBleAppPresent(): " + isBleAppPresent() +
+                                " mWaitForEnableRetry=" + mWaitForEnableRetry);
                         mWaitForEnableRetry = 0;
                         if (mEnableExternal || isBluetoothPersistedStateOnBluetooth()) {
                            try {
