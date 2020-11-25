@@ -16,6 +16,24 @@
       "revId": "dcd7e9a8946daa05846be0426d530083d2b18bab",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d45fc6b6_619f596c",
+        "filename": "packages/SystemUI/AndroidManifest.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 275,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2020-11-25T12:59:28Z",
+      "side": 1,
+      "message": "Shouldn\u0027t we keep the permission for users that install Pixel Launcher?",
+      "parentUuid": "f58b4f2a_08e63a83",
+      "revId": "dcd7e9a8946daa05846be0426d530083d2b18bab",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
     }
   ]
 }
