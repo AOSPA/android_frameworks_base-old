@@ -85,6 +85,8 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
 
     private boolean mExpanded;
 
+    private boolean mIsGuestUser;
+
     private boolean mListening;
 
     protected MultiUserSwitch mMultiUserSwitch;
@@ -94,8 +96,6 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     private float mExpansionAmount;
 
     protected View mEdit;
-    protected View mEditContainer;
-    private TouchAnimator mSettingsCogAnimator;
 
     private View mActionsContainer;
 
@@ -132,10 +132,14 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     protected void onFinishInflate() {
         super.onFinishInflate();
         mEdit = findViewById(android.R.id.edit);
-        mEdit.setOnClickListener(view ->
-                mActivityStarter.postQSRunnableDismissingKeyguard(() ->
-                        mQsPanel.showEdit(view)));
-
+        if (canShowEditIcon()) {
+            mEdit.setOnClickListener(view ->
+                    mActivityStarter.postQSRunnableDismissingKeyguard(() ->
+                            mQsPanel.showEdit(view)));
+            mEdit.setVisibility(View.VISIBLE);
+        } else {
+            mEdit.setVisibility(View.GONE);
+        }
         mPageIndicator = findViewById(R.id.footer_page_indicator);
 
         mSettingsButton = findViewById(R.id.settings_button);
@@ -146,7 +150,6 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         mMultiUserAvatar = mMultiUserSwitch.findViewById(R.id.multi_user_avatar);
 
         mActionsContainer = findViewById(R.id.qs_footer_actions_container);
-        mEditContainer = findViewById(R.id.qs_footer_actions_edit_container);
 
         // RenderThread is doing more harm than good when touching the header (to expand quick
         // settings), so disable it for this view
@@ -168,26 +171,19 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     }
 
     private void updateAnimator(int width) {
-        int numTiles = mQuickQsPanel != null ? mQuickQsPanel.getNumQuickTiles()
-                : QuickQSPanel.getDefaultMaxTiles();
-        int size = mContext.getResources().getDimensionPixelSize(R.dimen.qs_quick_tile_size)
-                - mContext.getResources().getDimensionPixelSize(dimen.qs_quick_tile_padding);
-        int remaining = (width - numTiles * size) / (numTiles - 1);
-        int defSpace = mContext.getResources().getDimensionPixelOffset(R.dimen.default_gear_space);
-
-        mSettingsCogAnimator = new Builder()
-                .addFloat(mSettingsContainer, "translationX",
-                        isLayoutRtl() ? (remaining - defSpace) : -(remaining - defSpace), 0)
-                .addFloat(mSettingsButton, "rotation", -120, 0)
-                .build();
-
         setExpansion(mExpansionAmount);
     }
 
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        if (canShowEditIcon()) {
+            mEdit.setVisibility(View.VISIBLE);
+        } else {
+            mEdit.setVisibility(View.GONE);
+        }
         updateResources();
+        updateEverything();
     }
 
     @Override
@@ -207,9 +203,9 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     @Nullable
     private TouchAnimator createFooterAnimator() {
         return new TouchAnimator.Builder()
-                .addFloat(mActionsContainer, "alpha", 0, 1)
-                .addFloat(mEditContainer, "alpha", 0, 1)
+                .addFloat(mEdit, "alpha", 0, 1)
                 .addFloat(mPageIndicator, "alpha", 0, 1)
+                .addFloat(mMultiUserSwitch, "alpha", 0, 1)
                 .setStartDelay(0.9f)
                 .build();
     }
@@ -234,8 +230,6 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     @Override
     public void setExpansion(float headerExpansionFraction) {
         mExpansionAmount = headerExpansionFraction;
-        if (mSettingsCogAnimator != null) mSettingsCogAnimator.setPosition(headerExpansionFraction);
-
         if (mFooterAnimator != null) {
             mFooterAnimator.setPosition(headerExpansionFraction);
         }
@@ -264,6 +258,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         }
         mListening = listening;
         updateListeners();
+        updateEverything();
     }
 
     @Override
@@ -311,12 +306,23 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
                 TunerService.isTunerEnabled(mContext) ? View.VISIBLE : View.INVISIBLE);
         final boolean isDemo = UserManager.isDeviceInDemoMode(mContext);
         mMultiUserSwitch.setVisibility(showUserSwitcher() ? View.VISIBLE : View.INVISIBLE);
-        mEditContainer.setVisibility(isDemo || !mExpanded ? View.INVISIBLE : View.VISIBLE);
-        mSettingsButton.setVisibility(isDemo || !mExpanded ? View.INVISIBLE : View.VISIBLE);
+        if (canShowEditIcon()) {
+            mEdit.setVisibility(isDemo || !mExpanded ? View.INVISIBLE : View.VISIBLE);
+        } else {
+            mEdit.setVisibility(View.GONE);
+        }
     }
 
     private boolean showUserSwitcher() {
         return mExpanded && mMultiUserSwitch.isMultiUserEnabled();
+    }
+
+    private boolean canShowEditIcon() {
+        return !(isLandscape() || mIsGuestUser);
+    }
+
+    private boolean isLandscape() {
+        return mContext.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
     }
 
     private void updateListeners() {
@@ -386,6 +392,9 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
 
     @Override
     public void onUserInfoChanged(String name, Drawable picture, String userAccount) {
+        mIsGuestUser = UserManager.get(mContext.isGuestUser(ActivityManager.getCurrentUser());
+        updateResources();
+        updateEverything();
         if (picture != null &&
                 UserManager.get(mContext).isGuestUser(KeyguardUpdateMonitor.getCurrentUser()) &&
                 !(picture instanceof UserIconDrawable)) {
