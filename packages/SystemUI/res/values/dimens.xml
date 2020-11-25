@@ -397,7 +397,7 @@
     <dimen name="qs_footer_margin">2dp</dimen>
 
     <!-- Padding on each QS Footer Icon to make the icons 20dpx20dp -->
-    <dimen name="qs_footer_icon_padding">14dp</dimen>
+    <dimen name="qs_footer_icon_padding">15dp</dimen>
 
     <!-- The padding between the notifications and the quick settings container -->
     <dimen name="qs_notification_padding">@dimen/notification_side_paddings</dimen>
@@ -482,40 +482,40 @@
     <!-- The size of the gesture span needed to activate the "pull" notification expansion -->
     <dimen name="pull_span_min">25dp</dimen>
 
-    <dimen name="qs_tile_height">106dp</dimen>
+    <dimen name="qs_tile_height">96dp</dimen>
     <!--notification_side_paddings + notification_content_margin_start - (qs_quick_tile_size - qs_tile_background_size) / 2 -->
-    <dimen name="qs_tile_layout_margin_side">18dp</dimen>
-    <dimen name="qs_tile_margin_horizontal">18dp</dimen>
+    <dimen name="qs_tile_layout_margin_side">9dp</dimen>
+    <dimen name="qs_tile_margin_horizontal">6dp</dimen>
     <dimen name="qs_tile_margin_horizontal_two_line">2dp</dimen>
-    <dimen name="qs_tile_margin_vertical">24dp</dimen>
-    <dimen name="qs_tile_margin_top_bottom">12dp</dimen>
+    <dimen name="qs_tile_margin_vertical">9dp</dimen>
+    <dimen name="qs_tile_margin_top_bottom">7dp</dimen>
     <dimen name="qs_tile_margin_top_bottom_negative">-12dp</dimen>
     <!-- The height of the qs customize header. Should be
          (qs_panel_padding_top (48dp) +  brightness_mirror_height (48dp) + qs_tile_margin_top (18dp)) -
          (Toolbar_minWidth (56dp) + qs_tile_margin_top_bottom (12dp))
     -->
     <dimen name="qs_customize_header_min_height">46dp</dimen>
-    <dimen name="qs_tile_margin_top">18dp</dimen>
-    <dimen name="qs_tile_background_size">44dp</dimen>
-    <dimen name="qs_quick_tile_size">48dp</dimen>
-    <dimen name="qs_quick_tile_padding">12dp</dimen>
+    <dimen name="qs_tile_margin_top">0dp</dimen>
+    <dimen name="qs_tile_background_size">48dp</dimen>
+    <dimen name="qs_quick_tile_size">50dp</dimen>
+    <dimen name="qs_quick_tile_padding">16dp</dimen>
     <dimen name="qs_header_gear_translation">16dp</dimen>
-    <dimen name="qs_header_tile_margin_bottom">18dp</dimen>
+    <dimen name="qs_header_tile_margin_bottom">16dp</dimen>
     <dimen name="qs_page_indicator_width">16dp</dimen>
     <dimen name="qs_page_indicator_height">8dp</dimen>
-    <dimen name="qs_tile_icon_size">24dp</dimen>
-    <dimen name="qs_tile_text_size">12sp</dimen>
+    <dimen name="qs_tile_icon_size">20dp</dimen>
+    <dimen name="qs_tile_text_size">11sp</dimen>
     <dimen name="qs_tile_divider_height">1dp</dimen>
     <dimen name="qs_panel_padding">16dp</dimen>
     <dimen name="qs_dual_tile_height">112dp</dimen>
     <dimen name="qs_dual_tile_padding_vertical">8dp</dimen>
     <dimen name="qs_dual_tile_padding_horizontal">6dp</dimen>
-    <dimen name="qs_tile_padding_top">14dp</dimen>
+    <dimen name="qs_tile_padding_top">0dp</dimen>
     <dimen name="qs_tile_padding_top_large_text">4dp</dimen>
     <dimen name="qs_tile_padding_bottom">16dp</dimen>
     <dimen name="qs_tile_spacing">4dp</dimen>
     <dimen name="qs_panel_padding_bottom">0dp</dimen>
-    <dimen name="qs_panel_padding_top">@dimen/qs_header_tooltip_height</dimen>
+    <dimen name="qs_panel_padding_top">20dp</dimen>
     <dimen name="qs_detail_header_height">56dp</dimen>
     <dimen name="qs_detail_header_padding">0dp</dimen>
     <dimen name="qs_detail_image_width">56dp</dimen>
@@ -549,7 +549,7 @@
     <dimen name="qs_carrier_margin_width">4dp</dimen>
     <dimen name="qs_footer_padding_start">16dp</dimen>
     <dimen name="qs_footer_padding_end">16dp</dimen>
-    <dimen name="qs_footer_icon_size">16dp</dimen>
+    <dimen name="qs_footer_icon_size">48dp</dimen>
     <dimen name="qs_paged_tile_layout_padding_bottom">0dp</dimen>
     <dimen name="qs_header_top_padding">15dp</dimen>
     <dimen name="qs_header_bottom_padding">14dp</dimen>
@@ -574,8 +574,8 @@
     <!-- Padding between subtitles and the following text in the QSFooter dialog -->
     <dimen name="qs_footer_dialog_subtitle_padding">20dp</dimen>
 
-    <dimen name="seek_bar_height">3dp</dimen>
-    <dimen name="seek_bar_corner_radius">3dp</dimen>
+    <dimen name="seek_bar_height">4dp</dimen>
+    <dimen name="seek_bar_corner_radius">4dp</dimen>
 
     <!-- Zen mode panel: condition item button padding -->
     <dimen name="zen_mode_condition_detail_button_padding">8dp</dimen>
@@ -1265,19 +1265,19 @@
     <dimen name="new_qs_vertical_margin">8dp</dimen>
 
     <!-- Size of media cards in the QSPanel carousel -->
-    <dimen name="qs_media_width">350dp</dimen>
-    <dimen name="qs_media_padding">16dp</dimen>
-    <dimen name="qs_media_panel_outer_padding">16dp</dimen>
-    <dimen name="qs_media_album_size">52dp</dimen>
-    <dimen name="qs_media_icon_size">16dp</dimen>
+    <dimen name="qs_media_width">1050px</dimen>
+    <dimen name="qs_media_padding">42px</dimen>
+    <dimen name="qs_media_panel_outer_padding">48px</dimen>
+    <dimen name="qs_media_album_size">156px</dimen>
+    <dimen name="qs_media_icon_size">48px</dimen>
     <dimen name="qs_center_guideline_padding">10dp</dimen>
     <dimen name="qs_seamless_icon_size">@dimen/qs_media_icon_size</dimen>
     <dimen name="qs_seamless_fallback_icon_size">@dimen/qs_seamless_icon_size</dimen>
     <dimen name="qs_seamless_fallback_end_margin">16dp</dimen>
-    <dimen name="qqs_media_spacing">16dp</dimen>
-    <dimen name="qs_footer_horizontal_margin">22dp</dimen>
-    <dimen name="qs_media_disabled_seekbar_height">1dp</dimen>
-    <dimen name="qs_media_enabled_seekbar_height">3dp</dimen>
+    <dimen name="qqs_media_spacing">0dp</dimen>
+    <dimen name="qs_footer_horizontal_margin">66px</dimen>
+    <dimen name="qs_media_disabled_seekbar_height">3px</dimen>
+    <dimen name="qs_media_enabled_seekbar_height">9px</dimen>
 
     <dimen name="magnification_border_size">5dp</dimen>
     <dimen name="magnification_frame_move_short">5dp</dimen>

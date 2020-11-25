@@ -90,11 +90,6 @@ public class QuickQSPanel extends QSPanel {
     }
 
     @Override
-    protected void addViewsAboveTiles() {
-        // Nothing to add above the tiles
-    }
-
-    @Override
     protected TileLayout createRegularTileLayout() {
         return new QuickQSPanel.HeaderTileLayout(mContext, mUiEventLogger);
     }
@@ -181,9 +176,8 @@ public class QuickQSPanel extends QSPanel {
 
     @Override
     public void onTuningChanged(String key, String newValue) {
-        if (QS_SHOW_BRIGHTNESS.equals(key)) {
-            // No Brightness or Tooltip for you!
-            super.onTuningChanged(key, "0");
+        if (QS_SHOW_BRIGHTNESS.equals(key) && mBrightnessView != null) {
+            mBrightnessView.setVisibility(View.VISIBLE);
         }
     }
 
@@ -274,6 +268,8 @@ public class QuickQSPanel extends QSPanel {
 
         private Rect mClippingBounds = new Rect();
 
+        private int mQSSideMargin = 0;
+
         public HeaderTileLayout(Context context, UiEventLogger uiEventLogger) {
             super(context);
             mUiEventLogger = uiEventLogger;
@@ -283,12 +279,18 @@ public class QuickQSPanel extends QSPanel {
                     LayoutParams.WRAP_CONTENT);
             lp.gravity = Gravity.CENTER_HORIZONTAL;
             setLayoutParams(lp);
+            mQSSideMargin = mContext.getResources().getDimensionPixelSize(R.dimen.quick_qs_panel_portrait_side_margin);
         }
 
         @Override
         protected void onConfigurationChanged(Configuration newConfig) {
             super.onConfigurationChanged(newConfig);
             updateResources();
+            if (newConfig.orientation == 2) {
+                mQSSideMargin = mContext.getResources().getDimensionPixelSize(R.dimen.quick_qs_panel_landscape_side_margin);
+            } else {
+                mQSSideMargin = mContext.getResources().getDimensionPixelSize(R.dimen.quick_qs_panel_portrait_side_margin);
+            }
         }
 
         @Override
@@ -340,7 +342,7 @@ public class QuickQSPanel extends QSPanel {
                 return true;
             }
 
-            final int availableWidth = getMeasuredWidth() - getPaddingStart() - getPaddingEnd();
+            final int availableWidth = getMeasuredWidth() - getPaddingStart() - getPaddingEnd() - (mQSSideMargin * 2);
             final int leftoverWhitespace = availableWidth - maxTiles * mCellWidth;
             final int smallestHorizontalMarginNeeded;
             smallestHorizontalMarginNeeded = leftoverWhitespace / Math.max(1, maxTiles - 1);
@@ -400,7 +402,7 @@ public class QuickQSPanel extends QSPanel {
                 // Only one column/tile. Use the margin to center the tile.
                 return getPaddingStart() + mCellMarginHorizontal;
             }
-            return getPaddingStart() + column *  (mCellWidth + mCellMarginHorizontal);
+            return mQSSideMargin + getPaddingStart() + column *  (mCellWidth + mCellMarginHorizontal);
         }
 
         @Override
@@ -415,5 +417,11 @@ public class QuickQSPanel extends QSPanel {
                 }
             }
         }
+    }
+
+    @Override
+    public void setListening(boolean listening) {
+        super.setListening(listening);
+        setBrightnessListening(listening);
     }
 }
