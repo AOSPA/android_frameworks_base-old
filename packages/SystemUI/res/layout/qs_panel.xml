@@ -61,6 +61,7 @@
             android:layout_height="wrap_content"
             android:background="@android:color/transparent"
             android:focusable="true"
+            android:layout_marginBottom="@dimen/qs_footer_height"
             android:accessibilityTraversalBefore="@android:id/edit">
             <include layout="@layout/qs_footer_impl" />
             <include layout="@layout/qs_media_divider"
