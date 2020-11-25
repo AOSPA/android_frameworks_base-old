@@ -68,13 +68,6 @@
                 android:visibility="gone"/>
          </com.android.keyguard.AlphaOptimizedLinearLayout>
 
-        <com.android.systemui.qs.PageIndicator
-            android:id="@+id/footer_page_indicator"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="center_vertical"
-            android:visibility="gone" />
-
         <com.android.keyguard.AlphaOptimizedLinearLayout
             android:id="@+id/qs_footer_actions_container"
             android:layout_width="@integer/qs_footer_actions_width"

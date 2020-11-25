@@ -26,6 +26,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.PointF;
+import android.graphics.PorterDuff;
 import android.metrics.LogMaker;
 import android.os.Bundle;
 import android.os.Handler;
@@ -36,6 +37,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
@@ -125,7 +127,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     @Nullable
     private ViewGroup mHeaderContainer;
-    private PageIndicator mFooterPageIndicator;
+    private PageIndicator mPanelPageIndicator;
     private boolean mGridContentVisible = true;
     private int mContentMarginStart;
     private int mContentMarginEnd;
@@ -148,6 +150,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     private int mFooterMarginStartHorizontal;
     private Consumer<Boolean> mMediaVisibilityChangedListener;
 
+    private View mBrightnessMirror;
 
     @Inject
     public QSPanel(
@@ -176,7 +179,6 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
         setOrientation(VERTICAL);
 
-        addViewsAboveTiles();
         mMovableContentStartIndex = getChildCount();
         mRegularTileLayout = createRegularTileLayout();
 
@@ -204,6 +206,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
             initMediaHostState();
         }
+        addPageIndicator();
+        addBrightnessView();
         addSecurityFooter();
         if (mRegularTileLayout instanceof PagedTileLayout) {
             mQsTileRevealController = new QSTileRevealController(mContext, this,
@@ -227,12 +231,24 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         mSecurityFooter = new QSSecurityFooter(this, mContext);
     }
 
-    protected void addViewsAboveTiles() {
+    protected void addBrightnessView() {
         mBrightnessView = LayoutInflater.from(mContext).inflate(
             R.layout.quick_settings_brightness_dialog, this, false);
+        updateBrightnessViewParams();
         addView(mBrightnessView);
-        mBrightnessController = new BrightnessController(getContext(),
-                findViewById(R.id.brightness_slider), mBroadcastDispatcher);
+        final ImageView level = findViewById(R.id.brightness_level);
+        final ImageView icon = findViewById(R.id.brightness_icon);
+        final ToggleSliderView slider = findViewById(R.id.brightness_slider);
+        mBrightnessController = new BrightnessController(getContext(), level, icon,
+                slider, mBroadcastDispatcher);
+    }
+
+    protected void addPageIndicator() {
+        mPanelPageIndicator = (PageIndicator) LayoutInflater.from(mContext).inflate(
+            R.layout.qs_page_indicator, this, false);
+        MarginLayoutParams lp = (MarginLayoutParams) mPanelPageIndicator.getLayoutParams();
+        lp.bottomMargin = getResources().getDimensionPixelSize(R.dimen.qs_page_indicator_margin);
+        addView(mPanelPageIndicator);
     }
 
     protected QSTileLayout createRegularTileLayout() {
@@ -290,8 +306,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         if (mTileLayout instanceof PagedTileLayout) {
             // Since PageIndicator gets measured before PagedTileLayout, we preemptively set the
             // # of pages before the measurement pass so PageIndicator is measured appropriately
-            if (mFooterPageIndicator != null) {
-                mFooterPageIndicator.setNumPages(((PagedTileLayout) mTileLayout).getNumPages());
+            if (mPanelPageIndicator != null) {
+                mPanelPageIndicator.setNumPages(((PagedTileLayout) mTileLayout).getNumPages());
             }
 
             // Allow the UI to be as big as it want's to, we're in a scroll view
@@ -424,6 +440,11 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     }
 
     @Nullable
+    View getPageIndicator() {
+        return mPanelPageIndicator;
+    }
+
+    @Nullable
     View getBrightnessView() {
         return mBrightnessView;
     }
@@ -445,24 +466,12 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         }
     }
 
-    /**
-     * Links the footer's page indicator, which is used in landscape orientation to save space.
-     *
-     * @param pageIndicator indicator to use for page scrolling
-     */
-    public void setFooterPageIndicator(PageIndicator pageIndicator) {
-        if (mRegularTileLayout instanceof PagedTileLayout) {
-            mFooterPageIndicator = pageIndicator;
-            updatePageIndicator();
-        }
-    }
-
     private void updatePageIndicator() {
         if (mRegularTileLayout instanceof PagedTileLayout) {
-            if (mFooterPageIndicator != null) {
-                mFooterPageIndicator.setVisibility(View.GONE);
+            if (mPanelPageIndicator != null) {
+                mPanelPageIndicator.setVisibility(View.GONE);
 
-                ((PagedTileLayout) mRegularTileLayout).setPageIndicator(mFooterPageIndicator);
+                ((PagedTileLayout) mRegularTileLayout).setPageIndicator(mPanelPageIndicator);
             }
         }
     }
@@ -521,6 +530,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             mLastOrientation = newConfig.orientation;
             switchTileLayout();
         }
+
+        updateBrightnessViewParams();
     }
 
     @Override
@@ -569,6 +580,9 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
                 }
             }
             mTileLayout = newLayout;
+            if (newLayout instanceof PagedTileLayout) {
+                ((PagedTileLayout) newLayout).setPageIndicator(mPanelPageIndicator);
+            }
             if (mHost != null) setTiles(mHost.getTiles());
             newLayout.setListening(mListening);
             if (needsDynamicRowsAndColumns()) {
@@ -688,6 +702,19 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
                     .findViewById(R.id.brightness_slider);
             brightnessSlider.setMirror(mirrorSlider);
             brightnessSlider.setMirrorController(mBrightnessMirrorController);
+            if (mBrightnessController != null) {
+                mBrightnessMirror = mBrightnessMirrorController.getMirror();
+                mBrightnessController.setMirrorView(mBrightnessMirror);
+            }
+        }
+    }
+
+    private void updateBrightnessViewParams() {
+        if (mBrightnessView != null) {
+            MarginLayoutParams lp = (MarginLayoutParams) mBrightnessView.getLayoutParams();
+            lp.height = getResources().getDimensionPixelSize(R.dimen.brightness_mirror_height);
+            mBrightnessView.setLayoutParams(lp);
+            forceLayout();
         }
     }
 
@@ -1055,18 +1082,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     private void updateFooterMargin() {
         if (mFooter != null) {
-            int footerMargin = 0;
-            int indicatorMargin = 0;
-            if (mUsingHorizontalLayout) {
-                footerMargin = mFooterMarginStartHorizontal;
-                indicatorMargin = footerMargin - mVisualMarginEnd;
-            }
+            int footerMargin = mUsingHorizontalLayout ? mFooterMarginStartHorizontal : 0;
             updateMargins(mFooter, footerMargin, 0);
-            // The page indicator isn't centered anymore because of the visual positioning.
-            // Let's fix it by adding some margin
-            if (mFooterPageIndicator != null) {
-                updateMargins(mFooterPageIndicator, 0, indicatorMargin);
-            }
         }
     }
 

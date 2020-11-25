@@ -41,4 +41,7 @@
     <dimen name="tri_state_up_top_left_radius">24.0dip</dimen>
     <dimen name="tri_state_up_top_right_radius">24.0dip</dimen>
 
+    <!-- Bottom brightness slider  -->
+    <dimen name="qs_page_indicator_margin">4dp</dimen>
+
 </resources>

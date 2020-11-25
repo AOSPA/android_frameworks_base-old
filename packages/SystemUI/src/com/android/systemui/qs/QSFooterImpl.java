@@ -77,7 +77,6 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     private final DeviceProvisionedController mDeviceProvisionedController;
     private SettingsButton mSettingsButton;
     protected View mSettingsContainer;
-    private PageIndicator mPageIndicator;
 
     private boolean mQsDisabled;
     private QSPanel mQsPanel;
@@ -135,8 +134,6 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         mEdit.setOnClickListener(view ->
                 mActivityStarter.postQSRunnableDismissingKeyguard(() ->
                         mQsPanel.showEdit(view)));
-
-        mPageIndicator = findViewById(R.id.footer_page_indicator);
 
         mSettingsButton = findViewById(R.id.settings_button);
         mSettingsContainer = findViewById(R.id.settings_button_container);
@@ -209,7 +206,6 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         return new TouchAnimator.Builder()
                 .addFloat(mActionsContainer, "alpha", 0, 1)
                 .addFloat(mEditContainer, "alpha", 0, 1)
-                .addFloat(mPageIndicator, "alpha", 0, 1)
                 .setStartDelay(0.9f)
                 .build();
     }
@@ -332,7 +328,6 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         mQsPanel = qsPanel;
         if (mQsPanel != null) {
             mMultiUserSwitch.setQsPanel(qsPanel);
-            mQsPanel.setFooterPageIndicator(mPageIndicator);
         }
     }
 
