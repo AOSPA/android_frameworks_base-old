@@ -67,6 +67,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     // This animates fading of SecurityFooter and media divider
     private TouchAnimator mAllPagesDelayedAnimator;
     private TouchAnimator mBrightnessAnimator;
+    private TouchAnimator mPageIndicatorAnimator;
     private boolean mNeedsAnimatorUpdate = false;
 
     private boolean mOnKeyguard;
@@ -282,14 +283,11 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             // Make brightness appear static position and alpha in through second half.
             View brightness = mQsPanel.getBrightnessView();
             if (brightness != null) {
-                firstPageBuilder.addFloat(brightness, "translationY", heightDiff, 0);
                 mBrightnessAnimator = new TouchAnimator.Builder()
                         .addFloat(brightness, "alpha", 0, 1)
-                        .setStartDelay(.5f)
+                        .setStartDelay(.9f)
                         .build();
                 mAllViews.add(brightness);
-            } else {
-                mBrightnessAnimator = null;
             }
             mFirstPageAnimator = firstPageBuilder
                     .setListener(this)
@@ -316,6 +314,15 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                 mAllViews.add(mQsPanel.getDivider());
             }
 
+            View pageIndicator = mQsPanel.getPageIndicator();
+            if (pageIndicator != null) {
+                mPageIndicatorAnimator = new TouchAnimator.Builder()
+                        .addFloat(pageIndicator, "alpha", 0, 1)
+                        .setStartDelay(.9f)
+                        .build();
+                mAllViews.add(pageIndicator);
+            }
+
             float px = 0;
             float py = 1;
             if (tiles.size() <= 3) {
@@ -331,6 +338,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         }
         mNonfirstPageAnimator = new TouchAnimator.Builder()
                 .addFloat(mQuickQsPanel, "alpha", 1, 0)
+                .addFloat(mQsPanel.getPageIndicator(), "alpha", 0, 1)
                 .setListener(mNonFirstPageListener)
                 .setEndDelay(.5f)
                 .build();
@@ -388,15 +396,18 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             mFirstPageDelayedAnimator.setPosition(position);
             mTranslationXAnimator.setPosition(position);
             mTranslationYAnimator.setPosition(position);
-            if (mBrightnessAnimator != null) {
-                mBrightnessAnimator.setPosition(position);
-            }
         } else {
             mNonfirstPageAnimator.setPosition(position);
             mNonfirstPageDelayedAnimator.setPosition(position);
         }
         if (mAllowFancy) {
             mAllPagesDelayedAnimator.setPosition(position);
+            mPageIndicatorAnimator.setPosition(position);
+        }
+        if (position == 0.0f) {
+            mQuickQsPanel.getBrightnessView().setVisibility(View.VISIBLE);
+        } else {
+            mQuickQsPanel.getBrightnessView().setVisibility(View.INVISIBLE);
         }
     }
 
