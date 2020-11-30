@@ -18,6 +18,7 @@ package com.android.server.hdmi;
 
 import android.annotation.CallSuper;
 import android.annotation.Nullable;
+import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.IHdmiControlCallback;
 import android.hardware.input.InputManager;
@@ -553,6 +554,7 @@ abstract class HdmiCecLocalDevice {
         return false;
     }
 
+    @Constants.RcProfile
     protected abstract int getRcProfile();
 
     protected abstract List<Integer> getRcFeatures();
@@ -560,10 +562,15 @@ abstract class HdmiCecLocalDevice {
     protected abstract List<Integer> getDeviceFeatures();
 
     protected boolean handleGiveFeatures(HdmiCecMessage message) {
-        if (mService.getCecVersion() < Constants.VERSION_2_0) {
+        if (mService.getCecVersion() < HdmiControlManager.HDMI_CEC_VERSION_2_0) {
             return false;
         }
 
+        reportFeatures();
+        return true;
+    }
+
+    protected void reportFeatures() {
         List<Integer> localDeviceTypes = new ArrayList<>();
         for (HdmiCecLocalDevice localDevice : mService.getAllLocalDevices()) {
             localDeviceTypes.add(localDevice.mDeviceType);
@@ -577,7 +584,6 @@ abstract class HdmiCecLocalDevice {
         mService.sendCecCommand(
                 HdmiCecMessageBuilder.buildReportFeatures(mAddress, mService.getCecVersion(),
                         localDeviceTypes, rcProfile, rcFeatures, deviceFeatures));
-        return true;
     }
 
     @ServiceThreadOnly
@@ -789,6 +795,9 @@ abstract class HdmiCecLocalDevice {
     final void handleAddressAllocated(int logicalAddress, int reason) {
         assertRunOnServiceThread();
         mAddress = mPreferredAddress = logicalAddress;
+        if (mService.getCecVersion() >= HdmiControlManager.HDMI_CEC_VERSION_2_0) {
+            reportFeatures();
+        }
         onAddressAllocated(logicalAddress, reason);
         setPreferredAddress(logicalAddress);
     }

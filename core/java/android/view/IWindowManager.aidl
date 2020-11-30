@@ -648,42 +648,44 @@ interface IWindowManager
     void setShouldShowSystemDecors(int displayId, boolean shouldShow);
 
     /**
-     * Indicates that the display should show IME.
+     * Indicates the policy for how the display should show IME.
      *
      * @param displayId The id of the display.
-     * @return {@code true} if the display should show IME.
+     * @return The policy for how the display should show IME.
      * @see KeyguardManager#isDeviceSecure()
      * @see KeyguardManager#isDeviceLocked()
      */
-    boolean shouldShowIme(int displayId);
+    int getDisplayImePolicy(int displayId);
 
     /**
-     * Sets that the display should show IME.
+     * Sets the policy for how the display should show IME.
      *
      * @param displayId The id of the display.
-     * @param shouldShow Indicates that the display should show IME.
+     * @param imePolicy Indicates the policy for how the display should show IME.
      * @see KeyguardManager#isDeviceSecure()
      * @see KeyguardManager#isDeviceLocked()
      */
-    void setShouldShowIme(int displayId, boolean shouldShow);
+    void setDisplayImePolicy(int displayId, int imePolicy);
 
     /**
-     * Waits for transactions to get applied before injecting input.
-     * This includes waiting for the input windows to get sent to InputManager.
+     * Waits for transactions to get applied before injecting input, optionally waiting for
+     * animations to complete. This includes waiting for the input windows to get sent to
+     * InputManager.
      *
      * This is needed for testing since the system add windows and injects input
      * quick enough that the windows don't have time to get sent to InputManager.
      */
-    boolean injectInputAfterTransactionsApplied(in InputEvent ev, int mode);
+    boolean injectInputAfterTransactionsApplied(in InputEvent ev, int mode,
+            boolean waitForAnimations);
 
     /**
-     * Waits until all animations have completed and input information has been sent from
-     * WindowManager to native InputManager.
+     * Waits until input information has been sent from WindowManager to native InputManager,
+     * optionally waiting for animations to complete.
      *
      * This is needed for testing since we need to ensure input information has been propagated to
      * native InputManager before proceeding with tests.
      */
-    void syncInputTransactions();
+    void syncInputTransactions(boolean waitForAnimations);
 
     /**
      * Returns whether SurfaceFlinger layer tracing is enabled.

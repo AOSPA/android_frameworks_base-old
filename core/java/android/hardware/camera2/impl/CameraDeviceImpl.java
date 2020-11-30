@@ -48,6 +48,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
+import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.Log;
@@ -385,7 +386,8 @@ public class CameraDeviceImpl extends CameraDevice
             outputConfigs.add(new OutputConfiguration(s));
         }
         configureStreamsChecked(/*inputConfig*/null, outputConfigs,
-                /*operatingMode*/ICameraDeviceUser.NORMAL_MODE, /*sessionParams*/ null);
+                /*operatingMode*/ICameraDeviceUser.NORMAL_MODE, /*sessionParams*/ null,
+                SystemClock.uptimeMillis());
 
     }
 
@@ -406,12 +408,15 @@ public class CameraDeviceImpl extends CameraDevice
      * @param operatingMode If the stream configuration is for a normal session,
      *     a constrained high speed session, or something else.
      * @param sessionParams Session parameters.
+     * @param createSessionStartTimeMs The timestamp when session creation starts, measured by
+     *     uptimeMillis().
      * @return whether or not the configuration was successful
      *
      * @throws CameraAccessException if there were any unexpected problems during configuration
      */
     public boolean configureStreamsChecked(InputConfiguration inputConfig,
-            List<OutputConfiguration> outputs, int operatingMode, CaptureRequest sessionParams)
+            List<OutputConfiguration> outputs, int operatingMode, CaptureRequest sessionParams,
+            long createSessionStartTime)
                     throws CameraAccessException {
         // Treat a null input the same an empty list
         if (outputs == null) {
@@ -491,9 +496,10 @@ public class CameraDeviceImpl extends CameraDevice
                 int offlineStreamIds[];
                 if (sessionParams != null) {
                     offlineStreamIds = mRemoteDevice.endConfigure(operatingMode,
-                            sessionParams.getNativeCopy());
+                            sessionParams.getNativeCopy(), createSessionStartTime);
                 } else {
-                    offlineStreamIds = mRemoteDevice.endConfigure(operatingMode, null);
+                    offlineStreamIds = mRemoteDevice.endConfigure(operatingMode, null,
+                            createSessionStartTime);
                 }
 
                 mOfflineSupport.clear();
@@ -662,6 +668,7 @@ public class CameraDeviceImpl extends CameraDevice
             List<OutputConfiguration> outputConfigurations,
             CameraCaptureSession.StateCallback callback, Executor executor,
             int operatingMode, CaptureRequest sessionParams) throws CameraAccessException {
+        long createSessionStartTime = SystemClock.uptimeMillis();
         synchronized(mInterfaceLock) {
             if (DEBUG) {
                 Log.d(TAG, "createCaptureSessionInternal");
@@ -689,7 +696,7 @@ public class CameraDeviceImpl extends CameraDevice
             try {
                 // configure streams and then block until IDLE
                 configureSuccess = configureStreamsChecked(inputConfig, outputConfigurations,
-                        operatingMode, sessionParams);
+                        operatingMode, sessionParams, createSessionStartTime);
                 if (configureSuccess == true && inputConfig != null) {
                     input = mRemoteDevice.getInputSurface();
                 }

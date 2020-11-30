@@ -94,13 +94,27 @@ static jint Typeface_getWeight(CRITICAL_JNI_PARAMS_COMMA jlong faceHandle) {
 }
 
 static jlong Typeface_createFromArray(JNIEnv *env, jobject, jlongArray familyArray,
-        int weight, int italic) {
+                                      jlong fallbackPtr, int weight, int italic) {
     ScopedLongArrayRO families(env, familyArray);
     std::vector<std::shared_ptr<minikin::FontFamily>> familyVec;
-    familyVec.reserve(families.size());
-    for (size_t i = 0; i < families.size(); i++) {
-        FontFamilyWrapper* family = reinterpret_cast<FontFamilyWrapper*>(families[i]);
-        familyVec.emplace_back(family->family);
+    Typeface* typeface = (fallbackPtr == 0) ? nullptr : toTypeface(fallbackPtr);
+    if (typeface != nullptr) {
+        const std::vector<std::shared_ptr<minikin::FontFamily>>& fallbackFamilies =
+            toTypeface(fallbackPtr)->fFontCollection->getFamilies();
+        familyVec.reserve(families.size() + fallbackFamilies.size());
+        for (size_t i = 0; i < families.size(); i++) {
+            FontFamilyWrapper* family = reinterpret_cast<FontFamilyWrapper*>(families[i]);
+            familyVec.emplace_back(family->family);
+        }
+        for (size_t i = 0; i < fallbackFamilies.size(); i++) {
+            familyVec.emplace_back(fallbackFamilies[i]);
+        }
+    } else {
+        familyVec.reserve(families.size());
+        for (size_t i = 0; i < families.size(); i++) {
+            FontFamilyWrapper* family = reinterpret_cast<FontFamilyWrapper*>(families[i]);
+            familyVec.emplace_back(family->family);
+        }
     }
     return toJLong(Typeface::createFromFamilies(std::move(familyVec), weight, italic));
 }
@@ -145,6 +159,13 @@ static std::function<std::shared_ptr<minikin::MinikinFont>()> readMinikinFontSki
     return [fontPath, fontIndex, axesPtr, axesCount]() -> std::shared_ptr<minikin::MinikinFont> {
         std::string path(fontPath.data(), fontPath.size());
         sk_sp<SkData> data = SkData::MakeFromFileName(path.c_str());
+        if (data == nullptr) {
+            // This may happen if:
+            // 1. When the process failed to open the file (e.g. invalid path or permission).
+            // 2. When the process failed to map the file (e.g. hitting max_map_count limit).
+            ALOGE("Failed to make SkData from file name: %s", path.c_str());
+            return nullptr;
+        }
         const void* fontPtr = data->data();
         size_t fontSize = data->size();
         std::vector<minikin::FontVariation> axes(axesPtr, axesPtr + axesCount);
@@ -243,7 +264,7 @@ static const JNINativeMethod gTypefaceMethods[] = {
     { "nativeGetReleaseFunc",     "()J",  (void*)Typeface_getReleaseFunc },
     { "nativeGetStyle",           "(J)I",  (void*)Typeface_getStyle },
     { "nativeGetWeight",      "(J)I",  (void*)Typeface_getWeight },
-    { "nativeCreateFromArray",    "([JII)J",
+    { "nativeCreateFromArray",    "([JJII)J",
                                            (void*)Typeface_createFromArray },
     { "nativeSetDefault",         "(J)V",   (void*)Typeface_setDefault },
     { "nativeGetSupportedAxes",   "(J)[I",  (void*)Typeface_getSupportedAxes },

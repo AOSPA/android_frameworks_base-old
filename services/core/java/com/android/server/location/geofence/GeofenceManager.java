@@ -43,14 +43,14 @@ import android.util.ArraySet;
 import com.android.internal.annotations.GuardedBy;
 import com.android.server.PendingIntentUtils;
 import com.android.server.location.LocationPermissions;
+import com.android.server.location.injector.Injector;
+import com.android.server.location.injector.LocationPermissionsHelper;
+import com.android.server.location.injector.LocationUsageLogger;
+import com.android.server.location.injector.SettingsHelper;
+import com.android.server.location.injector.UserInfoHelper;
+import com.android.server.location.injector.UserInfoHelper.UserListener;
 import com.android.server.location.listeners.ListenerMultiplexer;
 import com.android.server.location.listeners.PendingIntentListenerRegistration;
-import com.android.server.location.util.Injector;
-import com.android.server.location.util.LocationPermissionsHelper;
-import com.android.server.location.util.LocationUsageLogger;
-import com.android.server.location.util.SettingsHelper;
-import com.android.server.location.util.UserInfoHelper;
-import com.android.server.location.util.UserInfoHelper.UserListener;
 
 import java.util.Collection;
 import java.util.Objects;
@@ -322,12 +322,28 @@ public class GeofenceManager extends
 
     @Override
     protected boolean isActive(GeofenceRegistration registration) {
-        CallerIdentity identity = registration.getIdentity();
-        return registration.isPermitted()
-                && (identity.isSystem() || mUserInfoHelper.isCurrentUserId(identity.getUserId()))
-                && mSettingsHelper.isLocationEnabled(identity.getUserId())
-                && !mSettingsHelper.isLocationPackageBlacklisted(identity.getUserId(),
-                identity.getPackageName());
+        return registration.isPermitted() && isActive(registration.getIdentity());
+    }
+
+    private boolean isActive(CallerIdentity identity) {
+        if (identity.isSystemServer()) {
+            if (!mSettingsHelper.isLocationEnabled(mUserInfoHelper.getCurrentUserId())) {
+                return false;
+            }
+        } else {
+            if (!mSettingsHelper.isLocationEnabled(identity.getUserId())) {
+                return false;
+            }
+            if (!mUserInfoHelper.isCurrentUserId(identity.getUserId())) {
+                return false;
+            }
+            if (mSettingsHelper.isLocationPackageBlacklisted(identity.getUserId(),
+                    identity.getPackageName())) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     @Override

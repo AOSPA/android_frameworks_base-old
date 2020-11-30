@@ -172,10 +172,16 @@ class DisplayAreaPolicyBuilder {
             throw new IllegalStateException("Root must be set for the display area policy.");
         }
 
+        final Set<Integer> rootIdSet = new ArraySet<>();
+        rootIdSet.add(mRootHierarchyBuilder.mRoot.mFeatureId);
         boolean containsImeContainer = mRootHierarchyBuilder.mImeContainer != null;
         boolean containsDefaultTda = containsDefaultTaskDisplayArea(mRootHierarchyBuilder);
         for (int i = 0; i < mDisplayAreaGroupHierarchyBuilders.size(); i++) {
             HierarchyBuilder hierarchyBuilder = mDisplayAreaGroupHierarchyBuilders.get(i);
+            if (!rootIdSet.add(hierarchyBuilder.mRoot.mFeatureId)) {
+                throw new IllegalStateException("There should not be two RootDisplayAreas with id "
+                        + hierarchyBuilder.mRoot.mFeatureId);
+            }
             if (hierarchyBuilder.mTaskDisplayAreas.isEmpty()) {
                 throw new IllegalStateException(
                         "DisplayAreaGroup must contain at least one TaskDisplayArea.");
@@ -283,7 +289,7 @@ class DisplayAreaPolicyBuilder {
             final int maxWindowLayerCount = policy.getMaxWindowLayer();
             final DisplayArea.Tokens[] displayAreaForLayer =
                     new DisplayArea.Tokens[maxWindowLayerCount];
-            final Map<Feature, List<DisplayArea<? extends WindowContainer>>> featureAreas =
+            final Map<Feature, List<DisplayArea<WindowContainer>>> featureAreas =
                     new ArrayMap<>(mFeatures.size());
             for (int i = 0; i < mFeatures.size(); i++) {
                 featureAreas.put(mFeatures.get(i), new ArrayList<>());
@@ -678,7 +684,7 @@ class DisplayAreaPolicyBuilder {
         }
 
         void instantiateChildren(DisplayArea<DisplayArea> parent, DisplayArea.Tokens[] areaForLayer,
-                int level, Map<Feature, List<DisplayArea<? extends WindowContainer>>> areas) {
+                int level, Map<Feature, List<DisplayArea<WindowContainer>>> areas) {
             mChildren.sort(Comparator.comparingInt(pendingArea -> pendingArea.mMinLayer));
             for (int i = 0; i < mChildren.size(); i++) {
                 final PendingArea child = mChildren.get(i);

@@ -303,6 +303,9 @@
         <!-- Additional flag from base permission type: this permission will be granted to the
              retail demo app, as defined by the OEM. -->
         <flag name="retailDemo" value="0x1000000" />
+        <!-- Additional flag from base permission type: this permission will be granted to the
+             recents app. -->
+        <flag name="recents" value="0x2000000" />
     </attr>
 
     <!-- Flags indicating more context for a permission group. -->
@@ -1001,8 +1004,9 @@
         <!-- The font scaling factor has changed, that is the user has
              selected a new global font size. -->
         <flag name="fontScale" value="0x40000000" />
-        <!-- The user has enabled or disabled displaying all text in bold -->
-        <flag name="forceBoldText" value="0x10000000" />
+        <!-- The font weight adjustment value has changed. Used to reflect the user increasing font
+             weight. -->
+        <flag name="fontWeightAdjustment" value="0x10000000" />
     </attr>
 
     <!-- Indicate that the activity can be launched as the embedded child of another
@@ -2831,6 +2835,38 @@
              The resource identifier can later be retrieved from the meta data
              Bundle through {@link android.os.Bundle#getInt Bundle.getInt}. -->
         <attr name="resource" format="reference" />
+    </declare-styleable>
+
+    <!-- The <code>property</code> tag is used to attach additional data that can
+         be supplied to the parent component. A component element can contain any
+         number of <code>property</code> subelements. Valid names are any of the
+         <code>PROPERTY_</code> constants defined in the
+         {@link android.content.pm.PackageManager PackageManager} class. Values
+         are obtained using the appropriate method on the
+         {@link android.content.pm.PackageManager.Property PackageManager.Property} class.
+         <p>Ordinary values are specified through the value attribute. Resource IDs are
+         specified through the resource attribute.
+         <p>It is invalid to specify both a value and resource attributes. -->
+    <declare-styleable name="AndroidManifestProperty"
+         parent="AndroidManifestApplication
+                 AndroidManifestActivity
+                 AndroidManifestReceiver
+                 AndroidManifestProvider
+                 AndroidManifestService">
+        <attr name="name" />
+        <!-- Concrete value to assign to this property.
+             The data can later be retrieved from the property object
+             through
+             {@link android.content.pm.PackageManager.Property#getString Property.getString},
+             {@link android.content.pm.PackageManager.Property#getInteger Property.getInteger},
+             {@link android.content.pm.PackageManager.Property#getBoolean Property.getBoolean},
+             or {@link android.content.pm.PackageManager.Property#getFloat Property.getFloat}
+             depending on the type used here. -->
+        <attr name="value" />
+        <!-- The resource identifier to assign to this property.
+             The resource identifier can later be retrieved from the property object through
+             {@link android.content.pm.PackageManager.Property#getResourceId Property.getResourceId}. -->
+        <attr name="resource" />
     </declare-styleable>
 
     <!-- The <code>intent-filter</code> tag is used to construct an

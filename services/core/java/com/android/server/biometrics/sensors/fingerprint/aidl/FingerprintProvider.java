@@ -41,6 +41,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.biometrics.Utils;
 import com.android.server.biometrics.sensors.AuthenticationClient;
 import com.android.server.biometrics.sensors.ClientMonitor;
@@ -51,6 +52,10 @@ import com.android.server.biometrics.sensors.fingerprint.FingerprintUtils;
 import com.android.server.biometrics.sensors.fingerprint.GestureAvailabilityDispatcher;
 import com.android.server.biometrics.sensors.fingerprint.ServiceProvider;
 import com.android.server.biometrics.sensors.fingerprint.Udfps;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -67,7 +72,8 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
 
     @NonNull private final Context mContext;
     @NonNull private final String mHalInstanceName;
-    @NonNull private final SparseArray<Sensor> mSensors; // Map of sensors that this HAL supports
+    @NonNull @VisibleForTesting
+    final SparseArray<Sensor> mSensors; // Map of sensors that this HAL supports
     @NonNull private final ClientMonitor.LazyDaemon<IFingerprint> mLazyDaemon;
     @NonNull private final Handler mHandler;
     @NonNull private final LockoutResetDispatcher mLockoutResetDispatcher;
@@ -82,7 +88,7 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
         public void onTaskStackChanged() {
             mHandler.post(() -> {
                 for (int i = 0; i < mSensors.size(); i++) {
-                    final ClientMonitor<?> client = mSensors.get(i).getScheduler()
+                    final ClientMonitor<?> client = mSensors.valueAt(i).getScheduler()
                             .getCurrentClient();
                     if (!(client instanceof AuthenticationClient)) {
                         Slog.e(getTag(), "Task stack changed for client: " + client);
@@ -102,7 +108,7 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
                                     && !client.isAlreadyDone()) {
                                 Slog.e(getTag(), "Stopping background authentication, top: "
                                         + topPackage + " currentClient: " + client);
-                                mSensors.get(i).getScheduler()
+                                mSensors.valueAt(i).getScheduler()
                                         .cancelAuthentication(client.getToken());
                             }
                         }
@@ -224,6 +230,12 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
             props.add(mSensors.valueAt(i).getSensorProperties());
         }
         return props;
+    }
+
+    @NonNull
+    @Override
+    public FingerprintSensorPropertiesInternal getSensorProperties(int sensorId) {
+        return mSensors.get(sensorId).getSensorProperties();
     }
 
     private void scheduleLoadAuthenticatorIds(int sensorId) {
@@ -585,7 +597,42 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
 
     @Override
     public void dumpInternal(int sensorId, @NonNull PrintWriter pw) {
+        PerformanceTracker performanceTracker =
+                PerformanceTracker.getInstanceForSensorId(sensorId);
 
+        JSONObject dump = new JSONObject();
+        try {
+            dump.put("service", getTag());
+
+            JSONArray sets = new JSONArray();
+            for (UserInfo user : UserManager.get(mContext).getUsers()) {
+                final int userId = user.getUserHandle().getIdentifier();
+                final int c = FingerprintUtils.getInstance(sensorId)
+                        .getBiometricsForUser(mContext, userId).size();
+                JSONObject set = new JSONObject();
+                set.put("id", userId);
+                set.put("count", c);
+                set.put("accept", performanceTracker.getAcceptForUser(userId));
+                set.put("reject", performanceTracker.getRejectForUser(userId));
+                set.put("acquire", performanceTracker.getAcquireForUser(userId));
+                set.put("lockout", performanceTracker.getTimedLockoutForUser(userId));
+                set.put("permanentLockout", performanceTracker.getPermanentLockoutForUser(userId));
+                // cryptoStats measures statistics about secure fingerprint transactions
+                // (e.g. to unlock password storage, make secure purchases, etc.)
+                set.put("acceptCrypto", performanceTracker.getAcceptCryptoForUser(userId));
+                set.put("rejectCrypto", performanceTracker.getRejectCryptoForUser(userId));
+                set.put("acquireCrypto", performanceTracker.getAcquireCryptoForUser(userId));
+                sets.put(set);
+            }
+
+            dump.put("prints", sets);
+        } catch (JSONException e) {
+            Slog.e(getTag(), "dump formatting failure", e);
+        }
+        pw.println(dump);
+        pw.println("HAL deaths since last reboot: " + performanceTracker.getHALDeathCount());
+
+        mSensors.get(sensorId).getScheduler().dump(pw);
     }
 
     @NonNull
@@ -601,8 +648,11 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
             mDaemon = null;
 
             for (int i = 0; i < mSensors.size(); i++) {
+                final Sensor sensor = mSensors.valueAt(i);
                 final int sensorId = mSensors.keyAt(i);
                 PerformanceTracker.getInstanceForSensorId(sensorId).incrementHALDeathCount();
+                sensor.getScheduler().recordCrashState();
+                sensor.getScheduler().reset();
             }
         });
     }

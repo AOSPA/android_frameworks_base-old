@@ -307,10 +307,13 @@ interface IWifiManager
 
     int getNetworkSuggestionUserApprovalStatus(String packageName);
 
+    void startTemporarilyDisablingAllNonCarrierMergedWifi(int subId);
+
+    void stopTemporarilyDisablingAllNonCarrierMergedWifi();
+
     int getSoftApWifiStandard();
 
     boolean isVht8ssCapableDevice();
 
     String doDriverCmd(String command);
-
 }

@@ -27,7 +27,7 @@ import static android.net.RouteInfo.RTN_UNREACHABLE;
 
 import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.internal.util.Preconditions.checkNotNull;
-import static com.android.server.connectivity.NetworkNotificationManager.NOTIFICATION_VPN;
+import static com.android.server.connectivity.NetworkNotificationManager.NOTIFICATION_CHANNEL_VPN;
 
 import android.Manifest;
 import android.annotation.NonNull;
@@ -112,7 +112,6 @@ import com.android.internal.net.VpnConfig;
 import com.android.internal.net.VpnInfo;
 import com.android.internal.net.VpnProfile;
 import com.android.internal.util.ArrayUtils;
-import com.android.server.ConnectivityService;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
 import com.android.server.net.BaseNetworkObserver;
@@ -207,7 +206,8 @@ public class Vpn {
     @VisibleForTesting protected String mPackage;
     private int mOwnerUID;
     private boolean mIsPackageTargetingAtLeastQ;
-    private String mInterface;
+    @VisibleForTesting
+    protected String mInterface;
     private Connection mConnection;
 
     /** Tracks the runners for all VPN types managed by the platform (eg. LegacyVpn, PlatformVpn) */
@@ -1261,6 +1261,15 @@ public class Vpn {
         mNetworkCapabilities.setAdministratorUids(new int[] {mOwnerUID});
         mNetworkCapabilities.setUids(createUserAndRestrictedProfilesRanges(mUserId,
                 mConfig.allowedApplications, mConfig.disallowedApplications));
+
+        // Only apps targeting Q and above can explicitly declare themselves as metered.
+        // These VPNs are assumed metered unless they state otherwise.
+        if (mIsPackageTargetingAtLeastQ && mConfig.isMetered) {
+            mNetworkCapabilities.removeCapability(NET_CAPABILITY_NOT_METERED);
+        } else {
+            mNetworkCapabilities.addCapability(NET_CAPABILITY_NOT_METERED);
+        }
+
         final long token = Binder.clearCallingIdentity();
         try {
             mNetworkAgent = new NetworkAgent(mLooper, mContext, NETWORKTYPE /* logtag */,
@@ -1275,6 +1284,8 @@ public class Vpn {
         } finally {
             Binder.restoreCallingIdentity(token);
         }
+        mNetworkAgent.setUnderlyingNetworks((mConfig.underlyingNetworks != null)
+                ? Arrays.asList(mConfig.underlyingNetworks) : null);
         mNetworkInfo.setIsAvailable(true);
         updateState(DetailedState.CONNECTED, "agentConnect");
     }
@@ -1856,6 +1867,8 @@ public class Vpn {
                 }
             }
         }
+        mNetworkAgent.setUnderlyingNetworks((mConfig.underlyingNetworks != null)
+                ? Arrays.asList(mConfig.underlyingNetworks) : null);
         return true;
     }
 
@@ -1945,7 +1958,7 @@ public class Vpn {
             final PendingIntent configIntent = mSystemServices.pendingIntentGetActivityAsUser(
                     intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT, user);
             final Notification.Builder builder =
-                    new Notification.Builder(mContext, NOTIFICATION_VPN)
+                    new Notification.Builder(mContext, NOTIFICATION_CHANNEL_VPN)
                             .setSmallIcon(R.drawable.vpn_connected)
                             .setContentTitle(mContext.getString(R.string.vpn_lockdown_disconnected))
                             .setContentText(mContext.getString(R.string.vpn_lockdown_config))
@@ -2407,7 +2420,14 @@ public class Vpn {
                         .addTransportType(NetworkCapabilities.TRANSPORT_TEST)
                         .build();
             } else {
-                req = cm.getDefaultRequest();
+                // Basically, the request here is referring to the default request which is defined
+                // in ConnectivityService. Ideally, ConnectivityManager should provide an new API
+                // which can provide the status of physical network even though there is a virtual
+                // network. b/147280869 is used for tracking the new API.
+                // TODO: Use the new API to register default physical network.
+                req = new NetworkRequest.Builder()
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .build();
             }
 
             cm.requestNetwork(req, mNetworkCallback);

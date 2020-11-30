@@ -41,7 +41,6 @@ public class AmbientState {
     private static final float MAX_PULSE_HEIGHT = 100000f;
 
     private final SectionProvider mSectionProvider;
-    private ArrayList<View> mDraggedViews = new ArrayList<>();
     private int mScrollY;
     private int mAnchorViewIndex;
     private int mAnchorViewY;
@@ -82,9 +81,6 @@ public class AmbientState {
     private Runnable mOnPulseHeightChangedListener;
     private ExpandableNotificationRow mTrackedHeadsUpRow;
     private float mAppearFraction;
-
-    /** Tracks the state from AlertingNotificationManager#hasNotifications() */
-    private boolean mHasAlertEntries;
 
     public AmbientState(
             Context context,
@@ -159,19 +155,6 @@ public class AmbientState {
 
     public void setAnchorViewY(int anchorViewY) {
         mAnchorViewY = anchorViewY;
-    }
-
-    /** Call when dragging begins. */
-    public void onBeginDrag(View view) {
-        mDraggedViews.add(view);
-    }
-
-    public void onDragFinished(View view) {
-        mDraggedViews.remove(view);
-    }
-
-    public ArrayList<View> getDraggedViews() {
-        return mDraggedViews;
     }
 
     /**
@@ -382,19 +365,8 @@ public class AmbientState {
         mPanelTracking = panelTracking;
     }
 
-    public boolean hasPulsingNotifications() {
-        return mPulsing && mHasAlertEntries;
-    }
-
     public void setPulsing(boolean hasPulsing) {
         mPulsing = hasPulsing;
-    }
-
-    /**
-     * @return if we're pulsing in general
-     */
-    public boolean isPulsing() {
-        return mPulsing;
     }
 
     public boolean isPulsing(NotificationEntry entry) {
@@ -554,9 +526,5 @@ public class AmbientState {
 
     public float getAppearFraction() {
         return mAppearFraction;
-    }
-
-    public void setHasAlertEntries(boolean hasAlertEntries) {
-        mHasAlertEntries = hasAlertEntries;
     }
 }

@@ -51,6 +51,9 @@ import static android.view.Surface.ROTATION_180;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
 import static android.view.View.GONE;
+import static android.view.WindowInsets.Type.displayCutout;
+import static android.view.WindowInsets.Type.ime;
+import static android.view.WindowInsets.Type.systemBars;
 import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
@@ -70,9 +73,10 @@ import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
-import static android.view.WindowManager.TRANSIT_OLD_ACTIVITY_OPEN;
-import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN;
-import static android.view.WindowManager.TRANSIT_OLD_TASK_TO_FRONT;
+import static android.view.WindowManager.DISPLAY_IME_POLICY_LOCAL;
+import static android.view.WindowManager.DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
+import static android.view.WindowManager.TRANSIT_OPEN;
+import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.DisplayAreaOrganizer.FEATURE_ROOT;
 import static android.window.DisplayAreaOrganizer.FEATURE_WINDOWED_MAGNIFICATION;
 
@@ -89,7 +93,7 @@ import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_C
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.DisplayContentProto.APP_TRANSITION;
-import static com.android.server.wm.DisplayContentProto.CAN_SHOW_IME;
+import static com.android.server.wm.DisplayContentProto.IME_POLICY;
 import static com.android.server.wm.DisplayContentProto.CLOSING_APPS;
 import static com.android.server.wm.DisplayContentProto.CURRENT_FOCUS;
 import static com.android.server.wm.DisplayContentProto.DISPLAY_FRAMES;
@@ -201,6 +205,7 @@ import android.view.SurfaceControl.Transaction;
 import android.view.SurfaceSession;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.WindowManager.DisplayImePolicy;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -624,12 +629,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     private boolean mInEnsureActivitiesVisible = false;
 
-    /**
-     * Last window to be requested focus via {@code SurfaceControl.Transaction#setFocusedWindow} to
-     * prevent duplicate requests to input.
-     */
-    WindowState mLastRequestedFocus = null;
-
     private final Consumer<WindowState> mUpdateWindowsForAnimator = w -> {
         WindowStateAnimator winAnimator = w.mWinAnimator;
         final ActivityRecord activity = w.mActivityRecord;
@@ -756,7 +755,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 if (!w.getFrame().isEmpty()) {
                     w.updateLastFrames();
                 }
-                w.updateLastInsetValues();
+                w.onResizeHandled();
                 w.updateLocationInParentDisplayIfNeeded();
             }
 
@@ -2562,7 +2561,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     void getStableRect(Rect out) {
-        out.set(mDisplayFrames.mStable);
+        final InsetsState state = mDisplayContent.getInsetsStateController().getRawInsetsState();
+        out.set(state.getDisplayFrame());
+        out.inset(state.calculateInsets(out, systemBars(), true /* ignoreVisibility */));
     }
 
     /**
@@ -2690,12 +2691,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 // If the task is freeformed, enlarge the area to account for outside
                 // touch area for resize.
                 mTmpRect.inset(-delta, -delta);
-                // Intersect with display content rect. If we have system decor (status bar/
+                // Intersect with display content frame. If we have system decor (status bar/
                 // navigation bar), we want to exclude that from the tap detection.
                 // Otherwise, if the app is partially placed under some system button (eg.
                 // Recents, Home), pressing that button would cause a full series of
                 // unwanted transfer focus/resume/pause, before we could go home.
-                mTmpRect.intersect(mDisplayFrames.mContent);
+                mTmpRect.inset(getInsetsStateController().getRawInsetsState().calculateInsets(
+                        mTmpRect, systemBars() | ime(), false /* ignoreVisibility */));
             }
             mTouchExcludeRegion.op(mTmpRect, Region.Op.DIFFERENCE);
         }
@@ -2783,8 +2785,23 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final WindowState imeWin = mInputMethodWindow;
         final boolean imeVisible = imeWin != null && imeWin.isVisible()
                 && imeWin.isDisplayed();
-        final int imeHeight = mDisplayFrames.getInputMethodWindowVisibleHeight();
+        final int imeHeight = getInputMethodWindowVisibleHeight();
         mPinnedStackControllerLocked.setAdjustedForIme(imeVisible, imeHeight);
+    }
+
+    int getInputMethodWindowVisibleHeight() {
+        final InsetsState state = getInsetsStateController().getRawInsetsState();
+        final InsetsSource imeSource = state.peekSource(ITYPE_IME);
+        if (imeSource == null || !imeSource.isVisible()) {
+            return 0;
+        }
+        final Rect imeFrame = imeSource.getVisibleFrame() != null
+                ? imeSource.getVisibleFrame() : imeSource.getFrame();
+        final Rect dockFrame = mTmpRect;
+        dockFrame.set(state.getDisplayFrame());
+        dockFrame.inset(state.calculateInsets(dockFrame, systemBars() | displayCutout(),
+                false /* ignoreVisibility */));
+        return dockFrame.bottom - imeFrame.top;
     }
 
     void prepareFreezingTaskBounds() {
@@ -2916,7 +2933,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mInsetsStateController.getImeSourceProvider().dumpDebug(proto,
                     IME_INSETS_SOURCE_PROVIDER, logLevel);
         }
-        proto.write(CAN_SHOW_IME, canShowIme());
+        proto.write(IME_POLICY, getImePolicy());
         proto.end(token);
     }
 
@@ -3547,7 +3564,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * @return {@link InsetsControlTarget} that can host IME.
      */
     InsetsControlTarget getImeHostOrFallback(WindowState target) {
-        if (target != null && target.getDisplayContent().canShowIme()) {
+        if (target != null
+                && target.getDisplayContent().getImePolicy() == DISPLAY_IME_POLICY_LOCAL) {
             return target;
         }
         return getImeFallback();
@@ -3561,19 +3579,31 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return statusBar != null ? statusBar : defaultDc.mRemoteInsetsControlTarget;
     }
 
-    boolean canShowIme() {
+    @DisplayImePolicy int getImePolicy() {
         if (!isTrusted()) {
-            return false;
+            return DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
         }
-        return mWmService.mDisplayWindowSettings.shouldShowImeLocked(this)
-                || forceDesktopMode();
+        final int imePolicy = mWmService.mDisplayWindowSettings.getImePolicyLocked(this);
+        if (imePolicy == DISPLAY_IME_POLICY_FALLBACK_DISPLAY && forceDesktopMode()) {
+            // If the display has not explicitly requested for the IME to be hidden then it shall
+            // show the IME locally.
+            return DISPLAY_IME_POLICY_LOCAL;
+        }
+        return imePolicy;
     }
 
     boolean forceDesktopMode() {
         return mWmService.mForceDesktopModeOnExternalDisplays && !isDefaultDisplay && !isPrivate();
     }
 
-    private void setInputMethodTarget(WindowState target, boolean targetWaitingAnim) {
+    /**
+     * Sets the window the IME is on top of.
+     * @param target window to place the IME surface on top of. If {@code null}, the IME will be
+     *               placed at its parent's surface.
+     * @param targetWaitingAnim if {@code true}, hold off on modifying the animation layer of
+     *                          the target.
+     */
+    private void setInputMethodTarget(@Nullable WindowState target, boolean targetWaitingAnim) {
         if (target == mInputMethodTarget && mInputMethodTargetWaitingAnim == targetWaitingAnim) {
             return;
         }
@@ -3581,6 +3611,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mInputMethodTarget = target;
         mInputMethodTargetWaitingAnim = targetWaitingAnim;
         assignWindowLayers(true /* setLayoutNeeded */);
+        if (target != null) {
+            RootDisplayArea targetRoot = target.getRootDisplayArea();
+            if (targetRoot != null) {
+                // Reposition the IME container to the target root to get the correct bounds and
+                // config.
+                targetRoot.placeImeContainer(mImeWindowsContainers);
+            }
+        }
         updateImeParent();
         updateImeControlTarget();
     }
@@ -4511,22 +4549,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
     }
 
-    void prepareAppTransitionOld(@WindowManager.TransitionOldType int transit,
-            boolean alwaysKeepCurrent) {
-        prepareAppTransitionOld(transit, alwaysKeepCurrent, 0 /* flags */,
-                false /* forceOverride */);
-    }
-
-    void prepareAppTransitionOld(@WindowManager.TransitionOldType int transit,
-            boolean alwaysKeepCurrent, @WindowManager.TransitionFlags int flags,
-            boolean forceOverride) {
-        final boolean prepared = mAppTransition.prepareAppTransitionOld(
-                transit, alwaysKeepCurrent, flags, forceOverride);
-        if (prepared && okToAnimate()) {
-            mSkipAppTransitionAnimation = false;
-        }
-    }
-
     void prepareAppTransition(@WindowManager.TransitionType int transit) {
         prepareAppTransition(transit, 0 /* flags */);
     }
@@ -4537,6 +4559,28 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (prepared && okToAnimate()) {
             mSkipAppTransitionAnimation = false;
         }
+    }
+
+    /**
+     * Helper that both requests a transition (using the new transition system) and prepares
+     * the legacy transition system. Use this when both systems have the same start-point.
+     *
+     * @see TransitionController#requestTransitionIfNeeded(int, int, WindowContainer)
+     * @see AppTransition#prepareAppTransition
+     */
+    void requestTransitionAndLegacyPrepare(@WindowManager.TransitionType int transit,
+            @WindowManager.TransitionFlags int flags) {
+        prepareAppTransition(transit, flags);
+        mAtmService.getTransitionController().requestTransitionIfNeeded(transit, flags,
+                null /* trigger */);
+    }
+
+    /** @see #requestTransitionAndLegacyPrepare(int, int) */
+    void requestTransitionAndLegacyPrepare(@WindowManager.TransitionType int transit,
+            @Nullable WindowContainer trigger) {
+        prepareAppTransition(transit);
+        mAtmService.getTransitionController().requestTransitionIfNeeded(transit, 0 /* flags */,
+                trigger);
     }
 
     void executeAppTransition() {
@@ -4583,10 +4627,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /** Check if pending app transition is for activity / task launch. */
     boolean isNextTransitionForward() {
-        final int transit = mAppTransition.getAppTransitionOld();
-        return transit == TRANSIT_OLD_ACTIVITY_OPEN
-                || transit == TRANSIT_OLD_TASK_OPEN
-                || transit == TRANSIT_OLD_TASK_TO_FRONT;
+        return mAppTransition.containsTransitRequest(TRANSIT_OPEN)
+                || mAppTransition.containsTransitRequest(TRANSIT_TO_FRONT);
     }
 
     /**
@@ -4699,7 +4741,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     @VisibleForTesting
-    WindowContainer<?> getImeContainer() {
+    DisplayArea.Tokens getImeContainer() {
         return mImeWindowsContainers;
     }
 
@@ -5226,7 +5268,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mRemoving = true;
         Task lastReparentedStack;
 
-        mRootWindowContainer.mStackSupervisor.beginDeferResume();
+        mRootWindowContainer.mTaskSupervisor.beginDeferResume();
         try {
             lastReparentedStack = reduceOnAllTaskDisplayAreas((taskDisplayArea, stack) -> {
                 final Task lastReparentedStackFromArea = taskDisplayArea.remove();
@@ -5236,7 +5278,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 return stack;
             }, null /* initValue */, false /* traverseTopToBottom */);
         } finally {
-            mRootWindowContainer.mStackSupervisor.endDeferResume();
+            mRootWindowContainer.mTaskSupervisor.endDeferResume();
         }
         mRemoved = true;
 
@@ -5277,7 +5319,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             });
         } else if (getTopStack() == null) {
             removeIfPossible();
-            mRootWindowContainer.mStackSupervisor
+            mRootWindowContainer.mTaskSupervisor
                     .getKeyguardController().onDisplayRemoved(mDisplayId);
         }
     }
@@ -5343,20 +5385,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @VisibleForTesting
     void removeAllTasks() {
         forAllTasks((t) -> { t.getRootTask().removeChild(t, "removeAllTasks"); });
-    }
-
-    /**
-     * Similar to {@link RootWindowContainer#isAnyNonToastWindowVisibleForUid(int)}, but
-     * used for pid.
-     */
-    boolean isAnyNonToastWindowVisibleForPid(int pid) {
-        final PooledPredicate p = PooledLambda.obtainPredicate(
-                WindowState::isNonToastWindowVisibleForPid,
-                PooledLambda.__(WindowState.class), pid);
-
-        final WindowState w = getWindow(p);
-        p.recycle();
-        return w != null;
     }
 
     Context getDisplayUiContext() {
@@ -5549,7 +5577,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         @Override
-        public void onAppTransitionCancelledLocked(int transit) {
+        public void onAppTransitionCancelledLocked(boolean keyguardGoingAway) {
             continueUpdateOrientationForDiffOrienLaunchingApp();
         }
 

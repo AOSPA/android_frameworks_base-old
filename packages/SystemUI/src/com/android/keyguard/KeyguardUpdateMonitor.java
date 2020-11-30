@@ -1862,7 +1862,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             @Override
             public void onChange(boolean selfChange) {
                 updateLockScreenMode();
-                mHandler.sendEmptyMessage(MSG_LOCK_SCREEN_MODE);
             }
         };
         mContext.getContentResolver().registerContentObserver(
@@ -1871,14 +1870,22 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     }
 
     private void updateLockScreenMode() {
-        mLockScreenMode = Settings.Global.getInt(mContext.getContentResolver(),
+        final int newMode = Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.SHOW_NEW_LOCKSCREEN,
                 isUdfpsEnrolled() ? 1 : 0);
+        if (newMode != mLockScreenMode) {
+            mLockScreenMode = newMode;
+            mHandler.sendEmptyMessage(MSG_LOCK_SCREEN_MODE);
+        }
     }
 
     private void updateUdfpsEnrolled(int userId) {
         mIsUdfpsEnrolled = mAuthController.isUdfpsEnrolled(userId);
     }
+
+    /**
+     * @return true if there's at least one udfps enrolled
+     */
     public boolean isUdfpsEnrolled() {
         return mIsUdfpsEnrolled;
     }
@@ -1918,6 +1925,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             return;
         }
 
+        // TODO: Add support for multiple fingerprint sensors, b/173730729
         boolean shouldListenForFingerprint =
                 isUdfpsEnrolled() ? shouldListenForUdfps() : shouldListenForFingerprint();
         boolean runningOrRestarting = mFingerprintRunningState == BIOMETRIC_STATE_RUNNING
@@ -2142,7 +2150,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         userId);
             } else {
                 mFpm.authenticate(null /* crypto */, mFingerprintCancelSignal,
-                        mFingerprintAuthenticationCallback, null /* handler */, userId);
+                        mFingerprintAuthenticationCallback, null /* handler */,
+                        FingerprintManager.SENSOR_ID_ANY, userId);
             }
             setFingerprintRunningState(BIOMETRIC_STATE_RUNNING);
         }

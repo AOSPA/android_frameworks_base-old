@@ -161,9 +161,6 @@
     <!-- The number of milliseconds to extend ambient pulse by when prompted (e.g. on touch) -->
     <integer name="ambient_notification_extension_time">10000</integer>
 
-    <!-- Whether to enable KeyguardService or not -->
-    <bool name="config_enableKeyguardService">true</bool>
-
     <!-- The maximum count of notifications on Keyguard. The rest will be collapsed in an overflow
      card. -->
     <integer name="keyguard_max_notification_count">3</integer>
@@ -359,9 +356,6 @@
     <!-- Whether or not the gear icon on notifications should be shown. The gear is shown when the
          the notification is not swiped enough to dismiss it. -->
     <bool name="config_showNotificationGear">true</bool>
-
-    <!-- Whether or not a background should be drawn behind a notification. -->
-    <bool name="config_drawNotificationBackground">true</bool>
 
     <!-- Whether or the notifications can be shown and dismissed with a drag. -->
     <bool name="config_enableNotificationShadeDrag">true</bool>

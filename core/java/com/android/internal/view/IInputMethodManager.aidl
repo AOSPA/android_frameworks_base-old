@@ -77,6 +77,11 @@ interface IInputMethodManager {
     void removeImeSurface();
     /** Remove the IME surface. Requires passing the currently focused window. */
     void removeImeSurfaceFromWindow(in IBinder windowToken);
-    void startProtoDump(in byte[] clientProtoDump);
+    void startProtoDump(in byte[] protoDump, int source, String where);
     boolean isImeTraceEnabled();
+
+    // Starts an ime trace.
+    void startImeTrace();
+    // Stops an ime trace.
+    void stopImeTrace();
 }

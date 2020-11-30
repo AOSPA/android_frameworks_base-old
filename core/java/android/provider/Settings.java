@@ -3582,8 +3582,9 @@ public final class Settings {
             if (outConfig.fontScale < 0) {
                 outConfig.fontScale = DEFAULT_FONT_SCALE;
             }
-            outConfig.forceBoldText = Settings.Secure.getIntForUser(
-                    cr, Settings.Secure.FORCE_BOLD_TEXT, Configuration.FORCE_BOLD_TEXT_NO,
+            outConfig.fontWeightAdjustment = Settings.Secure.getIntForUser(
+                    cr, Settings.Secure.FONT_WEIGHT_ADJUSTMENT,
+                    Configuration.FONT_WEIGHT_ADJUSTMENT_UNDEFINED,
                     userHandle);
 
             final String localeValue =
@@ -3615,7 +3616,7 @@ public final class Settings {
             if (!inoutConfig.userSetLocale && !inoutConfig.getLocales().isEmpty()) {
                 inoutConfig.clearLocales();
             }
-            inoutConfig.forceBoldText = Configuration.FORCE_BOLD_TEXT_UNDEFINED;
+            inoutConfig.fontWeightAdjustment = Configuration.FONT_WEIGHT_ADJUSTMENT_UNDEFINED;
         }
 
         /**
@@ -6825,17 +6826,16 @@ public final class Settings {
         public static final String KEYGUARD_SLICE_URI = "keyguard_slice_uri";
 
         /**
-         * Whether to draw text in bold.
+         * The adjustment in font weight. This is used to draw text in bold.
          *
-         * <p>Values:
-         *  1 - Text is not displayed in bold. (Default)
-         *  2 - Text is displayed in bold.
+         * <p> This value can be negative. To display bolded text, the adjustment used is 300,
+         * which is the difference between
+         * {@link android.graphics.fonts.FontStyle#FONT_WEIGHT_NORMAL} and
+         * {@link android.graphics.fonts.FontStyle#FONT_WEIGHT_BOLD}.
          *
-         * @see Configuration#FORCE_BOLD_TEXT_NO
-         * @see Configuration#FORCE_BOLD_TEXT_YES
          * @hide
          */
-        public static final String FORCE_BOLD_TEXT = "force_bold_text";
+        public static final String FONT_WEIGHT_ADJUSTMENT = "font_weight_adjustment";
 
         /**
          * Whether to speak passwords while in accessibility mode.
@@ -8421,6 +8421,14 @@ public final class Settings {
          */
         public static final String EMERGENCY_GESTURE_SOUND_ENABLED =
                 "emergency_gesture_sound_enabled";
+
+        /**
+         * The default number to call in emergency gesture
+         *
+         * @hide
+         */
+        public static final String EMERGENCY_GESTURE_CALL_NUMBER =
+                "emergency_gesture_call_number";
 
         /**
          * Whether the camera launch gesture to double tap the power button when the screen is off
@@ -14597,19 +14605,6 @@ public final class Settings {
          */
         public static final String MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH =
                 "maximum_obscuring_opacity_for_touch";
-
-        /**
-         * LatencyTracker settings.
-         *
-         * The following strings are supported as keys:
-         * <pre>
-         *     enabled              (boolean)
-         *     sampling_interval    (int)
-         * </pre>
-         *
-         * @hide
-         */
-        public static final String LATENCY_TRACKER = "latency_tracker";
     }
 
     /**
