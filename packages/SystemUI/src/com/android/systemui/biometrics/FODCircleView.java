@@ -72,6 +72,7 @@ public class FODCircleView extends ImageView {
     private boolean mIsBouncer;
     private boolean mIsDreaming;
     private boolean mIsCircleShowing;
+    private boolean mDimDispatchOnPress;
 
     private Handler mHandler;
 
@@ -208,6 +209,19 @@ public class FODCircleView extends ImageView {
 
         mUpdateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
         mUpdateMonitor.registerCallback(mMonitorCallback);
+
+        mDimDispatchOnPress = res.getBoolean(R.bool.config_DimDispatchOnPress);
+        if (mDimDispatchOnPress) {
+            getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+                float drawingDimAmount = mParams.dimAmount;
+                if (mCurrentDimAmount == 0.0f && drawingDimAmount > 0.0f) {
+                    dispatchPress();
+                    mCurrentDimAmount = drawingDimAmount;
+                } else if (mCurrentDimAmount > 0.0f && drawingDimAmount == 0.0f) {
+                    mCurrentDimAmount = drawingDimAmount;
+                }
+            });
+        }
     }
 
     @Override
@@ -302,7 +316,9 @@ public class FODCircleView extends ImageView {
         setKeepScreenOn(true);
 
         setDim(true);
-        dispatchPress();
+        if (!mDimDispatchOnPress) {
+            dispatchPress();
+        }
 
         setImageDrawable(null);
         invalidate();
