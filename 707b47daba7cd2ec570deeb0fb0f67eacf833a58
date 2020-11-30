@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "27725c37_23789246",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 9,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-11-30T06:01:36Z",
+      "side": 1,
+      "message": "Spelling?",
+      "revId": "707b47daba7cd2ec570deeb0fb0f67eacf833a58",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
