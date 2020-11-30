@@ -525,6 +525,9 @@ public interface RILConstants {
     int RIL_REQUEST_SET_ALLOWED_NETWORK_TYPES_BITMAP = 222;
     int RIL_REQUEST_GET_ALLOWED_NETWORK_TYPES_BITMAP = 223;
 
+    /* RIL Request to get newly supported radio
+       capabilities include 5G SA*/
+    int RIL_REQUEST_GET_ENHANCED_RADIO_CAPABILITY = 600;
     /* Responses begin */
     int RIL_RESPONSE_ACKNOWLEDGEMENT = 800;
 
