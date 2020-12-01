@@ -86,5 +86,6 @@ public class SystemSettings {
         Settings.System.AMBIENT_NOTIFICATION_LIGHT,
         Settings.System.AMBIENT_NOTIFICATION_LIGHT_AUTOMATIC,
         Settings.System.NOTIFICATION_LIGHT_PULSE,
+        Settings.System.AUTHENTICATION_SUCCESS_VIB,
     };
 }
