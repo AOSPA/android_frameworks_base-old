@@ -464,17 +464,7 @@ public class WifiTracker implements LifecycleObserver, OnStart, OnStop, OnDestro
                 continue;
             }
 
-            String apKey;
-
-            if (!mWpa3Support && AccessPoint.checkForSaeAndPsk(result)) {
-                if (result.SSID == null || result.SSID.length() == 0) {
-                    apKey = result.BSSID + "," + AccessPoint.SECURITY_PSK;
-                } else {
-                    apKey = result.SSID + "," + AccessPoint.SECURITY_PSK;
-                }
-            } else {
-                apKey = AccessPoint.getKey(result);
-            }
+            String apKey = AccessPoint.getKey(mWpa3Support, result);
 
             List<ScanResult> resultList;
             if (scanResultsByApKey.containsKey(apKey)) {
@@ -696,7 +686,8 @@ public class WifiTracker implements LifecycleObserver, OnStart, OnStop, OnDestro
             List<AccessPoint> cache) {
         final int N = cache.size();
         for (int i = 0; i < N; i++) {
-            if (cache.get(i).getKey().equals(AccessPoint.getKey(scanResults.get(0)))) {
+            if (cache.get(i).getKey().equals(AccessPoint.getKey(mWpa3Support,
+                                                                scanResults.get(0)))) {
                 AccessPoint ret = cache.remove(i);
                 ret.setScanResults(scanResults);
                 return ret;

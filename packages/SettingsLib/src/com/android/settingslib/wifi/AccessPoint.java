@@ -602,6 +602,20 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return oldMetering == mIsScoredNetworkMetered;
     }
 
+    /** @hide */
+    public static String getKey(boolean wpa3Support, ScanResult result) {
+        StringBuilder builder = new StringBuilder();
+
+        if (TextUtils.isEmpty(result.SSID)) {
+            builder.append(result.BSSID);
+        } else {
+            builder.append(result.SSID);
+        }
+
+        builder.append(',').append(getSecurity(wpa3Support, result));
+        return builder.toString();
+    }
+
     public static String getKey(ScanResult result) {
         StringBuilder builder = new StringBuilder();
 
@@ -1127,8 +1141,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
         // Validate scan results are for current AP only
         String key = getKey();
+        boolean wpa3Support = mContext.getResources().getBoolean(
+                    com.android.internal.R.bool.config_wifi_wpa3_supported);
+
         for (ScanResult result : scanResults) {
-            String scanResultKey = AccessPoint.getKey(result);
+            String scanResultKey = AccessPoint.getKey(wpa3Support, result);
             if (!mKey.equals(scanResultKey)) {
                 throw new IllegalArgumentException(
                         String.format("ScanResult %s\nkey of %s did not match current AP key %s",
@@ -1384,6 +1401,23 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
     }
 
+    private static int getSecurity(boolean wpa3Support, ScanResult result) {
+        if (result.capabilities.contains("DPP")) {
+            return SECURITY_DPP;
+        } else if (wpa3Support && result.capabilities.contains("SAE")) {
+            return SECURITY_SAE;
+        } else if (result.capabilities.contains("OWE")) {
+            return SECURITY_OWE;
+        } else if (result.capabilities.contains("WEP")) {
+            return SECURITY_WEP;
+        } else if (result.capabilities.contains("PSK")) {
+            return SECURITY_PSK;
+        } else if (result.capabilities.contains("EAP")) {
+            return SECURITY_EAP;
+        }
+        return SECURITY_NONE;
+    }
+
     private static int getSecurity(ScanResult result) {
         if (result.capabilities.contains("DPP")) {
             return SECURITY_DPP;
@@ -1401,7 +1435,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return SECURITY_NONE;
     }
 
-    public static boolean checkForSaeAndPsk(ScanResult result) {
+    private static boolean checkForSaeAndPsk(ScanResult result) {
         if (result.capabilities.contains("SAE")
             && result.capabilities.contains("PSK"))
             return true;
