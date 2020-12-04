@@ -94,7 +94,6 @@ import android.app.AsyncNotedAppOp;
 import android.app.RuntimeAppOpAccessMessage;
 import android.app.SyncNotedAppOp;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -3018,28 +3017,6 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
     }
 
-    private boolean isTrustedVoiceServiceProxy(String packageName, int code) {
-        if (code != OP_RECORD_AUDIO) {
-            return false;
-        }
-        final String voiceRecognitionComponent = Settings.Secure.getString(
-                mContext.getContentResolver(), Settings.Secure.VOICE_RECOGNITION_SERVICE);
-        final String voiceInteractionComponent = Settings.Secure.getString(
-                mContext.getContentResolver(), Settings.Secure.VOICE_INTERACTION_SERVICE);
-
-        final String voiceRecognitionServicePackageName =
-                getComponentPackageNameFromString(voiceRecognitionComponent);
-        final String voiceInteractionServicePackageName =
-                getComponentPackageNameFromString(voiceInteractionComponent);
-        return Objects.equals(packageName, voiceRecognitionServicePackageName) && Objects.equals(
-                voiceRecognitionServicePackageName, voiceInteractionServicePackageName);
-    }
-
-    private String getComponentPackageNameFromString(String from) {
-        ComponentName componentName = from != null ? ComponentName.unflattenFromString(from) : null;
-        return componentName != null ? componentName.getPackageName() : "";
-    }
-
     @Override
     public int noteProxyOperation(int code, int proxiedUid, String proxiedPackageName,
             String proxiedAttributionTag, int proxyUid, String proxyPackageName,
@@ -3057,10 +3034,12 @@ public class AppOpsService extends IAppOpsService.Stub {
 
         // This is a workaround for R QPR, new API change is not allowed. We only allow the current
         // voice recognizer is also the voice interactor to noteproxy op.
-        final boolean isTrustVoiceServiceProxy = isTrustedVoiceServiceProxy(proxyPackageName, code);
+        final boolean isTrustVoiceServiceProxy =
+                AppOpsManager.isTrustedVoiceServiceProxy(mContext, proxyPackageName, code);
+        final boolean isSelfBlame = Binder.getCallingUid() == proxiedUid;
         final boolean isProxyTrusted = mContext.checkPermission(
                 Manifest.permission.UPDATE_APP_OPS_STATS, -1, proxyUid)
-                == PackageManager.PERMISSION_GRANTED || isTrustVoiceServiceProxy;
+                == PackageManager.PERMISSION_GRANTED || isTrustVoiceServiceProxy || isSelfBlame;
 
         final int proxyFlags = isProxyTrusted ? AppOpsManager.OP_FLAG_TRUSTED_PROXY
                 : AppOpsManager.OP_FLAG_UNTRUSTED_PROXY;
@@ -3524,10 +3503,12 @@ public class AppOpsService extends IAppOpsService.Stub {
 
         // This is a workaround for R QPR, new API change is not allowed. We only allow the current
         // voice recognizer is also the voice interactor to noteproxy op.
-        final boolean isTrustVoiceServiceProxy = isTrustedVoiceServiceProxy(proxyPackageName, code);
+        final boolean isTrustVoiceServiceProxy =
+                AppOpsManager.isTrustedVoiceServiceProxy(mContext, proxyPackageName, code);
+        final boolean isSelfBlame = Binder.getCallingUid() == proxiedUid;
         final boolean isProxyTrusted = mContext.checkPermission(
                 Manifest.permission.UPDATE_APP_OPS_STATS, -1, proxyUid)
-                == PackageManager.PERMISSION_GRANTED || isTrustVoiceServiceProxy;
+                == PackageManager.PERMISSION_GRANTED || isTrustVoiceServiceProxy || isSelfBlame;
 
         final int proxyFlags = isProxyTrusted ? AppOpsManager.OP_FLAG_TRUSTED_PROXY
                 : AppOpsManager.OP_FLAG_UNTRUSTED_PROXY;

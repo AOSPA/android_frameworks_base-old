@@ -94,6 +94,11 @@ import static android.content.pm.PackageManager.MOVE_FAILED_OPERATION_PENDING;
 import static android.content.pm.PackageManager.MOVE_FAILED_SYSTEM_PACKAGE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.content.pm.PackageManager.RESTRICTION_NONE;
+import static android.content.pm.PackageManager.TYPE_ACTIVITY;
+import static android.content.pm.PackageManager.TYPE_PROVIDER;
+import static android.content.pm.PackageManager.TYPE_RECEIVER;
+import static android.content.pm.PackageManager.TYPE_SERVICE;
+import static android.content.pm.PackageManager.TYPE_UNKNOWN;
 import static android.content.pm.PackageManager.UNINSTALL_REASON_UNKNOWN;
 import static android.content.pm.PackageManagerInternal.LAST_KNOWN_PACKAGE;
 import static android.content.pm.PackageParser.SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V4;
@@ -103,7 +108,6 @@ import static android.os.incremental.IncrementalManager.isIncrementalPath;
 import static android.os.storage.StorageManager.FLAG_STORAGE_CE;
 import static android.os.storage.StorageManager.FLAG_STORAGE_DE;
 import static android.os.storage.StorageManager.FLAG_STORAGE_EXTERNAL;
-import static android.permission.PermissionManager.KILL_APP_REASON_GIDS_CHANGED;
 
 import static com.android.internal.annotations.VisibleForTesting.Visibility;
 import static com.android.internal.app.IntentForwarderActivity.FORWARD_INTENT_TO_MANAGED_PROFILE;
@@ -137,6 +141,7 @@ import android.annotation.AppIdInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.StringRes;
 import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.ActivityManager;
@@ -160,6 +165,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.IntentSender.SendIntentException;
+import android.content.PermissionChecker;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.AuxiliaryResolveInfo;
@@ -195,8 +201,11 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInfoLite;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.ComponentType;
 import android.content.pm.PackageManager.LegacyPackageDeleteObserver;
 import android.content.pm.PackageManager.ModuleInfoFlags;
+import android.content.pm.PackageManager.Property;
+import android.content.pm.PackageManager.PropertyLocation;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageManagerInternal.PackageListObserver;
 import android.content.pm.PackageManagerInternal.PrivateResolveFlags;
@@ -245,7 +254,6 @@ import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.hardware.display.DisplayManager;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -274,7 +282,6 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.os.UserManagerInternal;
 import android.os.incremental.IStorageHealthListener;
 import android.os.incremental.IncrementalManager;
 import android.os.incremental.IncrementalStorage;
@@ -340,10 +347,8 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.os.Zygote;
 import com.android.internal.telephony.CarrierAppUtils;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
-import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
@@ -398,7 +403,6 @@ import libcore.util.HexEncoding;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -575,21 +579,6 @@ public class PackageManagerService extends IPackageManager.Stub
     public final static String STUB_SUFFIX = "-Stub";
 
     private static final int[] EMPTY_INT_ARRAY = new int[0];
-
-    private static final int TYPE_UNKNOWN = 0;
-    private static final int TYPE_ACTIVITY = 1;
-    private static final int TYPE_RECEIVER = 2;
-    private static final int TYPE_SERVICE = 3;
-    private static final int TYPE_PROVIDER = 4;
-    @IntDef(prefix = { "TYPE_" }, value = {
-            TYPE_UNKNOWN,
-            TYPE_ACTIVITY,
-            TYPE_RECEIVER,
-            TYPE_SERVICE,
-            TYPE_PROVIDER,
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface ComponentType {}
 
     /**
      * Timeout (in milliseconds) after which the watchdog should declare that
@@ -1217,6 +1206,7 @@ public class PackageManagerService extends IPackageManager.Stub
         public ViewCompiler viewCompiler;
         public @Nullable String wellbeingPackage;
         public @Nullable String retailDemoPackage;
+        public @Nullable String recentsPackage;
         public ComponentName resolveComponentName;
         public ArrayMap<String, AndroidPackage> packages;
         public boolean enableFreeCacheV2;
@@ -1321,6 +1311,8 @@ public class PackageManagerService extends IPackageManager.Stub
     private Future<?> mPrepareAppDataFuture;
 
     private final IncrementalManager mIncrementalManager;
+
+    private final PackageProperty mPackageProperty = new PackageProperty();
 
     private static class IFVerificationParams {
         String packageName;
@@ -1750,6 +1742,7 @@ public class PackageManagerService extends IPackageManager.Stub
     final @Nullable String mSharedSystemSharedLibraryPackageName;
     final @Nullable String mRetailDemoPackage;
     final @Nullable String mOverlayConfigSignaturePackage;
+    final @Nullable String mRecentsPackage;
 
     private final PackageUsage mPackageUsage = new PackageUsage();
     private final CompilerStats mCompilerStats = new CompilerStats();
@@ -2538,8 +2531,20 @@ public class PackageManagerService extends IPackageManager.Stub
             @Checksum.Type int optional,
             @Checksum.Type int required, @Nullable List trustedInstallers,
             @NonNull IntentSender statusReceiver, int userId) {
+        requestChecksumsInternal(packageName, includeSplits, optional, required, trustedInstallers,
+                statusReceiver, userId, mInjector.getBackgroundExecutor(),
+                mInjector.getBackgroundHandler());
+    }
+
+    private void requestChecksumsInternal(@NonNull String packageName, boolean includeSplits,
+            @Checksum.Type int optional,
+            @Checksum.Type int required, @Nullable List trustedInstallers,
+            @NonNull IntentSender statusReceiver, int userId, @NonNull Executor executor,
+            @NonNull Handler handler) {
         Objects.requireNonNull(packageName);
         Objects.requireNonNull(statusReceiver);
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(handler);
 
         final ApplicationInfo applicationInfo = getApplicationInfoInternal(packageName, 0,
                 Binder.getCallingUid(), userId);
@@ -2563,10 +2568,10 @@ public class PackageManagerService extends IPackageManager.Stub
         final Certificate[] trustedCerts = (trustedInstallers != null) ? decodeCertificates(
                 trustedInstallers) : null;
 
-        mInjector.getBackgroundExecutor().execute(() -> {
+        executor.execute(() -> {
             ApkChecksums.Injector injector = new ApkChecksums.Injector(
                     () -> mContext,
-                    () -> mInjector.getBackgroundHandler(),
+                    () -> handler,
                     () -> mInjector.getIncrementalManager());
             ApkChecksums.getChecksums(filesToChecksum, optional, required, trustedCerts,
                     statusReceiver, injector);
@@ -2982,6 +2987,7 @@ public class PackageManagerService extends IPackageManager.Stub
         mSystemTextClassifierPackageName = testParams.systemTextClassifierPackage;
         mWellbeingPackage = testParams.wellbeingPackage;
         mRetailDemoPackage = testParams.retailDemoPackage;
+        mRecentsPackage = testParams.recentsPackage;
         mDocumenterPackage = testParams.documenterPackage;
         mConfiguratorPackage = testParams.configuratorPackage;
         mAppPredictionServicePackage = testParams.appPredictionServicePackage;
@@ -3566,6 +3572,7 @@ public class PackageManagerService extends IPackageManager.Stub
             mIncidentReportApproverPackage = getIncidentReportApproverPackageName();
             mRetailDemoPackage = getRetailDemoPackageName();
             mOverlayConfigSignaturePackage = getOverlayConfigSignaturePackageName();
+            mRecentsPackage = getRecentsPackageName();
 
             // Now that we know all of the shared libraries, update all clients to have
             // the correct library paths.
@@ -3836,7 +3843,7 @@ public class PackageManagerService extends IPackageManager.Stub
         // are all flushed.  Not really needed, but keeps things nice and
         // tidy.
         t.traceBegin("GC");
-        Runtime.getRuntime().gc();
+        VMRuntime.getRuntime().requestConcurrentGC();
         t.traceEnd();
 
         // The initial scanning above does many calls into installd while
@@ -4653,8 +4660,7 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) {
             throw new SecurityException("User doesn't exist");
         }
-        mPermissionManager.enforceCrossUserPermission(
-                callingUid, userId, false, false, "checkPackageStartable");
+        enforceCrossUserPermission(callingUid, userId, false, false, "checkPackageStartable");
         final boolean userKeyUnlocked = StorageManager.isUserKeyUnlocked(userId);
         synchronized (mLock) {
             final PackageSetting ps = mSettings.mPackages.get(packageName);
@@ -4685,8 +4691,8 @@ public class PackageManagerService extends IPackageManager.Stub
     public boolean isPackageAvailable(String packageName, int userId) {
         if (!mUserManager.exists(userId)) return false;
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /*requireFullPermission*/, false /*checkShell*/, "is package available");
+        enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
+                false /*checkShell*/, "is package available");
         synchronized (mLock) {
             AndroidPackage p = mPackages.get(packageName);
             if (p != null) {
@@ -4728,7 +4734,7 @@ public class PackageManagerService extends IPackageManager.Stub
             int flags, int filterCallingUid, int userId) {
         if (!mUserManager.exists(userId)) return null;
         flags = updateFlagsForPackage(flags, userId);
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
+        enforceCrossUserPermission(Binder.getCallingUid(), userId,
                 false /* requireFullPermission */, false /* checkShell */, "get package info");
 
         // reader
@@ -5030,8 +5036,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) return -1;
         final int callingUid = Binder.getCallingUid();
         flags = updateFlagsForPackage(flags, userId);
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /*requireFullPermission*/, false /*checkShell*/, "getPackageUid");
+        enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
+                false /*checkShell*/, "getPackageUid");
         return getPackageUidInternal(packageName, flags, userId, callingUid);
     }
 
@@ -5063,8 +5069,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) return null;
         final int callingUid = Binder.getCallingUid();
         flags = updateFlagsForPackage(flags, userId);
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /*requireFullPermission*/, false /*checkShell*/, "getPackageGids");
+        enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
+                false /*checkShell*/, "getPackageGids");
 
         // reader
         synchronized (mLock) {
@@ -5147,7 +5153,7 @@ public class PackageManagerService extends IPackageManager.Stub
         flags = updateFlagsForApplication(flags, userId);
 
         if (!isRecentsAccessingChildProfiles(Binder.getCallingUid(), userId)) {
-            mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
+            enforceCrossUserPermission(Binder.getCallingUid(), userId,
                     false /* requireFullPermission */, false /* checkShell */,
                     "get application info");
         }
@@ -5451,8 +5457,7 @@ public class PackageManagerService extends IPackageManager.Stub
         if ((flags & PackageManager.MATCH_ANY_USER) != 0) {
             // require the permission to be held; the calling uid and given user id referring
             // to the same user is not sufficient
-            mPermissionManager.enforceCrossUserPermission(
-                    Binder.getCallingUid(), userId, false, false,
+            enforceCrossUserPermission(Binder.getCallingUid(), userId, false, false,
                     !isRecentsAccessingChildProfiles(Binder.getCallingUid(), userId),
                     "MATCH_ANY_USER flag requires INTERACT_ACROSS_USERS permission at "
                     + Debug.getCallers(5));
@@ -5574,7 +5579,7 @@ public class PackageManagerService extends IPackageManager.Stub
         flags = updateFlagsForComponent(flags, userId);
 
         if (!isRecentsAccessingChildProfiles(Binder.getCallingUid(), userId)) {
-            mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
+            enforceCrossUserPermission(Binder.getCallingUid(), userId,
                     false /* requireFullPermission */, false /* checkShell */, "get activity info");
         }
 
@@ -5656,8 +5661,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) return null;
         final int callingUid = Binder.getCallingUid();
         flags = updateFlagsForComponent(flags, userId);
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /* requireFullPermission */, false /* checkShell */, "get receiver info");
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "get receiver info");
         synchronized (mLock) {
             ParsedActivity a = mComponentResolver.getReceiver(component);
             if (DEBUG_PACKAGE_INFO) Log.v(
@@ -5745,7 +5750,8 @@ public class PackageManagerService extends IPackageManager.Stub
                             getPackagesUsingSharedLibraryLPr(libInfo, flags, userId),
                             (libInfo.getDependencies() == null
                                     ? null
-                                    : new ArrayList<>(libInfo.getDependencies())));
+                                    : new ArrayList<>(libInfo.getDependencies())),
+                            libInfo.isNative());
 
                     if (result == null) {
                         result = new ArrayList<>();
@@ -5765,9 +5771,8 @@ public class PackageManagerService extends IPackageManager.Stub
         mContext.enforceCallingOrSelfPermission(Manifest.permission.ACCESS_SHARED_LIBRARIES,
                 "getDeclaredSharedLibraries");
         int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "getDeclaredSharedLibraries");
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                false /* checkShell */, "getDeclaredSharedLibraries");
 
         Preconditions.checkNotNull(packageName, "packageName cannot be null");
         Preconditions.checkArgumentNonnegative(userId, "userId must be >= 0");
@@ -5815,7 +5820,8 @@ public class PackageManagerService extends IPackageManager.Stub
                             libraryInfo.getLongVersion(), libraryInfo.getType(),
                             libraryInfo.getDeclaringPackage(), getPackagesUsingSharedLibraryLPr(
                             libraryInfo, flags, userId), libraryInfo.getDependencies() == null
-                            ? null : new ArrayList<>(libraryInfo.getDependencies()));
+                            ? null : new ArrayList<>(libraryInfo.getDependencies()),
+                            libraryInfo.isNative());
 
                     if (result == null) {
                         result = new ArrayList<>();
@@ -5881,9 +5887,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) return null;
         final int callingUid = Binder.getCallingUid();
         flags = updateFlagsForComponent(flags, userId);
-        mPermissionManager.enforceCrossUserOrProfilePermission(
-                callingUid, userId, false /* requireFullPermission */, false /* checkShell */,
-                "get service info");
+        enforceCrossUserOrProfilePermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "get service info");
         synchronized (mLock) {
             ParsedService s = mComponentResolver.getService(component);
             if (DEBUG_PACKAGE_INFO) Log.v(
@@ -5912,8 +5917,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) return null;
         final int callingUid = Binder.getCallingUid();
         flags = updateFlagsForComponent(flags, userId);
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /* requireFullPermission */, false /* checkShell */, "get provider info");
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "get provider info");
         synchronized (mLock) {
             ParsedProvider p = mComponentResolver.getProvider(component);
             if (DEBUG_PACKAGE_INFO) Log.v(
@@ -6050,8 +6055,7 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) {
             return null;
         }
-        mPermissionManager.enforceCrossUserPermission(
-                callingUid, userId, false, false, "getChangedPackages");
+        enforceCrossUserPermission(callingUid, userId, false, false, "getChangedPackages");
         synchronized (mLock) {
             if (sequenceNumber >= mChangedPackagesSequenceNumber) {
                 return null;
@@ -6676,8 +6680,8 @@ public class PackageManagerService extends IPackageManager.Stub
             flags = updateFlagsForResolve(flags, userId, filterCallingUid, resolveForStart,
                     isImplicitImageCaptureIntentAndNotSetByDpcLocked(intent, userId, resolvedType,
                             flags));
-            mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                    false /*requireFullPermission*/, false /*checkShell*/, "resolve intent");
+            enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
+                    false /*checkShell*/, "resolve intent");
 
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "queryIntentActivities");
             final List<ResolveInfo> query = queryIntentActivitiesInternal(intent, resolvedType,
@@ -7384,7 +7388,7 @@ public class PackageManagerService extends IPackageManager.Stub
             int filterCallingUid, int userId, boolean resolveForStart, boolean allowDynamicSplits) {
         if (!mUserManager.exists(userId)) return Collections.emptyList();
         final String instantAppPkgName = getInstantAppPackageName(filterCallingUid);
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
+        enforceCrossUserPermission(Binder.getCallingUid(), userId,
                 false /* requireFullPermission */, false /* checkShell */,
                 "query intent activities");
         final String pkgName = intent.getPackage();
@@ -8191,9 +8195,8 @@ public class PackageManagerService extends IPackageManager.Stub
         flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/,
                 isImplicitImageCaptureIntentAndNotSetByDpcLocked(intent, userId, resolvedType,
                         flags));
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /*requireFullPermission*/, false /*checkShell*/,
-                "query intent activity options");
+        enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
+                false /*checkShell*/, "query intent activity options");
         final String resultsAction = intent.getAction();
 
         final List<ResolveInfo> results = queryIntentActivitiesInternal(intent, resolvedType, flags
@@ -8372,9 +8375,8 @@ public class PackageManagerService extends IPackageManager.Stub
             String resolvedType, int flags, int userId, boolean allowDynamicSplits) {
         if (!mUserManager.exists(userId)) return Collections.emptyList();
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /*requireFullPermission*/, false /*checkShell*/,
-                "query intent receivers");
+        enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
+                false /*checkShell*/, "query intent receivers");
         final String instantAppPkgName = getInstantAppPackageName(callingUid);
         flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/,
                 isImplicitImageCaptureIntentAndNotSetByDpcLocked(intent, userId, resolvedType,
@@ -8494,7 +8496,7 @@ public class PackageManagerService extends IPackageManager.Stub
             String resolvedType, int flags, int userId, int callingUid,
             boolean includeInstantApps) {
         if (!mUserManager.exists(userId)) return Collections.emptyList();
-        mPermissionManager.enforceCrossUserOrProfilePermission(callingUid,
+        enforceCrossUserOrProfilePermission(callingUid,
                 userId,
                 false /*requireFullPermission*/,
                 false /*checkShell*/,
@@ -8778,9 +8780,8 @@ public class PackageManagerService extends IPackageManager.Stub
         final boolean listApex = (flags & MATCH_APEX) != 0;
         final boolean listFactory = (flags & MATCH_FACTORY_ONLY) != 0;
 
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /* requireFullPermission */, false /* checkShell */,
-                "get installed packages");
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "get installed packages");
 
         // writer
         synchronized (mLock) {
@@ -8890,9 +8891,8 @@ public class PackageManagerService extends IPackageManager.Stub
             String[] permissions, int flags, int userId) {
         if (!mUserManager.exists(userId)) return ParceledListSlice.emptyList();
         flags = updateFlagsForPackage(flags, userId);
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "get packages holding permissions");
+        enforceCrossUserPermission(Binder.getCallingUid(), userId, true /* requireFullPermission */,
+                false /* checkShell */, "get packages holding permissions");
         final boolean listUninstalled = (flags & MATCH_KNOWN_PACKAGES) != 0;
 
         // writer
@@ -8934,7 +8934,7 @@ public class PackageManagerService extends IPackageManager.Stub
         flags = updateFlagsForApplication(flags, userId);
         final boolean listUninstalled = (flags & MATCH_KNOWN_PACKAGES) != 0;
 
-        mPermissionManager.enforceCrossUserPermission(
+        enforceCrossUserPermission(
             callingUid,
             userId,
             false /* requireFullPermission */,
@@ -9008,9 +9008,8 @@ public class PackageManagerService extends IPackageManager.Stub
             mContext.enforceCallingOrSelfPermission(Manifest.permission.ACCESS_INSTANT_APPS,
                     "getEphemeralApplications");
         }
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "getEphemeralApplications");
+        enforceCrossUserPermission(Binder.getCallingUid(), userId, true /* requireFullPermission */,
+                false /* checkShell */, "getEphemeralApplications");
         synchronized (mLock) {
             List<InstantAppInfo> instantApps = mInstantAppRegistry
                     .getInstantAppsLPr(userId);
@@ -9024,9 +9023,8 @@ public class PackageManagerService extends IPackageManager.Stub
     @Override
     public boolean isInstantApp(String packageName, int userId) {
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "isInstantApp");
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                false /* checkShell */, "isInstantApp");
 
         return isInstantAppInternal(packageName, userId, callingUid);
     }
@@ -9060,9 +9058,8 @@ public class PackageManagerService extends IPackageManager.Stub
             return null;
         }
 
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "getInstantAppCookie");
+        enforceCrossUserPermission(Binder.getCallingUid(), userId, true /* requireFullPermission */,
+                false /* checkShell */, "getInstantAppCookie");
         if (!isCallerSameApp(packageName, Binder.getCallingUid())) {
             return null;
         }
@@ -9078,9 +9075,8 @@ public class PackageManagerService extends IPackageManager.Stub
             return true;
         }
 
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
-                true /* requireFullPermission */, true /* checkShell */,
-                "setInstantAppCookie");
+        enforceCrossUserPermission(Binder.getCallingUid(), userId, true /* requireFullPermission */,
+                true /* checkShell */, "setInstantAppCookie");
         if (!isCallerSameApp(packageName, Binder.getCallingUid())) {
             return false;
         }
@@ -9100,9 +9096,8 @@ public class PackageManagerService extends IPackageManager.Stub
             mContext.enforceCallingOrSelfPermission(Manifest.permission.ACCESS_INSTANT_APPS,
                     "getInstantAppIcon");
         }
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "getInstantAppIcon");
+        enforceCrossUserPermission(Binder.getCallingUid(), userId, true /* requireFullPermission */,
+                false /* checkShell */, "getInstantAppIcon");
 
         synchronized (mLock) {
             return mInstantAppRegistry.getInstantAppIconLPw(
@@ -9178,8 +9173,7 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
         if (!checkedGrants) {
-            mPermissionManager.enforceCrossUserPermission(
-                    callingUid, userId, false, false, "resolveContentProvider");
+            enforceCrossUserPermission(callingUid, userId, false, false, "resolveContentProvider");
         }
         if (providerInfo == null) {
             return null;
@@ -9862,6 +9856,171 @@ public class PackageManagerService extends IPackageManager.Stub
         if (uid != Process.SYSTEM_UID && uid != Process.ROOT_UID && uid != Process.SHELL_UID) {
             throw new SecurityException(message);
         }
+    }
+
+    /**
+     * Enforces the request is from the system or an app that has INTERACT_ACROSS_USERS
+     * or INTERACT_ACROSS_USERS_FULL permissions, if the {@code userId} is not for the caller.
+     *
+     * @param checkShell whether to prevent shell from access if there's a debugging restriction
+     * @param message the message to log on security exception
+     */
+    void enforceCrossUserPermission(int callingUid, @UserIdInt int userId,
+            boolean requireFullPermission, boolean checkShell, String message) {
+        enforceCrossUserPermission(callingUid, userId, requireFullPermission, checkShell, false,
+                message);
+    }
+
+    /**
+     * Enforces the request is from the system or an app that has INTERACT_ACROSS_USERS
+     * or INTERACT_ACROSS_USERS_FULL permissions, if the {@code userId} is not for the caller.
+     *
+     * @param checkShell whether to prevent shell from access if there's a debugging restriction
+     * @param requirePermissionWhenSameUser When {@code true}, still require the cross user
+     *                                      permission to be held even if the callingUid and userId
+     *                                      reference the same user.
+     * @param message the message to log on security exception
+     */
+    private void enforceCrossUserPermission(int callingUid, @UserIdInt int userId,
+            boolean requireFullPermission, boolean checkShell,
+            boolean requirePermissionWhenSameUser, String message) {
+        if (userId < 0) {
+            throw new IllegalArgumentException("Invalid userId " + userId);
+        }
+        if (checkShell) {
+            PackageManagerServiceUtils.enforceShellRestriction(mInjector.getUserManagerInternal(),
+                    UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, userId);
+        }
+        final int callingUserId = UserHandle.getUserId(callingUid);
+        if (hasCrossUserPermission(
+                callingUid, callingUserId, userId, requireFullPermission,
+                requirePermissionWhenSameUser)) {
+            return;
+        }
+        String errorMessage = buildInvalidCrossUserPermissionMessage(
+                callingUid, userId, message, requireFullPermission);
+        Slog.w(TAG, errorMessage);
+        throw new SecurityException(errorMessage);
+    }
+
+    /**
+     * Checks if the request is from the system or an app that has the appropriate cross-user
+     * permissions defined as follows:
+     * <ul>
+     * <li>INTERACT_ACROSS_USERS_FULL if {@code requireFullPermission} is true.</li>
+     * <li>INTERACT_ACROSS_USERS if the given {@code userId} is in a different profile group
+     * to the caller.</li>
+     * <li>Otherwise, INTERACT_ACROSS_PROFILES if the given {@code userId} is in the same profile
+     * group as the caller.</li>
+     * </ul>
+     *
+     * @param checkShell whether to prevent shell from access if there's a debugging restriction
+     * @param message the message to log on security exception
+     */
+    private void enforceCrossUserOrProfilePermission(int callingUid, @UserIdInt int userId,
+            boolean requireFullPermission, boolean checkShell, String message) {
+        if (userId < 0) {
+            throw new IllegalArgumentException("Invalid userId " + userId);
+        }
+        if (checkShell) {
+            PackageManagerServiceUtils.enforceShellRestriction(mInjector.getUserManagerInternal(),
+                    UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, userId);
+        }
+        final int callingUserId = UserHandle.getUserId(callingUid);
+        if (hasCrossUserPermission(callingUid, callingUserId, userId, requireFullPermission,
+                /*requirePermissionWhenSameUser= */ false)) {
+            return;
+        }
+        final boolean isSameProfileGroup = isSameProfileGroup(callingUserId, userId);
+        if (isSameProfileGroup && PermissionChecker.checkPermissionForPreflight(
+                mContext,
+                android.Manifest.permission.INTERACT_ACROSS_PROFILES,
+                PermissionChecker.PID_UNKNOWN,
+                callingUid,
+                mPmInternal.getPackage(callingUid).getPackageName())
+                == PermissionChecker.PERMISSION_GRANTED) {
+            return;
+        }
+        String errorMessage = buildInvalidCrossUserOrProfilePermissionMessage(
+                callingUid, userId, message, requireFullPermission, isSameProfileGroup);
+        Slog.w(TAG, errorMessage);
+        throw new SecurityException(errorMessage);
+    }
+
+    private boolean hasCrossUserPermission(
+            int callingUid, int callingUserId, int userId, boolean requireFullPermission,
+            boolean requirePermissionWhenSameUser) {
+        if (!requirePermissionWhenSameUser && userId == callingUserId) {
+            return true;
+        }
+        if (callingUid == Process.SYSTEM_UID || callingUid == Process.ROOT_UID) {
+            return true;
+        }
+        if (requireFullPermission) {
+            return hasPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL);
+        }
+        return hasPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+                || hasPermission(Manifest.permission.INTERACT_ACROSS_USERS);
+    }
+
+    private boolean hasPermission(String permission) {
+        return mContext.checkCallingOrSelfPermission(permission)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean isSameProfileGroup(@UserIdInt int callerUserId, @UserIdInt int userId) {
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return UserManagerService.getInstance().isSameProfileGroup(callerUserId, userId);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    private static String buildInvalidCrossUserPermissionMessage(int callingUid,
+            @UserIdInt int userId, String message, boolean requireFullPermission) {
+        StringBuilder builder = new StringBuilder();
+        if (message != null) {
+            builder.append(message);
+            builder.append(": ");
+        }
+        builder.append("UID ");
+        builder.append(callingUid);
+        builder.append(" requires ");
+        builder.append(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL);
+        if (!requireFullPermission) {
+            builder.append(" or ");
+            builder.append(android.Manifest.permission.INTERACT_ACROSS_USERS);
+        }
+        builder.append(" to access user ");
+        builder.append(userId);
+        builder.append(".");
+        return builder.toString();
+    }
+
+    private static String buildInvalidCrossUserOrProfilePermissionMessage(int callingUid,
+            @UserIdInt int userId, String message, boolean requireFullPermission,
+            boolean isSameProfileGroup) {
+        StringBuilder builder = new StringBuilder();
+        if (message != null) {
+            builder.append(message);
+            builder.append(": ");
+        }
+        builder.append("UID ");
+        builder.append(callingUid);
+        builder.append(" requires ");
+        builder.append(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL);
+        if (!requireFullPermission) {
+            builder.append(" or ");
+            builder.append(android.Manifest.permission.INTERACT_ACROSS_USERS);
+            if (isSameProfileGroup) {
+                builder.append(" or ");
+                builder.append(android.Manifest.permission.INTERACT_ACROSS_PROFILES);
+            }
+        }
+        builder.append(" to access user ");
+        builder.append(".");
+        return builder.toString();
     }
 
     @Override
@@ -11463,22 +11622,6 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         pkgSetting.signatures.mSigningDetails = reconciledPkg.signingDetails;
 
-        if (!pkg.getAdoptPermissions().isEmpty()) {
-            // This package wants to adopt ownership of permissions from
-            // another package.
-            for (int i = pkg.getAdoptPermissions().size() - 1; i >= 0; i--) {
-                final String origName = pkg.getAdoptPermissions().get(i);
-                final PackageSetting orig = mSettings.getPackageLPr(origName);
-                if (orig != null) {
-                    if (verifyPackageUpdateLPr(orig, pkg)) {
-                        Slog.i(TAG, "Adopting permissions from " + origName + " to "
-                                + pkg.getPackageName());
-                        mPermissionManager.transferPermissions(origName, pkg.getPackageName());
-                    }
-                }
-            }
-        }
-
         if (changedAbiCodePath != null && changedAbiCodePath.size() > 0) {
             for (int i = changedAbiCodePath.size() - 1; i >= 0; --i) {
                 final String codePathString = changedAbiCodePath.get(i);
@@ -12598,6 +12741,37 @@ public class PackageManagerService extends IPackageManager.Stub
         return true;
     }
 
+    @Override
+    public Property getProperty(String propertyName, String packageName, String className) {
+        Objects.requireNonNull(propertyName);
+        Objects.requireNonNull(packageName);
+        synchronized (mLock) {
+            final PackageSetting ps = getPackageSetting(packageName);
+            if (shouldFilterApplicationLocked(ps, Binder.getCallingUid(),
+                    UserHandle.getCallingUserId())) {
+                return null;
+            }
+            return mPackageProperty.getProperty(propertyName, packageName, className);
+        }
+    }
+
+    @Override
+    public ParceledListSlice<Property> queryProperty(
+            String propertyName, @PropertyLocation int componentType) {
+        Objects.requireNonNull(propertyName);
+        final int callingUid = Binder.getCallingUid();
+        final int callingUserId = UserHandle.getCallingUserId();
+        final List<Property> result =
+                mPackageProperty.queryProperty(propertyName, componentType, packageName -> {
+                    final PackageSetting ps = getPackageSetting(packageName);
+                    return shouldFilterApplicationLocked(ps, callingUid, callingUserId);
+                });
+        if (result == null) {
+            return ParceledListSlice.emptyList();
+        }
+        return new ParceledListSlice<>(result);
+    }
+
     /**
      * Adds a scanned package to the system. When this method is finished, the package will
      * be available for query, resolution, etc...
@@ -12724,27 +12898,7 @@ public class PackageManagerService extends IPackageManager.Stub
             final boolean isReplace =
                     reconciledPkg.prepareResult != null && reconciledPkg.prepareResult.replace;
             mAppsFilter.addPackage(pkgSetting, isReplace);
-
-            // Don't allow ephemeral applications to define new permissions groups.
-            if ((scanFlags & SCAN_AS_INSTANT_APP) != 0) {
-                Slog.w(TAG, "Permission groups from package " + pkg.getPackageName()
-                        + " ignored: instant apps cannot define new permission groups.");
-            } else {
-                mPermissionManager.addAllPermissionGroups(pkg, chatty);
-            }
-
-            // If a permission has had its defining app changed, or it has had its protection
-            // upgraded, we need to revoke apps that hold it
-            final List<String> permissionsWithChangedDefinition;
-            // Don't allow ephemeral applications to define new permissions.
-            if ((scanFlags & SCAN_AS_INSTANT_APP) != 0) {
-                permissionsWithChangedDefinition = null;
-                Slog.w(TAG, "Permissions from package " + pkg.getPackageName()
-                        + " ignored: instant apps cannot define new permissions.");
-            } else {
-                permissionsWithChangedDefinition =
-                        mPermissionManager.addAllPermissions(pkg, chatty);
-            }
+            mPackageProperty.addAllProperties(pkg);
 
             int collectionSize = ArrayUtils.size(pkg.getInstrumentations());
             StringBuilder r = null;
@@ -12772,31 +12926,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
 
-            boolean hasOldPkg = oldPkg != null;
-            boolean hasPermissionDefinitionChanges =
-                    !CollectionUtils.isEmpty(permissionsWithChangedDefinition);
-            if (hasOldPkg || hasPermissionDefinitionChanges) {
-                // We need to call revokeRuntimePermissionsIfGroupChanged async as permission
-                // revoke callbacks from this method might need to kill apps which need the
-                // mPackages lock on a different thread. This would dead lock.
-                //
-                // Hence create a copy of all package names and pass it into
-                // revokeRuntimePermissionsIfGroupChanged. Only for those permissions might get
-                // revoked. If a new package is added before the async code runs the permission
-                // won't be granted yet, hence new packages are no problem.
-                final ArrayList<String> allPackageNames = new ArrayList<>(mPackages.keySet());
-
-                AsyncTask.execute(() -> {
-                    if (hasOldPkg) {
-                        mPermissionManager.revokeRuntimePermissionsIfGroupChanged(pkg, oldPkg,
-                                allPackageNames);
-                    }
-                    if (hasPermissionDefinitionChanges) {
-                        mPermissionManager.revokeRuntimePermissionsIfPermissionDefinitionChanged(
-                                permissionsWithChangedDefinition, allPackageNames);
-                    }
-                });
-            }
+            mPermissionManager.onPackageAdded(pkg, (scanFlags & SCAN_AS_INSTANT_APP) != 0, oldPkg);
         }
 
         Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
@@ -12895,7 +13025,7 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
-    void removePackageLI(String packageName, boolean chatty) {
+    private void removePackageLI(String packageName, boolean chatty) {
         if (DEBUG_INSTALL) {
             if (chatty)
                 Log.d(TAG, "Removing package " + packageName);
@@ -12910,9 +13040,10 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
-    void cleanPackageDataStructuresLILPw(AndroidPackage pkg, boolean chatty) {
+    private void cleanPackageDataStructuresLILPw(AndroidPackage pkg, boolean chatty) {
         mComponentResolver.removeAllComponents(pkg, chatty);
-        mPermissionManager.removeAllPermissions(pkg, chatty);
+        mPermissionManager.onPackageRemoved(pkg);
+        mPackageProperty.removeAllProperties(pkg);
 
         final int instrumentationSize = ArrayUtils.size(pkg.getInstrumentations());
         StringBuilder r = null;
@@ -13292,9 +13423,8 @@ public class PackageManagerService extends IPackageManager.Stub
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USERS, null);
         PackageSetting pkgSetting;
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, true /* checkShell */,
-                "setApplicationHiddenSetting for user " + userId);
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                true /* checkShell */, "setApplicationHiddenSetting for user " + userId);
 
         if (hidden && isPackageDeviceAdmin(packageName, userId)) {
             Slog.w(TAG, "Not hiding package " + packageName + ": has active device admin");
@@ -13480,9 +13610,8 @@ public class PackageManagerService extends IPackageManager.Stub
     public boolean getApplicationHiddenSettingAsUser(String packageName, int userId) {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USERS, null);
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "getApplicationHidden for user " + userId);
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                false /* checkShell */, "getApplicationHidden for user " + userId);
         PackageSetting ps;
         final long callingId = Binder.clearCallingIdentity();
         try {
@@ -13532,9 +13661,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     + android.Manifest.permission.INSTALL_PACKAGES + ".");
         }
         PackageSetting pkgSetting;
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, true /* checkShell */,
-                "installExistingPackage for user " + userId);
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                true /* checkShell */, "installExistingPackage for user " + userId);
         if (isUserRestricted(userId, UserManager.DISALLOW_INSTALL_APPS)) {
             return PackageManager.INSTALL_FAILED_USER_RESTRICTED;
         }
@@ -13899,9 +14027,8 @@ public class PackageManagerService extends IPackageManager.Stub
     @Override
     public boolean isPackageSuspendedForUser(String packageName, int userId) {
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "isPackageSuspendedForUser for user " + userId);
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                false /* checkShell */, "isPackageSuspendedForUser for user " + userId);
         synchronized (mLock) {
             final PackageSetting ps = mSettings.mPackages.get(packageName);
             if (ps == null || shouldFilterApplicationLocked(ps, callingUid, userId)) {
@@ -17772,6 +17899,17 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
+    /*
+     * Cannot properly check CANNOT_INSTALL_WITH_BAD_PERMISSION_GROUPS using CompatChanges
+     * as this only works for packages that are installed
+     *
+     * TODO: Move logic for permission group compatibility into PermissionManagerService
+     */
+    @SuppressWarnings("AndroidFrameworkCompatChange")
+    private static boolean cannotInstallWithBadPermissionGroups(ParsedPackage parsedPackage) {
+        return parsedPackage.getTargetSdkVersion() >= Build.VERSION_CODES.S;
+    }
+
     @GuardedBy("mInstallLock")
     private PrepareResult preparePackageLI(InstallArgs args, PackageInstalledInfo res)
             throws PrepareFailure {
@@ -17814,7 +17952,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 | (onExternal ? PackageParser.PARSE_EXTERNAL_STORAGE : 0);
 
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "parsePackage");
-        ParsedPackage parsedPackage;
+        final ParsedPackage parsedPackage;
         try (PackageParser2 pp = new PackageParser2(mSeparateProcesses, false, mMetrics, null,
                 mPackageParserCallback)) {
             parsedPackage = pp.parsePackage(tmpPackageFile, parseFlags, false);
@@ -17935,15 +18073,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
 
-            /*
-             * Cannot properly check CANNOT_INSTALL_WITH_BAD_PERMISSION_GROUPS using CompatChanges
-             * as this only works for packages that are installed
-             *
-             * TODO: Move logic for permission group compatibility into PermissionManagerService
-             */
-            boolean cannotInstallWithBadPermissionGroups =
-                    parsedPackage.getTargetSdkVersion() >= Build.VERSION_CODES.S;
-
             PackageSetting ps = mSettings.mPackages.get(pkgName);
             if (ps != null) {
                 if (DEBUG_INSTALL) Slog.d(TAG, "Existing package: " + ps);
@@ -18001,7 +18130,8 @@ public class PackageManagerService extends IPackageManager.Stub
                         parsedPackage.getPermissionGroups().get(groupNum);
                 final PermissionGroupInfo sourceGroup = getPermissionGroupInfo(group.getName(), 0);
 
-                if (sourceGroup != null && cannotInstallWithBadPermissionGroups) {
+                if (sourceGroup != null
+                        && cannotInstallWithBadPermissionGroups(parsedPackage)) {
                     final String sourcePackageName = sourceGroup.packageName;
 
                     if ((replace || !parsedPackage.getPackageName().equals(sourcePackageName))
@@ -18076,7 +18206,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
                 }
 
-                if (perm.getGroup() != null && cannotInstallWithBadPermissionGroups) {
+                if (perm.getGroup() != null
+                        && cannotInstallWithBadPermissionGroups(parsedPackage)) {
                     boolean isPermGroupDefinedByPackage = false;
                     for (int groupNum = 0; groupNum < numGroups; groupNum++) {
                         if (parsedPackage.getPermissionGroups().get(groupNum).getName()
@@ -19458,33 +19589,13 @@ public class PackageManagerService extends IPackageManager.Stub
                     if (outInfo != null) {
                         outInfo.removedAppId = removedAppId;
                     }
-                    if ((deletedPs.sharedUser == null || deletedPs.sharedUser.packages.size() == 0)
-                            && !isUpdatedSystemApp(deletedPs)) {
-                        mPermissionManager.removeAppIdStateTEMP(removedAppId);
+                    final SharedUserSetting sus = deletedPs.getSharedUser();
+                    List<AndroidPackage> sharedUserPkgs = sus != null ? sus.getPackages() : null;
+                    if (sharedUserPkgs == null) {
+                        sharedUserPkgs = Collections.emptyList();
                     }
-                    mPermissionManager.updatePermissions(deletedPs.name, null);
-                    if (deletedPs.sharedUser != null) {
-                        // Remove permissions associated with package. Since runtime
-                        // permissions are per user we have to kill the removed package
-                        // or packages running under the shared user of the removed
-                        // package if revoking the permissions requested only by the removed
-                        // package is successful and this causes a change in gids.
-                        boolean shouldKill = false;
-                        for (int userId : UserManagerService.getInstance().getUserIds()) {
-                            final int userIdToKill = mPermissionManager
-                                    .revokeSharedUserPermissionsForDeletedPackageTEMP(deletedPs,
-                                            userId);
-                            shouldKill |= userIdToKill != UserHandle.USER_NULL;
-                        }
-                        // If gids changed, kill all affected packages.
-                        if (shouldKill) {
-                            mHandler.post(() -> {
-                                // This has to happen with no lock held.
-                                killApplication(deletedPs.name, deletedPs.appId,
-                                        KILL_APP_REASON_GIDS_CHANGED);
-                            });
-                        }
-                    }
+                    mPermissionManager.onPackageStateRemoved(packageName, deletedPs.appId,
+                            deletedPs.pkg, sharedUserPkgs);
                     clearPackagePreferredActivitiesLPw(
                             deletedPs.name, changedUsers, UserHandle.USER_ALL);
                 }
@@ -20056,8 +20167,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 android.Manifest.permission.CLEAR_APP_USER_DATA, null);
 
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */, "clear application data");
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                false /* checkShell */, "clear application data");
 
         final boolean filterApp;
         synchronized (mLock) {
@@ -20210,9 +20321,8 @@ public class PackageManagerService extends IPackageManager.Stub
             mContext.enforceCallingOrSelfPermission(
                     android.Manifest.permission.INTERNAL_DELETE_CACHE_FILES, null);
         }
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                /* requireFullPermission= */ true, /* checkShell= */ false,
-                "delete application cache files");
+        enforceCrossUserPermission(callingUid, userId, /* requireFullPermission= */ true,
+                /* checkShell= */ false, "delete application cache files");
         final int hasAccessInstantApps = mContext.checkCallingOrSelfPermission(
                 android.Manifest.permission.ACCESS_INSTANT_APPS);
 
@@ -20338,8 +20448,8 @@ public class PackageManagerService extends IPackageManager.Stub
             String opname, boolean removeExisting) {
         // writer
         int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */, "add preferred activity");
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                false /* checkShell */, "add preferred activity");
         if (mContext.checkCallingOrSelfPermission(
                 android.Manifest.permission.SET_PREFERRED_APPLICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -20413,9 +20523,8 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "replace preferred activity");
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                false /* checkShell */, "replace preferred activity");
         if (mContext.checkCallingOrSelfPermission(
                 android.Manifest.permission.SET_PREFERRED_APPLICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -21308,15 +21417,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public @Nullable String getAttentionServicePackageName() {
-        final String flattenedComponentName =
-                mContext.getString(R.string.config_defaultAttentionService);
-        if (flattenedComponentName != null) {
-            ComponentName componentName = ComponentName.unflattenFromString(flattenedComponentName);
-            if (componentName != null && componentName.getPackageName() != null) {
-                return ensureSystemPackageName(componentName.getPackageName());
-            }
-        }
-        return null;
+        return ensureSystemPackageName(
+                getPackageFromComponentString(R.string.config_defaultAttentionService));
     }
 
     private @Nullable String getDocumenterPackageName() {
@@ -21351,17 +21453,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public String getAppPredictionServicePackageName() {
-        String flattenedAppPredictionServiceComponentName =
-                mContext.getString(R.string.config_defaultAppPredictionService);
-        if (flattenedAppPredictionServiceComponentName == null) {
-            return null;
-        }
-        ComponentName appPredictionServiceComponentName =
-                ComponentName.unflattenFromString(flattenedAppPredictionServiceComponentName);
-        if (appPredictionServiceComponentName == null) {
-            return null;
-        }
-        return ensureSystemPackageName(appPredictionServiceComponentName.getPackageName());
+        return ensureSystemPackageName(
+                getPackageFromComponentString(R.string.config_defaultAppPredictionService));
     }
 
     private @NonNull String[] dropNonSystemPackages(@NonNull String[] pkgNames) {
@@ -21378,19 +21471,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public String getSystemCaptionsServicePackageName() {
-        String flattenedSystemCaptionsServiceComponentName =
-                mContext.getString(R.string.config_defaultSystemCaptionsService);
-
-        if (TextUtils.isEmpty(flattenedSystemCaptionsServiceComponentName)) {
-            return null;
-        }
-
-        ComponentName systemCaptionsServiceComponentName =
-                ComponentName.unflattenFromString(flattenedSystemCaptionsServiceComponentName);
-        if (systemCaptionsServiceComponentName == null) {
-            return null;
-        }
-        return ensureSystemPackageName(systemCaptionsServiceComponentName.getPackageName());
+        return ensureSystemPackageName(
+                getPackageFromComponentString(R.string.config_defaultSystemCaptionsService));
     }
 
     @Override
@@ -21408,19 +21490,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public String getContentCaptureServicePackageName() {
-        final String flattenedContentCaptureService =
-                mContext.getString(R.string.config_defaultContentCaptureService);
-
-        if (TextUtils.isEmpty(flattenedContentCaptureService)) {
-            return null;
-        }
-
-        final ComponentName contentCaptureServiceComponentName =
-                ComponentName.unflattenFromString(flattenedContentCaptureService);
-        if (contentCaptureServiceComponentName == null) {
-            return null;
-        }
-        return ensureSystemPackageName(contentCaptureServiceComponentName.getPackageName());
+        return ensureSystemPackageName(
+                getPackageFromComponentString(R.string.config_defaultContentCaptureService));
     }
 
     public String getOverlayConfigSignaturePackageName() {
@@ -21461,6 +21532,26 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         return null;
+    }
+
+    @Nullable
+    private String getRecentsPackageName() {
+        return ensureSystemPackageName(
+                getPackageFromComponentString(R.string.config_recentsComponentName));
+
+    }
+
+    @Nullable
+    private String getPackageFromComponentString(@StringRes int stringResId) {
+        final String componentString = mContext.getString(stringResId);
+        if (TextUtils.isEmpty(componentString)) {
+            return null;
+        }
+        final ComponentName component = ComponentName.unflattenFromString(componentString);
+        if (component == null) {
+            return null;
+        }
+        return component.getPackageName();
     }
 
     @Nullable
@@ -21624,8 +21715,8 @@ public class PackageManagerService extends IPackageManager.Stub
             permission = mContext.checkCallingOrSelfPermission(
                     android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE);
         }
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /* requireFullPermission */, true /* checkShell */, "set enabled");
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                true /* checkShell */, "set enabled");
         final boolean allowedByPermission = (permission == PackageManager.PERMISSION_GRANTED);
         boolean sendNow = false;
         boolean isApp = (className == null);
@@ -21850,7 +21941,7 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) {
             return;
         }
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId, false /* requireFullPermission*/,
+        enforceCrossUserPermission(Binder.getCallingUid(), userId, false /* requireFullPermission*/,
                 false /* checkShell */, "flushPackageRestrictions");
         synchronized (mLock) {
             flushPackageRestrictionsAsUserInternalLocked(userId);
@@ -21915,8 +22006,8 @@ public class PackageManagerService extends IPackageManager.Stub
         final int permission = mContext.checkCallingOrSelfPermission(
                 android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE);
         final boolean allowedByPermission = (permission == PackageManager.PERMISSION_GRANTED);
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, true /* checkShell */, "stop package");
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                true /* checkShell */, "stop package");
         // writer
         synchronized (mLock) {
             final PackageSetting ps = mSettings.mPackages.get(packageName);
@@ -22063,8 +22154,8 @@ public class PackageManagerService extends IPackageManager.Stub
     public int getApplicationEnabledSetting(String packageName, int userId) {
         if (!mUserManager.exists(userId)) return COMPONENT_ENABLED_STATE_DISABLED;
         int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /* requireFullPermission */, false /* checkShell */, "get enabled");
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "get enabled");
         // reader
         synchronized (mLock) {
             try {
@@ -22084,8 +22175,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (component == null) return COMPONENT_ENABLED_STATE_DEFAULT;
         if (!mUserManager.exists(userId)) return COMPONENT_ENABLED_STATE_DISABLED;
         int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /*requireFullPermission*/, false /*checkShell*/, "getComponentEnabled");
+        enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
+                false /*checkShell*/, "getComponentEnabled");
         synchronized (mLock) {
             try {
                 if (shouldFilterApplicationLocked(
@@ -25075,6 +25166,8 @@ public class PackageManagerService extends IPackageManager.Stub
                             : new String[] {mRetailDemoPackage};
                 case PackageManagerInternal.PACKAGE_OVERLAY_CONFIG_SIGNATURE:
                     return filterOnlySystemPackages(getOverlayConfigSignaturePackageName());
+                case PackageManagerInternal.PACKAGE_RECENTS:
+                    return filterOnlySystemPackages(mRecentsPackage);
                 default:
                     return ArrayUtils.emptyArray(String.class);
             }
@@ -25996,6 +26089,14 @@ public class PackageManagerService extends IPackageManager.Stub
             }
             ps.setStatesOnCrashOrAnr();
         }
+
+        public void requestChecksums(@NonNull String packageName, boolean includeSplits,
+                @Checksum.Type int optional, @Checksum.Type int required,
+                @Nullable List trustedInstallers, @NonNull IntentSender statusReceiver, int userId,
+                @NonNull Executor executor, @NonNull Handler handler) {
+            requestChecksumsInternal(packageName, includeSplits, optional, required,
+                    trustedInstallers, statusReceiver, userId, executor, handler);
+        }
     }
 
 
@@ -26145,8 +26246,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!SecurityLog.isLoggingEnabled()) {
             return;
         }
-        mProcessLoggingHandler.logAppProcessStart(mContext, this, apkFile, packageName, processName,
-                uid, seinfo, pid);
+        mProcessLoggingHandler.logAppProcessStart(mContext, mPmInternal, apkFile, packageName,
+                processName, uid, seinfo, pid);
     }
 
     public CompilerStats.PackageStats getCompilerPackageStats(String pkgName) {
@@ -26176,9 +26277,8 @@ public class PackageManagerService extends IPackageManager.Stub
     @Override
     public int getInstallReason(String packageName, int userId) {
         final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "get install reason");
+        enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
+                false /* checkShell */, "get install reason");
         synchronized (mLock) {
             final PackageSetting ps = mSettings.mPackages.get(packageName);
             if (shouldFilterApplicationLocked(ps, callingUid, userId)) {
@@ -26260,9 +26360,8 @@ public class PackageManagerService extends IPackageManager.Stub
     public String getInstantAppAndroidId(String packageName, int userId) {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.ACCESS_INSTANT_APPS,
                 "getInstantAppAndroidId");
-        mPermissionManager.enforceCrossUserPermission(Binder.getCallingUid(), userId,
-                true /* requireFullPermission */, false /* checkShell */,
-                "getInstantAppAndroidId");
+        enforceCrossUserPermission(Binder.getCallingUid(), userId, true /* requireFullPermission */,
+                false /* checkShell */, "getInstantAppAndroidId");
         // Make sure the target is an Instant App.
         if (!isInstantApp(packageName, userId)) {
             return null;
@@ -26378,8 +26477,8 @@ public class PackageManagerService extends IPackageManager.Stub
         final int callingUid = Binder.getCallingUid();
         final int callingAppId = UserHandle.getAppId(callingUid);
 
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /*requireFullPermission*/, true /*checkShell*/, "setHarmfulAppInfo");
+        enforceCrossUserPermission(callingUid, userId, true /*requireFullPermission*/,
+                true /*checkShell*/, "setHarmfulAppInfo");
 
         if (callingAppId != Process.SYSTEM_UID && callingAppId != Process.ROOT_UID &&
                 checkUidPermission(SET_HARMFUL_APP_WARNINGS, callingUid) != PERMISSION_GRANTED) {
@@ -26399,8 +26498,8 @@ public class PackageManagerService extends IPackageManager.Stub
         final int callingUid = Binder.getCallingUid();
         final int callingAppId = UserHandle.getAppId(callingUid);
 
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /*requireFullPermission*/, true /*checkShell*/, "getHarmfulAppInfo");
+        enforceCrossUserPermission(callingUid, userId, true /*requireFullPermission*/,
+                true /*checkShell*/, "getHarmfulAppInfo");
 
         if (callingAppId != Process.SYSTEM_UID && callingAppId != Process.ROOT_UID &&
                 checkUidPermission(SET_HARMFUL_APP_WARNINGS, callingUid) != PERMISSION_GRANTED) {
@@ -26418,8 +26517,8 @@ public class PackageManagerService extends IPackageManager.Stub
         final int callingUid = Binder.getCallingUid();
         final int callingAppId = UserHandle.getAppId(callingUid);
 
-        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                false /*requireFullPermission*/, true /*checkShell*/, "isPackageStateProtected");
+        enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
+                true /*checkShell*/, "isPackageStateProtected");
 
         if (callingAppId != Process.SYSTEM_UID && callingAppId != Process.ROOT_UID
                 && checkUidPermission(MANAGE_DEVICE_ADMINS, callingUid) != PERMISSION_GRANTED) {

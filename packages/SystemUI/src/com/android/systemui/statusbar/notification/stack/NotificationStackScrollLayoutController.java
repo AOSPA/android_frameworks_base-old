@@ -60,10 +60,10 @@ import com.android.systemui.ExpandHelper;
 import com.android.systemui.Gefingerpoken;
 import com.android.systemui.R;
 import com.android.systemui.SwipeHelper;
+import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.KeyguardMediaController;
-import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.OnMenuEventListener;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
@@ -143,7 +143,7 @@ public class NotificationStackScrollLayoutController {
     private final ConfigurationController mConfigurationController;
     private final ZenModeController mZenModeController;
     private final MetricsLogger mMetricsLogger;
-    private final FalsingManager mFalsingManager;
+    private final FalsingCollector mFalsingCollector;
     private final Resources mResources;
     private final NotificationSwipeHelper.Builder mNotificationSwipeHelperBuilder;
     private final ScrimController mScrimController;
@@ -361,8 +361,7 @@ public class NotificationStackScrollLayoutController {
 
                 @Override
                 public void onDragCancelled(View v) {
-                    mView.setSwipingInProgress(false);
-                    mFalsingManager.onNotificationStopDismissing();
+                    mFalsingCollector.onNotificationStopDismissing();
                 }
 
                 /**
@@ -392,14 +391,9 @@ public class NotificationStackScrollLayoutController {
                  */
 
                 public void handleChildViewDismissed(View view) {
-                    mView.setSwipingInProgress(false);
                     if (mView.getDismissAllInProgress()) {
                         return;
                     }
-
-                    mView.removeDraggedView(view);
-                    mView.updateContinuousShadowDrawing();
-
                     if (view instanceof ExpandableNotificationRow) {
                         ExpandableNotificationRow row = (ExpandableNotificationRow) view;
                         if (row.isHeadsUp()) {
@@ -410,8 +404,8 @@ public class NotificationStackScrollLayoutController {
                     }
 
                     mView.addSwipedOutView(view);
-                    mFalsingManager.onNotificationDismissed();
-                    if (mFalsingManager.shouldEnforceBouncer()) {
+                    mFalsingCollector.onNotificationDismissed();
+                    if (mFalsingCollector.shouldEnforceBouncer()) {
                         mStatusBar.executeRunnableDismissingKeyguard(
                                 null,
                                 null /* cancelAction */,
@@ -453,19 +447,12 @@ public class NotificationStackScrollLayoutController {
 
                 @Override
                 public void onBeginDrag(View v) {
-                    mFalsingManager.onNotificationStartDismissing();
-                    mView.setSwipingInProgress(true);
-                    mView.addDraggedView(v);
-                    mView.updateContinuousShadowDrawing();
-                    mView.updateContinuousBackgroundDrawing();
-                    mView.requestChildrenUpdate();
+                    mFalsingCollector.onNotificationStartDismissing();
+                    mView.onSwipeBegin();
                 }
 
                 @Override
                 public void onChildSnappedBack(View animView, float targetLeft) {
-                    mView.addDraggedView(animView);
-                    mView.updateContinuousShadowDrawing();
-                    mView.updateContinuousBackgroundDrawing();
                     if (animView instanceof ExpandableNotificationRow) {
                         ExpandableNotificationRow row = (ExpandableNotificationRow) animView;
                         if (row.isPinned() && !canChildBeDismissed(row)
@@ -529,9 +516,7 @@ public class NotificationStackScrollLayoutController {
 
                 @Override
                 public void onHeadsUpStateChanged(NotificationEntry entry, boolean isHeadsUp) {
-                    long numEntries = mHeadsUpManager.getAllEntries().count();
                     NotificationEntry topEntry = mHeadsUpManager.getTopEntry();
-                    mView.setNumHeadsUp(numEntries);
                     mView.setTopHeadsUpEntry(topEntry);
                     mNotificationRoundnessManager.updateView(entry.getRow(), false /* animate */);
                 }
@@ -561,7 +546,7 @@ public class NotificationStackScrollLayoutController {
             SysuiColorExtractor colorExtractor,
             NotificationLockscreenUserManager lockscreenUserManager,
             MetricsLogger metricsLogger,
-            FalsingManager falsingManager,
+            FalsingCollector falsingCollector,
             @Main Resources resources,
             NotificationSwipeHelper.Builder notificationSwipeHelperBuilder,
             StatusBar statusBar,
@@ -595,7 +580,7 @@ public class NotificationStackScrollLayoutController {
         mColorExtractor = colorExtractor;
         mLockscreenUserManager = lockscreenUserManager;
         mMetricsLogger = metricsLogger;
-        mFalsingManager = falsingManager;
+        mFalsingCollector = falsingCollector;
         mResources = resources;
         mNotificationSwipeHelperBuilder = notificationSwipeHelperBuilder;
         mStatusBar = statusBar;
@@ -675,8 +660,6 @@ public class NotificationStackScrollLayoutController {
         mHeadsUpManager.addListener(mOnHeadsUpChangedListener);
         mHeadsUpManager.setAnimationStateHandler(mView::setHeadsUpGoingAwayAnimationsAllowed);
         mDynamicPrivacyController.addListener(mDynamicPrivacyControllerListener);
-
-        mScrimController.setScrimBehindChangeRunnable(mView::updateBackgroundDimming);
 
         mLockscreenUserManager.addUserChangedListener(mLockscreenUserChangeListener);
 
@@ -1536,12 +1519,12 @@ public class NotificationStackScrollLayoutController {
 
             NotificationGuts guts = mNotificationGutsManager.getExposedGuts();
             boolean expandWantsIt = false;
-            boolean swipingInProgress = mView.isSwipingInProgress();
-            if (!swipingInProgress && !mView.getOnlyScrollingInThisMotion() && guts == null) {
+            if (!mSwipeHelper.isSwiping()
+                    && !mView.getOnlyScrollingInThisMotion() && guts == null) {
                 expandWantsIt = mView.getExpandHelper().onInterceptTouchEvent(ev);
             }
             boolean scrollWantsIt = false;
-            if (!swipingInProgress && !mView.isExpandingNotification()) {
+            if (!mSwipeHelper.isSwiping() && !mView.isExpandingNotification()) {
                 scrollWantsIt = mView.onInterceptTouchEventScroll(ev);
             }
             boolean swipeWantsIt = false;
@@ -1582,10 +1565,9 @@ public class NotificationStackScrollLayoutController {
                     || ev.getActionMasked() == MotionEvent.ACTION_UP;
             mView.handleEmptySpaceClick(ev);
             boolean expandWantsIt = false;
-            boolean swipingInProgress = mView.getSwipingInProgress();
             boolean onlyScrollingInThisMotion = mView.getOnlyScrollingInThisMotion();
             boolean expandingNotification = mView.isExpandingNotification();
-            if (mView.getIsExpanded() && !swipingInProgress && !onlyScrollingInThisMotion
+            if (mView.getIsExpanded() && !mSwipeHelper.isSwiping() && !onlyScrollingInThisMotion
                     && guts == null) {
                 ExpandHelper expandHelper = mView.getExpandHelper();
                 if (isCancelOrUp) {
@@ -1600,7 +1582,7 @@ public class NotificationStackScrollLayoutController {
                 }
             }
             boolean scrollerWantsIt = false;
-            if (mView.isExpanded() && !swipingInProgress && !expandingNotification
+            if (mView.isExpanded() && !mSwipeHelper.isSwiping() && !expandingNotification
                     && !mView.getDisallowScrollingInThisMotion()) {
                 scrollerWantsIt = mView.onScrollTouch(ev);
             }

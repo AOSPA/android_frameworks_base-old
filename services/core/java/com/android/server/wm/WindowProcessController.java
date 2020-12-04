@@ -607,7 +607,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
     private boolean isBoundByForegroundUid() {
         for (int i = mBoundClientUids.size() - 1; i >= 0; --i) {
-            if (mAtm.isUidForeground(mBoundClientUids.valueAt(i))) {
+            if (mAtm.hasActiveVisibleWindow(mBoundClientUids.valueAt(i))) {
                 return true;
             }
         }
@@ -728,6 +728,28 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     @HotPath(caller = HotPath.LRU_UPDATE)
     public boolean hasActivitiesOrRecentTasks() {
         return mHasActivities || mHasRecentTasks;
+    }
+
+    @Nullable
+    TaskDisplayArea getTopActivityDisplayArea() {
+        if (mActivities.isEmpty()) {
+            return null;
+        }
+
+        final int lastIndex = mActivities.size() - 1;
+        ActivityRecord topRecord = mActivities.get(lastIndex);
+        TaskDisplayArea displayArea = topRecord.getDisplayArea();
+
+        for (int index = lastIndex - 1; index >= 0; --index) {
+            ActivityRecord nextRecord = mActivities.get(index);
+            TaskDisplayArea nextDisplayArea = nextRecord.getDisplayArea();
+            if (nextRecord.compareTo(topRecord) > 0 && nextDisplayArea != null) {
+                topRecord = nextRecord;
+                displayArea = nextDisplayArea;
+            }
+        }
+
+        return displayArea;
     }
 
     private boolean hasActivityInVisibleTask() {
@@ -1049,16 +1071,6 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 & (ACTIVITY_STATE_FLAG_IS_VISIBLE | ACTIVITY_STATE_FLAG_IS_WINDOW_VISIBLE)) != 0;
         for (int i = mActivities.size() - 1; i >= 0; i--) {
             final ActivityRecord r = mActivities.get(i);
-            if (r.app != this) {
-                Slog.e(TAG, "Found activity " + r + " in proc activity list using " + r.app
-                        + " instead of expected " + this);
-                if (r.app == null || (r.app.mUid == mUid)) {
-                    // Only fix things up when they look valid.
-                    r.setProcess(this);
-                } else {
-                    continue;
-                }
-            }
             if (r.isVisible()) {
                 stateFlags |= ACTIVITY_STATE_FLAG_IS_WINDOW_VISIBLE;
             }
@@ -1115,6 +1127,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     /** Called when the process has some oom related changes and it is going to update oom-adj. */
     private void prepareOomAdjustment() {
         mAtm.mRootWindowContainer.rankTaskLayersIfNeeded();
+        mAtm.mTaskSupervisor.computeProcessActivityStateBatch();
     }
 
     public int computeRelaunchReason() {
@@ -1238,7 +1251,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
      * @return {@code true} if the process has any visible activity.
      */
     boolean handleAppDied() {
-        mAtm.mStackSupervisor.removeHistoryRecords(this);
+        mAtm.mTaskSupervisor.removeHistoryRecords(this);
 
         boolean hasVisibleActivities = false;
         final boolean hasInactiveActivities =

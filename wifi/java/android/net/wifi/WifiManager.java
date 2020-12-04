@@ -1577,7 +1577,7 @@ public class WifiManager {
                             new ArrayList<>(results.keySet()));
             for (WifiConfiguration configuration : wifiConfigurations) {
                 Map<Integer, List<ScanResult>> scanResultsPerNetworkType =
-                        results.get(configuration.getKey());
+                        results.get(configuration.getProfileKey());
                 if (scanResultsPerNetworkType != null) {
                     configs.add(Pair.create(configuration, scanResultsPerNetworkType));
                 }
@@ -4438,6 +4438,45 @@ public class WifiManager {
     public void connect(int networkId, @Nullable ActionListener listener) {
         if (networkId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         connectInternal(null, networkId, listener);
+    }
+
+    /**
+     * Temporarily disable autojoin for all currently visible and provisioned (saved, suggested)
+     * wifi networks except merged carrier networks from the provided subscription ID.
+     *
+     * Disabled networks will get automatically re-enabled when they are out of range for a period
+     * of time, or after the maximum disable duration specified in the framework.
+     *
+     * Calling {@link #stopTemporarilyDisablingAllNonCarrierMergedWifi()} will immediately re-enable
+     * autojoin on all disabled networks.
+     *
+     * @param subscriptionId the subscription ID of the carrier whose merged wifi networks won't be
+     *                       disabled {@link android.telephony.SubscriptionInfo#getSubscriptionId()}
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void startTemporarilyDisablingAllNonCarrierMergedWifi(int subscriptionId) {
+        try {
+            mService.startTemporarilyDisablingAllNonCarrierMergedWifi(subscriptionId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Re-enable autojoin for all non carrier merged wifi networks temporarily disconnected by
+     * {@link #startTemporarilyDisablingAllNonCarrierMergedWifi(int)}.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void stopTemporarilyDisablingAllNonCarrierMergedWifi() {
+        try {
+            mService.stopTemporarilyDisablingAllNonCarrierMergedWifi();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**

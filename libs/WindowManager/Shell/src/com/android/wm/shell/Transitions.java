@@ -109,17 +109,14 @@ public class Transitions extends ITransitionPlayer.Stub {
         mAnimExecutor.execute(va::start);
     }
 
-    private static boolean isOpeningType(@WindowManager.TransitionOldType int legacyType) {
-        // TODO(shell-transitions): consider providing and using z-order vs the global type for
-        //                          this determination.
-        return legacyType == WindowManager.TRANSIT_OLD_TASK_OPEN
-                || legacyType == WindowManager.TRANSIT_OLD_TASK_TO_FRONT
-                || legacyType == WindowManager.TRANSIT_OLD_TASK_OPEN_BEHIND
-                || legacyType == WindowManager.TRANSIT_OLD_KEYGUARD_GOING_AWAY;
+    private static boolean isOpeningType(@WindowManager.TransitionType int type) {
+        return type == WindowManager.TRANSIT_OPEN
+                || type == WindowManager.TRANSIT_TO_FRONT
+                || type == WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
     }
 
     @Override
-    public void onTransitionReady(@NonNull IBinder transitionToken, TransitionInfo info,
+    public void onTransitionReady(@NonNull IBinder transitionToken, @NonNull TransitionInfo info,
             @NonNull SurfaceControl.Transaction t) {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "onTransitionReady %s: %s",
                 transitionToken, info);
@@ -134,22 +131,53 @@ public class Transitions extends ITransitionPlayer.Stub {
                         + transitionToken);
             }
             mActiveTransitions.put(transitionToken, new ArrayList<>());
-            for (int i = 0; i < info.getChanges().size(); ++i) {
-                final SurfaceControl leash = info.getChanges().get(i).getLeash();
+            boolean isOpening = isOpeningType(info.getType());
+            if (info.getRootLeash().isValid()) {
+                t.show(info.getRootLeash());
+            }
+            // changes should be ordered top-to-bottom in z
+            for (int i = info.getChanges().size() - 1; i >= 0; --i) {
+                final TransitionInfo.Change change = info.getChanges().get(i);
+                final SurfaceControl leash = change.getLeash();
                 final int mode = info.getChanges().get(i).getMode();
+
+                // Don't animate anything with an animating parent
+                if (change.getParent() != null) {
+                    if (mode == TRANSIT_OPEN || mode == TRANSIT_SHOW) {
+                        t.show(leash);
+                        t.setMatrix(leash, 1, 0, 0, 1);
+                    }
+                    continue;
+                }
+
+                t.reparent(leash, info.getRootLeash());
+                t.setPosition(leash, change.getEndAbsBounds().left - info.getRootOffset().x,
+                        change.getEndAbsBounds().top - info.getRootOffset().y);
+                // Put all the OPEN/SHOW on top
                 if (mode == TRANSIT_OPEN || mode == TRANSIT_SHOW) {
                     t.show(leash);
                     t.setMatrix(leash, 1, 0, 0, 1);
-                    if (isOpeningType(info.getType())) {
+                    if (isOpening) {
+                        // put on top and fade in
+                        t.setLayer(leash, info.getChanges().size() - i);
                         t.setAlpha(leash, 0.f);
                         startExampleAnimation(transitionToken, leash, true /* show */);
                     } else {
+                        // put on bottom and leave it visible without fade
+                        t.setLayer(leash, -i);
                         t.setAlpha(leash, 1.f);
                     }
                 } else if (mode == TRANSIT_CLOSE || mode == TRANSIT_HIDE) {
-                    if (!isOpeningType(info.getType())) {
+                    if (isOpening) {
+                        // put on bottom and leave visible without fade
+                        t.setLayer(leash, -i);
+                    } else {
+                        // put on top and fade out
+                        t.setLayer(leash, info.getChanges().size() - i);
                         startExampleAnimation(transitionToken, leash, false /* show */);
                     }
+                } else {
+                    t.setLayer(leash, info.getChanges().size() - i);
                 }
             }
             t.apply();

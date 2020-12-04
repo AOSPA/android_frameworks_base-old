@@ -81,6 +81,7 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Builder;
 import android.view.SurfaceSession;
 import android.view.WindowManager;
+import android.view.WindowManager.TransitionOldType;
 import android.view.animation.Animation;
 import android.window.IWindowContainerToken;
 import android.window.WindowContainerToken;
@@ -250,10 +251,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     boolean mLaunchTaskBehind;
 
     /**
-     * If we are running an animation, this determines the transition type. Must be one of
-     * {@link AppTransition#TransitionFlags}.
+     * If we are running an animation, this determines the transition type.
      */
-    int mTransit;
+    @TransitionOldType int mTransit;
 
     /**
      * If we are running an animation, this determines the flags during this animation. Must be a
@@ -825,14 +825,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return mDisplayContent;
     }
 
-    /** Get the first node of type {@link DisplayArea} above or at this node. */
+    /** Returns the first node of type {@link DisplayArea} above or at this node. */
     @Nullable
     DisplayArea getDisplayArea() {
         WindowContainer parent = getParent();
         return parent != null ? parent.getDisplayArea() : null;
     }
 
-    /** Get the first node of type {@link RootDisplayArea} above or at this node. */
+    /** Returns the first node of type {@link RootDisplayArea} above or at this node. */
     @Nullable
     RootDisplayArea getRootDisplayArea() {
         WindowContainer parent = getParent();
@@ -1112,7 +1112,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 // descendant. E.g. if a display is pending to be removed because it contains an
                 // activity with {@link ActivityRecord#mIsExiting} is true, the display may be
                 // removed when completing the removal of the last activity from
-                // {@link ActivityRecord#checkCompleteDeferredRemoval}.
+                // {@link ActivityRecord#handleCompleteDeferredRemoval}.
                 return false;
             }
         }
@@ -1814,7 +1814,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     /**
      * For all {@link TaskDisplayArea} at or below this container call the callback.
      * @param callback Applies on each {@link TaskDisplayArea} found and stops the search if it
-     *                  returns {@code true}.
+     *                 returns {@code true}.
      * @param traverseTopToBottom If {@code true}, traverses the hierarchy from top-to-bottom in
      *                            terms of z-order, else from bottom-to-top.
      * @return {@code true} if the search ended before we reached the end of the hierarchy due to
@@ -1837,7 +1837,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * For all {@link TaskDisplayArea} at or below this container call the callback. Traverses from
      * top to bottom in terms of z-order.
      * @param callback Applies on each {@link TaskDisplayArea} found and stops the search if it
-     *                  returns {@code true}.
+     *                 returns {@code true}.
      * @return {@code true} if the search ended before we reached the end of the hierarchy due to
      *         callback returning {@code true}.
      */
@@ -1873,7 +1873,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * Performs a reduction on all {@link TaskDisplayArea} at or below this container, using the
      * provided initial value and an accumulation function, and returns the reduced value.
      * @param accumulator Applies on each {@link TaskDisplayArea} found with the accumulative result
-     *                 from the previous call.
+     *                    from the previous call.
      * @param initValue The initial value to pass to the accumulating function with the first
      *                  {@link TaskDisplayArea}.
      * @param traverseTopToBottom If {@code true}, traverses the hierarchy from top-to-bottom in
@@ -1899,7 +1899,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * provided initial value and an accumulation function, and returns the reduced value. Traverses
      * from top to bottom in terms of z-order.
      * @param accumulator Applies on each {@link TaskDisplayArea} found with the accumulative result
-     *                 from the previous call.
+     *                    from the previous call.
      * @param initValue The initial value to pass to the accumulating function with the first
      *                  {@link TaskDisplayArea}.
      * @return the accumulative result.
@@ -1912,9 +1912,29 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     /**
      * Finds the first non {@code null} return value from calling the callback on all
+     * {@link DisplayArea} at or below this container. Traverses from top to bottom in terms of
+     * z-order.
+     * @param callback Applies on each {@link DisplayArea} found and stops the search if it
+     *                 returns non {@code null}.
+     * @return the first returned object that is not {@code null}. Returns {@code null} if not
+     *         found.
+     */
+    @Nullable
+    <R> R getItemFromDisplayAreas(Function<DisplayArea, R> callback) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            R result = (R) mChildren.get(i).getItemFromDisplayAreas(callback);
+            if (result != null) {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Finds the first non {@code null} return value from calling the callback on all
      * {@link TaskDisplayArea} at or below this container.
      * @param callback Applies on each {@link TaskDisplayArea} found and stops the search if it
-     *                  returns non {@code null}.
+     *                 returns non {@code null}.
      * @param traverseTopToBottom If {@code true}, traverses the hierarchy from top-to-bottom in
      *                            terms of z-order, else from bottom-to-top.
      * @return the first returned object that is not {@code null}. Returns {@code null} if not
@@ -1941,7 +1961,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * {@link TaskDisplayArea} at or below this container. Traverses from top to bottom in terms of
      * z-order.
      * @param callback Applies on each {@link TaskDisplayArea} found and stops the search if it
-     *                  returns non {@code null}.
+     *                 returns non {@code null}.
      * @return the first returned object that is not {@code null}. Returns {@code null} if not
      *         found.
      */
@@ -2069,6 +2089,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void assignLayer(Transaction t, int layer) {
+        // Don't assign layers while a transition animation is playing
+        // TODO(b/173528115): establish robust best-practices around z-order fighting.
+        if (mWmService.mAtmService.getTransitionController().isPlaying()) return;
         final boolean changed = layer != mLastLayer || mLastRelativeToLayer != null;
         if (mSurfaceControl != null && changed) {
             setLayer(t, layer);
@@ -2091,6 +2114,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Route through surface animator to accommodate that our surface control might be
         // attached to the leash, and leash is attached to parent container.
         mSurfaceAnimator.setLayer(t, layer);
+    }
+
+    int getLastLayer() {
+        return mLastLayer;
     }
 
     protected void setRelativeLayer(Transaction t, SurfaceControl relativeTo, int layer) {
@@ -2399,8 +2426,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      *
      * @see #getAnimationAdapter
      */
-    boolean applyAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
-            boolean isVoiceInteraction, @Nullable ArrayList<WindowContainer> sources) {
+    boolean applyAnimation(WindowManager.LayoutParams lp, @TransitionOldType int transit,
+            boolean enter, boolean isVoiceInteraction,
+            @Nullable ArrayList<WindowContainer> sources) {
         if (mWmService.mDisableTransitionAnimation) {
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS_ANIM,
                     "applyAnimation: transition animation is disabled or skipped. "
@@ -2415,6 +2443,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "WC#applyAnimation");
             if (okToAnimate()) {
+                ProtoLog.v(WM_DEBUG_APP_TRANSITIONS_ANIM,
+                        "applyAnimation: transit=%s, enter=%b, wc=%s",
+                        AppTransition.appTransitionOldToString(transit), enter, this);
                 applyAnimationUnchecked(lp, enter, transit, isVoiceInteraction, sources);
             } else {
                 cancelAnimation();
@@ -2437,7 +2468,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @See LocalAnimationAdapter
      */
     Pair<AnimationAdapter, AnimationAdapter> getAnimationAdapter(WindowManager.LayoutParams lp,
-            int transit, boolean enter, boolean isVoiceInteraction) {
+            @TransitionOldType int transit, boolean enter, boolean isVoiceInteraction) {
         final Pair<AnimationAdapter, AnimationAdapter> resultAdapters;
         final int appStackClipMode = getDisplayContent().mAppTransition.getAppStackClipMode();
 
@@ -2449,7 +2480,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         final RemoteAnimationController controller =
                 getDisplayContent().mAppTransition.getRemoteAnimationController();
-        final boolean isChanging = AppTransition.isChangeTransit(transit) && enter
+        final boolean isChanging = AppTransition.isChangeTransitOld(transit) && enter
                 && isChangingAppTransition();
 
         // Delaying animation start isn't compatible with remote animations at all.
@@ -2497,7 +2528,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
                 resultAdapters = new Pair<>(adapter, null);
                 mNeedsZBoost = a.getZAdjustment() == Animation.ZORDER_TOP
-                        || AppTransition.isClosingTransit(transit);
+                        || AppTransition.isClosingTransitOld(transit);
                 mTransit = transit;
                 mTransitFlags = getDisplayContent().mAppTransition.getTransitFlags();
             } else {
@@ -2508,7 +2539,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     protected void applyAnimationUnchecked(WindowManager.LayoutParams lp, boolean enter,
-            int transit, boolean isVoiceInteraction,
+            @TransitionOldType int transit, boolean isVoiceInteraction,
             @Nullable ArrayList<WindowContainer> sources) {
         final Pair<AnimationAdapter, AnimationAdapter> adapters = getAnimationAdapter(lp,
                 transit, enter, isVoiceInteraction);
@@ -2877,6 +2908,16 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     /** Cheap way of doing cast and instanceof. */
     DisplayArea asDisplayArea() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
+    RootDisplayArea asRootDisplayArea() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
+    TaskDisplayArea asTaskDisplayArea() {
         return null;
     }
 

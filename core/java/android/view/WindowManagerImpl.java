@@ -203,20 +203,20 @@ public final class WindowManagerImpl implements WindowManager {
     }
 
     @Override
-    public void setShouldShowIme(int displayId, boolean shouldShow) {
+    public void setDisplayImePolicy(int displayId, @DisplayImePolicy int imePolicy) {
         try {
-            WindowManagerGlobal.getWindowManagerService().setShouldShowIme(displayId, shouldShow);
+            WindowManagerGlobal.getWindowManagerService().setDisplayImePolicy(displayId, imePolicy);
         } catch (RemoteException e) {
         }
     }
 
     @Override
-    public boolean shouldShowIme(int displayId) {
+    public @DisplayImePolicy int getDisplayImePolicy(int displayId) {
         try {
-            return WindowManagerGlobal.getWindowManagerService().shouldShowIme(displayId);
+            return WindowManagerGlobal.getWindowManagerService().getDisplayImePolicy(displayId);
         } catch (RemoteException e) {
         }
-        return false;
+        return DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
     }
 
     @Override
@@ -252,8 +252,8 @@ public final class WindowManagerImpl implements WindowManager {
         // Initialize params which used for obtaining all system insets.
         final WindowManager.LayoutParams params = new WindowManager.LayoutParams();
         params.flags = FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_INSET_DECOR;
-        params.token = (mParentWindow != null) ? mParentWindow.getContext().getActivityToken()
-                : mContext.getActivityToken();
+        final Context context = (mParentWindow != null) ? mParentWindow.getContext() : mContext;
+        params.token = Context.getToken(context);
         params.systemUiVisibility = SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
         params.setFitInsetsTypes(0);
