@@ -16,10 +16,10 @@
 
 package com.android.server.hdmi;
 
+import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
 
 import com.android.server.hdmi.Constants.AudioCodec;
-import com.android.server.hdmi.Constants.CecVersion;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
@@ -696,8 +696,10 @@ public class HdmiCecMessageBuilder {
         return buildCommand(src, dest, Constants.MESSAGE_GIVE_FEATURES);
     }
 
-    static HdmiCecMessage buildReportFeatures(int src, @CecVersion int cecVersion,
-            List<Integer> allDeviceTypes, int rcProfile, List<Integer> rcFeatures,
+    static HdmiCecMessage buildReportFeatures(int src,
+            @HdmiControlManager.HdmiCecVersion int cecVersion,
+            List<Integer> allDeviceTypes, @Constants.RcProfile int rcProfile,
+            List<Integer> rcFeatures,
             List<Integer> deviceFeatures) {
         byte cecVersionByte = (byte) (cecVersion & 0xFF);
         byte deviceTypes = 0;
@@ -708,16 +710,16 @@ public class HdmiCecMessageBuilder {
         byte rcProfileByte = 0;
         rcProfileByte |= rcProfile << 6;
         if (rcProfile == Constants.RC_PROFILE_SOURCE) {
-            for (Integer rcFeature : rcFeatures) {
+            for (@Constants.RcProfileSource Integer rcFeature : rcFeatures) {
                 rcProfileByte |= 1 << rcFeature;
             }
         } else {
-            byte rcProfileTv = (byte) (rcFeatures.get(0) & 0xFFFF);
+            @Constants.RcProfileTv byte rcProfileTv = (byte) (rcFeatures.get(0) & 0xFFFF);
             rcProfileByte |= rcProfileTv;
         }
 
         byte deviceFeaturesByte = 0;
-        for (Integer deviceFeature : deviceFeatures) {
+        for (@Constants.DeviceFeature Integer deviceFeature : deviceFeatures) {
             deviceFeaturesByte |= 1 << deviceFeature;
         }
 
@@ -777,6 +779,7 @@ public class HdmiCecMessageBuilder {
         };
     }
 
+    @Constants.DeviceType
     private static int hdmiDeviceInfoDeviceTypeToShiftValue(int deviceType) {
         switch (deviceType) {
             case HdmiDeviceInfo.DEVICE_TV:

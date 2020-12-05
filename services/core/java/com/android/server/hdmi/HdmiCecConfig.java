@@ -22,11 +22,19 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringDef;
+import android.content.ContentResolver;
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.database.ContentObserver;
 import android.hardware.hdmi.HdmiControlManager;
+import android.net.Uri;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemProperties;
+import android.os.UserHandle;
 import android.provider.Settings.Global;
+import android.util.ArrayMap;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -59,15 +67,19 @@ public class HdmiCecConfig {
 
     private static final String ETC_DIR = "etc";
     private static final String CONFIG_FILE = "cec_config.xml";
+    private static final String SHARED_PREFS_DIR = "shared_prefs";
+    private static final String SHARED_PREFS_NAME = "cec_config.xml";
 
     @IntDef({
         STORAGE_SYSPROPS,
         STORAGE_GLOBAL_SETTINGS,
+        STORAGE_SHARED_PREFS,
     })
     private @interface Storage {}
 
     private static final int STORAGE_SYSPROPS = 0;
     private static final int STORAGE_GLOBAL_SETTINGS = 1;
+    private static final int STORAGE_SHARED_PREFS = 2;
 
     private static final String VALUE_TYPE_STRING = "string";
     private static final String VALUE_TYPE_INT = "int";
@@ -78,27 +90,46 @@ public class HdmiCecConfig {
     })
     private @interface ValueType {}
 
-    /**
-     * System property key for Power State Change on Active Source Lost.
-     */
-    public static final String SYSPROP_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST =
-            "ro.hdmi.cec.source.power_state_change_on_active_source_lost";
-
-    /**
-     * System property key for Audio Mode Muting.
-     */
-    public static final String SYSPROP_SYSTEM_AUDIO_MODE_MUTING =
-            "ro.hdmi.cec.audio.system_audio_mode_muting.enabled";
-
     @NonNull private final Context mContext;
     @NonNull private final StorageAdapter mStorageAdapter;
-    @Nullable private final CecSettings mSystemConfig;
+    @Nullable private final CecSettings mProductConfig;
     @Nullable private final CecSettings mVendorOverride;
+
+    private final ArrayMap<Setting, Set<SettingChangeListener>>
+            mSettingChangeListeners = new ArrayMap<>();
+
+    private SettingsObserver mSettingsObserver;
+
+    /**
+     * Listener used to get notifications when value of a setting changes.
+     */
+    public interface SettingChangeListener {
+        /**
+         * Called when value of a setting changes.
+         *
+         * @param setting name of a CEC setting that changed
+         */
+        void onChange(@NonNull @CecSettingName String setting);
+    }
 
     /**
      * Setting storage input/output helper class.
      */
     public static class StorageAdapter {
+        @NonNull private final Context mContext;
+        @NonNull private final SharedPreferences mSharedPrefs;
+
+        StorageAdapter(@NonNull Context context) {
+            mContext = context;
+            // The package info in the context isn't initialized in the way it is for normal apps,
+            // so the standard, name-based context.getSharedPreferences doesn't work. Instead, we
+            // build the path manually below using the same policy that appears in ContextImpl.
+            final Context deviceContext = mContext.createDeviceProtectedStorageContext();
+            final File prefsFile = new File(new File(Environment.getDataSystemDirectory(),
+                                                     SHARED_PREFS_DIR), SHARED_PREFS_NAME);
+            mSharedPrefs = deviceContext.getSharedPreferences(prefsFile, Context.MODE_PRIVATE);
+        }
+
         /**
          * Read the value from a system property.
          * Returns the given default value if the system property is not set.
@@ -120,34 +151,61 @@ public class HdmiCecConfig {
          * Read the value from a global setting.
          * Returns the given default value if the system property is not set.
          */
-        public String retrieveGlobalSetting(@NonNull Context context,
-                                            @NonNull String storageKey,
+        public String retrieveGlobalSetting(@NonNull String storageKey,
                                             @NonNull String defaultValue) {
-            String value = Global.getString(context.getContentResolver(), storageKey);
+            String value = Global.getString(mContext.getContentResolver(), storageKey);
             return value != null ? value : defaultValue;
         }
 
         /**
          * Write the value to a global setting.
          */
-        public void storeGlobalSetting(@NonNull Context context,
-                                       @NonNull String storageKey,
+        public void storeGlobalSetting(@NonNull String storageKey,
                                        @NonNull String value) {
-            Global.putString(context.getContentResolver(), storageKey, value);
+            Global.putString(mContext.getContentResolver(), storageKey, value);
+        }
+
+        /**
+         * Read the value from a shared preference.
+         * Returns the given default value if the preference is not set.
+         */
+        public String retrieveSharedPref(@NonNull String storageKey,
+                                         @NonNull String defaultValue) {
+            return mSharedPrefs.getString(storageKey, defaultValue);
+        }
+
+        /**
+         * Write the value to a shared preference.
+         */
+        public void storeSharedPref(@NonNull String storageKey,
+                                    @NonNull String value) {
+            mSharedPrefs.edit().putString(storageKey, value).apply();
+        }
+    }
+
+    private class SettingsObserver extends ContentObserver {
+        SettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            String setting = uri.getLastPathSegment();
+            HdmiCecConfig.this.notifyGlobalSettingChanged(setting);
         }
     }
 
     @VisibleForTesting
     HdmiCecConfig(@NonNull Context context,
                   @NonNull StorageAdapter storageAdapter,
-                  @Nullable CecSettings systemConfig,
+                  @Nullable CecSettings productConfig,
                   @Nullable CecSettings vendorOverride) {
         mContext = context;
         mStorageAdapter = storageAdapter;
-        mSystemConfig = systemConfig;
+        mProductConfig = productConfig;
         mVendorOverride = vendorOverride;
-        if (mSystemConfig == null) {
-            Slog.i(TAG, "CEC system configuration XML missing.");
+        if (mProductConfig == null) {
+            Slog.i(TAG, "CEC master configuration XML missing.");
         }
         if (mVendorOverride == null) {
             Slog.i(TAG, "CEC OEM configuration override XML missing.");
@@ -155,8 +213,8 @@ public class HdmiCecConfig {
     }
 
     HdmiCecConfig(@NonNull Context context) {
-        this(context, new StorageAdapter(),
-             readSettingsFromFile(Environment.buildPath(Environment.getRootDirectory(),
+        this(context, new StorageAdapter(context),
+             readSettingsFromFile(Environment.buildPath(Environment.getProductDirectory(),
                                                         ETC_DIR, CONFIG_FILE)),
              readSettingsFromFile(Environment.buildPath(Environment.getVendorDirectory(),
                                                         ETC_DIR, CONFIG_FILE)));
@@ -183,14 +241,14 @@ public class HdmiCecConfig {
     @VisibleForTesting
     static HdmiCecConfig createFromStrings(@NonNull Context context,
                                            @NonNull StorageAdapter storageAdapter,
-                                           @Nullable String systemConfigXml,
+                                           @Nullable String productConfigXml,
                                            @Nullable String vendorOverrideXml) {
-        CecSettings systemConfig = null;
+        CecSettings productConfig = null;
         CecSettings vendorOverride = null;
         try {
-            if (systemConfigXml != null) {
-                systemConfig = XmlParser.read(
-                        new ByteArrayInputStream(systemConfigXml.getBytes()));
+            if (productConfigXml != null) {
+                productConfig = XmlParser.read(
+                        new ByteArrayInputStream(productConfigXml.getBytes()));
             }
             if (vendorOverrideXml != null) {
                 vendorOverride = XmlParser.read(
@@ -199,12 +257,12 @@ public class HdmiCecConfig {
         } catch (IOException | DatatypeConfigurationException | XmlPullParserException e) {
             Slog.e(TAG, "Encountered an error while reading/parsing CEC config strings", e);
         }
-        return new HdmiCecConfig(context, storageAdapter, systemConfig, vendorOverride);
+        return new HdmiCecConfig(context, storageAdapter, productConfig, vendorOverride);
     }
 
     @Nullable
     private Setting getSetting(@NonNull String name) {
-        if (mSystemConfig == null) {
+        if (mProductConfig == null) {
             return null;
         }
         if (mVendorOverride != null) {
@@ -215,8 +273,8 @@ public class HdmiCecConfig {
                 }
             }
         }
-        // If not found, try the system config.
-        for (Setting setting : mSystemConfig.getSetting()) {
+        // If not found, try the product config.
+        for (Setting setting : mProductConfig.getSetting()) {
             if (setting.getName().equals(name)) {
                 return setting;
             }
@@ -234,9 +292,9 @@ public class HdmiCecConfig {
             case HdmiControlManager.CEC_SETTING_NAME_SEND_STANDBY_ON_SLEEP:
                 return STORAGE_GLOBAL_SETTINGS;
             case HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST:
-                return STORAGE_SYSPROPS;
+                return STORAGE_SHARED_PREFS;
             case HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING:
-                return STORAGE_SYSPROPS;
+                return STORAGE_SHARED_PREFS;
             default:
                 throw new RuntimeException("Invalid CEC setting '" + setting.getName()
                         + "' storage.");
@@ -252,9 +310,9 @@ public class HdmiCecConfig {
             case HdmiControlManager.CEC_SETTING_NAME_SEND_STANDBY_ON_SLEEP:
                 return Global.HDMI_CONTROL_SEND_STANDBY_ON_SLEEP;
             case HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST:
-                return SYSPROP_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST;
+                return setting.getName();
             case HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING:
-                return SYSPROP_SYSTEM_AUDIO_MODE_MUTING;
+                return setting.getName();
             default:
                 throw new RuntimeException("Invalid CEC setting '" + setting.getName()
                     + "' storage key.");
@@ -269,7 +327,10 @@ public class HdmiCecConfig {
             return mStorageAdapter.retrieveSystemProperty(storageKey, defaultValue);
         } else if (storage == STORAGE_GLOBAL_SETTINGS) {
             Slog.d(TAG, "Reading '" + storageKey + "' global setting.");
-            return mStorageAdapter.retrieveGlobalSetting(mContext, storageKey, defaultValue);
+            return mStorageAdapter.retrieveGlobalSetting(storageKey, defaultValue);
+        } else if (storage == STORAGE_SHARED_PREFS) {
+            Slog.d(TAG, "Reading '" + storageKey + "' shared preference.");
+            return mStorageAdapter.retrieveSharedPref(storageKey, defaultValue);
         }
         return null;
     }
@@ -282,7 +343,11 @@ public class HdmiCecConfig {
             mStorageAdapter.storeSystemProperty(storageKey, value);
         } else if (storage == STORAGE_GLOBAL_SETTINGS) {
             Slog.d(TAG, "Setting '" + storageKey + "' global setting.");
-            mStorageAdapter.storeGlobalSetting(mContext, storageKey, value);
+            mStorageAdapter.storeGlobalSetting(storageKey, value);
+        } else if (storage == STORAGE_SHARED_PREFS) {
+            Slog.d(TAG, "Setting '" + storageKey + "' shared pref.");
+            mStorageAdapter.storeSharedPref(storageKey, value);
+            notifySettingChanged(setting);
         }
     }
 
@@ -290,15 +355,112 @@ public class HdmiCecConfig {
         return Integer.decode(value.getIntValue());
     }
 
+    private void notifyGlobalSettingChanged(String setting) {
+        switch (setting) {
+            case Global.HDMI_CONTROL_ENABLED:
+                notifySettingChanged(HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_ENABLED);
+                break;
+            case Global.HDMI_CEC_VERSION:
+                notifySettingChanged(HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION);
+                break;
+            case Global.HDMI_CONTROL_SEND_STANDBY_ON_SLEEP:
+                notifySettingChanged(HdmiControlManager.CEC_SETTING_NAME_SEND_STANDBY_ON_SLEEP);
+                break;
+        }
+    }
+
+    private void notifySettingChanged(@NonNull @CecSettingName String name) {
+        Setting setting = getSetting(name);
+        if (setting == null) {
+            throw new IllegalArgumentException("Setting '" + name + "' does not exist.");
+        }
+        notifySettingChanged(setting);
+    }
+
+    private void notifySettingChanged(@NonNull Setting setting) {
+        Set<SettingChangeListener> listeners = mSettingChangeListeners.get(setting);
+        if (listeners == null) {
+            return;  // No listeners registered, do nothing.
+        }
+        for (SettingChangeListener listener: listeners) {
+            listener.onChange(setting.getName());
+        }
+    }
+
+    /**
+     * This method registers Global Setting change observer.
+     * Needs to be called once after initialization of HdmiCecConfig.
+     */
+    public void registerGlobalSettingsObserver(Looper looper) {
+        Handler handler = new Handler(looper);
+        mSettingsObserver = new SettingsObserver(handler);
+        ContentResolver resolver = mContext.getContentResolver();
+        String[] settings = new String[] {
+                Global.HDMI_CONTROL_ENABLED,
+                Global.HDMI_CEC_VERSION,
+                Global.HDMI_CONTROL_SEND_STANDBY_ON_SLEEP,
+        };
+        for (String setting: settings) {
+            resolver.registerContentObserver(Global.getUriFor(setting), false,
+                                             mSettingsObserver, UserHandle.USER_ALL);
+        }
+    }
+
+    /**
+     * This method unregisters Global Setting change observer.
+     */
+    public void unregisterGlobalSettingsObserver() {
+        ContentResolver resolver = mContext.getContentResolver();
+        resolver.unregisterContentObserver(mSettingsObserver);
+    }
+
+    /**
+     * Register change listener for a given setting name.
+     */
+    public void registerChangeListener(@NonNull @CecSettingName String name,
+                                       SettingChangeListener listener) {
+        Setting setting = getSetting(name);
+        if (setting == null) {
+            throw new IllegalArgumentException("Setting '" + name + "' does not exist.");
+        }
+        @Storage int storage = getStorage(setting);
+        if (storage != STORAGE_GLOBAL_SETTINGS && storage != STORAGE_SHARED_PREFS) {
+            throw new IllegalArgumentException("Change listeners for setting '" + name
+                    + "' not supported.");
+        }
+        if (!mSettingChangeListeners.containsKey(setting)) {
+            mSettingChangeListeners.put(setting, new HashSet<>());
+        }
+        mSettingChangeListeners.get(setting).add(listener);
+    }
+
+    /**
+     * Remove change listener for a given setting name.
+     */
+    public void removeChangeListener(@NonNull @CecSettingName String name,
+                                     SettingChangeListener listener) {
+        Setting setting = getSetting(name);
+        if (setting == null) {
+            throw new IllegalArgumentException("Setting '" + name + "' does not exist.");
+        }
+        if (mSettingChangeListeners.containsKey(setting)) {
+            Set<SettingChangeListener> listeners = mSettingChangeListeners.get(setting);
+            listeners.remove(listener);
+            if (listeners.isEmpty()) {
+                mSettingChangeListeners.remove(setting);
+            }
+        }
+    }
+
     /**
      * Returns a list of all settings based on the XML metadata.
      */
     public @CecSettingName List<String> getAllSettings() {
-        if (mSystemConfig == null) {
+        if (mProductConfig == null) {
             return new ArrayList<String>();
         }
         List<String> allSettings = new ArrayList<String>();
-        for (Setting setting : mSystemConfig.getSetting()) {
+        for (Setting setting : mProductConfig.getSetting()) {
             allSettings.add(setting.getName());
         }
         return allSettings;
@@ -308,12 +470,12 @@ public class HdmiCecConfig {
      * Returns a list of user-modifiable settings based on the XML metadata.
      */
     public @CecSettingName List<String> getUserSettings() {
-        if (mSystemConfig == null) {
+        if (mProductConfig == null) {
             return new ArrayList<String>();
         }
         Set<String> userSettings = new HashSet<String>();
-        // First read from the system config.
-        for (Setting setting : mSystemConfig.getSetting()) {
+        // First read from the product config.
+        for (Setting setting : mProductConfig.getSetting()) {
             if (setting.getUserConfigurable()) {
                 userSettings.add(setting.getName());
             }

@@ -33,6 +33,7 @@ import com.android.systemui.statusbar.notification.row.NotificationContentView;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * A Util to manage {@link android.view.NotificationHeaderView} objects and their redundancies.
@@ -40,6 +41,7 @@ import java.util.List;
 public class NotificationHeaderUtil {
 
     private static final TextViewComparator sTextViewComparator = new TextViewComparator();
+    private static final TextViewComparator sAppNameComparator = new AppNameComparator();
     private static final VisibilityApplicator sVisibilityApplicator = new VisibilityApplicator();
     private static final VisibilityApplicator sAppNameApplicator = new AppNameApplicator();
     private static  final DataExtractor sIconExtractor = new DataExtractor() {
@@ -118,7 +120,7 @@ public class NotificationHeaderUtil {
                 mRow,
                 com.android.internal.R.id.app_name_text,
                 null,
-                sTextViewComparator,
+                sAppNameComparator,
                 sAppNameApplicator));
         mComparators.add(HeaderProcessor.forTextView(mRow,
                 com.android.internal.R.id.header_text));
@@ -324,13 +326,15 @@ public class NotificationHeaderUtil {
         @Override
         public boolean compare(View parent, View child, Object parentData, Object childData) {
             TextView parentView = (TextView) parent;
+            CharSequence parentText = parentView == null ? "" : parentView.getText();
             TextView childView = (TextView) child;
-            return parentView.getText().equals(childView.getText());
+            CharSequence childText = childView == null ? "" : childView.getText();
+            return Objects.equals(parentText, childText);
         }
 
         @Override
         public boolean isEmpty(View view) {
-            return TextUtils.isEmpty(((TextView) view).getText());
+            return view == null || TextUtils.isEmpty(((TextView) view).getText());
         }
     }
 
@@ -369,7 +373,9 @@ public class NotificationHeaderUtil {
 
         @Override
         public void apply(View parent, View view, boolean apply, boolean reset) {
-            view.setVisibility(apply ? View.GONE : View.VISIBLE);
+            if (view != null) {
+                view.setVisibility(apply ? View.GONE : View.VISIBLE);
+            }
         }
     }
 
@@ -382,6 +388,19 @@ public class NotificationHeaderUtil {
                 apply = layout.shouldHideAppName();
             }
             super.apply(parent, view, apply, reset);
+        }
+    }
+
+    private static class AppNameComparator extends TextViewComparator {
+        @Override
+        public boolean compare(View parent, View child, Object parentData, Object childData) {
+            if (isEmpty(child)) {
+                // In headerless notifications the AppName view exists but is usually GONE (and not
+                // populated).  We need to treat this case as equal to the header in order to
+                // deduplicate the view.
+                return true;
+            }
+            return super.compare(parent, child, parentData, childData);
         }
     }
 }

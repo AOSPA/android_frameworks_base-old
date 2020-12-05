@@ -228,6 +228,7 @@ package android {
     field public static final String SHOW_KEYGUARD_MESSAGE = "android.permission.SHOW_KEYGUARD_MESSAGE";
     field public static final String SHUTDOWN = "android.permission.SHUTDOWN";
     field public static final String START_ACTIVITIES_FROM_BACKGROUND = "android.permission.START_ACTIVITIES_FROM_BACKGROUND";
+    field public static final String START_FOREGROUND_SERVICES_FROM_BACKGROUND = "android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND";
     field public static final String STATUS_BAR_SERVICE = "android.permission.STATUS_BAR_SERVICE";
     field public static final String STOP_APP_SWITCHES = "android.permission.STOP_APP_SWITCHES";
     field public static final String SUBSTITUTE_NOTIFICATION_APP_NAME = "android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME";
@@ -603,7 +604,7 @@ package android.app {
     method public static android.app.BroadcastOptions makeBasic();
     method @RequiresPermission(android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND) public void setBackgroundActivityStartsAllowed(boolean);
     method public void setDontSendToRestrictedApps(boolean);
-    method @RequiresPermission(android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST) public void setTemporaryAppWhitelistDuration(long);
+    method @RequiresPermission(anyOf={android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST, android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND, android.Manifest.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND}) public void setTemporaryAppWhitelistDuration(long);
     method public android.os.Bundle toBundle();
   }
 
@@ -1764,6 +1765,7 @@ package android.content {
     field public static final String BACKUP_SERVICE = "backup";
     field public static final String BATTERY_STATS_SERVICE = "batterystats";
     field public static final int BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS = 1048576; // 0x100000
+    field public static final int BIND_ALLOW_FOREGROUND_SERVICE_STARTS_FROM_BACKGROUND = 262144; // 0x40000
     field public static final String BUGREPORT_SERVICE = "bugreport";
     field public static final String CONTENT_SUGGESTIONS_SERVICE = "content_suggestions";
     field public static final String CONTEXTHUB_SERVICE = "contexthub";
@@ -2066,6 +2068,10 @@ package android.content.pm {
     field @NonNull public static final android.os.Parcelable.Creator<android.content.pm.LauncherApps.AppUsageLimit> CREATOR;
   }
 
+  public static class LauncherApps.ShortcutQuery {
+    field public static final int FLAG_GET_PERSONS_DATA = 2048; // 0x800
+  }
+
   public class PackageInstaller {
     method @RequiresPermission(android.Manifest.permission.INSTALL_PACKAGES) public void setPermissionsResult(int, boolean);
     field public static final int DATA_LOADER_TYPE_INCREMENTAL = 2; // 0x2
@@ -2276,6 +2282,7 @@ package android.content.pm {
     field public static final int PROTECTION_FLAG_DOCUMENTER = 262144; // 0x40000
     field public static final int PROTECTION_FLAG_INCIDENT_REPORT_APPROVER = 1048576; // 0x100000
     field public static final int PROTECTION_FLAG_OEM = 16384; // 0x4000
+    field public static final int PROTECTION_FLAG_RECENTS = 33554432; // 0x2000000
     field public static final int PROTECTION_FLAG_RETAIL_DEMO = 16777216; // 0x1000000
     field public static final int PROTECTION_FLAG_SYSTEM_TEXT_CLASSIFIER = 65536; // 0x10000
     field public static final int PROTECTION_FLAG_WELLBEING = 131072; // 0x20000
@@ -4385,7 +4392,7 @@ package android.media {
   }
 
   public class MediaPlayer implements android.media.AudioRouting android.media.VolumeAutomation {
-    method @RequiresPermission("android.permission.BIND_IMS_SERVICE") public void setOnRtpRxNoticeListener(@NonNull android.content.Context, @NonNull android.media.MediaPlayer.OnRtpRxNoticeListener, @Nullable android.os.Handler);
+    method @RequiresPermission(android.Manifest.permission.BIND_IMS_SERVICE) public void setOnRtpRxNoticeListener(@NonNull android.content.Context, @NonNull android.media.MediaPlayer.OnRtpRxNoticeListener, @Nullable android.os.Handler);
   }
 
   public static interface MediaPlayer.OnRtpRxNoticeListener {
@@ -5027,14 +5034,15 @@ package android.media.tv.tuner {
     method public void clearResourceLostListener();
     method public void close();
     method public int connectCiCam(int);
+    method public int connectFrontendToCiCam(int);
     method public int disconnectCiCam();
+    method public int disconnectFrontendToCiCam(int);
     method public int getAvSyncHwId(@NonNull android.media.tv.tuner.filter.Filter);
     method public long getAvSyncTime(int);
     method @Nullable public android.media.tv.tuner.DemuxCapabilities getDemuxCapabilities();
     method @Nullable public android.media.tv.tuner.frontend.FrontendInfo getFrontendInfo();
     method @Nullable public java.util.List<android.media.tv.tuner.frontend.FrontendInfo> getFrontendInfoList();
     method @Nullable public android.media.tv.tuner.frontend.FrontendStatus getFrontendStatus(@NonNull int[]);
-    method public int linkFrontendToCiCam(int);
     method @Nullable @RequiresPermission(android.Manifest.permission.ACCESS_TV_DESCRAMBLER) public android.media.tv.tuner.Descrambler openDescrambler();
     method @Nullable public android.media.tv.tuner.dvr.DvrPlayback openDvrPlayback(long, @NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.dvr.OnPlaybackStatusChangedListener);
     method @Nullable public android.media.tv.tuner.dvr.DvrRecorder openDvrRecorder(long, @NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.dvr.OnRecordStatusChangedListener);
@@ -5048,7 +5056,6 @@ package android.media.tv.tuner {
     method public void setResourceLostListener(@NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.Tuner.OnResourceLostListener);
     method public void shareFrontendFromTuner(@NonNull android.media.tv.tuner.Tuner);
     method public int tune(@NonNull android.media.tv.tuner.frontend.FrontendSettings);
-    method public int unlinkFrontendToCiCam(int);
     method public void updateResourcePriority(int, int);
     field public static final int INVALID_AV_SYNC_ID = -1; // 0xffffffff
     field public static final int INVALID_FILTER_ID = -1; // 0xffffffff
@@ -5249,7 +5256,7 @@ package android.media.tv.tuner.filter {
   public class Filter implements java.lang.AutoCloseable {
     method public void close();
     method public int configure(@NonNull android.media.tv.tuner.filter.FilterConfiguration);
-    method public int configureScramblingStatusEvent(int);
+    method public int configureMonitorEvent(int);
     method public int flush();
     method public int getId();
     method public long getId64Bit();
@@ -5257,6 +5264,8 @@ package android.media.tv.tuner.filter {
     method public int setDataSource(@Nullable android.media.tv.tuner.filter.Filter);
     method public int start();
     method public int stop();
+    field public static final int MONITOR_EVENT_IP_CID_CHANGE = 2; // 0x2
+    field public static final int MONITOR_EVENT_SCRAMBLING_STATUS = 1; // 0x1
     field public static final int SCRAMBLING_STATUS_NOT_SCRAMBLED = 2; // 0x2
     field public static final int SCRAMBLING_STATUS_SCRAMBLED = 4; // 0x4
     field public static final int SCRAMBLING_STATUS_UNKNOWN = 1; // 0x1
@@ -5301,6 +5310,10 @@ package android.media.tv.tuner.filter {
 
   public abstract class FilterEvent {
     ctor public FilterEvent();
+  }
+
+  public final class IpCidChangeEvent extends android.media.tv.tuner.filter.FilterEvent {
+    method public int getIpCid();
   }
 
   public final class IpFilterConfiguration extends android.media.tv.tuner.filter.FilterConfiguration {
@@ -5436,6 +5449,10 @@ package android.media.tv.tuner.filter {
     method @NonNull public android.media.tv.tuner.filter.RecordSettings.Builder setScIndexMask(int);
     method @NonNull public android.media.tv.tuner.filter.RecordSettings.Builder setScIndexType(int);
     method @NonNull public android.media.tv.tuner.filter.RecordSettings.Builder setTsIndexMask(int);
+  }
+
+  public final class RestartEvent extends android.media.tv.tuner.filter.FilterEvent {
+    method public int getStartId();
   }
 
   public final class ScramblingStatusEvent extends android.media.tv.tuner.filter.FilterEvent {
@@ -6676,6 +6693,7 @@ package android.net {
     method public final void sendNetworkCapabilities(@NonNull android.net.NetworkCapabilities);
     method public final void sendNetworkScore(@IntRange(from=0, to=99) int);
     method public final void sendSocketKeepaliveEvent(int, int);
+    method public final void setUnderlyingNetworks(@Nullable java.util.List<android.net.Network>);
     method public void unregister();
     field public static final int VALIDATION_STATUS_NOT_VALID = 2; // 0x2
     field public static final int VALIDATION_STATUS_VALID = 1; // 0x1
@@ -8949,11 +8967,8 @@ package android.service.attestation {
   public abstract class ImpressionAttestationService extends android.app.Service {
     ctor public ImpressionAttestationService();
     method @NonNull public final android.os.IBinder onBind(@NonNull android.content.Intent);
-    method @Nullable public abstract android.service.attestation.ImpressionToken onGenerateImpressionToken(@NonNull android.hardware.HardwareBuffer, @NonNull android.graphics.Rect, @NonNull String);
-    method public abstract int onVerifyImpressionToken(@NonNull android.service.attestation.ImpressionToken);
-    field public static final int VERIFICATION_STATUS_APP_DECLARED = 2; // 0x2
-    field public static final int VERIFICATION_STATUS_OS_VERIFIED = 1; // 0x1
-    field public static final int VERIFICATION_STATUS_UNKNOWN = 0; // 0x0
+    method @Nullable public abstract android.service.attestation.ImpressionToken onGenerateImpressionToken(@NonNull String, @NonNull android.hardware.HardwareBuffer, @NonNull android.graphics.Rect, @NonNull String);
+    method public abstract boolean onVerifyImpressionToken(@NonNull String, @NonNull android.service.attestation.ImpressionToken);
   }
 
   public final class ImpressionToken implements android.os.Parcelable {
@@ -10199,6 +10214,25 @@ package android.telephony {
     field @NonNull public static final android.os.Parcelable.Creator<android.telephony.DataSpecificRegistrationInfo> CREATOR;
   }
 
+  public final class DataThrottlingRequest implements android.os.Parcelable {
+    method public int describeContents();
+    method public long getCompletionDurationMillis();
+    method public int getDataThrottlingAction();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.telephony.DataThrottlingRequest> CREATOR;
+    field public static final int DATA_THROTTLING_ACTION_HOLD = 3; // 0x3
+    field public static final int DATA_THROTTLING_ACTION_NO_DATA_THROTTLING = 0; // 0x0
+    field public static final int DATA_THROTTLING_ACTION_THROTTLE_PRIMARY_CARRIER = 2; // 0x2
+    field public static final int DATA_THROTTLING_ACTION_THROTTLE_SECONDARY_CARRIER = 1; // 0x1
+  }
+
+  public static final class DataThrottlingRequest.Builder {
+    ctor public DataThrottlingRequest.Builder();
+    method @NonNull public android.telephony.DataThrottlingRequest build();
+    method @NonNull public android.telephony.DataThrottlingRequest.Builder setCompletionDurationMillis(long);
+    method @NonNull public android.telephony.DataThrottlingRequest.Builder setDataThrottlingAction(int);
+  }
+
   public final class ImsiEncryptionInfo implements android.os.Parcelable {
     method public int describeContents();
     method @Nullable public String getKeyIdentifier();
@@ -10774,6 +10808,7 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public int getSimCardState(int);
     method @Nullable @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public java.util.Locale getSimLocale();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public long getSupportedRadioAccessFamily();
+    method @NonNull @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public java.util.List<android.telephony.RadioAccessSpecifier> getSystemSelectionChannels();
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public java.util.List<android.telephony.TelephonyHistogram> getTelephonyHistograms();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public android.telephony.UiccSlotInfo[] getUiccSlotsInfo();
     method @Nullable public android.os.Bundle getVisualVoicemailSettings();
@@ -10817,6 +10852,7 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION) public void resetOtaEmergencyNumberDbFilePath();
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean resetRadioConfig();
     method @RequiresPermission(android.Manifest.permission.CONNECTIVITY_INTERNAL) public void resetSettings();
+    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int sendThermalMitigationRequest(@NonNull android.telephony.ThermalMitigationRequest);
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int setAllowedCarriers(int, java.util.List<android.service.carrier.CarrierIdentifier>);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean setAllowedNetworkTypes(long);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setCallForwarding(@NonNull android.telephony.CallForwardingInfo, @Nullable java.util.concurrent.Executor, @Nullable java.util.function.Consumer<java.lang.Integer>);
@@ -10934,6 +10970,11 @@ package android.telephony {
     field public static final int SRVCC_STATE_HANDOVER_FAILED = 2; // 0x2
     field public static final int SRVCC_STATE_HANDOVER_NONE = -1; // 0xffffffff
     field public static final int SRVCC_STATE_HANDOVER_STARTED = 0; // 0x0
+    field public static final int THERMAL_MITIGATION_RESULT_INVALID_STATE = 3; // 0x3
+    field public static final int THERMAL_MITIGATION_RESULT_MODEM_ERROR = 1; // 0x1
+    field public static final int THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE = 2; // 0x2
+    field public static final int THERMAL_MITIGATION_RESULT_SUCCESS = 0; // 0x0
+    field public static final int THERMAL_MITIGATION_RESULT_UNKNOWN_ERROR = 4; // 0x4
   }
 
   public static interface TelephonyManager.CallForwardingInfoCallback {
@@ -10951,6 +10992,24 @@ package android.telephony {
     field public static final int ERROR_MODEM_RESPONSE_ERROR = 3; // 0x3
     field public static final int ERROR_PHONE_NOT_AVAILABLE = 1; // 0x1
     field public static final int ERROR_UNKNOWN = 0; // 0x0
+  }
+
+  public final class ThermalMitigationRequest implements android.os.Parcelable {
+    method public int describeContents();
+    method @Nullable public android.telephony.DataThrottlingRequest getDataThrottlingRequest();
+    method public int getThermalMitigationAction();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.telephony.ThermalMitigationRequest> CREATOR;
+    field public static final int THERMAL_MITIGATION_ACTION_DATA_THROTTLING = 0; // 0x0
+    field public static final int THERMAL_MITIGATION_ACTION_RADIO_OFF = 2; // 0x2
+    field public static final int THERMAL_MITIGATION_ACTION_VOICE_ONLY = 1; // 0x1
+  }
+
+  public static final class ThermalMitigationRequest.Builder {
+    ctor public ThermalMitigationRequest.Builder();
+    method @NonNull public android.telephony.ThermalMitigationRequest build();
+    method @NonNull public android.telephony.ThermalMitigationRequest.Builder setDataThrottlingRequest(@NonNull android.telephony.DataThrottlingRequest);
+    method @NonNull public android.telephony.ThermalMitigationRequest.Builder setThermalMitigationAction(int);
   }
 
   public final class UiccAccessRule implements android.os.Parcelable {
@@ -11030,6 +11089,35 @@ package android.telephony.data {
     field public static final String TYPE_XCAP_STRING = "xcap";
   }
 
+  public final class ApnThrottleStatus implements android.os.Parcelable {
+    method public int describeContents();
+    method public int getApnType();
+    method public int getRetryType();
+    method public int getSlotIndex();
+    method public long getThrottleExpiryTimeMillis();
+    method public int getThrottleType();
+    method public int getTransportType();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.telephony.data.ApnThrottleStatus> CREATOR;
+    field public static final int RETRY_TYPE_HANDOVER = 3; // 0x3
+    field public static final int RETRY_TYPE_NEW_CONNECTION = 2; // 0x2
+    field public static final int RETRY_TYPE_NONE = 1; // 0x1
+    field public static final int THROTTLE_TYPE_ELAPSED_TIME = 2; // 0x2
+    field public static final int THROTTLE_TYPE_NONE = 1; // 0x1
+  }
+
+  public static final class ApnThrottleStatus.Builder {
+    ctor public ApnThrottleStatus.Builder();
+    method @NonNull public android.telephony.data.ApnThrottleStatus build();
+    method @NonNull public android.telephony.data.ApnThrottleStatus.Builder setApnType(int);
+    method @NonNull public android.telephony.data.ApnThrottleStatus.Builder setNoThrottle();
+    method @NonNull public android.telephony.data.ApnThrottleStatus.Builder setRetryType(int);
+    method @NonNull public android.telephony.data.ApnThrottleStatus.Builder setSlotIndex(int);
+    method @NonNull public android.telephony.data.ApnThrottleStatus.Builder setThrottleExpiryTimeMillis(long);
+    method @NonNull public android.telephony.data.ApnThrottleStatus.Builder setTransportType(int);
+    field public static final long NO_THROTTLE_EXPIRY_TIME = -1L; // 0xffffffffffffffffL
+  }
+
   public final class DataCallResponse implements android.os.Parcelable {
     method public int describeContents();
     method @NonNull public java.util.List<android.net.LinkAddress> getAddresses();
@@ -11044,6 +11132,7 @@ package android.telephony.data {
     method public int getMtuV4();
     method public int getMtuV6();
     method @NonNull public java.util.List<java.net.InetAddress> getPcscfAddresses();
+    method public int getPduSessionId();
     method public int getProtocolType();
     method public long getRetryDurationMillis();
     method @Deprecated public int getSuggestedRetryTime();
@@ -11058,6 +11147,7 @@ package android.telephony.data {
     field public static final int LINK_STATUS_DORMANT = 1; // 0x1
     field public static final int LINK_STATUS_INACTIVE = 0; // 0x0
     field public static final int LINK_STATUS_UNKNOWN = -1; // 0xffffffff
+    field public static final int PDU_SESSION_ID_NOT_SET = 0; // 0x0
     field public static final int RETRY_DURATION_UNDEFINED = -1; // 0xffffffff
   }
 
@@ -11076,6 +11166,7 @@ package android.telephony.data {
     method @NonNull public android.telephony.data.DataCallResponse.Builder setMtuV4(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setMtuV6(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setPcscfAddresses(@NonNull java.util.List<java.net.InetAddress>);
+    method @NonNull public android.telephony.data.DataCallResponse.Builder setPduSessionId(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setProtocolType(int);
     method @NonNull public android.telephony.data.DataCallResponse.Builder setRetryDurationMillis(long);
     method @Deprecated @NonNull public android.telephony.data.DataCallResponse.Builder setSuggestedRetryTime(int);
@@ -11140,19 +11231,26 @@ package android.telephony.data {
 
   public abstract class DataService.DataServiceProvider implements java.lang.AutoCloseable {
     ctor public DataService.DataServiceProvider(int);
+    method public void cancelHandover(int, @NonNull android.telephony.data.DataServiceCallback);
     method public abstract void close();
     method public void deactivateDataCall(int, int, @Nullable android.telephony.data.DataServiceCallback);
     method public final int getSlotIndex();
+    method public final void notifyApnUnthrottled(@NonNull String);
     method public final void notifyDataCallListChanged(java.util.List<android.telephony.data.DataCallResponse>);
     method public void requestDataCallList(@NonNull android.telephony.data.DataServiceCallback);
     method public void setDataProfile(@NonNull java.util.List<android.telephony.data.DataProfile>, boolean, @NonNull android.telephony.data.DataServiceCallback);
     method public void setInitialAttachApn(@NonNull android.telephony.data.DataProfile, boolean, @NonNull android.telephony.data.DataServiceCallback);
     method public void setupDataCall(int, @NonNull android.telephony.data.DataProfile, boolean, boolean, int, @Nullable android.net.LinkProperties, @NonNull android.telephony.data.DataServiceCallback);
+    method public void setupDataCall(int, @NonNull android.telephony.data.DataProfile, boolean, boolean, int, @Nullable android.net.LinkProperties, @IntRange(from=0, to=15) int, @NonNull android.telephony.data.DataServiceCallback);
+    method public void startHandover(int, @NonNull android.telephony.data.DataServiceCallback);
   }
 
   public class DataServiceCallback {
+    method public void onApnUnthrottled(@NonNull String);
     method public void onDataCallListChanged(@NonNull java.util.List<android.telephony.data.DataCallResponse>);
     method public void onDeactivateDataCallComplete(int);
+    method public void onHandoverCancelled(int);
+    method public void onHandoverStarted(int);
     method public void onRequestDataCallListComplete(int, @NonNull java.util.List<android.telephony.data.DataCallResponse>);
     method public void onSetDataProfileComplete(int);
     method public void onSetInitialAttachApnComplete(int);
@@ -11174,6 +11272,7 @@ package android.telephony.data {
     ctor public QualifiedNetworksService.NetworkAvailabilityProvider(int);
     method public abstract void close();
     method public final int getSlotIndex();
+    method public void reportApnThrottleStatusChanged(@NonNull java.util.List<android.telephony.data.ApnThrottleStatus>);
     method public final void updateQualifiedNetworkTypes(int, @NonNull java.util.List<java.lang.Integer>);
   }
 

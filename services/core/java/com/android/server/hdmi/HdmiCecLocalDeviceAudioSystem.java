@@ -47,8 +47,6 @@ import com.android.server.hdmi.HdmiAnnotations.ServiceThreadOnly;
 import com.android.server.hdmi.HdmiUtils.CodecSad;
 import com.android.server.hdmi.HdmiUtils.DeviceConfig;
 
-import com.google.android.collect.Lists;
-
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
@@ -179,7 +177,13 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
 
     @Override
     protected List<Integer> getDeviceFeatures() {
-        return Lists.newArrayList(Constants.DEVICE_FEATURE_SOURCE_SUPPORTS_ARC_RX);
+        List<Integer> deviceFeatures = new ArrayList<>();
+
+        if (SystemProperties.getBoolean(Constants.PROPERTY_ARC_SUPPORT, true)) {
+            deviceFeatures.add(Constants.DEVICE_FEATURE_SOURCE_SUPPORTS_ARC_RX);
+        }
+
+        return deviceFeatures;
     }
 
     @Override
@@ -778,11 +782,14 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
             switchToAudioInput();
         }
         // Mute device when feature is turned off and unmute device when feature is turned on.
-        // PROPERTY_SYSTEM_AUDIO_MODE_MUTING_ENABLE is false when device never needs to be muted.
+        // CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING is false when device never needs to be muted.
+        boolean systemAudioModeMutingEnabled = mService.getHdmiCecConfig().getIntValue(
+                    HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING)
+                        == HdmiControlManager.SYSTEM_AUDIO_MODE_MUTING_ENABLED;
         boolean currentMuteStatus =
                 mService.getAudioManager().isStreamMute(AudioManager.STREAM_MUSIC);
         if (currentMuteStatus == newSystemAudioMode) {
-            if (HdmiProperties.system_audio_mode_muting().orElse(true) || newSystemAudioMode) {
+            if (systemAudioModeMutingEnabled || newSystemAudioMode) {
                 mService.getAudioManager()
                         .adjustStreamVolume(
                                 AudioManager.STREAM_MUSIC,
@@ -806,7 +813,7 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         // Audio Mode is off even without terminating the ARC. This can stop the current
         // audio device from playing audio when system audio mode is off.
         if (mArcIntentUsed
-                && !HdmiProperties.system_audio_mode_muting().orElse(true)
+                && !systemAudioModeMutingEnabled
                 && !newSystemAudioMode
                 && getLocalActivePort() == Constants.CEC_SWITCH_ARC) {
             routeToInputFromPortId(getRoutingPort());

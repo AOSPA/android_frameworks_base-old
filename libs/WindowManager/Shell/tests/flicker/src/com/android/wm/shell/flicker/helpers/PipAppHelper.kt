@@ -26,16 +26,17 @@ import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.helpers.closePipWindow
 import com.android.server.wm.flicker.helpers.hasPipWindow
 import com.android.wm.shell.flicker.SYSTEM_UI_PACKAGE_NAME
-import com.android.wm.shell.flicker.TEST_APP_PIP_ACTIVITY_COMPONENT_NAME
 import com.android.wm.shell.flicker.TEST_APP_PIP_ACTIVITY_LABEL
+import com.android.wm.shell.flicker.testapp.Components
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.fail
 
 class PipAppHelper(
     instrumentation: Instrumentation
 ) : BaseAppHelper(
         instrumentation,
         TEST_APP_PIP_ACTIVITY_LABEL,
-        TEST_APP_PIP_ACTIVITY_COMPONENT_NAME
+        Components.PipActivity()
 ) {
     private val mediaSessionManager: MediaSessionManager
         get() = context.getSystemService(MediaSessionManager::class.java)
@@ -46,11 +47,12 @@ class PipAppHelper(
             it.packageName == packageName
         }
 
+    fun clickButton(resourceId: String) =
+            uiDevice.findObject(By.res(packageName, resourceId))?.click()
+                ?: fail("$resourceId button is not found")
+
     fun clickEnterPipButton() {
-        val enterPipButton = uiDevice.findObject(By.res(packageName, "enter_pip"))
-        assertNotNull("Pip button not found, this usually happens when the device " +
-                "was left in an unknown state (e.g. in split screen)", enterPipButton)
-        enterPipButton.click()
+        clickButton("enter_pip")
 
         // TODO(b/172321238): remove this check once hasPipWindow is fixed on TVs
         if (!isTelevision) {
@@ -67,6 +69,12 @@ class PipAppHelper(
                 "was left in an unknown state (e.g. in split screen)", startButton)
         startButton.click()
     }
+
+    fun checkWithCustomActionsCheckbox() = uiDevice
+            .findObject(By.res(packageName, "with_custom_actions"))
+            ?.takeIf { it.isCheckable }
+            ?.apply { if (!isChecked) click() }
+            ?: error("'With custom actions' checkbox not found")
 
     fun pauseMedia() = mediaController?.transportControls?.pause()
             ?: error("No active media session found")

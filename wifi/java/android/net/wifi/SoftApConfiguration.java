@@ -564,7 +564,16 @@ public final class SoftApConfiguration implements Parcelable {
         if (!SdkLevel.isAtLeastS()) {
             throw new UnsupportedOperationException();
         }
-        return mChannels;
+        return getChannelsInternal();
+    }
+
+    /**
+     * Internal version bypassing SdkLevel checks
+     * TODO(b/173791707): find a better way to allow Wifi to call its own new S APIs.
+     * @hide
+     */
+    public @NonNull SparseIntArray getChannelsInternal() {
+        return mChannels.clone();
     }
 
     /**

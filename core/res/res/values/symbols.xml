@@ -218,6 +218,7 @@
   <java-symbol type="id" name="inbox_text6" />
   <java-symbol type="id" name="status_bar_latest_event_content" />
   <java-symbol type="id" name="notification_main_column" />
+  <java-symbol type="id" name="notification_standard_view_column" />
   <java-symbol type="id" name="sms_short_code_confirm_message" />
   <java-symbol type="id" name="sms_short_code_detail_layout" />
   <java-symbol type="id" name="sms_short_code_detail_message" />
@@ -2202,6 +2203,7 @@
   <java-symbol type="layout" name="notification_material_action_list" />
   <java-symbol type="layout" name="notification_material_action_tombstone" />
   <java-symbol type="layout" name="notification_template_material_base" />
+  <java-symbol type="layout" name="notification_template_material_heads_up_base" />
   <java-symbol type="layout" name="notification_template_material_big_base" />
   <java-symbol type="layout" name="notification_template_material_big_picture" />
   <java-symbol type="layout" name="notification_template_material_inbox" />
@@ -2535,6 +2537,7 @@
   <java-symbol type="string" name="face_authenticated_confirmation_required" />
   <java-symbol type="string" name="face_error_security_update_required" />
 
+  <java-symbol type="string" name="config_biometric_prompt_ui_package" />
   <java-symbol type="array" name="config_biometric_sensors" />
   <java-symbol type="bool" name="allow_test_udfps" />
 
@@ -2876,6 +2879,7 @@
   <java-symbol type="id" name="header_text" />
   <java-symbol type="id" name="header_text_secondary" />
   <java-symbol type="id" name="expand_button" />
+  <java-symbol type="id" name="alternate_expand_target" />
   <java-symbol type="id" name="notification_header" />
   <java-symbol type="id" name="notification_top_line" />
   <java-symbol type="id" name="time_divider" />
@@ -2886,18 +2890,16 @@
   <java-symbol type="drawable" name="ic_collapse_notification" />
   <java-symbol type="drawable" name="ic_expand_bundle" />
   <java-symbol type="drawable" name="ic_collapse_bundle" />
-  <java-symbol type="dimen" name="notification_min_content_height" />
   <java-symbol type="dimen" name="notification_header_shrink_min_width" />
   <java-symbol type="dimen" name="notification_content_margin_start" />
   <java-symbol type="dimen" name="notification_content_margin_end" />
-  <java-symbol type="dimen" name="notification_reply_inset" />
+  <java-symbol type="dimen" name="notification_heading_margin_end" />
   <java-symbol type="dimen" name="notification_content_margin_top" />
   <java-symbol type="dimen" name="notification_content_margin" />
   <java-symbol type="dimen" name="notification_header_background_height" />
-  <java-symbol type="dimen" name="notification_header_height" />
+  <java-symbol type="dimen" name="notification_header_touchable_height" />
   <java-symbol type="dimen" name="notification_header_expand_icon_size" />
   <java-symbol type="dimen" name="notification_expand_button_padding_top" />
-  <java-symbol type="dimen" name="notification_header_icon_margin_end" />
   <java-symbol type="dimen" name="notification_header_icon_size" />
   <java-symbol type="dimen" name="notification_header_app_name_margin_start" />
   <java-symbol type="dimen" name="notification_header_separating_margin" />
@@ -3418,9 +3420,6 @@
   <java-symbol type="bool" name="config_allowEscrowTokenForTrustAgent"/>
   <java-symbol type="string" name="config_defaultTrustAgent" />
 
-  <!-- Time picker -->
-  <java-symbol type="id" name="right_icon_container"/>
-  <java-symbol type="id" name="reply_icon_action"/>
   <java-symbol type="id" name="toggle_mode"/>
   <java-symbol type="id" name="input_mode"/>
   <java-symbol type="id" name="input_header"/>
@@ -3479,6 +3478,7 @@
   <java-symbol type="string" name="notification_channel_heavy_weight_app" />
   <java-symbol type="string" name="notification_channel_system_changes" />
   <java-symbol type="string" name="notification_channel_do_not_disturb" />
+  <java-symbol type="string" name="notification_channel_accessibility_magnification" />
   <java-symbol type="string" name="config_defaultAutofillService" />
   <java-symbol type="string" name="config_defaultTextClassifierPackage" />
   <java-symbol type="string" name="config_defaultWellbeingPackage" />
@@ -3580,8 +3580,6 @@
   <java-symbol type="id" name="clip_children_tag" />
   <java-symbol type="id" name="bubble_button" />
   <java-symbol type="id" name="snooze_button" />
-  <java-symbol type="dimen" name="bubble_visible_padding_end" />
-  <java-symbol type="dimen" name="bubble_gone_padding_end" />
   <java-symbol type="dimen" name="text_size_body_2_material" />
   <java-symbol type="dimen" name="messaging_avatar_size" />
   <java-symbol type="dimen" name="messaging_group_sending_progress_size" />
@@ -3962,8 +3960,9 @@
   <java-symbol type="dimen" name="importance_ring_anim_max_stroke_width" />
   <java-symbol type="dimen" name="importance_ring_size" />
   <java-symbol type="dimen" name="conversation_icon_size_badged" />
+  <java-symbol type="dimen" name="conversation_icon_circle_start" />
+  <java-symbol type="dimen" name="notification_icon_circle_start" />
 
-  <java-symbol type="id" name="header_icon_container" />
   <java-symbol type="attr" name="notificationHeaderTextAppearance" />
   <java-symbol type="string" name="conversation_single_line_name_display" />
   <java-symbol type="string" name="conversation_single_line_image_placeholder" />
@@ -3974,7 +3973,7 @@
   <java-symbol type="id" name="conversation_icon_badge_ring" />
   <java-symbol type="id" name="conversation_icon_badge_bg" />
   <java-symbol type="id" name="expand_button_container" />
-  <java-symbol type="id" name="expand_button_inner_container" />
+  <java-symbol type="id" name="expand_button_touch_container" />
   <java-symbol type="id" name="messaging_group_content_container" />
   <java-symbol type="id" name="expand_button_and_content_container" />
   <java-symbol type="id" name="conversation_header" />
@@ -4124,4 +4123,10 @@
   <java-symbol type="dimen" name="config_taskLetterboxAspectRatio" />
 
   <java-symbol type="bool" name="config_hideDisplayCutoutWithDisplayArea" />
+
+  <!-- Window magnification prompt -->
+  <java-symbol type="string" name="window_magnification_prompt_title" />
+  <java-symbol type="string" name="window_magnification_prompt_content" />
+  <java-symbol type="string" name="turn_on_magnification_settings_action" />
+  <java-symbol type="string" name="dismiss_action" />
 </resources>

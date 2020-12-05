@@ -141,7 +141,6 @@ import android.net.netlink.InetDiagMessage;
 import android.net.shared.PrivateDnsConfig;
 import android.net.util.MultinetworkPolicyTracker;
 import android.net.util.NetdService;
-import android.os.BasicShellCommandHandler;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -196,6 +195,7 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.LocationPermissionChecker;
 import com.android.internal.util.MessageUtils;
 import com.android.internal.util.XmlUtils;
+import com.android.modules.utils.BasicShellCommandHandler;
 import com.android.net.module.util.LinkPropertiesUtils.CompareOrUpdateResult;
 import com.android.net.module.util.LinkPropertiesUtils.CompareResult;
 import com.android.server.am.BatteryStatsService;
@@ -2733,10 +2733,16 @@ public class ConnectivityService extends IConnectivityManager.Stub
     /**
      * Return an array of all current NetworkRequest sorted by request id.
      */
-    private NetworkRequestInfo[] requestsSortedById() {
+    @VisibleForTesting
+    protected NetworkRequestInfo[] requestsSortedById() {
         NetworkRequestInfo[] requests = new NetworkRequestInfo[0];
         requests = mNetworkRequests.values().toArray(requests);
-        Arrays.sort(requests, Comparator.comparingInt(nri -> nri.request.requestId));
+        // Sort the array based off the NRI containing the min requestId in its requests.
+        Arrays.sort(requests,
+                Comparator.comparingInt(nri -> Collections.min(nri.mRequests,
+                        Comparator.comparingInt(req -> req.requestId)).requestId
+                )
+        );
         return requests;
     }
 
@@ -2801,6 +2807,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                         networkCapabilities = new NetworkCapabilities(networkCapabilities);
                         networkCapabilities.restrictCapabilitesForTestNetwork(nai.creatorUid);
                     }
+                    processCapabilitiesFromAgent(nai, networkCapabilities);
                     updateCapabilities(nai.getCurrentScore(), nai, networkCapabilities);
                     break;
                 }
@@ -2838,6 +2845,31 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 case NetworkAgent.EVENT_SOCKET_KEEPALIVE: {
                     mKeepaliveTracker.handleEventSocketKeepalive(nai, msg);
                     break;
+                }
+                case NetworkAgent.EVENT_UNDERLYING_NETWORKS_CHANGED: {
+                    if (!nai.supportsUnderlyingNetworks()) {
+                        Log.wtf(TAG, "Non-virtual networks cannot have underlying networks");
+                        break;
+                    }
+                    final ArrayList<Network> underlying;
+                    try {
+                        underlying = ((Bundle) msg.obj).getParcelableArrayList(
+                                NetworkAgent.UNDERLYING_NETWORKS_KEY);
+                    } catch (NullPointerException | ClassCastException e) {
+                        break;
+                    }
+                    final Network[] oldUnderlying = nai.declaredUnderlyingNetworks;
+                    nai.declaredUnderlyingNetworks = (underlying != null)
+                            ? underlying.toArray(new Network[0]) : null;
+
+                    if (!Arrays.equals(oldUnderlying, nai.declaredUnderlyingNetworks)) {
+                        if (DBG) {
+                            log(nai.toShortString() + " changed underlying networks to "
+                                    + Arrays.toString(nai.declaredUnderlyingNetworks));
+                        }
+                        updateCapabilities(nai.getCurrentScore(), nai, nai.networkCapabilities);
+                        notifyIfacesChangedForNetworkStats();
+                    }
                 }
             }
         }
@@ -3424,7 +3456,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
         mLegacyTypeTracker.remove(nai, wasDefault);
         if (!nai.networkCapabilities.hasTransport(TRANSPORT_VPN)) {
-            updateAllVpnsCapabilities();
+            propagateUnderlyingNetworkCapabilities();
         }
         rematchAllNetworksAndRequests();
         mLingerMonitor.noteDisconnect(nai);
@@ -4740,10 +4772,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
             if (mLockdownEnabled) {
                 return new VpnInfo[0];
             }
-
             List<VpnInfo> infoList = new ArrayList<>();
-            for (int i = 0; i < mVpns.size(); i++) {
-                VpnInfo info = createVpnInfo(mVpns.valueAt(i));
+            for (NetworkAgentInfo nai : mNetworkAgentInfos.values()) {
+                VpnInfo info = createVpnInfo(nai);
                 if (info != null) {
                     infoList.add(info);
                 }
@@ -4756,13 +4787,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
      * @return VPN information for accounting, or null if we can't retrieve all required
      *         information, e.g underlying ifaces.
      */
-    @Nullable
-    private VpnInfo createVpnInfo(Vpn vpn) {
-        VpnInfo info = vpn.getVpnInfo();
-        if (info == null) {
-            return null;
-        }
-        Network[] underlyingNetworks = vpn.getUnderlyingNetworks();
+    private VpnInfo createVpnInfo(NetworkAgentInfo nai) {
+        if (!nai.isVPN()) return null;
+
+        Network[] underlyingNetworks = nai.declaredUnderlyingNetworks;
         // see VpnService.setUnderlyingNetworks()'s javadoc about how to interpret
         // the underlyingNetworks list.
         if (underlyingNetworks == null) {
@@ -4771,23 +4799,33 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 underlyingNetworks = new Network[] { defaultNai.network };
             }
         }
-        if (underlyingNetworks != null && underlyingNetworks.length > 0) {
-            List<String> interfaces = new ArrayList<>();
-            for (Network network : underlyingNetworks) {
-                LinkProperties lp = getLinkProperties(network);
-                if (lp != null) {
-                    for (String iface : lp.getAllInterfaceNames()) {
-                        if (!TextUtils.isEmpty(iface)) {
-                            interfaces.add(iface);
-                        }
-                    }
+
+        if (ArrayUtils.isEmpty(underlyingNetworks)) return null;
+
+        List<String> interfaces = new ArrayList<>();
+        for (Network network : underlyingNetworks) {
+            NetworkAgentInfo underlyingNai = getNetworkAgentInfoForNetwork(network);
+            if (underlyingNai == null) continue;
+            LinkProperties lp = underlyingNai.linkProperties;
+            for (String iface : lp.getAllInterfaceNames()) {
+                if (!TextUtils.isEmpty(iface)) {
+                    interfaces.add(iface);
                 }
             }
-            if (!interfaces.isEmpty()) {
-                info.underlyingIfaces = interfaces.toArray(new String[interfaces.size()]);
-            }
         }
-        return info.underlyingIfaces == null ? null : info;
+
+        if (interfaces.isEmpty()) return null;
+
+        VpnInfo info = new VpnInfo();
+        info.ownerUid = nai.networkCapabilities.getOwnerUid();
+        info.vpnIface = nai.linkProperties.getInterfaceName();
+        // Must be non-null or NetworkStatsService will crash.
+        // Cannot happen in production code because Vpn only registers the NetworkAgent after the
+        // tun or ipsec interface is created.
+        if (info.vpnIface == null) return null;
+        info.underlyingIfaces = interfaces.toArray(new String[0]);
+
+        return info;
     }
 
     /**
@@ -4810,22 +4848,17 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     /**
-     * Ask all VPN objects to recompute and update their capabilities.
+     * Ask all networks with underlying networks to recompute and update their capabilities.
      *
-     * When underlying networks change, VPNs may have to update capabilities to reflect things
-     * like the metered bit, their transports, and so on. This asks the VPN objects to update
-     * their capabilities, and as this will cause them to send messages to the ConnectivityService
-     * handler thread through their agent, this is asynchronous. When the capabilities objects
-     * are computed they will be up-to-date as they are computed synchronously from here and
-     * this is running on the ConnectivityService thread.
+     * When underlying networks change, such networks may have to update capabilities to reflect
+     * things like the metered bit, their transports, and so on. The capabilities are calculated
+     * immediately. This method runs on the ConnectivityService thread.
      */
-    private void updateAllVpnsCapabilities() {
-        Network defaultNetwork = getNetwork(getDefaultNetwork());
-        synchronized (mVpns) {
-            for (int i = 0; i < mVpns.size(); i++) {
-                final Vpn vpn = mVpns.valueAt(i);
-                NetworkCapabilities nc = vpn.updateCapabilities(defaultNetwork);
-                updateVpnCapabilities(vpn, nc);
+    private void propagateUnderlyingNetworkCapabilities() {
+        ensureRunningOnConnectivityServiceThread();
+        for (NetworkAgentInfo nai : mNetworkAgentInfos.values()) {
+            if (nai.supportsUnderlyingNetworks()) {
+                updateCapabilities(nai.getCurrentScore(), nai, nai.networkCapabilities);
             }
         }
     }
@@ -5392,6 +5425,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
+    private void ensureAllNetworkRequestsHaveType(List<NetworkRequest> requests) {
+        for (int i = 0; i < requests.size(); i++) {
+            ensureNetworkRequestHasType(requests.get(i));
+        }
+    }
+
     private void ensureNetworkRequestHasType(NetworkRequest request) {
         if (request.type == NetworkRequest.Type.NONE) {
             throw new IllegalArgumentException(
@@ -5403,7 +5442,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
      * Tracks info about the requester.
      * Also used to notice when the calling process dies so we can self-expire
      */
-    private class NetworkRequestInfo implements IBinder.DeathRecipient {
+    @VisibleForTesting
+    protected class NetworkRequestInfo implements IBinder.DeathRecipient {
         final List<NetworkRequest> mRequests;
         final NetworkRequest request;
 
@@ -5422,7 +5462,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         NetworkRequestInfo(NetworkRequest r, PendingIntent pi) {
             request = r;
             mRequests = initializeRequests(r);
-            ensureNetworkRequestHasType(request);
+            ensureAllNetworkRequestsHaveType(mRequests);
             mPendingIntent = pi;
             messenger = null;
             mBinder = null;
@@ -5436,7 +5476,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             messenger = m;
             request = r;
             mRequests = initializeRequests(r);
-            ensureNetworkRequestHasType(request);
+            ensureAllNetworkRequestsHaveType(mRequests);
             mBinder = binder;
             mPid = getCallingPid();
             mUid = getCallingUid();
@@ -5460,6 +5500,19 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return Collections.unmodifiableList(tempRequests);
         }
 
+        private NetworkRequest getSatisfiedRequest() {
+            if (mSatisfier == null) {
+                return null;
+            }
+
+            for (NetworkRequest req : mRequests) {
+                if (mSatisfier.isSatisfyingRequest(req.requestId)) {
+                    return req;
+                }
+            }
+
+            return null;
+        }
 
         private void enforceRequestCountLimit() {
             synchronized (mUidToNetworkRequestCount) {
@@ -5478,14 +5531,16 @@ public class ConnectivityService extends IConnectivityManager.Stub
             }
         }
 
+        @Override
         public void binderDied() {
             log("ConnectivityService NetworkRequestInfo binderDied(" +
-                    request + ", " + mBinder + ")");
-            releaseNetworkRequest(request);
+                    mRequests + ", " + mBinder + ")");
+            releaseNetworkRequest(mRequests);
         }
 
+        @Override
         public String toString() {
-            return "uid/pid:" + mUid + "/" + mPid + " " + request
+            return "uid/pid:" + mUid + "/" + mPid + " " + mRequests
                     + (mPendingIntent == null ? "" : " to trigger " + mPendingIntent);
         }
     }
@@ -5805,6 +5860,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return mNextNetworkProviderId.getAndIncrement();
     }
 
+    private void releaseNetworkRequest(List<NetworkRequest> networkRequests) {
+        for (int i = 0; i < networkRequests.size(); i++) {
+            releaseNetworkRequest(networkRequests.get(i));
+        }
+    }
+
     @Override
     public void releaseNetworkRequest(NetworkRequest networkRequest) {
         ensureNetworkRequestHasType(networkRequest);
@@ -5896,7 +5957,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @GuardedBy("mBlockedAppUids")
     private final HashSet<Integer> mBlockedAppUids = new HashSet<>();
 
-    // Note: if mDefaultRequest is changed, NetworkMonitor needs to be updated.
     @NonNull
     private final NetworkRequest mDefaultRequest;
     // The NetworkAgentInfo currently satisfying the default request, if any.
@@ -5968,13 +6028,29 @@ public class ConnectivityService extends IConnectivityManager.Stub
             int currentScore, NetworkAgentConfig networkAgentConfig, int providerId) {
         if (networkCapabilities.hasTransport(TRANSPORT_TEST)) {
             enforceAnyPermissionOf(Manifest.permission.MANAGE_TEST_NETWORKS);
+        } else {
+            enforceNetworkFactoryPermission();
+        }
+
+        final int uid = Binder.getCallingUid();
+        final long token = Binder.clearCallingIdentity();
+        try {
+            return registerNetworkAgentInternal(messenger, networkInfo, linkProperties,
+                    networkCapabilities, currentScore, networkAgentConfig, providerId, uid);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    private Network registerNetworkAgentInternal(Messenger messenger, NetworkInfo networkInfo,
+            LinkProperties linkProperties, NetworkCapabilities networkCapabilities,
+            int currentScore, NetworkAgentConfig networkAgentConfig, int providerId, int uid) {
+        if (networkCapabilities.hasTransport(TRANSPORT_TEST)) {
             // Strictly, sanitizing here is unnecessary as the capabilities will be sanitized in
             // the call to mixInCapabilities below anyway, but sanitizing here means the NAI never
             // sees capabilities that may be malicious, which might prevent mistakes in the future.
             networkCapabilities = new NetworkCapabilities(networkCapabilities);
-            networkCapabilities.restrictCapabilitesForTestNetwork(Binder.getCallingUid());
-        } else {
-            enforceNetworkFactoryPermission();
+            networkCapabilities.restrictCapabilitesForTestNetwork(uid);
         }
 
         LinkProperties lp = new LinkProperties(linkProperties);
@@ -5985,9 +6061,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final NetworkAgentInfo nai = new NetworkAgentInfo(messenger, new AsyncChannel(),
                 new Network(mNetIdManager.reserveNetId()), new NetworkInfo(networkInfo), lp, nc,
                 currentScore, mContext, mTrackerHandler, new NetworkAgentConfig(networkAgentConfig),
-                this, mNetd, mDnsResolver, mNMS, providerId, Binder.getCallingUid());
+                this, mNetd, mDnsResolver, mNMS, providerId, uid);
 
         // Make sure the LinkProperties and NetworkCapabilities reflect what the agent info says.
+        processCapabilitiesFromAgent(nai, nc);
         nai.getAndSetNetworkCapabilities(mixInCapabilities(nai, nc));
         processLinkPropertiesFromAgent(nai, nai.linkProperties);
 
@@ -5995,13 +6072,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final String name = TextUtils.isEmpty(extraInfo)
                 ? nai.networkCapabilities.getSsid() : extraInfo;
         if (DBG) log("registerNetworkAgent " + nai);
-        final long token = Binder.clearCallingIdentity();
-        try {
-            mDeps.getNetworkStack().makeNetworkMonitor(
-                    nai.network, name, new NetworkMonitorCallbacks(nai));
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
+        mDeps.getNetworkStack().makeNetworkMonitor(
+                nai.network, name, new NetworkMonitorCallbacks(nai));
         // NetworkAgentInfo registration will finish when the NetworkMonitor is created.
         // If the network disconnects or sends any other event before that, messages are deferred by
         // NetworkAgent until nai.asyncChannel.connect(), which will be called when finalizing the
@@ -6028,6 +6100,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         updateUids(nai, null, nai.networkCapabilities);
     }
 
+    /**
+     * Called when receiving LinkProperties directly from a NetworkAgent.
+     * Stores into |nai| any data coming from the agent that might also be written to the network's
+     * LinkProperties by ConnectivityService itself. This ensures that the data provided by the
+     * agent is not lost when updateLinkProperties is called.
+     */
     private void processLinkPropertiesFromAgent(NetworkAgentInfo nai, LinkProperties lp) {
         lp.ensureDirectlyConnectedRoutes();
         nai.clatd.setNat64PrefixFromRa(lp.getNat64Prefix());
@@ -6324,6 +6402,30 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     /**
+     * Called when receiving NetworkCapabilities directly from a NetworkAgent.
+     * Stores into |nai| any data coming from the agent that might also be written to the network's
+     * NetworkCapabilities by ConnectivityService itself. This ensures that the data provided by the
+     * agent is not lost when updateCapabilities is called.
+     */
+    private void processCapabilitiesFromAgent(NetworkAgentInfo nai, NetworkCapabilities nc) {
+        nai.declaredMetered = !nc.hasCapability(NET_CAPABILITY_NOT_METERED);
+    }
+
+    /** Propagates to |nc| the capabilities declared by the underlying networks of |nai|. */
+    private void mixInUnderlyingCapabilities(NetworkAgentInfo nai, NetworkCapabilities nc) {
+        Network[] underlyingNetworks = nai.declaredUnderlyingNetworks;
+        Network defaultNetwork = getNetwork(getDefaultNetwork());
+        if (underlyingNetworks == null && defaultNetwork != null) {
+            // null underlying networks means to track the default.
+            underlyingNetworks = new Network[] { defaultNetwork };
+        }
+
+        // TODO(b/124469351): Get capabilities directly from ConnectivityService instead.
+        final ConnectivityManager cm = mContext.getSystemService(ConnectivityManager.class);
+        Vpn.applyUnderlyingCapabilities(cm, underlyingNetworks, nc, nai.declaredMetered);
+    }
+
+    /**
      * Augments the NetworkCapabilities passed in by a NetworkAgent with capabilities that are
      * maintained here that the NetworkAgent is not aware of (e.g., validated, captive portal,
      * and foreground status).
@@ -6374,6 +6476,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (!newNc.hasTransport(TRANSPORT_CELLULAR)) {
             newNc.addCapability(NET_CAPABILITY_NOT_SUSPENDED);
             newNc.addCapability(NET_CAPABILITY_NOT_ROAMING);
+        }
+
+        if (nai.supportsUnderlyingNetworks()) {
+            mixInUnderlyingCapabilities(nai, newNc);
         }
 
         return newNc;
@@ -6455,7 +6561,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (!newNc.hasTransport(TRANSPORT_VPN)) {
             // Tell VPNs about updated capabilities, since they may need to
             // bubble those changes through.
-            updateAllVpnsCapabilities();
+            propagateUnderlyingNetworkCapabilities();
         }
 
         if (!newNc.equalsTransportTypes(prevNc)) {
@@ -6775,7 +6881,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 ? newNetwork.linkProperties.getTcpBufferSizes() : null);
         notifyIfacesChangedForNetworkStats();
         // Fix up the NetworkCapabilities of any VPNs that don't specify underlying networks.
-        updateAllVpnsCapabilities();
+        propagateUnderlyingNetworkCapabilities();
     }
 
     private void processListenRequests(@NonNull final NetworkAgentInfo nai) {
@@ -6822,7 +6928,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             }
 
             public String toString() {
-                return mRequest.request.requestId + " : "
+                return mRequest.mRequests.get(0).requestId + " : "
                         + (null != mOldNetwork ? mOldNetwork.network.netId : "null")
                         + " → " + (null != mNewNetwork ? mNewNetwork.network.netId : "null");
             }
@@ -7286,7 +7392,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 // onCapabilitiesUpdated being sent in updateAllVpnCapabilities below as
                 // the VPN would switch from its default, blank capabilities to those
                 // that reflect the capabilities of its underlying networks.
-                updateAllVpnsCapabilities();
+                propagateUnderlyingNetworkCapabilities();
             }
             networkAgent.created = true;
         }
@@ -7328,8 +7434,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // doing.
             updateSignalStrengthThresholds(networkAgent, "CONNECT", null);
 
-            if (networkAgent.isVPN()) {
-                updateAllVpnsCapabilities();
+            if (networkAgent.supportsUnderlyingNetworks()) {
+                propagateUnderlyingNetworkCapabilities();
             }
 
             // Consider network even though it is not yet validated.
@@ -7585,13 +7691,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         synchronized (mVpns) {
             throwIfLockdownEnabled();
             success = mVpns.get(user).setUnderlyingNetworks(networks);
-        }
-        if (success) {
-            mHandler.post(() -> {
-                // Update VPN's capabilities based on updated underlying network set.
-                updateAllVpnsCapabilities();
-                notifyIfacesChangedForNetworkStats();
-            });
         }
         return success;
     }

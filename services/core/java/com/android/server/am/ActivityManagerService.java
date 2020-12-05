@@ -22,6 +22,7 @@ import static android.Manifest.permission.FILTER_EVENTS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND;
+import static android.Manifest.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND;
 import static android.app.ActivityManager.INSTR_FLAG_DISABLE_HIDDEN_API_CHECKS;
 import static android.app.ActivityManager.INSTR_FLAG_DISABLE_ISOLATED_STORAGE;
 import static android.app.ActivityManager.INSTR_FLAG_DISABLE_TEST_API_CHECKS;
@@ -361,7 +362,7 @@ import com.android.server.utils.TimingsTraceAndSlog;
 import com.android.server.vr.VrManagerInternal;
 import com.android.server.wm.ActivityMetricsLaunchObserver;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
-import com.android.server.wm.ActivityStackSupervisor;
+import com.android.server.wm.ActivityTaskSupervisor;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.ActivityTaskManagerService;
 import com.android.server.wm.WindowManagerInternal;
@@ -535,7 +536,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     private Installer mInstaller;
 
     /** Run all ActivityStacks through this */
-    ActivityStackSupervisor mStackSupervisor;
+    ActivityTaskSupervisor mTaskSupervisor;
 
     final InstrumentationReporter mInstrumentationReporter = new InstrumentationReporter();
 
@@ -2019,7 +2020,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mProcessStats = null;
         mCpHelper = new ContentProviderHelper(this, false);
         // For the usage of {@link ActiveServices#cleanUpServices} that may be invoked from
-        // {@link ActivityStackSupervisor#cleanUpRemovedTaskLocked}.
+        // {@link ActivityTaskSupervisor#cleanUpRemovedTaskLocked}.
         mServices = hasHandlerThread ? new ActiveServices(this) : null;
         mSystemThread = null;
         mUiHandler = injector.getUiHandler(null /* service */);
@@ -2140,7 +2141,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mActivityTaskManager.initialize(mIntentFirewall, mPendingIntentController,
                 DisplayThread.get().getLooper());
         mAtmInternal = LocalServices.getService(ActivityTaskManagerInternal.class);
-        mStackSupervisor = mActivityTaskManager.mStackSupervisor;
+        mTaskSupervisor = mActivityTaskManager.mTaskSupervisor;
 
         mHiddenApiBlacklist = new HiddenApiSettings(mHandler, mContext);
 
@@ -2881,7 +2882,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         intent_l = mContext.getPackageManager().getLaunchIntentForPackage(app_str);
                         if (intent_l == null)
                             continue;
-                        ActivityInfo aInfo = mStackSupervisor.resolveActivity(intent_l, null,
+                        ActivityInfo aInfo = mTaskSupervisor.resolveActivity(intent_l, null,
                                                                           0, null, 0, 0);
                         if (aInfo == null)
                             continue;
@@ -12393,7 +12394,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
                 if (recentAppClose) {
-                    mStackSupervisor.startPreferredApps();
+                    mTaskSupervisor.startPreferredApps();
                 }
             }
         }
@@ -13419,15 +13420,22 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // See if the caller is allowed to do this.  Note we are checking against
                 // the actual real caller (not whoever provided the operation as say a
                 // PendingIntent), because that who is actually supplied the arguments.
-                if (checkComponentPermission(
-                        android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST,
+                if (checkComponentPermission(CHANGE_DEVICE_IDLE_TEMP_WHITELIST,
+                        realCallingPid, realCallingUid, -1, true)
+                        != PackageManager.PERMISSION_GRANTED
+                        && checkComponentPermission(START_ACTIVITIES_FROM_BACKGROUND,
+                        realCallingPid, realCallingUid, -1, true)
+                        != PackageManager.PERMISSION_GRANTED
+                        && checkComponentPermission(START_FOREGROUND_SERVICES_FROM_BACKGROUND,
                         realCallingPid, realCallingUid, -1, true)
                         != PackageManager.PERMISSION_GRANTED) {
                     String msg = "Permission Denial: " + intent.getAction()
                             + " broadcast from " + callerPackage + " (pid=" + callingPid
                             + ", uid=" + callingUid + ")"
                             + " requires "
-                            + android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST;
+                            + CHANGE_DEVICE_IDLE_TEMP_WHITELIST + " or "
+                            + START_ACTIVITIES_FROM_BACKGROUND + " or "
+                            + START_FOREGROUND_SERVICES_FROM_BACKGROUND;
                     Slog.w(TAG, msg);
                     throw new SecurityException(msg);
                 }
@@ -14387,8 +14395,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             activeInstr.mHasBackgroundActivityStartsPermission = checkPermission(
                     START_ACTIVITIES_FROM_BACKGROUND, callingPid, callingUid)
                             == PackageManager.PERMISSION_GRANTED;
+            activeInstr.mHasBackgroundForegroundServiceStartsPermission = checkPermission(
+                    START_FOREGROUND_SERVICES_FROM_BACKGROUND, callingPid, callingUid)
+                            == PackageManager.PERMISSION_GRANTED;
             activeInstr.mNoRestart = noRestart;
-
             boolean disableHiddenApiChecks = ai.usesNonSdkApi()
                     || (flags & INSTR_FLAG_DISABLE_HIDDEN_API_CHECKS) != 0;
             boolean disableTestApiChecks = disableHiddenApiChecks
@@ -16563,6 +16573,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                     activityShortComponentName, aInfo, parentShortComponentName,
                     (WindowProcessController) parentProc, aboveSystem, reason);
 
+        }
+
+        @Override
+        public void inputDispatchingResumed(int pid) {
+            // TODO (b/171218828)
+            return;
         }
 
         @Override

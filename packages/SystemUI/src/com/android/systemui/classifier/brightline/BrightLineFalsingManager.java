@@ -16,29 +16,32 @@
 
 package com.android.systemui.classifier.brightline;
 
-import static com.android.systemui.classifier.FalsingManagerImpl.FALSING_REMAIN_LOCKED;
-import static com.android.systemui.classifier.FalsingManagerImpl.FALSING_SUCCESS;
+import static com.android.systemui.classifier.FalsingManagerProxy.FALSING_SUCCESS;
 
 import android.app.ActivityManager;
-import android.hardware.biometrics.BiometricSourceType;
+import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Build;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.view.MotionEvent;
+import android.view.ViewConfiguration;
+
+import androidx.annotation.NonNull;
 
 import com.android.internal.logging.MetricsLogger;
-import com.android.internal.util.IndentingPrintWriter;
-import com.android.keyguard.KeyguardUpdateMonitor;
-import com.android.keyguard.KeyguardUpdateMonitorCallback;
+import com.android.systemui.R;
 import com.android.systemui.classifier.Classifier;
+import com.android.systemui.classifier.FalsingDataProvider;
+import com.android.systemui.classifier.FalsingDataProvider.SessionListener;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.plugins.FalsingManager;
-import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.phone.NotificationTapHelper;
 import com.android.systemui.util.DeviceConfigProxy;
-import com.android.systemui.util.sensors.ProximitySensor;
 import com.android.systemui.util.sensors.ThresholdSensor;
 
+import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -48,28 +51,25 @@ import java.util.Queue;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
+import javax.inject.Inject;
+
 /**
  * FalsingManager designed to make clear why a touch was rejected.
  */
 public class BrightLineFalsingManager implements FalsingManager {
 
     private static final String TAG = "FalsingManager";
-    static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    public static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final int RECENT_INFO_LOG_SIZE = 40;
     private static final int RECENT_SWIPE_LOG_SIZE = 20;
 
     private final FalsingDataProvider mDataProvider;
-    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
-    private final ProximitySensor mProximitySensor;
     private final DockManager mDockManager;
-    private final StatusBarStateController mStatusBarStateController;
-    private boolean mSessionStarted;
-    private MetricsLogger mMetricsLogger;
+    private final SingleTapClassifier mSingleTapClassifier;
+    private final DoubleTapClassifier mDoubleTapClassifier;
+    private final MetricsLogger mMetricsLogger;
     private int mIsFalseTouchCalls;
-    private boolean mShowingAod;
-    private boolean mScreenOn;
-    private boolean mJustUnlockedWithFace;
     private static final Queue<String> RECENT_INFO_LOG =
             new ArrayDeque<>(RECENT_INFO_LOG_SIZE + 1);
     private static final Queue<DebugSwipeRecord> RECENT_SWIPES =
@@ -77,45 +77,26 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     private final List<FalsingClassifier> mClassifiers;
 
-    private ThresholdSensor.Listener mSensorEventListener = this::onProximityEvent;
-
-    private final KeyguardUpdateMonitorCallback mKeyguardUpdateCallback =
-            new KeyguardUpdateMonitorCallback() {
-                @Override
-                public void onBiometricAuthenticated(int userId,
-                        BiometricSourceType biometricSourceType,
-                        boolean isStrongBiometric) {
-                    if (userId == KeyguardUpdateMonitor.getCurrentUser()
-                            && biometricSourceType == BiometricSourceType.FACE) {
-                        mJustUnlockedWithFace = true;
-                    }
-                }
-            };
-    private boolean mPreviousResult = false;
-
-    private StatusBarStateController.StateListener mStatusBarStateListener =
-            new StatusBarStateController.StateListener() {
+    private final SessionListener mSessionListener = new SessionListener() {
         @Override
-        public void onStateChanged(int newState) {
-            logDebug("StatusBarState=" + StatusBarState.toShortString(newState));
-            mState = newState;
-            updateSessionActive();
+        public void onSessionEnded() {
+            mClassifiers.forEach(FalsingClassifier::onSessionEnded);
+        }
+
+        @Override
+        public void onSessionStarted() {
+            mClassifiers.forEach(FalsingClassifier::onSessionStarted);
         }
     };
-    private int mState;
 
+    private boolean mPreviousResult = false;
+
+    @Inject
     public BrightLineFalsingManager(FalsingDataProvider falsingDataProvider,
-            KeyguardUpdateMonitor keyguardUpdateMonitor, ProximitySensor proximitySensor,
-            DeviceConfigProxy deviceConfigProxy,
-            DockManager dockManager, StatusBarStateController statusBarStateController) {
-        mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+            DeviceConfigProxy deviceConfigProxy, @Main Resources resources,
+            ViewConfiguration viewConfiguration, DockManager dockManager) {
         mDataProvider = falsingDataProvider;
-        mProximitySensor = proximitySensor;
         mDockManager = dockManager;
-        mStatusBarStateController = statusBarStateController;
-        mKeyguardUpdateMonitor.registerCallback(mKeyguardUpdateCallback);
-        mStatusBarStateController.addCallback(mStatusBarStateListener);
-        mState = mStatusBarStateController.getState();
 
         mMetricsLogger = new MetricsLogger();
         mClassifiers = new ArrayList<>();
@@ -129,58 +110,14 @@ public class BrightLineFalsingManager implements FalsingManager {
         mClassifiers.add(distanceClassifier);
         mClassifiers.add(proximityClassifier);
         mClassifiers.add(new ZigZagClassifier(mDataProvider, deviceConfigProxy));
-    }
 
-    private void registerSensors() {
-        if (!mDataProvider.isWirelessCharging()) {
-            mProximitySensor.register(mSensorEventListener);
-        }
-    }
+        mSingleTapClassifier = new SingleTapClassifier(
+                mDataProvider, viewConfiguration.getScaledTouchSlop());
+        mDoubleTapClassifier = new DoubleTapClassifier(mDataProvider, mSingleTapClassifier,
+                resources.getDimension(R.dimen.double_tap_slop),
+                NotificationTapHelper.DOUBLE_TAP_TIMEOUT_MS);
 
-    private void unregisterSensors() {
-        mProximitySensor.unregister(mSensorEventListener);
-    }
-
-    private void sessionStart() {
-        if (!mSessionStarted && shouldSessionBeActive()) {
-            logDebug("Starting Session");
-            mSessionStarted = true;
-            mJustUnlockedWithFace = false;
-            registerSensors();
-            mClassifiers.forEach(FalsingClassifier::onSessionStarted);
-        }
-    }
-
-    private void sessionEnd() {
-        if (mSessionStarted) {
-            logDebug("Ending Session");
-            mSessionStarted = false;
-            unregisterSensors();
-            mDataProvider.onSessionEnd();
-            mClassifiers.forEach(FalsingClassifier::onSessionEnded);
-            if (mIsFalseTouchCalls != 0) {
-                mMetricsLogger.histogram(FALSING_REMAIN_LOCKED, mIsFalseTouchCalls);
-                mIsFalseTouchCalls = 0;
-            }
-        }
-    }
-
-
-    private void updateSessionActive() {
-        if (shouldSessionBeActive()) {
-            sessionStart();
-        } else {
-            sessionEnd();
-        }
-    }
-
-    private boolean shouldSessionBeActive() {
-        return mScreenOn && (mState == StatusBarState.KEYGUARD) && !mShowingAod;
-    }
-
-    private void updateInteractionType(@Classifier.InteractionType int type) {
-        logDebug("InteractionType: " + type);
-        mDataProvider.setInteractionType(type);
+        mDataProvider.addSessionListener(mSessionListener);
     }
 
     @Override
@@ -195,8 +132,9 @@ public class BrightLineFalsingManager implements FalsingManager {
             return mPreviousResult;
         }
 
-        mPreviousResult = !ActivityManager.isRunningInUserTestHarness() && !mJustUnlockedWithFace
-                && !mDockManager.isDocked() && mClassifiers.stream().anyMatch(falsingClassifier -> {
+        mPreviousResult = !ActivityManager.isRunningInUserTestHarness()
+                && !mDataProvider.isJustUnlockedWithFace() && !mDockManager.isDocked()
+                && mClassifiers.stream().anyMatch(falsingClassifier -> {
                     boolean result = falsingClassifier.isFalseTouch();
                     if (result) {
                         logInfo(String.format(
@@ -228,23 +166,52 @@ public class BrightLineFalsingManager implements FalsingManager {
                                     (int) (motionEvent.getEventTime() - motionEvent.getDownTime())))
                             .collect(Collectors.toList())));
             while (RECENT_SWIPES.size() > RECENT_INFO_LOG_SIZE) {
-                DebugSwipeRecord record = RECENT_SWIPES.remove();
+                RECENT_SWIPES.remove();
             }
-
         }
 
         return mPreviousResult;
     }
 
     @Override
+    public boolean isFalseTap(boolean robustCheck) {
+        if (!mSingleTapClassifier.isTap(mDataProvider.getRecentMotionEvents())) {
+            logInfo(String.format(
+                    (Locale) null, "{classifier=%s}", mSingleTapClassifier.getClass().getName()));
+            String reason = mSingleTapClassifier.getReason();
+            if (reason != null) {
+                logInfo(reason);
+            }
+            return true;
+        }
+
+        // TODO(b/172655679): we always reject single-taps when doing a robust check for now.
+        return robustCheck;
+    }
+
+    @Override
+    public boolean isFalseDoubleTap() {
+        boolean result = mDoubleTapClassifier.isFalseTouch();
+        if (result) {
+            logInfo(String.format(
+                    (Locale) null, "{classifier=%s}", mDoubleTapClassifier.getClass().getName()));
+            String reason = mDoubleTapClassifier.getReason();
+            if (reason != null) {
+                logInfo(reason);
+            }
+        }
+        return result;
+    }
+
+    @Override
     public void onTouchEvent(MotionEvent motionEvent, int width, int height) {
         // TODO: some of these classifiers might allow us to abort early, meaning we don't have to
         // make these calls.
-        mDataProvider.onMotionEvent(motionEvent);
         mClassifiers.forEach((classifier) -> classifier.onTouchEvent(motionEvent));
     }
 
-    private void onProximityEvent(ThresholdSensor.ThresholdSensorEvent proximityEvent) {
+    @Override
+    public void onProximityEvent(ThresholdSensor.ThresholdSensorEvent proximityEvent) {
         // TODO: some of these classifiers might allow us to abort early, meaning we don't have to
         // make these calls.
         mClassifiers.forEach((classifier) -> classifier.onProximityEvent(proximityEvent));
@@ -256,50 +223,11 @@ public class BrightLineFalsingManager implements FalsingManager {
             mMetricsLogger.histogram(FALSING_SUCCESS, mIsFalseTouchCalls);
             mIsFalseTouchCalls = 0;
         }
-        sessionEnd();
-    }
-
-    @Override
-    public void onNotificationActive() {
-    }
-
-    @Override
-    public void setShowingAod(boolean showingAod) {
-        mShowingAod = showingAod;
-        updateSessionActive();
-    }
-
-    @Override
-    public void onNotificatonStartDraggingDown() {
-        updateInteractionType(Classifier.NOTIFICATION_DRAG_DOWN);
     }
 
     @Override
     public boolean isUnlockingDisabled() {
         return false;
-    }
-
-
-    @Override
-    public void onNotificatonStopDraggingDown() {
-    }
-
-    @Override
-    public void setNotificationExpanded() {
-    }
-
-    @Override
-    public void onQsDown() {
-        updateInteractionType(Classifier.QUICK_SETTINGS);
-    }
-
-    @Override
-    public void setQsExpanded(boolean expanded) {
-        if (expanded) {
-            unregisterSensors();
-        } else if (mSessionStarted) {
-            registerSensors();
-        }
     }
 
     @Override
@@ -308,49 +236,8 @@ public class BrightLineFalsingManager implements FalsingManager {
     }
 
     @Override
-    public void onTrackingStarted(boolean secure) {
-        updateInteractionType(secure ? Classifier.BOUNCER_UNLOCK : Classifier.UNLOCK);
-    }
-
-    @Override
-    public void onTrackingStopped() {
-    }
-
-    @Override
-    public void onLeftAffordanceOn() {
-    }
-
-    @Override
-    public void onCameraOn() {
-    }
-
-    @Override
-    public void onAffordanceSwipingStarted(boolean rightCorner) {
-        updateInteractionType(
-                rightCorner ? Classifier.RIGHT_AFFORDANCE : Classifier.LEFT_AFFORDANCE);
-    }
-
-    @Override
-    public void onAffordanceSwipingAborted() {
-    }
-
-    @Override
-    public void onStartExpandingFromPulse() {
-        updateInteractionType(Classifier.PULSE_EXPAND);
-    }
-
-    @Override
-    public void onExpansionFromPulseStopped() {
-    }
-
-    @Override
     public Uri reportRejectedTouch() {
         return null;
-    }
-
-    @Override
-    public void onScreenOnFromTouch() {
-        onScreenTurningOn();
     }
 
     @Override
@@ -359,67 +246,13 @@ public class BrightLineFalsingManager implements FalsingManager {
     }
 
     @Override
-    public void onUnlockHintStarted() {
-    }
-
-    @Override
-    public void onCameraHintStarted() {
-    }
-
-    @Override
-    public void onLeftAffordanceHintStarted() {
-    }
-
-    @Override
-    public void onScreenTurningOn() {
-        mScreenOn = true;
-        updateSessionActive();
-    }
-
-    @Override
-    public void onScreenOff() {
-        mScreenOn = false;
-        updateSessionActive();
-    }
-
-
-    @Override
-    public void onNotificationStopDismissing() {
-    }
-
-    @Override
-    public void onNotificationDismissed() {
-    }
-
-    @Override
-    public void onNotificationStartDismissing() {
-        updateInteractionType(Classifier.NOTIFICATION_DISMISS);
-    }
-
-    @Override
-    public void onNotificationDoubleTap(boolean b, float v, float v1) {
-    }
-
-    @Override
-    public void onBouncerShown() {
-        unregisterSensors();
-    }
-
-    @Override
-    public void onBouncerHidden() {
-        if (mSessionStarted) {
-            registerSensors();
-        }
-    }
-
-    @Override
-    public void dump(PrintWriter pw) {
+    public void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
         IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
         ipw.println("BRIGHTLINE FALSING MANAGER");
         ipw.print("classifierEnabled=");
         ipw.println(isClassifierEnabled() ? 1 : 0);
         ipw.print("mJustUnlockedWithFace=");
-        ipw.println(mJustUnlockedWithFace ? 1 : 0);
+        ipw.println(mDataProvider.isJustUnlockedWithFace() ? 1 : 0);
         ipw.print("isDocked=");
         ipw.println(mDockManager.isDocked() ? 1 : 0);
         ipw.print("width=");
@@ -449,9 +282,7 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public void cleanup() {
-        unregisterSensors();
-        mKeyguardUpdateMonitor.removeCallback(mKeyguardUpdateCallback);
-        mStatusBarStateController.removeCallback(mStatusBarStateListener);
+        mDataProvider.removeSessionListener(mSessionListener);
     }
 
     static void logDebug(String msg) {

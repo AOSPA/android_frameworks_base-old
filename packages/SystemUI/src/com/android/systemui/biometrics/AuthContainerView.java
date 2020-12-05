@@ -101,7 +101,7 @@ public class AuthContainerView extends LinearLayout
 
     @VisibleForTesting final WakefulnessLifecycle mWakefulnessLifecycle;
 
-    private @ContainerState int mContainerState = STATE_UNKNOWN;
+    @VisibleForTesting @ContainerState int mContainerState = STATE_UNKNOWN;
 
     // Non-null only if the dialog is in the act of dismissing and has not sent the reason yet.
     @Nullable @AuthDialogCallback.DismissedReason Integer mPendingCallbackReason;
@@ -281,7 +281,7 @@ public class AuthContainerView extends LinearLayout
 
         // Inflate biometric view only if necessary.
         if (Utils.isBiometricAllowed(mConfig.mPromptInfo)) {
-            if (config.mSensorIds.length == 1) {
+            if (config.mSensorIds.length == 1 || config.mSensorIds.length == 2) {
                 final int singleSensorAuthId = config.mSensorIds[0];
                 if (Utils.containsSensorId(mFpProps, singleSensorAuthId)) {
                     FingerprintSensorPropertiesInternal sensorProps = null;
@@ -313,7 +313,6 @@ public class AuthContainerView extends LinearLayout
                     return;
                 }
             } else {
-                // The UI currently only supports authentication with a single sensor.
                 Log.e(TAG, "Unsupported sensor array, length: " + config.mSensorIds.length);
                 mBiometricView = null;
                 mBackgroundView = null;
@@ -632,10 +631,11 @@ public class AuthContainerView extends LinearLayout
         mWindowManager.removeView(this);
     }
 
-    private void onDialogAnimatedIn() {
+    @VisibleForTesting
+    void onDialogAnimatedIn() {
         if (mContainerState == STATE_PENDING_DISMISS) {
             Log.d(TAG, "onDialogAnimatedIn(): mPendingDismissDialog=true, dismissing now");
-            animateAway(false /* sendReason */, 0);
+            animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
             return;
         }
         mContainerState = STATE_SHOWING;

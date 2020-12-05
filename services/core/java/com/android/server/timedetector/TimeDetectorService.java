@@ -71,9 +71,8 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
     @NonNull private final TimeDetectorStrategy mTimeDetectorStrategy;
 
     private static TimeDetectorService create(@NonNull Context context) {
-        TimeDetectorStrategy timeDetectorStrategy = new TimeDetectorStrategyImpl();
-        TimeDetectorStrategyCallbackImpl callback = new TimeDetectorStrategyCallbackImpl(context);
-        timeDetectorStrategy.initialize(callback);
+        TimeDetectorStrategyImpl.Callback callback = new TimeDetectorStrategyCallbackImpl(context);
+        TimeDetectorStrategy timeDetectorStrategy = new TimeDetectorStrategyImpl(callback);
 
         Handler handler = FgThread.getHandler();
         TimeDetectorService timeDetectorService =
@@ -133,7 +132,7 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
     /** Internal method for handling the auto time setting being changed. */
     @VisibleForTesting
     public void handleAutoTimeDetectionChanged() {
-        mHandler.post(mTimeDetectorStrategy::handleAutoTimeDetectionChanged);
+        mHandler.post(mTimeDetectorStrategy::handleAutoTimeConfigChanged);
     }
 
     @Override
