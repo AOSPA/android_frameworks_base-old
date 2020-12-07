@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.apppairs
 
+import android.platform.test.annotations.Presubmit
 import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
@@ -28,10 +29,10 @@ import com.android.wm.shell.flicker.helpers.AppPairsHelper
 import com.android.wm.shell.flicker.helpers.AppPairsHelper.Companion.TEST_REPETITIONS
 import com.android.wm.shell.flicker.appPairsDividerIsInvisible
 import com.android.wm.shell.flicker.appPairsDividerIsVisible
-import com.android.wm.shell.flicker.navBarLayerIsAlwaysVisible
-import com.android.wm.shell.flicker.navBarWindowIsAlwaysVisible
-import com.android.wm.shell.flicker.statusBarLayerIsAlwaysVisible
-import com.android.wm.shell.flicker.statusBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +44,7 @@ import java.io.IOException
  * Test AppPairs launch.
  * To run this test: `atest WMShellFlickerTests:AppPairsTest`
  */
+@Presubmit
 @RequiresDevice
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)

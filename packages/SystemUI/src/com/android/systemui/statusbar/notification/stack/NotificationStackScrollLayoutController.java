@@ -162,7 +162,6 @@ public class NotificationStackScrollLayoutController {
     private final KeyguardMediaController mKeyguardMediaController;
     private final SysuiStatusBarStateController mStatusBarStateController;
     private final KeyguardBypassController mKeyguardBypassController;
-    private final SysuiColorExtractor mColorExtractor;
     private final NotificationLockscreenUserManager mLockscreenUserManager;
     // TODO: StatusBar should be encapsulated behind a Controller
     private final StatusBar mStatusBar;
@@ -224,12 +223,14 @@ public class NotificationStackScrollLayoutController {
         public void onOverlayChanged() {
             updateShowEmptyShadeView();
             mView.updateCornerRadius();
+            mView.updateBgColor();
             mView.reinflateViews();
         }
 
         @Override
         public void onUiModeChanged() {
             mView.updateBgColor();
+            mView.updateDecorViews();
         }
 
         @Override
@@ -394,6 +395,7 @@ public class NotificationStackScrollLayoutController {
                     if (mView.getDismissAllInProgress()) {
                         return;
                     }
+                    mView.onSwipeEnd();
                     if (view instanceof ExpandableNotificationRow) {
                         ExpandableNotificationRow row = (ExpandableNotificationRow) view;
                         if (row.isHeadsUp()) {
@@ -453,6 +455,7 @@ public class NotificationStackScrollLayoutController {
 
                 @Override
                 public void onChildSnappedBack(View animView, float targetLeft) {
+                    mView.onSwipeEnd();
                     if (animView instanceof ExpandableNotificationRow) {
                         ExpandableNotificationRow row = (ExpandableNotificationRow) animView;
                         if (row.isPinned() && !canChildBeDismissed(row)
@@ -516,7 +519,9 @@ public class NotificationStackScrollLayoutController {
 
                 @Override
                 public void onHeadsUpStateChanged(NotificationEntry entry, boolean isHeadsUp) {
+                    long numEntries = mHeadsUpManager.getAllEntries().count();
                     NotificationEntry topEntry = mHeadsUpManager.getTopEntry();
+                    mView.setNumHeadsUp(numEntries);
                     mView.setTopHeadsUpEntry(topEntry);
                     mNotificationRoundnessManager.updateView(entry.getRow(), false /* animate */);
                 }
@@ -577,7 +582,6 @@ public class NotificationStackScrollLayoutController {
         mKeyguardMediaController = keyguardMediaController;
         mKeyguardBypassController = keyguardBypassController;
         mZenModeController = zenModeController;
-        mColorExtractor = colorExtractor;
         mLockscreenUserManager = lockscreenUserManager;
         mMetricsLogger = metricsLogger;
         mFalsingCollector = falsingCollector;
@@ -661,6 +665,8 @@ public class NotificationStackScrollLayoutController {
         mHeadsUpManager.setAnimationStateHandler(mView::setHeadsUpGoingAwayAnimationsAllowed);
         mDynamicPrivacyController.addListener(mDynamicPrivacyControllerListener);
 
+        mScrimController.setScrimBehindChangeRunnable(mView::updateBackgroundDimming);
+
         mLockscreenUserManager.addUserChangedListener(mLockscreenUserChangeListener);
 
         mFadeNotificationsOnDismiss =  // TODO: this should probably be injected directly
@@ -688,12 +694,6 @@ public class NotificationStackScrollLayoutController {
                 HIGH_PRIORITY,
                 Settings.Secure.NOTIFICATION_DISMISS_RTL,
                 Settings.Secure.NOTIFICATION_HISTORY_ENABLED);
-
-        mOnColorsChangedListener = (colorExtractor, which) -> {
-            final boolean useDarkText = mColorExtractor.getNeutralColors().supportsDarkText();
-            mView.updateDecorViews(useDarkText);
-        };
-        mColorExtractor.addOnColorsChangedListener(mOnColorsChangedListener);
 
         mKeyguardMediaController.setVisibilityChangedListener(visible -> {
             mView.setKeyguardMediaControllorVisible(visible);

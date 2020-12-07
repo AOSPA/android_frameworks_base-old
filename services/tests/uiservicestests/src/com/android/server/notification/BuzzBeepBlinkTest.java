@@ -153,7 +153,8 @@ public class BuzzBeepBlinkTest extends UiServiceTestCase {
                 AccessibilityEvent.TYPES_ALL_MASK);
         when(mAccessibilityService.addClient(any(), anyInt())).thenReturn(serviceReturnValue);
         AccessibilityManager accessibilityManager =
-                new AccessibilityManager(Handler.getMain(), mAccessibilityService, 0);
+                new AccessibilityManager(getContext(), Handler.getMain(), mAccessibilityService,
+                        0, true);
         verify(mAccessibilityService).addClient(any(IAccessibilityManagerClient.class), anyInt());
         assertTrue(accessibilityManager.isEnabled());
 
@@ -1191,7 +1192,7 @@ public class BuzzBeepBlinkTest extends UiServiceTestCase {
         NotificationRecord r = getLightsNotification();
         mService.buzzBeepBlinkLocked(r);
         verifyNeverLights();
-        assertFalse(r.isInterruptive());
+        assertTrue(r.isInterruptive());
         assertEquals(-1, r.getLastAudiblyAlertedMs());
     }
 

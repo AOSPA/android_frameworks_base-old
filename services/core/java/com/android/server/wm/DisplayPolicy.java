@@ -68,7 +68,6 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_BA
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_SHOW_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INSET_PARENT_FRAME_BY_IME;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INTERCEPT_GLOBAL_DRAG_AND_DROP;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_SCREEN_DECOR;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
@@ -296,7 +295,6 @@ public class DisplayPolicy {
     private volatile boolean mKeyguardDrawComplete;
     private volatile boolean mWindowManagerDrawComplete;
 
-    private final ArraySet<WindowState> mScreenDecorWindows = new ArraySet<>();
     private WindowState mStatusBar = null;
     private WindowState mNotificationShade = null;
     private final int[] mStatusBarHeightForRotation = new int[4];
@@ -450,7 +448,7 @@ public class DisplayPolicy {
     private String getAppPackageName() {
         String currentPackage;
         try {
-            ActivityManager.RunningTaskInfo rti = ActivityTaskManager.getService().getFilteredTasks(
+            ActivityManager.RunningTaskInfo rti = ActivityTaskManager.getService().getTasks(
                   1, false /* filterVisibleRecents */).get(0);
             currentPackage = rti.topActivity.getPackageName();
         } catch (Exception e) {
@@ -1010,19 +1008,7 @@ public class DisplayPolicy {
      * @param attrs The window layout parameters to be modified.  These values
      * are modified in-place.
      */
-    public void adjustWindowParamsLw(WindowState win, WindowManager.LayoutParams attrs,
-            int callingPid, int callingUid) {
-
-        final boolean isScreenDecor = (attrs.privateFlags & PRIVATE_FLAG_IS_SCREEN_DECOR) != 0;
-        if (mScreenDecorWindows.contains(win)) {
-            if (!isScreenDecor) {
-                // No longer has the flag set, so remove from the set.
-                mScreenDecorWindows.remove(win);
-            }
-        } else if (isScreenDecor && hasStatusBarServicePermission(callingPid, callingUid)) {
-            mScreenDecorWindows.add(win);
-        }
-
+    public void adjustWindowParamsLw(WindowState win, WindowManager.LayoutParams attrs) {
         switch (attrs.type) {
             case TYPE_SYSTEM_OVERLAY:
             case TYPE_SECURE_SYSTEM_OVERLAY:
@@ -1112,11 +1098,6 @@ public class DisplayPolicy {
      * WindowManagerImpl.ADD_MULTIPLE_SINGLETON
      */
     int validateAddingWindowLw(WindowManager.LayoutParams attrs, int callingPid, int callingUid) {
-        if ((attrs.privateFlags & PRIVATE_FLAG_IS_SCREEN_DECOR) != 0) {
-            mContext.enforcePermission(
-                    android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
-                    "DisplayPolicy");
-        }
         if ((attrs.privateFlags & PRIVATE_FLAG_TRUSTED_OVERLAY) != 0) {
             mContext.enforcePermission(
                     android.Manifest.permission.INTERNAL_SYSTEM_WINDOW, callingPid, callingUid,
@@ -1236,10 +1217,6 @@ public class DisplayPolicy {
      * @param attrs Information about the window to be added.
      */
     void addWindowLw(WindowState win, WindowManager.LayoutParams attrs) {
-        if ((attrs.privateFlags & PRIVATE_FLAG_IS_SCREEN_DECOR) != 0) {
-            mScreenDecorWindows.add(win);
-        }
-
         switch (attrs.type) {
             case TYPE_NOTIFICATION_SHADE:
                 mNotificationShade = win;
@@ -1421,7 +1398,6 @@ public class DisplayPolicy {
         if (mLastFocusedWindow == win) {
             mLastFocusedWindow = null;
         }
-        mScreenDecorWindows.remove(win);
     }
 
     private int getStatusBarHeight(DisplayFrames displayFrames) {
@@ -1597,20 +1573,18 @@ public class DisplayPolicy {
                 : (task != null ? task.getBounds() : null);
         final InsetsState state =
                 mDisplayContent.getInsetsPolicy().getInsetsForWindowMetrics(attrs);
-        computeWindowBounds(attrs, state, outFrame);
+        computeWindowBounds(attrs, state, windowToken, outFrame);
         if (taskBounds != null) {
             outFrame.intersect(taskBounds);
         }
 
         final int fl = attrs.flags;
-        final int pfl = attrs.privateFlags;
         final boolean layoutInScreenAndInsetDecor = (fl & FLAG_LAYOUT_IN_SCREEN) != 0
                 && (fl & FLAG_LAYOUT_INSET_DECOR) != 0;
-        final boolean screenDecor = (pfl & PRIVATE_FLAG_IS_SCREEN_DECOR) != 0;
         final DisplayFrames displayFrames = isFixedRotationTransforming
                 ? windowToken.getFixedRotationTransformDisplayFrames()
                 : mDisplayContent.mDisplayFrames;
-        if (layoutInScreenAndInsetDecor && !screenDecor) {
+        if (layoutInScreenAndInsetDecor) {
             outDisplayCutout.set(
                     displayFrames.mDisplayCutout.calculateRelativeTo(outFrame).getDisplayCutout());
         } else {
@@ -1710,7 +1684,6 @@ public class DisplayPolicy {
                     simulatedWindowFrames, barContentFrames,
                     contentFrame -> layoutStatusBar(displayFrames, contentFrame));
         }
-        layoutScreenDecorWindows(displayFrames, simulatedWindowFrames);
     }
 
     /**
@@ -1731,7 +1704,6 @@ public class DisplayPolicy {
 
         layoutNavigationBar(displayFrames, uiMode, null /* simulatedContentFrame */);
         layoutStatusBar(displayFrames, null /* simulatedContentFrame */);
-        layoutScreenDecorWindows(displayFrames, null /* simulatedFrames */);
     }
 
     void updateHideNavInputEventReceiver() {
@@ -1784,47 +1756,6 @@ public class DisplayPolicy {
         state.getSource(ITYPE_TOP_DISPLAY_CUTOUT).setFrame(u.left, u.top, u.right, s.top);
         state.getSource(ITYPE_RIGHT_DISPLAY_CUTOUT).setFrame(s.right, u.top, u.right, u.bottom);
         state.getSource(ITYPE_BOTTOM_DISPLAY_CUTOUT).setFrame(u.left, s.bottom, u.right, u.bottom);
-    }
-
-    /**
-     * Layout the decor windows with {@link #PRIVATE_FLAG_IS_SCREEN_DECOR}.
-     *
-     * @param displayFrames The display frames to be layouted.
-     * @param simulatedFrames Non-null if the caller only needs the result of display frames (see
-     *                        {@link WindowState#mSimulatedWindowFrames}).
-     */
-    private void layoutScreenDecorWindows(DisplayFrames displayFrames,
-            WindowFrames simulatedFrames) {
-        if (mScreenDecorWindows.isEmpty()) {
-            return;
-        }
-
-        sTmpRect.setEmpty();
-        final int displayId = displayFrames.mDisplayId;
-
-        for (int i = mScreenDecorWindows.size() - 1; i >= 0; --i) {
-            final WindowState w = mScreenDecorWindows.valueAt(i);
-            if (w.getDisplayId() != displayId || !w.isVisible()) {
-                // Skip if not on the same display or not visible.
-                continue;
-            }
-
-            final boolean isSimulatedLayout = simulatedFrames != null;
-            if (isSimulatedLayout) {
-                w.setSimulatedWindowFrames(simulatedFrames);
-            }
-            getRotatedWindowBounds(displayFrames, w, sTmpScreenDecorFrame);
-            final WindowFrames windowFrames = w.getLayoutingWindowFrames();
-            windowFrames.setFrames(sTmpScreenDecorFrame /* parentFrame */,
-                    sTmpScreenDecorFrame /* displayFrame */);
-            try {
-                w.computeFrame(displayFrames);
-            } finally {
-                if (isSimulatedLayout) {
-                    w.setSimulatedWindowFrames(null);
-                }
-            }
-        }
     }
 
     private void layoutStatusBar(DisplayFrames displayFrames, Rect simulatedContentFrame) {
@@ -1929,11 +1860,11 @@ public class DisplayPolicy {
     }
 
     private void computeWindowBounds(WindowManager.LayoutParams attrs, InsetsState state,
-            Rect outBounds) {
+            @Nullable WindowToken windowToken, Rect outBounds) {
         final @InsetsType int typesToFit = attrs.getFitInsetsTypes();
         final @InsetsSide int sidesToFit = attrs.getFitInsetsSides();
         final ArraySet<Integer> types = InsetsState.toInternalType(typesToFit);
-        final Rect dfu = state.getDisplayFrame();
+        final Rect df = windowToken != null ? windowToken.getBounds() : state.getDisplayFrame();
         Insets insets = Insets.of(0, 0, 0, 0);
         for (int i = types.size() - 1; i >= 0; i--) {
             final InsetsSource source = state.peekSource(types.valueAt(i));
@@ -1941,13 +1872,13 @@ public class DisplayPolicy {
                 continue;
             }
             insets = Insets.max(insets, source.calculateInsets(
-                    dfu, attrs.isFitInsetsIgnoringVisibility()));
+                    df, attrs.isFitInsetsIgnoringVisibility()));
         }
         final int left = (sidesToFit & Side.LEFT) != 0 ? insets.left : 0;
         final int top = (sidesToFit & Side.TOP) != 0 ? insets.top : 0;
         final int right = (sidesToFit & Side.RIGHT) != 0 ? insets.right : 0;
         final int bottom = (sidesToFit & Side.BOTTOM) != 0 ? insets.bottom : 0;
-        outBounds.set(dfu.left + left, dfu.top + top, dfu.right - right, dfu.bottom - bottom);
+        outBounds.set(df.left + left, df.top + top, df.right - right, df.bottom - bottom);
     }
 
     /**
@@ -1965,8 +1896,7 @@ public class DisplayPolicy {
         // We've already done the navigation bar, status bar, and all screen decor windows. If the
         // status bar can receive input, we need to layout it again to accommodate for the IME
         // window.
-        if ((win == mStatusBar && !canReceiveInput(win)) || win == mNavigationBar
-                || mScreenDecorWindows.contains(win)) {
+        if ((win == mStatusBar && !canReceiveInput(win)) || win == mNavigationBar) {
             return;
         }
         final WindowManager.LayoutParams attrs = win.getAttrs();
@@ -1988,7 +1918,7 @@ public class DisplayPolicy {
         final boolean layoutInsetDecor = (fl & FLAG_LAYOUT_INSET_DECOR) == FLAG_LAYOUT_INSET_DECOR;
 
         final InsetsState state = win.getInsetsState();
-        computeWindowBounds(attrs, state, df);
+        computeWindowBounds(attrs, state, win.mToken, df);
         if (attached == null) {
             pf.set(df);
             if ((pfl & PRIVATE_FLAG_INSET_PARENT_FRAME_BY_IME) != 0) {
@@ -2061,7 +1991,6 @@ public class DisplayPolicy {
             // They will later be cropped or shifted using the displayFrame in WindowState,
             // which prevents overlap with the DisplayCutout.
             if (!attachedInParent && !floatingInScreenWindow) {
-                getRotatedWindowBounds(displayFrames, win, sTmpRect);
                 sTmpRect.set(pf);
                 pf.intersectUnchecked(displayCutoutSafeExceptMaybeBars);
                 windowFrames.setParentFrameWasClippedByDisplayCutout(!sTmpRect.equals(pf));
@@ -2262,7 +2191,7 @@ public class DisplayPolicy {
                 // requests to hide the status bar.  Not sure if there is another way that to be the
                 // case though.
                 if (!topIsFullscreen || mDisplayContent.getDefaultTaskDisplayArea()
-                        .isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)) {
+                        .isRootTaskVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)) {
                     topAppHidesStatusBar = false;
                 }
             }
@@ -3046,9 +2975,9 @@ public class DisplayPolicy {
 
     private int updateSystemBarsLw(WindowState win, int disableFlags) {
         final boolean dockedStackVisible = mDisplayContent.getDefaultTaskDisplayArea()
-                .isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+                .isRootTaskVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
         final boolean freeformStackVisible = mDisplayContent.getDefaultTaskDisplayArea()
-                .isStackVisible(WINDOWING_MODE_FREEFORM);
+                .isRootTaskVisible(WINDOWING_MODE_FREEFORM);
         final boolean resizing = mDisplayContent.getDockedDividerController().isResizing();
 
         // We need to force system bars when the docked stack is visible, when the freeform stack

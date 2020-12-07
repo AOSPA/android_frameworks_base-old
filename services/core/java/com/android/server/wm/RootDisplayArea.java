@@ -16,10 +16,16 @@
 
 package com.android.server.wm;
 
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManagerPolicyConstants.APPLICATION_LAYER;
 import static android.window.DisplayAreaOrganizer.FEATURE_IME_PLACEHOLDER;
 
 import static com.android.server.wm.DisplayAreaPolicyBuilder.Feature;
+
+import android.annotation.Nullable;
+
+import com.android.server.policy.WindowManagerPolicy;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -72,7 +78,8 @@ class RootDisplayArea extends DisplayArea<DisplayArea> {
      * match the root.
      */
     void placeImeContainer(DisplayArea.Tokens imeContainer) {
-        if (imeContainer.getRootDisplayArea() == this) {
+        final RootDisplayArea previousRoot = imeContainer.getRootDisplayArea();
+        if (previousRoot == this) {
             // No need to reparent if IME container is below the same root.
             return;
         }
@@ -88,7 +95,9 @@ class RootDisplayArea extends DisplayArea<DisplayArea> {
                             + "FEATURE_IME_PLACEHOLDER");
                 }
 
+                previousRoot.updateImeContainerForLayers(null /* imeContainer */);
                 imeContainer.reparent(imeDisplayAreas.get(0), POSITION_TOP);
+                updateImeContainerForLayers(imeContainer);
                 return;
             }
         }
@@ -97,12 +106,23 @@ class RootDisplayArea extends DisplayArea<DisplayArea> {
     }
 
     /** Finds the {@link DisplayArea.Tokens} that this type of window should be attached to. */
+    @Nullable
     DisplayArea.Tokens findAreaForToken(WindowToken token) {
-        int windowLayerFromType = token.getWindowLayerFromType();
+        return findAreaForToken(token.windowType, token.mOwnerCanManageAppTokens,
+                token.mRoundedCornerOverlay);
+    }
+
+    @Nullable
+    DisplayArea.Tokens findAreaForToken(int windowType, boolean ownerCanManageAppTokens,
+            boolean roundedCornerOverlay) {
+        // TODO(b/159767464): cover TYPE_INPUT_METHOD(_DIALOG) case here. mAreaForLayer doesn't
+        // contain IME container.
+        int windowLayerFromType = mWmService.mPolicy.getWindowLayerFromTypeLw(windowType,
+                ownerCanManageAppTokens);
         if (windowLayerFromType == APPLICATION_LAYER) {
             throw new IllegalArgumentException(
                     "There shouldn't be WindowToken on APPLICATION_LAYER");
-        } else if (token.mRoundedCornerOverlay) {
+        } else if (roundedCornerOverlay) {
             windowLayerFromType = mAreaForLayer.length - 1;
         }
         return mAreaForLayer[windowLayerFromType];
@@ -118,5 +138,11 @@ class RootDisplayArea extends DisplayArea<DisplayArea> {
         mFeatures = Collections.unmodifiableList(features);
         mAreaForLayer = areaForLayer;
         mFeatureToDisplayAreas = featureToDisplayAreas;
+    }
+
+    private void updateImeContainerForLayers(@Nullable DisplayArea.Tokens imeContainer) {
+        final WindowManagerPolicy policy = mWmService.mPolicy;
+        mAreaForLayer[policy.getWindowLayerFromTypeLw(TYPE_INPUT_METHOD)] = imeContainer;
+        mAreaForLayer[policy.getWindowLayerFromTypeLw(TYPE_INPUT_METHOD_DIALOG)] = imeContainer;
     }
 }

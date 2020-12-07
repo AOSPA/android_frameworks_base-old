@@ -35,6 +35,7 @@ import static com.android.server.wm.DisplayAreaPolicyBuilder.Feature;
 import static com.android.server.wm.DisplayAreaPolicyBuilder.HierarchyBuilder;
 
 import android.content.res.Resources;
+import android.os.Bundle;
 import android.text.TextUtils;
 
 import java.util.ArrayList;
@@ -71,6 +72,10 @@ public abstract class DisplayAreaPolicy {
      */
     public abstract void addWindow(WindowToken token);
 
+    /** Gets the {@link DisplayArea} which a {@link WindowToken} is about to be attached to. */
+    public abstract DisplayArea.Tokens getDisplayAreaForWindowToken(int type, Bundle options,
+            boolean ownerCanManageAppTokens, boolean roundedCornerOverlay);
+
     /**
      * Gets the set of {@link DisplayArea} that are created for the given feature to apply to.
      */
@@ -86,7 +91,7 @@ public abstract class DisplayAreaPolicy {
         @Override
         public DisplayAreaPolicy instantiate(WindowManagerService wmService,
                 DisplayContent content, RootDisplayArea root,
-                DisplayArea<? extends WindowContainer> imeContainer) {
+                DisplayArea.Tokens imeContainer) {
             final TaskDisplayArea defaultTaskDisplayArea = new TaskDisplayArea(content, wmService,
                     "DefaultTaskDisplayArea", FEATURE_DEFAULT_TASK_CONTAINER);
             final List<TaskDisplayArea> tdaList = new ArrayList<>();
@@ -151,7 +156,7 @@ public abstract class DisplayAreaPolicy {
          * @see DisplayAreaPolicy#DisplayAreaPolicy
          */
         DisplayAreaPolicy instantiate(WindowManagerService wmService, DisplayContent content,
-                RootDisplayArea root, DisplayArea<? extends WindowContainer> imeContainer);
+                RootDisplayArea root, DisplayArea.Tokens imeContainer);
 
         /**
          * Instantiates the device-specific {@link Provider}.

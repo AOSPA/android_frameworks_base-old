@@ -51,7 +51,6 @@ android_test {
         "testng",
         "junit",
         "platform-compat-test-rules",
-
     ],
 
     aidl: {
@@ -112,11 +111,22 @@ android_test {
 }
 
 java_library {
+    name: "servicestests-core-utils",
+    srcs: [
+        "src/com/android/server/pm/PackageSettingBuilder.java",
+    ],
+    static_libs: [
+        "services.core",
+    ],
+}
+
+java_library {
     name: "servicestests-utils",
     srcs: [
         "utils/**/*.java",
         "utils/**/*.kt",
         "utils-mockito/**/*.kt",
+        ":services.core-sources-deviceconfig-interface",
     ],
     static_libs: [
         "junit",
@@ -133,6 +143,7 @@ java_library {
         "utils/**/*.java",
         "utils/**/*.kt",
         "utils-mockito/**/*.kt",
+        ":services.core-sources-deviceconfig-interface",
     ],
     static_libs: [
         "junit",
