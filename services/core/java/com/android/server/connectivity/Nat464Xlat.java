@@ -134,7 +134,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
 
         boolean doXlat = SystemProperties.getBoolean("persist.vendor.net.doxlat", true);
         if(!doXlat) {
-            Slog.i(TAG, "Android Xlat is disabled");
+            Log.i(TAG, "Android Xlat is disabled");
         }
 
         return supported && connected && isIpv6OnlyNetwork && !skip464xlat
