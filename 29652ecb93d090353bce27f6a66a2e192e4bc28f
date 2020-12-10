@@ -16,6 +16,23 @@
       "message": "Needs more testing. Last time I tried it on ginkgo, it caused random reboots. It\u0027s also reverted at proton: https://github.com/ProtonAOSP/android_frameworks_base/commit/f62feee5e5b8e011bb87a3ac08fdac16c6007297",
       "revId": "29652ecb93d090353bce27f6a66a2e192e4bc28f",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b07711c1_3cc3e882",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000092
+      },
+      "writtenOn": "2020-12-10T01:04:05Z",
+      "side": 1,
+      "message": "This breaks Google photos backup on Pixel 2 XL.",
+      "revId": "29652ecb93d090353bce27f6a66a2e192e4bc28f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
