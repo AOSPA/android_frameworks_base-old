@@ -98,7 +98,8 @@ public class ParanoidSenseManager {
                 for (byte b : token) {
                     token_AL.add(new Byte(b));
                 }
-                mFaceService.handleAuthenticated(face, token_AL);
+                final boolean authenticated = faceId != 0;
+                mFaceService.handleAuthenticated(authenticated, face, token_AL);
             });
         }
 
