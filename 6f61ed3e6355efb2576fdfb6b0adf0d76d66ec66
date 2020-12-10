@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "884ab1f5_6845035d",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2020-12-10T17:32:01Z",
+      "side": 1,
+      "message": "This needs r20 merge in fw/opt/net/wifi",
+      "revId": "6f61ed3e6355efb2576fdfb6b0adf0d76d66ec66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
