@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c8c7b42a_afe49f42",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000316
+      },
+      "writtenOn": "2020-12-13T19:52:44Z",
+      "side": 1,
+      "message": "kill it with fire 🔥",
+      "revId": "032627c984f4eb729501e774eb61c45f29198141",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
