@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "91769e92_6508e999",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 292,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-12-14T14:39:02Z",
+      "side": 1,
+      "message": "cache the getView call by creating a local (final) variable above the visible check which calls on getView();",
+      "revId": "105a9e18e6ced364a7253d748de3aac4df8d2755",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "4f6d6fe1_7c6d6a80",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 296,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-12-14T14:39:02Z",
+      "side": 1,
+      "message": "also make use of the same variable here",
+      "revId": "105a9e18e6ced364a7253d748de3aac4df8d2755",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
