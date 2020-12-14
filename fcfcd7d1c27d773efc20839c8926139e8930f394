@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "664383d7_c892eb05",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-12-14T14:40:09Z",
+      "side": 1,
+      "message": "I\u0027m not a fan of this. This changes the behavior of all external apps as well. I prefer sticking with Google\u0027s design for this",
+      "revId": "fcfcd7d1c27d773efc20839c8926139e8930f394",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
