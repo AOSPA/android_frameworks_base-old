@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3cc8cb2f_0d61a640",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 303,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-12-14T14:27:50Z",
+      "side": 1,
+      "message": "this can be made private",
+      "revId": "ecdec4bc611579ceb88567f8bf902d1a8e78ca01",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
