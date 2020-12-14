@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "17d934d6_2ae315e1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000447
+      },
+      "writtenOn": "2020-12-14T05:40:32Z",
+      "side": 1,
+      "message": "There is a ton of stuff in AOSP that is unused, unless it\u0027s causing issues I would rather not.",
+      "revId": "d48529ec946bb1bfc03ce5194de475d11830b66f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
