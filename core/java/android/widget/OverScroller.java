@@ -164,7 +164,7 @@ public class OverScroller {
      */
     public final void forceFinished(boolean finished) {
         mScrollerX.mFinished = mScrollerY.mFinished = finished;
-        if (finished) {
+        if (finished && mMode == FLING_MODE) {
             ScrollOptimizer.setFlingFlag(ScrollOptimizer.FLING_END);
         }
     }
@@ -309,7 +309,9 @@ public class OverScroller {
      */
     public boolean computeScrollOffset() {
         if (isFinished()) {
-            ScrollOptimizer.setFlingFlag(ScrollOptimizer.FLING_END);
+            if (mMode == FLING_MODE) {
+                ScrollOptimizer.setFlingFlag(ScrollOptimizer.FLING_END);
+            }
             return false;
         }
 
@@ -347,12 +349,12 @@ public class OverScroller {
                     }
                 }
 
+                if (isFinished()) {
+                    ScrollOptimizer.setFlingFlag(ScrollOptimizer.FLING_END);
+                }
                 break;
         }
 
-        if (isFinished()) {
-            ScrollOptimizer.setFlingFlag(ScrollOptimizer.FLING_END);
-        }
         return true;
     }
 
@@ -528,7 +530,9 @@ public class OverScroller {
      * @see #forceFinished(boolean)
      */
     public void abortAnimation() {
-        ScrollOptimizer.setFlingFlag(ScrollOptimizer.FLING_END);
+        if (mMode == FLING_MODE) {
+            ScrollOptimizer.setFlingFlag(ScrollOptimizer.FLING_END);
+        }
         mScrollerX.finish();
         mScrollerY.finish();
     }
