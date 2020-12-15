@@ -126,6 +126,14 @@ public final class DeviceConfig {
     public static final String NAMESPACE_AUTOFILL = "autofill";
 
     /**
+     * Namespace for battery saver feature.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_BATTERY_SAVER = "battery_saver";
+
+    /**
      * Namespace for blobstore feature that allows apps to share data blobs.
      *
      * @hide
@@ -449,6 +457,22 @@ public final class DeviceConfig {
      */
     public static final String NAMESPACE_CONNECTIVITY_THERMAL_POWER_MANAGER =
             "connectivity_thermal_power_manager";
+
+    /**
+     * Namespace for all statsd native features that can be applied immediately.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_STATSD_NATIVE = "statsd_native";
+
+    /**
+     * Namespace for all statsd native features that are applied on boot.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_STATSD_NATIVE_BOOT = "statsd_native_boot";
 
     /**
      * Namespace for configuration related features.

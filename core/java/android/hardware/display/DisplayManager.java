@@ -19,6 +19,7 @@ package android.hardware.display;
 import static android.view.Display.DEFAULT_DISPLAY;
 
 import android.Manifest;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -38,8 +39,11 @@ import android.util.SparseArray;
 import android.view.Display;
 import android.view.Surface;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+
 
 /**
  * Manages the properties of attached displays.
@@ -335,6 +339,40 @@ public final class DisplayManager {
      * @hide
      */
     public static final int VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP = 1 << 11;
+
+
+    /** @hide */
+    @IntDef(prefix = {"SWITCHING_TYPE_"}, value = {
+            SWITCHING_TYPE_NONE,
+            SWITCHING_TYPE_WITHIN_GROUPS,
+            SWITCHING_TYPE_ACROSS_AND_WITHIN_GROUPS,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SwitchingType {}
+
+    /**
+     * No mode switching will happen.
+     * @hide
+     */
+    @TestApi
+    public static final int SWITCHING_TYPE_NONE = 0;
+
+    /**
+     * Allow only refresh rate switching between modes in the same configuration group. This way
+     * only switches without visual interruptions for the user will be allowed.
+     * @hide
+     */
+    @TestApi
+    public static final int SWITCHING_TYPE_WITHIN_GROUPS = 1;
+
+    /**
+     * Allow refresh rate switching between all refresh rates even if the switch with have visual
+     * interruptions for the user.
+     * @hide
+     */
+    @TestApi
+    public static final int SWITCHING_TYPE_ACROSS_AND_WITHIN_GROUPS = 2;
+
 
     /** @hide */
     public DisplayManager(Context context) {
@@ -875,6 +913,29 @@ public final class DisplayManager {
     }
 
     /**
+     * Sets the refresh rate switching type.
+     * This matches {@link android.provider.Settings.Secure.MATCH_CONTENT_FRAME_RATE}
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE)
+    public void setRefreshRateSwitchingType(@SwitchingType int newValue) {
+        mGlobal.setRefreshRateSwitchingType(newValue);
+    }
+
+    /**
+     * Returns the refresh rate switching type.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE)
+    @SwitchingType public int getRefreshRateSwitchingType() {
+        return mGlobal.getRefreshRateSwitchingType();
+    }
+
+    /**
      * Listens for changes in available display devices.
      */
     public interface DisplayListener {
@@ -911,12 +972,52 @@ public final class DisplayManager {
     public interface DeviceConfig {
 
         /**
-         * Key for refresh rate in the zone defined by thresholds.
+         * Key for refresh rate in the low zone defined by thresholds.
          *
+         * Note that the name and value don't match because they were added before we had a high
+         * zone to consider.
          * @see android.provider.DeviceConfig#NAMESPACE_DISPLAY_MANAGER
          * @see android.R.integer#config_defaultZoneBehavior
          */
-        String KEY_REFRESH_RATE_IN_ZONE = "refresh_rate_in_zone";
+        String KEY_REFRESH_RATE_IN_LOW_ZONE = "refresh_rate_in_zone";
+
+        /**
+         * Key for accessing the low display brightness thresholds for the configured refresh
+         * rate zone.
+         * The value will be a pair of comma separated integers representing the minimum and maximum
+         * thresholds of the zone, respectively, in display backlight units (i.e. [0, 255]).
+         *
+         * Note that the name and value don't match because they were added before we had a high
+         * zone to consider.
+         *
+         * @see android.provider.DeviceConfig#NAMESPACE_DISPLAY_MANAGER
+         * @see android.R.array#config_brightnessThresholdsOfPeakRefreshRate
+         * @hide
+         */
+        String KEY_FIXED_REFRESH_RATE_LOW_DISPLAY_BRIGHTNESS_THRESHOLDS =
+                "peak_refresh_rate_brightness_thresholds";
+
+        /**
+         * Key for accessing the low ambient brightness thresholds for the configured refresh
+         * rate zone. The value will be a pair of comma separated integers representing the minimum
+         * and maximum thresholds of the zone, respectively, in lux.
+         *
+         * Note that the name and value don't match because they were added before we had a high
+         * zone to consider.
+         *
+         * @see android.provider.DeviceConfig#NAMESPACE_DISPLAY_MANAGER
+         * @see android.R.array#config_ambientThresholdsOfPeakRefreshRate
+         * @hide
+         */
+        String KEY_FIXED_REFRESH_RATE_LOW_AMBIENT_BRIGHTNESS_THRESHOLDS =
+                "peak_refresh_rate_ambient_thresholds";
+        /**
+         * Key for refresh rate in the high zone defined by thresholds.
+         *
+         * @see android.provider.DeviceConfig#NAMESPACE_DISPLAY_MANAGER
+         * @see android.R.integer#config_fixedRefreshRateInHighZone
+         */
+        String KEY_REFRESH_RATE_IN_HIGH_ZONE = "refresh_rate_in_high_zone";
 
         /**
          * Key for accessing the display brightness thresholds for the configured refresh rate zone.
@@ -924,11 +1025,11 @@ public final class DisplayManager {
          * thresholds of the zone, respectively, in display backlight units (i.e. [0, 255]).
          *
          * @see android.provider.DeviceConfig#NAMESPACE_DISPLAY_MANAGER
-         * @see android.R.array#config_brightnessThresholdsOfPeakRefreshRate
+         * @see android.R.array#config_brightnessHighThresholdsOfFixedRefreshRate
          * @hide
          */
-        String KEY_PEAK_REFRESH_RATE_DISPLAY_BRIGHTNESS_THRESHOLDS =
-                "peak_refresh_rate_brightness_thresholds";
+        String KEY_FIXED_REFRESH_RATE_HIGH_DISPLAY_BRIGHTNESS_THRESHOLDS =
+                "fixed_refresh_rate_high_display_brightness_thresholds";
 
         /**
          * Key for accessing the ambient brightness thresholds for the configured refresh rate zone.
@@ -936,12 +1037,11 @@ public final class DisplayManager {
          * thresholds of the zone, respectively, in lux.
          *
          * @see android.provider.DeviceConfig#NAMESPACE_DISPLAY_MANAGER
-         * @see android.R.array#config_ambientThresholdsOfPeakRefreshRate
+         * @see android.R.array#config_ambientHighThresholdsOfFixedRefreshRate
          * @hide
          */
-        String KEY_PEAK_REFRESH_RATE_AMBIENT_BRIGHTNESS_THRESHOLDS =
-                "peak_refresh_rate_ambient_thresholds";
-
+        String KEY_FIXED_REFRESH_RATE_HIGH_AMBIENT_BRIGHTNESS_THRESHOLDS =
+                "fixed_refresh_rate_high_ambient_brightness_thresholds";
         /**
          * Key for default peak refresh rate
          *

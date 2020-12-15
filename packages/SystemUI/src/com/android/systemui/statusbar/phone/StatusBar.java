@@ -3782,7 +3782,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         mBouncerShowing = bouncerShowing;
         mKeyguardBypassController.setBouncerShowing(bouncerShowing);
         mPulseExpansionHandler.setBouncerShowing(bouncerShowing);
-        mLockscreenLockIconController.setBouncerShowingScrimmed(isBouncerShowingScrimmed());
+        mLockscreenLockIconController.setBouncerShowingScrimmed(bouncerShowing,
+                isBouncerShowingScrimmed());
         if (mStatusBarView != null) mStatusBarView.setBouncerShowing(bouncerShowing);
         updateHideIconsForBouncer(true /* animate */);
         mCommandQueue.recomputeDisableFlags(mDisplayId, true /* animate */);
@@ -3790,6 +3791,14 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (!mBouncerShowing) {
             updatePanelExpansionForKeyguard();
         }
+    }
+
+    /**
+     * Sets how hidden the bouncer is, where 0f is fully visible and 1f is fully hidden
+     * See {@link KeyguardBouncer#EXPANSION_VISIBLE} and {@link KeyguardBouncer#EXPANSION_HIDDEN}.
+     */
+    public void setBouncerHideAmount(float hideAmount) {
+        mLockscreenLockIconController.setBouncerHideAmount(hideAmount);
     }
 
     /**

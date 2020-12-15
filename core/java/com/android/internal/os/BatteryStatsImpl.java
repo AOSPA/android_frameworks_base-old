@@ -38,6 +38,7 @@ import android.net.NetworkStats;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
+import android.os.BatteryProperty;
 import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.Build;
@@ -54,6 +55,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.os.WorkSource.WorkChain;
@@ -88,6 +90,8 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.SparseLongArray;
 import android.util.TimeUtils;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.view.Display;
 
@@ -110,7 +114,6 @@ import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -144,6 +147,14 @@ import java.util.concurrent.locks.ReentrantLock;
 public class BatteryStatsImpl extends BatteryStats {
     private static final String TAG = "BatteryStatsImpl";
     private static final boolean DEBUG = false;
+
+    // TODO(b/169376495): STOPSHIP if true
+    private static final boolean DEBUG_FOREGROUND_STATS = true;
+
+    private static final boolean ENABLE_FOREGROUND_STATS_COLLECTION =
+            DEBUG_FOREGROUND_STATS && SystemProperties.getBoolean(
+                    "debug.battery_foreground_stats_collection", false);
+
     public static final boolean DEBUG_ENERGY = false;
     private static final boolean DEBUG_ENERGY_CPU = DEBUG_ENERGY;
     private static final boolean DEBUG_BINDER_STATS = false;
@@ -739,6 +750,37 @@ public class BatteryStatsImpl extends BatteryStats {
     long mTrackRunningHistoryElapsedRealtimeMs = 0;
     long mTrackRunningHistoryUptimeMs = 0;
 
+    private static final int FOREGROUND_UID_INITIAL_CAPACITY = 10;
+    private static final int INVALID_UID = -1;
+
+    private final IntArray mForegroundUids = ENABLE_FOREGROUND_STATS_COLLECTION
+            ? new IntArray(FOREGROUND_UID_INITIAL_CAPACITY) :  null;
+
+    // Last recorded battery energy capacity.
+    // This is used for computing foregrund power per application.
+    // See: PowerForUid below
+    private long mLastBatteryEnergyCapacityNWh = 0;
+
+    private static final class PowerForUid {
+        public long energyNwh = 0;
+        // Same as energyNwh, but not tracked for the first 2 minutes;
+        public long filteredEnergyNwh = 0;
+        public double totalHours = 0;
+        public long baseTimeMs = 0;
+
+        double computePower() {
+            // units in nW
+            return totalHours != 0 ? energyNwh / totalHours : -1.0;
+        }
+
+        double computeFilteredPower() {
+            // units in nW
+            return totalHours != 0 ? filteredEnergyNwh / totalHours : -1.0;
+        }
+    }
+    private final HashMap<Integer, PowerForUid> mUidToPower = ENABLE_FOREGROUND_STATS_COLLECTION
+            ? new HashMap<>() : null;
+
     final BatteryStatsHistory mBatteryStatsHistory;
 
     final HistoryItem mHistoryCur = new HistoryItem();
@@ -1026,6 +1068,8 @@ public class BatteryStatsImpl extends BatteryStats {
 
     private int mNumConnectivityChange;
 
+    private int mBatteryVolt = -1;
+    private int mBatteryCharge = -1;
     private int mEstimatedBatteryCapacity = -1;
 
     private int mMinLearnedBatteryCapacity = -1;
@@ -4154,6 +4198,49 @@ public class BatteryStatsImpl extends BatteryStats {
         // TODO(b/155216561): It is possible for isolated uids to be in a higher
         // state than its parent uid. We should track the highest state within the union of host
         // and isolated uids rather than only the parent uid.
+
+
+        int uidState = mapToInternalProcessState(state);
+
+        boolean isForeground = (uidState == Uid.PROCESS_STATE_TOP)
+                ||  (uidState == Uid.PROCESS_STATE_FOREGROUND);
+
+
+        if (ENABLE_FOREGROUND_STATS_COLLECTION) {
+            boolean previouslyInForegrond = false;
+            for (int i = 0; i < mForegroundUids.size(); i++) {
+                if (mForegroundUids.get(i) == uid) {
+                    previouslyInForegrond = true;
+                    if (!isForeground) {
+                        // If we were previously in the foreground, remove the uid
+                        // from the foreground set and dirty the slot.
+                        mForegroundUids.set(i, INVALID_UID);
+                        final PowerForUid pfu =
+                                mUidToPower.computeIfAbsent(uid, unused -> new PowerForUid());
+                        pfu.baseTimeMs = 0;
+                        break;
+                    }
+                }
+            }
+
+            if (!previouslyInForegrond && isForeground) {
+                boolean addedToForeground = false;
+                // Check if we have a free slot to clobber...
+                for (int i = 0; i < mForegroundUids.size(); i++) {
+                    if (mForegroundUids.get(i) == INVALID_UID) {
+                        addedToForeground = true;
+                        mForegroundUids.set(i, uid);
+                        break;
+                    }
+                }
+
+                // ...if not, append to the end of the array.
+                if (!addedToForeground) {
+                    mForegroundUids.add(uid);
+                }
+            }
+        }
+
         FrameworkStatsLog.write(FrameworkStatsLog.UID_PROCESS_STATE_CHANGED, uid,
                 ActivityManager.processStateAmToProto(state));
         getUidStatsLocked(uid, elapsedRealtimeMs, uptimeMs)
@@ -10744,8 +10831,7 @@ public class BatteryStatsImpl extends BatteryStats {
             }
             final ByteArrayOutputStream memStream = new ByteArrayOutputStream();
             try {
-                XmlSerializer out = new FastXmlSerializer();
-                out.setOutput(memStream, StandardCharsets.UTF_8.name());
+                TypedXmlSerializer out = Xml.resolveSerializer(memStream);
                 writeDailyItemsLocked(out);
                 final long initialTimeMs = SystemClock.uptimeMillis() - startTimeMs;
                 BackgroundThread.getHandler().post(new Runnable() {
@@ -10775,15 +10861,15 @@ public class BatteryStatsImpl extends BatteryStats {
         }
     }
 
-    private void writeDailyItemsLocked(XmlSerializer out) throws IOException {
+    private void writeDailyItemsLocked(TypedXmlSerializer out) throws IOException {
         StringBuilder sb = new StringBuilder(64);
         out.startDocument(null, true);
         out.startTag(null, "daily-items");
         for (int i=0; i<mDailyItems.size(); i++) {
             final DailyItem dit = mDailyItems.get(i);
             out.startTag(null, "item");
-            out.attribute(null, "start", Long.toString(dit.mStartTime));
-            out.attribute(null, "end", Long.toString(dit.mEndTime));
+            out.attributeLong(null, "start", dit.mStartTime);
+            out.attributeLong(null, "end", dit.mEndTime);
             writeDailyLevelSteps(out, "dis", dit.mDischargeSteps, sb);
             writeDailyLevelSteps(out, "chg", dit.mChargeSteps, sb);
             if (dit.mPackageChanges != null) {
@@ -10792,7 +10878,7 @@ public class BatteryStatsImpl extends BatteryStats {
                     if (pc.mUpdate) {
                         out.startTag(null, "upd");
                         out.attribute(null, "pkg", pc.mPackageName);
-                        out.attribute(null, "ver", Long.toString(pc.mVersionCode));
+                        out.attributeLong(null, "ver", pc.mVersionCode);
                         out.endTag(null, "upd");
                     } else {
                         out.startTag(null, "rem");
@@ -10807,11 +10893,11 @@ public class BatteryStatsImpl extends BatteryStats {
         out.endDocument();
     }
 
-    private void writeDailyLevelSteps(XmlSerializer out, String tag, LevelStepTracker steps,
+    private void writeDailyLevelSteps(TypedXmlSerializer out, String tag, LevelStepTracker steps,
             StringBuilder tmpBuilder) throws IOException {
         if (steps != null) {
             out.startTag(null, tag);
-            out.attribute(null, "n", Integer.toString(steps.mNumStepDurations));
+            out.attributeInt(null, "n", steps.mNumStepDurations);
             for (int i=0; i<steps.mNumStepDurations; i++) {
                 out.startTag(null, "s");
                 tmpBuilder.setLength(0);
@@ -10833,10 +10919,9 @@ public class BatteryStatsImpl extends BatteryStats {
             return;
         }
         try {
-            XmlPullParser parser = Xml.newPullParser();
-            parser.setInput(stream, StandardCharsets.UTF_8.name());
+            TypedXmlPullParser parser = Xml.resolvePullParser(stream);
             readDailyItemsLocked(parser);
-        } catch (XmlPullParserException e) {
+        } catch (IOException e) {
         } finally {
             try {
                 stream.close();
@@ -10845,7 +10930,7 @@ public class BatteryStatsImpl extends BatteryStats {
         }
     }
 
-    private void readDailyItemsLocked(XmlPullParser parser) {
+    private void readDailyItemsLocked(TypedXmlPullParser parser) {
         try {
             int type;
             while ((type = parser.next()) != XmlPullParser.START_TAG
@@ -10889,17 +10974,11 @@ public class BatteryStatsImpl extends BatteryStats {
         }
     }
 
-    void readDailyItemTagLocked(XmlPullParser parser) throws NumberFormatException,
+    void readDailyItemTagLocked(TypedXmlPullParser parser) throws NumberFormatException,
             XmlPullParserException, IOException {
         DailyItem dit = new DailyItem();
-        String attr = parser.getAttributeValue(null, "start");
-        if (attr != null) {
-            dit.mStartTime = Long.parseLong(attr);
-        }
-        attr = parser.getAttributeValue(null, "end");
-        if (attr != null) {
-            dit.mEndTime = Long.parseLong(attr);
-        }
+        dit.mStartTime = parser.getAttributeLong(null, "start", 0);
+        dit.mEndTime = parser.getAttributeLong(null, "end", 0);
         int outerDepth = parser.getDepth();
         int type;
         while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
@@ -10920,8 +10999,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 PackageChange pc = new PackageChange();
                 pc.mUpdate = true;
                 pc.mPackageName = parser.getAttributeValue(null, "pkg");
-                String verStr = parser.getAttributeValue(null, "ver");
-                pc.mVersionCode = verStr != null ? Long.parseLong(verStr) : 0;
+                pc.mVersionCode = parser.getAttributeLong(null, "ver", 0);
                 dit.mPackageChanges.add(pc);
                 XmlUtils.skipCurrentTag(parser);
             } else if (tagName.equals("rem")) {
@@ -10942,16 +11020,15 @@ public class BatteryStatsImpl extends BatteryStats {
         mDailyItems.add(dit);
     }
 
-    void readDailyItemTagDetailsLocked(XmlPullParser parser, DailyItem dit, boolean isCharge,
+    void readDailyItemTagDetailsLocked(TypedXmlPullParser parser, DailyItem dit, boolean isCharge,
             String tag)
             throws NumberFormatException, XmlPullParserException, IOException {
-        final String numAttr = parser.getAttributeValue(null, "n");
-        if (numAttr == null) {
+        final int num = parser.getAttributeInt(null, "n", -1);
+        if (num == -1) {
             Slog.w(TAG, "Missing 'n' attribute at " + parser.getPositionDescription());
             XmlUtils.skipCurrentTag(parser);
             return;
         }
-        final int num = Integer.parseInt(numAttr);
         LevelStepTracker steps = new LevelStepTracker(num);
         if (isCharge) {
             dit.mChargeSteps = steps;
@@ -12968,6 +13045,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 doWrite = true;
                 resetAllStatsLocked(mSecUptime, mSecRealtime);
                 if (chargeUAh > 0 && level > 0) {
+                    mBatteryCharge = chargeUAh;
                     // Only use the reported coulomb charge value if it is supported and reported.
                     mEstimatedBatteryCapacity = (int) ((chargeUAh / 1000) / (level / 100.0));
                 }
@@ -13140,6 +13218,47 @@ public class BatteryStatsImpl extends BatteryStats {
                 startRecordingHistory(elapsedRealtimeMs, uptimeMs, true);
             }
         }
+
+        if (ENABLE_FOREGROUND_STATS_COLLECTION) {
+            mBatteryVolt = volt;
+            if (onBattery) {
+                final long energyNwh = (volt * (long) chargeUAh);
+                final long energyDelta = mLastBatteryEnergyCapacityNWh - energyNwh;
+                for (int i = 0; i < mForegroundUids.size(); i++) {
+                    final int uid = mForegroundUids.get(i);
+                    if (uid == INVALID_UID) {
+                        continue;
+                    }
+                    final PowerForUid pfu = mUidToPower
+                            .computeIfAbsent(uid, unused -> new PowerForUid());
+                    if (pfu.baseTimeMs <= 0) {
+                        pfu.baseTimeMs = currentTimeMs;
+                    } else {
+                        // Check if mLastBatteryEnergyCapacityNWh > energyNwh,
+                        // to make sure we only count discharges
+                        if (energyDelta > 0) {
+                            pfu.energyNwh += energyDelta;
+                            // Convert from milliseconds to hours
+                            // 1000 ms per second * 3600 seconds per hour
+                            pfu.totalHours += ((double) (currentTimeMs - pfu.baseTimeMs)
+                                    / (1.0 * 1000 * 60 * 60));
+                            // Now convert from 2 minutes to hours
+                            // 2 minutes = 1/30 of an hour
+                            if (pfu.totalHours > (2.0 / 60)) {
+                                pfu.filteredEnergyNwh += energyDelta;
+                            }
+
+                        }
+                        pfu.baseTimeMs = currentTimeMs;
+                    }
+                }
+                mLastBatteryEnergyCapacityNWh = energyNwh;
+            } else if (onBattery != mOnBattery) {
+                // Transition to onBattery = false
+                mUidToPower.values().forEach(v -> v.baseTimeMs = 0);
+            }
+        }
+
         mCurrentBatteryLevel = level;
         if (mDischargePlugLevel < 0) {
             mDischargePlugLevel = level;
@@ -16056,6 +16175,48 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     public void dumpLocked(Context context, PrintWriter pw, int flags, int reqUid, long histStart) {
+        if (ENABLE_FOREGROUND_STATS_COLLECTION) {
+            long actualCharge = -1;
+            long actualEnergy = -1;
+            try {
+                IBatteryPropertiesRegistrar registrar =
+                        IBatteryPropertiesRegistrar.Stub.asInterface(
+                                ServiceManager.getService("batteryproperties"));
+                if (registrar != null) {
+                    BatteryProperty prop = new BatteryProperty();
+                    if (registrar.getProperty(
+                                BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER, prop) == 0) {
+                        actualCharge = prop.getLong();
+                    }
+                    prop = new BatteryProperty();
+                    if (registrar.getProperty(
+                                BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER, prop) == 0) {
+                        actualEnergy = prop.getLong();
+                    }
+                }
+            } catch (RemoteException e) {
+                // Ignore.
+            }
+            pw.printf("ActualCharge (uAh): %d\n", (int) actualCharge);
+            pw.printf("ActualEnergy (nWh): %d\n", actualEnergy);
+            pw.printf("mBatteryCharge (uAh): %d\n", mBatteryCharge);
+            pw.printf("mBatteryVolts (mV): %d\n", mBatteryVolt);
+            pw.printf("est energy (nWh): %d\n", mBatteryVolt * (long) mBatteryCharge);
+            pw.printf("mEstimatedBatteryCapacity (mAh): %d\n", mEstimatedBatteryCapacity);
+            pw.printf("mMinLearnedBatteryCapacity (uAh): %d\n", mMinLearnedBatteryCapacity);
+            pw.printf("mMaxLearnedBatteryCapacity (uAh): %d\n", mMaxLearnedBatteryCapacity);
+            pw.printf("est. capacity: %f\n",
+                    (float) actualCharge / (mEstimatedBatteryCapacity * 1000));
+            pw.printf("mCurrentBatteryLevel: %d\n", mCurrentBatteryLevel);
+            pw.println("Total Power per app:");
+            mUidToPower.entrySet().forEach(e ->
+                    pw.printf("Uid: %d, Total watts (nW): %f\n",
+                            e.getKey(), e.getValue().computePower()));
+            pw.println("Total Power per app after first 2 minutes initial launch:");
+            mUidToPower.entrySet().forEach(e ->
+                    pw.printf("Uid: %d, Total watts (nW): %f\n",
+                            e.getKey(), e.getValue().computeFilteredPower()));
+        }
         if (DEBUG) {
             pw.println("mOnBatteryTimeBase:");
             mOnBatteryTimeBase.dump(pw, "  ");

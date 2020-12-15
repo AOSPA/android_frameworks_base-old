@@ -69,7 +69,7 @@ public class DisplayAreaPolicyTests {
         WindowManagerService wms = mSystemServices.getWindowManagerService();
         mRoot = new SurfacelessDisplayAreaRoot(wms);
         spyOn(mRoot);
-        DisplayArea<WindowContainer> ime = new DisplayArea<>(wms, ABOVE_TASKS, "Ime");
+        DisplayArea.Tokens ime = new DisplayArea.Tokens(wms, ABOVE_TASKS, "Ime");
         DisplayContent displayContent = mock(DisplayContent.class);
         doReturn(true).when(displayContent).isTrusted();
         mTaskDisplayArea1 = new TaskDisplayArea(displayContent, wms, "Tasks1",
@@ -94,9 +94,9 @@ public class DisplayAreaPolicyTests {
 
     @Test
     public void testTaskDisplayArea_taskPositionChanged_updatesTaskDisplayAreaPosition() {
-        final Task stack1 = mTaskDisplayArea1.createStack(
+        final Task stack1 = mTaskDisplayArea1.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final Task stack2 = mTaskDisplayArea2.createStack(
+        final Task stack2 = mTaskDisplayArea2.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Initial order
@@ -143,7 +143,7 @@ public class DisplayAreaPolicyTests {
                 FEATURE_VENDOR_FIRST + 5);
         final TaskDisplayArea taskDisplayArea5 = new TaskDisplayArea(displayContent, wms, "Tasks5",
                 FEATURE_VENDOR_FIRST + 6);
-        final DisplayArea<WindowContainer> ime = new DisplayArea<>(wms, ABOVE_TASKS, "Ime");
+        final DisplayArea.Tokens ime = new DisplayArea.Tokens(wms, ABOVE_TASKS, "Ime");
         final DisplayAreaPolicy policy = new DisplayAreaPolicyBuilder()
                 .setRootHierarchy(new DisplayAreaPolicyBuilder.HierarchyBuilder(root)
                         .setImeContainer(ime)
@@ -155,11 +155,11 @@ public class DisplayAreaPolicyTests {
                 .addDisplayAreaGroupHierarchy(new DisplayAreaPolicyBuilder.HierarchyBuilder(group2)
                         .setTaskDisplayAreas(Lists.newArrayList(taskDisplayArea5)))
                 .build(wms);
-        final Task stack1 = taskDisplayArea1.createStack(
+        final Task stack1 = taskDisplayArea1.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final Task stack3 = taskDisplayArea3.createStack(
+        final Task stack3 = taskDisplayArea3.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final Task stack4 = taskDisplayArea4.createStack(
+        final Task stack4 = taskDisplayArea4.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Initial order

@@ -77,6 +77,8 @@ import android.util.ArrayMap;
 import android.util.DisplayMetrics;
 import android.util.Singleton;
 import android.util.Size;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.view.Surface;
 import android.view.WindowInsetsController.Appearance;
 
@@ -1502,57 +1504,54 @@ public class ActivityManager {
         }
 
         /** @hide */
-        public void saveToXml(XmlSerializer out) throws IOException {
+        public void saveToXml(TypedXmlSerializer out) throws IOException {
             if (mLabel != null) {
                 out.attribute(null, ATTR_TASKDESCRIPTIONLABEL, mLabel);
             }
             if (mColorPrimary != 0) {
-                out.attribute(null, ATTR_TASKDESCRIPTIONCOLOR_PRIMARY,
-                        Integer.toHexString(mColorPrimary));
+                out.attributeIntHex(null, ATTR_TASKDESCRIPTIONCOLOR_PRIMARY, mColorPrimary);
             }
             if (mColorBackground != 0) {
-                out.attribute(null, ATTR_TASKDESCRIPTIONCOLOR_BACKGROUND,
-                        Integer.toHexString(mColorBackground));
+                out.attributeIntHex(null, ATTR_TASKDESCRIPTIONCOLOR_BACKGROUND, mColorBackground);
             }
             if (mIconFilename != null) {
                 out.attribute(null, ATTR_TASKDESCRIPTIONICON_FILENAME, mIconFilename);
             }
             if (mIcon != null && mIcon.getType() == Icon.TYPE_RESOURCE) {
-                out.attribute(null, ATTR_TASKDESCRIPTIONICON_RESOURCE,
-                        Integer.toString(mIcon.getResId()));
+                out.attributeInt(null, ATTR_TASKDESCRIPTIONICON_RESOURCE, mIcon.getResId());
                 out.attribute(null, ATTR_TASKDESCRIPTIONICON_RESOURCE_PACKAGE,
                         mIcon.getResPackage());
             }
         }
 
         /** @hide */
-        public void restoreFromXml(XmlPullParser in) {
+        public void restoreFromXml(TypedXmlPullParser in) {
             final String label = in.getAttributeValue(null, ATTR_TASKDESCRIPTIONLABEL);
             if (label != null) {
                 setLabel(label);
             }
-            final String colorPrimary = in.getAttributeValue(null,
-                    ATTR_TASKDESCRIPTIONCOLOR_PRIMARY);
-            if (colorPrimary != null) {
-                setPrimaryColor((int) Long.parseLong(colorPrimary, 16));
+            final int colorPrimary = in.getAttributeIntHex(null,
+                    ATTR_TASKDESCRIPTIONCOLOR_PRIMARY, 0);
+            if (colorPrimary != 0) {
+                setPrimaryColor(colorPrimary);
             }
-            final String colorBackground = in.getAttributeValue(null,
-                    ATTR_TASKDESCRIPTIONCOLOR_BACKGROUND);
-            if (colorBackground != null) {
-                setBackgroundColor((int) Long.parseLong(colorBackground, 16));
+            final int colorBackground = in.getAttributeIntHex(null,
+                    ATTR_TASKDESCRIPTIONCOLOR_BACKGROUND, 0);
+            if (colorBackground != 0) {
+                setBackgroundColor(colorBackground);
             }
             final String iconFilename = in.getAttributeValue(null,
                     ATTR_TASKDESCRIPTIONICON_FILENAME);
             if (iconFilename != null) {
                 setIconFilename(iconFilename);
             }
-            final String iconResourceId = in.getAttributeValue(null,
-                    ATTR_TASKDESCRIPTIONICON_RESOURCE);
+            final int iconResourceId = in.getAttributeInt(null,
+                    ATTR_TASKDESCRIPTIONICON_RESOURCE, Resources.ID_NULL);
             final String iconResourcePackage = in.getAttributeValue(null,
                     ATTR_TASKDESCRIPTIONICON_RESOURCE_PACKAGE);
-            if (iconResourceId != null && iconResourcePackage != null) {
+            if (iconResourceId != Resources.ID_NULL && iconResourcePackage != null) {
                 setIcon(Icon.createWithResource(iconResourcePackage,
-                        Integer.parseInt(iconResourceId, 10)));
+                        iconResourceId));
             }
         }
 
@@ -1854,16 +1853,12 @@ public class ActivityManager {
      * the recent tasks.
      */
     @Deprecated
-    public List<RecentTaskInfo> getRecentTasks(int maxNum, int flags)
-            throws SecurityException {
-        try {
-            if (maxNum < 0) {
-                throw new IllegalArgumentException("The requested number of tasks should be >= 0");
-            }
-            return getTaskService().getRecentTasks(maxNum, flags, mContext.getUserId()).getList();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+    public List<RecentTaskInfo> getRecentTasks(int maxNum, int flags) throws SecurityException {
+        if (maxNum < 0) {
+            throw new IllegalArgumentException("The requested number of tasks should be >= 0");
         }
+        return ActivityTaskManager.getInstance().getRecentTasks(
+                maxNum, flags, mContext.getUserId());
     }
 
     /**
@@ -2084,11 +2079,7 @@ public class ActivityManager {
     @Deprecated
     public List<RunningTaskInfo> getRunningTasks(int maxNum)
             throws SecurityException {
-        try {
-            return getTaskService().getTasks(maxNum);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return ActivityTaskManager.getInstance().getTasks(maxNum);
     }
 
     /**

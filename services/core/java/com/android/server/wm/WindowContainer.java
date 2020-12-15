@@ -98,6 +98,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -313,6 +314,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     BLASTSyncEngine.SyncGroup mSyncGroup = null;
     final SurfaceControl.Transaction mSyncTransaction;
     @SyncState int mSyncState = SYNC_STATE_NONE;
+
+    private final List<WindowContainerListener> mListeners = new ArrayList<>();
 
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
@@ -637,6 +640,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mParent != null) {
             mParent.removeChild(this);
         }
+
+        for (int i = mListeners.size() - 1; i >= 0; --i) {
+            mListeners.get(i).onRemoved();
+        }
     }
 
     /**
@@ -818,6 +825,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer child = mChildren.get(i);
             child.onDisplayChanged(dc);
+        }
+        for (int i = mListeners.size() - 1; i >= 0; --i) {
+            mListeners.get(i).onDisplayChanged(dc);
         }
     }
 
@@ -1139,26 +1149,23 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * Called when this container or one of its descendants changed its requested orientation, and
      * wants this container to handle it or pass it to its parent.
      *
-     * @param freezeDisplayToken freeze this app window token if display needs to freeze
      * @param requestingContainer the container which orientation request has changed
      * @return {@code true} if handled; {@code false} otherwise.
      */
-    boolean onDescendantOrientationChanged(@Nullable IBinder freezeDisplayToken,
-            @Nullable WindowContainer requestingContainer) {
+    boolean onDescendantOrientationChanged(@Nullable WindowContainer requestingContainer) {
         final WindowContainer parent = getParent();
         if (parent == null) {
             return false;
         }
-        return parent.onDescendantOrientationChanged(freezeDisplayToken,
-                requestingContainer);
+        return parent.onDescendantOrientationChanged(requestingContainer);
     }
 
     /**
      * Check if this container or its parent will handle orientation changes from descendants. It's
-     * different from the return value of {@link #onDescendantOrientationChanged(IBinder,
-     * WindowContainer)} in the sense that the return value of this method tells if this
-     * container or its parent will handle the request eventually, while the return value of the
-     * other method is if it handled the request synchronously.
+     * different from the return value of {@link #onDescendantOrientationChanged(WindowContainer)}
+     * in the sense that the return value of this method tells if this container or its parent will
+     * handle the request eventually, while the return value of the other method is if it handled
+     * the request synchronously.
      *
      * @return {@code true} if it handles or will handle orientation change in the future; {@code
      *         false} if it won't handle the change at anytime.
@@ -1224,14 +1231,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /**
-     * Calls {@link #setOrientation(int, IBinder, ActivityRecord)} with {@code null} to the last 2
+     * Calls {@link #setOrientation(int, WindowContainer)} with {@code null} to the last 2
      * parameters.
      *
      * @param orientation the specified orientation.
      */
     void setOrientation(int orientation) {
-        setOrientation(orientation, null /* freezeDisplayToken */,
-                null /* ActivityRecord */);
+        setOrientation(orientation, null /* requestingContainer */);
     }
 
     /**
@@ -1240,14 +1246,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      *
      * @param orientation the specified orientation. Needs to be one of {@link
      *      android.content.pm.ActivityInfo.ScreenOrientation}.
-     * @param freezeDisplayToken uses this token to freeze display if orientation change is not
-     *                           done. Display will not be frozen if this is {@code null}, which
-     *                           should only happen in tests.
      * @param requestingContainer the container which orientation request has changed. Mostly used
      *                            to ensure it gets correct configuration.
      */
-    void setOrientation(int orientation, @Nullable IBinder freezeDisplayToken,
-            @Nullable WindowContainer requestingContainer) {
+    void setOrientation(int orientation, @Nullable WindowContainer requestingContainer) {
         if (mOrientation == orientation) {
             return;
         }
@@ -1259,7 +1261,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 // Resolve the requested orientation.
                 onConfigurationChanged(parent.getConfiguration());
             }
-            onDescendantOrientationChanged(freezeDisplayToken, requestingContainer);
+            onDescendantOrientationChanged(requestingContainer);
         }
     }
 
@@ -3113,5 +3115,20 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // This container's situation has changed so we need to restart its sync.
         mSyncState = SYNC_STATE_NONE;
         prepareSync();
+    }
+
+    void registerWindowContainerListener(WindowContainerListener listener) {
+        if (mListeners.contains(listener)) {
+            return;
+        }
+        mListeners.add(listener);
+        // Also register to ConfigurationChangeListener to receive configuration changes.
+        registerConfigurationChangeListener(listener);
+        listener.onDisplayChanged(getDisplayContent());
+    }
+
+    void unregisterWindowContainerListener(WindowContainerListener listener) {
+        mListeners.remove(listener);
+        unregisterConfigurationChangeListener(listener);
     }
 }

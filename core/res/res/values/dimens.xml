@@ -553,6 +553,9 @@
     <!-- Width of the outline stroke used by the accessibility screen magnification indicator -->
     <dimen name="accessibility_magnification_indicator_width">4dip</dimen>
 
+    <!-- Width of the outline stroke used by the accessibility focus rectangle -->
+    <dimen name="accessibility_focus_highlight_stroke_width">4dp</dimen>
+
     <!-- Margin around the various security views -->
     <dimen name="keyguard_muliuser_selector_margin">8dp</dimen>
 
@@ -714,6 +717,10 @@
     <dimen name="notification_right_icon_headerless_margin">12dp</dimen>
     <!-- The top margin of the right icon in the "big" notification states -->
     <dimen name="notification_right_icon_big_margin_top">16dp</dimen>
+    <!-- The size of the left icon -->
+    <dimen name="notification_left_icon_size">@dimen/notification_icon_circle_size</dimen>
+    <!-- The left padding of the left icon -->
+    <dimen name="notification_left_icon_start">@dimen/notification_icon_circle_start</dimen>
     <!-- The alpha of a disabled notification button -->
     <item type="dimen" format="float" name="notification_action_disabled_alpha">0.5</item>
 

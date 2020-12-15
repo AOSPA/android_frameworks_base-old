@@ -52,10 +52,13 @@ import android.service.notification.RankingHelperProto;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.IntArray;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.util.StatsEvent;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.R;
@@ -168,6 +171,8 @@ public class PreferencesHelper implements RankingConfig {
     private final AppOpsManager mAppOps;
 
     private SparseBooleanArray mBadgingEnabled;
+    private SparseBooleanArray mLockScreenShowNotifications;
+    private SparseBooleanArray mLockScreenPrivateNotifications;
     private boolean mBubblesEnabledGlobally = DEFAULT_GLOBAL_ALLOW_BUBBLE;
     private boolean mIsMediaNotificationFilteringEnabled = DEFAULT_MEDIA_NOTIFICATION_FILTERING;
     private boolean mAreChannelsBypassingDnd;
@@ -195,21 +200,15 @@ public class PreferencesHelper implements RankingConfig {
         syncChannelsBypassingDnd(mContext.getUserId());
     }
 
-    public void readXml(XmlPullParser parser, boolean forRestore, int userId)
+    public void readXml(TypedXmlPullParser parser, boolean forRestore, int userId)
             throws XmlPullParserException, IOException {
         int type = parser.getEventType();
         if (type != XmlPullParser.START_TAG) return;
         String tag = parser.getName();
         if (!TAG_RANKING.equals(tag)) return;
 
-        boolean upgradeForBubbles = false;
-        if (parser.getAttributeCount() > 0) {
-            String attribute = parser.getAttributeName(0);
-            if (ATT_VERSION.equals(attribute)) {
-                int xmlVersion = Integer.parseInt(parser.getAttributeValue(0));
-                upgradeForBubbles = xmlVersion == XML_VERSION_BUBBLES_UPGRADE;
-            }
-        }
+        final int xmlVersion = parser.getAttributeInt(null, ATT_VERSION, -1);
+        boolean upgradeForBubbles = xmlVersion == XML_VERSION_BUBBLES_UPGRADE;
         synchronized (mPackagePreferences) {
             while ((type = parser.next()) != XmlPullParser.END_DOCUMENT) {
                 tag = parser.getName();
@@ -221,10 +220,10 @@ public class PreferencesHelper implements RankingConfig {
                         if (forRestore && userId != UserHandle.USER_SYSTEM) {
                             continue;
                         }
-                        mHideSilentStatusBarIcons = XmlUtils.readBooleanAttribute(
-                                parser, ATT_HIDE_SILENT, DEFAULT_HIDE_SILENT_STATUS_BAR_ICONS);
+                        mHideSilentStatusBarIcons = parser.getAttributeBoolean(null,
+                                ATT_HIDE_SILENT, DEFAULT_HIDE_SILENT_STATUS_BAR_ICONS);
                     } else if (TAG_PACKAGE.equals(tag)) {
-                        int uid = XmlUtils.readIntAttribute(parser, ATT_UID, UNKNOWN_UID);
+                        int uid = parser.getAttributeInt(null, ATT_UID, UNKNOWN_UID);
                         String name = parser.getAttributeValue(null, ATT_NAME);
                         if (!TextUtils.isEmpty(name)) {
                             if (forRestore) {
@@ -243,36 +242,36 @@ public class PreferencesHelper implements RankingConfig {
                             }
                             int bubblePref = hasSAWPermission
                                     ? BUBBLE_PREFERENCE_ALL
-                                    : XmlUtils.readIntAttribute(parser, ATT_ALLOW_BUBBLE,
-                                            DEFAULT_BUBBLE_PREFERENCE);
+                                    : parser.getAttributeInt(
+                                            null, ATT_ALLOW_BUBBLE, DEFAULT_BUBBLE_PREFERENCE);
 
                             PackagePreferences r = getOrCreatePackagePreferencesLocked(
                                     name, userId, uid,
-                                    XmlUtils.readIntAttribute(
-                                            parser, ATT_IMPORTANCE, DEFAULT_IMPORTANCE),
-                                    XmlUtils.readIntAttribute(parser, ATT_PRIORITY,
-                                            DEFAULT_PRIORITY),
-                                    XmlUtils.readIntAttribute(
-                                            parser, ATT_VISIBILITY, DEFAULT_VISIBILITY),
-                                    XmlUtils.readBooleanAttribute(
-                                            parser, ATT_SHOW_BADGE, DEFAULT_SHOW_BADGE),
+                                    parser.getAttributeInt(
+                                            null, ATT_IMPORTANCE, DEFAULT_IMPORTANCE),
+                                    parser.getAttributeInt(
+                                            null, ATT_PRIORITY, DEFAULT_PRIORITY),
+                                    parser.getAttributeInt(
+                                            null, ATT_VISIBILITY, DEFAULT_VISIBILITY),
+                                    parser.getAttributeBoolean(
+                                            null, ATT_SHOW_BADGE, DEFAULT_SHOW_BADGE),
                                     bubblePref);
-                            r.importance = XmlUtils.readIntAttribute(
-                                    parser, ATT_IMPORTANCE, DEFAULT_IMPORTANCE);
-                            r.priority = XmlUtils.readIntAttribute(
-                                    parser, ATT_PRIORITY, DEFAULT_PRIORITY);
-                            r.visibility = XmlUtils.readIntAttribute(
-                                    parser, ATT_VISIBILITY, DEFAULT_VISIBILITY);
-                            r.showBadge = XmlUtils.readBooleanAttribute(
-                                    parser, ATT_SHOW_BADGE, DEFAULT_SHOW_BADGE);
-                            r.lockedAppFields = XmlUtils.readIntAttribute(parser,
-                                    ATT_APP_USER_LOCKED_FIELDS, DEFAULT_LOCKED_APP_FIELDS);
-                            r.hasSentInvalidMessage = XmlUtils.readBooleanAttribute(
-                                    parser, ATT_SENT_INVALID_MESSAGE, false);
-                            r.hasSentValidMessage = XmlUtils.readBooleanAttribute(
-                                    parser, ATT_SENT_VALID_MESSAGE, false);
-                            r.userDemotedMsgApp = XmlUtils.readBooleanAttribute(
-                                    parser, ATT_USER_DEMOTED_INVALID_MSG_APP, false);
+                            r.importance = parser.getAttributeInt(
+                                    null, ATT_IMPORTANCE, DEFAULT_IMPORTANCE);
+                            r.priority = parser.getAttributeInt(
+                                    null, ATT_PRIORITY, DEFAULT_PRIORITY);
+                            r.visibility = parser.getAttributeInt(
+                                    null, ATT_VISIBILITY, DEFAULT_VISIBILITY);
+                            r.showBadge = parser.getAttributeBoolean(
+                                    null, ATT_SHOW_BADGE, DEFAULT_SHOW_BADGE);
+                            r.lockedAppFields = parser.getAttributeInt(
+                                    null, ATT_APP_USER_LOCKED_FIELDS, DEFAULT_LOCKED_APP_FIELDS);
+                            r.hasSentInvalidMessage = parser.getAttributeBoolean(
+                                    null, ATT_SENT_INVALID_MESSAGE, false);
+                            r.hasSentValidMessage = parser.getAttributeBoolean(
+                                    null, ATT_SENT_VALID_MESSAGE, false);
+                            r.userDemotedMsgApp = parser.getAttributeBoolean(
+                                    null, ATT_USER_DEMOTED_INVALID_MSG_APP, false);
 
                             final int innerDepth = parser.getDepth();
                             while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
@@ -307,8 +306,8 @@ public class PreferencesHelper implements RankingConfig {
                                     }
                                     String id = parser.getAttributeValue(null, ATT_ID);
                                     String channelName = parser.getAttributeValue(null, ATT_NAME);
-                                    int channelImportance = XmlUtils.readIntAttribute(
-                                            parser, ATT_IMPORTANCE, DEFAULT_IMPORTANCE);
+                                    int channelImportance = parser.getAttributeInt(
+                                            null, ATT_IMPORTANCE, DEFAULT_IMPORTANCE);
                                     if (!TextUtils.isEmpty(id) && !TextUtils.isEmpty(channelName)) {
                                         NotificationChannel channel = new NotificationChannel(id,
                                                 channelName, channelImportance);
@@ -338,14 +337,13 @@ public class PreferencesHelper implements RankingConfig {
                                 // Delegate
                                 if (TAG_DELEGATE.equals(tagName)) {
                                     int delegateId =
-                                            XmlUtils.readIntAttribute(parser, ATT_UID, UNKNOWN_UID);
+                                            parser.getAttributeInt(null, ATT_UID, UNKNOWN_UID);
                                     String delegateName =
                                             XmlUtils.readStringAttribute(parser, ATT_NAME);
-                                    boolean delegateEnabled = XmlUtils.readBooleanAttribute(
-                                            parser, ATT_ENABLED, Delegate.DEFAULT_ENABLED);
-                                    boolean userAllowed = XmlUtils.readBooleanAttribute(
-                                            parser, ATT_USER_ALLOWED,
-                                            Delegate.DEFAULT_USER_ALLOWED);
+                                    boolean delegateEnabled = parser.getAttributeBoolean(
+                                            null, ATT_ENABLED, Delegate.DEFAULT_ENABLED);
+                                    boolean userAllowed = parser.getAttributeBoolean(
+                                            null, ATT_USER_ALLOWED, Delegate.DEFAULT_USER_ALLOWED);
                                     Delegate d = null;
                                     if (delegateId != UNKNOWN_UID && !TextUtils.isEmpty(
                                             delegateName)) {
@@ -502,13 +500,13 @@ public class PreferencesHelper implements RankingConfig {
         return true;
     }
 
-    public void writeXml(XmlSerializer out, boolean forBackup, int userId) throws IOException {
+    public void writeXml(TypedXmlSerializer out, boolean forBackup, int userId) throws IOException {
         out.startTag(null, TAG_RANKING);
-        out.attribute(null, ATT_VERSION, Integer.toString(XML_VERSION));
+        out.attributeInt(null, ATT_VERSION, XML_VERSION);
         if (mHideSilentStatusBarIcons != DEFAULT_HIDE_SILENT_STATUS_BAR_ICONS
                 && (!forBackup || userId == UserHandle.USER_SYSTEM)) {
             out.startTag(null, TAG_STATUS_ICONS);
-            out.attribute(null, ATT_HIDE_SILENT, String.valueOf(mHideSilentStatusBarIcons));
+            out.attributeBoolean(null, ATT_HIDE_SILENT, mHideSilentStatusBarIcons);
             out.endTag(null, TAG_STATUS_ICONS);
         }
 
@@ -536,42 +534,41 @@ public class PreferencesHelper implements RankingConfig {
                     out.startTag(null, TAG_PACKAGE);
                     out.attribute(null, ATT_NAME, r.pkg);
                     if (r.importance != DEFAULT_IMPORTANCE) {
-                        out.attribute(null, ATT_IMPORTANCE, Integer.toString(r.importance));
+                        out.attributeInt(null, ATT_IMPORTANCE, r.importance);
                     }
                     if (r.priority != DEFAULT_PRIORITY) {
-                        out.attribute(null, ATT_PRIORITY, Integer.toString(r.priority));
+                        out.attributeInt(null, ATT_PRIORITY, r.priority);
                     }
                     if (r.visibility != DEFAULT_VISIBILITY) {
-                        out.attribute(null, ATT_VISIBILITY, Integer.toString(r.visibility));
+                        out.attributeInt(null, ATT_VISIBILITY, r.visibility);
                     }
                     if (r.bubblePreference != DEFAULT_BUBBLE_PREFERENCE) {
-                        out.attribute(null, ATT_ALLOW_BUBBLE, Integer.toString(r.bubblePreference));
+                        out.attributeInt(null, ATT_ALLOW_BUBBLE, r.bubblePreference);
                     }
-                    out.attribute(null, ATT_SHOW_BADGE, Boolean.toString(r.showBadge));
-                    out.attribute(null, ATT_APP_USER_LOCKED_FIELDS,
-                            Integer.toString(r.lockedAppFields));
-                    out.attribute(null, ATT_SENT_INVALID_MESSAGE,
-                            Boolean.toString(r.hasSentInvalidMessage));
-                    out.attribute(null, ATT_SENT_VALID_MESSAGE,
-                            Boolean.toString(r.hasSentValidMessage));
-                    out.attribute(null, ATT_USER_DEMOTED_INVALID_MSG_APP,
-                            Boolean.toString(r.userDemotedMsgApp));
+                    out.attributeBoolean(null, ATT_SHOW_BADGE, r.showBadge);
+                    out.attributeInt(null, ATT_APP_USER_LOCKED_FIELDS,
+                            r.lockedAppFields);
+                    out.attributeBoolean(null, ATT_SENT_INVALID_MESSAGE,
+                            r.hasSentInvalidMessage);
+                    out.attributeBoolean(null, ATT_SENT_VALID_MESSAGE,
+                            r.hasSentValidMessage);
+                    out.attributeBoolean(null, ATT_USER_DEMOTED_INVALID_MSG_APP,
+                            r.userDemotedMsgApp);
 
                     if (!forBackup) {
-                        out.attribute(null, ATT_UID, Integer.toString(r.uid));
+                        out.attributeInt(null, ATT_UID, r.uid);
                     }
 
                     if (r.delegate != null) {
                         out.startTag(null, TAG_DELEGATE);
 
                         out.attribute(null, ATT_NAME, r.delegate.mPkg);
-                        out.attribute(null, ATT_UID, Integer.toString(r.delegate.mUid));
+                        out.attributeInt(null, ATT_UID, r.delegate.mUid);
                         if (r.delegate.mEnabled != Delegate.DEFAULT_ENABLED) {
-                            out.attribute(null, ATT_ENABLED, Boolean.toString(r.delegate.mEnabled));
+                            out.attributeBoolean(null, ATT_ENABLED, r.delegate.mEnabled);
                         }
                         if (r.delegate.mUserAllowed != Delegate.DEFAULT_USER_ALLOWED) {
-                            out.attribute(null, ATT_USER_ALLOWED,
-                                    Boolean.toString(r.delegate.mUserAllowed));
+                            out.attributeBoolean(null, ATT_USER_ALLOWED, r.delegate.mUserAllowed);
                         }
                         out.endTag(null, TAG_DELEGATE);
                     }
@@ -1385,36 +1382,39 @@ public class PreferencesHelper implements RankingConfig {
         return null;
     }
 
-    public ArrayList<ConversationChannelWrapper> getConversations(boolean onlyImportant) {
+    public ArrayList<ConversationChannelWrapper> getConversations(IntArray userIds,
+            boolean onlyImportant) {
         synchronized (mPackagePreferences) {
             ArrayList<ConversationChannelWrapper> conversations = new ArrayList<>();
-
             for (PackagePreferences p : mPackagePreferences.values()) {
-                int N = p.channels.size();
-                for (int i = 0; i < N; i++) {
-                    final NotificationChannel nc = p.channels.valueAt(i);
-                    if (!TextUtils.isEmpty(nc.getConversationId()) && !nc.isDeleted()
-                            && !nc.isDemoted()
-                            && (nc.isImportantConversation() || !onlyImportant)) {
-                        ConversationChannelWrapper conversation = new ConversationChannelWrapper();
-                        conversation.setPkg(p.pkg);
-                        conversation.setUid(p.uid);
-                        conversation.setNotificationChannel(nc);
-                        conversation.setParentChannelLabel(
-                                p.channels.get(nc.getParentChannelId()).getName());
-                        boolean blockedByGroup = false;
-                        if (nc.getGroup() != null) {
-                            NotificationChannelGroup group = p.groups.get(nc.getGroup());
-                            if (group != null) {
-                                if (group.isBlocked()) {
-                                    blockedByGroup = true;
-                                } else {
-                                    conversation.setGroupLabel(group.getName());
+                if (userIds.binarySearch(UserHandle.getUserId(p.uid)) >= 0) {
+                    int N = p.channels.size();
+                    for (int i = 0; i < N; i++) {
+                        final NotificationChannel nc = p.channels.valueAt(i);
+                        if (!TextUtils.isEmpty(nc.getConversationId()) && !nc.isDeleted()
+                                && !nc.isDemoted()
+                                && (nc.isImportantConversation() || !onlyImportant)) {
+                            ConversationChannelWrapper conversation =
+                                    new ConversationChannelWrapper();
+                            conversation.setPkg(p.pkg);
+                            conversation.setUid(p.uid);
+                            conversation.setNotificationChannel(nc);
+                            conversation.setParentChannelLabel(
+                                    p.channels.get(nc.getParentChannelId()).getName());
+                            boolean blockedByGroup = false;
+                            if (nc.getGroup() != null) {
+                                NotificationChannelGroup group = p.groups.get(nc.getGroup());
+                                if (group != null) {
+                                    if (group.isBlocked()) {
+                                        blockedByGroup = true;
+                                    } else {
+                                        conversation.setGroupLabel(group.getName());
+                                    }
                                 }
                             }
-                        }
-                        if (!blockedByGroup) {
-                            conversations.add(conversation);
+                            if (!blockedByGroup) {
+                                conversations.add(conversation);
+                            }
                         }
                     }
                 }
@@ -2405,6 +2405,60 @@ public class PreferencesHelper implements RankingConfig {
                             DEFAULT_SHOW_BADGE ? 1 : 0, userId) != 0);
         }
         return mBadgingEnabled.get(userId, DEFAULT_SHOW_BADGE);
+    }
+
+    public void updateLockScreenPrivateNotifications() {
+        if (mLockScreenPrivateNotifications == null) {
+            mLockScreenPrivateNotifications = new SparseBooleanArray();
+        }
+        boolean changed = false;
+        // update the cached values
+        for (int index = 0; index < mLockScreenPrivateNotifications.size(); index++) {
+            int userId = mLockScreenPrivateNotifications.keyAt(index);
+            final boolean oldValue = mLockScreenPrivateNotifications.get(userId);
+            final boolean newValue = Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                    Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, 1, userId) != 0;
+            mLockScreenPrivateNotifications.put(userId, newValue);
+            changed |= oldValue != newValue;
+        }
+        if (changed) {
+            updateConfig();
+        }
+    }
+
+    public void updateLockScreenShowNotifications() {
+        if (mLockScreenShowNotifications == null) {
+            mLockScreenShowNotifications = new SparseBooleanArray();
+        }
+        boolean changed = false;
+        // update the cached values
+        for (int index = 0; index < mLockScreenShowNotifications.size(); index++) {
+            int userId = mLockScreenShowNotifications.keyAt(index);
+            final boolean oldValue = mLockScreenShowNotifications.get(userId);
+            final boolean newValue = Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                    Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS, 1, userId) != 0;
+            mLockScreenShowNotifications.put(userId, newValue);
+            changed |= oldValue != newValue;
+        }
+        if (changed) {
+            updateConfig();
+        }
+    }
+
+    @Override
+    public boolean canShowNotificationsOnLockscreen(int userId) {
+        if (mLockScreenShowNotifications == null) {
+            mLockScreenShowNotifications = new SparseBooleanArray();
+        }
+        return mLockScreenShowNotifications.get(userId, true);
+    }
+
+    @Override
+    public boolean canShowPrivateNotificationsOnLockScreen(int userId) {
+        if (mLockScreenPrivateNotifications == null) {
+            mLockScreenPrivateNotifications = new SparseBooleanArray();
+        }
+        return mLockScreenPrivateNotifications.get(userId, true);
     }
 
     public void unlockAllNotificationChannels() {

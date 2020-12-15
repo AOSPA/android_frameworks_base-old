@@ -139,6 +139,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.Activity;
+import android.app.ActivityClient;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityManagerInternal;
@@ -252,6 +253,7 @@ import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
+import android.os.SharedMemory;
 import android.os.ShellCallback;
 import android.os.StrictMode;
 import android.os.SystemClock;
@@ -263,7 +265,6 @@ import android.os.UserManager;
 import android.os.WorkSource;
 import android.os.storage.IStorageManager;
 import android.os.storage.StorageManager;
-import android.permission.PermissionManagerInternal.CheckPermissionDelegate;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.server.ServerProtoEnums;
@@ -287,7 +288,6 @@ import android.util.SparseIntArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.util.proto.ProtoUtils;
-import android.view.Display;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -328,7 +328,6 @@ import com.android.internal.util.MemInfoReader;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.HeptFunction;
 import com.android.internal.util.function.QuadFunction;
-import com.android.internal.util.function.TriFunction;
 import com.android.server.AlarmManagerInternal;
 import com.android.server.AttributeCache;
 import com.android.server.DeviceIdleInternal;
@@ -351,6 +350,7 @@ import com.android.server.appop.AppOpsService;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.firewall.IntentFirewall;
+import com.android.server.graphics.fonts.FontManagerInternal;
 import com.android.server.job.JobSchedulerInternal;
 import com.android.server.pm.Installer;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
@@ -397,7 +397,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.function.BiFunction;
 
 public class ActivityManagerService extends IActivityManager.Stub
         implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback {
@@ -2921,12 +2920,13 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public final boolean finishActivity(IBinder token, int resultCode, Intent resultData,
             int finishTask) {
-        return mActivityTaskManager.finishActivity(token, resultCode, resultData, finishTask);
+        return ActivityClient.getInstance().finishActivity(token, resultCode, resultData,
+                finishTask);
     }
 
     @Override
     public void setRequestedOrientation(IBinder token, int requestedOrientation) {
-        mActivityTaskManager.setRequestedOrientation(token, requestedOrientation);
+        ActivityClient.getInstance().setRequestedOrientation(token, requestedOrientation);
     }
 
     @Override
@@ -4434,6 +4434,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                             app.info.packageName);
                 }
             }
+            SharedMemory serializedSystemFontMap = null;
+            final FontManagerInternal fm = LocalServices.getService(FontManagerInternal.class);
+            if (fm != null) {
+                serializedSystemFontMap = fm.getSerializedSystemFontMap();
+            }
 
             checkTime(startTime, "attachApplicationLocked: immediately before bindApplication");
             bindApplicationTimeMillis = SystemClock.elapsedRealtime();
@@ -4459,7 +4464,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         app.compat, getCommonServicesLocked(app.isolated),
                         mCoreSettingsObserver.getCoreSettingsLocked(),
                         buildSerial, autofillOptions, contentCaptureOptions,
-                        app.mDisabledCompatChanges);
+                        app.mDisabledCompatChanges, serializedSystemFontMap);
             } else {
                 thread.bindApplication(processName, appInfo, providerList, null, profilerInfo,
                         null, null, null, testMode,
@@ -4469,7 +4474,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         app.compat, getCommonServicesLocked(app.isolated),
                         mCoreSettingsObserver.getCoreSettingsLocked(),
                         buildSerial, autofillOptions, contentCaptureOptions,
-                        app.mDisabledCompatChanges);
+                        app.mDisabledCompatChanges, serializedSystemFontMap);
             }
             if (profilerInfo != null) {
                 profilerInfo.closeFd();
@@ -5720,7 +5725,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public List<RunningTaskInfo> getTasks(int maxNum) {
-        return mActivityTaskManager.getTasks(maxNum);
+        return mActivityTaskManager.getTasks(maxNum, false /* filterForVisibleRecents */);
     }
 
     @Override
@@ -5780,7 +5785,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @Override
     public boolean moveActivityTaskToBack(IBinder token, boolean nonRoot) {
-        return mActivityTaskManager.moveActivityTaskToBack(token, nonRoot);
+        return ActivityClient.getInstance().moveActivityTaskToBack(token, nonRoot);
     }
 
     @Override
@@ -5815,7 +5820,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public int getTaskForActivity(IBinder token, boolean onlyRoot) {
-        return mActivityTaskManager.getTaskForActivity(token, onlyRoot);
+        return ActivityClient.getInstance().getTaskForActivity(token, onlyRoot);
     }
 
     @Override
@@ -6788,7 +6793,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public boolean isTopOfTask(IBinder token) {
-        return mActivityTaskManager.isTopOfTask(token);
+        return ActivityClient.getInstance().isTopOfTask(token);
     }
 
     @Override
@@ -8740,17 +8745,30 @@ public class ActivityManagerService extends IActivityManager.Stub
             } else if ("service".equals(cmd)) {
                 String[] newArgs;
                 String name;
+                int[] users = null;
                 if (opti >= args.length) {
                     name = null;
                     newArgs = EMPTY_STRING_ARRAY;
                 } else {
                     name = args[opti];
                     opti++;
+                    if ("--user".equals(name) && opti < args.length) {
+                        int userId = UserHandle.parseUserArg(args[opti]);
+                        opti++;
+                        if (userId != UserHandle.USER_ALL) {
+                            if (userId == UserHandle.USER_CURRENT) {
+                                userId = getCurrentUser().id;
+                            }
+                            users = new int[] { userId };
+                        }
+                        name = args[opti];
+                        opti++;
+                    }
                     newArgs = new String[args.length - opti];
                     if (args.length > 2) System.arraycopy(args, opti, newArgs, 0,
                             args.length - opti);
                 }
-                if (!mServices.dumpService(fd, pw, name, newArgs, 0, dumpAll)) {
+                if (!mServices.dumpService(fd, pw, name, users, newArgs, 0, dumpAll)) {
                     pw.println("No services match: " + name);
                     pw.println("Use -h for help.");
                 }
@@ -14563,7 +14581,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mAppOpsService.setMode(AppOpsManager.OP_NO_ISOLATED_STORAGE, app.uid,
                         app.info.packageName, AppOpsManager.MODE_ERRORED);
                 mAppOpsService.setAppOpsServiceDelegate(null);
-                getPermissionManagerInternalLocked().setCheckPermissionDelegate(null);
+                getPermissionManagerInternalLocked().stopShellPermissionIdentityDelegation();
                 mHandler.obtainMessage(SHUTDOWN_UI_AUTOMATION_CONNECTION_MSG,
                         instr.mUiAutomationConnection).sendToTarget();
             }
@@ -16390,14 +16408,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public ActivityPresentationInfo getActivityPresentationInfo(IBinder token) {
-            int displayId = Display.INVALID_DISPLAY;
-            try {
-                displayId = mActivityTaskManager.getDisplayId(token);
-            } catch (RemoteException e) {
-            }
-
-            return new ActivityPresentationInfo(mActivityTaskManager.getTaskForActivity(token,
-                    /*onlyRoot=*/ false), displayId,
+            final ActivityClient ac = ActivityClient.getInstance();
+            return new ActivityPresentationInfo(ac.getTaskForActivity(token,
+                    /*onlyRoot=*/ false), ac.getDisplayId(token),
                     mActivityTaskManager.getActivityClassForToken(token));
         }
 
@@ -17290,12 +17303,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // We allow delegation only to one instrumentation started from the shell
         synchronized (ActivityManagerService.this) {
-            // If there is a delegate it should be the same instance for app ops and permissions.
-            if (mAppOpsService.getAppOpsServiceDelegate()
-                    != getPermissionManagerInternalLocked().getCheckPermissionDelegate()) {
-                throw new IllegalStateException("Bad shell delegate state");
-            }
-
             // If the delegate is already set up for the target UID, nothing to do.
             if (mAppOpsService.getAppOpsServiceDelegate() != null) {
                 if (!(mAppOpsService.getAppOpsServiceDelegate() instanceof ShellDelegate)) {
@@ -17324,10 +17331,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
 
                 // Hook them up...
-                final ShellDelegate shellDelegate = new ShellDelegate(
-                        instr.mTargetInfo.packageName, delegateUid, permissions);
+                final ShellDelegate shellDelegate = new ShellDelegate(delegateUid,
+                        permissions);
                 mAppOpsService.setAppOpsServiceDelegate(shellDelegate);
-                getPermissionManagerInternalLocked().setCheckPermissionDelegate(shellDelegate);
+                final String packageName = instr.mTargetInfo.packageName;
+                final List<String> permissionNames = permissions != null ?
+                        Arrays.asList(permissions) : null;
+                getPermissionManagerInternalLocked().startShellPermissionIdentityDelegation(
+                        delegateUid, packageName, permissionNames);
                 return;
             }
         }
@@ -17341,17 +17352,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         synchronized (ActivityManagerService.this) {
             mAppOpsService.setAppOpsServiceDelegate(null);
-            getPermissionManagerInternalLocked().setCheckPermissionDelegate(null);
+            getPermissionManagerInternalLocked().stopShellPermissionIdentityDelegation();
         }
     }
 
-    private class ShellDelegate implements CheckOpsDelegate, CheckPermissionDelegate {
-        private final String mTargetPackageName;
+    private class ShellDelegate implements CheckOpsDelegate {
         private final int mTargetUid;
         private @Nullable String[] mPermissions;
 
-        ShellDelegate(String targetPackageName, int targetUid, @Nullable String[] permissions) {
-            mTargetPackageName = targetPackageName;
+        ShellDelegate(int targetUid, @Nullable String[] permissions) {
             mTargetUid = targetUid;
             mPermissions = permissions;
         }
@@ -17412,34 +17421,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             return superImpl.apply(code, uid, packageName, featureId, shouldCollectAsyncNotedOp,
                     message, shouldCollectMessage);
-        }
-
-        @Override
-        public int checkPermission(String permName, String pkgName, int userId,
-                TriFunction<String, String, Integer, Integer> superImpl) {
-            if (mTargetPackageName.equals(pkgName) && isTargetPermission(permName)) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    return superImpl.apply(permName, "com.android.shell", userId);
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
-                }
-            }
-            return superImpl.apply(permName, pkgName, userId);
-        }
-
-        @Override
-        public int checkUidPermission(String permName, int uid,
-                BiFunction<String, Integer, Integer> superImpl) {
-            if (uid == mTargetUid  && isTargetPermission(permName)) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    return superImpl.apply(permName, Process.SHELL_UID);
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
-                }
-            }
-            return superImpl.apply(permName, uid);
         }
 
         private boolean isTargetOp(int code) {
