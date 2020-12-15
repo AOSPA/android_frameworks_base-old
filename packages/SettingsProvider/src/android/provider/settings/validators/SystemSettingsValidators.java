@@ -38,12 +38,6 @@ import java.util.Map;
  * Validators for System settings
  */
 public class SystemSettingsValidators {
-    /**
-     * These are all public system settings
-     *
-     * <p>All settings in {@link System.SETTINGS_TO_BACKUP} array *must* have a non-null validator,
-     * otherwise they won't be restored.
-     */
     @UnsupportedAppUsage
     public static final Map<String, Validator> VALIDATORS = new ArrayMap<>();
 
@@ -89,15 +83,7 @@ public class SystemSettingsValidators {
                         return value == null || value.length() < MAX_LENGTH;
                     }
                 });
-        VALIDATORS.put(
-                System.FONT_SCALE,
-                value -> {
-                    try {
-                        return Float.parseFloat(value) >= 0;
-                    } catch (NumberFormatException | NullPointerException e) {
-                        return false;
-                    }
-                });
+        VALIDATORS.put(System.FONT_SCALE, new InclusiveFloatRangeValidator(0.85f, 1.3f));
         VALIDATORS.put(System.DIM_SCREEN, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
                 System.DISPLAY_COLOR_MODE,

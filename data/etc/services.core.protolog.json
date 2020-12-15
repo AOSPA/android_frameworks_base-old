@@ -85,6 +85,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "-2014162875": {
+      "message": "Could not register window container listener token=%s, container=%s",
+      "level": "ERROR",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowContextListenerController.java"
+    },
     "-2012562539": {
       "message": "startAnimation(): Notify animation start:",
       "level": "DEBUG",
@@ -799,12 +805,6 @@
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimation.java"
     },
-    "-1155279885": {
-      "message": "Frontmost changed immersion: %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_IMMERSIVE",
-      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
-    },
     "-1144293044": {
       "message": "SURFACE SET FREEZE LAYER: %s",
       "level": "INFO",
@@ -816,6 +816,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_FOCUS",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
+    },
+    "-1136467585": {
+      "message": "The listener does not exist.",
+      "level": "INFO",
+      "group": "WM_DEBUG_ADD_REMOVE",
+      "at": "com\/android\/server\/wm\/WindowContextListenerController.java"
     },
     "-1136139407": {
       "message": "no-history finish of %s",
@@ -1219,6 +1225,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
     },
+    "-655104359": {
+      "message": "Frontmost changed immersion: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_IMMERSIVE",
+      "at": "com\/android\/server\/wm\/ActivityClientController.java"
+    },
     "-653156702": {
       "message": "createAppAnimations()",
       "level": "DEBUG",
@@ -1573,12 +1585,6 @@
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/Task.java"
     },
-    "-272719931": {
-      "message": "startLockTaskModeLocked: %s",
-      "level": "WARN",
-      "group": "WM_DEBUG_LOCKTASK",
-      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
-    },
     "-262984451": {
       "message": "Relaunch failed %s",
       "level": "INFO",
@@ -1825,6 +1831,18 @@
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
     },
+    "90764070": {
+      "message": "Could not report token removal to the window token client.",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowContextListenerController.java"
+    },
+    "91350919": {
+      "message": "Attempted to set IME flag to a display that does not exist: %d",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
     "94402792": {
       "message": "Moving to RESUMED: %s (in existing)",
       "level": "VERBOSE",
@@ -1969,6 +1987,12 @@
       "group": "WM_DEBUG_WINDOW_ORGANIZER",
       "at": "com\/android\/server\/wm\/TaskOrganizerController.java"
     },
+    "236210101": {
+      "message": "registerWindowContextListener: trying to add listener to a non-existing display:%d",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
     "241961619": {
       "message": "Adding %s to %s",
       "level": "VERBOSE",
@@ -2046,6 +2070,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayRotation.java"
+    },
+    "295861935": {
+      "message": "startLockTaskMode: %s",
+      "level": "WARN",
+      "group": "WM_DEBUG_LOCKTASK",
+      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
     },
     "302969511": {
       "message": "Task info changed taskId=%d",
@@ -2557,6 +2587,12 @@
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/TaskDisplayArea.java"
     },
+    "883475718": {
+      "message": "Report configuration: %s %s %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_CONFIGURATION",
+      "at": "com\/android\/server\/wm\/ActivityClientController.java"
+    },
     "892244061": {
       "message": "Waiting for drawn %s: removed=%b visible=%b mHasSurface=%b drawState=%d",
       "level": "INFO",
@@ -2748,6 +2784,12 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "1105210816": {
+      "message": "Skipping config check in destroyed state %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_CONFIGURATION",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "1112047265": {
       "message": "finishDrawingWindow: %s mDrawState=%s",
@@ -3091,12 +3133,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "1576607724": {
-      "message": "Report configuration: %s %s %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_CONFIGURATION",
-      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
-    },
     "1577579529": {
       "message": "win=%s destroySurfaces: appStopped=%b win.mWindowRemovalAllowed=%b win.mRemoveOnExit=%b",
       "level": "ERROR",
@@ -3396,6 +3432,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
+    },
+    "1948483534": {
+      "message": "Could not report config changes to the window token client.",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowContextListenerController.java"
     },
     "1964565370": {
       "message": "Starting remote animation",

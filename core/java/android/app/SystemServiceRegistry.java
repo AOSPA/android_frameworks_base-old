@@ -194,6 +194,7 @@ import android.telephony.TelephonyRegistryManager;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
+import android.uwb.UwbManager;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.WindowManager;
@@ -284,8 +285,7 @@ public final class SystemServiceRegistry {
                 new CachedServiceFetcher<ActivityTaskManager>() {
             @Override
             public ActivityTaskManager createService(ContextImpl ctx) {
-                return new ActivityTaskManager(
-                        ctx.getOuterContext(), ctx.mMainThread.getHandler());
+                return ActivityTaskManager.getInstance();
             }});
 
         registerService(Context.URI_GRANTS_SERVICE, UriGrantsManager.class,
@@ -732,6 +732,14 @@ public final class SystemServiceRegistry {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.SERIAL_SERVICE);
                 return new SerialManager(ctx, ISerialManager.Stub.asInterface(b));
             }});
+
+        registerService(Context.UWB_SERVICE, UwbManager.class,
+                new CachedServiceFetcher<UwbManager>() {
+                    @Override
+                    public UwbManager createService(ContextImpl ctx) {
+                        return UwbManager.getInstance();
+                    }
+                });
 
         registerService(Context.VIBRATOR_SERVICE, Vibrator.class,
                 new CachedServiceFetcher<Vibrator>() {

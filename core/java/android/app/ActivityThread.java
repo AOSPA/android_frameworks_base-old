@@ -85,6 +85,8 @@ import android.database.sqlite.SQLiteDebug.DbStats;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.HardwareRenderer;
+import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.hardware.display.DisplayManagerGlobal;
 import android.inputmethodservice.InputMethodService;
 import android.media.MediaFrameworkInitializer;
@@ -117,6 +119,7 @@ import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.SharedMemory;
 import android.os.StatsFrameworkInitializer;
 import android.os.StatsServiceManager;
 import android.os.StrictMode;
@@ -845,6 +848,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         long[] disabledCompatChanges;
 
+        SharedMemory mSerializedSystemFontMap;
+
         @Override
         public String toString() {
             return "AppBindData{appInfo=" + appInfo + "}";
@@ -1055,7 +1060,8 @@ public final class ActivityThread extends ClientTransactionHandler {
                 boolean isRestrictedBackupMode, boolean persistent, Configuration config,
                 CompatibilityInfo compatInfo, Map services, Bundle coreSettings,
                 String buildSerial, AutofillOptions autofillOptions,
-                ContentCaptureOptions contentCaptureOptions, long[] disabledCompatChanges) {
+                ContentCaptureOptions contentCaptureOptions, long[] disabledCompatChanges,
+                SharedMemory serializedSystemFontMap) {
             if (services != null) {
                 if (false) {
                     // Test code to make sure the app could see the passed-in services.
@@ -1104,6 +1110,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             data.autofillOptions = autofillOptions;
             data.contentCaptureOptions = contentCaptureOptions;
             data.disabledCompatChanges = disabledCompatChanges;
+            data.mSerializedSystemFontMap = serializedSystemFontMap;
             sendMessage(H.BIND_APPLICATION, data);
         }
 
@@ -2149,7 +2156,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
             if (a != null) {
                 mNewActivities = null;
-                IActivityTaskManager am = ActivityTaskManager.getService();
+                final ActivityClient ac = ActivityClient.getInstance();
                 ActivityClientRecord prev;
                 do {
                     if (localLOGV) Slog.v(
@@ -2157,12 +2164,8 @@ public final class ActivityThread extends ClientTransactionHandler {
                         " finished=" +
                         (a.activity != null && a.activity.mFinished));
                     if (a.activity != null && !a.activity.mFinished) {
-                        try {
-                            am.activityIdle(a.token, a.createdConfig, stopProfiling);
-                            a.createdConfig = null;
-                        } catch (RemoteException ex) {
-                            throw ex.rethrowFromSystemServer();
-                        }
+                        ac.activityIdle(a.token, a.createdConfig, stopProfiling);
+                        a.createdConfig = null;
                     }
                     prev = a;
                     a = a.nextIdle;
@@ -3571,13 +3574,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     private ContextImpl createBaseContextForActivity(ActivityClientRecord r) {
-        final int displayId;
-        try {
-            displayId = ActivityTaskManager.getService().getDisplayId(r.token);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-
+        final int displayId = ActivityClient.getInstance().getDisplayId(r.token);
         ContextImpl appContext = ContextImpl.createActivityContext(
                 this, r.packageInfo, r.activityInfo, r.token, displayId, r.overrideConfig);
 
@@ -3664,13 +3661,8 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
         } else {
             // If there was an error, for any reason, tell the activity manager to stop us.
-            try {
-                ActivityTaskManager.getService()
-                        .finishActivity(r.token, Activity.RESULT_CANCELED, null,
-                                Activity.DONT_FINISH_TASK_WITH_ACTIVITY);
-            } catch (RemoteException ex) {
-                throw ex.rethrowFromSystemServer();
-            }
+            ActivityClient.getInstance().finishActivity(r.token, Activity.RESULT_CANCELED,
+                    null /* resultData */, Activity.DONT_FINISH_TASK_WITH_ACTIVITY);
         }
 
         return a;
@@ -3700,12 +3692,8 @@ public final class ActivityThread extends ClientTransactionHandler {
                 smallest.put(config.smallestScreenWidthDp, 0);
             }
         }
-        try {
-            ActivityTaskManager.getService().reportSizeConfigurations(r.token,
-                    horizontal.copyKeys(), vertical.copyKeys(), smallest.copyKeys());
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        ActivityClient.getInstance().reportSizeConfigurations(r.token, horizontal.copyKeys(),
+                vertical.copyKeys(), smallest.copyKeys());
     }
 
     private void deliverNewIntents(ActivityClientRecord r, List<ReferrerIntent> intents) {
@@ -4554,12 +4542,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         // then go ahead and add the window.
         boolean willBeVisible = !a.mStartedActivity;
         if (!willBeVisible) {
-            try {
-                willBeVisible = ActivityTaskManager.getService().willActivityBeVisible(
-                        a.getActivityToken());
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
+            willBeVisible = ActivityClient.getInstance().willActivityBeVisible(
+                    a.getActivityToken());
         }
         if (r.window == null && !a.mFinished && willBeVisible) {
             r.window = r.activity.getWindow();
@@ -5204,11 +5188,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             ((ContextImpl) c).scheduleFinalCleanup(r.activity.getClass().getName(), "Activity");
         }
         if (finishing) {
-            try {
-                ActivityTaskManager.getService().activityDestroyed(r.token);
-            } catch (RemoteException ex) {
-                throw ex.rethrowFromSystemServer();
-            }
+            ActivityClient.getInstance().activityDestroyed(r.token);
         }
         mSomeActivitiesChanged = true;
     }
@@ -5472,13 +5452,9 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     @Override
     public void reportRelaunch(ActivityClientRecord r, PendingTransactionActions pendingActions) {
-        try {
-            ActivityTaskManager.getService().activityRelaunched(r.token);
-            if (pendingActions.shouldReportRelaunchToWindowManager() && r.window != null) {
-                r.window.reportActivityRelaunched();
-            }
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+        ActivityClient.getInstance().activityRelaunched(r.token);
+        if (pendingActions.shouldReportRelaunchToWindowManager() && r.window != null) {
+            r.window.reportActivityRelaunched();
         }
     }
 
@@ -5618,10 +5594,13 @@ public final class ActivityThread extends ClientTransactionHandler {
             // If the new config is the same as the config this Activity is already running with and
             // the override config also didn't change, then don't bother calling
             // onConfigurationChanged.
+            // TODO(b/173090263): Use diff instead after the improvement of AssetManager and
+            // ResourcesImpl constructions.
             final int diff = activity.mCurrentConfig.diffPublicOnly(newConfig);
-            if (diff == 0 && !movedToDifferentDisplay
-                    && mResourcesManager.isSameResourcesOverrideConfig(activityToken,
-                    amOverrideConfig)) {
+
+            if (diff == 0 && !shouldUpdateWindowMetricsBounds(activity.mCurrentConfig, newConfig)
+                    && !movedToDifferentDisplay && mResourcesManager.isSameResourcesOverrideConfig(
+                            activityToken, amOverrideConfig)) {
                 // Nothing significant, don't proceed with updating and reporting.
                 return null;
             } else if ((~activity.mActivityInfo.getRealConfigChanged() & diff) == 0) {
@@ -5671,6 +5650,26 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         return configToReport;
+    }
+
+    // TODO(b/173090263): Remove this method after the improvement of AssetManager and ResourcesImpl
+    // constructions.
+    /**
+     * Returns {@code true} if the metrics reported by {@link android.view.WindowMetrics} APIs
+     * should be updated.
+     *
+     * @see WindowManager#getCurrentWindowMetrics()
+     * @see WindowManager#getMaximumWindowMetrics()
+     */
+    private static boolean shouldUpdateWindowMetricsBounds(@NonNull Configuration currentConfig,
+            @NonNull Configuration newConfig) {
+        final Rect currentBounds = currentConfig.windowConfiguration.getBounds();
+        final Rect newBounds = newConfig.windowConfiguration.getBounds();
+
+        final Rect currentMaxBounds = currentConfig.windowConfiguration.getMaxBounds();
+        final Rect newMaxBounds = newConfig.windowConfiguration.getMaxBounds();
+
+        return !currentBounds.equals(newBounds) || !currentMaxBounds.equals(newMaxBounds);
     }
 
     public final void applyConfigurationToResources(Configuration config) {
@@ -5907,7 +5906,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     /**
      * Sets the supplied {@code overrideConfig} as pending for the {@code activityToken}. Calling
      * this method prevents any calls to
-     * {@link #handleActivityConfigurationChanged(IBinder, Configuration, int, boolean)} from
+     * {@link #handleActivityConfigurationChanged(ActivityClientRecord, Configuration, int)} from
      * processing any configurations older than {@code overrideConfig}.
      */
     @Override
@@ -5929,8 +5928,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     /**
      * Handle new activity configuration and/or move to a different display. This method is a noop
-     * if {@link #updatePendingActivityConfiguration(IBinder, Configuration)} has been called with
-     * a newer config than {@code overrideConfig}.
+     * if {@link #updatePendingActivityConfiguration(ActivityClientRecord, Configuration)} has been
+     * called with a newer config than {@code overrideConfig}.
      *
      * @param r Target activity record.
      * @param overrideConfig Activity override config.
@@ -5995,7 +5994,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     /**
      * Checks if the display id of activity is different from the given one. Note that
-     * {@link #INVALID_DISPLAY} means no difference.
+     * {@link Display#INVALID_DISPLAY} means no difference.
      */
     private static boolean isDifferentDisplay(@NonNull Activity activity, int displayId) {
         return displayId != INVALID_DISPLAY && displayId != activity.getDisplayId();
@@ -6413,6 +6412,15 @@ public final class ActivityThread extends ClientTransactionHandler {
          * Set the LocaleList. This may change once we create the App Context.
          */
         LocaleList.setDefault(data.config.getLocales());
+
+        if (Typeface.ENABLE_LAZY_TYPEFACE_INITIALIZATION) {
+            try {
+                Typeface.setSystemFontMap(data.mSerializedSystemFontMap);
+            } catch (IOException | ErrnoException e) {
+                Slog.e(TAG, "Failed to parse serialized system font map");
+                Typeface.loadPreinstalledSystemFontMap();
+            }
+        }
 
         synchronized (mResourcesManager) {
             /*

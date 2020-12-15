@@ -60,6 +60,7 @@ import com.android.internal.util.FrameworkStatsLog;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -296,8 +297,8 @@ public class Tuner implements AutoCloseable  {
     private Executor mOnResourceLostListenerExecutor;
 
     private Integer mDemuxHandle;
-    private Map<Integer, Descrambler> mDescramblers = new HashMap<>();
-    private List<Filter> mFilters = new ArrayList<>();
+    private Map<Integer, WeakReference<Descrambler>> mDescramblers = new HashMap<>();
+    private List<WeakReference<Filter>> mFilters = new ArrayList<WeakReference<Filter>>();
 
     private final TunerResourceManager.ResourcesReclaimListener mResourceListener =
             new TunerResourceManager.ResourcesReclaimListener() {
@@ -308,6 +309,7 @@ public class Tuner implements AutoCloseable  {
                                 .write(FrameworkStatsLog.TV_TUNER_STATE_CHANGED, mUserId,
                                     FrameworkStatsLog.TV_TUNER_STATE_CHANGED__STATE__UNKNOWN);
                     }
+                    releaseAll();
                     mHandler.sendMessage(mHandler.obtainMessage(MSG_RESOURCE_LOST));
                 }
             };
@@ -485,18 +487,28 @@ public class Tuner implements AutoCloseable  {
         if (mLnb != null) {
             mLnb.close();
         }
-        if (!mDescramblers.isEmpty()) {
-            for (Map.Entry<Integer, Descrambler> d : mDescramblers.entrySet()) {
-                d.getValue().close();
-                mTunerResourceManager.releaseDescrambler(d.getKey(), mClientId);
+        synchronized (mDescramblers) {
+            if (!mDescramblers.isEmpty()) {
+                for (Map.Entry<Integer, WeakReference<Descrambler>> d : mDescramblers.entrySet()) {
+                    Descrambler descrambler = d.getValue().get();
+                    if (descrambler != null) {
+                        descrambler.close();
+                    }
+                    mTunerResourceManager.releaseDescrambler(d.getKey(), mClientId);
+                }
+                mDescramblers.clear();
             }
-            mDescramblers.clear();
         }
-        if (!mFilters.isEmpty()) {
-            for (Filter f : mFilters) {
-                f.close();
+        synchronized (mFilters) {
+            if (!mFilters.isEmpty()) {
+                for (WeakReference<Filter> weakFilter : mFilters) {
+                    Filter filter = weakFilter.get();
+                    if (filter != null) {
+                        filter.close();
+                    }
+                }
+                mFilters.clear();
             }
-            mFilters.clear();
         }
         if (mDemuxHandle != null) {
             int res = nativeCloseDemux(mDemuxHandle);
@@ -610,7 +622,6 @@ public class Tuner implements AutoCloseable  {
                     break;
                 }
                 case MSG_RESOURCE_LOST: {
-                    releaseAll();
                     if (mOnResourceLostListener != null
                                 && mOnResourceLostListenerExecutor != null) {
                         mOnResourceLostListenerExecutor.execute(
@@ -1183,7 +1194,10 @@ public class Tuner implements AutoCloseable  {
             if (mHandler == null) {
                 mHandler = createEventHandler();
             }
-            mFilters.add(filter);
+            synchronized (mFilters) {
+                WeakReference<Filter> weakFilter = new WeakReference<Filter>(filter);
+                mFilters.add(weakFilter);
+            }
         }
         return filter;
     }
@@ -1351,7 +1365,10 @@ public class Tuner implements AutoCloseable  {
         int handle = descramblerHandle[0];
         Descrambler descrambler = nativeOpenDescramblerByHandle(handle);
         if (descrambler != null) {
-            mDescramblers.put(handle, descrambler);
+            synchronized (mDescramblers) {
+                WeakReference weakDescrambler = new WeakReference<Descrambler>(descrambler);
+                mDescramblers.put(handle, weakDescrambler);
+            }
         } else {
             mTunerResourceManager.releaseDescrambler(handle, mClientId);
         }

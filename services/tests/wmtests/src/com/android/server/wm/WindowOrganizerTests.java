@@ -387,7 +387,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
     public void testSetIgnoreOrientationRequest_taskDisplayArea() {
         removeGlobalMinSizeRestriction();
         final TaskDisplayArea taskDisplayArea = mDisplayContent.getDefaultTaskDisplayArea();
-        final Task stack = taskDisplayArea.createStack(
+        final Task stack = taskDisplayArea.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
         final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(stack).build();
         taskDisplayArea.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
@@ -425,7 +425,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
     public void testSetIgnoreOrientationRequest_displayContent() {
         removeGlobalMinSizeRestriction();
         final TaskDisplayArea taskDisplayArea = mDisplayContent.getDefaultTaskDisplayArea();
-        final Task stack = taskDisplayArea.createStack(
+        final Task stack = taskDisplayArea.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
         final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(stack).build();
         mDisplayContent.setFocusedApp(activity);
@@ -743,8 +743,8 @@ public class WindowOrganizerTests extends WindowTestsBase {
     private List<Task> getTasksCreatedByOrganizer(DisplayContent dc) {
         ArrayList<Task> out = new ArrayList<>();
         dc.forAllTaskDisplayAreas(taskDisplayArea -> {
-            for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
-                final Task t = taskDisplayArea.getStackAt(sNdx);
+            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
+                final Task t = taskDisplayArea.getRootTaskAt(sNdx);
                 if (t.mCreatedByOrganizer) out.add(t);
             }
         });
@@ -824,7 +824,8 @@ public class WindowOrganizerTests extends WindowTestsBase {
 
         final PictureInPictureParams p = new PictureInPictureParams.Builder()
                 .setAspectRatio(new Rational(1, 2)).build();
-        assertTrue(mWm.mAtmService.enterPictureInPictureMode(record.token, p));
+        assertTrue(mWm.mAtmService.mActivityClientController.enterPictureInPictureMode(
+                record.token, p));
         waitUntilHandlersIdle();
         assertNotNull(o.mInfo);
         assertNotNull(o.mInfo.pictureInPictureParams);
@@ -845,14 +846,15 @@ public class WindowOrganizerTests extends WindowTestsBase {
         final ActivityRecord record = makePipableActivity();
         final PictureInPictureParams p = new PictureInPictureParams.Builder()
                 .setAspectRatio(new Rational(1, 2)).build();
-        assertTrue(mWm.mAtmService.enterPictureInPictureMode(record.token, p));
+        assertTrue(mWm.mAtmService.mActivityClientController.enterPictureInPictureMode(
+                record.token, p));
         waitUntilHandlersIdle();
         assertNotNull(o.mInfo);
         assertNotNull(o.mInfo.pictureInPictureParams);
 
         final PictureInPictureParams p2 = new PictureInPictureParams.Builder()
                 .setAspectRatio(new Rational(3, 4)).build();
-        mWm.mAtmService.setPictureInPictureParams(record.token, p2);
+        mWm.mAtmService.mActivityClientController.setPictureInPictureParams(record.token, p2);
         waitUntilHandlersIdle();
         assertNotNull(o.mChangedInfo);
         assertNotNull(o.mChangedInfo.pictureInPictureParams);
@@ -920,7 +922,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         assertTrue(stack2.isOrganized());
 
         // Verify a back pressed does not call the organizer
-        mWm.mAtmService.onBackPressedOnTaskRoot(activity.token);
+        mWm.mAtmService.mActivityClientController.onBackPressedOnTaskRoot(activity.token);
         verify(organizer, never()).onBackPressedOnTaskRoot(any());
 
         // Enable intercepting back
@@ -928,7 +930,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
                 stack.mRemoteToken.toWindowContainerToken(), true);
 
         // Verify now that the back press does call the organizer
-        mWm.mAtmService.onBackPressedOnTaskRoot(activity.token);
+        mWm.mAtmService.mActivityClientController.onBackPressedOnTaskRoot(activity.token);
         verify(organizer, times(1)).onBackPressedOnTaskRoot(any());
 
         // Disable intercepting back
@@ -936,7 +938,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
                 stack.mRemoteToken.toWindowContainerToken(), false);
 
         // Verify now that the back press no longer calls the organizer
-        mWm.mAtmService.onBackPressedOnTaskRoot(activity.token);
+        mWm.mAtmService.mActivityClientController.onBackPressedOnTaskRoot(activity.token);
         verify(organizer, times(1)).onBackPressedOnTaskRoot(any());
     }
 

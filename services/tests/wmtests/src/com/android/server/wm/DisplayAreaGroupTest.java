@@ -61,7 +61,7 @@ public class DisplayAreaGroupTest extends WindowTestsBase {
         mTaskDisplayArea = new TaskDisplayArea(
                 mDisplayContent, mWm, "TDA1", FEATURE_VENDOR_FIRST + 1);
         mDisplayAreaGroup.addChild(mTaskDisplayArea, POSITION_TOP);
-        mDisplayContent.setLastFocusedTaskDisplayArea(mTaskDisplayArea);
+        mDisplayContent.onLastFocusedTaskDisplayAreaChanged(mTaskDisplayArea);
     }
 
     @Test
@@ -87,7 +87,7 @@ public class DisplayAreaGroupTest extends WindowTestsBase {
         final Task task = new TaskBuilder(mSupervisor)
                 .setTaskDisplayArea(mTaskDisplayArea).setCreateActivity(true).build();
         final ActivityRecord activity = task.getTopNonFinishingActivity();
-        doReturn(true).when(mDisplayContent).onDescendantOrientationChanged(any(), any());
+        doReturn(true).when(mDisplayContent).onDescendantOrientationChanged(any());
         activity.setRequestedOrientation(SCREEN_ORIENTATION_PORTRAIT);
 
         // Display is portrait, DisplayAreaGroup inherits that

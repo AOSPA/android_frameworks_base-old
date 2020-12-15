@@ -36,6 +36,7 @@ import android.content.pm.UserInfo;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.IntArray;
+import android.util.TypedXmlPullParser;
 import android.util.Xml;
 
 import com.android.server.UiServiceTestCase;
@@ -45,7 +46,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.xmlpull.v1.XmlPullParser;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
@@ -126,7 +126,7 @@ public class NotificationAssistantsTest extends UiServiceTestCase {
                 + "<service_listing approved=\"b/b\" user=\"10\" primary=\"true\" />"
                 + "</enabled_assistants>";
 
-        XmlPullParser parser = Xml.newPullParser();
+        TypedXmlPullParser parser = Xml.newFastPullParser();
         parser.setInput(new BufferedInputStream(
                 new ByteArrayInputStream(xml.toString().getBytes())), null);
         parser.nextTag();
@@ -142,24 +142,24 @@ public class NotificationAssistantsTest extends UiServiceTestCase {
         ComponentName component1 = ComponentName.unflattenFromString("package/Component1");
         ComponentName component2 = ComponentName.unflattenFromString("package/Component2");
         mAssistants.setPackageOrComponentEnabled(component1.flattenToString(), mZero.id, true,
-                true);
+                true, true);
         verify(mNm, never()).setNotificationAssistantAccessGrantedForUserInternal(
-                any(ComponentName.class), eq(mZero.id), anyBoolean());
+                any(ComponentName.class), eq(mZero.id), anyBoolean(), anyBoolean());
 
         mAssistants.setPackageOrComponentEnabled(component2.flattenToString(), mZero.id, true,
-                true);
+                true, true);
         verify(mNm, times(1)).setNotificationAssistantAccessGrantedForUserInternal(
-                component1, mZero.id, false);
+                component1, mZero.id, false, true);
     }
 
     @Test
     public void testSetPackageOrComponentEnabled_samePackage() throws Exception {
         ComponentName component1 = ComponentName.unflattenFromString("package/Component1");
         mAssistants.setPackageOrComponentEnabled(component1.flattenToString(), mZero.id, true,
-                true);
+                true, true);
         mAssistants.setPackageOrComponentEnabled(component1.flattenToString(), mZero.id, true,
-                true);
+                true, true);
         verify(mNm, never()).setNotificationAssistantAccessGrantedForUserInternal(
-                any(ComponentName.class), eq(mZero.id), anyBoolean());
+                any(ComponentName.class), eq(mZero.id), anyBoolean(), anyBoolean());
     }
 }

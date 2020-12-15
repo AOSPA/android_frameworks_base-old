@@ -839,12 +839,12 @@ public class DisplayContentTests extends WindowTestsBase {
         final DisplayContent newDisplay = createNewDisplay();
 
         final WindowState appWin = createWindow(null, TYPE_APPLICATION, mDisplayContent, "appWin");
-        final Task stack = mDisplayContent.getTopStack();
+        final Task stack = mDisplayContent.getTopRootTask();
         final ActivityRecord activity = stack.topRunningActivity();
         doReturn(true).when(activity).shouldBeVisibleUnchecked();
 
         final WindowState appWin1 = createWindow(null, TYPE_APPLICATION, newDisplay, "appWin1");
-        final Task stack1 = newDisplay.getTopStack();
+        final Task stack1 = newDisplay.getTopRootTask();
         final ActivityRecord activity1 = stack1.topRunningActivity();
         doReturn(true).when(activity1).shouldBeVisibleUnchecked();
         appWin.setHasSurface(true);
@@ -886,7 +886,7 @@ public class DisplayContentTests extends WindowTestsBase {
         doReturn(true).when(freeformStack).isVisible();
         freeformStack.getTopChild().setBounds(100, 100, 300, 400);
 
-        assertTrue(dc.getDefaultTaskDisplayArea().isStackVisible(WINDOWING_MODE_FREEFORM));
+        assertTrue(dc.getDefaultTaskDisplayArea().isRootTaskVisible(WINDOWING_MODE_FREEFORM));
 
         freeformStack.getTopNonFinishingActivity().setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
         stack.getTopNonFinishingActivity().setOrientation(SCREEN_ORIENTATION_PORTRAIT);
@@ -1201,6 +1201,17 @@ public class DisplayContentTests extends WindowTestsBase {
                 ANIMATION_TYPE_FIXED_TRANSFORM));
         assertTrue(mNavBarWindow.getParent().isAnimating(WindowContainer.AnimationFlags.PARENTS,
                 ANIMATION_TYPE_FIXED_TRANSFORM));
+
+        // If the visibility of insets state is changed, the rotated state should be updated too.
+        final InsetsState rotatedState = app.getFixedRotationTransformInsetsState();
+        final InsetsState state = mDisplayContent.getInsetsStateController().getRawInsetsState();
+        assertEquals(state.getSource(ITYPE_STATUS_BAR).isVisible(),
+                rotatedState.getSource(ITYPE_STATUS_BAR).isVisible());
+        state.getSource(ITYPE_STATUS_BAR).setVisible(
+                !rotatedState.getSource(ITYPE_STATUS_BAR).isVisible());
+        mDisplayContent.getInsetsStateController().notifyInsetsChanged();
+        assertEquals(state.getSource(ITYPE_STATUS_BAR).isVisible(),
+                rotatedState.getSource(ITYPE_STATUS_BAR).isVisible());
 
         final Rect outFrame = new Rect();
         final Rect outInsets = new Rect();

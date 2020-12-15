@@ -19,6 +19,7 @@ package android.graphics.fonts;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.FontListParser;
+import android.graphics.Typeface;
 import android.text.FontConfig;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -68,19 +69,38 @@ public final class SystemFonts {
                 return sAvailableFonts;
             }
 
-            Set<Font> set = new HashSet<>();
-
-            for (FontFamily[] items : sFamilyMap.values()) {
-                for (FontFamily family : items) {
-                    for (int i = 0; i < family.getSize(); ++i) {
-                        set.add(family.getFont(i));
+            if (Typeface.ENABLE_LAZY_TYPEFACE_INITIALIZATION) {
+                sAvailableFonts = collectAllFonts();
+            } else {
+                Set<Font> set = new HashSet<>();
+                for (FontFamily[] items : sFamilyMap.values()) {
+                    for (FontFamily family : items) {
+                        for (int i = 0; i < family.getSize(); ++i) {
+                            set.add(family.getFont(i));
+                        }
                     }
                 }
-            }
 
-            sAvailableFonts = Collections.unmodifiableSet(set);
+                sAvailableFonts = Collections.unmodifiableSet(set);
+            }
             return sAvailableFonts;
         }
+    }
+
+    private static @NonNull Set<Font> collectAllFonts() {
+        final FontCustomizationParser.Result oemCustomization =
+                readFontCustomization("/product/etc/fonts_customization.xml", "/product/fonts/");
+        Map<String, FontFamily[]> map = new ArrayMap<>();
+        buildSystemFallback("/system/etc/fonts.xml", "/system/fonts/", oemCustomization, map);
+        Set<Font> res = new HashSet<>();
+        for (FontFamily[] families : map.values()) {
+            for (FontFamily family : families) {
+                for (int i = 0; i < family.getSize(); ++i) {
+                    res.add(family.getFont(i));
+                }
+            }
+        }
+        return res;
     }
 
     private static @Nullable ByteBuffer mmap(@NonNull String fullPath) {

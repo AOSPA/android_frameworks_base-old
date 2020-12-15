@@ -20,6 +20,7 @@ import static com.android.systemui.statusbar.notification.TransformState.TRANSFO
 
 import android.app.Notification;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.util.ArraySet;
 import android.view.NotificationHeaderView;
 import android.view.NotificationTopLineView;
@@ -64,6 +65,7 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
     private ImageView mWorkProfileImage;
     private View mAudiblyAlertedIcon;
     private View mFeedbackIcon;
+    private View mLeftIcon;
     private View mRightIcon;
 
     private boolean mIsLowPriority;
@@ -108,6 +110,7 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
         mAppNameText = mView.findViewById(com.android.internal.R.id.app_name_text);
         mExpandButton = mView.findViewById(com.android.internal.R.id.expand_button);
         mAltExpandTarget = mView.findViewById(com.android.internal.R.id.alternate_expand_target);
+        mLeftIcon = mView.findViewById(com.android.internal.R.id.left_icon);
         mRightIcon = mView.findViewById(com.android.internal.R.id.right_icon);
         mWorkProfileImage = mView.findViewById(com.android.internal.R.id.profile_badge);
         mNotificationHeader = mView.findViewById(com.android.internal.R.id.notification_header);
@@ -146,6 +149,9 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
         updateCropToPaddingForImageViews();
         Notification notification = row.getEntry().getSbn().getNotification();
         mIcon.setTag(ImageTransformState.ICON_TAG, notification.getSmallIcon());
+        if (mLeftIcon != null) {
+            mLeftIcon.setClipToOutline(true);
+        }
         if (mRightIcon != null) {
             mRightIcon.setClipToOutline(true);
         }
@@ -163,9 +169,11 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
 
     public void applyConversationSkin() {
         if (mAppNameText != null) {
+            final ColorStateList colors = mAppNameText.getTextColors();
             mAppNameText.setTextAppearance(
                     com.android.internal.R.style
                             .TextAppearance_DeviceDefault_Notification_Conversation_AppName);
+            mAppNameText.setTextColor(colors);
             MarginLayoutParams layoutParams = (MarginLayoutParams) mAppNameText.getLayoutParams();
             layoutParams.setMarginStart(0);
         }
@@ -184,11 +192,13 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
 
     public void clearConversationSkin() {
         if (mAppNameText != null) {
+            final ColorStateList colors = mAppNameText.getTextColors();
             final int textAppearance = Utils.getThemeAttr(
                     mAppNameText.getContext(),
                     com.android.internal.R.attr.notificationHeaderTextAppearance,
                     com.android.internal.R.style.TextAppearance_DeviceDefault_Notification_Info);
             mAppNameText.setTextAppearance(textAppearance);
+            mAppNameText.setTextColor(colors);
             MarginLayoutParams layoutParams = (MarginLayoutParams) mAppNameText.getLayoutParams();
             final int marginStart = mAppNameText.getResources().getDimensionPixelSize(
                     com.android.internal.R.dimen.notification_header_app_name_margin_start);

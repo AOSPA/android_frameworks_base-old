@@ -55,6 +55,8 @@ import static android.view.WindowInsets.Type.displayCutout;
 import static android.view.WindowInsets.Type.ime;
 import static android.view.WindowInsets.Type.systemBars;
 import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
+import static android.view.WindowManager.DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
+import static android.view.WindowManager.DISPLAY_IME_POLICY_LOCAL;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -73,8 +75,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
-import static android.view.WindowManager.DISPLAY_IME_POLICY_LOCAL;
-import static android.view.WindowManager.DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.DisplayAreaOrganizer.FEATURE_ROOT;
@@ -93,7 +93,6 @@ import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_C
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.DisplayContentProto.APP_TRANSITION;
-import static com.android.server.wm.DisplayContentProto.IME_POLICY;
 import static com.android.server.wm.DisplayContentProto.CLOSING_APPS;
 import static com.android.server.wm.DisplayContentProto.CURRENT_FOCUS;
 import static com.android.server.wm.DisplayContentProto.DISPLAY_FRAMES;
@@ -105,6 +104,7 @@ import static com.android.server.wm.DisplayContentProto.FOCUSED_APP;
 import static com.android.server.wm.DisplayContentProto.FOCUSED_ROOT_TASK_ID;
 import static com.android.server.wm.DisplayContentProto.ID;
 import static com.android.server.wm.DisplayContentProto.IME_INSETS_SOURCE_PROVIDER;
+import static com.android.server.wm.DisplayContentProto.IME_POLICY;
 import static com.android.server.wm.DisplayContentProto.INPUT_METHOD_CONTROL_TARGET;
 import static com.android.server.wm.DisplayContentProto.INPUT_METHOD_INPUT_TARGET;
 import static com.android.server.wm.DisplayContentProto.INPUT_METHOD_TARGET;
@@ -165,6 +165,7 @@ import android.graphics.Region.Op;
 import android.hardware.display.DisplayManagerInternal;
 import android.metrics.LogMaker;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
@@ -488,8 +489,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     ActivityRecord mFocusedApp = null;
 
-    /** The last focused {@link TaskDisplayArea} on this display. */
-    private TaskDisplayArea mLastFocusedTaskDisplayArea = null;
+    /**
+     * We only respect the orientation request from apps below this {@link TaskDisplayArea}.
+     * It is the last focused {@link TaskDisplayArea} on this display that handles orientation
+     * request.
+     */
+    @Nullable
+    private TaskDisplayArea mOrientationRequestingTaskDisplayArea = null;
 
     /**
      * The launching activity which is using fixed rotation transformation.
@@ -558,6 +564,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * This controls the visibility and animation of the input method window.
      */
     InsetsControlTarget mInputMethodControlTarget;
+
+    /** The surface parent of the IME container. */
+    private SurfaceControl mInputMethodSurfaceParent;
 
     /** If true hold off on modifying the animation layer of mInputMethodTarget */
     boolean mInputMethodTargetWaitingAnim;
@@ -992,7 +1001,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         getPendingTransaction().apply();
 
         // Setup the policy and build the display area hierarchy.
-        mDisplayAreaPolicy = mWmService.mDisplayAreaPolicyProvider.instantiate(
+        mDisplayAreaPolicy = mWmService.getDisplayAreaPolicyProvider().instantiate(
                 mWmService, this /* content */, this /* root */, mImeWindowsContainers);
 
         // Sets the display content for the children.
@@ -1300,10 +1309,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     @Override
-    boolean onDescendantOrientationChanged(IBinder freezeDisplayToken,
-            WindowContainer requestingContainer) {
+    boolean onDescendantOrientationChanged(WindowContainer requestingContainer) {
         final Configuration config = updateOrientation(
-                getRequestedOverrideConfiguration(), freezeDisplayToken, false /* forceUpdate */);
+                getRequestedOverrideConfiguration(), requestingContainer, false /* forceUpdate */);
         // If display rotation class tells us that it doesn't consider app requested orientation,
         // this display won't rotate just because of an app changes its requested orientation. Thus
         // it indicates that this display chooses not to handle this request.
@@ -1318,7 +1326,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     false /* deferResume */, null /* result */);
             activityRecord.frozenBeforeDestroy = true;
             if (!kept) {
-                mRootWindowContainer.resumeFocusedStacksTopActivities();
+                mRootWindowContainer.resumeFocusedTasksTopActivities();
             }
         } else {
             // We have a new configuration to push so we need to update ATMS for now.
@@ -1355,11 +1363,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * @param currentConfig The current requested override configuration (it is usually set from
      *                      the last {@link #sendNewConfiguration}) of the display. It is used to
      *                      check if the configuration container has the latest state.
-     * @param freezeDisplayToken Freeze the app window token if the orientation is changed.
+     * @param freezeDisplayWindow Freeze the app window if the orientation is changed.
      * @param forceUpdate See {@link DisplayRotation#updateRotationUnchecked(boolean)}
      */
-    Configuration updateOrientation(Configuration currentConfig, IBinder freezeDisplayToken,
-            boolean forceUpdate) {
+    Configuration updateOrientation(Configuration currentConfig,
+            WindowContainer freezeDisplayWindow, boolean forceUpdate) {
         if (!mDisplayReady) {
             return null;
         }
@@ -1368,9 +1376,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (updateOrientation(forceUpdate)) {
             // If we changed the orientation but mOrientationChangeComplete is already true,
             // we used seamless rotation, and we don't need to freeze the screen.
-            if (freezeDisplayToken != null && !mWmService.mRoot.mOrientationChangeComplete) {
-                final ActivityRecord activity = getActivityRecord(freezeDisplayToken);
-                if (activity != null) {
+            if (freezeDisplayWindow != null && !mWmService.mRoot.mOrientationChangeComplete) {
+                final ActivityRecord activity = freezeDisplayWindow.asActivityRecord();
+                if (activity != null && activity.mayFreezeScreenLocked()) {
                     activity.startFreezingScreen();
                 }
             }
@@ -1674,6 +1682,28 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (controller != null && !mDisplayRotation.hasSeamlessRotatingWindow()) {
             controller.show();
             mFixedRotationAnimationController = null;
+        }
+    }
+
+    void notifyInsetsChanged(Consumer<WindowState> dispatchInsetsChanged) {
+        if (mFixedRotationLaunchingApp != null) {
+            // The insets state of fixed rotation app is a rotated copy. Make sure the visibilities
+            // of insets sources are consistent with the latest state.
+            final InsetsState rotatedState =
+                    mFixedRotationLaunchingApp.getFixedRotationTransformInsetsState();
+            if (rotatedState != null) {
+                final InsetsState state = mInsetsStateController.getRawInsetsState();
+                for (int i = 0; i < InsetsState.SIZE; i++) {
+                    final InsetsSource source = state.peekSource(i);
+                    if (source != null) {
+                        rotatedState.setSourceVisible(i, source.isVisible());
+                    }
+                }
+            }
+        }
+        forAllWindows(dispatchInsetsChanged, true /* traverseTopToBottom */);
+        if (mRemoteInsetsControlTarget != null) {
+            mRemoteInsetsControlTarget.notifyInsetsChanged();
         }
     }
 
@@ -2219,26 +2249,26 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * activity type. Null is no compatible stack on the display.
      */
     @Nullable
-    Task getStack(int windowingMode, int activityType) {
+    Task getRootTask(int windowingMode, int activityType) {
         return getItemFromTaskDisplayAreas(taskDisplayArea ->
-                taskDisplayArea.getStack(windowingMode, activityType));
+                taskDisplayArea.getRootTask(windowingMode, activityType));
     }
 
     @Nullable
-    Task getStack(int rootTaskId) {
+    Task getRootTask(int rootTaskId) {
         return getItemFromTaskDisplayAreas(taskDisplayArea ->
-                        taskDisplayArea.getStack(rootTaskId));
+                        taskDisplayArea.getRootTask(rootTaskId));
     }
 
-    protected int getStackCount() {
+    protected int getRootTaskCount() {
         return reduceOnAllTaskDisplayAreas((taskDisplayArea, count) ->
-                count + taskDisplayArea.getStackCount(), 0 /* initValue */);
+                count + taskDisplayArea.getRootTaskCount(), 0 /* initValue */);
     }
 
     @VisibleForTesting
     @Nullable
-    Task getTopStack() {
-        return getItemFromTaskDisplayAreas(TaskDisplayArea::getTopStack);
+    Task getTopRootTask() {
+        return getItemFromTaskDisplayAreas(TaskDisplayArea::getTopRootTask);
     }
 
     /**
@@ -2902,7 +2932,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mClosingApps.valueAt(i).writeIdentifierToProto(proto, CLOSING_APPS);
         }
 
-        final Task focusedStack = getFocusedStack();
+        final Task focusedStack = getFocusedRootTask();
         if (focusedStack != null) {
             proto.write(FOCUSED_ROOT_TASK_ID, focusedStack.getRootTaskId());
             final ActivityRecord focusedActivity = focusedStack.getDisplayArea()
@@ -2946,7 +2976,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     public void dump(PrintWriter pw, String prefix, boolean dumpAll) {
         super.dump(pw, prefix, dumpAll);
         pw.print(prefix);
-        pw.println("Display: mDisplayId=" + mDisplayId + " stacks=" + getStackCount());
+        pw.println("Display: mDisplayId=" + mDisplayId + " stacks=" + getRootTaskCount());
         final String subPrefix = "  " + prefix;
         pw.print(subPrefix); pw.print("init="); pw.print(mInitialDisplayWidth); pw.print("x");
         pw.print(mInitialDisplayHeight); pw.print(" "); pw.print(mInitialDisplayDensity);
@@ -3044,13 +3074,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             pw.println(prefix + "splitScreenPrimaryStack=" + splitScreenPrimaryStack.getName());
         }
         // TODO: Support recents on non-default task containers
-        final Task recentsStack = getDefaultTaskDisplayArea().getStack(
+        final Task recentsStack = getDefaultTaskDisplayArea().getRootTask(
                 WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_RECENTS);
         if (recentsStack != null) {
             pw.println(prefix + "recentsStack=" + recentsStack.getName());
         }
         final Task dreamStack =
-                getStack(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_DREAM);
+                getRootTask(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_DREAM);
         if (dreamStack != null) {
             pw.println(prefix + "dreamStack=" + dreamStack.getName());
         }
@@ -3301,7 +3331,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
             // Called even if the focused app is not changed in case the app is moved to a different
             // TaskDisplayArea.
-            setLastFocusedTaskDisplayArea(newFocus.getDisplayArea());
+            onLastFocusedTaskDisplayAreaChanged(newFocus.getDisplayArea());
         }
         if (mFocusedApp == newFocus) {
             return false;
@@ -3315,16 +3345,27 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     /** Called when the focused {@link TaskDisplayArea} on this display may have changed. */
-    @VisibleForTesting
-    void setLastFocusedTaskDisplayArea(@Nullable TaskDisplayArea taskDisplayArea) {
-        if (taskDisplayArea != null) {
-            mLastFocusedTaskDisplayArea = taskDisplayArea;
+    void onLastFocusedTaskDisplayAreaChanged(@Nullable TaskDisplayArea taskDisplayArea) {
+        // Only record the TaskDisplayArea that handles orientation request.
+        if (taskDisplayArea != null && taskDisplayArea.handlesOrientationChangeFromDescendant()) {
+            mOrientationRequestingTaskDisplayArea = taskDisplayArea;
+            return;
+        }
+
+        // If the previous TDA no longer handles orientation request, clear it.
+        if (mOrientationRequestingTaskDisplayArea != null
+                && !mOrientationRequestingTaskDisplayArea
+                .handlesOrientationChangeFromDescendant()) {
+            mOrientationRequestingTaskDisplayArea = null;
         }
     }
 
-    /** Gets the last focused {@link TaskDisplayArea} on this display. */
-    TaskDisplayArea getLastFocusedTaskDisplayArea() {
-        return mLastFocusedTaskDisplayArea;
+    /**
+     * Gets the {@link TaskDisplayArea} that we respect orientation requests from apps below it.
+     */
+    @Nullable
+    TaskDisplayArea getOrientationRequestingTaskDisplayArea() {
+        return mOrientationRequestingTaskDisplayArea;
     }
 
     /** Updates the layer assignment of windows on this display. */
@@ -3610,7 +3651,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         ProtoLog.i(WM_DEBUG_IME, "setInputMethodTarget %s", target);
         mInputMethodTarget = target;
         mInputMethodTargetWaitingAnim = targetWaitingAnim;
-        assignWindowLayers(true /* setLayoutNeeded */);
+
+        // 1. Reparent the IME container window to the target root DA to get the correct bounds and
+        // config. (Only happens when the target window is in a different root DA)
         if (target != null) {
             RootDisplayArea targetRoot = target.getRootDisplayArea();
             if (targetRoot != null) {
@@ -3619,7 +3662,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 targetRoot.placeImeContainer(mImeWindowsContainers);
             }
         }
+        // 2. Reparent the IME container surface to either the input target app, or the IME window
+        // parent.
         updateImeParent();
+        // 3. Assign window layers based on the IME surface parent to make sure it is on top of the
+        // app.
+        assignWindowLayers(true /* setLayoutNeeded */);
+        // 4. Update the IME control target to apply any inset change and animation.
         updateImeControlTarget();
     }
 
@@ -3649,7 +3698,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     void updateImeParent() {
         final SurfaceControl newParent = computeImeParent();
-        if (newParent != null) {
+        if (newParent != null && newParent != mInputMethodSurfaceParent) {
+            mInputMethodSurfaceParent = newParent;
             getPendingTransaction().reparent(mImeWindowsContainers.mSurfaceControl, newParent);
             scheduleAnimation();
         }
@@ -4426,18 +4476,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         //
         // In the case of split-screen windowing mode, we need to elevate the IME above the
         // docked divider while keeping the app itself below the docked divider, so instead
-        // we use relative layering of the IME targets child windows, and place the IME in
-        // the non-app layer (see {@link AboveAppWindowContainers#assignChildLayers}).
+        // we will put the docked divider below the IME. @see #assignRelativeLayerForImeTargetChild
         //
         // In the case the IME target is animating, the animation Z order may be different
         // than the WindowContainer Z order, so it's difficult to be sure we have the correct
-        // IME target. In this case we just layer the IME over all transitions by placing it
-        // in the above applications layer.
+        // IME target. In this case we just layer the IME over its parent surface.
         //
-        // In the case where we have no IME target we assign it where its base layer would
-        // place it in the AboveAppWindowContainers.
+        // In the case where we have no IME target we let its window parent to place it.
         //
-        // Keep IME window in mAboveAppWindowsContainers as long as app's starting window
+        // Keep IME window in surface parent as long as app's starting window
         // exists so it get's layered above the starting window.
         if (imeTarget != null && !(imeTarget.mActivityRecord != null
                 && imeTarget.mActivityRecord.hasStartingWindow()) && (
@@ -4448,6 +4495,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     // TODO: We need to use an extra level on the app surface to ensure
                     // this is always above SurfaceView but always below attached window.
                     1);
+        } else if (mInputMethodSurfaceParent != null) {
+            // The IME surface parent may not be its window parent's surface
+            // (@see #computeImeParent), so set relative layer here instead of letting the window
+            // parent to assign layer.
+            mImeWindowsContainers.assignRelativeLayer(t, mInputMethodSurfaceParent, 1);
         }
         super.assignChildLayers(t);
     }
@@ -4481,9 +4533,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
     }
 
-    void assignStackOrdering() {
+    void assignRootTaskOrdering() {
         forAllTaskDisplayAreas(taskDisplayArea -> {
-            taskDisplayArea.assignStackOrdering(getPendingTransaction());
+            taskDisplayArea.assignRootTaskOrdering(getPendingTransaction());
         });
     }
 
@@ -4740,7 +4792,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return getWindowContainers().getSurfaceControl();
     }
 
-    @VisibleForTesting
     DisplayArea.Tokens getImeContainer() {
         return mImeWindowsContainers;
     }
@@ -5048,7 +5099,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mWmService.requestTraversal();
     }
 
-    static boolean alwaysCreateStack(int windowingMode, int activityType) {
+    static boolean alwaysCreateRootTask(int windowingMode, int activityType) {
         // Always create a stack for fullscreen, freeform, and split-screen-secondary windowing
         // modes so that we can manage visual ordering and return types correctly.
         return activityType == ACTIVITY_TYPE_STANDARD
@@ -5062,13 +5113,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     static boolean canReuseExistingTask(int windowingMode, int activityType) {
         // Existing Tasks can be reused if a new stack will be created anyway, or for the Dream -
         // because there can only ever be one DreamActivity.
-        return alwaysCreateStack(windowingMode, activityType)
+        return alwaysCreateRootTask(windowingMode, activityType)
                 || activityType == ACTIVITY_TYPE_DREAM;
     }
 
     @Nullable
-    Task getFocusedStack() {
-        return getItemFromTaskDisplayAreas(TaskDisplayArea::getFocusedStack);
+    Task getFocusedRootTask() {
+        return getItemFromTaskDisplayAreas(TaskDisplayArea::getFocusedRootTask);
     }
 
     /**
@@ -5197,7 +5248,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mCurrentOverrideConfigurationChanges = currOverrideConfig.diff(overrideConfiguration);
         super.onRequestedOverrideConfigurationChanged(overrideConfiguration);
         mCurrentOverrideConfigurationChanges = 0;
-        mWmService.setNewDisplayOverrideConfiguration(overrideConfiguration, this);
+        mWmService.setNewDisplayOverrideConfiguration(currOverrideConfig, this);
         mAtmService.addWindowLayoutReasons(
                 ActivityTaskManagerService.LAYOUT_REASON_CONFIG_CHANGED);
     }
@@ -5305,19 +5356,19 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         // Check if all task display areas have only the empty home stacks left.
         boolean hasNonEmptyHomeStack = forAllTaskDisplayAreas(taskDisplayArea -> {
-            if (taskDisplayArea.getStackCount() != 1) {
+            if (taskDisplayArea.getRootTaskCount() != 1) {
                 return true;
             }
-            final Task stack = taskDisplayArea.getStackAt(0);
+            final Task stack = taskDisplayArea.getRootTaskAt(0);
             return !stack.isActivityTypeHome() || stack.hasChild();
         });
         if (!hasNonEmptyHomeStack) {
             // Release this display if only empty home stack(s) are left. This display will be
             // released along with the stack(s) removal.
             forAllTaskDisplayAreas(taskDisplayArea -> {
-                taskDisplayArea.getStackAt(0).removeIfPossible();
+                taskDisplayArea.getRootTaskAt(0).removeIfPossible();
             });
-        } else if (getTopStack() == null) {
+        } else if (getTopRootTask() == null) {
             removeIfPossible();
             mRootWindowContainer.mTaskSupervisor
                     .getKeyguardController().onDisplayRemoved(mDisplayId);
@@ -5344,7 +5395,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     boolean shouldSleep() {
-        return (getStackCount() == 0 || !mAllSleepTokens.isEmpty())
+        return (getRootTaskCount() == 0 || !mAllSleepTokens.isEmpty())
                 && (mAtmService.mRunningVoice == null);
     }
 
@@ -5648,6 +5699,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         @Override
         public boolean getRequestedVisibility(@InternalInsetsType int type) {
+            if (type == ITYPE_IME) {
+                return getInsetsStateController().getImeSourceProvider().isImeShowing();
+            }
             return mRequestedInsetsState.getSourceOrDefaultVisibility(type);
         }
 
@@ -5688,5 +5742,25 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             count++;
         }
         return count;
+    }
+
+    MagnificationSpec getMagnificationSpec() {
+        return mMagnificationSpec;
+    }
+
+    DisplayArea getAreaForWindowToken(int windowType, Bundle options,
+            boolean ownerCanManageAppToken, boolean roundedCornerOverlay) {
+        // TODO(b/159767464): figure out how to find an appropriate TDA.
+        if (windowType >= FIRST_APPLICATION_WINDOW && windowType <= LAST_APPLICATION_WINDOW) {
+            return getDefaultTaskDisplayArea();
+        }
+        // Return IME container here because it could be in one of sub RootDisplayAreas depending on
+        // the focused edit text. Also, the RootDisplayArea choosing strategy is implemented by
+        // the server side, but not mSelectRootForWindowFunc customized by OEM.
+        if (windowType == TYPE_INPUT_METHOD || windowType == TYPE_INPUT_METHOD_DIALOG) {
+            return getImeContainer();
+        }
+        return mDisplayAreaPolicy.getDisplayAreaForWindowToken(windowType, options,
+                ownerCanManageAppToken, roundedCornerOverlay);
     }
 }

@@ -150,6 +150,7 @@ java_library_static {
         "vendor.qti.hardware.servicetracker-V1.0-java",
         "vendor.qti.hardware.servicetracker-V1.2-java",
     ],
+    javac_shard_size: 50,
 }
 
 java_genrule {
@@ -191,6 +192,13 @@ genrule {
 prebuilt_etc {
     name: "protolog.conf.json.gz",
     src: ":services.core.json.gz",
+}
+
+filegroup {
+    name: "services.core-sources-deviceconfig-interface",
+    srcs: [
+         "java/com/android/server/utils/DeviceConfigInterface.java"
+    ],
 }
 
 // TODO: Move connectivity service sources to independent directory.

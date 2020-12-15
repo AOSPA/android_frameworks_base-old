@@ -23,6 +23,7 @@ import static com.android.systemui.statusbar.phone.LockIcon.STATE_LOCKED;
 import static com.android.systemui.statusbar.phone.LockIcon.STATE_LOCK_OPEN;
 import static com.android.systemui.statusbar.phone.LockIcon.STATE_SCANNING_FACE;
 
+import android.animation.ArgbEvaluator;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
@@ -38,6 +39,7 @@ import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
+import com.android.settingslib.Utils;
 import com.android.systemui.R;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -84,6 +86,7 @@ public class LockscreenLockIconController {
     private boolean mDocked;
     private boolean mWakeAndUnlockRunning;
     private boolean mShowingLaunchAffordance;
+    private float mBouncerHiddenAmount = KeyguardBouncer.EXPANSION_HIDDEN;
     private boolean mBouncerShowingScrimmed;
     private boolean mFingerprintUnlock;
     private int mStatusBarState = StatusBarState.SHADE;
@@ -103,6 +106,8 @@ public class LockscreenLockIconController {
 
             mSimLocked = mKeyguardUpdateMonitor.isSimPinSecure();
             mConfigurationListener.onThemeChanged();
+
+            updateColor();
             update();
         }
 
@@ -142,16 +147,13 @@ public class LockscreenLockIconController {
         private int mDensity;
 
         @Override
-        public void onThemeChanged() {
-            if (mLockIcon == null) {
-                return;
-            }
+        public void onUiModeChanged() {
+            updateColor();
+        }
 
-            TypedArray typedArray = mLockIcon.getContext().getTheme().obtainStyledAttributes(
-                    null, new int[]{ R.attr.wallpaperTextColor }, 0, 0);
-            int iconColor = typedArray.getColor(0, Color.WHITE);
-            typedArray.recycle();
-            mLockIcon.onThemeChange(iconColor);
+        @Override
+        public void onOverlayChanged() {
+            updateColor();
         }
 
         @Override
@@ -408,11 +410,46 @@ public class LockscreenLockIconController {
     }
 
     /** Sets whether the bouncer is showing. */
-    public void setBouncerShowingScrimmed(boolean bouncerShowing) {
-        mBouncerShowingScrimmed = bouncerShowing;
-        if (mKeyguardBypassController.getBypassEnabled()) {
-            update();
+    public void setBouncerShowingScrimmed(boolean showing, boolean scrimmed) {
+        mBouncerShowingScrimmed = scrimmed;
+        update();
+    }
+
+    /**
+     * Sets how hidden the bouncer is, where 0f is fully visible and 1f is fully hidden
+     * See {@link KeyguardBouncer#EXPANSION_VISIBLE} and {@link KeyguardBouncer#EXPANSION_HIDDEN}.
+     */
+    public void setBouncerHideAmount(float hideAmount) {
+        mBouncerHiddenAmount = hideAmount;
+        updateColor();
+    }
+
+    private void updateColor() {
+        if (mLockIcon == null) {
+            return;
         }
+
+        int iconColor = -1;
+        if (mBouncerHiddenAmount == KeyguardBouncer.EXPANSION_VISIBLE) {
+            TypedArray typedArray = mLockIcon.getContext().getTheme().obtainStyledAttributes(
+                    null, new int[]{ android.R.attr.textColorPrimary }, 0, 0);
+            iconColor = typedArray.getColor(0, Color.WHITE);
+            typedArray.recycle();
+        } else if (mBouncerHiddenAmount == KeyguardBouncer.EXPANSION_HIDDEN) {
+            iconColor = Utils.getColorAttrDefaultColor(
+                    mLockIcon.getContext(), com.android.systemui.R.attr.wallpaperTextColor);
+        } else {
+            // bouncer is transitioning
+            TypedArray typedArray = mLockIcon.getContext().getTheme().obtainStyledAttributes(
+                    null, new int[]{ android.R.attr.textColorPrimary }, 0, 0);
+            int bouncerIconColor = typedArray.getColor(0, Color.WHITE);
+            typedArray.recycle();
+            int keyguardIconColor = Utils.getColorAttrDefaultColor(
+                    mLockIcon.getContext(), com.android.systemui.R.attr.wallpaperTextColor);
+            iconColor = (int) new ArgbEvaluator().evaluate(
+                    mBouncerHiddenAmount, bouncerIconColor, keyguardIconColor);
+        }
+        mLockIcon.updateColor(iconColor);
     }
 
     /**

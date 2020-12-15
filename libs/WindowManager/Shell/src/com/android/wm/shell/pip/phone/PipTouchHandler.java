@@ -18,9 +18,9 @@ package com.android.wm.shell.pip.phone;
 
 import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.PIP_STASHING;
 import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_TO_PIP;
-import static com.android.wm.shell.pip.phone.PipMenuActivityController.MENU_STATE_CLOSE;
-import static com.android.wm.shell.pip.phone.PipMenuActivityController.MENU_STATE_FULL;
-import static com.android.wm.shell.pip.phone.PipMenuActivityController.MENU_STATE_NONE;
+import static com.android.wm.shell.pip.phone.PhonePipMenuController.MENU_STATE_CLOSE;
+import static com.android.wm.shell.pip.phone.PhonePipMenuController.MENU_STATE_FULL;
+import static com.android.wm.shell.pip.phone.PhonePipMenuController.MENU_STATE_NONE;
 
 import android.annotation.NonNull;
 import android.annotation.SuppressLint;
@@ -31,11 +31,8 @@ import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.os.Handler;
-import android.os.RemoteException;
 import android.provider.DeviceConfig;
-import android.util.Log;
 import android.util.Size;
-import android.view.IPinnedStackController;
 import android.view.InputEvent;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
@@ -47,6 +44,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.wm.shell.R;
 import com.android.wm.shell.common.FloatingContentCoordinator;
+import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.pip.PipAnimationController;
 import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
@@ -75,10 +73,9 @@ public class PipTouchHandler {
     private final PipDismissTargetHandler mPipDismissTargetHandler;
 
     private PipResizeGestureHandler mPipResizeGestureHandler;
-    private IPinnedStackController mPinnedStackController;
     private WeakReference<Consumer<Rect>> mPipExclusionBoundsChangeListener;
 
-    private final PipMenuActivityController mMenuController;
+    private final PhonePipMenuController mMenuController;
     private final AccessibilityManager mAccessibilityManager;
     private boolean mShowPipMenuOnAnimationEnd = false;
 
@@ -125,7 +122,7 @@ public class PipTouchHandler {
     /**
      * A listener for the PIP menu activity.
      */
-    private class PipMenuListener implements PipMenuActivityController.Listener {
+    private class PipMenuListener implements PhonePipMenuController.Listener {
         @Override
         public void onPipMenuStateChanged(int menuState, boolean resize, Runnable callback) {
             setMenuState(menuState, resize, callback);
@@ -152,12 +149,13 @@ public class PipTouchHandler {
 
     @SuppressLint("InflateParams")
     public PipTouchHandler(Context context,
-            PipMenuActivityController menuController,
+            PhonePipMenuController menuController,
             PipBoundsAlgorithm pipBoundsAlgorithm,
             @NonNull PipBoundsState pipBoundsState,
             PipTaskOrganizer pipTaskOrganizer,
             FloatingContentCoordinator floatingContentCoordinator,
-            PipUiEventLogger pipUiEventLogger) {
+            PipUiEventLogger pipUiEventLogger,
+            ShellExecutor shellMainExecutor) {
         // Initialize the Pip input consumer
         mContext = context;
         mAccessibilityManager = context.getSystemService(AccessibilityManager.class);
@@ -188,7 +186,7 @@ public class PipTouchHandler {
         mFloatingContentCoordinator = floatingContentCoordinator;
         mConnection = new PipAccessibilityInteractionConnection(mContext, pipBoundsState,
                 mMotionHelper, pipTaskOrganizer, mPipBoundsAlgorithm.getSnapAlgorithm(),
-                this::onAccessibilityShowMenu, this::updateMovementBounds, mHandler);
+                this::onAccessibilityShowMenu, this::updateMovementBounds, shellMainExecutor);
 
         mPipUiEventLogger = pipUiEventLogger;
 
@@ -436,8 +434,11 @@ public class PipTouchHandler {
      * TODO Add appropriate description
      */
     public void onRegistrationChanged(boolean isRegistered) {
-        mAccessibilityManager.setPictureInPictureActionReplacingConnection(isRegistered
-                ? mConnection : null);
+        if (isRegistered) {
+            mConnection.register(mAccessibilityManager);
+        } else {
+            mAccessibilityManager.setPictureInPictureActionReplacingConnection(null);
+        }
         if (!isRegistered && mTouchState.isUserInteracting()) {
             // If the input consumer is unregistered while the user is interacting, then we may not
             // get the final TOUCH_UP event, so clean up the dismiss target as well
@@ -459,10 +460,6 @@ public class PipTouchHandler {
         if (!(inputEvent instanceof MotionEvent)) {
             return true;
         }
-        // Skip touch handling until we are bound to the controller
-        if (mPinnedStackController == null) {
-            return true;
-        }
 
         MotionEvent ev = (MotionEvent) inputEvent;
         if (!mPipBoundsState.isStashed() && mPipResizeGestureHandler.willStartResizeGesture(ev)) {
@@ -470,6 +467,11 @@ public class PipTouchHandler {
             // gesture
             mTouchState.onTouchEvent(ev);
             mTouchState.reset();
+            return true;
+        }
+
+        if (mPipResizeGestureHandler.hasOngoingGesture()) {
+            mPipDismissTargetHandler.hideDismissTargetMaybe();
             return true;
         }
 
@@ -586,13 +588,6 @@ public class PipTouchHandler {
     }
 
     /**
-     * Sets the controller to update the system of changes from user interaction.
-     */
-    void setPinnedStackController(IPinnedStackController controller) {
-        mPinnedStackController = controller;
-    }
-
-    /**
      * Sets the menu visibility.
      */
     private void setMenuState(int menuState, boolean resize, Runnable callback) {
@@ -620,13 +615,9 @@ public class PipTouchHandler {
                     // bounds which are now stale.  In such a case we defer the animation to the
                     // normal bounds until after the next onMovementBoundsChanged() call to get the
                     // bounds in the new orientation
-                    try {
-                        int displayRotation = mPinnedStackController.getDisplayRotation();
-                        if (mDisplayRotation != displayRotation) {
-                            mDeferResizeToNormalBoundsUntilRotation = displayRotation;
-                        }
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Could not get display rotation from controller");
+                    int displayRotation = mContext.getDisplay().getRotation();
+                    if (mDisplayRotation != displayRotation) {
+                        mDeferResizeToNormalBoundsUntilRotation = displayRotation;
                     }
                 }
 

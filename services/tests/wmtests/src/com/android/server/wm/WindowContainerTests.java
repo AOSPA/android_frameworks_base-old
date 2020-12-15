@@ -56,7 +56,6 @@ import static org.junit.Assert.assertTrue;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Rect;
-import android.os.IBinder;
 import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
 import android.view.IRemoteAnimationFinishedCallback;
@@ -787,12 +786,11 @@ public class WindowContainerTests extends WindowTestsBase {
         final TestWindowContainerBuilder builder = new TestWindowContainerBuilder(mWm);
         final TestWindowContainer root = spy(builder.build());
 
-        final IBinder binder = mock(IBinder.class);
         final ActivityRecord activityRecord = mock(ActivityRecord.class);
         final TestWindowContainer child = root.addChildWindow();
 
-        child.setOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED, binder, activityRecord);
-        verify(root).onDescendantOrientationChanged(binder, activityRecord);
+        child.setOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED, activityRecord);
+        verify(root).onDescendantOrientationChanged(activityRecord);
     }
 
     @Test
@@ -814,7 +812,7 @@ public class WindowContainerTests extends WindowTestsBase {
         final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
 
         final DisplayContent newDc = createNewDisplay();
-        stack.getDisplayArea().removeStack(stack);
+        stack.getDisplayArea().removeRootTask(stack);
         newDc.getDefaultTaskDisplayArea().addChild(stack, POSITION_TOP);
 
         verify(stack).onDisplayChanged(newDc);
@@ -948,6 +946,36 @@ public class WindowContainerTests extends WindowTestsBase {
         verify(wc).onAnimationFinished(eq(ANIMATION_TYPE_APP_TRANSITION), any());
         assertFalse(wc.isAnimating());
         assertFalse(act.isAnimating(PARENTS));
+    }
+
+    @Test
+    public void testRegisterWindowContainerListener() {
+        final WindowContainer container = new WindowContainer(mWm);
+        container.mDisplayContent = mDisplayContent;
+        final TestWindowContainerListener listener = new TestWindowContainerListener();
+        Configuration config = container.getConfiguration();
+        Rect bounds = new Rect(0, 0, 10, 10);
+        config.windowConfiguration.setBounds(bounds);
+        config.densityDpi = 100;
+        container.onRequestedOverrideConfigurationChanged(config);
+        container.registerWindowContainerListener(listener);
+
+        assertEquals(mDisplayContent, listener.mDisplayContent);
+        assertEquals(bounds, listener.mConfiguration.windowConfiguration.getBounds());
+        assertEquals(100, listener.mConfiguration.densityDpi);
+
+        container.onDisplayChanged(mDefaultDisplay);
+        assertEquals(listener.mDisplayContent, mDefaultDisplay);
+
+        config = new Configuration();
+        bounds = new Rect(0, 0, 20, 20);
+        config.windowConfiguration.setBounds(bounds);
+        config.densityDpi = 200;
+
+        container.onRequestedOverrideConfigurationChanged(config);
+
+        assertEquals(bounds, listener.mConfiguration.windowConfiguration.getBounds());
+        assertEquals(200, listener.mConfiguration.densityDpi);
     }
 
     /* Used so we can gain access to some protected members of the {@link WindowContainer} class */
@@ -1131,6 +1159,21 @@ public class WindowContainerTests extends WindowTestsBase {
         @Override
         public void close() {
             mSession.kill();
+        }
+    }
+
+    private static class TestWindowContainerListener implements WindowContainerListener {
+        private Configuration mConfiguration = new Configuration();
+        private DisplayContent mDisplayContent;
+
+        @Override
+        public void onRequestedOverrideConfigurationChanged(Configuration overrideConfiguration) {
+            mConfiguration.setTo(overrideConfiguration);
+        }
+
+        @Override
+        public void onDisplayChanged(DisplayContent dc) {
+            mDisplayContent = dc;
         }
     }
 }

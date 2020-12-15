@@ -71,6 +71,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 
@@ -154,7 +155,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final Task rootTask = activity.getRootTask();
         rootTask.removeChild(task, null /*reason*/);
         // parentTask should be gone on task removal.
-        assertNull(mAtm.mRootWindowContainer.getStack(rootTask.mTaskId));
+        assertNull(mAtm.mRootWindowContainer.getRootTask(rootTask.mTaskId));
     }
 
     @Test
@@ -376,6 +377,28 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
+    public void testDestroyedActivityNotScheduleConfigChanged() throws RemoteException {
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setCreateTask(true)
+                .setConfigChanges(CONFIG_ORIENTATION)
+                .build();
+        final Task task = activity.getTask();
+        activity.setState(DESTROYED, "Testing");
+        clearInvocations(mAtm.getLifecycleManager());
+
+        final Configuration newConfig = new Configuration(task.getConfiguration());
+        newConfig.orientation = newConfig.orientation == ORIENTATION_PORTRAIT
+                ? ORIENTATION_LANDSCAPE
+                : ORIENTATION_PORTRAIT;
+        task.onRequestedOverrideConfigurationChanged(newConfig);
+
+        ensureActivityConfiguration(activity);
+
+        verify(mAtm.getLifecycleManager(), never())
+                .scheduleTransaction(any(), any(), isA(ActivityConfigurationChangeItem.class));
+    }
+
+    @Test
     public void testSetRequestedOrientationUpdatesConfiguration() throws Exception {
         final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
@@ -386,6 +409,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         activity.setLastReportedConfiguration(new MergedConfiguration(new Configuration(),
                 activity.getConfiguration()));
 
+        clearInvocations(mAtm.getLifecycleManager());
         final Configuration newConfig = new Configuration(activity.getConfiguration());
         final int shortSide = Math.min(newConfig.screenWidthDp, newConfig.screenHeightDp);
         final int longSide = Math.max(newConfig.screenWidthDp, newConfig.screenHeightDp);
@@ -401,7 +425,7 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         // Mimic the behavior that display doesn't handle app's requested orientation.
         final DisplayContent dc = activity.getTask().getDisplayContent();
-        doReturn(false).when(dc).onDescendantOrientationChanged(any(), any());
+        doReturn(false).when(dc).onDescendantOrientationChanged(any());
         doReturn(false).when(dc).handlesOrientationChangeFromDescendant();
 
         final int requestedOrientation;
@@ -574,6 +598,7 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         try {
+            clearInvocations(mAtm.getLifecycleManager());
             doReturn(false).when(stack).isTranslucent(any());
             assertTrue(task.shouldBeVisible(null /* starting */));
 
@@ -853,7 +878,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         topRootableTask.moveToFront("test");
         assertTrue(topRootableTask.isTopStackInDisplayArea());
         assertEquals(topRootableTask, topActivityOnNonTopDisplay.getDisplayArea()
-                .mPreferredTopFocusableStack);
+                .mPreferredTopFocusableRootTask);
 
         final ActivityRecord secondaryDisplayActivity =
                 createActivityOnDisplay(false /* defaultDisplay */, null /* process */);
@@ -861,7 +886,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         topRootableTask.moveToFront("test");
         assertTrue(topRootableTask.isTopStackInDisplayArea());
         assertEquals(topRootableTask,
-                secondaryDisplayActivity.getDisplayArea().mPreferredTopFocusableStack);
+                secondaryDisplayActivity.getDisplayArea().mPreferredTopFocusableRootTask);
 
         // The global top focus activity is on secondary display now.
         // Finish top activity on default display and verify the next preferred top focusable stack
@@ -870,7 +895,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         topActivityOnNonTopDisplay.finishIfPossible(0 /* resultCode */, null /* resultData */,
                 null /* resultGrants */, "test", false /* oomAdj */);
         assertEquals(task, task.getTopMostTask());
-        assertEquals(task, activity.getDisplayArea().mPreferredTopFocusableStack);
+        assertEquals(task, activity.getDisplayArea().mPreferredTopFocusableRootTask);
     }
 
     /**
@@ -1275,7 +1300,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     @Test
     public void testDestroyIfPossible() {
         final ActivityRecord activity = createActivityWithTask();
-        doReturn(false).when(mRootWindowContainer).resumeFocusedStacksTopActivities();
+        doReturn(false).when(mRootWindowContainer).resumeFocusedTasksTopActivities();
         activity.destroyIfPossible("test");
 
         assertEquals(DESTROYING, activity.getState());
@@ -1297,7 +1322,7 @@ public class ActivityRecordTests extends WindowTestsBase {
             homeStack.removeChild(t, "test");
         }, true /* traverseTopToBottom */);
         activity.finishing = true;
-        doReturn(false).when(mRootWindowContainer).resumeFocusedStacksTopActivities();
+        doReturn(false).when(mRootWindowContainer).resumeFocusedTasksTopActivities();
 
         // Try to destroy the last activity above the home stack.
         activity.destroyIfPossible("test");
@@ -1658,7 +1683,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final int rotatedOrentation = r.getConfiguration().orientation == ORIENTATION_PORTRAIT
                 ? SCREEN_ORIENTATION_LANDSCAPE
                 : SCREEN_ORIENTATION_PORTRAIT;
-        doReturn(false).when(r).onDescendantOrientationChanged(any(), any());
+        doReturn(false).when(r).onDescendantOrientationChanged(any());
         r.setOrientation(rotatedOrentation);
     }
 
