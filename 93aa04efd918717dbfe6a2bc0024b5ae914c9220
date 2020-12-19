@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b7522dbe_1254cd31",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-12-19T19:34:23Z",
+      "side": 1,
+      "message": "Approved by Andrew (and Alex 2) verbally",
+      "revId": "93aa04efd918717dbfe6a2bc0024b5ae914c9220",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
