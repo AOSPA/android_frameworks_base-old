@@ -74,7 +74,6 @@ import androidx.annotation.NonNull;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.widget.LockPatternUtils;
-import com.android.keyguard.EmergencyCarrierArea;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.settingslib.Utils;
@@ -135,9 +134,12 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private static final int DOZE_ANIMATION_STAGGER_DELAY = 48;
     private static final int DOZE_ANIMATION_ELEMENT_DURATION = 250;
 
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
     private EmergencyCarrierArea mEmergencyCarrierArea;
 
     // TODO(b/179494051): May no longer be needed
+=======
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
     private final boolean mShowLeftAffordance;
     private final boolean mShowCameraAffordance;
 
@@ -277,7 +279,11 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         super.onFinishInflate();
         mPreviewInflater = new PreviewInflater(mContext, new LockPatternUtils(mContext),
                 new ActivityIntentHelper(mContext));
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
         mEmergencyCarrierArea = (EmergencyCarrierArea) findViewById(R.id.keyguard_selector_fade_container);
+=======
+        mPreviewContainer = findViewById(R.id.preview_container);
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
         mOverlayContainer = findViewById(R.id.overlay_container);
         mRightAffordanceView = findViewById(R.id.camera_button);
         mLeftAffordanceView = findViewById(R.id.left_button);
@@ -890,10 +896,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
 
         if (dozing) {
             mOverlayContainer.setVisibility(INVISIBLE);
-            mEmergencyCarrierArea.setVisibility(INVISIBLE);
         } else {
             mOverlayContainer.setVisibility(VISIBLE);
-            mEmergencyCarrierArea.setVisibility(VISIBLE);
             if (animate) {
                 startFinishDozeAnimation();
             }
@@ -921,9 +925,12 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mLeftAffordanceView.setAlpha(alpha);
         mRightAffordanceView.setAlpha(alpha);
         mIndicationArea.setAlpha(alpha);
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
         mWalletButton.setAlpha(alpha);
         mControlsButton.setAlpha(alpha);
         mEmergencyCarrierArea.setAlpha(alpha);
+=======
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
     }
 
     private class DefaultLeftButton implements IntentButton {

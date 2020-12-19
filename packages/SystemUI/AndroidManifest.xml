@@ -83,8 +83,11 @@
     <uses-permission android:name="android.permission.REQUEST_NETWORK_SCORES" />
     <uses-permission android:name="android.permission.CONTROL_VPN" />
     <uses-permission android:name="android.permission.PEERS_MAC_ADDRESS"/>
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
     <uses-permission android:name="android.permission.READ_WIFI_CREDENTIAL"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+=======
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
     <!-- Physical hardware -->
     <uses-permission android:name="android.permission.MANAGE_USB" />
     <uses-permission android:name="android.permission.CONTROL_DISPLAY_BRIGHTNESS" />

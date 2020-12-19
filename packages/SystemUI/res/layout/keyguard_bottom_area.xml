@@ -60,6 +60,7 @@
 
     </LinearLayout>
 
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
     <include layout="@layout/keyguard_emergency_carrier_area"
         android:id="@+id/keyguard_selector_fade_container"
         android:layout_width="wrap_content"
@@ -68,6 +69,13 @@
         android:orientation="vertical"
         android:layout_gravity="bottom|center_horizontal"
         android:gravity="center_horizontal" />
+=======
+    <FrameLayout
+        android:id="@+id/preview_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+    </FrameLayout>
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
 
     <com.android.systemui.statusbar.KeyguardAffordanceView
         android:id="@+id/camera_button"

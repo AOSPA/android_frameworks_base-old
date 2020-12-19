@@ -17,8 +17,24 @@
 package com.android.keyguard;
 
 import android.content.Context;
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
 import com.android.systemui.Dependency;
+=======
+import android.content.Intent;
+import android.content.res.Configuration;
+import android.os.PowerManager;
+import android.os.RemoteException;
+import android.os.SystemClock;
+import android.os.UserHandle;
+import android.telecom.TelecomManager;
+import android.telephony.TelephonyManager;
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
 import android.util.AttributeSet;
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
+=======
+import android.util.Log;
+import android.util.Slog;
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -28,8 +44,6 @@ import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.settingslib.Utils;
 import com.android.systemui.R;
-
-import java.util.List;
 
 /**
  * This class implements a smart emergency button that updates itself based
@@ -43,6 +57,21 @@ public class EmergencyButton extends Button {
 
     private int mDownX;
     private int mDownY;
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
+=======
+    KeyguardUpdateMonitorCallback mInfoCallback = new KeyguardUpdateMonitorCallback() {
+
+        @Override
+        public void onSimStateChanged(int subId, int slotId, int simState) {
+            updateEmergencyCallButton();
+        }
+
+        @Override
+        public void onPhoneStateChanged(int phoneState) {
+            updateEmergencyCallButton();
+        }
+    };
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
     private boolean mLongPressWasDragged;
 
     private LockPatternUtils mLockPatternUtils;
@@ -60,6 +89,25 @@ public class EmergencyButton extends Button {
         mEmergencyAffordanceManager = new EmergencyAffordanceManager(context);
     }
 
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
+=======
+    private TelephonyManager getTelephonyManager() {
+        return (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        Dependency.get(KeyguardUpdateMonitor.class).registerCallback(mInfoCallback);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        Dependency.get(KeyguardUpdateMonitor.class).removeCallback(mInfoCallback);
+    }
+
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
@@ -74,6 +122,10 @@ public class EmergencyButton extends Button {
                 return false;
             });
         }
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
+=======
+        whitelistIpcs(this::updateEmergencyCallButton);
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
     }
 
     @Override
@@ -111,8 +163,62 @@ public class EmergencyButton extends Button {
         return super.performLongClick();
     }
 
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
     public void updateEmergencyCallButton(boolean isInCall, boolean isVoiceCapable,
                                           boolean simLocked, boolean isEmergencyCapable) {
+=======
+    @Override
+    protected void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        updateEmergencyCallButton();
+    }
+
+    /**
+     * Shows the emergency dialer or returns the user to the existing call.
+     */
+    public void takeEmergencyCallAction() {
+        MetricsLogger.action(mContext, MetricsEvent.ACTION_EMERGENCY_CALL);
+        if (mPowerManager != null) {
+            mPowerManager.userActivity(SystemClock.uptimeMillis(), true);
+        }
+        try {
+            ActivityTaskManager.getService().stopSystemLockTaskMode();
+        } catch (RemoteException e) {
+            Slog.w(LOG_TAG, "Failed to stop app pinning");
+        }
+        if (isInCall()) {
+            resumeCall();
+            if (mEmergencyButtonCallback != null) {
+                mEmergencyButtonCallback.onEmergencyButtonClickedWhenInCall();
+            }
+        } else {
+            KeyguardUpdateMonitor updateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
+            if (updateMonitor != null) {
+                updateMonitor.reportEmergencyCallAction(true /* bypassHandler */);
+            } else {
+                Log.w(LOG_TAG, "KeyguardUpdateMonitor was null, launching intent anyway.");
+            }
+            TelecomManager telecomManager = getTelecommManager();
+            if (telecomManager == null) {
+                Log.wtf(LOG_TAG, "TelecomManager was null, cannot launch emergency dialer");
+                return;
+            }
+            Intent emergencyDialIntent =
+                    telecomManager.createLaunchEmergencyDialerIntent(null /* number*/)
+                            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                    | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                                    | Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            .putExtra(EmergencyDialerConstants.EXTRA_ENTRY_TYPE,
+                                    EmergencyDialerConstants.ENTRY_TYPE_LOCKSCREEN_BUTTON);
+
+            getContext().startActivityAsUser(emergencyDialIntent,
+                    ActivityOptions.makeCustomAnimation(getContext(), 0, 0).toBundle(),
+                    new UserHandle(KeyguardUpdateMonitor.getCurrentUser()));
+        }
+    }
+
+    private void updateEmergencyCallButton() {
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
         boolean visible = false;
         if (isVoiceCapable) {
             // Emergency calling requires voice capability.
@@ -123,6 +229,7 @@ public class EmergencyButton extends Button {
                     // Some countries can't handle emergency calls while SIM is locked.
                     visible = mEnableEmergencyCallWhileSimLocked;
                 } else {
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
                     // Show if there is a secure screen (pin/pattern/SIM pin/SIM puk) or config set
                     visible = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser()) ||
                             mContext.getResources().getBoolean(R.bool.config_showEmergencyButton);
@@ -130,6 +237,10 @@ public class EmergencyButton extends Button {
 
                 if (mContext.getResources().getBoolean(R.bool.kg_hide_emgcy_btn_when_oos)) {
                     visible = visible && isEmergencyCapable;
+=======
+                    // Only show if there is a secure screen (pin/pattern/SIM pin/SIM puk);
+                    visible = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser());
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
                 }
             }
         }
@@ -148,4 +259,28 @@ public class EmergencyButton extends Button {
         }
     }
 
+<<<<<<< HEAD   (16efb2 Merge 63a9457d5d71d3761637e9d2c2289bc7a38e33fe on remote bra)
+=======
+    public void setCallback(EmergencyButtonCallback callback) {
+        mEmergencyButtonCallback = callback;
+    }
+
+    /**
+     * Resumes a call in progress.
+     */
+    private void resumeCall() {
+        getTelecommManager().showInCallScreen(false);
+    }
+
+    /**
+     * @return {@code true} if there is a call currently in progress.
+     */
+    private boolean isInCall() {
+        return getTelecommManager().isInCall();
+    }
+
+    private TelecomManager getTelecommManager() {
+        return (TelecomManager) mContext.getSystemService(Context.TELECOM_SERVICE);
+    }
+>>>>>>> CHANGE (93aa04 SystemUI: Squashed Revert of CAF Emergency Button additions)
 }
