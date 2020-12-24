@@ -29,6 +29,7 @@ import com.android.systemui.qs.QSHost.Callback;
 import com.android.systemui.qs.QSPanel.QSTileLayout;
 import com.android.systemui.qs.TouchAnimator.Builder;
 import com.android.systemui.qs.TouchAnimator.Listener;
+import com.android.systemui.R;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 import com.android.systemui.util.Utils;
@@ -79,12 +80,15 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     private float mLastPosition;
     private QSTileHost mHost;
     private boolean mShowCollapsedOnKeyguard;
+    private int mMediaTopOffset;
 
     public QSAnimator(QS qs, QuickQSPanel quickPanel, QSPanel panel, Context context) {
         mContext = context;
         mQs = qs;
         mQuickQsPanel = quickPanel;
         mQsPanel = panel;
+        mMediaTopOffset = mContext.getResources().getDimensionPixelSize(
+                    R.dimen.quick_settings_top_margin_media_extra);
         mQsPanel.addOnAttachStateChangeListener(this);
         qs.getView().addOnLayoutChangeListener(this);
         if (mQsPanel.isAttachedToWindow()) {
@@ -286,7 +290,12 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                 && mQsPanel.isMediaHostVisible()) {
             View mQsPanelMediaHostView = mQsPanel.getMediaHost().getHostView();
             View mQuickQsPanelMediaHostView = mQuickQsPanel.getMediaHost().getHostView();
-            float translation = mQsPanelMediaHostView.getHeight() - mQuickQsPanelMediaHostView.getHeight();
+            float translation;
+            if (!mQsPanel.hasActiveMedia()) {
+                translation = mQsPanelMediaHostView.getHeight() + mMediaTopOffset;
+            } else {
+                translation = mQsPanelMediaHostView.getHeight() - mQuickQsPanelMediaHostView.getHeight();
+            }
             mBrightnessAnimator = new TouchAnimator.Builder().addFloat(brightnessView, "translationY", translation, 0)
                     .build();
             mAllViews.add(brightnessView);
@@ -309,15 +318,9 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             if (mQsPanel.getSecurityFooter() != null) {
                 builder.addFloat(mQsPanel.getSecurityFooter().getView(), "alpha", 0, 1);
             }
-            if (mQsPanel.getDivider() != null) {
-                builder.addFloat(mQsPanel.getDivider(), "alpha", 0, 1);
-            }
             mAllPagesDelayedAnimator = builder.build();
             if (mQsPanel.getSecurityFooter() != null) {
                 mAllViews.add(mQsPanel.getSecurityFooter().getView());
-            }
-            if (mQsPanel.getDivider() != null) {
-                mAllViews.add(mQsPanel.getDivider());
             }
 
             float px = 0;
