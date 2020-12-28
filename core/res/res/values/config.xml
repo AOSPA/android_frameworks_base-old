@@ -2785,6 +2785,7 @@
         <item>restart</item>
         <item>recovery</item>
         <item>logout</item>
+        <item>screenshot</item>
         <item>bugreport</item>
     </string-array>
 
