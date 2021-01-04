@@ -390,7 +390,15 @@ public class BtHelper {
                                 broadcast = false;
                                 break;
                             }
+                        } else if(mScoClients.isEmpty() &&
+                             mScoAudioState == SCO_STATE_DEACTIVATING) {
+                             // when SCO client dies, mScoClients will be empty
+                             // and SCO disconnection gets triggered.
+                             // send SCO disconnection broadcast.
+                             broadcast = true;
+                             Log.w(TAG, "no SCO clnts while SCO disc, sending broadcast");
                         }
+
                         // Tear down SCO if disconnected from external
                         clearAllScoClients(0, mScoAudioState == SCO_STATE_ACTIVE_INTERNAL);
                         mScoAudioState = SCO_STATE_INACTIVE;
