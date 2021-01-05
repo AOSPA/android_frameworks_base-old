@@ -70,8 +70,6 @@ LIBHWUI_PLATFORM {
       SkPaint::*;
       SkRGBA4f*::FromColor*;
       SkTypeface::MakeFromFile*;
-      SkData::*;
-      SkImage::*;
     };
   local:
     *;
