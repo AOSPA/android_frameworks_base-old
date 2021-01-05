@@ -386,6 +386,9 @@ public class BugreportProgressService extends Service {
             }
         }
 
+        @Override
+        public void onEarlyReportFinished() {}
+
         /**
          * Reads bugreport id and links it to the bugreport info to track a bugreport that is in
          * process. id is incremented in the dumpstate code.
@@ -511,14 +514,14 @@ public class BugreportProgressService extends Service {
             }
 
             if (msg.what != MSG_SERVICE_COMMAND) {
-                // Sanity check.
+                // Confidence check.
                 Log.e(TAG, "Invalid message type: " + msg.what);
                 return;
             }
 
             // At this point it's handling onStartCommand(), with the intent passed as an Extra.
             if (!(msg.obj instanceof Intent)) {
-                // Sanity check.
+                // Confidence check.
                 Log.wtf(TAG, "handleMessage(): invalid msg.obj type: " + msg.obj);
                 return;
             }
@@ -737,18 +740,20 @@ public class BugreportProgressService extends Service {
             final Intent infoIntent = new Intent(mContext, BugreportProgressService.class);
             infoIntent.setAction(INTENT_BUGREPORT_INFO_LAUNCH);
             infoIntent.putExtra(EXTRA_ID, info.id);
+            // Simple notification action button clicks are immutable
             final PendingIntent infoPendingIntent =
                     PendingIntent.getService(mContext, info.id, infoIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT);
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             final Action infoAction = new Action.Builder(null,
                     mContext.getString(R.string.bugreport_info_action),
                     infoPendingIntent).build();
             final Intent screenshotIntent = new Intent(mContext, BugreportProgressService.class);
             screenshotIntent.setAction(INTENT_BUGREPORT_SCREENSHOT);
             screenshotIntent.putExtra(EXTRA_ID, info.id);
+            // Simple notification action button clicks are immutable
             PendingIntent screenshotPendingIntent = mTakingScreenshot ? null : PendingIntent
                     .getService(mContext, info.id, screenshotIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT);
+                            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             final Action screenshotAction = new Action.Builder(null,
                     mContext.getString(R.string.bugreport_screenshot_action),
                     screenshotPendingIntent).build();
@@ -790,7 +795,7 @@ public class BugreportProgressService extends Service {
         intent.setClass(context, BugreportProgressService.class);
         intent.putExtra(EXTRA_ID, info.id);
         return PendingIntent.getService(context, info.id, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
     /**
@@ -1250,7 +1255,7 @@ public class BugreportProgressService extends Service {
                 .setTicker(title)
                 .setContentText(content)
                 .setContentIntent(PendingIntent.getService(mContext, info.id, shareIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT))
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
                 .setOnlyAlertOnce(false)
                 .setDeleteIntent(newCancelIntent(mContext, info));
 

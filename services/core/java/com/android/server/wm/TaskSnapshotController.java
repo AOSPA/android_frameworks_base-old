@@ -16,7 +16,9 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREENSHOT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -27,7 +29,6 @@ import android.annotation.Nullable;
 import android.app.ActivityManager.TaskSnapshot;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.Insets;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.RecordingCanvas;
@@ -82,7 +83,7 @@ class TaskSnapshotController {
 
     /**
      * Return value for {@link #getSnapshotMode}: We are not allowed to take a real screenshot but
-     * we should try to use the app theme to create a dummy representation of the app.
+     * we should try to use the app theme to create a fake representation of the app.
      */
     @VisibleForTesting
     static final int SNAPSHOT_MODE_APP_THEME = 1;
@@ -156,7 +157,6 @@ class TaskSnapshotController {
         if (shouldDisableSnapshots()) {
             return;
         }
-
         // We need to take a snapshot of the task if and only if all activities of the task are
         // either closing or hidden.
         getClosingTasks(closingApps, mTmpTasks);
@@ -367,7 +367,8 @@ class TaskSnapshotController {
 
         SurfaceControl[] excludeLayers;
         final WindowState imeWindow = task.getDisplayContent().mInputMethodWindow;
-        if (imeWindow != null) {
+        // Exclude IME window snapshot when IME isn't proper to attach to app.
+        if (imeWindow != null && !task.getDisplayContent().isImeAttachedToApp()) {
             excludeLayers = new SurfaceControl[1];
             excludeLayers[0] = imeWindow.getSurfaceControl();
         } else {
@@ -443,10 +444,17 @@ class TaskSnapshotController {
         for (int i = closingApps.size() - 1; i >= 0; i--) {
             final ActivityRecord activity = closingApps.valueAt(i);
             final Task task = activity.getTask();
+            if (task == null) continue;
 
+            // Since RecentsAnimation will handle task snapshot while switching apps with the
+            // best capture timing (e.g. IME window capture),
+            // No need additional task capture while task is controlled by RecentsAnimation.
+            if (task.isAnimatingByRecents()) {
+                mSkipClosingAppSnapshotTasks.add(task);
+            }
             // If the task of the app is not visible anymore, it means no other app in that task
             // is opening. Thus, the task is closing.
-            if (task != null && !task.isVisible() && !mSkipClosingAppSnapshotTasks.contains(task)) {
+            if (!task.isVisible() && !mSkipClosingAppSnapshotTasks.contains(task)) {
                 outClosingTasks.add(task);
             }
         }
@@ -480,13 +488,10 @@ class TaskSnapshotController {
         final int color = ColorUtils.setAlphaComponent(
                 task.getTaskDescription().getBackgroundColor(), 255);
         final LayoutParams attrs = mainWindow.getAttrs();
-        final InsetsPolicy insetsPolicy = mainWindow.getDisplayContent().getInsetsPolicy();
-        final InsetsState insetsState =
-                new InsetsState(insetsPolicy.getInsetsForDispatch(mainWindow));
-        mergeInsetsSources(insetsState, mainWindow.getRequestedInsetsState());
-        final Rect systemBarInsets = getSystemBarInsets(mainWindow.getFrameLw(), insetsState);
+        final InsetsState insetsState = getInsetsStateWithVisibilityOverride(mainWindow);
+        final Rect systemBarInsets = getSystemBarInsets(mainWindow.getFrame(), insetsState);
         final SystemBarBackgroundPainter decorPainter = new SystemBarBackgroundPainter(attrs.flags,
-                attrs.privateFlags, attrs.systemUiVisibility, task.getTaskDescription(),
+                attrs.privateFlags, attrs.insetsFlags.appearance, task.getTaskDescription(),
                 mHighResTaskSnapshotScale, insetsState);
         final int taskWidth = task.getBounds().width();
         final int taskHeight = task.getBounds().height();
@@ -572,7 +577,10 @@ class TaskSnapshotController {
                 synchronized (mService.mGlobalLock) {
                     mTmpTasks.clear();
                     mService.mRoot.forAllTasks(task -> {
-                        if (task.isVisible()) {
+                        // Since RecentsAnimation will handle task snapshot while switching apps
+                        // with the best capture timing (e.g. IME window capture), No need
+                        // additional task capture while task is controlled by RecentsAnimation.
+                        if (task.isVisible() && !task.isAnimatingByRecents()) {
                             mTmpTasks.add(task);
                         }
                     });
@@ -603,21 +611,26 @@ class TaskSnapshotController {
         return 0;
     }
 
-    static void mergeInsetsSources(InsetsState base, InsetsState other) {
+    static InsetsState getInsetsStateWithVisibilityOverride(WindowState win) {
+        final InsetsState state = new InsetsState(win.getInsetsState());
         for (@InternalInsetsType int type = 0; type < InsetsState.SIZE; type++) {
-            final InsetsSource source = other.peekSource(type);
-            if (source != null) {
-                base.addSource(source);
+            final boolean requestedVisible = win.getRequestedVisibility(type);
+            InsetsSource source = state.peekSource(type);
+            if (source != null && source.isVisible() != requestedVisible) {
+                source = new InsetsSource(source);
+                source.setVisible(requestedVisible);
+                state.addSource(source);
             }
         }
+        return state;
     }
 
     static Rect getSystemBarInsets(Rect frame, InsetsState state) {
         return state.calculateInsets(frame, null /* ignoringVisibilityState */,
                 false /* isScreenRound */, false /* alwaysConsumeSystemBars */,
                 null /* displayCutout */, 0 /* legacySoftInputMode */, 0 /* legacyWindowFlags */,
-                0 /* legacySystemUiFlags */, null /* typeSideMap */).getInsets(
-                        WindowInsets.Type.systemBars()).toRect();
+                0 /* legacySystemUiFlags */, TYPE_APPLICATION, WINDOWING_MODE_UNDEFINED,
+                null /* typeSideMap */).getInsets(WindowInsets.Type.systemBars()).toRect();
     }
 
     void dump(PrintWriter pw, String prefix) {

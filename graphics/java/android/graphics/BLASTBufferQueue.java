@@ -16,6 +16,7 @@
 
 package android.graphics;
 
+import android.annotation.Nullable;
 import android.view.Surface;
 import android.view.SurfaceControl;
 
@@ -24,31 +25,49 @@ import android.view.SurfaceControl;
  */
 public final class BLASTBufferQueue {
     // Note: This field is accessed by native code.
-    private long mNativeObject; // BLASTBufferQueue*
+    public long mNativeObject; // BLASTBufferQueue*
 
-    private static native long nativeCreate(long surfaceControl, long width, long height,
-            boolean tripleBufferingEnabled);
+    private static native long nativeCreate(String name, long surfaceControl, long width,
+                                            long height, boolean tripleBufferingEnabled);
     private static native void nativeDestroy(long ptr);
-    private static native Surface nativeGetSurface(long ptr);
+    private static native Surface nativeGetSurface(long ptr, boolean includeSurfaceControlHandle);
     private static native void nativeSetNextTransaction(long ptr, long transactionPtr);
     private static native void nativeUpdate(long ptr, long surfaceControl, long width, long height);
+    private static native void nativeFlushShadowQueue(long ptr);
 
     /** Create a new connection with the surface flinger. */
-    public BLASTBufferQueue(SurfaceControl sc, int width, int height,
+    public BLASTBufferQueue(String name, SurfaceControl sc, int width, int height,
             boolean tripleBufferingEnabled) {
-        mNativeObject = nativeCreate(sc.mNativeObject, width, height, tripleBufferingEnabled);
+        mNativeObject = nativeCreate(name, sc.mNativeObject, width, height, tripleBufferingEnabled);
     }
 
     public void destroy() {
         nativeDestroy(mNativeObject);
+        mNativeObject = 0;
     }
 
-    public Surface getSurface() {
-        return nativeGetSurface(mNativeObject);
+    /**
+     * @return a new Surface instance from the IGraphicsBufferProducer of the adapter.
+     */
+    public Surface createSurface() {
+        return nativeGetSurface(mNativeObject, false /* includeSurfaceControlHandle */);
     }
 
-    public void setNextTransaction(SurfaceControl.Transaction t) {
-        nativeSetNextTransaction(mNativeObject, t.mNativeObject);
+    /**
+     * @return a new Surface instance from the IGraphicsBufferProducer of the adapter and
+     * the SurfaceControl handle.
+     */
+    public Surface createSurfaceWithHandle() {
+        return nativeGetSurface(mNativeObject, true /* includeSurfaceControlHandle */);
+    }
+
+    /**
+     * Send the transaction to BBQ so the next frame can be added and not applied immediately.
+     * This gives the caller a chance to apply the transaction when it's ready.
+     * @param t The transaction to add the frame to. This can be null to clear the transaction.
+     */
+    public void setNextTransaction(@Nullable SurfaceControl.Transaction t) {
+        nativeSetNextTransaction(mNativeObject, t == null ? 0 : t.mNativeObject);
     }
 
     public void update(SurfaceControl sc, int width, int height) {
@@ -64,5 +83,9 @@ public final class BLASTBufferQueue {
         } finally {
             super.finalize();
         }
+    }
+
+    public void flushShadowQueue() {
+        nativeFlushShadowQueue(mNativeObject);
     }
 }

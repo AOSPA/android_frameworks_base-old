@@ -126,7 +126,7 @@ public final class AccessibilityInteractionClient
     /**
      * @return The client for the current thread.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static AccessibilityInteractionClient getInstance() {
         final long threadId = Thread.currentThread().getId();
         return getInstanceForThread(threadId);
@@ -205,7 +205,7 @@ public final class AccessibilityInteractionClient
      *
      * @param message The message.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void setSameThreadMessage(Message message) {
         synchronized (mInstanceLock) {
             mSameThreadMessage = message;
@@ -441,8 +441,8 @@ public final class AccessibilityInteractionClient
                     prefetchFlags &= ~AccessibilityNodeInfo.FLAG_PREFETCH_MASK;
                 }
                 final int interactionId = mInteractionIdCounter.getAndIncrement();
-                final long identityToken = Binder.clearCallingIdentity();
                 final String[] packageNames;
+                final long identityToken = Binder.clearCallingIdentity();
                 try {
                     packageNames = connection.findAccessibilityNodeInfoByAccessibilityId(
                             accessibilityWindowId, accessibilityNodeId, interactionId, this,
@@ -501,8 +501,8 @@ public final class AccessibilityInteractionClient
             IAccessibilityServiceConnection connection = getConnection(connectionId);
             if (connection != null) {
                 final int interactionId = mInteractionIdCounter.getAndIncrement();
-                final long identityToken = Binder.clearCallingIdentity();
                 final String[] packageNames;
+                final long identityToken = Binder.clearCallingIdentity();
                 try {
                     packageNames = connection.findAccessibilityNodeInfosByViewId(
                             accessibilityWindowId, accessibilityNodeId, viewId, interactionId, this,
@@ -555,8 +555,8 @@ public final class AccessibilityInteractionClient
             IAccessibilityServiceConnection connection = getConnection(connectionId);
             if (connection != null) {
                 final int interactionId = mInteractionIdCounter.getAndIncrement();
-                final long identityToken = Binder.clearCallingIdentity();
                 final String[] packageNames;
+                final long identityToken = Binder.clearCallingIdentity();
                 try {
                     packageNames = connection.findAccessibilityNodeInfosByText(
                             accessibilityWindowId, accessibilityNodeId, text, interactionId, this,
@@ -608,8 +608,8 @@ public final class AccessibilityInteractionClient
             IAccessibilityServiceConnection connection = getConnection(connectionId);
             if (connection != null) {
                 final int interactionId = mInteractionIdCounter.getAndIncrement();
-                final long identityToken = Binder.clearCallingIdentity();
                 final String[] packageNames;
+                final long identityToken = Binder.clearCallingIdentity();
                 try {
                     packageNames = connection.findFocus(accessibilityWindowId,
                             accessibilityNodeId, focusType, interactionId, this,
@@ -657,8 +657,8 @@ public final class AccessibilityInteractionClient
             IAccessibilityServiceConnection connection = getConnection(connectionId);
             if (connection != null) {
                 final int interactionId = mInteractionIdCounter.getAndIncrement();
-                final long identityToken = Binder.clearCallingIdentity();
                 final String[] packageNames;
+                final long identityToken = Binder.clearCallingIdentity();
                 try {
                     packageNames = connection.focusSearch(accessibilityWindowId,
                             accessibilityNodeId, direction, interactionId, this,
@@ -705,8 +705,8 @@ public final class AccessibilityInteractionClient
             IAccessibilityServiceConnection connection = getConnection(connectionId);
             if (connection != null) {
                 final int interactionId = mInteractionIdCounter.getAndIncrement();
-                final long identityToken = Binder.clearCallingIdentity();
                 final boolean success;
+                final long identityToken = Binder.clearCallingIdentity();
                 try {
                     success = connection.performAccessibilityAction(
                             accessibilityWindowId, accessibilityNodeId, action, arguments,
@@ -729,7 +729,7 @@ public final class AccessibilityInteractionClient
         return false;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void clearCache() {
         sAccessibilityCache.clear();
     }

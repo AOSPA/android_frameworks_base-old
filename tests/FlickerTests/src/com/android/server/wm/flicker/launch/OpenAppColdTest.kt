@@ -16,16 +16,31 @@
 
 package com.android.server.wm.flicker.launch
 
-import androidx.test.filters.FlakyTest
-import androidx.test.filters.LargeTest
-import com.android.server.wm.flicker.CommonTransitions
-import com.android.server.wm.flicker.LayersTraceSubject
-import com.android.server.wm.flicker.NonRotationTestBase
-import com.android.server.wm.flicker.StandardAppHelper
-import com.android.server.wm.flicker.TransitionRunner
-import com.android.server.wm.flicker.WmTraceSubject
+import android.platform.test.annotations.Presubmit
+import android.view.Surface
+import androidx.test.filters.RequiresDevice
+import androidx.test.platform.app.InstrumentationRegistry
+import com.android.server.wm.flicker.Flicker
+import com.android.server.wm.flicker.FlickerTestRunnerFactory
+import com.android.server.wm.flicker.FlickerTestRunner
+import com.android.server.wm.flicker.endRotation
+import com.android.server.wm.flicker.focusChanges
+import com.android.server.wm.flicker.helpers.StandardAppHelper
+import com.android.server.wm.flicker.helpers.buildTestTag
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerRotatesAndScales
+import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.noUncoveredRegions
+import com.android.server.wm.flicker.repetitions
+import com.android.server.wm.flicker.startRotation
+import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.visibleWindowsShownMoreThanOneConsecutiveEntry
+import com.android.server.wm.flicker.visibleLayersShownMoreThanOneConsecutiveEntry
 import org.junit.FixMethodOrder
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -34,54 +49,73 @@ import org.junit.runners.Parameterized
  * Test cold launch app from launcher.
  * To run this test: `atest FlickerTests:OpenAppColdTest`
  */
-@LargeTest
+@Presubmit
+@RequiresDevice
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class OpenAppColdTest(
-    beginRotationName: String,
-    beginRotation: Int
-) : NonRotationTestBase(beginRotationName, beginRotation) {
-    init {
-        testApp = StandardAppHelper(instrumentation,
+    testName: String,
+    flickerSpec: Flicker
+) : FlickerTestRunner(testName, flickerSpec) {
+    companion object {
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): List<Array<Any>> {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val testApp = StandardAppHelper(instrumentation,
                 "com.android.server.wm.flicker.testapp", "SimpleApp")
-    }
+            return FlickerTestRunnerFactory(instrumentation)
+                .buildTest { configuration ->
+                    withTag { buildTestTag("openAppCold", testApp, configuration) }
+                    repeat { configuration.repetitions }
+                    setup {
+                        test {
+                            device.wakeUpAndGoToHomeScreen()
+                        }
+                        eachRun {
+                            this.setRotation(configuration.startRotation)
+                        }
+                    }
+                    transitions {
+                        testApp.open()
+                    }
+                    teardown {
+                        eachRun {
+                            testApp.exit()
+                            this.setRotation(Surface.ROTATION_0)
+                        }
+                    }
+                    assertions {
+                        windowManagerTrace {
+                            navBarWindowIsAlwaysVisible()
+                            statusBarWindowIsAlwaysVisible()
+                            visibleWindowsShownMoreThanOneConsecutiveEntry()
 
-    override val transitionToRun: TransitionRunner
-        get() = CommonTransitions.openAppCold(testApp, instrumentation, uiDevice, beginRotation)
-                .includeJankyRuns().build()
+                            appWindowReplacesLauncherAsTopWindow(testApp)
+                            wallpaperWindowBecomesInvisible()
+                        }
 
-    @Test
-    fun checkVisibility_wallpaperWindowBecomesInvisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsBelowAppWindow("Wallpaper")
-                    .then()
-                    .hidesBelowAppWindow("Wallpaper")
-                    .forAllEntries()
-        }
-    }
+                        layersTrace {
+                            // During testing the launcher is always in portrait mode
+                            noUncoveredRegions(Surface.ROTATION_0, configuration.endRotation,
+                                bugId = 141361128)
+                            navBarLayerRotatesAndScales(Surface.ROTATION_0,
+                                configuration.endRotation)
+                            statusBarLayerRotatesScales(Surface.ROTATION_0,
+                                configuration.endRotation)
+                            navBarLayerIsAlwaysVisible(enabled = false)
+                            statusBarLayerIsAlwaysVisible(enabled = false)
+                            visibleLayersShownMoreThanOneConsecutiveEntry(
+                                    enabled = Surface.ROTATION_0 == configuration.endRotation)
 
-    @FlakyTest(bugId = 140855415)
-    @Test
-    fun checkZOrder_appWindowReplacesLauncherAsTopWindow() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAppWindowOnTop(
-                            "com.android.launcher3/.Launcher")
-                    .then()
-                    .showsAppWindowOnTop(testApp.getPackage())
-                    .forAllEntries()
-        }
-    }
+                            appLayerReplacesWallpaperLayer(testApp)
+                        }
 
-    @Test
-    fun checkVisibility_wallpaperLayerBecomesInvisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .showsLayer("Wallpaper")
-                    .then()
-                    .replaceVisibleLayer("Wallpaper", testApp.getPackage())
-                    .forAllEntries()
+                        eventLog {
+                            focusChanges("NexusLauncherActivity", testApp.`package`)
+                        }
+                    }
+                }
         }
     }
 }

@@ -19,6 +19,7 @@ package android.widget;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.hardware.SensorManager;
+import android.os.Build;
 import android.util.BoostFramework.ScrollOptimizer;
 import android.util.Log;
 import android.view.ViewConfiguration;
@@ -38,7 +39,7 @@ public class OverScroller {
     @UnsupportedAppUsage
     private final SplineOverScroller mScrollerY;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private Interpolator mInterpolator;
 
     private final boolean mFlywheel;
@@ -929,7 +930,7 @@ public class OverScroller {
             final long time = AnimationUtils.currentAnimationTimeMillis();
             final long currentTime = time - mStartTime;
 
-            if (currentTime == 0) {
+            if (currentTime <= 0) {
                 // Skip work but report that we're still going if we have a nonzero duration.
                 return mDuration > 0;
             }

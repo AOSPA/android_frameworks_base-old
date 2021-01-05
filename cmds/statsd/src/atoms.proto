@@ -50,6 +50,7 @@ import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enum
 import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
 import "frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto";
 import "frameworks/base/core/proto/android/stats/enums.proto";
+import "frameworks/base/core/proto/android/stats/hdmi/enums.proto";
 import "frameworks/base/core/proto/android/stats/intelligence/enums.proto";
 import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
 import "frameworks/base/core/proto/android/stats/location/location_enums.proto";
@@ -58,6 +59,7 @@ import "frameworks/base/core/proto/android/stats/mediaprovider/mediaprovider_enu
 import "frameworks/base/core/proto/android/stats/storage/storage_enums.proto";
 import "frameworks/base/core/proto/android/stats/style/style_enums.proto";
 import "frameworks/base/core/proto/android/stats/sysui/notification_enums.proto";
+import "frameworks/base/core/proto/android/stats/tls/enums.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
@@ -66,7 +68,7 @@ import "frameworks/base/core/proto/android/stats/textclassifier/textclassifier_e
 import "frameworks/base/core/proto/android/stats/otaupdate/updateengine_enums.proto";
 
 /**
- * The master atom class. This message defines all of the available
+ * The primary atom class. This message defines all of the available
  * raw stats log events from the Android system, also known as "atoms."
  *
  * This field contains a single oneof with all of the available messages.
@@ -156,7 +158,7 @@ message Atom {
         AppStartMemoryStateCaptured app_start_memory_state_captured = 55 [(module) = "framework"];
         ShutdownSequenceReported shutdown_sequence_reported = 56 [(module) = "framework"];
         BootSequenceReported boot_sequence_reported = 57;
-        DaveyOccurred davey_occurred = 58 [(module) = "statsd"];
+        DaveyOccurred davey_occurred = 58 [(module) = "statsd", deprecated = true];
         OverlayStateChanged overlay_state_changed =
                 59 [(module) = "framework", (module) = "statsdtest"];
         ForegroundServiceStateChanged foreground_service_state_changed
@@ -265,7 +267,7 @@ message Atom {
                 147 [(module) = "framework", (module) = "statsd"];
         BiometricSystemHealthIssueDetected biometric_system_health_issue_detected =
                 148 [(module) = "framework"];
-        BubbleUIChanged bubble_ui_changed = 149 [(module) = "sysui"];
+        BubbleUIChanged bubble_ui_changed = 149 [(module) = "framework"];
         ScheduledJobConstraintChanged scheduled_job_constraint_changed =
                 150 [(module) = "framework"];
         BluetoothActiveDeviceChanged bluetooth_active_device_changed =
@@ -485,13 +487,34 @@ message Atom {
         NetworkTetheringReported  network_tethering_reported =
             303 [(module) = "network_tethering"];
         ImeTouchReported ime_touch_reported = 304 [(module) = "sysui"];
+        UIInteractionFrameInfoReported ui_interaction_frame_info_reported =
+            305 [(module) = "framework"];
+        UIActionLatencyReported ui_action_latency_reported = 306 [(module) = "framework"];
+        WifiDisconnectReported wifi_disconnect_reported = 307 [(module) = "wifi"];
+        WifiConnectionStateChanged wifi_connection_state_changed = 308 [(module) = "wifi"];
+        HdmiCecActiveSourceChanged hdmi_cec_active_source_changed = 309 [(module) = "framework"];
+        HdmiCecMessageReported hdmi_cec_message_reported = 310 [(module) = "framework"];
+        AirplaneMode airplane_mode = 311 [(module) = "telephony"];
+        ModemRestart modem_restart = 312 [(module) = "telephony"];
+        CarrierIdMismatchReported carrier_id_mismatch_reported = 313 [(module) = "telephony"];
+        CarrierIdTableUpdated carrier_id_table_updated = 314 [(module) = "telephony"];
+        DataStallRecoveryReported data_stall_recovery_reported = 315 [(module) = "telephony"];
+        MediametricsMediaParserReported mediametrics_mediaparser_reported = 316;
+        TlsHandshakeReported tls_handshake_reported = 317 [(module) = "conscrypt"];
+        TextClassifierApiUsageReported text_classifier_api_usage_reported = 318  [(module) = "textclassifier"];
+        KilledAppStatsReported killed_app_stats_reported = 319 [(module) = "carwatchdogd"];
+        MediametricsPlaybackReported mediametrics_playback_reported = 320;
+        MediaNetworkInfoChanged media_network_info_changed = 321;
+        MediaPlaybackStateChanged media_playback_state_changed = 322;
+        MediaPlaybackErrorReported media_playback_error_reported = 323;
+        MediaPlaybackTrackChanged media_playback_track_changed = 324;
 
         // StatsdStats tracks platform atoms with ids upto 500.
         // Update StatsdStats::kMaxPushedAtomId when atom ids here approach that value.
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10084
+    // Next: 10092
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000 [(module) = "framework"];
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001 [(module) = "framework"];
@@ -590,6 +613,12 @@ message Atom {
         DNDModeProto dnd_mode_rule = 10084 [(module) = "framework"];
         GeneralExternalStorageAccessStats general_external_storage_access_stats =
             10085 [(module) = "mediaprovider"];
+        IncomingSms incoming_sms = 10086 [(module) = "telephony"];
+        OutgoingSms outgoing_sms = 10087 [(module) = "telephony"];
+        CarrierIdTableVersion carrier_id_table_version = 10088 [(module) = "telephony"];
+        DataCallSession data_call_session = 10089 [(module) = "telephony"];
+        CellularServiceState cellular_service_state = 10090 [(module) = "telephony"];
+        CellularDataServiceSwitch cellular_data_service_switch = 10091 [(module) = "telephony"];
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -851,10 +880,10 @@ message WifiFailureStatReported {
 }
 
 /**
- * Logs whether a wifi connection is successful and reasons for failure if it isn't.
+ * Logs whether a Wifi connection attempt was successful and reasons for failure if it wasn't.
  *
  * Logged from:
- *   frameworks/opt/net/wifi/service/java/com/android/server/wifi/ClientModeImpl.java
+ *   frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiMetrics.java
  */
 message WifiConnectionResultReported {
     enum FailureCode {
@@ -866,13 +895,159 @@ message WifiConnectionResultReported {
         FAILURE_DHCP = 5;
         FAILURE_NETWORK_DISCONNECTION = 6;
         FAILURE_ROAM_TIMEOUT = 7;
+        FAILURE_WRONG_PASSWORD = 8;
     }
-    // true represents a successful connection
+
+    enum Trigger {
+        UNKNOWN = 0;
+        // Connection attempt was initiated manually.
+        MANUAL = 1;
+        // Automatic reconnection to the same network as connected previously.
+        RECONNECT_SAME_NETWORK = 2;
+        // Automatic reconnection to a saved network, but not the previous one.
+        AUTOCONNECT_CONFIGURED_NETWORK = 3;
+        // Automatic first connection attempt after device boot.
+        AUTOCONNECT_BOOT = 4;
+    }
+
+    // True represents a successful connection.
     optional bool connection_result = 1;
-    // reason for the connection failure
+    // Reason for the connection failure.
     optional FailureCode failure_code = 2;
-    // scan rssi before the connection attempt
+    // Scan RSSI before the connection attempt.
     optional int32 rssi = 3;
+    // Time taken by this connection attempt.
+    optional int32 connection_attempt_duration_millis = 4;
+    // Band bucket the connected network is on.
+    optional android.net.wifi.WifiBandBucket band = 5;
+    // Authentication type.
+    optional android.net.wifi.WifiAuthType auth_type = 6;
+    // What triggered this connection attempt.
+    optional Trigger trigger = 7;
+    // Whether this network was used (successfully connected to) previously.
+    optional bool network_used = 8;
+    // Time taken from the last successful connection (or device boot if that's the first one).
+    optional int32 time_since_last_connection_seconds = 9;
+}
+
+/**
+ * Logs when a Wifi connection drops.
+ *
+ * Logged from:
+ *   frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiMetrics.java
+ */
+message WifiDisconnectReported {
+    enum FailureCode {
+        UNKNOWN = 0;
+
+        // Wifi supplicant failure reason codes (IEEE Std 802.11-2016, 9.4.1.7, Table 9-45).
+        // See ISupplicantStaIfaceCallback.java:ReasonCode
+        UNSPECIFIED = 1;
+        PREV_AUTH_NOT_VALID = 2;
+        DEAUTH_LEAVING = 3;
+        DISASSOC_DUE_TO_INACTIVITY = 4;
+        DISASSOC_AP_BUSY = 5;
+        CLASS2_FRAME_FROM_NONAUTH_STA = 6;
+        CLASS3_FRAME_FROM_NONASSOC_STA = 7;
+        DISASSOC_STA_HAS_LEFT = 8;
+        STA_REQ_ASSOC_WITHOUT_AUTH = 9;
+        PWR_CAPABILITY_NOT_VALID = 10;
+        SUPPORTED_CHANNEL_NOT_VALID = 11;
+        BSS_TRANSITION_DISASSOC = 12;
+        INVALID_IE = 13;
+        MICHAEL_MIC_FAILURE = 14;
+        FOURWAY_HANDSHAKE_TIMEOUT = 15;
+        GROUP_KEY_UPDATE_TIMEOUT = 16;
+        IE_IN_4WAY_DIFFERS = 17;
+        GROUP_CIPHER_NOT_VALID = 18;
+        PAIRWISE_CIPHER_NOT_VALID = 19;
+        AKMP_NOT_VALID = 20;
+        UNSUPPORTED_RSN_IE_VERSION = 21;
+        INVALID_RSN_IE_CAPAB = 22;
+        IEEE_802_1X_AUTH_FAILED = 23;
+        CIPHER_SUITE_REJECTED = 24;
+        TDLS_TEARDOWN_UNREACHABLE = 25;
+        TDLS_TEARDOWN_UNSPECIFIED = 26;
+        SSP_REQUESTED_DISASSOC = 27;
+        NO_SSP_ROAMING_AGREEMENT = 28;
+        BAD_CIPHER_OR_AKM = 29;
+        NOT_AUTHORIZED_THIS_LOCATION = 30;
+        SERVICE_CHANGE_PRECLUDES_TS = 31;
+        UNSPECIFIED_QOS_REASON = 32;
+        NOT_ENOUGH_BANDWIDTH = 33;
+        DISASSOC_LOW_ACK = 34;
+        EXCEEDED_TXOP = 35;
+        STA_LEAVING = 36;
+        END_TS_BA_DLS = 37;
+        UNKNOWN_TS_BA = 38;
+        TIMEOUT = 39;
+        PEERKEY_MISMATCH = 45;
+        AUTHORIZED_ACCESS_LIMIT_REACHED = 46;
+        EXTERNAL_SERVICE_REQUIREMENTS = 47;
+        INVALID_FT_ACTION_FRAME_COUNT = 48;
+        INVALID_PMKID = 49;
+        INVALID_MDE = 50;
+        INVALID_FTE = 51;
+        MESH_PEERING_CANCELLED = 52;
+        MESH_MAX_PEERS = 53;
+        MESH_CONFIG_POLICY_VIOLATION = 54;
+        MESH_CLOSE_RCVD = 55;
+        MESH_MAX_RETRIES = 56;
+        MESH_CONFIRM_TIMEOUT = 57;
+        MESH_INVALID_GTK = 58;
+        MESH_INCONSISTENT_PARAMS = 59;
+        MESH_INVALID_SECURITY_CAP = 60;
+        MESH_PATH_ERROR_NO_PROXY_INFO = 61;
+        MESH_PATH_ERROR_NO_FORWARDING_INFO = 62;
+        MESH_PATH_ERROR_DEST_UNREACHABLE = 63;
+        MAC_ADDRESS_ALREADY_EXISTS_IN_MBSS = 64;
+        MESH_CHANNEL_SWITCH_REGULATORY_REQ = 65;
+        MESH_CHANNEL_SWITCH_UNSPECIFIED = 66;
+
+        // ClientModeImpl error codes
+        // Defined in /frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiMetrics.java
+        IFACE_DESTROYED = 10000;
+        WIFI_DISABLED = 10001;
+        SUPPLICANT_DISCONNECTED = 10002;
+        CONNECTING_WATCHDOG_TIMER = 10003;
+        ROAM_WATCHDOG_TIMER = 10004;
+    }
+
+    // How long the session lasted from successful connection to disconnect.
+    optional int32 connected_duration_seconds = 1;
+
+    // Reason for the disconnect.
+    optional FailureCode failure_code = 2;
+
+    // Band bucket the connected network was on.
+    optional android.net.wifi.WifiBandBucket band = 3;
+
+    // Authentication type.
+    optional android.net.wifi.WifiAuthType auth_type = 4;
+
+    // Last seen RSSI before the disconnect.
+    optional int32 last_rssi = 5;
+
+    // Last seen link speed before the disconnect.
+    optional int32 last_link_speed = 6;
+}
+
+/**
+ * Logs when Wifi connection is established or dropped.
+ *
+ * Logged from:
+ *   frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiMetrics.java
+ */
+message WifiConnectionStateChanged {
+    optional bool is_connected = 1;
+
+    // Band bucket the connected network was on.
+    // Filled for both connected and disconnected cases.
+    optional android.net.wifi.WifiBandBucket band = 2;
+
+    // Authentication type.
+    // Filled for both connected and disconnected cases.
+    optional android.net.wifi.WifiAuthType auth_type = 3;
 }
 
 /**
@@ -3037,6 +3212,9 @@ message BackGesture {
     optional int32 end_y = 7;  // Y coordinate for ACTION_MOVE event.
     optional int32 left_boundary = 8;  // left edge width + left inset
     optional int32 right_boundary = 9;  // screen width - (right edge width + right inset)
+    // The score between 0 and 1 which is the prediction output for the Back Gesture model.
+    optional float ml_model_score = 10;
+    optional string package_name = 11;  // The name of the top 100 most used package by all users.
 
     enum WindowHorizontalLocation {
         DEFAULT_LOCATION = 0;
@@ -3192,6 +3370,8 @@ message StyleUIChanged {
     optional int32 wallpaper_id_hash = 8;
     optional int32 color_preference = 9;
     optional android.stats.style.LocationPreference location_preference = 10;
+    optional android.stats.style.DatePreference date_preference = 11;
+    optional android.stats.style.LaunchedPreference launched_preference = 12;
 }
 
 /**
@@ -3434,6 +3614,8 @@ message AppCrashOccurred {
     optional ForegroundState foreground_state = 7;
 
     optional android.server.ErrorSource error_source = 8;
+
+    optional bool is_package_loading = 9;
 }
 
 /**
@@ -3495,6 +3677,8 @@ message ANROccurred {
     optional android.server.ErrorSource error_source = 7;
 
     optional string package_name = 8;
+
+    optional bool is_package_loading = 9;
 }
 
 /**
@@ -3613,6 +3797,20 @@ message AppStartOccurred {
 
     // The reason why the package was optimized.
     optional int32 package_optimization_compilation_reason = 15;
+
+    enum SourceType {
+        UNAVAILABLE = 0;
+        LAUNCHER = 1;
+        NOTIFICATION = 2;
+        LOCKSCREEN = 3;
+        RECENTS_ANIMATION = 4;
+    }
+    // The type of the startup source.
+    optional SourceType source_type = 16;
+
+    // The time from the startup source to the beginning of handling the startup event.
+    // -1 means not available.
+    optional int32 source_event_delay_millis = 17;
 }
 
 message AppStartCanceled {
@@ -3657,6 +3855,25 @@ message AppStartFullyDrawn {
 
     // App startup time (until call to Activity#reportFullyDrawn()).
     optional int64 app_startup_time_millis = 6;
+
+    // The compiler filter used when when the package was optimized.
+    optional int32 package_optimization_compilation_filter = 7;
+
+    // The reason why the package was optimized.
+    optional int32 package_optimization_compilation_reason = 8;
+
+    enum SourceType {
+        UNAVAILABLE = 0;
+        LAUNCHER = 1;
+        NOTIFICATION = 2;
+        LOCKSCREEN = 3;
+    }
+    // The type of the startup source.
+    optional SourceType source_type = 9;
+
+    // The time from the startup source to the beginning of handling the startup event.
+    // -1 means not available.
+    optional int32 source_event_delay_millis = 10;
 }
 
 /**
@@ -3864,6 +4081,17 @@ message LmkStateChanged {
  *      system/core/lmkd/lmkd.c
  */
 message LmkKillOccurred {
+    enum Reason {
+        UNKNOWN = 0;
+        PRESSURE_AFTER_KILL = 1;
+        NOT_RESPONDING = 2;
+        LOW_SWAP_AND_THRASHING = 3;
+        LOW_MEM_AND_SWAP = 4;
+        LOW_MEM_AND_THRASHING = 5;
+        DIRECT_RECL_AND_THRASHING = 6;
+        LOW_MEM_AND_SWAP_UTIL = 7;
+    }
+
     // The uid if available. -1 means not available.
     optional int32 uid = 1 [(is_uid) = true];
 
@@ -3893,6 +4121,15 @@ message LmkKillOccurred {
 
     // Min oom adj score considered by lmkd.
     optional int32 min_oom_score = 10;
+
+    // Free physical memory on device at LMK time.
+    optional int32 free_mem_kb = 11;
+
+    // Free swap on device at LMK time.
+    optional int32 free_swap_kb = 12;
+
+    // What triggered the LMK event.
+    optional Reason reason = 13;
 }
 
 /*
@@ -4004,7 +4241,7 @@ message Notification {
     optional bool is_group_summary = 5;
 
     // The section of the shade that the notification is in.
-    // See NotificationSectionsManager.PriorityBucket.
+    // See SystemUI Notifications.proto.
     enum NotificationSection {
         SECTION_UNKNOWN = 0;
         SECTION_HEADS_UP = 1;
@@ -4012,6 +4249,7 @@ message Notification {
         SECTION_PEOPLE = 3;
         SECTION_ALERTING = 4;
         SECTION_SILENT = 5;
+        SECTION_FOREGROUND_SERVICE = 6;
     }
     optional NotificationSection section = 6;
 }
@@ -4052,8 +4290,15 @@ message NotificationChannelModified {
     optional android.stats.sysui.NotificationImportance old_importance = 5;
     // New importance setting
     optional android.stats.sysui.NotificationImportance importance = 6;
+    // whether or not this channel represents a conversation
+    optional bool is_conversation = 7;
+    // Hash of app-assigned notification conversation id
+    optional int32 conversation_id_hash = 8;
+    // whether or not the user demoted this channel out of the conversation space
+    optional bool is_conversation_demoted = 9;
+    // whether this conversation is marked as being a priority
+    optional bool is_conversation_priority = 10;
 }
-
 
 /**
  * Logs when a biometric acquire event occurs.
@@ -4258,6 +4503,7 @@ message BinaryPushStateChanged {
         // which requires reboot and not eligible for any reboot promotion strategy
         // (e.g. soft restart, notification restart).
         NO_REBOOT_PROMOTION_STRATEGY_ELIGIBLE = 30;
+        REBOOT_TRIGGER_FAILURE = 31;
     }
     optional State state = 6;
     // Possible experiment ids for monitoring this push.
@@ -4434,15 +4680,12 @@ message PrivacyIndicatorsInteracted {
         UNKNOWN = 0;
         CHIP_VIEWED = 1;
         CHIP_CLICKED = 2;
-        DIALOG_PRIVACY_SETTINGS = 3;
+        reserved 3; // Used only in beta builds, never shipped
         DIALOG_DISMISS = 4;
         DIALOG_LINE_ITEM = 5;
     }
 
     optional Type type = 1 [(state_field_option).exclusive_state = true];
-
-    // Used if the type is LINE_ITEM
-    optional string package_name = 2;
 }
 
 /**
@@ -5055,6 +5298,70 @@ message BlobOpened{
         ACCESS_NOT_ALLOWED = 3;
     }
     optional Result result = 4;
+}
+
+/**
+ * Event to track Jank for various system interactions.
+ *
+ * Logged from:
+ *  frameworks/base/core/java/com/android/internal/jank/FrameTracker.java
+ */
+message UIInteractionFrameInfoReported {
+    enum InteractionType {
+        UNKNOWN = 0;
+        NOTIFICATION_SHADE_SWIPE = 1;
+        SHADE_EXPAND_COLLAPSE_LOCK = 2;
+        SHADE_SCROLL_FLING = 3;
+        SHADE_ROW_EXPAND = 4;
+        SHADE_ROW_SWIPE = 5;
+        SHADE_QS_EXPAND_COLLAPSE = 6;
+        SHADE_QS_SCROLL_SWIPE = 7;
+        LAUNCHER_APP_LAUNCH_FROM_RECENTS = 8;
+        LAUNCHER_APP_LAUNCH_FROM_ICON = 9;
+        LAUNCHER_APP_CLOSE_TO_HOME = 10;
+        LAUNCHER_APP_CLOSE_TO_PIP = 11;
+        LAUNCHER_QUICK_SWITCH = 12;
+        SHADE_HEADS_UP_APPEAR = 13;
+        SHADE_HEADS_UP_DISAPPEAR = 14;
+        SHADE_NOTIFICATION_ADD = 15;
+        SHADE_NOTIFICATION_REMOVE = 16;
+        SHADE_APP_LAUNCH = 17;
+    }
+
+    optional InteractionType interaction_type = 1;
+
+    // Number of frames rendered during the interaction.
+    optional int64 total_frames = 2;
+
+    // Number of frames that were skipped in rendering during the interaction.
+    optional int64 missed_frames = 3;
+
+    // Maximum time it took to render a single frame during the interaction.
+    optional int64 max_frame_time_nanos = 4;
+}
+
+/**
+ * Event to track various latencies in SystemUI.
+ *
+ * Logged from:
+ *  frameworks/base/core/java/com/android/internal/util/LatencyTracker.java
+ */
+message UIActionLatencyReported {
+    enum ActionType {
+        UNKNOWN = 0;
+        ACTION_EXPAND_PANEL = 1;
+        ACTION_TOGGLE_RECENTS = 2;
+        ACTION_FINGERPRINT_WAKE_AND_UNLOCK = 3;
+        ACTION_CHECK_CREDENTIAL = 4;
+        ACTION_CHECK_CREDENTIAL_UNLOCKED = 5;
+        ACTION_TURN_ON_SCREEN = 6;
+        ACTION_ROTATE_SCREEN = 7;
+        ACTION_FACE_WAKE_AND_UNLOCK = 8;
+    }
+
+    optional ActionType action = 1;
+
+    optional int64 latency_millis = 2;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -7916,6 +8223,72 @@ message MediametricsExtractorReported {
 }
 
 /**
+ * Track MediaParser (parsing video/audio streams from containers) usage
+ * Logged from:
+ *
+ *   frameworks/av/services/mediametrics/statsd_mediaparser.cpp
+ *   frameworks/base/apex/media/framework/jni/android_media_MediaParserJNI.cpp
+ */
+message MediametricsMediaParserReported {
+    optional int64 timestamp_nanos = 1;
+    optional string package_name = 2;
+    optional int64 package_version_code = 3;
+
+    // MediaParser specific data.
+    /**
+     * The name of the parser selected for parsing the media, or an empty string
+     * if no parser was selected.
+     */
+    optional string parser_name = 4;
+    /**
+     * Whether the parser was created by name. 1 represents true, and 0
+     * represents false.
+     */
+    optional int32 created_by_name = 5;
+    /**
+     * The parser names in the sniffing pool separated by "|".
+     */
+    optional string parser_pool = 6;
+    /**
+     * The fully qualified name of the last encountered exception, or an empty
+     * string if no exception was encountered.
+     */
+    optional string last_exception = 7;
+    /**
+     * The size of the parsed media in bytes, or -1 if unknown. Note this value
+     * contains intentional random error to prevent media content
+     * identification.
+     */
+    optional int64 resource_byte_count = 8;
+    /**
+     * The duration of the media in milliseconds, or -1 if unknown. Note this
+     * value contains intentional random error to prevent media content
+     * identification.
+     */
+    optional int64 duration_millis = 9;
+    /**
+     * The MIME types of the tracks separated by "|".
+     */
+    optional string track_mime_types = 10;
+    /**
+     * The tracks' RFC 6381 codec strings separated by "|".
+     */
+    optional string track_codecs = 11;
+    /**
+     * Concatenation of the parameters altered by the client, separated by "|".
+     */
+    optional string altered_parameters = 12;
+    /**
+     * The video width in pixels, or -1 if unknown or not applicable.
+     */
+    optional int32 video_width = 13;
+    /**
+     * The video height in pixels, or -1 if unknown or not applicable.
+     */
+    optional int32 video_height = 14;
+}
+
+/**
  * Track how we arbitrate between microphone/input requests.
  * Logged from
  *   frameworks/av/services/audiopolicy/service/AudioPolicyInterfaceImpl.cpp
@@ -9403,6 +9776,7 @@ message RebootEscrowRecoveryReported {
 
 /**
  * Global display pipeline metrics reported by SurfaceFlinger.
+ * Metrics exist beginning in Android 11.
  * Pulled from:
  *    frameworks/native/services/surfaceflinger/TimeStats/TimeStats.cpp
  */
@@ -9434,18 +9808,48 @@ message SurfaceflingerStatsGlobalInfo {
     // perform due to falling back into GPU composition.
     optional FrameTimingHistogram render_engine_timing = 8
         [(android.os.statsd.log_mode) = MODE_BYTES];
+    // Number of frames where SF saw a frame, based on its frame timeline.
+    // Frame timelines may include transactions without updating buffer contents.
+    // Introduced in Android 12.
+    optional int32 total_timeline_frames = 9;
+    // Number of frames where SF saw a janky frame.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames = 10;
+    // Number of janky frames where SF spent a long time on the CPU.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_with_long_cpu = 11;
+    // Number of janky frames where SF spent a long time on the GPU.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_with_long_gpu = 12;
+    // Number of janky frames where SF missed the frame deadline, but there
+    // was not an attributed reason (e.g., maybe HWC missed?)
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_sf_unattributed = 13;
+    // Number of janky frames where the app missed the frame deadline, but
+    // there was not an attributed reason
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_app_unattributed = 14;
+
+    // Next ID: 15
 }
 
 /**
  * Per-layer display pipeline metrics reported by SurfaceFlinger.
- * The number of layers uploaded will be restricted due to size limitations.
+ * Metrics exist beginning in Android 11.
+ * The number of layers uploaded may be restricted due to size limitations.
  * Pulled from:
  *    frameworks/native/services/surfaceflinger/TimeStats/TimeStats.cpp
  */
 message SurfaceflingerStatsLayerInfo {
+    // UID of the application who submitted this layer for presentation
+    // This is intended to be used as a dimension for surfacing rendering
+    // statistics to applications.
+    // Introduced in Android 12.
+    optional int32 uid = 12 [(is_uid) = true];
     // The layer for this set of metrics
-    // For now we can infer that the package name is included in the layer
-    // name.
+    // In many scenarios the package name is included in the layer name, e.g.,
+    // layers created by Window Manager. But this is not a guarantee - in the
+    // general case layer names are arbitrary debug names.
     optional string layer_name = 1;
     // Total number of frames presented
     optional int64 total_frames = 2;
@@ -9479,6 +9883,29 @@ message SurfaceflingerStatsLayerInfo {
     optional int64 late_acquire_frames = 10;
     // Frames latched early because the desired present time was bad
     optional int64 bad_desired_present_frames = 11;
+    // Number of frames where SF saw a frame, based on its frame timeline.
+    // Frame timelines may include transactions without updating buffer contents.
+    // Introduced in Android 12.
+    optional int32 total_timeline_frames = 13;
+    // Number of frames where SF saw a janky frame.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames = 14;
+    // Number of janky frames where SF spent a long time on the CPU.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_with_long_cpu = 15;
+    // Number of janky frames where SF spent a long time on the GPU.
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_with_long_gpu = 16;
+    // Number of janky frames where SF missed the frame deadline, but there
+    // was not an attributed reason (e.g., maybe HWC missed?)
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_sf_unattributed = 17;
+    // Number of janky frames where the app missed the frame deadline, but
+    // there was not an attributed reason
+    // Introduced in Android 12.
+    optional int32 total_janky_frames_app_unattributed = 18;
+
+    // Next ID: 19
 }
 
 /**
@@ -10120,7 +10547,7 @@ message VoiceCallSession {
     // Number of other calls going on during call termination, for the same SIM slot.
     optional int32 concurrent_call_count_at_end = 14;
 
-    // Index of the SIM is used, 0 for single-SIM devices.
+    // Index of the SIM used, 0 for single-SIM devices.
     optional int32 sim_slot_index = 15;
 
     // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
@@ -10172,12 +10599,88 @@ message VoiceCallRatUsage {
     // Radio access technology.
     optional android.telephony.NetworkTypeEnum rat = 2;
 
-    // Total duration that voice calls spent on this carrier and RAT.
+    // Total duration that voice calls spent on this carrier and RAT, rounded to 5 minute.
     optional int64 total_duration_seconds = 3;
 
     // Total number of calls using this carrier and RAT.
     // A call is counted once even if it used the RAT multiple times.
     optional int64 call_count = 4;
+}
+
+/**
+ * Pulls amount of time spend in each cellular service state.
+ *
+ * Each pull creates multiple atoms, one for each SIM slot/carrier/RAT(including ENDC), the order of
+ * which is irrelevant to time. If multi SIM settings changes during the period, durations will be
+ * counted separately before and after the change. Airplane mode does not count towards durations.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message CellularServiceState {
+    // Radio access technology (RAT) for voice.
+    // NETWORK_TYPE_UNKNOWN when the device is out of service.
+    // NETWORK_TYPE_IWLAN when the device is using VoWiFi.
+    optional android.telephony.NetworkTypeEnum voice_rat = 1;
+
+    // Radio access technology (RAT) for data.
+    // NETWORK_TYPE_UNKNOWN when the device is out of service.
+    // Only cellular RATs are valid and show where the device is camped.
+    optional android.telephony.NetworkTypeEnum data_rat = 2;
+
+    // Whether the device was in roaming (domestic or international) for voice.
+    optional android.telephony.RoamingTypeEnum voice_roaming_type = 3;
+
+    // Whether the device was in roaming (domestic or international) for data.
+    optional android.telephony.RoamingTypeEnum data_roaming_type = 4;
+
+    // Whether the device is on LTE and has access to NR NSA, i.e. cell supports 5G (ENDC) and UE
+    // registration (attach/TAU) indicates ENDC is not restricted.
+    optional bool is_endc = 5;
+
+    // Index of the SIM used, 0 for single-SIM devices.
+    optional int32 sim_slot_index = 6;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 7;
+
+    // Carrier ID of the SIM card.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 8;
+
+    // Total time spent in this service state, rounded to 5 minutes.
+    optional int32 total_time_seconds = 9;
+}
+
+/**
+ * Pulls the number of times cellular data service state switches.
+ *
+ * Each pull creates multiple atoms, one for each RAT combination, the order of which is irrelevant
+ * to time. Switches for different SIM slots, carrier IDs, or multi-SIM settings are counted
+ * separately.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message CellularDataServiceSwitch {
+    // Cellular RAT of the DATA domain from where the switch occurred.
+    optional android.telephony.NetworkTypeEnum rat_from = 1;
+
+    // Cellular RAT of the DATA domain to where the switch occurred.
+    optional android.telephony.NetworkTypeEnum rat_to = 2;
+
+    // Index of the SIM used, 0 for single-SIM devices.
+    optional int32 sim_slot_index = 3;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 4;
+
+    // Carrier ID of the SIM card.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 5;
+
+    // Number of switches from rat_from to rat_to.
+    optional int32 switch_count = 6;
 }
 
 /**
@@ -10214,12 +10717,304 @@ message SupportedRadioAccessFamily {
 }
 
 /**
+ * Pulls information for a single incoming SMS.
+ *
+ * Each pull creates multiple atoms, one for each SMS. The sequence is randomized when pulled.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message IncomingSms {
+    // Format of the SMS (3GPP or 3GPP2).
+    optional android.telephony.SmsFormatEnum sms_format = 1;
+
+    // Technology of the SMS (CS or IMS).
+    optional android.telephony.SmsTechEnum sms_tech = 2;
+
+    // Radio access technology (RAT) used for the SMS. It can be IWLAN in case of IMS.
+    optional android.telephony.NetworkTypeEnum rat = 3;
+
+    // Type the SMS.
+    optional android.telephony.SmsTypeEnum sms_type = 4;
+
+    // Number of total parts.
+    optional int32 total_parts = 5;
+
+    // Number of received parts (if smaller than total parts, the SMS was dropped).
+    optional int32 received_parts = 6;
+
+    // Indicates if the incoming SMS was blocked.
+    optional bool blocked = 7;
+
+    // Indicate a specific error handling the SMS
+    optional android.telephony.SmsIncomingErrorEnum error = 8;
+
+    // Whether the SMS was received while roaming.
+    optional bool is_roaming = 9;
+
+    // Index of the SIM used, 0 for single-SIM devices.
+    optional int32 sim_slot_index = 10;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 11;
+
+    // Whether the message was received with an eSIM profile.
+    optional bool is_esim = 12;
+
+    // Carrier ID of the SIM card used for the SMS.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 13;
+
+    // Random message ID.
+    optional int64 message_id = 14;
+}
+
+/**
+ * Pulls information for a single outgoing SMS.
+ *
+ * Each pull creates multiple atoms, one for each SMS. The sequence is randomized when pulled.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message OutgoingSms {
+    // Format of the SMS (3GPP or 3GPP2).
+    optional android.telephony.SmsFormatEnum sms_format = 1;
+
+    // Technology of the SMS (CS or IMS).
+    optional android.telephony.SmsTechEnum sms_tech = 2;
+
+    // Radio access technology (RAT) used for the SMS. It can be IWLAN in case of IMS.
+    optional android.telephony.NetworkTypeEnum rat = 3;
+
+    // Result of the SMS sending.
+    optional android.telephony.SmsSendResultEnum send_result = 4;
+
+    // Error code
+    // For IMS technology, see @SmsManager.Result in
+    // http://cs/android/frameworks/base/telephony/java/android/telephony/SmsManager.java
+    // For CS technology:
+    //  - GSM format: see GsmSmsErrorCode (3GPP 27.005 clause 3.2.5)
+    //  - CDMA format: see CdmaSmsErrorCode (3GPP2 N.S0005 (IS-41-C) Table 171)
+    optional int32 error_code = 5;
+
+    // Whether the SMS was sent while roaming.
+    optional bool is_roaming = 6;
+
+    // Whether the default SMS application generated the SMS (regardless of which application).
+    optional bool is_from_default_app = 7;
+
+    // Index of the SIM used, 0 for single-SIM devices.
+    optional int32 sim_slot_index = 8;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 9;
+
+    // Whether the message was sent with an eSIM profile.
+    optional bool is_esim = 10;
+
+    // Carrier ID of the SIM card used for the SMS.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 11;
+
+    // Random message ID.
+    optional int64 message_id = 12;
+
+    // Retry count: 0 for the first attempt and then increasing for each attempt.
+    optional int32 retry_id = 13;
+}
+
+/**
+ * Logs information about usage of airplane mode.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/AirplaneModeStats.java
+ */
+message AirplaneMode {
+    // Status of airplane mode
+    optional bool is_enabled = 1;
+
+    // When is_enabled is false, indicates if this was a very short airplane mode toggle
+    // (i.e. airplane mode was disabled after less than 10 seconds from enablement).
+    optional bool short_toggle = 2;
+
+    // Carrier ID of the SIM card.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 3;
+}
+
+/**
+ * Logs information about modem restarts.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/ModemRestartStats.java
+ */
+message ModemRestart {
+    // Software version of the modem, as provided by android.os.Build.getRadioVersion().
+    optional string baseband_version = 1;
+
+    // Reason of the modem restart, as provided in the modemReset indication of IRadio HAL.
+    optional string reason = 2;
+
+    // Carrier ID of the first SIM card.
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 3;
+}
+
+/**
+ * Logs the SIM card details when the carrier ID match is not complete.
+ *
+ * The atom is pushed when a SIM card is initialized and the MCC/MNC is not present in the
+ * carrier ID table, or the SIM card contains a GID1 value that is not present in the carrier ID
+ * table. This atom is pushed only once for each type of SIM card.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/CarrierIdMatchStats.java
+ */
+message CarrierIdMismatchReported {
+    // Matched carrier ID. The value -1 is used if no match is found.
+    optional int32 carrier_id = 1;
+
+    // MCC/MNC of the SIM card.
+    optional string mcc_mnc = 2;
+
+    // Group identifier (level 1) of the SIM card.
+    optional string gid1 = 3;
+
+    // SPN value of the SIM card.
+    optional string spn = 4;
+
+    // First record of the PNN in the SIM card. This field is populated only if the SPN is missing
+    // or empty.
+    optional string pnn = 5;
+}
+
+/**
+ * Logs the version of the carrier ID matching table at first power up and when it is updated.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/CarrierIdMatchStats.java
+ */
+message CarrierIdTableUpdated {
+    // Version of the CarrierId matching table.
+    optional int32 table_version = 1;
+}
+
+/**
+ * Pulls the version of the carrier ID matching table.
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message CarrierIdTableVersion {
+    // Version of the CarrierId matching table.
+    optional int32 table_version = 1;
+}
+
+/**
+ * Pulls information for a single data call session
+ *
+ * Each pull creates multiple atoms, one for each data call session.
+ * The sequence is randomized when pulled.
+ *
+ * Pulled from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
+ */
+message DataCallSession {
+    // A random number to be used as dimension to capture multiple atoms
+    optional int32 dimension = 1;
+
+    // Whether the device was in multi-SIM mode (with multiple active SIM profiles).
+    optional bool is_multi_sim = 2;
+
+    // Whether the call was made with an eSIM profile.
+    optional bool is_esim = 3;
+
+    // Data profile of this call (for what purpose this call was made)
+    optional android.telephony.DataProfileEnum profile = 4;
+
+    // APN type bitmask of the APN used:
+    // @ApnType in frameworks/base/telephony/java/android/telephony/Annotation.java.
+    optional int32 apn_type_bitmask = 5;
+
+    // Carrier ID of the SIM
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 6;
+
+    // Whether the subscription is roaming
+    optional bool is_roaming = 7;
+
+    // Data RAT when the call ended, can be IWLAN for IMS/MMS, otherwise should be WWAN PS RAT.
+    // In the case that the connection hasn't ended yet, this field holds the current RAT.
+    // In the case the call ended due to Out Of Service (OOS),
+    // this field should be the last known RAT.
+    optional android.telephony.NetworkTypeEnum rat_at_end = 8;
+
+    // Was the data call ended due to OOS
+    optional bool oos_at_end = 9;
+
+    // Number of RAT switches during the data call
+    optional int64 rat_switch_count = 10;
+
+    // Whether the call is on an opportunistic subscription
+    optional bool is_opportunistic = 11;
+
+    // Packet data protocol used
+    optional android.telephony.ApnProtocolEnum ip_type = 12;
+
+    // Whether the data call terminated before being established
+    optional bool setup_failed = 13;
+
+    // Reason why the data call terminated, as in RIL_DataCallFailCause from ril.h
+    optional int32 failure_cause = 14;
+
+    // Suggested retry back-off timer value from RIL
+    optional int32 suggested_retry_millis = 15;
+
+    // Why the data call was deactivated
+    // Set by telephony for MO deactivations (unrelated to failure_cause)
+    optional android.telephony.DataDeactivateReasonEnum deactivate_reason = 16;
+
+    // Duration of the data call, rounded into the closest 5 minutes.
+    optional int64 duration_minutes = 17;
+
+    // Whether the data call is still connected when the atom is collected.
+    optional bool ongoing = 18;
+}
+
+/**
+ * Logs data stall recovery event
+ *
+ * Logged from:
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java
+ */
+message DataStallRecoveryReported {
+    // Carrier ID of the SIM
+    // See https://source.android.com/devices/tech/config/carrierid.
+    optional int32 carrier_id = 1;
+
+    // Data RAT when the stall happened
+    optional android.telephony.NetworkTypeEnum rat = 2;
+
+    // Signal strength when stall happened
+    optional android.telephony.SignalStrengthEnum signal_strength = 3;
+
+    // Action taken to recover
+    optional android.telephony.DataStallRecoveryActionEnum action = 4;
+
+    // Whether the subscription is opportunistic
+    optional bool is_opportunistic = 5;
+
+    // Whether the device is in multi-SIM mode
+    optional bool is_multi_sim = 6;
+}
+
+/**
  * Logs gnss stats from location service provider
  *
  * Pulled from:
  *  frameworks/base/location/java/com/android/internal/location/gnssmetrics/GnssMetrics.java
  */
-
 message GnssStats {
     // Number of location reports since boot
     optional int64 location_reports = 1;
@@ -11190,4 +11985,366 @@ message BlobInfo {
 
     // List of leasees of this Blob
     optional BlobLeaseeListProto leasees = 5 [(log_mode) = MODE_BYTES];
+}
+
+/**
+ * Logs when the HDMI CEC active source changes.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/hdmi/HdmiCecAtomWriter.java
+ */
+message HdmiCecActiveSourceChanged {
+    // The logical address of the active source.
+    optional android.stats.hdmi.LogicalAddress active_source_logical_address = 1;
+
+    // The physical address of the active source. Consists of four hexadecimal nibbles.
+    // Examples: 0x1234, 0x0000 (root device). 0xFFFF represents an unknown or invalid address.
+    // See section 8.7 in the HDMI 1.4b spec for details.
+    optional int32 active_source_physical_address = 2;
+
+    // The relationship between this device and the active source.
+    optional android.stats.hdmi.PathRelationship local_relationship = 3;
+}
+
+/**
+ * Logs when an HDMI CEC message is sent or received.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/hdmi/HdmiCecAtomWriter.java
+ */
+message HdmiCecMessageReported {
+    // The calling uid of the application that caused this atom to be written.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Whether a HDMI CEC message is sent from this device, to this device, or neither.
+    optional android.stats.hdmi.MessageDirection direction = 2;
+
+    // The HDMI CEC logical address of the initiator.
+    optional android.stats.hdmi.LogicalAddress initiator_logical_address = 3;
+
+    // The HDMI CEC logical address of the destination.
+    optional android.stats.hdmi.LogicalAddress destination_logical_address = 4;
+
+    // The opcode of the message. Ranges from 0x00 to 0xFF.
+    // For all values, see section "CEC 15 Message Descriptions" in the HDMI CEC 1.4b spec.
+    optional int32 opcode = 5;
+
+    // The result of attempting to send the message on its final retransmission attempt.
+    // Only applicable to outgoing messages; set to SEND_MESSAGE_RESULT_UNKNOWN otherwise.
+    optional android.stats.hdmi.SendMessageResult send_message_result = 6;
+
+    // Fields specific to <User Control Pressed> messages
+
+    // The user control command that was received.
+    optional android.stats.hdmi.UserControlPressedCommand user_control_pressed_command = 7;
+
+    // Fields specific to <Feature Abort> messages
+
+    // The opcode of the message that was feature aborted.
+    // Set to 0x100 when unknown or not applicable.
+    optional int32 feature_abort_opcode = 8;
+
+    // The reason for the feature abort.
+    optional android.stats.hdmi.FeatureAbortReason feature_abort_reason = 9;
+}
+
+/**
+  * Pushes TLS handshake counters from Conscrypt.
+  * Pulled from:
+  *   external/conscrypt/common/src/main/java/org/conscrypt/ConscryptEngineSocket.java
+  *   external/conscrypt/common/src/main/java/org/conscrypt/ConscryptFileDescriptorSocket.java
+  */
+message TlsHandshakeReported {
+    optional bool success = 1;
+
+    optional android.stats.tls.Protocol protocol = 2;
+
+    optional android.stats.tls.CipherSuite cipher_suite = 3;
+
+    optional int32 handshake_duration_millis = 4;
+}
+
+/**
+ * Logs when a TextClassifier API is invoked.
+ *
+ * See frameworks/base/core/java/android/view/textclassifier/TextClassifier.java
+ * Logged from: external/libtextclassifier/java/
+ */
+message TextClassifierApiUsageReported {
+    enum ApiType {
+        UNKNOWN_API = 0;
+        SUGGEST_SELECTION = 1;
+        CLASSIFY_TEXT = 2;
+        GENERATE_LINKS = 3;
+        DETECT_LANGUAGES = 4;
+        SUGGEST_CONVERSATION_ACTIONS = 5;
+    }
+    optional ApiType api_type = 1;
+
+    enum ResultType {
+        UNKNOWN_RESULT = 0;
+        SUCCESS = 1;
+        FAIL = 2;
+    }
+    optional ResultType result_type = 2;
+    optional int64 latency_millis = 3;
+}
+
+/**
+ * Logs the current state of an application before it is killed.
+ *
+ * Pushed from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message KilledAppStatsReported {
+    // Linux process uid for the package.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Name of the package that was killed.
+    optional string package_name = 2;
+
+    // State of the application when it was killed.
+    enum AppState {
+        UNKNOWN_APP_STATE = 0;
+        BACKGROUND = 1;
+        FOREGROUND = 2;
+    }
+    optional AppState app_state = 3;
+
+    // System state indicating whether the system was in normal mode or garage mode.
+    enum SystemState {
+        UNKNOWN_SYSTEM_STATE = 0;
+        USER_INTERACTION_MODE = 1;
+        NO_USER_INTERACTION_MODE = 2;
+    }
+    optional SystemState system_state = 4;
+
+    // Reason for killing the application.
+    // Keep in sync between:
+    //   packages/services/Car/watchdog/server/src/ApplicationTerminator.h
+    //   frameworks/base/cmds/statsd/src/atoms.proto
+    enum KillReason {
+        UNKNOWN_KILL_REASON = 0;
+        KILLED_ON_ANR = 1;
+        KILLED_ON_IO_OVERUSE = 2;
+        KILLED_ON_MEMORY_OVERUSE = 3;
+    }
+    optional KillReason kill_reason = 5;
+
+    // Stats of the processes owned by the application when the application was killed.
+    // The process stack traces are not collected when the application was killed due to IO_OVERUSE.
+    optional ProcessStats process_stat = 6 [(log_mode) = MODE_BYTES];
+
+    // The application's I/O overuse stats logged only when the kill reason is KILLED_ON_IO_OVERUSE.
+    optional IoOveruseStats io_overuse_stats = 7 [(log_mode) = MODE_BYTES];
+}
+
+/**
+ * Logs I/O overuse stats for a package.
+ *
+ * Keep in sync between:
+ *  packages/services/Car/watchdog/server/src/proto/statsd.proto
+ *  frameworks/base/cmds/statsd/src/atoms.proto
+ *
+ * Logged from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message IoOveruseStats {
+    enum Period {
+        DAILY = 0;
+        WEEKLY = 1;
+    }
+
+    // Threshold and usage stats period.
+    optional Period period = 1;
+
+    // Threshold in-terms of write bytes defined for the package.
+    optional PerStateBytes threshold = 2;
+
+    // Number of write bytes in each state for the specified period.
+    optional PerStateBytes written_bytes = 3;
+};
+
+/**
+ * Logs bytes attributed to each application and system states.
+ *
+ * Keep in sync between:
+ *  packages/services/Car/watchdog/server/src/proto/statsd.proto
+ *  frameworks/base/cmds/statsd/src/atoms.proto
+ *
+ * Logged from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message PerStateBytes {
+    // Number of bytes attributed to the application foreground.
+    optional int64 foreground_bytes = 1;
+
+    // Number of bytes attributed to the application background.
+    optional int64 background_bytes = 2;
+
+    // Number of bytes attributed to the garage mode.
+    optional int64 garage_mode_bytes = 3;
+}
+
+/**
+ * Logs each ProcessStat in ProcessStats.
+ * Keep in sync between:
+ *  packages/services/Car/watchdog/server/src/proto/statsd.proto
+ *  frameworks/base/cmds/statsd/src/atoms.proto
+ * Logged from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message ProcessStats {
+    // Records the stats of the processes owned by an application.
+    repeated ProcessStat process_stat = 1;
+}
+
+/**
+ * Logs a process's stats.
+ * Keep in sync between:
+ *  packages/services/Car/watchdog/server/src/proto/statsd.proto
+ *  frameworks/base/cmds/statsd/src/atoms.proto
+ * Logged from:
+ *  packages/services/Car/watchdog/server/src/ApplicationTerminator.cpp
+ */
+message ProcessStat {
+    // Command name of the process.
+    optional string process_name = 1;
+
+    // Process uptime.
+    optional uint64 uptime_milliseconds = 2;
+
+    // Number of major page faults caused by the process and its children.
+    optional uint64 major_page_faults = 3;
+
+    // Peak virtual memory size in kb.
+    optional uint64 vm_peak_kb = 4;
+
+    // Virtual memory size in kb.
+    optional uint64 vm_size_kb = 5;
+
+    // Peak resident set size (high water mark) in kb.
+    optional uint64 vm_hwm_kb = 6;
+
+    // Resident set size in kb.
+    optional uint64 vm_rss_kb = 7;
+}
+
+/*
+ * pushes Media playback information.
+ * Logged from
+ *   (WIP) frameworks/av/services/mediaanalytics/playback_statsd.cpp
+ */
+message MediametricsPlaybackReported {
+    optional int32 uid = 1 [(is_uid) = true];
+
+    //  Randomly generated playback ID. A Base64 encoded hex string representing a 128-bit integer
+    optional string playback_id = 2;
+    //  The total length of the media in milliseconds. 0 for live contents.
+    optional int64 media_duration_millis = 3;
+    //  Network, device, or mixed.
+    optional android.stats.mediametrics.StreamSourceType stream_source = 4;
+    //  Stream type. DASH, HLS, etc
+    optional android.stats.mediametrics.StreamType stream_type = 5;
+    //  Live, VOD, others
+    optional android.stats.mediametrics.PlaybackType playback_type = 6;
+    //  DRM type
+    optional android.stats.mediametrics.DrmType drm_type = 7;
+    //  Main, AD, others
+    optional android.stats.mediametrics.ContentType content_type = 8;
+    //  Player name. E.g. ExoPlayer
+    optional string player_name = 9;
+    //  Player version. E.g. 1.10.3e
+    optional string player_version = 10;
+    //  Player related experiment IDs
+    optional Experiments experiment_ids = 11 [(log_mode) = MODE_BYTES];
+    //  Number of frames played. Dropped frames included. -1 means unknown.
+    optional int32 video_frames_played = 12;
+    //  Number of frames dropped. -1 means unknown.
+    optional int32 video_frames_dropped = 13;
+    //  Number of audio underruns. -1 means unknown.
+    optional int32 audio_underrun_count = 14;
+    //  Total number of bytes read from the network
+    optional int64 network_bytes_read = 15;
+    //  Total number of bytes read from on-device sources
+    optional int64 local_bytes_read = 16;
+    //  Total transfer spent reading from the network in ms.
+    // For parallel requests, the overlapping time intervals are counted only once.
+    optional int64 network_transfer_duration_millis = 17;
+}
+
+message MediaNetworkInfoChanged {
+    //  Randomly generated playback ID. A Base64 encoded hex string representing a 128-bit integer
+    optional string playback_id = 1;
+    //  New network type
+    optional android.stats.mediametrics.NetworkType type = 2;
+    //  Network Start time, relative to playback creation time in millisecond.
+    //  It's in absolute time (e.g. always ticks even if the playback is paused).
+    optional int64 time_since_playback_created_millis = 3;
+}
+
+message MediaPlaybackStateChanged {
+    //  Randomly generated playback ID. A Base64 encoded hex string representing a 128-bit integer
+    optional string playback_id = 1;
+    //  New playback state
+    optional android.stats.mediametrics.PlaybackState playback_state = 2;
+    //  State change time, relative to playback creation time in millisecond.
+    //  It's in absolute time (e.g. always ticks even if the playback is paused).
+    optional int64 time_since_playback_created_millis = 3;
+}
+
+message MediaPlaybackErrorReported {
+    //  Randomly generated playback ID. A Base64 encoded hex string representing a 128-bit integer
+    optional string playback_id = 1;
+    //  A shortened call stack of the error
+    optional string exception_stack = 2;
+    //  Error code
+    optional android.stats.mediametrics.PlaybackErrorCode error_code = 3;
+    //  Sub-code of error type specified by the error code.
+    optional int32 sub_error_code = 4;
+    //  Error time, relative to playback creation time in millisecond.
+    //  It's in absolute time (e.g. always ticks even if the playback is paused).
+    optional int64 time_since_playback_created_millis = 5;
+}
+
+message MediaPlaybackTrackChanged {
+    //  Randomly generated playback ID. A Base64 encoded hex string representing a 128-bit integer
+    optional string playback_id = 1;
+    //  The track is on or off after the change
+    optional android.stats.mediametrics.TrackState state = 2;
+    //  The reason of the track change
+    optional android.stats.mediametrics.TrackChangeReason reason = 3;
+    //  The MIME type of the container. E.g. video/mp4
+    optional string container_mime_type = 4;
+    //  The sample MIME type of the track. E.g. video/avc
+    optional string sample_mime_type = 5;
+
+    //  Codec name
+    optional string codec_name = 6;
+    //  Bits per second. 0 means unknown.
+    optional int32 bitrate = 7;
+
+    //  Track change time, relative to playback creation time in millisecond.
+    //  It's in absolute time (e.g. always ticks even if the playback is paused).
+    optional int64 time_since_playback_created_millis = 8;
+
+    //  Track type. Audio, Video, Text
+    optional android.stats.mediametrics.TrackType type = 9;
+    //  2-letter ISO 639-1 language code.
+    optional string language = 10;
+    //  IETF BCP 47 optional language region subtag based on a two-letter country code
+    optional string language_region = 11;
+    //  Number of channels
+    optional int32 channel_count = 12;
+    //  Samples per second
+    optional int32 sample_rate = 13;
+    //  The width of the video in pixels.
+    optional int32 width = 14;
+    //  The height of the video in pixels.
+    optional int32 height = 15;
+}
+
+message Experiments {
+    // Experiment IDs sent by the player.
+    repeated int64 experiments = 1;
 }

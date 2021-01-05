@@ -46,6 +46,7 @@ import android.database.CursorWrapper;
 import android.database.DatabaseUtils;
 import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Build;
 import android.os.RemoteException;
 import android.telecom.PhoneAccountHandle;
 import android.text.TextUtils;
@@ -129,7 +130,7 @@ public final class ContactsContract {
      * Prefix for column names that are not visible to client apps.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final String HIDDEN_COLUMN_PREFIX = "x_";
 
@@ -6147,7 +6148,7 @@ public final class ContactsContract {
             *
             * @hide
             */
-            @UnsupportedAppUsage
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
             @TestApi
             public static final Uri ENTERPRISE_CONTENT_URI =
                     Uri.withAppendedPath(Data.ENTERPRISE_CONTENT_URI, "phones");
@@ -6158,7 +6159,7 @@ public final class ContactsContract {
              * to display names as well as phone numbers. The filter argument should be passed
              * as an additional path segment after this URI.
              *
-             * <p class="caution"><b>Caution: </b>This field deosn't sort results based on contacts
+             * <p class="caution"><b>Caution: </b>This field doesn't sort results based on contacts
              * frequency. For more information, see the
              * <a href="/guide/topics/providers/contacts-provider#ObsoleteData">Contacts Provider</a>
              * page.

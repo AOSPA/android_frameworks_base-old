@@ -17,6 +17,9 @@
 package com.android.companiondevicemanager;
 
 import static android.companion.BluetoothDeviceFilterUtils.getDeviceMacAddress;
+import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
+
+import static java.util.Objects.requireNonNull;
 
 import android.app.Activity;
 import android.companion.CompanionDeviceManager;
@@ -56,6 +59,8 @@ public class DeviceChooserActivity extends Activity {
         if (getService().mDevicesFound.isEmpty()) {
             Log.e(LOG_TAG, "About to show UI, but no devices to show");
         }
+
+        getWindow().addSystemFlags(SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
 
         if (getService().mRequest.isSingleDevice()) {
             setContentView(R.layout.device_confirmation);
@@ -123,6 +128,11 @@ public class DeviceChooserActivity extends Activity {
         } catch (PackageManager.NameNotFoundException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public String getCallingPackage() {
+        return requireNonNull(getService().mRequest.getCallingPackage());
     }
 
     @Override

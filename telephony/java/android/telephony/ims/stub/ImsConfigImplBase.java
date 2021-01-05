@@ -19,7 +19,6 @@ package android.telephony.ims.stub;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
 import android.content.Context;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
@@ -51,7 +50,6 @@ import java.util.HashMap;
  * @hide
  */
 @SystemApi
-@TestApi
 public class ImsConfigImplBase {
 
     private static final String TAG = "ImsConfigImplBase";
@@ -142,7 +140,7 @@ public class ImsConfigImplBase {
         /**
          * Sets the value for IMS service/capabilities parameters by the operator device
          * management entity. It sets the config item value in the provisioned storage
-         * from which the master value is derived, and write it into local cache.
+         * from which the main value is derived, and write it into local cache.
          * Synchronous blocking call.
          *
          * @param item integer key
@@ -167,7 +165,7 @@ public class ImsConfigImplBase {
         /**
          * Sets the value for IMS service/capabilities parameters by the operator device
          * management entity. It sets the config item value in the provisioned storage
-         * from which the master value is derived, and write it into local cache.
+         * from which the main value is derived, and write it into local cache.
          * Synchronous blocking call.
          *
          * @param item as defined in com.android.ims.ImsConfig#ConfigConstants.

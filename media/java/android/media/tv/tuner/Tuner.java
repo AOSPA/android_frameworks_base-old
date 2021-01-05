@@ -61,6 +61,7 @@ import com.android.internal.util.FrameworkStatsLog;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,15 +99,81 @@ public class Tuner implements AutoCloseable  {
      * Invalid timestamp.
      *
      * <p>Returned by {@link android.media.tv.tuner.filter.TimeFilter#getSourceTime()},
-     * {@link android.media.tv.tuner.filter.TimeFilter#getTimeStamp()}, or
-     * {@link Tuner#getAvSyncTime(int)} when the requested timestamp is not available.
+     * {@link android.media.tv.tuner.filter.TimeFilter#getTimeStamp()},
+     * {@link Tuner#getAvSyncTime(int)} or {@link TsRecordEvent#getPts()} and
+     * {@link MmtpRecordEvent#getPts()} when the requested timestamp is not available.
      *
      * @see android.media.tv.tuner.filter.TimeFilter#getSourceTime()
      * @see android.media.tv.tuner.filter.TimeFilter#getTimeStamp()
      * @see Tuner#getAvSyncTime(int)
+     * @see android.media.tv.tuner.filter.TsRecordEvent#getPts()
+     * @see android.media.tv.tuner.filter.MmtpRecordEvent#getPts()
      */
-    public static final long INVALID_TIMESTAMP = -1L;
-
+    public static final long INVALID_TIMESTAMP =
+            android.hardware.tv.tuner.V1_1.Constants.Constant64Bit.INVALID_PRESENTATION_TIME_STAMP;
+    /**
+     * Invalid mpu sequence number in MmtpRecordEvent.
+     *
+     * <p>Returned by {@link MmtpRecordEvent#getMpuSequenceNumber()} when the requested sequence
+     * number is not available.
+     *
+     * @see android.media.tv.tuner.filter.MmtpRecordEvent#getMpuSequenceNumber()
+     */
+    public static final int INVALID_MMTP_RECORD_EVENT_MPT_SEQUENCE_NUM =
+            android.hardware.tv.tuner.V1_1.Constants.Constant
+                    .INVALID_MMTP_RECORD_EVENT_MPT_SEQUENCE_NUM;
+    /**
+     * Invalid first macroblock address in MmtpRecordEvent and TsRecordEvent.
+     *
+     * <p>Returned by {@link MmtpRecordEvent#getMbInSlice()} and
+     * {@link TsRecordEvent#getMbInSlice()} when the requested sequence number is not available.
+     *
+     * @see android.media.tv.tuner.filter.MmtpRecordEvent#getMbInSlice()
+     * @see android.media.tv.tuner.filter.TsRecordEvent#getMbInSlice()
+     */
+    public static final int INVALID_FIRST_MACROBLOCK_IN_SLICE =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_FIRST_MACROBLOCK_IN_SLICE;
+    /**
+     * Invalid local transport stream id.
+     *
+     * <p>Returned by {@link #linkFrontendToCiCam(int)} when the requested failed
+     * or the hal implementation does not support the operation.
+     *
+     * @see #linkFrontendToCiCam(int)
+     */
+    public static final int INVALID_LTS_ID =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_LTS_ID;
+    /**
+     * Invalid 64-bit filter ID.
+     */
+    public static final long INVALID_FILTER_ID_64BIT =
+            android.hardware.tv.tuner.V1_1.Constants.Constant64Bit.INVALID_FILTER_ID_64BIT;
+    /**
+     * Invalid frequency that is used as the default frontend frequency setting.
+     */
+    public static final int INVALID_FRONTEND_SETTING_FREQUENCY =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_FRONTEND_SETTING_FREQUENCY;
+    /**
+     * Invalid frontend id.
+     */
+    public static final int INVALID_FRONTEND_ID =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_FRONTEND_ID;
+    /**
+     * Invalid LNB id.
+     *
+     * @hide
+     */
+    public static final int INVALID_LNB_ID =
+            android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_LNB_ID;
+    /**
+     * Invalid key token. It is used to remove the current key from descrambler.
+     *
+     * <p>If the current keyToken comes from a MediaCas session, App is recommended to
+     * to use this constant to remove current key before closing MediaCas session.
+     */
+    @NonNull
+    public static final byte[] INVALID_KEYTOKEN =
+            {android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_KEYTOKEN};
 
     /** @hide */
     @IntDef(prefix = "SCAN_TYPE_", value = {SCAN_TYPE_UNDEFINED, SCAN_TYPE_AUTO, SCAN_TYPE_BLIND})
@@ -204,6 +271,7 @@ public class Tuner implements AutoCloseable  {
     private final Context mContext;
     private final TunerResourceManager mTunerResourceManager;
     private final int mClientId;
+    private static int sTunerVersion = TunerVersionChecker.TUNER_VERSION_UNKNOWN;
 
     private Frontend mFrontend;
     private EventHandler mHandler;
@@ -255,6 +323,14 @@ public class Tuner implements AutoCloseable  {
     public Tuner(@NonNull Context context, @Nullable String tvInputSessionId,
             @TvInputService.PriorityHintUseCaseType int useCase) {
         nativeSetup();
+        sTunerVersion = nativeGetTunerVersion();
+        if (sTunerVersion == TunerVersionChecker.TUNER_VERSION_UNKNOWN) {
+            Log.e(TAG, "Unknown Tuner version!");
+        } else {
+            Log.d(TAG, "Current Tuner version is "
+                    + TunerVersionChecker.getMajorVersion(sTunerVersion) + "."
+                    + TunerVersionChecker.getMinorVersion(sTunerVersion) + ".");
+        }
         mContext = context;
         mTunerResourceManager = (TunerResourceManager)
                 context.getSystemService(Context.TV_TUNER_RESOURCE_MGR_SERVICE);
@@ -292,6 +368,33 @@ public class Tuner implements AutoCloseable  {
             infos[i] = tunerFrontendInfo;
         }
         mTunerResourceManager.setFrontendInfoList(infos);
+    }
+
+    /**
+     * Get frontend info list from native and build them into a {@link FrontendInfo} list. Any
+     * {@code null} FrontendInfo element would be removed.
+     */
+    private FrontendInfo[] getFrontendInfoListInternal() {
+        List<Integer> ids = getFrontendIds();
+        if (ids == null) {
+            return null;
+        }
+        FrontendInfo[] infos = new FrontendInfo[ids.size()];
+        for (int i = 0; i < ids.size(); i++) {
+            int id = ids.get(i);
+            FrontendInfo frontendInfo = getFrontendInfoById(id);
+            if (frontendInfo == null) {
+                Log.e(TAG, "Failed to get a FrontendInfo on frontend id:" + id + "!");
+                continue;
+            }
+            infos[i] = frontendInfo;
+        }
+        return Arrays.stream(infos).filter(Objects::nonNull).toArray(FrontendInfo[]::new);
+    }
+
+    /** @hide */
+    public static int getTunerVersion() {
+        return sTunerVersion;
     }
 
     /** @hide */
@@ -362,6 +465,11 @@ public class Tuner implements AutoCloseable  {
      */
     @Override
     public void close() {
+        releaseAll();
+        TunerUtils.throwExceptionForResult(nativeClose(), "failed to close tuner");
+    }
+
+    private void releaseAll() {
         if (mFrontendHandle != null) {
             int res = nativeCloseFrontend(mFrontendHandle);
             if (res != Tuner.RESULT_SUCCESS) {
@@ -396,9 +504,9 @@ public class Tuner implements AutoCloseable  {
                 TunerUtils.throwExceptionForResult(res, "failed to close demux");
             }
             mTunerResourceManager.releaseDemux(mDemuxHandle, mClientId);
-            mFrontendHandle = null;
+            mDemuxHandle = null;
         }
-        TunerUtils.throwExceptionForResult(nativeClose(), "failed to close tuner");
+
     }
 
     /**
@@ -410,6 +518,11 @@ public class Tuner implements AutoCloseable  {
      * Native setup.
      */
     private native void nativeSetup();
+
+    /**
+     * Native method to get all frontend IDs.
+     */
+    private native int nativeGetTunerVersion();
 
     /**
      * Native method to get all frontend IDs.
@@ -432,7 +545,9 @@ public class Tuner implements AutoCloseable  {
     private native Integer nativeGetAvSyncHwId(Filter filter);
     private native Long nativeGetAvSyncTime(int avSyncId);
     private native int nativeConnectCiCam(int ciCamId);
+    private native int nativeLinkCiCam(int ciCamId);
     private native int nativeDisconnectCiCam();
+    private native int nativeUnlinkCiCam(int ciCamId);
     private native FrontendInfo nativeGetFrontendInfo(int id);
     private native Filter nativeOpenFilter(int type, int subType, long bufferSize);
     private native TimeFilter nativeOpenTimeFilter();
@@ -495,6 +610,7 @@ public class Tuner implements AutoCloseable  {
                     break;
                 }
                 case MSG_RESOURCE_LOST: {
+                    releaseAll();
                     if (mOnResourceLostListener != null
                                 && mOnResourceLostListenerExecutor != null) {
                         mOnResourceLostListenerExecutor.execute(
@@ -562,6 +678,10 @@ public class Tuner implements AutoCloseable  {
      * OnTuneEventListener#SIGNAL_NO_SIGNAL} events sent to the {@link OnTuneEventListener}
      * specified in {@link #setOnTuneEventListener(Executor, OnTuneEventListener)}.
      *
+     * <p>Tuning with {@link android.media.tv.tuner.frontend.DtmbFrontendSettings} is only
+     * supported in Tuner 1.1 or higher version. Unsupported version will cause no-op. Use {@link
+     * TunerVersionChecker.getTunerVersion()} to get the version information.
+     *
      * @param settings Signal delivery information the frontend uses to
      *                 search and lock the signal.
      * @return result status of tune operation.
@@ -572,6 +692,12 @@ public class Tuner implements AutoCloseable  {
     public int tune(@NonNull FrontendSettings settings) {
         Log.d(TAG, "Tune to " + settings.getFrequency());
         mFrontendType = settings.getType();
+        if (mFrontendType == FrontendSettings.TYPE_DTMB) {
+            if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
+                    TunerVersionChecker.TUNER_VERSION_1_1, "Tuner with DTMB Frontend")) {
+                return RESULT_UNAVAILABLE;
+            }
+        }
         if (checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND)) {
             mFrontendInfo = null;
             Log.d(TAG, "Write Stats Log for tuning.");
@@ -601,6 +727,10 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>Details for channels found are returned via {@link ScanCallback}.
      *
+     * <p>Scanning with {@link android.media.tv.tuner.frontend.DtmbFrontendSettings} is only
+     * supported in Tuner 1.1 or higher version. Unsupported version will cause no-op. Use {@link
+     * TunerVersionChecker.getTunerVersion()} to get the version information.
+     *
      * @param settings A {@link FrontendSettings} to configure the frontend.
      * @param scanType The scan type.
      * @throws SecurityException     if the caller does not have appropriate permissions.
@@ -610,12 +740,22 @@ public class Tuner implements AutoCloseable  {
     @Result
     public int scan(@NonNull FrontendSettings settings, @ScanType int scanType,
             @NonNull @CallbackExecutor Executor executor, @NonNull ScanCallback scanCallback) {
-        if (mScanCallback != null || mScanCallbackExecutor != null) {
+        /**
+         * Scan can be called again for blink scan if scanCallback and executor are same as before.
+         */
+        if (((mScanCallback != null) && (mScanCallback != scanCallback))
+                || ((mScanCallbackExecutor != null) && (mScanCallbackExecutor != executor))) {
             throw new IllegalStateException(
-                    "Scan already in progress.  stopScan must be called before a new scan can be "
-                            + "started.");
+                    "Different Scan session already in progress.  stopScan must be called "
+                        + "before a new scan session can be " + "started.");
         }
         mFrontendType = settings.getType();
+        if (mFrontendType == FrontendSettings.TYPE_DTMB) {
+            if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
+                    TunerVersionChecker.TUNER_VERSION_1_1, "Scan with DTMB Frontend")) {
+                return RESULT_UNAVAILABLE;
+            }
+        }
         if (checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND)) {
             mScanCallback = scanCallback;
             mScanCallbackExecutor = executor;
@@ -694,7 +834,8 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>This retrieve the statuses of the frontend for given status types.
      *
-     * @param statusTypes an array of status types which the caller requests.
+     * @param statusTypes an array of status types which the caller requests. Any types that are not
+     *        in {@link FrontendInfo.getStatusCapabilities()} would be ignored.
      * @return statuses which response the caller's requests. {@code null} if the operation failed.
      */
     @Nullable
@@ -754,6 +895,33 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
+     * Link Conditional Access Modules (CAM) Frontend to support Common Interface (CI) by-pass mode.
+     *
+     * <p>It is used by the client to link CI-CAM to a Frontend. CI by-pass mode requires that
+     * the CICAM also receives the TS concurrently from the frontend when the Demux is receiving
+     * the TS directly from the frontend.
+     *
+     * <p>Use {@link #unlinkFrontendToCicam(int)} to disconnect.
+     *
+     * <p>This API is only supported by Tuner HAL 1.1 or higher. Unsupported version would cause
+     * no-op and return {@link INVALID_LTS_ID}. Use {@link TunerVersionChecker.getTunerVersion()} to
+     * check the version.
+     *
+     * @param ciCamId specify CI-CAM Id to link.
+     * @return Local transport stream id when connection is successfully established. Failed
+     *         operation returns {@link INVALID_LTS_ID}.
+     */
+    public int linkFrontendToCiCam(int ciCamId) {
+        if (TunerVersionChecker.checkHigherOrEqualVersionTo(TunerVersionChecker.TUNER_VERSION_1_1,
+                "linkFrontendToCiCam")) {
+            if (checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND)) {
+                return nativeLinkCiCam(ciCamId);
+            }
+        }
+        return INVALID_LTS_ID;
+    }
+
+    /**
      * Disconnects Conditional Access Modules (CAM)
      *
      * <p>The demux will use the output from the frontend as the input after this call.
@@ -769,7 +937,29 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
-     * Gets the frontend information.
+     * Unlink Conditional Access Modules (CAM) Frontend.
+     *
+     * <p>It is used by the client to unlink CI-CAM to a Frontend.
+     *
+     * <p>This API is only supported by Tuner HAL 1.1 or higher. Unsupported version would cause
+     * no-op. Use {@link TunerVersionChecker.getTunerVersion()} to check the version.
+     *
+     * @param ciCamId specify CI-CAM Id to unlink.
+     * @return result status of the operation.
+     */
+    @Result
+    public int unlinkFrontendToCiCam(int ciCamId) {
+        if (TunerVersionChecker.checkHigherOrEqualVersionTo(TunerVersionChecker.TUNER_VERSION_1_1,
+                "unlinkFrontendToCiCam")) {
+            if (checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND)) {
+                return nativeUnlinkCiCam(ciCamId);
+            }
+        }
+        return RESULT_UNAVAILABLE;
+    }
+
+    /**
+     * Gets the initialized frontend information.
      *
      * @return The frontend information. {@code null} if the operation failed.
      */
@@ -785,6 +975,16 @@ public class Tuner implements AutoCloseable  {
             mFrontendInfo = getFrontendInfoById(mFrontend.mId);
         }
         return mFrontendInfo;
+    }
+
+    /**
+     * Get a list all the existed frontend information.
+     *
+     * @return The list of all the frontend information. {@code null} if the operation failed.
+     */
+    @Nullable
+    public List<FrontendInfo> getFrontendInfoList() {
+        return Arrays.asList(getFrontendInfoListInternal());
     }
 
     /** @hide */
@@ -914,6 +1114,27 @@ public class Tuner implements AutoCloseable  {
         if (mScanCallbackExecutor != null && mScanCallback != null) {
             mScanCallbackExecutor.execute(
                     () -> mScanCallback.onAtsc3PlpInfosReported(atsc3PlpInfos));
+        }
+    }
+
+    private void onModulationReported(int modulation) {
+        if (mScanCallbackExecutor != null && mScanCallback != null) {
+            mScanCallbackExecutor.execute(
+                    () -> mScanCallback.onModulationReported(modulation));
+        }
+    }
+
+    private void onPriorityReported(boolean isHighPriority) {
+        if (mScanCallbackExecutor != null && mScanCallback != null) {
+            mScanCallbackExecutor.execute(
+                    () -> mScanCallback.onPriorityReported(isHighPriority));
+        }
+    }
+
+    private void onDvbcAnnexReported(int dvbcAnnex) {
+        if (mScanCallbackExecutor != null && mScanCallback != null) {
+            mScanCallbackExecutor.execute(
+                    () -> mScanCallback.onDvbcAnnexReported(dvbcAnnex));
         }
     }
 

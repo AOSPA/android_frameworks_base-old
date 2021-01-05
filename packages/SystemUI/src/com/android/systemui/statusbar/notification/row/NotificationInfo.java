@@ -60,7 +60,6 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 
 import java.lang.annotation.Retention;
@@ -93,9 +92,9 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
     private TextView mAutomaticDescriptionView;
 
     private INotificationManager mINotificationManager;
+    private OnUserInteractionCallback mOnUserInteractionCallback;
     private PackageManager mPm;
     private MetricsLogger mMetricsLogger;
-    private VisualStabilityManager mVisualStabilityManager;
     private ChannelEditorDialogController mChannelEditorDialogController;
 
     private String mPackageName;
@@ -119,6 +118,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
     private boolean mIsAutomaticChosen;
     private boolean mIsSingleDefaultChannel;
     private boolean mIsNonblockable;
+    private NotificationEntry mEntry;
     private StatusBarNotification mSbn;
     private boolean mIsDeviceProvisioned;
 
@@ -188,7 +188,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
     public void bindNotification(
             PackageManager pm,
             INotificationManager iNotificationManager,
-            VisualStabilityManager visualStabilityManager,
+            OnUserInteractionCallback onUserInteractionCallback,
             ChannelEditorDialogController channelEditorDialogController,
             String pkg,
             NotificationChannel notificationChannel,
@@ -204,11 +204,12 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             throws RemoteException {
         mINotificationManager = iNotificationManager;
         mMetricsLogger = Dependency.get(MetricsLogger.class);
-        mVisualStabilityManager = visualStabilityManager;
+        mOnUserInteractionCallback = onUserInteractionCallback;
         mChannelEditorDialogController = channelEditorDialogController;
         mPackageName = pkg;
         mUniqueChannelsInRow = uniqueChannelsInRow;
         mNumUniqueChannelsInRow = uniqueChannelsInRow.size();
+        mEntry = entry;
         mSbn = entry.getSbn();
         mPm = pm;
         mAppSettingsClickListener = onAppSettingsClick;
@@ -235,6 +236,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
                             NotificationChannel.DEFAULT_CHANNEL_ID)
                     && numTotalChannels == 1;
         }
+        mIsAutomaticChosen = getAlertingBehavior() == BEHAVIOR_AUTOMATIC;
 
         bindHeader();
         bindChannelDetails();
@@ -438,7 +440,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
                     new UpdateImportanceRunnable(mINotificationManager, mPackageName, mAppUid,
                             mNumUniqueChannelsInRow == 1 ? mSingleNotificationChannel : null,
                             mStartingChannelImportance, newImportance, mIsAutomaticChosen));
-            mVisualStabilityManager.temporarilyAllowReordering();
+            mOnUserInteractionCallback.onImportanceChanged(mEntry);
         }
     }
 
@@ -657,13 +659,14 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             try {
                 if (mChannelToUpdate != null) {
                     if (mUnlockImportance) {
-                        mChannelToUpdate.unlockFields(NotificationChannel.USER_LOCKED_IMPORTANCE);
+                        mINotificationManager.unlockNotificationChannel(
+                                mPackageName, mAppUid, mChannelToUpdate.getId());
                     } else {
                         mChannelToUpdate.setImportance(mNewImportance);
                         mChannelToUpdate.lockFields(NotificationChannel.USER_LOCKED_IMPORTANCE);
+                        mINotificationManager.updateNotificationChannelForPackage(
+                                mPackageName, mAppUid, mChannelToUpdate);
                     }
-                    mINotificationManager.updateNotificationChannelForPackage(
-                            mPackageName, mAppUid, mChannelToUpdate);
                 } else {
                     // For notifications with more than one channel, update notification enabled
                     // state. If the importance was lowered, we disable notifications.

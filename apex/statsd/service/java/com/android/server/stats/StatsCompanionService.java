@@ -54,6 +54,7 @@ import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -100,7 +101,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private static IStatsd sStatsd;
     private static final Object sStatsdLock = new Object();
 
-    private final OnAlarmListener mAnomalyAlarmListener;
     private final OnAlarmListener mPullingAlarmListener;
     private final OnAlarmListener mPeriodicAlarmListener;
 
@@ -124,7 +124,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         handlerThread.start();
         mHandler = new CompanionHandler(handlerThread.getLooper());
 
-        mAnomalyAlarmListener = new AnomalyAlarmListener(context);
         mPullingAlarmListener = new PullingAlarmListener(context);
         mPeriodicAlarmListener = new PeriodicAlarmListener(context);
     }
@@ -196,40 +195,38 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 int numRecords = 0;
                 // Add in all the apps for every user/profile.
                 for (UserHandle userHandle : users) {
-                    List<PackageInfo> pi =
-                            pm.getInstalledPackagesAsUser(PackageManager.MATCH_UNINSTALLED_PACKAGES
-                                            | PackageManager.MATCH_ANY_USER
-                                            | PackageManager.MATCH_APEX,
-                                    userHandle.getIdentifier());
-                    for (int j = 0; j < pi.size(); j++) {
-                        if (pi.get(j).applicationInfo != null) {
+                    List<PackageInfo> packagesPlusApex = getAllPackagesWithApex(pm, userHandle);
+                    for (int j = 0; j < packagesPlusApex.size(); j++) {
+                        if (packagesPlusApex.get(j).applicationInfo != null) {
                             String installer;
                             try {
-                                installer = pm.getInstallerPackageName(pi.get(j).packageName);
+                                installer = pm.getInstallerPackageName(
+                                        packagesPlusApex.get(j).packageName);
                             } catch (IllegalArgumentException e) {
                                 installer = "";
                             }
                             long applicationInfoToken =
                                     output.start(ProtoOutputStream.FIELD_TYPE_MESSAGE
                                             | ProtoOutputStream.FIELD_COUNT_REPEATED
-                                                    | APPLICATION_INFO_FIELD_ID);
+                                            | APPLICATION_INFO_FIELD_ID);
                             output.write(ProtoOutputStream.FIELD_TYPE_INT32
-                                    | ProtoOutputStream.FIELD_COUNT_SINGLE | UID_FIELD_ID,
-                                            pi.get(j).applicationInfo.uid);
+                                            | ProtoOutputStream.FIELD_COUNT_SINGLE | UID_FIELD_ID,
+                                    packagesPlusApex.get(j).applicationInfo.uid);
                             output.write(ProtoOutputStream.FIELD_TYPE_INT64
-                                    | ProtoOutputStream.FIELD_COUNT_SINGLE
-                                            | VERSION_FIELD_ID, pi.get(j).getLongVersionCode());
+                                            | ProtoOutputStream.FIELD_COUNT_SINGLE
+                                            | VERSION_FIELD_ID,
+                                    packagesPlusApex.get(j).getLongVersionCode());
+                            output.write(ProtoOutputStream.FIELD_TYPE_STRING
+                                            | ProtoOutputStream.FIELD_COUNT_SINGLE
+                                            | VERSION_STRING_FIELD_ID,
+                                    packagesPlusApex.get(j).versionName);
                             output.write(ProtoOutputStream.FIELD_TYPE_STRING
                                     | ProtoOutputStream.FIELD_COUNT_SINGLE
-                                    | VERSION_STRING_FIELD_ID,
-                                            pi.get(j).versionName);
+                                    | PACKAGE_NAME_FIELD_ID, packagesPlusApex.get(j).packageName);
                             output.write(ProtoOutputStream.FIELD_TYPE_STRING
-                                    | ProtoOutputStream.FIELD_COUNT_SINGLE
-                                            | PACKAGE_NAME_FIELD_ID, pi.get(j).packageName);
-                            output.write(ProtoOutputStream.FIELD_TYPE_STRING
-                                    | ProtoOutputStream.FIELD_COUNT_SINGLE
+                                            | ProtoOutputStream.FIELD_COUNT_SINGLE
                                             | INSTALLER_FIELD_ID,
-                                                    installer == null ? "" : installer);
+                                    installer == null ? "" : installer);
                             numRecords++;
                             output.end(applicationInfoToken);
                         }
@@ -245,6 +242,26 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 backgroundThread.interrupt();
             }
         });
+    }
+
+    private static List<PackageInfo> getAllPackagesWithApex(PackageManager pm,
+            UserHandle userHandle) {
+        // We want all the uninstalled packages because uninstalled package uids can still be logged
+        // to statsd.
+        List<PackageInfo> allPackages = new ArrayList<>(
+                pm.getInstalledPackagesAsUser(PackageManager.MATCH_UNINSTALLED_PACKAGES
+                                | PackageManager.MATCH_ANY_USER,
+                        userHandle.getIdentifier()));
+        // We make a second query to package manager for the apex modules because package manager
+        // returns both installed and uninstalled apexes with
+        // PackageManager.MATCH_UNINSTALLED_PACKAGES flag. We only want active apexes because
+        // inactive apexes can conflict with active ones.
+        for (PackageInfo packageInfo : pm.getInstalledPackages(PackageManager.MATCH_APEX)) {
+            if (packageInfo.isApex) {
+                allPackages.add(packageInfo);
+            }
+        }
+        return allPackages;
     }
 
     private static class WakelockThread extends Thread {
@@ -333,41 +350,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             // Pull the latest state of UID->app name, version mapping.
             // Needed since the new user basically has a version of every app.
             informAllUids(context);
-        }
-    }
-
-    public static final class AnomalyAlarmListener implements OnAlarmListener {
-        private final Context mContext;
-
-        AnomalyAlarmListener(Context context) {
-            mContext = context;
-        }
-
-        @Override
-        public void onAlarm() {
-            if (DEBUG) {
-                Log.i(TAG, "StatsCompanionService believes an anomaly has occurred at time "
-                        + System.currentTimeMillis() + "ms.");
-            }
-            IStatsd statsd = getStatsdNonblocking();
-            if (statsd == null) {
-                Log.w(TAG, "Could not access statsd to inform it of anomaly alarm firing");
-                return;
-            }
-
-            // Wakelock needs to be retained while calling statsd.
-            Thread thread = new WakelockThread(mContext,
-                    AnomalyAlarmListener.class.getCanonicalName(), new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                statsd.informAnomalyAlarmFired();
-                            } catch (RemoteException e) {
-                                Log.w(TAG, "Failed to inform statsd of anomaly alarm firing", e);
-                            }
-                        }
-                    });
-            thread.start();
         }
     }
 
@@ -465,34 +447,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             } catch (Exception e) {
                 Log.w(TAG, "Failed to inform statsd of a shutdown event.", e);
             }
-        }
-    }
-
-    @Override // Binder call
-    public void setAnomalyAlarm(long timestampMs) {
-        StatsCompanion.enforceStatsdCallingUid();
-        if (DEBUG) Log.d(TAG, "Setting anomaly alarm for " + timestampMs);
-        final long callingToken = Binder.clearCallingIdentity();
-        try {
-            // using ELAPSED_REALTIME, not ELAPSED_REALTIME_WAKEUP, so if device is asleep, will
-            // only fire when it awakens.
-            // AlarmManager will automatically cancel any previous mAnomalyAlarmListener alarm.
-            mAlarmManager.setExact(AlarmManager.ELAPSED_REALTIME, timestampMs, TAG + ".anomaly",
-                    mAnomalyAlarmListener, mHandler);
-        } finally {
-            Binder.restoreCallingIdentity(callingToken);
-        }
-    }
-
-    @Override // Binder call
-    public void cancelAnomalyAlarm() {
-        StatsCompanion.enforceStatsdCallingUid();
-        if (DEBUG) Log.d(TAG, "Cancelling anomaly alarm");
-        final long callingToken = Binder.clearCallingIdentity();
-        try {
-            mAlarmManager.cancel(mAnomalyAlarmListener);
-        } finally {
-            Binder.restoreCallingIdentity(callingToken);
         }
     }
 
@@ -666,7 +620,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         // instead of in binder death because statsd can come back and set different alarms, or not
         // want to set an alarm when it had been set. This guarantees that when we get a new statsd,
         // we cancel any alarms before it is able to set them.
-        cancelAnomalyAlarm();
         cancelPullingAlarm();
         cancelAlarmForSubscriberTriggering();
 

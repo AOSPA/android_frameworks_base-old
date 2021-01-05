@@ -33,6 +33,7 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
 
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.systemui.Gefingerpoken;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
@@ -124,6 +125,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     private float mAppearAnimationTranslation;
     private int mNormalColor;
     private boolean mIsBelowSpeedBump;
+    private long mLastActionUpTime;
 
     private float mNormalBackgroundVisibilityAmount;
     private float mDimmedBackgroundFadeInAmount = -1;
@@ -223,6 +225,22 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
             return true;
         }
         return super.onInterceptTouchEvent(ev);
+    }
+
+    /** Sets the last action up time this view was touched. */
+    void setLastActionUpTime(long eventTime) {
+        mLastActionUpTime = eventTime;
+    }
+
+    /**
+     * Returns the last action up time. The last time will also be cleared because the source of
+     * action is not only from touch event. That prevents the caller from utilizing the time with
+     * unrelated event. The time can be 0 if the event is unavailable.
+     */
+    public long getAndResetLastActionUpTime() {
+        long lastActionUpTime = mLastActionUpTime;
+        mLastActionUpTime = 0;
+        return lastActionUpTime;
     }
 
     protected boolean disallowSingleClick(MotionEvent ev) {
@@ -733,12 +751,16 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
                 if (!mWasCancelled) {
                     enableAppearDrawing(false);
                     onAppearAnimationFinished(isAppearing);
+                    InteractionJankMonitor.getInstance().end(getCujType(isAppearing));
+                } else {
+                    InteractionJankMonitor.getInstance().cancel(getCujType(isAppearing));
                 }
             }
 
             @Override
             public void onAnimationStart(Animator animation) {
                 mWasCancelled = false;
+                InteractionJankMonitor.getInstance().begin(getCujType(isAppearing));
             }
 
             @Override
@@ -747,6 +769,18 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
             }
         });
         mAppearAnimator.start();
+    }
+
+    private int getCujType(boolean isAppearing) {
+        if (mIsHeadsUpAnimation) {
+            return isAppearing
+                    ? InteractionJankMonitor.CUJ_NOTIFICATION_HEADS_UP_APPEAR
+                    : InteractionJankMonitor.CUJ_NOTIFICATION_HEADS_UP_DISAPPEAR;
+        } else {
+            return isAppearing
+                    ? InteractionJankMonitor.CUJ_NOTIFICATION_ADD
+                    : InteractionJankMonitor.CUJ_NOTIFICATION_REMOVE;
+        }
     }
 
     protected void onAppearAnimationFinished(boolean wasAppearing) {

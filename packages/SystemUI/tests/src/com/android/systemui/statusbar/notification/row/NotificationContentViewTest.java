@@ -25,8 +25,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.app.AppOpsManager;
-import android.util.ArraySet;
 import android.view.NotificationHeaderView;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
@@ -37,6 +35,7 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.widget.NotificationExpandButton;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.media.dialog.MediaOutputDialogFactory;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -51,6 +50,8 @@ public class NotificationContentViewTest extends SysuiTestCase {
     @Before
     @UiThreadTest
     public void setup() {
+        mDependency.injectMockDependency(MediaOutputDialogFactory.class);
+
         mView = new NotificationContentView(mContext, null);
         ExpandableNotificationRow row = new ExpandableNotificationRow(mContext, null);
         ExpandableNotificationRow mockRow = spy(row);
@@ -72,32 +73,6 @@ public class NotificationContentViewTest extends SysuiTestCase {
         View view = new View(mContext, null);
         view.setMinimumHeight(height);
         return view;
-    }
-
-    @Test
-    @UiThreadTest
-    public void testShowAppOpsIcons() {
-        View mockContracted = mock(NotificationHeaderView.class);
-        when(mockContracted.findViewById(com.android.internal.R.id.mic))
-                .thenReturn(mockContracted);
-        View mockExpanded = mock(NotificationHeaderView.class);
-        when(mockExpanded.findViewById(com.android.internal.R.id.mic))
-                .thenReturn(mockExpanded);
-        View mockHeadsUp = mock(NotificationHeaderView.class);
-        when(mockHeadsUp.findViewById(com.android.internal.R.id.mic))
-                .thenReturn(mockHeadsUp);
-
-        mView.setContractedChild(mockContracted);
-        mView.setExpandedChild(mockExpanded);
-        mView.setHeadsUpChild(mockHeadsUp);
-
-        ArraySet<Integer> ops = new ArraySet<>();
-        ops.add(AppOpsManager.OP_RECORD_AUDIO);
-        mView.showAppOpsIcons(ops);
-
-        verify(mockContracted, times(1)).setVisibility(View.VISIBLE);
-        verify(mockExpanded, times(1)).setVisibility(View.VISIBLE);
-        verify(mockHeadsUp, times(1)).setVisibility(View.VISIBLE);
     }
 
     @Test

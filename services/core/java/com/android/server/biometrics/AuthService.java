@@ -259,17 +259,6 @@ public class AuthService extends SystemService {
         }
 
         @Override
-        public void resetLockout(int userId, byte[] hardwareAuthToken) throws RemoteException {
-            checkInternalPermission();
-            final long identity = Binder.clearCallingIdentity();
-            try {
-                mBiometricService.resetLockout(userId, hardwareAuthToken);
-            } finally {
-                Binder.restoreCallingIdentity(identity);
-            }
-        }
-
-        @Override
         public long[] getAuthenticatorIds() throws RemoteException {
             // In this method, we're not checking whether the caller is permitted to use face
             // API because current authenticator ID is leaked (in a more contrived way) via Android
@@ -340,7 +329,11 @@ public class AuthService extends SystemService {
                     return;
                 }
 
-                authenticator = new FingerprintAuthenticator(fingerprintService, config);
+                // Initialize this outside of FingerprintAuthenticator. Only HIDL HALs require
+                // initialization from here. AIDL HALs are initialized by FingerprintService since
+                // the HAL interface provides ID, strength, and other configuration information.
+                fingerprintService.initializeConfiguration(config.id, config.strength);
+                authenticator = new FingerprintAuthenticator(fingerprintService, config.id);
                 break;
 
             case TYPE_FACE:
@@ -351,7 +344,11 @@ public class AuthService extends SystemService {
                     return;
                 }
 
-                authenticator = new FaceAuthenticator(faceService, config);
+                // Initialize this outside of FingerprintAuthenticator. Only HIDL HALs require
+                // initialization from here. AIDL HALs are initialized by FaceService since
+                // the HAL interface provides ID, strength, and other configuration information.
+                faceService.initializeConfiguration(config.id, config.strength);
+                authenticator = new FaceAuthenticator(faceService, config.id);
                 break;
 
             case TYPE_IRIS:
@@ -362,7 +359,8 @@ public class AuthService extends SystemService {
                     return;
                 }
 
-                authenticator = new IrisAuthenticator(irisService, config);
+                irisService.initializeConfiguration(config.id, config.strength);
+                authenticator = new IrisAuthenticator(irisService, config.id);
                 break;
 
             default:

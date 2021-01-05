@@ -257,7 +257,6 @@
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"이름이 없는 블루투스 기기 표시"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="1452342324349203434">"절대 볼륨 사용 안함"</string>
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"Gabeldorsche 사용 설정"</string>
-    <string name="enhanced_connectivity" msgid="7201127377781666804">"향상된 연결"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="1710571610177659127">"블루투스 AVRCP 버전"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7846922290083709633">"블루투스 AVRCP 버전 선택"</string>
     <string name="bluetooth_select_map_version_string" msgid="526308145174175327">"블루투스 MAP 버전"</string>
@@ -400,6 +399,12 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"비활성화 상태입니다. 전환하려면 탭하세요."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"활성화되었습니다. 전환하려면 탭하세요."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"앱 대기 상태:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <!-- no translation found for transcode_settings_title (6700974145733932357) -->
+    <skip />
+    <!-- no translation found for transcode_enable_all (4719796495995795404) -->
+    <skip />
+    <!-- no translation found for transcode_skip_apps (5680997722349545778) -->
+    <skip />
     <string name="runningservices_settings_title" msgid="6460099290493086515">"실행 중인 서비스"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"현재 실행 중인 서비스 보기 및 제어"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"WebView 구현"</string>
@@ -539,19 +544,26 @@
     <string name="user_setup_button_setup_now" msgid="1708269547187760639">"지금 설정"</string>
     <string name="user_setup_button_setup_later" msgid="8712980133555493516">"나중에"</string>
     <string name="user_add_user_type_title" msgid="551279664052914497">"추가"</string>
-    <string name="user_new_user_name" msgid="60979820612818840">"새 사용자"</string>
+    <string name="user_new_user_name" msgid="60979820612818840">"신규 사용자"</string>
     <string name="user_new_profile_name" msgid="2405500423304678841">"새 프로필"</string>
     <string name="user_info_settings_title" msgid="6351390762733279907">"사용자 정보"</string>
     <string name="profile_info_settings_title" msgid="105699672534365099">"프로필 정보"</string>
     <string name="user_need_lock_message" msgid="4311424336209509301">"제한된 프로필을 만들기 전에 화면 잠금을 설정하여 앱과 개인 데이터를 보호해야 합니다."</string>
     <string name="user_set_lock_button" msgid="1427128184982594856">"잠금 설정"</string>
     <string name="user_switch_to_user" msgid="6975428297154968543">"<xliff:g id="USER_NAME">%s</xliff:g>(으)로 전환"</string>
+    <string name="creating_new_user_dialog_message" msgid="7232880257538970375">"새로운 사용자를 만드는 중…"</string>
+    <string name="user_nickname" msgid="262624187455825083">"닉네임"</string>
     <string name="guest_new_guest" msgid="3482026122932643557">"게스트 추가"</string>
     <string name="guest_exit_guest" msgid="5908239569510734136">"게스트 삭제"</string>
     <string name="guest_nickname" msgid="6332276931583337261">"게스트"</string>
+    <string name="user_image_take_photo" msgid="467512954561638530">"사진 찍기"</string>
+    <string name="user_image_choose_photo" msgid="1363820919146782908">"이미지 선택"</string>
+    <string name="user_image_photo_selector" msgid="433658323306627093">"사진 선택"</string>
     <string name="cached_apps_freezer_device_default" msgid="2616594131750144342">"기기 기본값"</string>
     <string name="cached_apps_freezer_disabled" msgid="4816382260660472042">"사용 중지됨"</string>
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"사용 설정됨"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"변경사항을 적용하려면 기기를 재부팅해야 합니다. 지금 재부팅하거나 취소하세요."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"유선 헤드폰"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"사용"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"사용 안 함"</string>
 </resources>

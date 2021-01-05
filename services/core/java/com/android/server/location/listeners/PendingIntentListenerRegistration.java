@@ -30,7 +30,7 @@ import android.util.Log;
  * @param <TListener> listener type
  */
 public abstract class PendingIntentListenerRegistration<TRequest, TListener> extends
-        RemovableListenerRegistration<TRequest, TListener> implements PendingIntent.CancelListener {
+        RemoteListenerRegistration<TRequest, TListener> implements PendingIntent.CancelListener {
 
     /**
      * Interface to allowed pending intent retrieval when keys are not themselves PendingIntents.
@@ -42,9 +42,9 @@ public abstract class PendingIntentListenerRegistration<TRequest, TListener> ext
         PendingIntent getPendingIntent();
     }
 
-    protected PendingIntentListenerRegistration(String tag, @Nullable TRequest request,
+    protected PendingIntentListenerRegistration(@Nullable TRequest request,
             CallerIdentity callerIdentity, TListener listener) {
-        super(tag, request, callerIdentity, listener);
+        super(request, callerIdentity, listener);
     }
 
     @Override
@@ -70,9 +70,20 @@ public abstract class PendingIntentListenerRegistration<TRequest, TListener> ext
     protected void onPendingIntentListenerUnregister() {}
 
     @Override
+    protected void onOperationFailure(ListenerOperation<TListener> operation, Exception e) {
+        if (e instanceof PendingIntent.CanceledException) {
+            Log.w(getOwner().getTag(), "registration " + this + " removed", e);
+            remove();
+        } else {
+            super.onOperationFailure(operation, e);
+        }
+    }
+
+    @Override
     public void onCancelled(PendingIntent intent) {
-        if (Log.isLoggable(mTag, Log.DEBUG)) {
-            Log.d(mTag, "pending intent registration " + getIdentity() + " canceled");
+        if (Log.isLoggable(getOwner().getTag(), Log.DEBUG)) {
+            Log.d(getOwner().getTag(),
+                    "pending intent registration " + getIdentity() + " canceled");
         }
 
         remove();

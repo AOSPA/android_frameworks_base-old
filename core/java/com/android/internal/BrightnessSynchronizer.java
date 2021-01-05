@@ -22,6 +22,7 @@ import android.content.Context;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.UserHandle;
@@ -36,7 +37,7 @@ import java.util.Queue;
  * (new) system for storing the brightness. It has methods to convert between the two and also
  * observes for when one of the settings is changed and syncs this with the other.
  */
-public class BrightnessSynchronizer{
+public class BrightnessSynchronizer {
 
     private static final int MSG_UPDATE_FLOAT = 1;
     private static final int MSG_UPDATE_INT = 2;
@@ -55,7 +56,7 @@ public class BrightnessSynchronizer{
 
     private final Queue<Object> mWriteHistory = new LinkedList<>();
 
-    private final Handler mHandler = new Handler() {
+    private final Handler mHandler = new Handler(Looper.getMainLooper()) {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
@@ -72,74 +73,63 @@ public class BrightnessSynchronizer{
         }
     };
 
+    private float mPreferredSettingValue;
 
     public BrightnessSynchronizer(Context context) {
-        final BrightnessSyncObserver mBrightnessSyncObserver;
         mContext = context;
-        mBrightnessSyncObserver = new BrightnessSyncObserver(mHandler);
-        mBrightnessSyncObserver.startObserving();
+    }
+
+    /**
+     * Starts brightnessSyncObserver to ensure that the float and int brightness values stay
+     * in sync.
+     * This also ensures that values are synchronized at system start up too.
+     * So we force an update to the int value, since float is the source of truth. Fallback to int
+     * value, if float is invalid. If both are invalid, use default float value from config.
+     */
+    public void startSynchronizing() {
+        final BrightnessSyncObserver brightnessSyncObserver;
+        brightnessSyncObserver = new BrightnessSyncObserver(mHandler);
+        brightnessSyncObserver.startObserving();
+
+        final float currentFloatBrightness = getScreenBrightnessFloat(mContext);
+        final int currentIntBrightness = getScreenBrightnessInt(mContext);
+
+        if (!Float.isNaN(currentFloatBrightness)) {
+            updateBrightnessIntFromFloat(currentFloatBrightness);
+        } else if (currentIntBrightness != -1) {
+            updateBrightnessFloatFromInt(currentIntBrightness);
+        } else {
+            final float defaultBrightness = mContext.getResources().getFloat(
+                    com.android.internal.R.dimen.config_screenBrightnessSettingDefaultFloat);
+            Settings.System.putFloatForUser(mContext.getContentResolver(),
+                    Settings.System.SCREEN_BRIGHTNESS_FLOAT, defaultBrightness,
+                    UserHandle.USER_CURRENT);
+
+        }
     }
 
     /**
      * Converts between the int brightness system and the float brightness system.
      */
-    public static float brightnessIntToFloat(Context context, int brightnessInt) {
-        final PowerManager pm = context.getSystemService(PowerManager.class);
-        final float pmMinBrightness = pm.getBrightnessConstraint(
-                PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM);
-        final float pmMaxBrightness = pm.getBrightnessConstraint(
-                PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MAXIMUM);
-        final int minBrightnessInt = Math.round(brightnessFloatToIntRange(pmMinBrightness,
-                PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX,
-                PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON));
-        final int maxBrightnessInt = Math.round(brightnessFloatToIntRange(pmMaxBrightness,
-                PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX,
-                PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON));
-
-        return brightnessIntToFloat(brightnessInt, minBrightnessInt, maxBrightnessInt,
-                pmMinBrightness, pmMaxBrightness);
-    }
-
-    /**
-     * Converts between the int brightness system and the float brightness system.
-     */
-    public static float brightnessIntToFloat(int brightnessInt, int minInt, int maxInt,
-            float minFloat, float maxFloat) {
+    public static float brightnessIntToFloat(int brightnessInt) {
         if (brightnessInt == PowerManager.BRIGHTNESS_OFF) {
             return PowerManager.BRIGHTNESS_OFF_FLOAT;
         } else if (brightnessInt == PowerManager.BRIGHTNESS_INVALID) {
             return PowerManager.BRIGHTNESS_INVALID_FLOAT;
         } else {
-            return MathUtils.constrainedMap(minFloat, maxFloat, (float) minInt, (float) maxInt,
-                    brightnessInt);
+            final float minFloat = PowerManager.BRIGHTNESS_MIN;
+            final float maxFloat = PowerManager.BRIGHTNESS_MAX;
+            final float minInt = PowerManager.BRIGHTNESS_OFF + 1;
+            final float maxInt = PowerManager.BRIGHTNESS_ON;
+            return MathUtils.constrainedMap(minFloat, maxFloat, minInt, maxInt, brightnessInt);
         }
     }
 
     /**
      * Converts between the float brightness system and the int brightness system.
      */
-    public static int brightnessFloatToInt(Context context, float brightnessFloat) {
-        return Math.round(brightnessFloatToIntRange(context, brightnessFloat));
-    }
-
-    /**
-     * Converts between the float brightness system and the int brightness system, but returns
-     * the converted value as a float within the int-system's range. This method helps with
-     * conversions from one system to the other without losing the floating-point precision.
-     */
-    public static float brightnessFloatToIntRange(Context context, float brightnessFloat) {
-        final PowerManager pm = context.getSystemService(PowerManager.class);
-        final float minFloat = pm.getBrightnessConstraint(
-                PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM);
-        final float maxFloat = pm.getBrightnessConstraint(
-                PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MAXIMUM);
-        final float minInt = brightnessFloatToIntRange(minFloat,
-                PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX,
-                PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON);
-        final float maxInt = brightnessFloatToIntRange(maxFloat,
-                PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX,
-                PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON);
-        return brightnessFloatToIntRange(brightnessFloat, minFloat, maxFloat, minInt, maxInt);
+    public static int brightnessFloatToInt(float brightnessFloat) {
+        return Math.round(brightnessFloatToIntRange(brightnessFloat));
     }
 
     /**
@@ -148,28 +138,31 @@ public class BrightnessSynchronizer{
      * Value returned as a float privimite (to preserve precision), but is a value within the
      * int-system range.
      */
-    private static float brightnessFloatToIntRange(float brightnessFloat, float minFloat,
-            float maxFloat, float minInt, float maxInt) {
+    public static float brightnessFloatToIntRange(float brightnessFloat) {
         if (floatEquals(brightnessFloat, PowerManager.BRIGHTNESS_OFF_FLOAT)) {
             return PowerManager.BRIGHTNESS_OFF;
         } else if (Float.isNaN(brightnessFloat)) {
             return PowerManager.BRIGHTNESS_INVALID;
         } else {
+            final float minFloat = PowerManager.BRIGHTNESS_MIN;
+            final float maxFloat = PowerManager.BRIGHTNESS_MAX;
+            final float minInt = PowerManager.BRIGHTNESS_OFF + 1;
+            final float maxInt = PowerManager.BRIGHTNESS_ON;
             return MathUtils.constrainedMap(minInt, maxInt, minFloat, maxFloat, brightnessFloat);
         }
     }
 
     private static float getScreenBrightnessFloat(Context context) {
         return Settings.System.getFloatForUser(context.getContentResolver(),
-                Settings.System.SCREEN_BRIGHTNESS_FLOAT, Float.NaN, UserHandle.USER_CURRENT);
+                Settings.System.SCREEN_BRIGHTNESS_FLOAT, PowerManager.BRIGHTNESS_INVALID_FLOAT,
+                UserHandle.USER_CURRENT);
     }
 
     private static int getScreenBrightnessInt(Context context) {
         return Settings.System.getIntForUser(context.getContentResolver(),
-                Settings.System.SCREEN_BRIGHTNESS, 0, UserHandle.USER_CURRENT);
+                Settings.System.SCREEN_BRIGHTNESS, PowerManager.BRIGHTNESS_INVALID,
+                UserHandle.USER_CURRENT);
     }
-
-    private float mPreferredSettingValue;
 
     /**
      * Updates the float setting based on a passed in int value. This is called whenever the int
@@ -185,10 +178,10 @@ public class BrightnessSynchronizer{
         if (topOfQueue != null && topOfQueue.equals(value)) {
             mWriteHistory.poll();
         } else {
-            if (brightnessFloatToInt(mContext, mPreferredSettingValue) == value) {
+            if (brightnessFloatToInt(mPreferredSettingValue) == value) {
                 return;
             }
-            float newBrightnessFloat = brightnessIntToFloat(mContext, value);
+            float newBrightnessFloat = brightnessIntToFloat(value);
             mWriteHistory.offer(newBrightnessFloat);
             mPreferredSettingValue = newBrightnessFloat;
             Settings.System.putFloatForUser(mContext.getContentResolver(),
@@ -207,7 +200,7 @@ public class BrightnessSynchronizer{
      * @param value Brightness setting as float to store in int setting.
      */
     private void updateBrightnessIntFromFloat(float value) {
-        int newBrightnessInt = brightnessFloatToInt(mContext, value);
+        int newBrightnessInt = brightnessFloatToInt(value);
         Object topOfQueue = mWriteHistory.peek();
         if (topOfQueue != null && topOfQueue.equals(value)) {
             mWriteHistory.poll();
@@ -259,10 +252,12 @@ public class BrightnessSynchronizer{
             }
             if (BRIGHTNESS_URI.equals(uri)) {
                 int currentBrightness = getScreenBrightnessInt(mContext);
+                mHandler.removeMessages(MSG_UPDATE_FLOAT);
                 mHandler.obtainMessage(MSG_UPDATE_FLOAT, currentBrightness, 0).sendToTarget();
             } else if (BRIGHTNESS_FLOAT_URI.equals(uri)) {
                 float currentFloat = getScreenBrightnessFloat(mContext);
                 int toSend = Float.floatToIntBits(currentFloat);
+                mHandler.removeMessages(MSG_UPDATE_INT);
                 mHandler.obtainMessage(MSG_UPDATE_INT, toSend, 0).sendToTarget();
             }
         }

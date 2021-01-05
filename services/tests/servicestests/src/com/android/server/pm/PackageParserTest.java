@@ -155,8 +155,8 @@ public class PackageParserTest {
     @Test
     public void test_serializePackage() throws Exception {
         try (PackageParser2 pp = PackageParser2.forParsingFileWithDefaults()) {
-            ParsedPackage pkg = pp.parsePackage(FRAMEWORK, 0 /* parseFlags */,
-                    true /* useCaches */);
+            AndroidPackage pkg = pp.parsePackage(FRAMEWORK, 0 /* parseFlags */,
+                    true /* useCaches */).hideAsFinal();
 
             Parcel p = Parcel.obtain();
             pkg.writeToParcel(p, 0 /* flags */);
@@ -312,8 +312,7 @@ public class PackageParserTest {
 
     private static PackageSetting mockPkgSetting(AndroidPackage pkg) {
         return new PackageSetting(pkg.getPackageName(), pkg.getRealPackage(),
-                new File(pkg.getCodePath()), new File(pkg.getCodePath()), null,
-                pkg.getPrimaryCpuAbi(), pkg.getSecondaryCpuAbi(),
+                new File(pkg.getPath()), null, pkg.getPrimaryCpuAbi(), pkg.getSecondaryCpuAbi(),
                 null, pkg.getVersionCode(),
                 PackageInfoUtils.appInfoFlags(pkg, null),
                 PackageInfoUtils.appInfoPrivateFlags(pkg, null),
@@ -336,8 +335,8 @@ public class PackageParserTest {
         assertEquals(a.getPackageName(), b.getPackageName());
         assertArrayEquals(a.getSplitNames(), b.getSplitNames());
         assertEquals(a.getVolumeUuid(), b.getVolumeUuid());
-        assertEquals(a.getCodePath(), b.getCodePath());
-        assertEquals(a.getBaseCodePath(), b.getBaseCodePath());
+        assertEquals(a.getPath(), b.getPath());
+        assertEquals(a.getBaseApkPath(), b.getBaseApkPath());
         assertArrayEquals(a.getSplitCodePaths(), b.getSplitCodePaths());
         assertArrayEquals(a.getSplitRevisionCodes(), b.getSplitRevisionCodes());
         assertArrayEquals(a.getSplitFlags(), b.getSplitFlags());
@@ -468,7 +467,7 @@ public class PackageParserTest {
             ParsedInstrumentation b) {
         assertComponentsEqual(a, b);
 
-        // Sanity check for InstrumentationInfo.
+        // Validity check for InstrumentationInfo.
         assertEquals(a.getTargetPackage(), b.getTargetPackage());
         assertEquals(a.getTargetProcesses(), b.getTargetProcesses());
         assertEquals(a.isHandleProfiling(), b.isHandleProfiling());
@@ -483,7 +482,7 @@ public class PackageParserTest {
     ) {
         assertComponentsEqual(a, b);
 
-        // Sanity check for ServiceInfo.
+        // Validity check for ServiceInfo.
         ServiceInfo aInfo = PackageInfoUtils.generateServiceInfo(aPkg, a, 0,
                 new PackageUserState(), 0, mockPkgSetting(aPkg));
         ServiceInfo bInfo = PackageInfoUtils.generateServiceInfo(bPkg, b, 0,
@@ -510,7 +509,7 @@ public class PackageParserTest {
     ) {
         assertComponentsEqual(a, b);
 
-        // Sanity check for ActivityInfo.
+        // Validity check for ActivityInfo.
         ActivityInfo aInfo = PackageInfoUtils.generateActivityInfo(aPkg, a, 0,
                 new PackageUserState(), 0, mockPkgSetting(aPkg));
         ActivityInfo bInfo = PackageInfoUtils.generateActivityInfo(bPkg, b, 0,
@@ -523,7 +522,7 @@ public class PackageParserTest {
             ParsedPermissionGroup b) {
         assertComponentsEqual(a, b);
 
-        // Sanity check for PermissionGroupInfo.
+        // Validity check for PermissionGroupInfo.
         assertEquals(a.getName(), b.getName());
         assertEquals(a.getDescriptionRes(), b.getDescriptionRes());
     }
@@ -592,7 +591,7 @@ public class PackageParserTest {
                         null
                 )
                 .setUse32BitAbi(true)
-                .setVolumeUuid("foo3")
+                .setVolumeUuid("d52ef59a-7def-4541-bf21-4c28ed4b65a0")
                 .addPermission(permission)
                 .addPermissionGroup(new ParsedPermissionGroup())
                 .addActivity(new ParsedActivity())
@@ -666,13 +665,13 @@ public class PackageParserTest {
             }
 
             if (List.class.isAssignableFrom(fieldType)) {
-                // Sanity check for list fields: Assume they're non-null and contain precisely
+                // Validity check for list fields: Assume they're non-null and contain precisely
                 // one element.
                 List<?> list = (List<?>) f.get(pkg);
                 assertNotNull("List was null: " + f, list);
                 assertEquals(1, list.size());
             } else if (fieldType.getComponentType() != null) {
-                // Sanity check for array fields: Assume they're non-null and contain precisely
+                // Validity check for array fields: Assume they're non-null and contain precisely
                 // one element.
                 Object array = f.get(pkg);
                 assertNotNull(Array.get(array, 0));

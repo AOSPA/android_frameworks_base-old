@@ -86,11 +86,6 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public int getMaxWallpaperLayer() {
-        return 0;
-    }
-
-    @Override
     public boolean isKeyguardHostWindow(WindowManager.LayoutParams attrs) {
         return attrs.type == TYPE_NOTIFICATION_SHADE;
     }
@@ -122,7 +117,7 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
             window = WindowTestsBase.createWindow(null, TYPE_APPLICATION_STARTING, activity,
                     "Starting window", 0 /* ownerId */, 0 /* userId*/, false /* internalWindows */,
                     wm, mock(Session.class), iWindow, mPowerManagerWrapper);
-            activity.startingWindow = window;
+            activity.mStartingWindow = window;
         }
         if (mRunnableWhenAddingSplashScreen != null) {
             mRunnableWhenAddingSplashScreen.run();
@@ -131,7 +126,7 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
         return () -> {
             synchronized (wm.mGlobalLock) {
                 activity.removeChild(window);
-                activity.startingWindow = null;
+                activity.mStartingWindow = null;
             }
         };
     }
@@ -178,10 +173,6 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public void applyKeyguardPolicyLw(WindowState win, WindowState imeTarget) {
-    }
-
-    @Override
     public void setAllowLockscreenWhenOn(int displayId, boolean allow) {
     }
 
@@ -202,19 +193,19 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public void screenTurningOn(ScreenOnListener screenOnListener) {
+    public void screenTurningOn(int displayId, ScreenOnListener screenOnListener) {
     }
 
     @Override
-    public void screenTurnedOn() {
+    public void screenTurnedOn(int displayId) {
     }
 
     @Override
-    public void screenTurningOff(ScreenOffListener screenOffListener) {
+    public void screenTurningOff(int displayId, ScreenOffListener screenOffListener) {
     }
 
     @Override
-    public void screenTurnedOff() {
+    public void screenTurnedOff(int displayId) {
     }
 
     @Override
@@ -377,11 +368,6 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public boolean isTopLevelWindow(int windowType) {
-        return false;
-    }
-
-    @Override
     public void startKeyguardExitAnimation(long startTime, long fadeoutDuration) {
     }
 
@@ -404,10 +390,5 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     @Override
     public boolean canDismissBootAnimation() {
         return true;
-    }
-
-    @Override
-    public boolean setAodShowing(boolean aodShowing) {
-        return false;
     }
 }

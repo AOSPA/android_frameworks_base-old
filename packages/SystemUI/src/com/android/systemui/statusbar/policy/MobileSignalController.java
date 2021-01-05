@@ -26,7 +26,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings.Global;
 import android.telephony.Annotation;
-import android.telephony.CdmaEriInformation;
 import android.telephony.CellSignalStrength;
 import android.telephony.CellSignalStrengthCdma;
 import android.telephony.CellSignalStrengthNr;
@@ -151,26 +150,22 @@ public class MobileSignalController extends SignalController<
         updateDataSim();
 
         int phoneId = mSubscriptionInfo.getSimSlotIndex();
-        mFeatureConnector = new FeatureConnector(mContext, phoneId,
-                new FeatureConnector.Listener<ImsManager> () {
-                    @Override
-                    public ImsManager getFeatureManager() {
-                        return ImsManager.getInstance(mContext, phoneId);
-                    }
+        mFeatureConnector = ImsManager.getConnector(
+            mContext, phoneId, "?",
+            new FeatureConnector.Listener<ImsManager> () {
+                @Override
+                public void connectionReady(ImsManager manager) throws ImsException {
+                    Log.d(mTag, "ImsManager: connection ready.");
+                    mImsManager = manager;
+                    setListeners();
+                }
 
-                    @Override
-                    public void connectionReady(ImsManager manager) throws ImsException {
-                        Log.d(mTag, "ImsManager: connection ready.");
-                        mImsManager = manager;
-                        setListeners();
-                    }
-
-                    @Override
-                    public void connectionUnavailable() {
-                        Log.d(mTag, "ImsManager: connection unavailable.");
-                        removeListeners();
-                    }
-        }, "?");
+                @Override
+                public void connectionUnavailable(int reason) {
+                    Log.d(mTag, "ImsManager: connection unavailable.");
+                    removeListeners();
+                }
+            }, mContext.getMainExecutor());
 
 
         mObserver = new ContentObserver(new Handler(receiverLooper)) {
@@ -456,8 +451,8 @@ public class MobileSignalController extends SignalController<
         }
 
         try {
-            mImsManager.addCapabilitiesCallback(mCapabilityCallback);
-            mImsManager.addRegistrationCallback(mImsRegistrationCallback);
+            mImsManager.addCapabilitiesCallback(mCapabilityCallback, mContext.getMainExecutor());
+            mImsManager.addRegistrationCallback(mImsRegistrationCallback, mContext.getMainExecutor());
             Log.d(mTag, "addCapabilitiesCallback " + mCapabilityCallback + " into " + mImsManager);
             Log.d(mTag, "addRegistrationCallback " + mImsRegistrationCallback
                     + " into " + mImsManager);
@@ -544,6 +539,8 @@ public class MobileSignalController extends SignalController<
                 || mConfig.alwaysShowNetworkTypeIcon) ? icons.mDataType : 0;
         if ( mConfig.enableRatIconEnhancement ) {
             typeIcon = getEnhancementDataRatIcon();
+        }else if ( mConfig.enableDdsRatIconEnhancement ) {
+            typeIcon = getEnhancementDdsRatIcon();
         }
         int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
         MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
@@ -586,16 +583,18 @@ public class MobileSignalController extends SignalController<
         return (mServiceState != null && mServiceState.isEmergencyOnly());
     }
 
+    public boolean isInService() {
+        return Utils.isInService(mServiceState);
+    }
+
     private boolean isRoaming() {
         // During a carrier change, roaming indications need to be supressed.
         if (isCarrierNetworkChangeActive()) {
             return false;
         }
-        if (isCdma() && mServiceState != null) {
-            final int iconMode = mPhone.getCdmaEriInformation().getEriIconMode();
-            return mPhone.getCdmaEriInformation().getEriIconIndex() != CdmaEriInformation.ERI_OFF
-                    && (iconMode == CdmaEriInformation.ERI_ICON_MODE_NORMAL
-                    || iconMode == CdmaEriInformation.ERI_ICON_MODE_FLASH);
+        if (isCdma()) {
+            return mPhone.getCdmaEnhancedRoamingIndicatorDisplayNumber()
+                    != TelephonyManager.ERI_OFF;
         } else {
             return mServiceState != null && mServiceState.getRoaming();
         }
@@ -940,17 +939,21 @@ public class MobileSignalController extends SignalController<
     }
 
     private int getEnhancementDataRatIcon() {
-        int ratIcon = 0;
-        if ( showDataRatIcon() ) {
-            MobileIconGroup iconGroup = mDefaultIcons;
-            if ( mFiveGState.isNrIconTypeValid() ) {
-                iconGroup = mFiveGState.getIconGroup();
-            }else {
-                iconGroup = getNetworkTypeIconGroup();
-            }
-            ratIcon = iconGroup.mDataType;
+        return showDataRatIcon() ? getRatIconGroup().mDataType : 0;
+    }
+
+    private int getEnhancementDdsRatIcon() {
+        return mCurrentState.dataSim ? getRatIconGroup().mDataType : 0;
+    }
+
+    private MobileIconGroup getRatIconGroup() {
+        MobileIconGroup iconGroup = mDefaultIcons;
+        if ( mFiveGState.isNrIconTypeValid() ) {
+            iconGroup = mFiveGState.getIconGroup();
+        }else {
+            iconGroup = getNetworkTypeIconGroup();
         }
-        return ratIcon;
+        return iconGroup;
     }
 
     private boolean isVowifiAvailable() {

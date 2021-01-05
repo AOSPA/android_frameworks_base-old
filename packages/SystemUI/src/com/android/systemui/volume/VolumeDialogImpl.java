@@ -49,6 +49,7 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Region;
 import android.graphics.drawable.ColorDrawable;
 import android.media.AudioManager;
 import android.media.AudioSystem;
@@ -71,6 +72,7 @@ import android.view.View.AccessibilityDelegate;
 import android.view.ViewGroup;
 import android.view.ViewPropertyAnimator;
 import android.view.ViewStub;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -88,6 +90,7 @@ import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
+import com.android.systemui.media.dialog.MediaOutputDialogFactory;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.VolumeDialog;
 import com.android.systemui.plugins.VolumeDialogController;
@@ -109,7 +112,8 @@ import java.util.List;
  * Methods ending in "H" must be called on the (ui) handler.
  */
 public class VolumeDialogImpl implements VolumeDialog,
-        ConfigurationController.ConfigurationListener {
+        ConfigurationController.ConfigurationListener,
+        ViewTreeObserver.OnComputeInternalInsetsListener {
     private static final String TAG = Util.logTag(VolumeDialogImpl.class);
 
     private static final long USER_ATTEMPT_GRACE_PERIOD = 1000;
@@ -119,13 +123,17 @@ public class VolumeDialogImpl implements VolumeDialog,
     static final int DIALOG_SAFETYWARNING_TIMEOUT_MILLIS = 5000;
     static final int DIALOG_ODI_CAPTIONS_TOOLTIP_TIMEOUT_MILLIS = 5000;
     static final int DIALOG_HOVERING_TIMEOUT_MILLIS = 16000;
-    static final int DIALOG_SHOW_ANIMATION_DURATION = 300;
-    static final int DIALOG_HIDE_ANIMATION_DURATION = 250;
+
+    private final int mDialogShowAnimationDurationMs;
+    private final int mDialogHideAnimationDurationMs;
+    private final boolean mShowLowMediaVolumeIcon;
+    private final boolean mChangeVolumeRowTintWhenInactive;
 
     private final Context mContext;
     private final H mHandler = new H();
     private final VolumeDialogController mController;
     private final DeviceProvisionedController mDeviceProvisionedController;
+    private final Region mTouchableRegion = new Region();
 
     private Window mWindow;
     private CustomDialog mDialog;
@@ -166,7 +174,7 @@ public class VolumeDialogImpl implements VolumeDialog,
 
     public VolumeDialogImpl(Context context) {
         mContext =
-                new ContextThemeWrapper(context, R.style.qs_theme);
+                new ContextThemeWrapper(context, R.style.volume_dialog_theme);
         mController = Dependency.get(VolumeDialogController.class);
         mKeyguard = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
         mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
@@ -175,6 +183,14 @@ public class VolumeDialogImpl implements VolumeDialog,
         mShowActiveStreamOnly = showActiveStreamOnly();
         mHasSeenODICaptionsTooltip =
                 Prefs.getBoolean(context, Prefs.Key.HAS_SEEN_ODI_CAPTIONS_TOOLTIP, false);
+        mShowLowMediaVolumeIcon =
+            mContext.getResources().getBoolean(R.bool.config_showLowMediaVolumeIcon);
+        mChangeVolumeRowTintWhenInactive =
+            mContext.getResources().getBoolean(R.bool.config_changeVolumeRowTintWhenInactive);
+        mDialogShowAnimationDurationMs =
+            mContext.getResources().getInteger(R.integer.config_dialogShowAnimationDurationMs);
+        mDialogHideAnimationDurationMs =
+            mContext.getResources().getInteger(R.integer.config_dialogHideAnimationDurationMs);
     }
 
     @Override
@@ -198,6 +214,33 @@ public class VolumeDialogImpl implements VolumeDialog,
         mController.removeCallback(mControllerCallbackH);
         mHandler.removeCallbacksAndMessages(null);
         Dependency.get(ConfigurationController.class).removeCallback(this);
+    }
+
+    @Override
+    public void onComputeInternalInsets(ViewTreeObserver.InternalInsetsInfo internalInsetsInfo) {
+        // Set touchable region insets on the root dialog view. This tells WindowManager that
+        // touches outside of this region should not be delivered to the volume window, and instead
+        // go to the window below. This is the only way to do this - returning false in
+        // onDispatchTouchEvent results in the event being ignored entirely, rather than passed to
+        // the next window.
+        internalInsetsInfo.setTouchableInsets(
+                ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
+
+        mTouchableRegion.setEmpty();
+
+        // Set the touchable region to the union of all child view bounds. We don't use touches on
+        // the volume dialog container itself, so this is fine.
+        for (int i = 0; i < mDialogView.getChildCount(); i++) {
+            final View view = mDialogView.getChildAt(i);
+            mTouchableRegion.op(
+                    view.getLeft(),
+                    view.getTop(),
+                    view.getRight(),
+                    view.getBottom(),
+                    Region.Op.UNION);
+        }
+
+        internalInsetsInfo.touchableRegion.set(mTouchableRegion);
     }
 
     private void initDialog() {
@@ -231,12 +274,13 @@ public class VolumeDialogImpl implements VolumeDialog,
         mDialogView.setAlpha(0);
         mDialog.setCanceledOnTouchOutside(true);
         mDialog.setOnShowListener(dialog -> {
+            mDialogView.getViewTreeObserver().addOnComputeInternalInsetsListener(this);
             if (!isLandscape()) mDialogView.setTranslationX(mDialogView.getWidth() / 2.0f);
             mDialogView.setAlpha(0);
             mDialogView.animate()
                     .alpha(1)
                     .translationX(0)
-                    .setDuration(DIALOG_SHOW_ANIMATION_DURATION)
+                    .setDuration(mDialogShowAnimationDurationMs)
                     .setInterpolator(new SystemUIInterpolators.LogDecelerateInterpolator())
                     .withEndAction(() -> {
                         if (!Prefs.getBoolean(mContext, Prefs.Key.TOUCHED_RINGER_TOGGLE, false)) {
@@ -248,6 +292,11 @@ public class VolumeDialogImpl implements VolumeDialog,
                     })
                     .start();
         });
+
+        mDialog.setOnDismissListener(dialogInterface ->
+                mDialogView
+                        .getViewTreeObserver()
+                        .removeOnComputeInternalInsetsListener(VolumeDialogImpl.this));
 
         mDialogView.setOnHoverListener((v, event) -> {
             int action = event.getActionMasked();
@@ -421,6 +470,7 @@ public class VolumeDialogImpl implements VolumeDialog,
         row.dndIcon = row.view.findViewById(R.id.dnd_icon);
         row.slider = row.view.findViewById(R.id.volume_row_slider);
         row.slider.setOnSeekBarChangeListener(new VolumeSeekBarChangeListener(row));
+        row.number = row.view.findViewById(R.id.volume_number);
 
         row.anim = null;
 
@@ -470,6 +520,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                 Events.writeEvent(Events.EVENT_SETTINGS_CLICK);
                 Intent intent = new Intent(Settings.Panel.ACTION_VOLUME);
                 dismissH(DISMISS_REASON_SETTINGS_CLICKED);
+                Dependency.get(MediaOutputDialogFactory.class).dismiss();
                 Dependency.get(ActivityStarter.class).startActivity(intent,
                         true /* dismissShade */);
             });
@@ -550,7 +601,7 @@ public class VolumeDialogImpl implements VolumeDialog,
             mODICaptionsTooltipView.setAlpha(0.f);
             mODICaptionsTooltipView.animate()
                 .alpha(1.f)
-                .setStartDelay(DIALOG_SHOW_ANIMATION_DURATION)
+                .setStartDelay(mDialogShowAnimationDurationMs)
                 .withEndAction(() -> {
                     if (D.BUG) Log.d(TAG, "tool:checkODICaptionsTooltip() putBoolean true");
                     Prefs.putBoolean(mContext,
@@ -572,7 +623,7 @@ public class VolumeDialogImpl implements VolumeDialog,
             mODICaptionsTooltipView.animate()
                     .alpha(0.f)
                     .setStartDelay(0)
-                    .setDuration(DIALOG_HIDE_ANIMATION_DURATION)
+                    .setDuration(mDialogHideAnimationDurationMs)
                     .withEndAction(() -> mODICaptionsTooltipView.setVisibility(INVISIBLE))
                     .start();
         }
@@ -751,7 +802,7 @@ public class VolumeDialogImpl implements VolumeDialog,
         mDialogView.setAlpha(1);
         ViewPropertyAnimator animator = mDialogView.animate()
                 .alpha(0)
-                .setDuration(DIALOG_HIDE_ANIMATION_DURATION)
+                .setDuration(mDialogHideAnimationDurationMs)
                 .setInterpolator(new SystemUIInterpolators.LogAccelerateInterpolator())
                 .withEndAction(() -> mHandler.postDelayed(() -> {
                     mDialog.dismiss();
@@ -935,6 +986,7 @@ public class VolumeDialogImpl implements VolumeDialog,
     protected void onStateChangedH(State state) {
         if (D.BUG) Log.d(TAG, "onStateChangedH() state: " + state.toString());
         if (mState != null && state != null
+                && mState.ringerModeInternal != -1
                 && mState.ringerModeInternal != state.ringerModeInternal
                 && state.ringerModeInternal == AudioManager.RINGER_MODE_VIBRATE) {
             mController.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_HEAVY_CLICK));
@@ -1024,19 +1076,28 @@ public class VolumeDialogImpl implements VolumeDialog,
         final boolean iconEnabled = (mAutomute || ss.muteSupported) && !zenMuted;
         row.icon.setEnabled(iconEnabled);
         row.icon.setAlpha(iconEnabled ? 1 : 0.5f);
-        final int iconRes =
-                isRingVibrate ? R.drawable.ic_volume_ringer_vibrate
-                        : isRingSilent || zenMuted ? row.iconMuteRes
-                                : ss.routedToBluetooth
-                                        ? isStreamMuted(ss) ? R.drawable.ic_volume_media_bt_mute
-                                                : R.drawable.ic_volume_media_bt
-                                        : isStreamMuted(ss) ? row.iconMuteRes : row.iconRes;
+        final int iconRes;
+        if (isRingVibrate) {
+            iconRes = R.drawable.ic_volume_ringer_vibrate;
+        } else if (isRingSilent || zenMuted) {
+            iconRes = row.iconMuteRes;
+        } else if (ss.routedToBluetooth) {
+            iconRes = isStreamMuted(ss) ? R.drawable.ic_volume_media_bt_mute
+                                        : R.drawable.ic_volume_media_bt;
+        } else if (isStreamMuted(ss)) {
+            iconRes = ss.muted ? R.drawable.ic_volume_media_off : row.iconMuteRes;
+        } else {
+            iconRes = mShowLowMediaVolumeIcon && ss.level * 2 < (ss.levelMax + ss.levelMin)
+                      ? R.drawable.ic_volume_media_low : row.iconRes;
+        }
+
         row.icon.setImageResource(iconRes);
         row.iconState =
                 iconRes == R.drawable.ic_volume_ringer_vibrate ? Events.ICON_STATE_VIBRATE
                 : (iconRes == R.drawable.ic_volume_media_bt_mute || iconRes == row.iconMuteRes)
                         ? Events.ICON_STATE_MUTE
-                : (iconRes == R.drawable.ic_volume_media_bt || iconRes == row.iconRes)
+                : (iconRes == R.drawable.ic_volume_media_bt || iconRes == row.iconRes
+                        || iconRes == R.drawable.ic_volume_media_low)
                         ? Events.ICON_STATE_UNMUTE
                 : Events.ICON_STATE_UNKNOWN;
         if (iconEnabled) {
@@ -1090,6 +1151,7 @@ public class VolumeDialogImpl implements VolumeDialog,
         final int vlevel = row.ss.muted && (!isRingStream && !zenMuted) ? 0
                 : row.ss.level;
         updateVolumeRowSliderH(row, enableSlider, vlevel);
+        if (row.number != null) row.number.setText(Integer.toString(vlevel));
     }
 
     private boolean isStreamMuted(final StreamState streamState) {
@@ -1101,6 +1163,9 @@ public class VolumeDialogImpl implements VolumeDialog,
             row.slider.requestFocus();
         }
         boolean useActiveColoring = isActive && row.slider.isEnabled();
+        if (!useActiveColoring && !mChangeVolumeRowTintWhenInactive) {
+            return;
+        }
         final ColorStateList tint = useActiveColoring
                 ? Utils.getColorAccent(mContext)
                 : Utils.getColorAttr(mContext, android.R.attr.colorForeground);
@@ -1115,6 +1180,10 @@ public class VolumeDialogImpl implements VolumeDialog,
         row.icon.setImageTintList(tint);
         row.icon.setImageAlpha(alpha);
         row.cachedTint = tint;
+        if (row.number != null) {
+            row.number.setTextColor(tint);
+            row.number.setAlpha(alpha);
+        }
     }
 
     private void updateVolumeRowSliderH(VolumeRow row, boolean enable, int vlevel) {
@@ -1346,9 +1415,14 @@ public class VolumeDialogImpl implements VolumeDialog,
 
     private final class CustomDialog extends Dialog implements DialogInterface {
         public CustomDialog(Context context) {
-            super(context, R.style.qs_theme);
+            super(context, R.style.volume_dialog_theme);
         }
 
+        /**
+         * NOTE: This will only be called for touches within the touchable region of the volume
+         * dialog, as returned by {@link #onComputeInternalInsets}. Other touches, even if they are
+         * within the bounds of the volume dialog, will fall through to the window below.
+         */
         @Override
         public boolean dispatchTouchEvent(MotionEvent ev) {
             rescheduleTimeoutH();
@@ -1367,6 +1441,12 @@ public class VolumeDialogImpl implements VolumeDialog,
             mHandler.sendEmptyMessage(H.RECHECK_ALL);
         }
 
+        /**
+         * NOTE: This will be called with ACTION_OUTSIDE MotionEvents for touches that occur outside
+         * of the touchable region of the volume dialog (as returned by
+         * {@link #onComputeInternalInsets}) even if those touches occurred within the bounds of the
+         * volume dialog.
+         */
         @Override
         public boolean onTouchEvent(MotionEvent event) {
             if (mShowing) {
@@ -1458,6 +1538,7 @@ public class VolumeDialogImpl implements VolumeDialog,
         private TextView header;
         private ImageButton icon;
         private SeekBar slider;
+        private TextView number;
         private int stream;
         private StreamState ss;
         private long userAttempt;  // last user-driven slider change

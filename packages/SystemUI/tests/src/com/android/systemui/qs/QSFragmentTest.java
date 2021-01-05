@@ -16,7 +16,9 @@ package com.android.systemui.qs;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import android.app.Fragment;
 import android.content.Context;
@@ -37,14 +39,16 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.keyguard.CarrierText;
 import com.android.systemui.Dependency;
-import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.SysuiBaseFragmentTest;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.media.MediaHost;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.qs.dagger.QSFragmentComponent;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.phone.AutoTileManager;
@@ -61,6 +65,8 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.util.Optional;
 
@@ -71,6 +77,16 @@ import java.util.Optional;
 public class QSFragmentTest extends SysuiBaseFragmentTest {
 
     private MetricsLogger mMockMetricsLogger;
+    @Mock
+    private QSFragmentComponent.Factory mQsComponentFactory;
+    @Mock
+    private QSFragmentComponent mQsFragmentComponent;
+    @Mock
+    private QSPanelController mQSPanelController;
+    @Mock
+    private MediaHost mQSMediaHost;
+    @Mock
+    private MediaHost mQQSMediaHost;
 
     public QSFragmentTest() {
         super(QSFragment.class);
@@ -80,6 +96,10 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
     @Before
     @Ignore("failing")
     public void addLeakCheckDependencies() {
+        MockitoAnnotations.initMocks(this);
+        when(mQsComponentFactory.create(any(QSFragment.class))).thenReturn(mQsFragmentComponent);
+        when(mQsFragmentComponent.getQSPanelController()).thenReturn(mQSPanelController);
+
         mMockMetricsLogger = mDependency.injectMockDependency(MetricsLogger.class);
         mContext.addMockSystemService(Context.LAYOUT_INFLATER_SERVICE,
                 new LayoutInflaterBuilder(mContext)
@@ -107,7 +127,7 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
                 mock(PluginManager.class), mock(TunerService.class),
                 () -> mock(AutoTileManager.class), mock(DumpManager.class),
                 mock(BroadcastDispatcher.class), Optional.of(mock(StatusBar.class)),
-                mock(QSLogger.class), mock(UiEventLogger.class));
+                mock(QSLogger.class), mock(UiEventLogger.class), mock(UserTracker.class));
         qs.setHost(host);
 
         qs.setListening(true);
@@ -115,11 +135,6 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
 
         qs.setListening(false);
         processAllMessages();
-
-        // Manually push header through detach so it can handle standard cleanup it does on
-        // removed from window.
-        ((QuickStatusBarHeader) qs.getView().findViewById(R.id.header)).onDetachedFromWindow();
-
         host.destroy();
         processAllMessages();
     }
@@ -150,10 +165,16 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
         return new QSFragment(
                 new RemoteInputQuickSettingsDisabler(context, mock(ConfigurationController.class),
                         commandQueue),
-                new InjectionInflationController(SystemUIFactory.getInstance().getRootComponent()),
+                new InjectionInflationController(
+                        SystemUIFactory.getInstance()
+                                .getSysUIComponent()
+                                .createViewInstanceCreatorFactory()),
                 mock(QSTileHost.class),
                 mock(StatusBarStateController.class),
                 commandQueue,
-                mock(QSContainerImplController.Builder.class));
+                new QSDetailDisplayer(),
+                mQSMediaHost,
+                mQQSMediaHost,
+                mQsComponentFactory);
     }
 }

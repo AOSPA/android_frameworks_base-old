@@ -19,12 +19,11 @@ package android.location;
 import android.annotation.NonNull;
 import android.os.Bundle;
 
+import java.util.concurrent.Executor;
+
 /**
- * Used for receiving notifications from the LocationManager when
- * the location has changed. These methods are called if the
- * LocationListener has been registered with the location manager service
- * using the {@link LocationManager#requestLocationUpdates(String, long, float, LocationListener)}
- * method.
+ * Used for receiving notifications when the device location has changed. These methods are called
+ * when the listener has been registered with the LocationManager.
  *
  * <div class="special reference">
  * <h3>Developer Guides</h3>
@@ -32,6 +31,8 @@ import android.os.Bundle;
  * <a href="{@docRoot}guide/topics/location/obtaining-user-location.html">Obtaining User
  * Location</a> developer guide.</p>
  * </div>
+ *
+ * @see LocationManager#requestLocationUpdates(String, LocationRequest, Executor, LocationListener)
  */
 public interface LocationListener {
 
@@ -43,6 +44,29 @@ public interface LocationListener {
      * @param location the updated location
      */
     void onLocationChanged(@NonNull Location location);
+
+    /**
+     * Called when the location has changed and locations are being delivered in batches. The
+     * default implementation calls through to ({@link #onLocationChanged(Location)} with all
+     * locations in the batch, from earliest to latest.
+     *
+     * @see LocationRequest#getMaxUpdateDelayMillis()
+     * @param locationResult the location result list
+     */
+    default void onLocationChanged(@NonNull LocationResult locationResult) {
+        final int size = locationResult.size();
+        for (int i = 0; i < size; ++i) {
+            onLocationChanged(locationResult.get(i));
+        }
+    }
+
+    /**
+     * Invoked when a flush operation is complete and after flushed locations have been delivered.
+     *
+     * @param requestCode the request code passed into
+     *                    {@link LocationManager#requestFlush(String, LocationListener, int)}
+     */
+    default void onFlushComplete(int requestCode) {}
 
     /**
      * This callback will never be invoked on Android Q and above, and providers can be considered

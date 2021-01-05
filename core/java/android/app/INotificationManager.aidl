@@ -96,9 +96,11 @@ interface INotificationManager
     NotificationChannelGroup getPopulatedNotificationChannelGroupForPackage(String pkg, int uid, String groupId, boolean includeDeleted);
     void updateNotificationChannelGroupForPackage(String pkg, int uid, in NotificationChannelGroup group);
     void updateNotificationChannelForPackage(String pkg, int uid, in NotificationChannel channel);
+    void unlockNotificationChannel(String pkg, int uid, String channelId);
+    void unlockAllNotificationChannels();
     NotificationChannel getNotificationChannel(String callingPkg, int userId, String pkg, String channelId);
     NotificationChannel getConversationNotificationChannel(String callingPkg, int userId, String pkg, String channelId, boolean returnParentIfNoConversationChannel, String conversationId);
-    void createConversationNotificationChannelForPackage(String pkg, int uid, String triggeringKey, in NotificationChannel parentChannel, String conversationId);
+    void createConversationNotificationChannelForPackage(String pkg, int uid, in NotificationChannel parentChannel, String conversationId);
     NotificationChannel getNotificationChannelForPackage(String pkg, int uid, String channelId, String conversationId, boolean includeDeleted);
     void deleteNotificationChannel(String pkg, String channelId);
     void deleteConversationNotificationChannels(String pkg, int uid, String conversationId);
@@ -126,7 +128,7 @@ interface INotificationManager
     StatusBarNotification[] getActiveNotifications(String callingPkg);
     StatusBarNotification[] getActiveNotificationsWithAttribution(String callingPkg,
             String callingAttributionTag);
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     StatusBarNotification[] getHistoricalNotifications(String callingPkg, int count, boolean includeSnoozed);
     StatusBarNotification[] getHistoricalNotificationsWithAttribution(String callingPkg,
             String callingAttributionTag, int count, boolean includeSnoozed);
@@ -177,9 +179,9 @@ interface INotificationManager
     boolean isNotificationListenerAccessGranted(in ComponentName listener);
     boolean isNotificationListenerAccessGrantedForUser(in ComponentName listener, int userId);
     boolean isNotificationAssistantAccessGranted(in ComponentName assistant);
-    void setNotificationListenerAccessGranted(in ComponentName listener, boolean enabled);
+    void setNotificationListenerAccessGranted(in ComponentName listener, boolean enabled, boolean userSet);
     void setNotificationAssistantAccessGranted(in ComponentName assistant, boolean enabled);
-    void setNotificationListenerAccessGrantedForUser(in ComponentName listener, int userId, boolean enabled);
+    void setNotificationListenerAccessGrantedForUser(in ComponentName listener, int userId, boolean enabled, boolean userSet);
     void setNotificationAssistantAccessGrantedForUser(in ComponentName assistant, int userId, boolean enabled);
     List<String> getEnabledNotificationListenerPackages();
     List<ComponentName> getEnabledNotificationListeners(int userId);

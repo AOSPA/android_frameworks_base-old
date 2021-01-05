@@ -21,12 +21,14 @@ import static com.android.internal.location.ProviderRequest.EMPTY_REQUEST;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.location.Criteria;
 import android.location.Location;
+import android.location.LocationResult;
 import android.location.util.identity.CallerIdentity;
 import android.platform.test.annotations.Presubmit;
 
@@ -50,7 +52,7 @@ public class MockableLocationProviderTest {
     private ProviderListenerCapture mListener;
 
     private AbstractLocationProvider mRealProvider;
-    private MockProvider mMockProvider;
+    private MockLocationProvider mMockProvider;
 
     private MockableLocationProvider mProvider;
 
@@ -60,7 +62,7 @@ public class MockableLocationProviderTest {
         mListener = new ProviderListenerCapture(lock);
 
         mRealProvider = spy(new FakeProvider());
-        mMockProvider = spy(new MockProvider(new ProviderProperties(
+        mMockProvider = spy(new MockLocationProvider(new ProviderProperties(
                 false,
                 false,
                 false,
@@ -95,7 +97,7 @@ public class MockableLocationProviderTest {
         assertThat(mProvider.getCurrentRequest()).isEqualTo(EMPTY_REQUEST);
         verify(mRealProvider, times(1)).onSetRequest(EMPTY_REQUEST);
 
-        ProviderRequest request = new ProviderRequest.Builder().setInterval(1).build();
+        ProviderRequest request = new ProviderRequest.Builder().setIntervalMillis(1).build();
         mProvider.setRequest(request);
 
         assertThat(mProvider.getCurrentRequest()).isEqualTo(request);
@@ -114,6 +116,20 @@ public class MockableLocationProviderTest {
         mProvider.setRealProvider(null);
         assertThat(mProvider.getCurrentRequest()).isEqualTo(request);
         verify(mRealProvider, times(3)).onSetRequest(EMPTY_REQUEST);
+    }
+
+    @Test
+    public void testFlush() {
+        Runnable listener = mock(Runnable.class);
+        mProvider.flush(listener);
+        verify(mRealProvider).onFlush(listener);
+        verify(listener).run();
+
+        listener = mock(Runnable.class);
+        mProvider.setMockProvider(mMockProvider);
+        mProvider.flush(listener);
+        verify(mMockProvider).onFlush(listener);
+        verify(listener).run();
     }
 
     @Test
@@ -158,15 +174,15 @@ public class MockableLocationProviderTest {
 
     @Test
     public void testReportLocation() {
-        Location realLocation = new Location("real");
-        Location mockLocation = new Location("mock");
+        LocationResult realLocation = LocationResult.create(new Location("real"));
+        LocationResult mockLocation = LocationResult.create(new Location("mock"));
 
         mRealProvider.reportLocation(realLocation);
-        assertThat(mListener.getNextLocation()).isEqualTo(realLocation);
+        assertThat(mListener.getNextLocationResult()).isEqualTo(realLocation);
 
         mProvider.setMockProvider(mMockProvider);
         mRealProvider.reportLocation(realLocation);
         mMockProvider.reportLocation(mockLocation);
-        assertThat(mListener.getNextLocation()).isEqualTo(mockLocation);
+        assertThat(mListener.getNextLocationResult()).isEqualTo(mockLocation);
     }
 }

@@ -306,7 +306,7 @@ public class Fragment implements ComponentCallbacks2, OnCreateContextMenuListene
     int mTargetRequestCode;
 
     // True if the fragment is in the list of added fragments.
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     boolean mAdded;
 
     // If set this fragment is being removed from its activity.
@@ -596,7 +596,7 @@ public class Fragment implements ComponentCallbacks2, OnCreateContextMenuListene
     /**
      * Subclasses can not override equals().
      */
-    @Override final public boolean equals(Object o) {
+    @Override final public boolean equals(@Nullable Object o) {
         return super.equals(o);
     }
 

@@ -21,17 +21,24 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.os.Process.INVALID_UID;
+import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.window.DisplayAreaOrganizer.FEATURE_VENDOR_FIRST;
 
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -114,11 +121,11 @@ public class WindowManagerServiceTests extends WindowTestsBase {
         Task tappedStack = createTaskStackOnDisplay(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, display);
         Task tappedTask = createTaskInStack(tappedStack, 0 /* userId */);
-        spyOn(mWm.mActivityTaskManager);
+        spyOn(mWm.mAtmService);
 
         mWm.handleTaskFocusChange(tappedTask);
 
-        verify(mWm.mActivityTaskManager).setFocusedTask(tappedTask.mTaskId);
+        verify(mWm.mAtmService).setFocusedTask(tappedTask.mTaskId);
     }
 
     @Test
@@ -135,11 +142,11 @@ public class WindowManagerServiceTests extends WindowTestsBase {
         Task tappedStack = createTaskStackOnDisplay(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, display);
         Task tappedTask = createTaskInStack(tappedStack, 0 /* userId */);
-        spyOn(mWm.mActivityTaskManager);
+        spyOn(mWm.mAtmService);
 
         mWm.handleTaskFocusChange(tappedTask);
 
-        verify(mWm.mActivityTaskManager, never()).setFocusedTask(tappedTask.mTaskId);
+        verify(mWm.mAtmService, never()).setFocusedTask(tappedTask.mTaskId);
     }
 
     @Test
@@ -158,10 +165,47 @@ public class WindowManagerServiceTests extends WindowTestsBase {
         Task tappedStack = createTaskStackOnTaskDisplayArea(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, secondTda);
         Task tappedTask = createTaskInStack(tappedStack, 0 /* userId */);
-        spyOn(mWm.mActivityTaskManager);
+        spyOn(mWm.mAtmService);
 
         mWm.handleTaskFocusChange(tappedTask);
 
-        verify(mWm.mActivityTaskManager).setFocusedTask(tappedTask.mTaskId);
+        verify(mWm.mAtmService).setFocusedTask(tappedTask.mTaskId);
+    }
+
+    @Test
+    public void testDismissKeyguardCanWakeUp() {
+        doReturn(true).when(mWm).checkCallingPermission(anyString(), anyString());
+        spyOn(mWm.mAtmInternal);
+        doReturn(true).when(mWm.mAtmInternal).isDreaming();
+        doNothing().when(mWm.mAtmService.mStackSupervisor).wakeUp(anyString());
+        mWm.dismissKeyguard(null, "test-dismiss-keyguard");
+        verify(mWm.mAtmService.mStackSupervisor).wakeUp(anyString());
+    }
+
+    @Test
+    public void testMoveWindowTokenToDisplay_NullToken_DoNothing() {
+        mWm.moveWindowTokenToDisplay(null, mDisplayContent.getDisplayId());
+
+        verify(mDisplayContent, never()).reParentWindowToken(any());
+    }
+
+    @Test
+    public void testMoveWindowTokenToDisplay_SameDisplay_DoNothing() {
+        final WindowToken windowToken = createTestWindowToken(TYPE_INPUT_METHOD_DIALOG,
+                mDisplayContent);
+
+        mWm.moveWindowTokenToDisplay(windowToken.token, mDisplayContent.getDisplayId());
+
+        verify(mDisplayContent, never()).reParentWindowToken(any());
+    }
+
+    @Test
+    public void testMoveWindowTokenToDisplay_DifferentDisplay_DoMoveDisplay() {
+        final WindowToken windowToken = createTestWindowToken(TYPE_INPUT_METHOD_DIALOG,
+                mDisplayContent);
+
+        mWm.moveWindowTokenToDisplay(windowToken.token, DEFAULT_DISPLAY);
+
+        assertThat(windowToken.getDisplayContent()).isEqualTo(mDefaultDisplay);
     }
 }

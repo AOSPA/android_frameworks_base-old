@@ -327,6 +327,7 @@ cc_defaults {
         "jni/PathMeasure.cpp",
         "jni/Picture.cpp",
         "jni/Shader.cpp",
+        "jni/RenderEffect.cpp",
         "jni/Typeface.cpp",
         "jni/Utils.cpp",
         "jni/YuvToJpegEncoder.cpp",
@@ -334,6 +335,7 @@ cc_defaults {
         "jni/fonts/FontFamily.cpp",
         "jni/text/LineBreaker.cpp",
         "jni/text/MeasuredText.cpp",
+        "jni/text/TextShaper.cpp",
     ],
 
     header_libs: [ "android_graphics_jni_headers" ],
@@ -427,6 +429,8 @@ cc_defaults {
     whole_static_libs: ["libskia"],
 
     srcs: [
+        "canvas/CanvasOpBuffer.cpp",
+        "canvas/CanvasOpRasterizer.cpp",
         "pipeline/skia/SkiaDisplayList.cpp",
         "pipeline/skia/SkiaRecordingCanvas.cpp",
         "pipeline/skia/RenderNodeDrawable.cpp",
@@ -602,6 +606,7 @@ cc_test {
         "tests/unit/ABitmapTests.cpp",
         "tests/unit/CacheManagerTests.cpp",
         "tests/unit/CanvasContextTests.cpp",
+        "tests/unit/CanvasOpTests.cpp",
         "tests/unit/CommonPoolTests.cpp",
         "tests/unit/DamageAccumulatorTests.cpp",
         "tests/unit/DeferredLayerUpdaterTests.cpp",

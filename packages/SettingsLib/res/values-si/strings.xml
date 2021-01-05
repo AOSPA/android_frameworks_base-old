@@ -257,7 +257,6 @@
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"නම් නොමැති බ්ලූටූත් උපාංග පෙන්වන්න"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="1452342324349203434">"නිරපේක්ෂ හඩ පරිමාව අබල කරන්න"</string>
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"Gabeldorsche සබල කරන්න"</string>
-    <string name="enhanced_connectivity" msgid="7201127377781666804">"වැඩිදියුණු කළ සබැඳුම් හැකියාව"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="1710571610177659127">"බ්ලූටූත් AVRCP අනුවාදය"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7846922290083709633">"බ්ලූටූත් AVRCP අනුවාදය තෝරන්න"</string>
     <string name="bluetooth_select_map_version_string" msgid="526308145174175327">"Bluetooth MAP අනුවාදය"</string>
@@ -400,6 +399,12 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"අක්‍රියයි. ටොගල කිරීමට තට්ටු කරන්න."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"සක්‍රියයි. ටොගල කිරීමට තට්ටු කරන්න."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"යෙදුම් පොරොත්තු තත්ත්වය:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <!-- no translation found for transcode_settings_title (6700974145733932357) -->
+    <skip />
+    <!-- no translation found for transcode_enable_all (4719796495995795404) -->
+    <skip />
+    <!-- no translation found for transcode_skip_apps (5680997722349545778) -->
+    <skip />
     <string name="runningservices_settings_title" msgid="6460099290493086515">"ධාවනය වන සේවා"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"දැනට ධාවනය වන සේවා බලන්න සහ පාලනය කරන්න"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"WebView ක්‍රියාත්මක කිරීම"</string>
@@ -546,12 +551,19 @@
     <string name="user_need_lock_message" msgid="4311424336209509301">"සීමිත පැතිකඩක් නිර්මාණය කිරීමට කලින්. ඔබගේ යෙදුම් සහ පෞද්ගලික දත්ත ආරක්ෂා කිරීමට තිර අගුලක් සැකසිය යුතුයි."</string>
     <string name="user_set_lock_button" msgid="1427128184982594856">"අගුල සකසන්න"</string>
     <string name="user_switch_to_user" msgid="6975428297154968543">"<xliff:g id="USER_NAME">%s</xliff:g> වෙත මාරු වන්න"</string>
+    <string name="creating_new_user_dialog_message" msgid="7232880257538970375">"නව පරිශීලක තනමින්…"</string>
+    <string name="user_nickname" msgid="262624187455825083">"අපනාමය"</string>
     <string name="guest_new_guest" msgid="3482026122932643557">"අමුත්තා එක් කරන්න"</string>
     <string name="guest_exit_guest" msgid="5908239569510734136">"අමුත්තා ඉවත් කරන්න"</string>
     <string name="guest_nickname" msgid="6332276931583337261">"අමුත්තා"</string>
+    <string name="user_image_take_photo" msgid="467512954561638530">"ඡායාරූපයක් ගන්න"</string>
+    <string name="user_image_choose_photo" msgid="1363820919146782908">"රූපයක් තෝරන්න"</string>
+    <string name="user_image_photo_selector" msgid="433658323306627093">"ඡායාරූපය තෝරන්න"</string>
     <string name="cached_apps_freezer_device_default" msgid="2616594131750144342">"උපාංගයේ පෙරනිමිය"</string>
     <string name="cached_apps_freezer_disabled" msgid="4816382260660472042">"අබල කළා"</string>
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"සබලයි"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"මෙම වෙනස යෙදීමට ඔබේ උපාංගය නැවත පණ ගැන්විය යුතුය. දැන් නැවත පණ ගන්වන්න හෝ අවලංගු කරන්න."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"රැහැන්ගත කළ හෙඩ්ෆෝන්"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"ක්‍රියාත්මකයි"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"ක්‍රියාවිරහිතයි"</string>
 </resources>

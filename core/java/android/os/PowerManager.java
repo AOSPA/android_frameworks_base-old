@@ -41,6 +41,7 @@ import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -273,7 +274,6 @@ public final class PowerManager {
 
     /**
      * Brightness value for fully off in float.
-     * TODO(brightnessfloat): rename this to BRIGHTNES_OFF and remove the integer-based constant.
      * @hide
      */
     public static final float BRIGHTNESS_OFF_FLOAT = -1.0f;
@@ -1014,7 +1014,7 @@ public final class PowerManager {
      * Gets a float screen brightness setting.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public float getBrightnessConstraint(int constraint) {
         try {
             return mService.getBrightnessConstraint(constraint);
@@ -1565,7 +1565,6 @@ public final class PowerManager {
      * @see #isPowerSaveMode()
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.DEVICE_POWER,
             android.Manifest.permission.POWER_SAVER
@@ -1610,7 +1609,6 @@ public final class PowerManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(permission.POWER_SAVER)
     public boolean setDynamicPowerSaveHint(boolean powerSaveHint, int disableThreshold) {
         try {
@@ -1670,7 +1668,6 @@ public final class PowerManager {
      *  @hide
      */
     @SystemApi
-    @TestApi
     public static final int POWER_SAVE_MODE_TRIGGER_PERCENTAGE = 0;
 
     /**
@@ -1683,7 +1680,6 @@ public final class PowerManager {
      *  @hide
      */
     @SystemApi
-    @TestApi
     public static final int POWER_SAVE_MODE_TRIGGER_DYNAMIC = 1;
 
     /** @hide */
@@ -1708,11 +1704,73 @@ public final class PowerManager {
      */
     @AutoPowerSaveModeTriggers
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.POWER_SAVER)
     public int getPowerSaveModeTrigger() {
         try {
             return mService.getPowerSaveModeTrigger();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Allows an app to tell the system how long it believes the battery will last and whether
+     * this estimate is customized based on historical device usage or on a generic configuration.
+     * These estimates will be displayed on system UI surfaces in place of the system computed
+     * value.
+     *
+     * Calling this requires the {@link android.Manifest.permission#DEVICE_POWER} permission.
+     *
+     * @param timeRemaining  The time remaining as a {@link Duration}.
+     * @param isPersonalized true if personalized based on device usage history, false otherwise.
+     * @throws IllegalStateException if the device is powered or currently charging
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.DEVICE_POWER)
+    public void setBatteryDischargePrediction(@NonNull Duration timeRemaining,
+            boolean isPersonalized) {
+        if (timeRemaining == null) {
+            throw new IllegalArgumentException("time remaining must not be null");
+        }
+        try {
+            mService.setBatteryDischargePrediction(new ParcelDuration(timeRemaining),
+                    isPersonalized);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the current battery life remaining estimate.
+     *
+     * @return The estimated battery life remaining as a {@link Duration}. Will be {@code null} if
+     * the device is powered, charging, or an error was encountered.
+     */
+    @Nullable
+    public Duration getBatteryDischargePrediction() {
+        try {
+            final ParcelDuration parcelDuration = mService.getBatteryDischargePrediction();
+            if (parcelDuration == null) {
+                return null;
+            }
+            return parcelDuration.getDuration();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns whether the current battery life remaining estimate is personalized based on device
+     * usage history or not. This value does not take a device's powered or charging state into
+     * account.
+     *
+     * @return A boolean indicating if the current discharge estimate is personalized based on
+     * historical device usage or not.
+     */
+    public boolean isBatteryDischargePredictionPersonalized() {
+        try {
+            return mService.isBatteryDischargePredictionPersonalized();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1795,8 +1853,8 @@ public final class PowerManager {
     }
 
     /**
-     * Return whether the given application package name is on the device's power whitelist.
-     * Apps can be placed on the whitelist through the settings UI invoked by
+     * Return whether the given application package name is on the device's power allowlist.
+     * Apps can be placed on the allowlist through the settings UI invoked by
      * {@link android.provider.Settings#ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS}.
      */
     public boolean isIgnoringBatteryOptimizations(String packageName) {
@@ -1941,7 +1999,7 @@ public final class PowerManager {
         Preconditions.checkNotNull(listener, "listener cannot be null");
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkArgument(!mListenerMap.containsKey(listener),
-                "Listener already registered: " + listener);
+                "Listener already registered: %s", listener);
         IThermalStatusListener internalListener = new IThermalStatusListener.Stub() {
             @Override
             public void onStatusChange(int status) {
@@ -2127,6 +2185,27 @@ public final class PowerManager {
     }
 
     /**
+     * Returns true if ambient display is suppressed by the given {@code appUid} with the given
+     * {@code token}.
+     *
+     * <p>This method will return false if {@link #isAmbientDisplayAvailable()} is false.
+     *
+     * @param token The identifier of the ambient display suppression.
+     * @param appUid The uid of the app that suppressed ambient display.
+     * @hide
+     */
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.READ_DREAM_STATE,
+            android.Manifest.permission.READ_DREAM_SUPPRESSION })
+    public boolean isAmbientDisplaySuppressedForTokenByApp(@NonNull String token, int appUid) {
+        try {
+            return mService.isAmbientDisplaySuppressedForTokenByApp(token, appUid);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns the reason the phone was last shutdown. Calling app must have the
      * {@link android.Manifest.permission#DEVICE_POWER} permission to request this information.
      * @return Reason for shutdown as an int, {@link #SHUTDOWN_REASON_UNKNOWN} if the file could
@@ -2185,6 +2264,18 @@ public final class PowerManager {
     }
 
     /**
+     * Intent that is broadcast when the enhanced battery discharge prediction changes. The new
+     * value can be retrieved via {@link #getBatteryDischargePrediction()}.
+     * This broadcast is only sent to registered receivers.
+     *
+     * @hide
+     */
+    @TestApi
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_ENHANCED_DISCHARGE_PREDICTION_CHANGED =
+            "android.os.action.ENHANCED_DISCHARGE_PREDICTION_CHANGED";
+
+    /**
      * Intent that is broadcast when the state of {@link #isPowerSaveMode()} changes.
      * This broadcast is only sent to registered receivers.
      */
@@ -2213,13 +2304,13 @@ public final class PowerManager {
      * This broadcast is only sent to registered receivers.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_LIGHT_DEVICE_IDLE_MODE_CHANGED
             = "android.os.action.LIGHT_DEVICE_IDLE_MODE_CHANGED";
 
     /**
-     * @hide Intent that is broadcast when the set of power save whitelist apps has changed.
+     * @hide Intent that is broadcast when the set of power save allowlist apps has changed.
      * This broadcast is only sent to registered receivers.
      */
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
@@ -2227,7 +2318,7 @@ public final class PowerManager {
             = "android.os.action.POWER_SAVE_WHITELIST_CHANGED";
 
     /**
-     * @hide Intent that is broadcast when the set of temporarily whitelisted apps has changed.
+     * @hide Intent that is broadcast when the set of temporarily allowlisted apps has changed.
      * This broadcast is only sent to registered receivers.
      */
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)

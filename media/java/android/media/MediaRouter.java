@@ -45,6 +45,9 @@ import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Display;
+import android.view.DisplayAddress;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -843,7 +846,7 @@ public class MediaRouter {
     }
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public RouteInfo getSelectedRoute() {
         return getSelectedRoute(ROUTE_TYPE_ANY);
     }
@@ -1616,9 +1619,9 @@ public class MediaRouter {
         Drawable mIcon;
         // playback information
         int mPlaybackType = PLAYBACK_TYPE_LOCAL;
-        int mVolumeMax = RemoteControlClient.DEFAULT_PLAYBACK_VOLUME;
-        int mVolume = RemoteControlClient.DEFAULT_PLAYBACK_VOLUME;
-        int mVolumeHandling = RemoteControlClient.DEFAULT_PLAYBACK_VOLUME_HANDLING;
+        int mVolumeMax = DEFAULT_PLAYBACK_MAX_VOLUME;
+        int mVolume = DEFAULT_PLAYBACK_VOLUME;
+        int mVolumeHandling = PLAYBACK_VOLUME_VARIABLE;
         int mPlaybackStream = AudioManager.STREAM_MUSIC;
         VolumeCallbackInfo mVcb;
         Display mPresentationDisplay;
@@ -1722,7 +1725,24 @@ public class MediaRouter {
          */
         public final static int PLAYBACK_VOLUME_VARIABLE = 1;
 
-        RouteInfo(RouteCategory category) {
+        /**
+         * Default playback max volume if not set.
+         * Hard-coded to the same number of steps as AudioService.MAX_STREAM_VOLUME[STREAM_MUSIC]
+         *
+         * @see #getVolumeMax()
+         */
+        private static final int DEFAULT_PLAYBACK_MAX_VOLUME = 15;
+
+        /**
+         * Default playback volume if not set.
+         *
+         * @see #getVolume()
+         */
+        private static final int DEFAULT_PLAYBACK_VOLUME = DEFAULT_PLAYBACK_MAX_VOLUME;
+
+        /** @hide */
+        @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+        public RouteInfo(RouteCategory category) {
             mCategory = category;
             mDeviceType = DEVICE_TYPE_UNKNOWN;
         }
@@ -1756,7 +1776,7 @@ public class MediaRouter {
             return getName(context.getResources());
         }
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         CharSequence getName(Resources res) {
             if (mNameResId != 0) {
                 return res.getText(mNameResId);
@@ -2063,7 +2083,9 @@ public class MediaRouter {
             return mPresentationDisplay;
         }
 
-        boolean updatePresentationDisplay() {
+        /** @hide */
+        @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+        public boolean updatePresentationDisplay() {
             Display display = choosePresentationDisplay();
             if (mPresentationDisplay != display) {
                 mPresentationDisplay = display;
@@ -2073,38 +2095,78 @@ public class MediaRouter {
         }
 
         private Display choosePresentationDisplay() {
-            if ((mSupportedTypes & ROUTE_TYPE_LIVE_VIDEO) != 0) {
-                Display[] displays = sStatic.getAllPresentationDisplays();
+            if ((getSupportedTypes() & ROUTE_TYPE_LIVE_VIDEO) == 0) {
+                return null;
+            }
+            final Display[] displays = getAllPresentationDisplays();
+            if (displays == null || displays.length == 0) {
+                return null;
+            }
 
-                // Ensure that the specified display is valid for presentations.
-                // This check will normally disallow the default display unless it was
-                // configured as a presentation display for some reason.
-                if (mPresentationDisplayId >= 0) {
-                    for (Display display : displays) {
-                        if (display.getDisplayId() == mPresentationDisplayId) {
-                            return display;
-                        }
+            // Ensure that the specified display is valid for presentations.
+            // This check will normally disallow the default display unless it was
+            // configured as a presentation display for some reason.
+            if (mPresentationDisplayId >= 0) {
+                for (Display display : displays) {
+                    if (display.getDisplayId() == mPresentationDisplayId) {
+                        return display;
                     }
-                    return null;
                 }
+                return null;
+            }
 
-                // Find the indicated Wifi display by its address.
-                if (mDeviceAddress != null) {
-                    for (Display display : displays) {
-                        if (display.getType() == Display.TYPE_WIFI
-                                && mDeviceAddress.equals(display.getAddress())) {
-                            return display;
-                        }
+            // Find the indicated Wifi display by its address.
+            if (getDeviceAddress() != null) {
+                for (Display display : displays) {
+                    if (display.getType() == Display.TYPE_WIFI
+                            && displayAddressEquals(display)) {
+                        return display;
                     }
-                    return null;
-                }
-
-                // For the default route, choose the first presentation display from the list.
-                if (this == sStatic.mDefaultAudioVideo && displays.length > 0) {
-                    return displays[0];
                 }
             }
+
+            // Returns the first hard-wired display.
+            for (Display display : displays) {
+                if (display.getType() == Display.TYPE_EXTERNAL) {
+                    return display;
+                }
+            }
+
+            // Returns the first non-default built-in display.
+            for (Display display : displays) {
+                if (display.getType() == Display.TYPE_INTERNAL) {
+                    return display;
+                }
+            }
+
+            // For the default route, choose the first presentation display from the list.
+            if (this == getDefaultAudioVideo()) {
+                return displays[0];
+            }
             return null;
+        }
+
+        /** @hide */
+        @VisibleForTesting
+        public Display[] getAllPresentationDisplays() {
+            return sStatic.getAllPresentationDisplays();
+        }
+
+        /** @hide */
+        @VisibleForTesting
+        public RouteInfo getDefaultAudioVideo() {
+            return sStatic.mDefaultAudioVideo;
+        }
+
+        private boolean displayAddressEquals(Display display) {
+            final DisplayAddress displayAddress = display.getAddress();
+            // mDeviceAddress recorded mac address. If displayAddress is not a kind of Network,
+            // return false early.
+            if (!(displayAddress instanceof DisplayAddress.Network)) {
+                return false;
+            }
+            final DisplayAddress.Network networkAddress = (DisplayAddress.Network) displayAddress;
+            return getDeviceAddress().equals(networkAddress.toString());
         }
 
         /** @hide */
@@ -2430,13 +2492,13 @@ public class MediaRouter {
                 }
                 return;
             }
-            if (mPlaybackType == RemoteControlClient.PLAYBACK_TYPE_REMOTE) {
+            if (mPlaybackType == PLAYBACK_TYPE_REMOTE) {
                 int volumeControl = VolumeProvider.VOLUME_CONTROL_FIXED;
                 switch (mVolumeHandling) {
-                    case RemoteControlClient.PLAYBACK_VOLUME_VARIABLE:
+                    case PLAYBACK_VOLUME_VARIABLE:
                         volumeControl = VolumeProvider.VOLUME_CONTROL_ABSOLUTE;
                         break;
-                    case RemoteControlClient.PLAYBACK_VOLUME_FIXED:
+                    case PLAYBACK_VOLUME_FIXED:
                     default:
                         break;
                 }

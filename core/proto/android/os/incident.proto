@@ -40,6 +40,7 @@ import "frameworks/base/core/proto/android/server/fingerprint.proto";
 import "frameworks/base/core/proto/android/server/jobscheduler.proto";
 import "frameworks/base/core/proto/android/server/location/context_hub.proto";
 import "frameworks/base/core/proto/android/server/powermanagerservice.proto";
+import "frameworks/base/core/proto/android/server/powerstatsservice.proto";
 import "frameworks/base/core/proto/android/server/rolemanagerservice.proto";
 import "frameworks/base/core/proto/android/server/windowmanagerservice.proto";
 import "frameworks/base/core/proto/android/service/appwidget.proto";
@@ -508,6 +509,16 @@ message IncidentProto {
     optional android.service.SensorServiceProto sensor_service = 3053 [
         (section).type = SECTION_DUMPSYS,
         (section).args = "sensorservice --proto"
+    ];
+
+    optional com.android.server.powerstats.PowerStatsServiceMeterProto powerstats_meter = 3054 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "power_stats --proto meter"
+    ];
+
+    optional com.android.server.powerstats.PowerStatsServiceModelProto powerstats_model = 3055 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "power_stats --proto model"
     ];
 
     // Dumps in text format (on userdebug and eng builds only): 4000 ~ 4999

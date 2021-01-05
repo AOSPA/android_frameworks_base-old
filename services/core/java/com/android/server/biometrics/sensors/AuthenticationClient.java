@@ -18,19 +18,26 @@ package com.android.server.biometrics.sensors;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.app.IActivityTaskManager;
 import android.app.TaskStackListener;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricsProtoEnums;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.security.KeyStore;
+import android.util.EventLog;
 import android.util.Slog;
 
+import com.android.server.biometrics.Utils;
+
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A class to keep track of the authentication state for a given client.
@@ -99,6 +106,14 @@ public abstract class AuthenticationClient<T> extends AcquisitionClient<T>
         return getCookie() != 0;
     }
 
+    public long getOperationId() {
+        return mOperationId;
+    }
+
+    public boolean isRestricted() {
+        return mIsRestricted;
+    }
+
     @Override
     protected boolean isCryptoOperation() {
         return mOperationId != 0;
@@ -128,7 +143,54 @@ public abstract class AuthenticationClient<T> extends AcquisitionClient<T>
                 pm.incrementAuthForUser(getTargetUserId(), authenticated);
             }
 
+            // Ensure authentication only succeeds if the client activity is on top or is keyguard.
+            boolean isBackgroundAuth = false;
+            if (authenticated && !Utils.isKeyguard(getContext(), getOwnerString())) {
+                try {
+                    final List<ActivityManager.RunningTaskInfo> tasks =
+                            mActivityTaskManager.getTasks(1);
+                    if (tasks == null || tasks.isEmpty()) {
+                        Slog.e(TAG, "No running tasks reported");
+                        isBackgroundAuth = true;
+                    } else {
+                        final ComponentName topActivity = tasks.get(0).topActivity;
+                        if (topActivity == null) {
+                            Slog.e(TAG, "Unable to get top activity");
+                            isBackgroundAuth = true;
+                        } else {
+                            final String topPackage = topActivity.getPackageName();
+                            if (!topPackage.contentEquals(getOwnerString())) {
+                                Slog.e(TAG, "Background authentication detected, top: " + topPackage
+                                        + ", client: " + this);
+                                isBackgroundAuth = true;
+                            }
+                        }
+                    }
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Unable to get running tasks", e);
+                    isBackgroundAuth = true;
+                }
+            }
+
+            // Fail authentication if we can't confirm the client activity is on top.
+            if (isBackgroundAuth) {
+                Slog.e(TAG, "Failing possible background authentication");
+                authenticated = false;
+
+                // SafetyNet logging for exploitation attempts of b/159249069.
+                final ApplicationInfo appInfo = getContext().getApplicationInfo();
+                EventLog.writeEvent(0x534e4554, "159249069", appInfo != null ? appInfo.uid : -1,
+                        "Attempted background authentication");
+            }
+
             if (authenticated) {
+                // SafetyNet logging for b/159249069 if constraint is violated.
+                if (isBackgroundAuth) {
+                    final ApplicationInfo appInfo = getContext().getApplicationInfo();
+                    EventLog.writeEvent(0x534e4554, "159249069", appInfo != null ? appInfo.uid : -1,
+                            "Successful background authentication!");
+                }
+
                 mAlreadyDone = true;
 
                 if (listener != null) {
@@ -187,11 +249,13 @@ public abstract class AuthenticationClient<T> extends AcquisitionClient<T>
                     if (listener != null) {
                         listener.onAuthenticationFailed(getSensorId());
                     }
+                } else {
+                    mAlreadyDone = true;
                 }
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "Unable to notify listener, finishing", e);
-            mFinishCallback.onClientFinished(this, false /* success */);
+            mCallback.onClientFinished(this, false /* success */);
         }
     }
 
@@ -211,8 +275,8 @@ public abstract class AuthenticationClient<T> extends AcquisitionClient<T>
      * Start authentication
      */
     @Override
-    public void start(@NonNull FinishCallback finishCallback) {
-        super.start(finishCallback);
+    public void start(@NonNull Callback callback) {
+        super.start(callback);
 
         final @LockoutTracker.LockoutMode int lockoutMode =
                 mLockoutTracker.getLockoutModeForUser(getTargetUserId());

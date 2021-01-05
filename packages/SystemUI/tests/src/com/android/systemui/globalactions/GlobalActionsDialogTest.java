@@ -49,9 +49,13 @@ import android.testing.TestableLooper;
 import android.util.FeatureFlagUtils;
 import android.view.IWindowManager;
 import android.view.View;
+import android.view.WindowManagerPolicyConstants;
 import android.widget.FrameLayout;
 
 import androidx.test.filters.SmallTest;
+import androidx.test.uiautomator.By;
+import androidx.test.uiautomator.UiObject2;
+import androidx.test.uiautomator.Until;
 
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.logging.MetricsLogger;
@@ -69,9 +73,9 @@ import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.GlobalActions;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
-import com.android.systemui.settings.CurrentUserContextTracker;
+import com.android.systemui.settings.UserContextProvider;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.RingerModeLiveData;
@@ -85,11 +89,16 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.regex.Pattern;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
-@TestableLooper.RunWithLooper()
+@TestableLooper.RunWithLooper(setAsMainLooper = true)
 public class GlobalActionsDialogTest extends SysuiTestCase {
+    private static final long UI_TIMEOUT_MILLIS = 5000; // 5 sec
+    private static final Pattern CANCEL_BUTTON =
+            Pattern.compile("cancel", Pattern.CASE_INSENSITIVE);
+
     private GlobalActionsDialog mGlobalActionsDialog;
 
     @Mock private GlobalActions.GlobalActionsManager mWindowManagerFuncs;
@@ -125,7 +134,7 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
     @Mock GlobalActionsPanelPlugin mWalletPlugin;
     @Mock GlobalActionsPanelPlugin.PanelViewController mWalletController;
     @Mock private Handler mHandler;
-    @Mock private CurrentUserContextTracker mCurrentUserContextTracker;
+    @Mock private UserContextProvider mUserContextProvider;
     private ControlsComponent mControlsComponent;
 
     private TestableLooper mTestableLooper;
@@ -137,7 +146,7 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
         allowTestableLooperAsMainThread();
 
         when(mRingerModeTracker.getRingerMode()).thenReturn(mRingerModeLiveData);
-        when(mCurrentUserContextTracker.getCurrentUserContext()).thenReturn(mContext);
+        when(mUserContextProvider.getUserContext()).thenReturn(mContext);
         mControlsComponent = new ControlsComponent(
                 true,
                 () -> mControlsController,
@@ -176,7 +185,7 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
                 mSysUiState,
                 mHandler,
                 mControlsComponent,
-                mCurrentUserContextTracker
+                mUserContextProvider
         );
         mGlobalActionsDialog.setZeroDialogPressDelayForTesting();
 
@@ -239,6 +248,35 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
                 mGlobalActionsDialog.makeScreenshotActionForTesting();
         screenshotAction.onLongPress();
         verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_SCREENSHOT_LONG_PRESS);
+
+        // Dismiss ScreenRecordDialog opened by the long press above.
+        final UiObject2 cancelButton = getUiDevice().wait(
+                Until.findObject(By.text(CANCEL_BUTTON)), UI_TIMEOUT_MILLIS);
+        if (cancelButton != null) {
+            cancelButton.click();
+        }
+    }
+
+    @Test
+    public void testShouldShowScreenshot() {
+        mContext.getOrCreateTestableResources().addOverride(
+                com.android.internal.R.integer.config_navBarInteractionMode,
+                WindowManagerPolicyConstants.NAV_BAR_MODE_2BUTTON);
+
+        GlobalActionsDialog.ScreenshotAction screenshotAction =
+                mGlobalActionsDialog.makeScreenshotActionForTesting();
+        assertThat(screenshotAction.shouldShow()).isTrue();
+    }
+
+    @Test
+    public void testShouldNotShowScreenshot() {
+        mContext.getOrCreateTestableResources().addOverride(
+                com.android.internal.R.integer.config_navBarInteractionMode,
+                WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON);
+
+        GlobalActionsDialog.ScreenshotAction screenshotAction =
+                mGlobalActionsDialog.makeScreenshotActionForTesting();
+        assertThat(screenshotAction.shouldShow()).isFalse();
     }
 
     private void verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent event) {

@@ -23,11 +23,14 @@ import android.util.FloatProperty;
 import android.util.Log;
 import android.view.animation.Interpolator;
 
+import androidx.annotation.NonNull;
+
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.Interpolators;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 import com.android.systemui.statusbar.policy.CallbackController;
@@ -38,12 +41,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Tracks and reports on {@link StatusBarState}.
  */
-@Singleton
+@SysUISingleton
 public class StatusBarStateControllerImpl implements SysuiStatusBarStateController,
         CallbackController<StateListener>, Dumpable {
     private static final String TAG = "SbStateController";
@@ -99,6 +101,11 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
      * If the device is currently dozing or not.
      */
     private boolean mIsDozing;
+
+    /**
+     * If the status bar is currently expanded or not.
+     */
+    private boolean mIsExpanded;
 
     /**
      * Current {@link #mDozeAmount} animator.
@@ -185,6 +192,26 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
     @Override
     public float getDozeAmount() {
         return mDozeAmount;
+    }
+
+    @Override
+    public boolean isExpanded() {
+        return mIsExpanded;
+    }
+
+    @Override
+    public boolean setPanelExpanded(boolean expanded) {
+        if (mIsExpanded == expanded) {
+            return false;
+        }
+        mIsExpanded = expanded;
+        String tag = getClass().getSimpleName() + "#setIsExpanded";
+        DejankUtils.startDetectingBlockingIpcs(tag);
+        for (RankedListener rl : new ArrayList<>(mListeners)) {
+            rl.mListener.onExpandedChanged(mIsExpanded);
+        }
+        DejankUtils.stopDetectingBlockingIpcs(tag);
+        return true;
     }
 
     @Override
@@ -276,7 +303,7 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
     }
 
     @Override
-    public void addCallback(StateListener listener) {
+    public void addCallback(@NonNull StateListener listener) {
         synchronized (mListeners) {
             addListenerInternalLocked(listener, Integer.MAX_VALUE);
         }
@@ -316,7 +343,7 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
 
 
     @Override
-    public void removeCallback(StateListener listener) {
+    public void removeCallback(@NonNull StateListener listener) {
         synchronized (mListeners) {
             mListeners.removeIf((it) -> it.mListener.equals(listener));
         }

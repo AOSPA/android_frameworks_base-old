@@ -37,6 +37,7 @@ import static android.net.wifi.WifiInfo.sanitizeSsid;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.telephony.Annotation.NetworkType;
@@ -159,7 +160,7 @@ public class NetworkTemplate implements Parcelable {
      * Template to match metered {@link ConnectivityManager#TYPE_MOBILE} networks,
      * regardless of IMSI.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static NetworkTemplate buildTemplateMobileWildcard() {
         return new NetworkTemplate(MATCH_MOBILE_WILDCARD, null, null);
     }
@@ -327,7 +328,7 @@ public class NetworkTemplate implements Parcelable {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(@Nullable Object obj) {
         if (obj instanceof NetworkTemplate) {
             final NetworkTemplate other = (NetworkTemplate) obj;
             return mMatchRule == other.mMatchRule
@@ -503,6 +504,10 @@ public class NetworkTemplate implements Parcelable {
         for (final int ratType : ratTypes) {
             collapsedRatTypes.add(NetworkTemplate.getCollapsedRatType(ratType));
         }
+        // Add NETWORK_TYPE_5G_NSA to the returned list since 5G NSA is a virtual RAT type and
+        // it is not in TelephonyManager#NETWORK_TYPE_* constants.
+        // See {@link NetworkTemplate#NETWORK_TYPE_5G_NSA}.
+        collapsedRatTypes.add(NetworkTemplate.getCollapsedRatType(NETWORK_TYPE_5G_NSA));
         // Ensure that unknown type is returned.
         collapsedRatTypes.add(TelephonyManager.NETWORK_TYPE_UNKNOWN);
         return toIntArray(collapsedRatTypes);

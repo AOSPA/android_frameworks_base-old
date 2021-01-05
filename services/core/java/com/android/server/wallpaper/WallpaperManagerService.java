@@ -90,6 +90,8 @@ import android.util.EventLog;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.view.Display;
 import android.view.DisplayInfo;
@@ -105,6 +107,7 @@ import com.android.server.EventLogTags;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.utils.TimingsTraceAndSlog;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -166,9 +169,9 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         }
 
         @Override
-        public void onUnlockUser(int userHandle) {
+        public void onUserUnlocking(@NonNull TargetUser user) {
             if (mService != null) {
-                mService.onUnlockUser(userHandle);
+                mService.onUnlockUser(user.getUserIdentifier());
             }
         }
     }
@@ -1443,7 +1446,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         public void engineShown(IWallpaperEngine engine) {
             synchronized (mLock) {
                 if (mReply != null) {
-                    long ident = Binder.clearCallingIdentity();
+                    final long ident = Binder.clearCallingIdentity();
                     try {
                         mReply.sendResult(null);
                     } catch (RemoteException e) {
@@ -2008,7 +2011,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
     public boolean hasNamedWallpaper(String name) {
         synchronized (mLock) {
             List<UserInfo> users;
-            long ident = Binder.clearCallingIdentity();
+            final long ident = Binder.clearCallingIdentity();
             try {
                 users = ((UserManager) mContext.getSystemService(Context.USER_SERVICE)).getUsers();
             } finally {
@@ -2021,7 +2024,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                 }
                 WallpaperData wd = mWallpaperMap.get(user.id);
                 if (wd == null) {
-                    // User hasn't started yet, so load her settings to peek at the wallpaper
+                    // User hasn't started yet, so load their settings to peek at the wallpaper
                     loadSettingsLocked(user.id, false);
                     wd = mWallpaperMap.get(user.id);
                 }
@@ -2909,10 +2912,9 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         FileOutputStream fstream = null;
         BufferedOutputStream stream = null;
         try {
-            XmlSerializer out = new FastXmlSerializer();
             fstream = new FileOutputStream(journal.chooseForWrite(), false);
             stream = new BufferedOutputStream(fstream);
-            out.setOutput(stream, StandardCharsets.UTF_8.name());
+            TypedXmlSerializer out = Xml.resolveSerializer(stream);
             out.startDocument(null, true);
 
             WallpaperData wallpaper;
@@ -3069,7 +3071,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                     mLockWallpaperMap.put(userId, wallpaper);
                     ensureSaneWallpaperData(wallpaper);
                 } else {
-                    // sanity fallback: we're in bad shape, but establishing a known
+                    // rationality fallback: we're in bad shape, but establishing a known
                     // valid system+lock WallpaperData will keep us from dying.
                     Slog.wtf(TAG, "Didn't find wallpaper in non-lock case!");
                     wallpaper = new WallpaperData(userId, getWallpaperDir(userId),
@@ -3109,8 +3111,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         final DisplayData wpdData = getDisplayDataOrCreate(DEFAULT_DISPLAY);
         try {
             stream = new FileInputStream(file);
-            XmlPullParser parser = Xml.newPullParser();
-            parser.setInput(stream, StandardCharsets.UTF_8.name());
+            TypedXmlPullParser parser = Xml.resolvePullParser(stream);
 
             int type;
             do {

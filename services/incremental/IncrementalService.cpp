@@ -23,7 +23,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <binder/AppOpsManager.h>
-#include <binder/Nullable.h>
 #include <binder/Status.h>
 #include <sys/stat.h>
 #include <uuid/uuid.h>
@@ -38,7 +37,6 @@
 #include "Metadata.pb.h"
 
 using namespace std::literals;
-namespace fs = std::filesystem;
 
 constexpr const char* kDataUsageStats = "android.permission.LOADER_USAGE_STATS";
 constexpr const char* kOpUsage = "android:loader_usage_stats";
@@ -277,6 +275,8 @@ IncrementalService::IncrementalService(ServiceManagerWrapper&& sm, std::string_v
         mJni(sm.getJni()),
         mLooper(sm.getLooper()),
         mTimedQueue(sm.getTimedQueue()),
+        mProgressUpdateJobQueue(sm.getProgressUpdateJobQueue()),
+        mFs(sm.getFs()),
         mIncrementalDir(rootDir) {
     CHECK(mVold) << "Vold service is unavailable";
     CHECK(mDataLoaderManager) << "DataLoaderManagerService is unavailable";
@@ -284,6 +284,8 @@ IncrementalService::IncrementalService(ServiceManagerWrapper&& sm, std::string_v
     CHECK(mJni) << "JNI is unavailable";
     CHECK(mLooper) << "Looper is unavailable";
     CHECK(mTimedQueue) << "TimedQueue is unavailable";
+    CHECK(mProgressUpdateJobQueue) << "mProgressUpdateJobQueue is unavailable";
+    CHECK(mFs) << "Fs is unavailable";
 
     mJobQueue.reserve(16);
     mJobProcessor = std::thread([this]() {
@@ -306,8 +308,10 @@ IncrementalService::~IncrementalService() {
     }
     mJobCondition.notify_all();
     mJobProcessor.join();
+    mLooper->wake();
     mCmdLooperThread.join();
     mTimedQueue->stop();
+    mProgressUpdateJobQueue->stop();
     // Ensure that mounts are destroyed while the service is still valid.
     mBindsByPath.clear();
     mMounts.clear();
@@ -345,7 +349,8 @@ void IncrementalService::onDump(int fd) {
             }
             dprintf(fd, "    storages (%d): {\n", int(mnt.storages.size()));
             for (auto&& [storageId, storage] : mnt.storages) {
-                dprintf(fd, "      [%d] -> [%s]\n", storageId, storage.name.c_str());
+                dprintf(fd, "      [%d] -> [%s] (%d %% loaded) \n", storageId, storage.name.c_str(),
+                        (int)(getLoadingProgressFromPath(mnt, storage.name.c_str()) * 100));
             }
             dprintf(fd, "    }\n");
 
@@ -855,7 +860,7 @@ std::string IncrementalService::normalizePathToStorage(const IncFsMount& ifs, St
 }
 
 int IncrementalService::makeFile(StorageId storage, std::string_view path, int mode, FileId id,
-                                 incfs::NewFileParams params) {
+                                 incfs::NewFileParams params, std::span<const uint8_t> data) {
     if (auto ifs = getIfs(storage)) {
         std::string normPath = normalizePathToStorage(*ifs, storage, path);
         if (normPath.empty()) {
@@ -863,10 +868,14 @@ int IncrementalService::makeFile(StorageId storage, std::string_view path, int m
                        << " failed to normalize: " << path;
             return -EINVAL;
         }
-        auto err = mIncFs->makeFile(ifs->control, normPath, mode, id, params);
-        if (err) {
+        if (auto err = mIncFs->makeFile(ifs->control, normPath, mode, id, params); err) {
             LOG(ERROR) << "Internal error: storageId " << storage << " failed to makeFile: " << err;
             return err;
+        }
+        if (!data.empty()) {
+            if (auto err = setFileContent(ifs, id, path, data); err) {
+                return err;
+            }
         }
         return 0;
     }
@@ -1378,7 +1387,7 @@ bool IncrementalService::mountExistingImage(std::string_view root) {
 }
 
 void IncrementalService::runCmdLooper() {
-    constexpr auto kTimeoutMsecs = 1000;
+    constexpr auto kTimeoutMsecs = -1;
     while (mRunning.load(std::memory_order_relaxed)) {
         mLooper->pollAll(kTimeoutMsecs);
     }
@@ -1404,7 +1413,7 @@ void IncrementalService::prepareDataLoaderLocked(IncFsMount& ifs, DataLoaderPara
     }
 
     FileSystemControlParcel fsControlParcel;
-    fsControlParcel.incremental = aidl::make_nullable<IncrementalFileSystemControlParcel>();
+    fsControlParcel.incremental = std::make_optional<IncrementalFileSystemControlParcel>();
     fsControlParcel.incremental->cmd.reset(dup(ifs.control.cmd()));
     fsControlParcel.incremental->pendingReads.reset(dup(ifs.control.pendingReads()));
     fsControlParcel.incremental->log.reset(dup(ifs.control.logs()));
@@ -1459,7 +1468,7 @@ bool IncrementalService::configureNativeBinaries(StorageId storage, std::string_
     // Need a shared pointer: will be passing it into all unpacking jobs.
     std::shared_ptr<ZipArchive> zipFile(zipFileHandle, [](ZipArchiveHandle h) { CloseArchive(h); });
     void* cookie = nullptr;
-    const auto libFilePrefix = path::join(constants().libDir, abi);
+    const auto libFilePrefix = path::join(constants().libDir, abi) + "/";
     if (StartIteration(zipFile.get(), &cookie, libFilePrefix, constants().libSuffix)) {
         LOG(ERROR) << "Failed to start zip iteration for " << apkFullPath;
         return false;
@@ -1580,66 +1589,38 @@ bool IncrementalService::configureNativeBinaries(StorageId storage, std::string_
 
 void IncrementalService::extractZipFile(const IfsMountPtr& ifs, ZipArchiveHandle zipFile,
                                         ZipEntry& entry, const incfs::FileId& libFileId,
-                                        std::string_view targetLibPath,
+                                        std::string_view debugLibPath,
                                         Clock::time_point scheduledTs) {
     if (!ifs) {
-        LOG(INFO) << "Skipping zip file " << targetLibPath << " extraction for an expired mount";
+        LOG(INFO) << "Skipping zip file " << debugLibPath << " extraction for an expired mount";
         return;
     }
 
-    auto libName = path::basename(targetLibPath);
     auto startedTs = Clock::now();
 
     // Write extracted data to new file
     // NOTE: don't zero-initialize memory, it may take a while for nothing
     auto libData = std::unique_ptr<uint8_t[]>(new uint8_t[entry.uncompressed_length]);
     if (ExtractToMemory(zipFile, &entry, libData.get(), entry.uncompressed_length)) {
-        LOG(ERROR) << "Failed to extract native lib zip entry: " << libName;
+        LOG(ERROR) << "Failed to extract native lib zip entry: " << path::basename(debugLibPath);
         return;
     }
 
     auto extractFileTs = Clock::now();
 
-    const auto writeFd = mIncFs->openForSpecialOps(ifs->control, libFileId);
-    if (!writeFd.ok()) {
-        LOG(ERROR) << "Failed to open write fd for: " << targetLibPath << " errno: " << writeFd;
-        return;
-    }
-
-    auto openFileTs = Clock::now();
-    const int numBlocks =
-            (entry.uncompressed_length + constants().blockSize - 1) / constants().blockSize;
-    std::vector<IncFsDataBlock> instructions(numBlocks);
-    auto remainingData = std::span(libData.get(), entry.uncompressed_length);
-    for (int i = 0; i < numBlocks; i++) {
-        const auto blockSize = std::min<long>(constants().blockSize, remainingData.size());
-        instructions[i] = IncFsDataBlock{
-                .fileFd = writeFd.get(),
-                .pageIndex = static_cast<IncFsBlockIndex>(i),
-                .compression = INCFS_COMPRESSION_KIND_NONE,
-                .kind = INCFS_BLOCK_KIND_DATA,
-                .dataSize = static_cast<uint32_t>(blockSize),
-                .data = reinterpret_cast<const char*>(remainingData.data()),
-        };
-        remainingData = remainingData.subspan(blockSize);
-    }
-    auto prepareInstsTs = Clock::now();
-
-    size_t res = mIncFs->writeBlocks(instructions);
-    if (res != instructions.size()) {
-        LOG(ERROR) << "Failed to write data into: " << targetLibPath;
+    if (setFileContent(ifs, libFileId, debugLibPath,
+                       std::span(libData.get(), entry.uncompressed_length))) {
         return;
     }
 
     if (perfLoggingEnabled()) {
         auto endFileTs = Clock::now();
-        LOG(INFO) << "incfs: Extracted " << libName << "(" << entry.compressed_length << " -> "
-                  << entry.uncompressed_length << " bytes): " << elapsedMcs(startedTs, endFileTs)
+        LOG(INFO) << "incfs: Extracted " << path::basename(debugLibPath) << "("
+                  << entry.compressed_length << " -> " << entry.uncompressed_length
+                  << " bytes): " << elapsedMcs(startedTs, endFileTs)
                   << "mcs, scheduling delay: " << elapsedMcs(scheduledTs, startedTs)
                   << " extract: " << elapsedMcs(startedTs, extractFileTs)
-                  << " open: " << elapsedMcs(extractFileTs, openFileTs)
-                  << " prepare: " << elapsedMcs(openFileTs, prepareInstsTs)
-                  << " write: " << elapsedMcs(prepareInstsTs, endFileTs);
+                  << " open/prepare/write: " << elapsedMcs(extractFileTs, endFileTs);
     }
 }
 
@@ -1670,6 +1651,179 @@ bool IncrementalService::waitForNativeBinariesExtraction(StorageId storage) {
                 (mPendingJobsMount != mount && mJobQueue.find(mount) == mJobQueue.end());
     });
     return mRunning;
+}
+
+int IncrementalService::setFileContent(const IfsMountPtr& ifs, const incfs::FileId& fileId,
+                                       std::string_view debugFilePath,
+                                       std::span<const uint8_t> data) const {
+    auto startTs = Clock::now();
+
+    const auto writeFd = mIncFs->openForSpecialOps(ifs->control, fileId);
+    if (!writeFd.ok()) {
+        LOG(ERROR) << "Failed to open write fd for: " << debugFilePath
+                   << " errno: " << writeFd.get();
+        return writeFd.get();
+    }
+
+    const auto dataLength = data.size();
+
+    auto openFileTs = Clock::now();
+    const int numBlocks = (data.size() + constants().blockSize - 1) / constants().blockSize;
+    std::vector<IncFsDataBlock> instructions(numBlocks);
+    for (int i = 0; i < numBlocks; i++) {
+        const auto blockSize = std::min<long>(constants().blockSize, data.size());
+        instructions[i] = IncFsDataBlock{
+                .fileFd = writeFd.get(),
+                .pageIndex = static_cast<IncFsBlockIndex>(i),
+                .compression = INCFS_COMPRESSION_KIND_NONE,
+                .kind = INCFS_BLOCK_KIND_DATA,
+                .dataSize = static_cast<uint32_t>(blockSize),
+                .data = reinterpret_cast<const char*>(data.data()),
+        };
+        data = data.subspan(blockSize);
+    }
+    auto prepareInstsTs = Clock::now();
+
+    size_t res = mIncFs->writeBlocks(instructions);
+    if (res != instructions.size()) {
+        LOG(ERROR) << "Failed to write data into: " << debugFilePath;
+        return res;
+    }
+
+    if (perfLoggingEnabled()) {
+        auto endTs = Clock::now();
+        LOG(INFO) << "incfs: Set file content " << debugFilePath << "(" << dataLength
+                  << " bytes): " << elapsedMcs(startTs, endTs)
+                  << "mcs, open: " << elapsedMcs(startTs, openFileTs)
+                  << " prepare: " << elapsedMcs(openFileTs, prepareInstsTs)
+                  << " write: " << elapsedMcs(prepareInstsTs, endTs);
+    }
+
+    return 0;
+}
+
+int IncrementalService::isFileFullyLoaded(StorageId storage, const std::string& path) const {
+    std::unique_lock l(mLock);
+    const auto ifs = getIfsLocked(storage);
+    if (!ifs) {
+        LOG(ERROR) << "isFileFullyLoaded failed, invalid storageId: " << storage;
+        return -EINVAL;
+    }
+    const auto storageInfo = ifs->storages.find(storage);
+    if (storageInfo == ifs->storages.end()) {
+        LOG(ERROR) << "isFileFullyLoaded failed, no storage: " << storage;
+        return -EINVAL;
+    }
+    l.unlock();
+    return isFileFullyLoadedFromPath(*ifs, path);
+}
+
+int IncrementalService::isFileFullyLoadedFromPath(const IncFsMount& ifs,
+                                                  std::string_view filePath) const {
+    const auto [filledBlocks, totalBlocks] = mIncFs->countFilledBlocks(ifs.control, filePath);
+    if (filledBlocks < 0) {
+        LOG(ERROR) << "isFileFullyLoadedFromPath failed to get filled blocks count for: "
+                   << filePath << " errno: " << filledBlocks;
+        return filledBlocks;
+    }
+    if (totalBlocks < filledBlocks) {
+        LOG(ERROR) << "isFileFullyLoadedFromPath failed to get total num of blocks";
+        return -EINVAL;
+    }
+    return totalBlocks - filledBlocks;
+}
+
+float IncrementalService::getLoadingProgress(StorageId storage) const {
+    std::unique_lock l(mLock);
+    const auto ifs = getIfsLocked(storage);
+    if (!ifs) {
+        LOG(ERROR) << "getLoadingProgress failed, invalid storageId: " << storage;
+        return -EINVAL;
+    }
+    const auto storageInfo = ifs->storages.find(storage);
+    if (storageInfo == ifs->storages.end()) {
+        LOG(ERROR) << "getLoadingProgress failed, no storage: " << storage;
+        return -EINVAL;
+    }
+    l.unlock();
+    return getLoadingProgressFromPath(*ifs, storageInfo->second.name);
+}
+
+float IncrementalService::getLoadingProgressFromPath(const IncFsMount& ifs,
+                                                     std::string_view storagePath) const {
+    size_t totalBlocks = 0, filledBlocks = 0;
+    const auto filePaths = mFs->listFilesRecursive(storagePath);
+    for (const auto& filePath : filePaths) {
+        const auto [filledBlocksCount, totalBlocksCount] =
+                mIncFs->countFilledBlocks(ifs.control, filePath);
+        if (filledBlocksCount < 0) {
+            LOG(ERROR) << "getLoadingProgress failed to get filled blocks count for: " << filePath
+                       << " errno: " << filledBlocksCount;
+            return filledBlocksCount;
+        }
+        totalBlocks += totalBlocksCount;
+        filledBlocks += filledBlocksCount;
+    }
+
+    if (totalBlocks == 0) {
+        // No file in the storage or files are empty; regarded as fully loaded
+        return 1;
+    }
+    return (float)filledBlocks / (float)totalBlocks;
+}
+
+bool IncrementalService::updateLoadingProgress(
+        StorageId storage, const StorageLoadingProgressListener& progressListener) {
+    const auto progress = getLoadingProgress(storage);
+    if (progress < 0) {
+        // Failed to get progress from incfs, abort.
+        return false;
+    }
+    progressListener->onStorageLoadingProgressChanged(storage, progress);
+    if (progress > 1 - 0.001f) {
+        // Stop updating progress once it is fully loaded
+        return true;
+    }
+    static constexpr auto kProgressUpdateInterval = 1000ms;
+    addTimedJob(*mProgressUpdateJobQueue, storage, kProgressUpdateInterval /* repeat after 1s */,
+                [storage, progressListener, this]() {
+                    updateLoadingProgress(storage, progressListener);
+                });
+    return true;
+}
+
+bool IncrementalService::registerLoadingProgressListener(
+        StorageId storage, const StorageLoadingProgressListener& progressListener) {
+    return updateLoadingProgress(storage, progressListener);
+}
+
+bool IncrementalService::unregisterLoadingProgressListener(StorageId storage) {
+    return removeTimedJobs(*mProgressUpdateJobQueue, storage);
+}
+
+bool IncrementalService::registerStorageHealthListener(
+        StorageId storage, StorageHealthCheckParams&& healthCheckParams,
+        const StorageHealthListener& healthListener) {
+    DataLoaderStubPtr dataLoaderStub;
+    {
+        std::unique_lock l(mLock);
+        const auto& ifs = getIfsLocked(storage);
+        if (!ifs) {
+            return false;
+        }
+        dataLoaderStub = ifs->dataLoaderStub;
+        if (!dataLoaderStub) {
+            return false;
+        }
+    }
+    dataLoaderStub->setHealthListener(std::move(healthCheckParams), &healthListener);
+    return true;
+}
+
+void IncrementalService::unregisterStorageHealthListener(StorageId storage) {
+    StorageHealthCheckParams invalidCheckParams;
+    invalidCheckParams.blockedTimeoutMs = -1;
+    registerStorageHealthListener(storage, std::move(invalidCheckParams), {});
 }
 
 bool IncrementalService::perfLoggingEnabled() {
@@ -1754,18 +1908,21 @@ void IncrementalService::onAppOpChanged(const std::string& packageName) {
     }
 }
 
-void IncrementalService::addTimedJob(MountId id, Milliseconds after, Job what) {
+bool IncrementalService::addTimedJob(TimedQueueWrapper& timedQueue, MountId id, Milliseconds after,
+                                     Job what) {
     if (id == kInvalidStorageId) {
-        return;
+        return false;
     }
-    mTimedQueue->addJob(id, after, std::move(what));
+    timedQueue.addJob(id, after, std::move(what));
+    return true;
 }
 
-void IncrementalService::removeTimedJobs(MountId id) {
+bool IncrementalService::removeTimedJobs(TimedQueueWrapper& timedQueue, MountId id) {
     if (id == kInvalidStorageId) {
-        return;
+        return false;
     }
-    mTimedQueue->removeJobs(id);
+    timedQueue.removeJobs(id);
+    return true;
 }
 
 IncrementalService::DataLoaderStub::DataLoaderStub(IncrementalService& service, MountId id,
@@ -1807,7 +1964,7 @@ void IncrementalService::DataLoaderStub::cleanupResources() {
         mHealthPath.clear();
         unregisterFromPendingReads();
         resetHealthControl();
-        mService.removeTimedJobs(mId);
+        mService.removeTimedJobs(*mService.mTimedQueue, mId);
     }
 
     requestDestroy();
@@ -2003,6 +2160,24 @@ binder::Status IncrementalService::DataLoaderStub::onStatusChanged(MountId mount
     return binder::Status::ok();
 }
 
+binder::Status IncrementalService::DataLoaderStub::reportStreamHealth(MountId mountId,
+                                                                      int newStatus) {
+    if (!isValid()) {
+        return binder::Status::
+                fromServiceSpecificError(-EINVAL,
+                                         "reportStreamHealth came to invalid DataLoaderStub");
+    }
+    if (id() != mountId) {
+        LOG(ERROR) << "Mount ID mismatch: expected " << id() << ", but got: " << mountId;
+        return binder::Status::fromServiceSpecificError(-EPERM, "Mount ID mismatch.");
+    }
+    {
+        std::lock_guard lock(mMutex);
+        mStreamStatus = newStatus;
+    }
+    return binder::Status::ok();
+}
+
 bool IncrementalService::DataLoaderStub::isHealthParamsValid() const {
     return mHealthCheckParams.blockedTimeoutMs > 0 &&
             mHealthCheckParams.blockedTimeoutMs < mHealthCheckParams.unhealthyTimeoutMs;
@@ -2014,6 +2189,33 @@ void IncrementalService::DataLoaderStub::onHealthStatus(StorageHealthListener he
     if (healthListener) {
         healthListener->onHealthStatus(id(), healthStatus);
     }
+}
+
+static int adjustHealthStatus(int healthStatus, int streamStatus) {
+    if (healthStatus == IStorageHealthListener::HEALTH_STATUS_OK) {
+        // everything is good; no need to change status
+        return healthStatus;
+    }
+    int newHeathStatus = healthStatus;
+    switch (streamStatus) {
+        case IDataLoaderStatusListener::STREAM_STORAGE_ERROR:
+            // storage is limited and storage not healthy
+            newHeathStatus = IStorageHealthListener::HEALTH_STATUS_UNHEALTHY_STORAGE;
+            break;
+        case IDataLoaderStatusListener::STREAM_INTEGRITY_ERROR:
+            // fall through
+        case IDataLoaderStatusListener::STREAM_SOURCE_ERROR:
+            // fall through
+        case IDataLoaderStatusListener::STREAM_TRANSPORT_ERROR:
+            if (healthStatus == IStorageHealthListener::HEALTH_STATUS_UNHEALTHY) {
+                newHeathStatus = IStorageHealthListener::HEALTH_STATUS_UNHEALTHY_TRANSPORT;
+            }
+            // pending/blocked status due to transportation issues is not regarded as unhealthy
+            break;
+        default:
+            break;
+    }
+    return newHeathStatus;
 }
 
 void IncrementalService::DataLoaderStub::updateHealthStatus(bool baseline) {
@@ -2030,11 +2232,13 @@ void IncrementalService::DataLoaderStub::updateHealthStatus(bool baseline) {
 
         // Healthcheck depends on timestamp of the oldest pending read.
         // To get it, we need to re-open a pendingReads FD to get a full list of reads.
-        // Additionally we need to re-register for epoll with fresh FDs in case there are no reads.
+        // Additionally we need to re-register for epoll with fresh FDs in case there are no
+        // reads.
         const auto now = Clock::now();
         const auto kernelTsUs = getOldestPendingReadTs();
         if (baseline) {
-            // Updating baseline only on looper/epoll callback, i.e. on new set of pending reads.
+            // Updating baseline only on looper/epoll callback, i.e. on new set of pending
+            // reads.
             mHealthBase = {now, kernelTsUs};
         }
 
@@ -2093,9 +2297,12 @@ void IncrementalService::DataLoaderStub::updateHealthStatus(bool baseline) {
             checkBackAfter = unhealthyMonitoring;
             healthStatusToReport = IStorageHealthListener::HEALTH_STATUS_UNHEALTHY;
         }
+        // Adjust health status based on stream status
+        healthStatusToReport = adjustHealthStatus(healthStatusToReport, mStreamStatus);
         LOG(DEBUG) << id() << ": updateHealthStatus in " << double(checkBackAfter.count()) / 1000.0
                    << "secs";
-        mService.addTimedJob(id(), checkBackAfter, [this]() { updateHealthStatus(); });
+        mService.addTimedJob(*mService.mTimedQueue, id(), checkBackAfter,
+                             [this]() { updateHealthStatus(); });
     }
 
     // With kTolerance we are expecting these to execute before the next update.
@@ -2134,17 +2341,16 @@ BootClockTsUs IncrementalService::DataLoaderStub::getOldestPendingReadTs() {
         return result;
     }
 
-    std::vector<incfs::ReadInfo> pendingReads;
-    if (mService.mIncFs->waitForPendingReads(control, 0ms, &pendingReads) !=
+    if (mService.mIncFs->waitForPendingReads(control, 0ms, &mLastPendingReads) !=
                 android::incfs::WaitResult::HaveData ||
-        pendingReads.empty()) {
+        mLastPendingReads.empty()) {
         return result;
     }
 
     LOG(DEBUG) << id() << ": pendingReads: " << control.pendingReads() << ", "
-               << pendingReads.size() << ": " << pendingReads.front().bootClockTsUs;
+               << mLastPendingReads.size() << ": " << mLastPendingReads.front().bootClockTsUs;
 
-    for (auto&& pendingRead : pendingReads) {
+    for (auto&& pendingRead : mLastPendingReads) {
         result = std::min(result, pendingRead.bootClockTsUs);
     }
     return result;
@@ -2181,6 +2387,30 @@ void IncrementalService::DataLoaderStub::unregisterFromPendingReads() {
     mService.mLooper->wake();
 }
 
+void IncrementalService::DataLoaderStub::setHealthListener(
+        StorageHealthCheckParams&& healthCheckParams, const StorageHealthListener* healthListener) {
+    std::lock_guard lock(mMutex);
+    mHealthCheckParams = std::move(healthCheckParams);
+    if (healthListener == nullptr) {
+        // reset listener and params
+        mHealthListener = {};
+    } else {
+        mHealthListener = *healthListener;
+    }
+}
+
+static std::string toHexString(const RawMetadata& metadata) {
+    int n = metadata.size();
+    std::string res(n * 2, '\0');
+    // Same as incfs::toString(fileId)
+    static constexpr char kHexChar[] = "0123456789abcdef";
+    for (int i = 0; i < n; ++i) {
+        res[i * 2] = kHexChar[(metadata[i] & 0xf0) >> 4];
+        res[i * 2 + 1] = kHexChar[(metadata[i] & 0x0f)];
+    }
+    return res;
+}
+
 void IncrementalService::DataLoaderStub::onDump(int fd) {
     dprintf(fd, "    dataLoader: {\n");
     dprintf(fd, "      currentStatus: %d\n", mCurrentStatus);
@@ -2196,6 +2426,15 @@ void IncrementalService::DataLoaderStub::onDump(int fd) {
     dprintf(fd, "        unhealthyTimeoutMs: %d\n", int(mHealthCheckParams.unhealthyTimeoutMs));
     dprintf(fd, "        unhealthyMonitoringMs: %d\n",
             int(mHealthCheckParams.unhealthyMonitoringMs));
+    dprintf(fd, "        lastPendingReads: \n");
+    const auto control = mService.mIncFs->openMount(mHealthPath);
+    for (auto&& pendingRead : mLastPendingReads) {
+        dprintf(fd, "          fileId: %s\n", mService.mIncFs->toString(pendingRead.id).c_str());
+        const auto metadata = mService.mIncFs->getMetadata(control, pendingRead.id);
+        dprintf(fd, "          metadataHex: %s\n", toHexString(metadata).c_str());
+        dprintf(fd, "          blockIndex: %d\n", pendingRead.block);
+        dprintf(fd, "          bootClockTsUs: %lld\n", (long long)pendingRead.bootClockTsUs);
+    }
     dprintf(fd, "      }\n");
     const auto& params = mParams;
     dprintf(fd, "      dataLoaderParams: {\n");

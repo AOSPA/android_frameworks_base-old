@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static android.view.View.GONE;
+
 import static com.android.systemui.statusbar.phone.LockIcon.STATE_BIOMETRICS_ERROR;
 import static com.android.systemui.statusbar.phone.LockIcon.STATE_LOCKED;
 import static com.android.systemui.statusbar.phone.LockIcon.STATE_LOCK_OPEN;
@@ -37,6 +39,7 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.R;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
@@ -54,10 +57,9 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import java.util.Optional;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /** Controls the {@link LockIcon} in the lockscreen. */
-@Singleton
+@SysUISingleton
 public class LockscreenLockIconController {
 
     private final LockscreenGestureLogger mLockscreenGestureLogger;
@@ -83,6 +85,7 @@ public class LockscreenLockIconController {
     private boolean mWakeAndUnlockRunning;
     private boolean mShowingLaunchAffordance;
     private boolean mBouncerShowingScrimmed;
+    private boolean mFingerprintUnlock;
     private int mStatusBarState = StatusBarState.SHADE;
     private LockIcon mLockIcon;
 
@@ -377,14 +380,19 @@ public class LockscreenLockIconController {
     /**
      * We need to hide the lock whenever there's a fingerprint unlock, otherwise you'll see the
      * icon on top of the black front scrim.
+     * We also want to halt padlock the animation when we're in face bypass mode or dismissing the
+     * keyguard with fingerprint.
      * @param wakeAndUnlock are we wake and unlocking
      * @param isUnlock are we currently unlocking
      */
-    public void onBiometricAuthModeChanged(boolean wakeAndUnlock, boolean isUnlock) {
+    public void onBiometricAuthModeChanged(boolean wakeAndUnlock, boolean isUnlock,
+            BiometricSourceType type) {
         if (wakeAndUnlock) {
             mWakeAndUnlockRunning = true;
         }
-        if (isUnlock && mKeyguardBypassController.getBypassEnabled() && canBlockUpdates()) {
+        mFingerprintUnlock = type == BiometricSourceType.FINGERPRINT;
+        if (isUnlock && (mFingerprintUnlock || mKeyguardBypassController.getBypassEnabled())
+                && canBlockUpdates()) {
             // We don't want the icon to change while we are unlocking
             mBlockUpdates = true;
         }
@@ -496,12 +504,20 @@ public class LockscreenLockIconController {
      * @return true if the visibility changed
      */
     private boolean updateIconVisibility() {
-        boolean onAodOrDocked = mStatusBarStateController.isDozing() && mDocked;
+        if (mKeyguardUpdateMonitor.isUdfpsEnrolled()) {
+            boolean changed = mLockIcon.getVisibility() == GONE;
+            mLockIcon.setVisibility(GONE);
+            return changed;
+        }
+        boolean onAodOrDocked = mStatusBarStateController.isDozing() || mDocked;
         boolean invisible = onAodOrDocked || mWakeAndUnlockRunning || mShowingLaunchAffordance;
-        if (mKeyguardBypassController.getBypassEnabled() && !mBouncerShowingScrimmed) {
+        boolean fingerprintOrBypass = mFingerprintUnlock
+                || mKeyguardBypassController.getBypassEnabled();
+        if (fingerprintOrBypass && !mBouncerShowingScrimmed) {
             if ((mHeadsUpManagerPhone.isHeadsUpGoingAway()
                     || mHeadsUpManagerPhone.hasPinnedHeadsUp()
-                    || mStatusBarState == StatusBarState.KEYGUARD)
+                    || mStatusBarState == StatusBarState.KEYGUARD
+                    || mStatusBarState == StatusBarState.SHADE)
                     && !mNotificationWakeUpCoordinator.getNotificationsFullyHidden()) {
                 invisible = true;
             }

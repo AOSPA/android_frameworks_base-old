@@ -22,6 +22,7 @@ import android.graphics.Rect;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
 import android.os.Bundle;
+import android.os.ParcelFileDescriptor;
 import android.service.notification.StatusBarNotification;
 
 import com.android.internal.statusbar.StatusBarIcon;
@@ -101,6 +102,13 @@ oneway interface IStatusBar
     void onCameraLaunchGestureDetected(int source);
 
     /**
+     * Notifies the status bar that the Emergency Action launch gesture has been detected.
+     *
+     * TODO(b/169175022) Update method name and docs when feature name is locked.
+     */
+    void onEmergencyActionLaunchGestureDetected();
+
+    /**
      * Shows the picture-in-picture menu if an activity is in picture-in-picture mode.
      */
     void showPictureInPictureMenu();
@@ -137,8 +145,8 @@ oneway interface IStatusBar
 
     // Used to show the authentication dialog (Biometrics, Device Credential)
     void showAuthenticationDialog(in PromptInfo promptInfo, IBiometricSysuiReceiver sysuiReceiver,
-            int biometricModality, boolean requireConfirmation, int userId, String opPackageName,
-            long operationId);
+            in int[] sensorIds, boolean credentialAllowed, boolean requireConfirmation, int userId,
+            String opPackageName, long operationId);
     // Used to notify the authentication dialog that a biometric has been authenticated
     void onBiometricAuthenticated();
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc
@@ -224,6 +232,11 @@ oneway interface IStatusBar
     void stopTracing();
 
     /**
+     * Handles a logging command from the WM shell command.
+     */
+    void handleWindowManagerLoggingCommand(in String[] args, in ParcelFileDescriptor outFd);
+
+    /**
      * If true, suppresses the ambient display from showing. If false, re-enables the ambient
      * display.
      */
@@ -236,4 +249,10 @@ oneway interface IStatusBar
      * @param connect {@code true} if needs connection, otherwise set the connection to null.
      */
     void requestWindowMagnificationConnection(boolean connect);
+
+    /**
+     * Allow for pass-through arguments from `adb shell cmd statusbar <args>`, and write to the
+     * file descriptor passed in.
+     */
+     void passThroughShellCommand(in String[] args, in ParcelFileDescriptor pfd);
 }

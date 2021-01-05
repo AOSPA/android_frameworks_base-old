@@ -205,6 +205,7 @@ public class DozeMachine {
     }
 
     void onScreenState(int state) {
+        mDozeLog.traceDisplayState(state);
         for (Part part : mParts) {
             part.onScreenState(state);
         }
@@ -308,6 +309,7 @@ public class DozeMachine {
         for (Part p : mParts) {
             p.transitionTo(oldState, newState);
         }
+        mDozeLog.traceDozeStateSendComplete(newState);
 
         switch (newState) {
             case FINISH:
@@ -411,6 +413,7 @@ public class DozeMachine {
         pw.print(" state="); pw.println(mState);
         pw.print(" wakeLockHeldForCurrentState="); pw.println(mWakeLockHeldForCurrentState);
         pw.print(" wakeLock="); pw.println(mWakeLock);
+        pw.print(" isDozeSuppressed="); pw.println(mDozeHost.isDozeSuppressed());
         pw.println("Parts:");
         for (Part p : mParts) {
             p.dump(pw);
@@ -432,8 +435,12 @@ public class DozeMachine {
         /** Give the Part a chance to clean itself up. */
         default void destroy() {}
 
-        /** Alerts that the screenstate is being changed. */
-        default void onScreenState(int state) {}
+        /**
+         *  Alerts that the screenstate is being changed.
+         *  Note: This may be called from within a call to transitionTo, so local DozeState may not
+         *  be accurate nor match with the new displayState.
+         */
+        default void onScreenState(int displayState) {}
 
         /** Sets the {@link DozeMachine} when this Part is associated with one. */
         default void setDozeMachine(DozeMachine dozeMachine) {}

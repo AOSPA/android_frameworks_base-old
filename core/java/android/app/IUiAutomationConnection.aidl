@@ -39,7 +39,7 @@ interface IUiAutomationConnection {
     boolean injectInputEvent(in InputEvent event, boolean sync);
     void syncInputTransactions();
     boolean setRotation(int rotation);
-    Bitmap takeScreenshot(in Rect crop, int rotation);
+    Bitmap takeScreenshot(in Rect crop);
     boolean clearWindowContentFrameStats(int windowId);
     WindowContentFrameStats getWindowContentFrameStats(int windowId);
     void clearWindowAnimationFrameStats();
@@ -52,4 +52,6 @@ interface IUiAutomationConnection {
     void dropShellPermissionIdentity();
     // Called from the system process.
     oneway void shutdown();
+    void executeShellCommandWithStderr(String command, in ParcelFileDescriptor sink,
+                in ParcelFileDescriptor source, in ParcelFileDescriptor stderrSink);
 }

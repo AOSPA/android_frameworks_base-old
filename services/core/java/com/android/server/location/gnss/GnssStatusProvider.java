@@ -31,6 +31,8 @@ import com.android.server.location.util.AppOpsHelper;
 import com.android.server.location.util.Injector;
 import com.android.server.location.util.LocationUsageLogger;
 
+import java.util.Collection;
+
 /**
  * Implementation of a handler for {@link IGnssStatusListener}.
  */
@@ -51,7 +53,8 @@ public class GnssStatusProvider extends GnssListenerMultiplexer<Void, IGnssStatu
     }
 
     @Override
-    protected boolean registerWithService(Void ignored) {
+    protected boolean registerWithService(Void ignored,
+            Collection<GnssListenerRegistration> registrations) {
         if (D) {
             Log.d(TAG, "starting gnss status");
         }
@@ -71,11 +74,11 @@ public class GnssStatusProvider extends GnssListenerMultiplexer<Void, IGnssStatu
                 LocationStatsEnums.USAGE_STARTED,
                 LocationStatsEnums.API_REGISTER_GNSS_STATUS_CALLBACK,
                 registration.getIdentity().getPackageName(),
-                /* LocationRequest= */ null,
-                /* hasListener= */ true,
-                /* hasIntent= */ false,
-                /* geofence= */ null,
-                registration.isForeground());
+                null,
+                null,
+                true,
+                false,
+                null, registration.isForeground());
     }
 
     @Override
@@ -84,10 +87,11 @@ public class GnssStatusProvider extends GnssListenerMultiplexer<Void, IGnssStatu
                 LocationStatsEnums.USAGE_ENDED,
                 LocationStatsEnums.API_REGISTER_GNSS_STATUS_CALLBACK,
                 registration.getIdentity().getPackageName(),
-                /* LocationRequest= */ null,
-                /* hasListener= */ true,
-                /* hasIntent= */ false,
-                /* geofence= */ null,
+                null,
+                null,
+                true,
+                false,
+                null,
                 registration.isForeground());
     }
 

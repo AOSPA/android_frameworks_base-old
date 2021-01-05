@@ -17,7 +17,6 @@
 package com.android.server.biometrics.sensors.fingerprint;
 
 import android.content.Context;
-import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.fingerprint.Fingerprint;
 import android.util.AtomicFile;
 import android.util.Slog;
@@ -40,10 +39,9 @@ import java.util.ArrayList;
  * Class managing the set of fingerprint per user across device reboots.
  * @hide
  */
-public class FingerprintUserState extends BiometricUserState {
+public class FingerprintUserState extends BiometricUserState<Fingerprint> {
 
     private static final String TAG = "FingerprintState";
-    private static final String FINGERPRINT_FILE = "settings_fingerprint.xml";
 
     private static final String TAG_FINGERPRINTS = "fingerprints";
     private static final String TAG_FINGERPRINT = "fingerprint";
@@ -52,8 +50,8 @@ public class FingerprintUserState extends BiometricUserState {
     private static final String ATTR_FINGER_ID = "fingerId";
     private static final String ATTR_DEVICE_ID = "deviceId";
 
-    public FingerprintUserState(Context context, int userId) {
-        super(context, userId);
+    public FingerprintUserState(Context context, int userId, String fileName) {
+        super(context, userId, fileName);
     }
 
     @Override
@@ -62,29 +60,14 @@ public class FingerprintUserState extends BiometricUserState {
     }
 
     @Override
-    protected String getBiometricFile() {
-        return FINGERPRINT_FILE;
-    }
-
-    @Override
     protected int getNameTemplateResource() {
         return com.android.internal.R.string.fingerprint_name_template;
     }
 
     @Override
-    public void addBiometric(BiometricAuthenticator.Identifier identifier) {
-        if (identifier instanceof Fingerprint) {
-            super.addBiometric(identifier);
-        } else {
-            Slog.w(TAG, "Attempted to add non-fingerprint identifier");
-        }
-    }
-
-    @Override
-    protected ArrayList getCopy(ArrayList array) {
-        ArrayList<Fingerprint> result = new ArrayList<>();
-        for (int i = 0; i < array.size(); i++) {
-            Fingerprint fp = (Fingerprint) array.get(i);
+    protected ArrayList<Fingerprint> getCopy(ArrayList<Fingerprint> array) {
+        final ArrayList<Fingerprint> result = new ArrayList<>();
+        for (Fingerprint fp : array) {
             result.add(new Fingerprint(fp.getName(), fp.getGroupId(), fp.getBiometricId(),
                     fp.getDeviceId()));
         }

@@ -20,7 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.IntentFilter;
 import android.content.pm.parsing.ParsingPackage;
-import android.content.pm.parsing.ParsingPackageUtils;
+import android.content.pm.parsing.ParsingUtils;
 import android.content.pm.parsing.result.ParseInput;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.res.Configuration;
@@ -39,7 +39,7 @@ import java.io.IOException;
 /** @hide */
 class ParsedMainComponentUtils {
 
-    private static final String TAG = ParsingPackageUtils.TAG;
+    private static final String TAG = ParsingUtils.TAG;
 
     @NonNull
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
@@ -113,7 +113,7 @@ class ParsedMainComponentUtils {
         ParsedIntentInfo intent = intentResult.getResult();
         int actionCount = intent.countActions();
         if (actionCount == 0 && failOnNoActions) {
-            Slog.w(TAG, "No actions in " + parser.getName() + " at " + pkg.getBaseCodePath() + " "
+            Slog.w(TAG, "No actions in " + parser.getName() + " at " + pkg.getBaseApkPath() + " "
                     + parser.getPositionDescription());
             // Backward-compat, do not actually fail
             return input.success(null);

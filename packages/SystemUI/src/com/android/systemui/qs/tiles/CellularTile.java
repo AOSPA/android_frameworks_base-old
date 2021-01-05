@@ -25,6 +25,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.telephony.SubscriptionManager;
@@ -130,7 +131,8 @@ public class CellularTile extends QSTileImpl<SignalState> {
             return;
         }
         String carrierName = mController.getMobileDataNetworkName();
-        if (TextUtils.isEmpty(carrierName)) {
+        boolean isInService = mController.isMobileDataNetworkInService();
+        if (TextUtils.isEmpty(carrierName) || !isInService) {
             carrierName = mContext.getString(R.string.mobile_data_disable_message_default_carrier);
         }
         AlertDialog dialog = new Builder(mContext)
@@ -243,7 +245,8 @@ public class CellularTile extends QSTileImpl<SignalState> {
 
     @Override
     public boolean isAvailable() {
-        return mController.hasMobileDataFeature();
+        return mController.hasMobileDataFeature()
+            && mHost.getUserContext().getUserId() == UserHandle.USER_SYSTEM;
     }
 
     private static final class CallbackInfo {

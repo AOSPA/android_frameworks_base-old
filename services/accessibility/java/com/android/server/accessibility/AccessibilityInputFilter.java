@@ -118,6 +118,20 @@ class AccessibilityInputFilter extends InputFilter implements EventStreamTransfo
      */
     static final int FLAG_REQUEST_MULTI_FINGER_GESTURES = 0x00000100;
 
+    /**
+     * Flag for enabling two-finger passthrough when multi-finger gestures are enabled.
+     *
+     * @see #setUserAndEnabledFeatures(int, int)
+     */
+    static final int FLAG_REQUEST_2_FINGER_PASSTHROUGH = 0x00000200;
+
+    /**
+     * Flag for including motion events when dispatching a gesture.
+     *
+     * @see #setUserAndEnabledFeatures(int, int)
+     */
+    static final int FLAG_SEND_MOTION_EVENTS = 0x00000400;
+
     static final int FEATURES_AFFECTING_MOTION_EVENTS =
             FLAG_FEATURE_INJECT_MOTION_EVENTS
                     | FLAG_FEATURE_AUTOCLICK
@@ -125,7 +139,8 @@ class AccessibilityInputFilter extends InputFilter implements EventStreamTransfo
                     | FLAG_FEATURE_SCREEN_MAGNIFIER
                     | FLAG_FEATURE_TRIGGERED_SCREEN_MAGNIFIER
                     | FLAG_SERVICE_HANDLES_DOUBLE_TAP
-                    | FLAG_REQUEST_MULTI_FINGER_GESTURES;
+                    | FLAG_REQUEST_MULTI_FINGER_GESTURES
+                    | FLAG_REQUEST_2_FINGER_PASSTHROUGH;
 
     private final Context mContext;
 
@@ -420,6 +435,12 @@ class AccessibilityInputFilter extends InputFilter implements EventStreamTransfo
                 }
                 if ((mEnabledFeatures & FLAG_REQUEST_MULTI_FINGER_GESTURES) != 0) {
                     explorer.setMultiFingerGesturesEnabled(true);
+                }
+                if ((mEnabledFeatures & FLAG_REQUEST_2_FINGER_PASSTHROUGH) != 0) {
+                    explorer.setTwoFingerPassthroughEnabled(true);
+                }
+                if ((mEnabledFeatures & FLAG_SEND_MOTION_EVENTS) != 0) {
+                    explorer.setSendMotionEventsEnabled(true);
                 }
                 addFirstEventHandler(displayId, explorer);
                 mTouchExplorer.put(displayId, explorer);

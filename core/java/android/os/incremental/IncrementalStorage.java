@@ -170,9 +170,10 @@ public final class IncrementalStorage {
      * @param size             Size of the new file in bytes.
      * @param metadata         Metadata bytes.
      * @param v4signatureBytes Serialized V4SignatureProto.
+     * @param content          Optionally set file content.
      */
     public void makeFile(@NonNull String path, long size, @Nullable UUID id,
-            @Nullable byte[] metadata, @Nullable byte[] v4signatureBytes)
+            @Nullable byte[] metadata, @Nullable byte[] v4signatureBytes, @Nullable byte[] content)
             throws IOException {
         try {
             if (id == null && metadata == null) {
@@ -184,7 +185,7 @@ public final class IncrementalStorage {
             params.metadata = (metadata == null ? new byte[0] : metadata);
             params.fileId = idToBytes(id);
             params.signature = v4signatureBytes;
-            int res = mService.makeFile(mId, path, params);
+            int res = mService.makeFile(mId, path, params, content);
             if (res != 0) {
                 throw new IOException("makeFile() failed with errno " + -res);
             }
@@ -309,24 +310,35 @@ public final class IncrementalStorage {
      * @param path The relative path of the file.
      * @return True if the file is fully loaded.
      */
-    public boolean isFileFullyLoaded(@NonNull String path) {
-        return isFileRangeLoaded(path, 0, -1);
-    }
-
-    /**
-     * Checks whether a range in a file if loaded.
-     *
-     * @param path The relative path of the file.
-     * @param start            The starting offset of the range.
-     * @param end              The ending offset of the range.
-     * @return True if the file is fully loaded.
-     */
-    public boolean isFileRangeLoaded(@NonNull String path, long start, long end) {
+    public boolean isFileFullyLoaded(@NonNull String path) throws IOException {
         try {
-            return mService.isFileRangeLoaded(mId, path, start, end);
+            int res = mService.isFileFullyLoaded(mId, path);
+            if (res < 0) {
+                throw new IOException("isFileFullyLoaded() failed, errno " + -res);
+            }
+            return res == 0;
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
             return false;
+        }
+    }
+
+    /**
+     * Returns the loading progress of a storage
+     *
+     * @return progress value between [0, 1].
+     */
+    public float getLoadingProgress() throws IOException {
+        try {
+            final float res = mService.getLoadingProgress(mId);
+            if (res < 0) {
+                throw new IOException(
+                        "getLoadingProgress() failed at querying loading progress, errno " + -res);
+            }
+            return res;
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+            return 0;
         }
     }
 
@@ -506,6 +518,58 @@ public final class IncrementalStorage {
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
             return false;
+        }
+    }
+
+    /**
+     * Register to listen to loading progress of all the files on this storage.
+     * @param listener To report progress from Incremental Service to the caller.
+     */
+    public boolean registerLoadingProgressListener(IStorageLoadingProgressListener listener) {
+        try {
+            return mService.registerLoadingProgressListener(mId, listener);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+            return false;
+        }
+    }
+
+    /**
+     * Unregister to stop listening to storage loading progress.
+     */
+    public boolean unregisterLoadingProgressListener() {
+        try {
+            return mService.unregisterLoadingProgressListener(mId);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+            return false;
+        }
+    }
+
+    /**
+     * Register to listen to the status changes of the storage health.
+     * @param healthCheckParams Params to specify status change timeouts.
+     * @param listener To report health status change from Incremental Service to the caller.
+     */
+    public boolean registerStorageHealthListener(StorageHealthCheckParams healthCheckParams,
+            IStorageHealthListener listener) {
+        try {
+            return mService.registerStorageHealthListener(mId, healthCheckParams, listener);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+            return false;
+        }
+    }
+
+    /**
+     * Stops listening to the status changes of the storage health.
+     */
+    public void unregisterStorageHealthListener() {
+        try {
+            mService.unregisterStorageHealthListener(mId);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+            return;
         }
     }
 }

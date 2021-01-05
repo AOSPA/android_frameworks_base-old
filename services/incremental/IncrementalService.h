@@ -22,6 +22,7 @@
 #include <android/content/pm/IDataLoaderStatusListener.h>
 #include <android/os/incremental/BnIncrementalServiceConnector.h>
 #include <android/os/incremental/BnStorageHealthListener.h>
+#include <android/os/incremental/BnStorageLoadingProgressListener.h>
 #include <android/os/incremental/StorageHealthCheckParams.h>
 #include <binder/IAppOpsCallback.h>
 #include <utils/String16.h>
@@ -65,6 +66,8 @@ using DataLoaderStatusListener = ::android::sp<IDataLoaderStatusListener>;
 using StorageHealthCheckParams = ::android::os::incremental::StorageHealthCheckParams;
 using IStorageHealthListener = ::android::os::incremental::IStorageHealthListener;
 using StorageHealthListener = ::android::sp<IStorageHealthListener>;
+using IStorageLoadingProgressListener = ::android::os::incremental::IStorageLoadingProgressListener;
+using StorageLoadingProgressListener = ::android::sp<IStorageLoadingProgressListener>;
 
 class IncrementalService final {
 public:
@@ -124,7 +127,7 @@ public:
     int setStorageParams(StorageId storage, bool enableReadLogs);
 
     int makeFile(StorageId storage, std::string_view path, int mode, FileId id,
-                 incfs::NewFileParams params);
+                 incfs::NewFileParams params, std::span<const uint8_t> data);
     int makeDir(StorageId storage, std::string_view path, int mode = 0755);
     int makeDirs(StorageId storage, std::string_view path, int mode = 0755);
 
@@ -132,10 +135,15 @@ public:
              std::string_view newPath);
     int unlink(StorageId storage, std::string_view path);
 
-    bool isRangeLoaded(StorageId storage, FileId file, std::pair<BlockIndex, BlockIndex> range) {
-        return false;
-    }
-
+    int isFileFullyLoaded(StorageId storage, const std::string& path) const;
+    float getLoadingProgress(StorageId storage) const;
+    bool registerLoadingProgressListener(StorageId storage,
+                                         const StorageLoadingProgressListener& progressListener);
+    bool unregisterLoadingProgressListener(StorageId storage);
+    bool registerStorageHealthListener(StorageId storage,
+                                       StorageHealthCheckParams&& healthCheckParams,
+                                       const StorageHealthListener& healthListener);
+    void unregisterStorageHealthListener(StorageId storage);
     RawMetadata getMetadata(StorageId storage, std::string_view path) const;
     RawMetadata getMetadata(StorageId storage, FileId node) const;
 
@@ -192,9 +200,12 @@ private:
 
         MountId id() const { return mId.load(std::memory_order_relaxed); }
         const content::pm::DataLoaderParamsParcel& params() const { return mParams; }
+        void setHealthListener(StorageHealthCheckParams&& healthCheckParams,
+                               const StorageHealthListener* healthListener);
 
     private:
         binder::Status onStatusChanged(MountId mount, int newStatus) final;
+        binder::Status reportStreamHealth(MountId mount, int newStatus) final;
 
         sp<content::pm::IDataLoader> getDataLoader();
 
@@ -245,6 +256,8 @@ private:
             BootClockTsUs kernelTsUs;
         } mHealthBase = {TimePoint::max(), kMaxBootClockTsUs};
         StorageHealthCheckParams mHealthCheckParams;
+        int mStreamStatus = content::pm::IDataLoaderStatusListener::STREAM_HEALTHY;
+        std::vector<incfs::ReadInfo> mLastPendingReads;
     };
     using DataLoaderStubPtr = sp<DataLoaderStub>;
 
@@ -341,19 +354,27 @@ private:
     int makeDirs(const IncFsMount& ifs, StorageId storageId, std::string_view path, int mode);
     binder::Status applyStorageParams(IncFsMount& ifs, bool enableReadLogs);
 
+    int isFileFullyLoadedFromPath(const IncFsMount& ifs, std::string_view filePath) const;
+    float getLoadingProgressFromPath(const IncFsMount& ifs, std::string_view path) const;
+
+    int setFileContent(const IfsMountPtr& ifs, const incfs::FileId& fileId,
+                       std::string_view debugFilePath, std::span<const uint8_t> data) const;
+
     void registerAppOpsCallback(const std::string& packageName);
     bool unregisterAppOpsCallback(const std::string& packageName);
     void onAppOpChanged(const std::string& packageName);
 
     void runJobProcessing();
     void extractZipFile(const IfsMountPtr& ifs, ZipArchiveHandle zipFile, ZipEntry& entry,
-                        const incfs::FileId& libFileId, std::string_view targetLibPath,
+                        const incfs::FileId& libFileId, std::string_view debugLibPath,
                         Clock::time_point scheduledTs);
 
     void runCmdLooper();
 
-    void addTimedJob(MountId id, Milliseconds after, Job what);
-    void removeTimedJobs(MountId id);
+    bool addTimedJob(TimedQueueWrapper& timedQueue, MountId id, Milliseconds after, Job what);
+    bool removeTimedJobs(TimedQueueWrapper& timedQueue, MountId id);
+    bool updateLoadingProgress(int32_t storageId,
+                               const StorageLoadingProgressListener& progressListener);
 
 private:
     const std::unique_ptr<VoldServiceWrapper> mVold;
@@ -363,6 +384,8 @@ private:
     const std::unique_ptr<JniWrapper> mJni;
     const std::unique_ptr<LooperWrapper> mLooper;
     const std::unique_ptr<TimedQueueWrapper> mTimedQueue;
+    const std::unique_ptr<TimedQueueWrapper> mProgressUpdateJobQueue;
+    const std::unique_ptr<FsWrapper> mFs;
     const std::string mIncrementalDir;
 
     mutable std::mutex mLock;

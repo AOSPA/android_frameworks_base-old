@@ -16,7 +16,6 @@
 
 package com.android.systemui.media
 
-import android.content.Context
 import android.media.MediaRouter2Manager
 import android.media.session.MediaController
 import androidx.annotation.AnyThread
@@ -24,34 +23,33 @@ import androidx.annotation.MainThread
 import androidx.annotation.WorkerThread
 import com.android.settingslib.media.LocalMediaManager
 import com.android.settingslib.media.MediaDevice
+import com.android.systemui.Dumpable
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
-import com.android.systemui.Dumpable
 import com.android.systemui.dump.DumpManager
 import java.io.FileDescriptor
 import java.io.PrintWriter
 import java.util.concurrent.Executor
 import javax.inject.Inject
-import javax.inject.Singleton
+
+private const val PLAYBACK_TYPE_UNKNOWN = 0
 
 /**
  * Provides information about the route (ie. device) where playback is occurring.
  */
-@Singleton
 class MediaDeviceManager @Inject constructor(
-    private val context: Context,
+    private val controllerFactory: MediaControllerFactory,
     private val localMediaManagerFactory: LocalMediaManagerFactory,
     private val mr2manager: MediaRouter2Manager,
     @Main private val fgExecutor: Executor,
     @Background private val bgExecutor: Executor,
-    private val mediaDataManager: MediaDataManager,
-    private val dumpManager: DumpManager
+    dumpManager: DumpManager
 ) : MediaDataManager.Listener, Dumpable {
+
     private val listeners: MutableSet<Listener> = mutableSetOf()
     private val entries: MutableMap<String, Entry> = mutableMapOf()
 
     init {
-        mediaDataManager.addListener(this)
         dumpManager.registerDumpable(javaClass.name, this)
     }
 
@@ -74,7 +72,7 @@ class MediaDeviceManager @Inject constructor(
         if (entry == null || entry?.token != data.token) {
             entry?.stop()
             val controller = data.token?.let {
-                MediaController(context, it)
+                controllerFactory.create(it)
             }
             entry = Entry(key, oldKey, controller,
                     localMediaManagerFactory.create(data.packageName))
@@ -125,11 +123,12 @@ class MediaDeviceManager @Inject constructor(
         val oldKey: String?,
         val controller: MediaController?,
         val localMediaManager: LocalMediaManager
-    ) : LocalMediaManager.DeviceCallback {
+    ) : LocalMediaManager.DeviceCallback, MediaController.Callback() {
 
         val token
             get() = controller?.sessionToken
         private var started = false
+        private var playbackType = PLAYBACK_TYPE_UNKNOWN
         private var current: MediaDevice? = null
             set(value) {
                 if (!started || value != field) {
@@ -144,6 +143,8 @@ class MediaDeviceManager @Inject constructor(
         fun start() = bgExecutor.execute {
             localMediaManager.registerCallback(this)
             localMediaManager.startScan()
+            playbackType = controller?.playbackInfo?.playbackType ?: PLAYBACK_TYPE_UNKNOWN
+            controller?.registerCallback(this)
             updateCurrent()
             started = true
         }
@@ -151,20 +152,35 @@ class MediaDeviceManager @Inject constructor(
         @AnyThread
         fun stop() = bgExecutor.execute {
             started = false
+            controller?.unregisterCallback(this)
             localMediaManager.stopScan()
             localMediaManager.unregisterCallback(this)
         }
 
         fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<String>) {
-            val route = controller?.let {
+            val routingSession = controller?.let {
                 mr2manager.getRoutingSessionForMediaController(it)
+            }
+            val selectedRoutes = routingSession?.let {
+                mr2manager.getSelectedRoutes(it)
             }
             with(pw) {
                 println("    current device is ${current?.name}")
                 val type = controller?.playbackInfo?.playbackType
-                println("    PlaybackType=$type (1 for local, 2 for remote)")
-                println("    route=$route")
+                println("    PlaybackType=$type (1 for local, 2 for remote) cached=$playbackType")
+                println("    routingSession=$routingSession")
+                println("    selectedRoutes=$selectedRoutes")
             }
+        }
+
+        @WorkerThread
+        override fun onAudioInfoChanged(info: MediaController.PlaybackInfo?) {
+            val newPlaybackType = info?.playbackType ?: PLAYBACK_TYPE_UNKNOWN
+            if (newPlaybackType == playbackType) {
+                return
+            }
+            playbackType = newPlaybackType
+            updateCurrent()
         }
 
         override fun onDeviceListUpdate(devices: List<MediaDevice>?) = bgExecutor.execute {

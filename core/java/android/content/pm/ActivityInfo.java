@@ -24,6 +24,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.res.Configuration.NativeConfig;
 import android.content.res.TypedArray;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Printer;
@@ -373,7 +374,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * {@link android.R.attr#showForAllUsers} attribute.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int FLAG_SHOW_FOR_ALL_USERS = 0x0400;
     /**
      * Bit in {@link #flags} corresponding to an immersive activity
@@ -502,7 +503,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * this activity is launched into such a container a SecurityException will be
      * thrown. Set from the {@link android.R.attr#allowEmbedded} attribute.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int FLAG_ALLOW_EMBEDDED = 0x80000000;
 
     /**
@@ -831,6 +832,16 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      */
     public static final int CONFIG_WINDOW_CONFIGURATION = 0x20000000;
 
+    /**
+     * Bit in {@link #configChanges} that indicates that the activity
+     * can itself handle changes to bold text.  Set from the
+     * {@link android.R.attr#configChanges} attribute.  This is
+     * not a core resource configuration, but a higher-level value, so its
+     * constant starts at the high bits.
+     */
+
+    public static final int CONFIG_FORCE_BOLD_TEXT = 0x10000000;
+
     /** @hide
      * Unfortunately the constants for config changes in native code are
      * different from ActivityInfo. :(  Here are the values we should use for the
@@ -859,7 +870,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static @NativeConfig int activityInfoConfigJavaToNative(@Config int input) {
         int output = 0;
         for (int i = 0; i < CONFIG_NATIVE_BITS.length; i++) {
@@ -963,7 +974,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     /** @hide */
     public static final int LOCK_TASK_LAUNCH_MODE_ALWAYS = 2;
     /** @hide */
-    public static final int LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED = 3;
+    public static final int LOCK_TASK_LAUNCH_MODE_IF_ALLOWLISTED = 3;
 
     /** @hide */
     public static final String lockTaskLaunchModeToString(int lockTaskLaunchMode) {
@@ -974,8 +985,8 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
                 return "LOCK_TASK_LAUNCH_MODE_NEVER";
             case LOCK_TASK_LAUNCH_MODE_ALWAYS:
                 return "LOCK_TASK_LAUNCH_MODE_ALWAYS";
-            case LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED:
-                return "LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED";
+            case LOCK_TASK_LAUNCH_MODE_IF_ALLOWLISTED:
+                return "LOCK_TASK_LAUNCH_MODE_IF_ALLOWLISTED";
             default:
                 return "unknown=" + lockTaskLaunchMode;
         }
@@ -1096,6 +1107,34 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
                 || orientation == SCREEN_ORIENTATION_SENSOR_PORTRAIT
                 || orientation == SCREEN_ORIENTATION_REVERSE_PORTRAIT
                 || orientation == SCREEN_ORIENTATION_USER_PORTRAIT;
+    }
+
+    /**
+     * Returns the reversed orientation.
+     * @hide
+     */
+    @ActivityInfo.ScreenOrientation
+    public static int reverseOrientation(@ActivityInfo.ScreenOrientation int orientation) {
+        switch (orientation) {
+            case SCREEN_ORIENTATION_LANDSCAPE:
+                return SCREEN_ORIENTATION_PORTRAIT;
+            case SCREEN_ORIENTATION_PORTRAIT:
+                return SCREEN_ORIENTATION_LANDSCAPE;
+            case SCREEN_ORIENTATION_SENSOR_LANDSCAPE:
+                return SCREEN_ORIENTATION_SENSOR_PORTRAIT;
+            case SCREEN_ORIENTATION_SENSOR_PORTRAIT:
+                return SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+            case SCREEN_ORIENTATION_REVERSE_LANDSCAPE:
+                return SCREEN_ORIENTATION_REVERSE_PORTRAIT;
+            case SCREEN_ORIENTATION_REVERSE_PORTRAIT:
+                return SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
+            case SCREEN_ORIENTATION_USER_LANDSCAPE:
+                return SCREEN_ORIENTATION_USER_PORTRAIT;
+            case SCREEN_ORIENTATION_USER_PORTRAIT:
+                return SCREEN_ORIENTATION_USER_LANDSCAPE;
+            default:
+                return orientation;
+        }
     }
 
     /**
@@ -1381,6 +1420,13 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     public static final class WindowLayout {
         public WindowLayout(int width, float widthFraction, int height, float heightFraction,
                 int gravity, int minWidth, int minHeight) {
+            this(width, widthFraction, height, heightFraction, gravity, minWidth, minHeight,
+                    null /* windowLayoutAffinity */);
+        }
+
+        /** @hide */
+        public WindowLayout(int width, float widthFraction, int height, float heightFraction,
+                int gravity, int minWidth, int minHeight, String windowLayoutAffinity) {
             this.width = width;
             this.widthFraction = widthFraction;
             this.height = height;
@@ -1388,6 +1434,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
             this.gravity = gravity;
             this.minWidth = minWidth;
             this.minHeight = minHeight;
+            this.windowLayoutAffinity = windowLayoutAffinity;
         }
 
         /** @hide */
@@ -1468,6 +1515,8 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
         /**
          * Affinity of window layout parameters. Activities with the same UID and window layout
          * affinity will share the same window dimension record.
+         *
+         * @attr ref android.R.styleable#AndroidManifestLayout_windowLayoutAffinity
          * @hide
          */
         public String windowLayoutAffinity;

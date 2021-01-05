@@ -169,7 +169,7 @@ public final class AutofillManagerService
                 // beneath it is brought back to top. Ideally, we should just hide the UI and
                 // bring it back when the activity resumes.
                 synchronized (mLock) {
-                    visitServicesLocked((s) -> s.destroyFinishedSessionsLocked());
+                    visitServicesLocked((s) -> s.forceRemoveFinishedSessionsLocked());
                 }
                 mUi.hideAll(null);
             }
@@ -359,11 +359,11 @@ public final class AutofillManagerService
 
     @Override // from SystemService
     public boolean isUserSupported(TargetUser user) {
-        return user.getUserInfo().isFull() || user.getUserInfo().isManagedProfile();
+        return user.isFull() || user.isManagedProfile();
     }
 
     @Override // from SystemService
-    public void onSwitchUser(int userHandle) {
+    public void onUserSwitching(@Nullable TargetUser from, @NonNull TargetUser to) {
         if (sDebug) Slog.d(TAG, "Hiding UI when user switched");
         mUi.hideAll(null);
     }
@@ -385,18 +385,18 @@ public final class AutofillManagerService
     }
 
     // Called by Shell command.
-    void destroySessions(@UserIdInt int userId, IResultReceiver receiver) {
-        Slog.i(TAG, "destroySessions() for userId " + userId);
+    void removeAllSessions(@UserIdInt int userId, IResultReceiver receiver) {
+        Slog.i(TAG, "removeAllSessions() for userId " + userId);
         enforceCallingPermissionForManagement();
 
         synchronized (mLock) {
             if (userId != UserHandle.USER_ALL) {
                 AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
                 if (service != null) {
-                    service.destroySessionsLocked();
+                    service.forceRemoveAllSessionsLocked();
                 }
             } else {
-                visitServicesLocked((s) -> s.destroySessionsLocked());
+                visitServicesLocked((s) -> s.forceRemoveAllSessionsLocked());
             }
         }
 

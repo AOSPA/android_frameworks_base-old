@@ -260,6 +260,13 @@ public abstract class DisplayManagerInternal {
             int displayId, long maxFrames, long timestamp);
 
     /**
+     * Temporarily ignore proximity-sensor-based display behavior until there is a change
+     * to the proximity sensor state. This allows the display to turn back on even if something
+     * is obstructing the proximity sensor.
+     */
+    public abstract void ignoreProximitySensorUntilChanged();
+
+    /**
      * Describes the requested power state of the display.
      *
      * This object is intended to describe the general characteristics of the
@@ -365,7 +372,7 @@ public abstract class DisplayManagerInternal {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             return o instanceof DisplayPowerRequest
                     && equals((DisplayPowerRequest)o);
         }

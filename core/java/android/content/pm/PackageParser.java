@@ -30,7 +30,6 @@ import static android.content.pm.ApplicationInfo.FLAG_SUSPENDED;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE;
-import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_MANIFEST;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_PACKAGE_NAME;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
@@ -88,7 +87,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TypedValue;
 import android.util.apk.ApkSignatureVerifier;
-import android.view.Display;
 import android.view.Gravity;
 
 import com.android.internal.R;
@@ -143,8 +141,14 @@ import java.util.UUID;
  * <li>All installations must contain a single base APK.
  * </ul>
  *
+ * @deprecated This class is mostly unused and no new changes should be added to it. Use
+ * {@link android.content.pm.parsing.ParsingPackageUtils} and related parsing v2 infrastructure in
+ * the core/services parsing subpackages. Or for a quick parse of a provided APK, use
+ * {@link PackageManager#getPackageArchiveInfo(String, int)}.
+ *
  * @hide
  */
+@Deprecated
 public class PackageParser {
 
     public static final boolean DEBUG_JAR = false;
@@ -160,8 +164,6 @@ public class PackageParser {
             SystemProperties.getBoolean(PROPERTY_CHILD_PACKAGES_ENABLED, false);
 
     public static final float DEFAULT_PRE_O_MAX_ASPECT_RATIO = 1.86f;
-    public static final float DEFAULT_PRE_Q_MIN_ASPECT_RATIO = 1.333f;
-    public static final float DEFAULT_PRE_Q_MIN_ASPECT_RATIO_WATCH = 1f;
 
     private static final int DEFAULT_MIN_SDK_VERSION = 1;
     private static final int DEFAULT_TARGET_SDK_VERSION = 0;
@@ -292,7 +294,7 @@ public class PackageParser {
     public String[] mSeparateProcesses;
     private boolean mOnlyCoreApps;
     private DisplayMetrics mMetrics;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public Callback mCallback;
     private File mCacheDir;
 
@@ -917,7 +919,7 @@ public class PackageParser {
      * Automatically detects if the package is a monolithic style (single APK
      * file) or cluster style (directory of APKs).
      * <p>
-     * This performs sanity checking on cluster style packages, such as
+     * This performs checking on cluster style packages, such as
      * requiring identical package name and version codes, a single base APK,
      * and unique split names.
      *
@@ -1038,7 +1040,7 @@ public class PackageParser {
      * package is a monolithic style (single APK file) or cluster style
      * (directory of APKs).
      * <p>
-     * This performs sanity checking on cluster style packages, such as
+     * This performs checking on cluster style packages, such as
      * requiring identical package name and version codes, a single base APK,
      * and unique split names.
      * <p>
@@ -1072,7 +1074,7 @@ public class PackageParser {
 
     /**
      * Parse all APKs contained in the given directory, treating them as a
-     * single package. This also performs sanity checking, such as requiring
+     * single package. This also performs checking, such as requiring
      * identical package name and version codes, a single base APK, and unique
      * split names.
      * <p>
@@ -1368,7 +1370,7 @@ public class PackageParser {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private static void collectCertificates(Package pkg, File apkFile, boolean skipVerify)
             throws PackageParserException {
         final String apkPath = apkFile.getAbsolutePath();
@@ -4684,20 +4686,8 @@ public class PackageParser {
      * ratio set.
      */
     private void setMinAspectRatio(Package owner) {
-        final float minAspectRatio;
-        if (owner.applicationInfo.minAspectRatio != 0) {
-            // Use the application max aspect ration as default if set.
-            minAspectRatio = owner.applicationInfo.minAspectRatio;
-        } else {
-            // Default to (1.33) 4:3 aspect ratio for pre-Q apps and unset for Q and greater.
-            // NOTE: 4:3 was the min aspect ratio Android devices can support pre-Q per the CDD,
-            // except for watches which always supported 1:1.
-            minAspectRatio = owner.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q
-                    ? 0
-                    : (mCallback != null && mCallback.hasFeature(FEATURE_WATCH))
-                            ? DEFAULT_PRE_Q_MIN_ASPECT_RATIO_WATCH
-                            : DEFAULT_PRE_Q_MIN_ASPECT_RATIO;
-        }
+        // Use the application max aspect ration as default if set.
+        final float minAspectRatio = owner.applicationInfo.minAspectRatio;
 
         for (Activity activity : owner.activities) {
             if (activity.hasMinAspectRatio()) {
@@ -6489,7 +6479,7 @@ public class PackageParser {
         };
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (!(o instanceof SigningDetails)) return false;
 
@@ -6555,7 +6545,7 @@ public class PackageParser {
             }
 
             /** set the signing certificates by which the APK proved it can be authenticated */
-            @UnsupportedAppUsage
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
             public Builder setPastSigningCertificates(Signature[] pastSigningCertificates) {
                 mPastSigningCertificates = pastSigningCertificates;
                 return this;
@@ -6769,9 +6759,9 @@ public class PackageParser {
         /**
          * Data used to feed the KeySetManagerService
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public ArraySet<String> mUpgradeKeySets;
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public ArrayMap<String, ArraySet<PublicKey>> mKeySetMapping;
 
         /**
@@ -8536,7 +8526,7 @@ public class PackageParser {
                 null,
                 androidAppInfo.resourceDirs,
                 androidAppInfo.sharedLibraryFiles,
-                Display.DEFAULT_DISPLAY,
+                null,
                 null,
                 systemResources.getCompatibilityInfo(),
                 systemResources.getClassLoader(),

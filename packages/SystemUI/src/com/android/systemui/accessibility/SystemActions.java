@@ -51,18 +51,18 @@ import com.android.internal.accessibility.dialog.AccessibilityButtonChooserActiv
 import com.android.internal.util.ScreenshotHelper;
 import com.android.systemui.Dependency;
 import com.android.systemui.SystemUI;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.statusbar.phone.StatusBar;
 
 import java.util.Locale;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Class to register system actions with accessibility framework.
  */
-@Singleton
+@SysUISingleton
 public class SystemActions extends SystemUI {
     private static final String TAG = "SystemActions";
 
@@ -130,8 +130,6 @@ public class SystemActions extends SystemUI {
 
     private static final String PERMISSION_SELF = "com.android.systemui.permission.SELF";
 
-    private Recents mRecents;
-    private StatusBar mStatusBar;
     private SystemActionsBroadcastReceiver mReceiver;
     private Locale mLocale;
     private AccessibilityManager mA11yManager;
@@ -139,8 +137,6 @@ public class SystemActions extends SystemUI {
     @Inject
     public SystemActions(Context context) {
         super(context);
-        mRecents = Dependency.get(Recents.class);
-        mStatusBar = Dependency.get(StatusBar.class);
         mReceiver = new SystemActionsBroadcastReceiver();
         mLocale = mContext.getResources().getConfiguration().getLocales().get(0);
         mA11yManager = (AccessibilityManager) mContext.getSystemService(
@@ -317,15 +313,15 @@ public class SystemActions extends SystemUI {
     }
 
     private void handleRecents() {
-        mRecents.toggleRecentApps();
+        Dependency.get(Recents.class).toggleRecentApps();
     }
 
     private void handleNotifications() {
-        mStatusBar.animateExpandNotificationsPanel();
+        Dependency.get(StatusBar.class).animateExpandNotificationsPanel();
     }
 
     private void handleQuickSettings() {
-        mStatusBar.animateExpandSettingsPanel(null);
+        Dependency.get(StatusBar.class).animateExpandSettingsPanel(null);
     }
 
     private void handlePowerDialog() {

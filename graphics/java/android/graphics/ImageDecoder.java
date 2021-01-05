@@ -27,7 +27,6 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.Px;
-import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.WorkerThread;
 import android.content.ContentResolver;
@@ -301,7 +300,7 @@ public final class ImageDecoder implements AutoCloseable {
 
         ImageDecoder decoder = null;
         try {
-            decoder = nCreate(fd, preferAnimation, source);
+            decoder = nCreate(fd, AssetFileDescriptor.UNKNOWN_LENGTH, preferAnimation, source);
         } finally {
             if (decoder == null) {
                 IoUtils.closeQuietly(stream);
@@ -349,7 +348,7 @@ public final class ImageDecoder implements AutoCloseable {
         try {
             try {
                 Os.lseek(fd, offset, SEEK_SET);
-                decoder = nCreate(fd, preferAnimation, source);
+                decoder = nCreate(fd, assetFd.getDeclaredLength(), preferAnimation, source);
             } catch (ErrnoException e) {
                 decoder = createFromStream(new FileInputStream(fd), true, preferAnimation, source);
             }
@@ -916,12 +915,8 @@ public final class ImageDecoder implements AutoCloseable {
     /**
      * Provide Resources for density scaling.
      *
-     * This is a SystemApi to enable legacy behavior, so there is no need to
-     * make it public like the version above, which does not have a Resources
-     * parameter.
      * @hide
      */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     @AnyThread
     @NonNull
     public static Source createSource(@NonNull ContentResolver cr,
@@ -2008,7 +2003,7 @@ public final class ImageDecoder implements AutoCloseable {
     private static native ImageDecoder nCreate(InputStream is, byte[] storage,
             boolean preferAnimation, Source src) throws IOException;
     // The fd must be seekable.
-    private static native ImageDecoder nCreate(FileDescriptor fd,
+    private static native ImageDecoder nCreate(FileDescriptor fd, long length,
             boolean preferAnimation, Source src) throws IOException;
     @NonNull
     private static native Bitmap nDecodeBitmap(long nativePtr,

@@ -23,7 +23,6 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.StringDef;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
 import android.annotation.WorkerThread;
 import android.os.Binder;
 import android.os.RemoteException;
@@ -59,7 +58,6 @@ import java.util.concurrent.Executor;
  * @hide
  */
 @SystemApi
-@TestApi
 public class ProvisioningManager {
 
     /**@hide*/
@@ -851,6 +849,19 @@ public class ProvisioningManager {
     public static final int KEY_RTT_ENABLED = 66;
 
     /**
+     * An obfuscated string defined by the carrier to indicate VoWiFi entitlement status.
+     *
+     * <p>Implementation note: how to generate the value and how it affects VoWiFi service
+     * should follow carrier requirements. For example, set an empty string could result in
+     * VoWiFi being disabled by IMS service, and set to a specific string could enable.
+     *
+     * <p>Value is in String format.
+     * @see #setProvisioningStringValue(int, String)
+     * @see #getProvisioningStringValue(int)
+     */
+    public static final int KEY_VOICE_OVER_WIFI_ENTITLEMENT_ID = 67;
+
+    /**
      * Callback for IMS provisioning changes.
      */
     public static class Callback {
@@ -866,7 +877,7 @@ public class ProvisioningManager {
 
             @Override
             public final void onIntConfigChanged(int item, int value) {
-                long callingIdentity = Binder.clearCallingIdentity();
+                final long callingIdentity = Binder.clearCallingIdentity();
                 try {
                     mExecutor.execute(() ->
                             mLocalConfigurationCallback.onProvisioningIntChanged(item, value));
@@ -877,7 +888,7 @@ public class ProvisioningManager {
 
             @Override
             public final void onStringConfigChanged(int item, String value) {
-                long callingIdentity = Binder.clearCallingIdentity();
+                final long callingIdentity = Binder.clearCallingIdentity();
                 try {
                     mExecutor.execute(() ->
                             mLocalConfigurationCallback.onProvisioningStringChanged(item, value));

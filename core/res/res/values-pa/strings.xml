@@ -432,13 +432,17 @@
     <string name="permlab_modifyAudioSettings" msgid="6129039778010031815">"ਆਪਣੀਆਂ ਆਡੀਓ ਸੈਟਿੰਗਾਂ ਬਦਲੋ"</string>
     <string name="permdesc_modifyAudioSettings" msgid="8687227609663124921">"ਐਪ ਨੂੰ ਗਲੋਬਲ ਆਡੀਓ ਸੈਟਿੰਗਾਂ ਸੰਸ਼ੋਧਿਤ ਕਰਨ ਦੀ ਆਗਿਆ ਦਿੰਦਾ ਹੈ ਜਿਵੇਂ ਅਵਾਜ਼ ਅਤੇ ਆਊਟਪੁਟ ਲਈ ਕਿਹੜਾ ਸਪੀਕਰ ਵਰਤਿਆ ਜਾਂਦਾ ਹੈ।"</string>
     <string name="permlab_recordAudio" msgid="1208457423054219147">" ਆਡੀਓ  ਰਿਕਾਰਡ ਕਰਨ"</string>
-    <string name="permdesc_recordAudio" msgid="3976213377904701093">"ਇਹ ਐਪ ਕਿਸੇ ਵੀ ਸਮੇਂ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਦੀ ਵਰਤੋਂ ਕਰਕੇ  ਆਡੀਓ  ਫ਼ਾਈਲ ਰਿਕਾਰਡ ਕਰ ਸਕਦੀ ਹੈ।"</string>
+    <string name="permdesc_recordAudio" msgid="5857246765327514062">"ਇਹ ਐਪ ਵਰਤੋਂ ਵਿੱਚ ਹੋਣ ਵੇਲੇ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਨੂੰ ਵਰਤ ਕੇ ਆਡੀਓ ਰਿਕਾਰਡ ਕਰ ਸਕਦੀ ਹੈ।"</string>
+    <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਆਡੀਓ ਰਿਕਾਰਡ ਕਰੋ"</string>
+    <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"ਇਹ ਐਪ ਕਿਸੇ ਵੇਲੇ ਵੀ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਨੂੰ ਵਰਤ ਕੇ ਆਡੀਓ ਰਿਕਾਰਡ ਕਰ ਸਕਦੀ ਹੈ।"</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"SIM ਨੂੰ ਕਮਾਂਡਾਂ ਭੇਜੋ"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"ਐਪ ਨੂੰ SIM ਨੂੰ ਕਮਾਂਡਾਂ ਭੇਜਣ ਦੀ ਆਗਿਆ ਦਿੰਦਾ ਹੈ। ਇਹ ਬਹੁਤ ਘਾਤਕ ਹੈ।"</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"ਸਰੀਰਕ ਸਰਗਰਮੀ ਨੂੰ ਪਛਾਣਨਾ"</string>
     <string name="permdesc_activityRecognition" msgid="8667484762991357519">"ਇਹ ਐਪ ਤੁਹਾਡੀ ਸਰੀਰਕ ਸਰਗਰਮੀ ਨੂੰ ਪਛਾਣ ਸਕਦੀ ਹੈ।"</string>
     <string name="permlab_camera" msgid="6320282492904119413">"ਤਸਵੀਰਾਂ ਅਤੇ ਵੀਡੀਓ ਬਣਾਓ"</string>
-    <string name="permdesc_camera" msgid="1354600178048761499">"ਇਹ ਐਪ ਕਿਸੇ ਵੀ ਸਮੇਂ ਕੈਮਰੇ ਨੂੰ ਵਰਤ ਕੇ ਤਸਵੀਰਾਂ ਖਿੱਚ ਸਕਦੀ ਹੈ ਅਤੇ ਵੀਡੀਓ ਫ਼ਾਈਲਾਂ ਰਿਕਾਰਡ ਕਰ ਸਕਦੀ ਹੈ।"</string>
+    <string name="permdesc_camera" msgid="5240801376168647151">"ਇਹ ਐਪ ਵਰਤੋਂ ਵਿੱਚ ਹੋਣ ਵੇਲੇ ਕੈਮਰੇ ਨੂੰ ਵਰਤ ਕੇ ਤਸਵੀਰਾਂ ਖਿੱਚ ਸਕਦੀ ਹੈ ਅਤੇ ਵੀਡੀਓ ਰਿਕਾਰਡ ਕਰ ਸਕਦੀ ਹੈ।"</string>
+    <string name="permlab_backgroundCamera" msgid="7549917926079731681">"ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਤਸਵੀਰਾਂ ਖਿੱਚੋ ਅਤੇ ਵੀਡੀਓ ਰਿਕਾਰਡ ਕਰੋ"</string>
+    <string name="permdesc_backgroundCamera" msgid="1615291686191138250">"ਇਹ ਐਪ ਕਿਸੇ ਵੇਲੇ ਵੀ ਕੈਮਰੇ ਨੂੰ ਵਰਤ ਕੇ ਤਸਵੀਰਾਂ ਖਿੱਚ ਸਕਦੀ ਹੈ ਅਤੇ ਵੀਡੀਓ ਰਿਕਾਰਡ ਕਰ ਸਕਦੀ ਹੈ।"</string>
     <string name="permlab_systemCamera" msgid="3642917457796210580">"ਸਿਸਟਮ ਕੈਮਰੇ ਨੂੰ ਤਸਵੀਰਾਂ ਅਤੇ ਵੀਡੀਓ ਬਣਾਉਣ ਲਈ ਐਪਲੀਕੇਸ਼ਨ ਜਾਂ ਸੇਵਾ ਤੱਕ ਪਹੁੰਚ ਦਿਓ"</string>
     <string name="permdesc_systemCamera" msgid="5938360914419175986">"ਇਹ ਵਿਸ਼ੇਸ਼ ਅਧਿਕ੍ਰਿਤ ਜਾਂ ਸਿਸਟਮ ਐਪ ਕਿਸੇ ਵੇਲੇ ਵੀ ਸਿਸਟਮ ਕੈਮਰੇ ਨੂੰ ਵਰਤ ਕੇ ਤਸਵੀਰਾਂ ਖਿੱਚ ਸਕਦੀ ਹੈ ਅਤੇ ਵੀਡੀਓ ਫ਼ਾਈਲਾਂ ਰਿਕਾਰਡ ਕਰ ਸਕਦੀ ਹੈ। ਐਪ ਨੂੰ ਵੀ android.permission.CAMERA ਇਜਾਜ਼ਤ ਦੀ ਲੋੜ ਹੈ"</string>
     <string name="permlab_cameraOpenCloseListener" msgid="5548732769068109315">"ਐਪਲੀਕੇਸ਼ਨ ਜਾਂ ਸੇਵਾ ਨੂੰ ਕੈਮਰਾ ਡੀਵਾਈਸਾਂ ਦੇ ਚਾਲੂ ਜਾਂ ਬੰਦ ਕੀਤੇ ਜਾਣ ਬਾਰੇ ਕਾਲਬੈਕ ਪ੍ਰਾਪਤ ਕਰਨ ਦੀ ਇਜਾਜ਼ਤ ਦਿਓ।"</string>
@@ -832,8 +836,7 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"ਅਣਲਾਕ ਕਰਨ ਲਈ ਮੀਨੂ ਦਬਾਓ ਜਾਂ ਸੰਕਟਕਾਲੀਨ ਕਾਲ ਕਰੋ।"</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"ਅਣਲਾਕ ਕਰਨ ਲਈ ਮੀਨੂ ਦਬਾਓ।"</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"ਅਣਲਾਕ ਕਰਨ ਲਈ ਪੈਟਰਨ ਡ੍ਰਾ ਕਰੋ"</string>
-    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
-    <skip />
+    <string name="lockscreen_emergency_call" msgid="7549683825868928636">"ਸੰਕਟਕਾਲੀਨ ਕਾਲ"</string>
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"ਕਾਲ ਤੇ ਵਾਪਸ ਜਾਓ"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"ਸਹੀ!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ"</string>
@@ -900,7 +903,7 @@
     <string name="keyguard_accessibility_unlock_area_collapsed" msgid="4729922043778400434">"ਅਣਲਾਕ ਖੇਤਰ ਨਸ਼ਟ ਕੀਤਾ।"</string>
     <string name="keyguard_accessibility_widget" msgid="6776892679715699875">"<xliff:g id="WIDGET_INDEX">%1$s</xliff:g> ਵਿਜੇਟ।"</string>
     <string name="keyguard_accessibility_user_selector" msgid="1466067610235696600">"ਉਪਭੋਗਤਾ ਚੋਣਕਾਰ"</string>
-    <string name="keyguard_accessibility_status" msgid="6792745049712397237">"ਅਵਸਥਾ"</string>
+    <string name="keyguard_accessibility_status" msgid="6792745049712397237">"ਸਥਿਤੀ"</string>
     <string name="keyguard_accessibility_camera" msgid="7862557559464986528">"ਕੈਮਰਾ"</string>
     <string name="keygaurd_accessibility_media_controls" msgid="2267379779900620614">"ਮੀਡੀਆ ਨਿਯੰਤਰਣ"</string>
     <string name="keyguard_accessibility_widget_reorder_start" msgid="7066213328912939191">"ਵਿਜੇਟ ਨੂੰ ਪੁਨਰ ਤਰਤੀਬ ਦੇਣਾ ਸ਼ੁਰੂ ਹੋਇਆ।"</string>
@@ -1126,6 +1129,8 @@
     <string name="capital_off" msgid="7443704171014626777">"ਬੰਦ"</string>
     <string name="checked" msgid="9179896827054513119">"ਨਿਸ਼ਾਨਬੱਧ ਕੀਤਾ ਗਿਆ"</string>
     <string name="not_checked" msgid="7972320087569023342">"ਨਿਸ਼ਾਨਬੱਧ ਨਹੀਂ ਕੀਤਾ ਗਿਆ"</string>
+    <string name="selected" msgid="6614607926197755875">"ਚੁਣਿਆ ਗਿਆ"</string>
+    <string name="not_selected" msgid="410652016565864475">"ਨਹੀਂ ਚੁਣਿਆ ਗਿਆ"</string>
     <string name="whichApplication" msgid="5432266899591255759">"ਇਸਨੂੰ ਵਰਤਦੇ ਹੋਏ ਕਾਰਵਾਈ ਪੂਰੀ ਕਰੋ"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"%1$s ਵਰਤਦੇ ਹੋਏ ਕਾਰਵਾਈ ਪੂਰੀ ਕਰੋ"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"ਕਾਰਵਾਈ ਪੂਰੀ ਕਰੋ"</string>
@@ -1220,18 +1225,18 @@
     <string name="dump_heap_ready_text" msgid="5849618132123045516">"ਸਾਂਝਾ ਕਰਨ ਲਈ <xliff:g id="PROC">%1$s</xliff:g> ਦੀ ਪ੍ਰਕਿਰਿਆ ਦਾ ਹੀਪ ਡੰਪ ਤੁਹਾਡੇ ਲਈ ਉਪਲਬਧ ਹੈ। ਸਾਵਧਾਨ ਰਹੋ: ਸ਼ਾਇਦ ਇਸ ਹੀਪ ਡੰਪ ਵਿੱਚ ਕੋਈ ਵੀ ਸੰਵੇਦਨਸ਼ੀਲ ਨਿੱਜੀ ਜਾਣਕਾਰੀ ਸ਼ਾਮਲ ਹੋਵੇ, ਜਿਸ \'ਤੇ ਪ੍ਰਕਿਰਿਆ ਦੀ ਪਹੁੰਚ ਹੈ, ਜਿਸ ਵਿੱਚ ਸ਼ਾਇਦ ਤੁਹਾਡੇ ਵੱਲੋਂ ਟਾਈਪ ਕੀਤੀਆਂ ਚੀਜ਼ਾਂ ਸ਼ਾਮਲ ਹੋਣ।"</string>
     <string name="sendText" msgid="493003724401350724">"ਲਿਖਤ ਲਈ ਕੋਈ ਕਾਰਵਾਈ ਚੁਣੋ"</string>
     <string name="volume_ringtone" msgid="134784084629229029">"ਰਿੰਗਰ ਵੌਲਿਊਮ"</string>
-    <string name="volume_music" msgid="7727274216734955095">"ਮੀਡੀਆ ਵੌਲਿਊਮ"</string>
+    <string name="volume_music" msgid="7727274216734955095">"ਮੀਡੀਆ ਦੀ ਅਵਾਜ਼"</string>
     <string name="volume_music_hint_playing_through_bluetooth" msgid="2614142915948898228">"Bluetooth ਰਾਹੀਂ ਪਲੇ ਕਰ ਰਿਹਾ ਹੈ"</string>
     <string name="volume_music_hint_silent_ringtone_selected" msgid="1514829655029062233">"ਖਾਮੋਸ਼ ਰਿੰਗਟੋਨ ਸੈੱਟ ਕੀਤੀ"</string>
     <string name="volume_call" msgid="7625321655265747433">"ਇਨ-ਕਾਲ ਅਵਾਜ਼"</string>
     <string name="volume_bluetooth_call" msgid="2930204618610115061">"ਬਲੂਟੁੱਥ ਇਨ-ਕਾਲ ਅਵਾਜ਼"</string>
-    <string name="volume_alarm" msgid="4486241060751798448">"ਅਲਾਰਮ ਵੌਲਿਊਮ"</string>
+    <string name="volume_alarm" msgid="4486241060751798448">"ਅਲਾਰਮ ਦੀ ਅਵਾਜ਼"</string>
     <string name="volume_notification" msgid="6864412249031660057">"ਸੂਚਨਾ ਵੌਲਿਊਮ"</string>
     <string name="volume_unknown" msgid="4041914008166576293">"ਵੌਲਿਊਮ"</string>
     <string name="volume_icon_description_bluetooth" msgid="7540388479345558400">"Bluetooth ਵੌਲਿਊਮ"</string>
     <string name="volume_icon_description_ringer" msgid="2187800636867423459">"ਰਿੰਗਟੋਨ ਵੌਲਿਊਮ"</string>
     <string name="volume_icon_description_incall" msgid="4491255105381227919">"ਕਾਲ ਅਵਾਜ਼"</string>
-    <string name="volume_icon_description_media" msgid="4997633254078171233">"ਮੀਡੀਆ ਵੌਲਿਊਮ"</string>
+    <string name="volume_icon_description_media" msgid="4997633254078171233">"ਮੀਡੀਆ ਦੀ ਅਵਾਜ਼"</string>
     <string name="volume_icon_description_notification" msgid="579091344110747279">"ਸੂਚਨਾ ਵੌਲਿਊਮ"</string>
     <string name="ringtone_default" msgid="9118299121288174597">"ਪੂਰਵ-ਨਿਰਧਾਰਤ ਰਿੰਗਟੋਨ"</string>
     <string name="ringtone_default_with_actual" msgid="2709686194556159773">"ਪੂਰਵ-ਨਿਰਧਾਰਤ (<xliff:g id="ACTUAL_RINGTONE">%1$s</xliff:g>)"</string>
@@ -1623,10 +1628,10 @@
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"ਕੀ ਵੌਲਿਊਮ  ਸਿਫ਼ਾਰਸ਼  ਕੀਤੇ ਪੱਧਰ ਤੋਂ ਵਧਾਉਣੀ ਹੈ?\n\nਲੰਮੇ ਸਮੇਂ ਤੱਕ ਉੱਚ ਵੌਲਿਊਮ ਤੇ ਸੁਣਨ ਨਾਲ ਤੁਹਾਡੀ ਸੁਣਨ ਸ਼ਕਤੀ ਨੂੰ ਨੁਕਸਾਨ ਪਹੁੰਚ ਸਕਦਾ ਹੈ।"</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"ਕੀ ਪਹੁੰਚਯੋਗਤਾ ਸ਼ਾਰਟਕੱਟ ਵਰਤਣਾ ਹੈ?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"ਸ਼ਾਰਟਕੱਟ ਚਾਲੂ ਹੋਣ \'ਤੇ, ਕਿਸੇ ਪਹੁੰਚਯੋਗਤਾ ਵਿਸ਼ੇਸ਼ਤਾ ਨੂੰ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਦੋਵੇਂ ਅਵਾਜ਼ ਬਟਨਾਂ ਨੂੰ 3 ਸਕਿੰਟ ਲਈ ਦਬਾ ਕੇ ਰੱਖੋ।"</string>
-    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"ਕੀ ਪਹੁੰਚਯੋਗਤਾ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨੂੰ ਚਾਲੂ ਕਰਨਾ ਹੈ?"</string>
+    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"ਕੀ ਪਹੁੰਚਯੋਗਤਾ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਲਈ ਸ਼ਾਰਟਕੱਟ ਚਾਲੂ ਕਰਨਾ ਹੈ?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"ਕੁਝ ਸਕਿੰਟਾਂ ਲਈ ਦੋਵੇਂ ਅਵਾਜ਼ੀ ਕੁੰਜੀਆਂ ਨੂੰ ਦਬਾਈ ਰੱਖਣਾ, ਪਹੁੰਚਯੋਗਤਾ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨੂੰ ਚਾਲੂ ਕਰ ਦਿੰਦਾ ਹੈ। ਇਹ ਤੁਹਾਡੇ ਡੀਵਾਈਸ ਦੇ ਕੰਮ ਕਰਨ ਦੇ ਤਰੀਕੇ ਨੂੰ ਬਦਲ ਸਕਦਾ ਹੈ।\n\nਮੌਜੂਦਾ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nਸੈਟਿੰਗਾਂ ਅਤੇ ਪਹੁੰਚਯੋਗਤਾ ਵਿੱਚ ਤੁਸੀਂ ਚੁਣੀਆਂ ਗਈਆਂ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨੂੰ ਬਦਲ ਸਕਦੇ ਹੋ।"</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"ਕੀ <xliff:g id="SERVICE">%1$s</xliff:g> ਨੂੰ ਚਾਲੂ ਕਰਨਾ ਹੈ?"</string>
+    <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"ਕੀ <xliff:g id="SERVICE">%1$s</xliff:g> ਸ਼ਾਰਟਕੱਟ ਚਾਲੂ ਕਰਨਾ ਹੈ?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"ਕੁਝ ਸਕਿੰਟਾਂ ਲਈ ਦੋਵੇਂ ਅਵਾਜ਼ੀ ਕੁੰਜੀਆਂ ਨੂੰ ਦਬਾਈ ਰੱਖਣਾ <xliff:g id="SERVICE">%1$s</xliff:g>, ਇੱਕ ਪਹੁੰਚਯੋਗਤਾ ਵਿਸ਼ੇਸ਼ਤਾ ਨੂੰ ਚਾਲੂ ਕਰ ਦਿੰਦਾ ਹੈ। ਇਹ ਤੁਹਾਡੇ ਡੀਵਾਈਸ ਦੇ ਕੰਮ ਕਰਨ ਦੇ ਤਰੀਕੇ ਨੂੰ ਬਦਲ ਸਕਦਾ ਹੈ।\n\nਸੈਟਿੰਗਾਂ ਅਤੇ ਪਹੁੰਚਯੋਗਤਾ ਵਿੱਚ ਤੁਸੀਂ ਇਸ ਸ਼ਾਰਟਕੱਟ ਨੂੰ ਕਿਸੇ ਹੋਰ ਵਿਸ਼ੇਸ਼ਤਾ ਵਿੱਚ ਬਦਲ ਸਕਦੇ ਹੋ।"</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"ਚਾਲੂ ਕਰੋ"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"ਚਾਲੂ ਨਾ ਕਰੋ"</string>
@@ -1830,6 +1835,7 @@
       <item quantity="one">%d ਘੰਟਿਆਂ ਲਈ</item>
       <item quantity="other">%d ਘੰਟਿਆਂ ਲਈ</item>
     </plurals>
+    <string name="zen_mode_until_next_day" msgid="1403042784161725038">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> ਤੱਕ"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> ਤੱਕ"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> ਤੱਕ (ਅਗਲਾ ਅਲਾਰਮ)"</string>
     <string name="zen_mode_forever" msgid="740585666364912448">"ਜਦੋਂ ਤੱਕ ਤੁਸੀਂ ਬੰਦ ਨਹੀਂ ਕਰਦੇ ਹੋ"</string>

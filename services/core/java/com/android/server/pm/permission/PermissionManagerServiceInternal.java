@@ -24,10 +24,12 @@ import android.content.pm.PackageManager;
 import android.content.pm.PermissionInfo;
 import android.permission.PermissionManagerInternal;
 
+import com.android.server.pm.PackageSetting;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -35,8 +37,8 @@ import java.util.function.Consumer;
  *
  * TODO: Should be merged into PermissionManagerInternal, but currently uses internal classes.
  */
-public abstract class PermissionManagerServiceInternal extends PermissionManagerInternal {
-
+public abstract class PermissionManagerServiceInternal extends PermissionManagerInternal
+        implements LegacyPermissionDataProvider {
     /**
      * Provider for package names.
      */
@@ -177,22 +179,52 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
 
     public abstract void systemReady();
 
-    public abstract boolean isPermissionsReviewRequired(@NonNull AndroidPackage pkg,
+    /**
+     * Get whether permission review is required for a package.
+     *
+     * @param packageName the name of the package
+     * @param userId the user ID
+     * @return whether permission review is required
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    public abstract boolean isPermissionsReviewRequired(@NonNull String packageName,
             @UserIdInt int userId);
 
-    public abstract void grantRequestedRuntimePermissions(
-            @NonNull AndroidPackage pkg, @NonNull int[] userIds,
-            @NonNull String[] grantedPermissions, int callingUid);
-    public abstract void setWhitelistedRestrictedPermissions(
-            @NonNull AndroidPackage pkg, @NonNull int[] userIds,
-            @NonNull List<String> permissions, int callingUid,
-            @PackageManager.PermissionWhitelistFlags int whitelistFlags);
-    /** Sets the whitelisted, restricted permissions for the given package. */
-    public abstract void setWhitelistedRestrictedPermissions(
-            @NonNull String packageName, @NonNull List<String> permissions,
-            @PackageManager.PermissionWhitelistFlags int flags, int userId);
-    public abstract void setAutoRevokeWhitelisted(
-            @NonNull String packageName, boolean whitelisted, int userId);
+    /**
+     * Grant the requested runtime permissions for a package, or an explicit subset of them.
+     *
+     * @param pkg the package
+     * @param permissions the names of the subset of permissions to be granted, or {@code null} for
+     *                    granting all the requested permissions
+     * @param userIds the user IDs
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    public abstract void grantRequestedRuntimePermissions(@NonNull AndroidPackage pkg,
+            @Nullable List<String> permissions, @NonNull int[] userIds);
+
+    /**
+     * Set the allowlisted restricted permissions for a package, or an explicit subset of them.
+     *
+     * @param pkg the package
+     * @param permissions the names of the subset of permissions to be allowlisted, or {@code null}
+     *                    for allowlisting all the requested restricted permissions
+     * @param userIds the user IDs
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    public abstract void setAllowlistedRestrictedPermissions(
+            @NonNull AndroidPackage pkg, @Nullable List<String> permissions,
+            @PackageManager.PermissionWhitelistFlags int allowlistFlags, @NonNull int[] userIds);
+
+    /**
+     * Set whether a package is exempted from auto revoke.
+     *
+     * @param pkg the package
+     * @param exempted whether the package is exempted from auto revoke
+     * @param userIds the user IDs
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    public abstract void setAutoRevokeExempted(@NonNull AndroidPackage pkg, boolean exempted,
+            @NonNull int[] userIds);
 
     /**
      * Update permissions when a package changed.
@@ -225,19 +257,24 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
     public abstract void updateAllPermissions(@Nullable String volumeUuid, boolean sdkUpdate);
 
     /**
-     * Resets any user permission state changes (eg. permissions and flags) of all
-     * packages installed for the given user.
+     * Reset the runtime permission state changes for a package.
      *
-     * @see #resetRuntimePermissions(AndroidPackage, int)
+     * TODO(zhanghai): Turn this into package change callback?
+     *
+     * @param pkg the package
+     * @param userId the user ID
      */
-    public abstract void resetAllRuntimePermissions(@UserIdInt int userId);
-
-    /**
-     * Resets any user permission state changes (eg. permissions and flags) of the
-     * specified package for the given user.
-     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
     public abstract void resetRuntimePermissions(@NonNull AndroidPackage pkg,
             @UserIdInt int userId);
+
+    /**
+     * Reset the runtime permission state changes for all packages.
+     *
+     * @param userId the user ID
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    public abstract void resetAllRuntimePermissions(@UserIdInt int userId);
 
     /**
      * We might auto-grant permissions if any permission of the group is already granted. Hence if
@@ -254,18 +291,107 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
             @NonNull ArrayList<String> allPackageNames);
 
     /**
+     * Some permissions might have been owned by a non-system package, and the system then defined
+     * said permission. Some other permissions may one have been install permissions, but are now
+     * runtime or higher. These permissions should be revoked.
+     *
+     * @param permissionsToRevoke A list of permission names to revoke
+     * @param allPackageNames All packages
+     */
+    public abstract void revokeRuntimePermissionsIfPermissionDefinitionChanged(
+            @NonNull List<String> permissionsToRevoke,
+            @NonNull ArrayList<String> allPackageNames);
+
+    /**
      * Add all permissions in the given package.
      * <p>
      * NOTE: argument {@code groupTEMP} is temporary until mPermissionGroups is moved to
      * the permission settings.
+     *
+     * @return A list of BasePermissions that were updated, and need to be revoked from packages
      */
-    public abstract void addAllPermissions(@NonNull AndroidPackage pkg, boolean chatty);
+    public abstract List<String> addAllPermissions(@NonNull AndroidPackage pkg, boolean chatty);
     public abstract void addAllPermissionGroups(@NonNull AndroidPackage pkg, boolean chatty);
     public abstract void removeAllPermissions(@NonNull AndroidPackage pkg, boolean chatty);
 
-    /** Retrieve the packages that have requested the given app op permission */
-    public abstract @Nullable String[] getAppOpPermissionPackages(
-            @NonNull String permName, int callingUid);
+    /**
+     * Read legacy permission state from package settings.
+     *
+     * TODO(zhanghai): This is a temporary method because we should not expose
+     * {@code PackageSetting} which is a implementation detail that permission should not know.
+     * Instead, it should retrieve the legacy state via a defined API.
+     */
+    public abstract void readLegacyPermissionStateTEMP();
+
+    /**
+     * Write legacy permission state to package settings.
+     *
+     * TODO(zhanghai): This is a temporary method and should be removed once we migrated persistence
+     * for permission.
+     */
+    public abstract void writeLegacyPermissionStateTEMP();
+
+    /**
+     * Notify that a user has been removed and its permission state should be removed as well.
+     */
+    public abstract void onUserRemoved(@UserIdInt int userId);
+
+    /**
+     * Remove the permission state associated with an app ID, called the same time as the
+     * removal of a {@code PackageSetitng}.
+     *
+     * TODO(zhanghai): This is a temporary method before we figure out a way to get notified of app
+     * ID removal via API.
+     */
+    public abstract void removeAppIdStateTEMP(@AppIdInt int appId);
+
+    /**
+     * Update the shared user setting when a package with a shared user id is removed. The gids
+     * associated with each permission of the deleted package are removed from the shared user'
+     * gid list only if its not in use by other permissions of packages in the shared user setting.
+     *
+     * TODO(zhanghai): We should not need this when permission no longer sees an incomplete package
+     * state where the updated system package is uninstalled but the disabled system package is yet
+     * to be installed. Then we should handle this in restorePermissionState().
+     *
+     * @return the affected user id, may be a real user ID, USER_ALL, or USER_NULL when none.
+     */
+    @UserIdInt
+    public abstract int revokeSharedUserPermissionsForDeletedPackageTEMP(
+            @NonNull PackageSetting deletedPs, @UserIdInt int userId);
+
+    /**
+     * Get all the permissions granted to a package.
+     *
+     * @param packageName the name of the package
+     * @param userId the user ID
+     * @return the names of the granted permissions
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    @NonNull
+    public abstract Set<String> getGrantedPermissions(@NonNull String packageName,
+            @UserIdInt int userId);
+
+    /**
+     * Get the GIDs of a permission.
+     *
+     * @param permissionName the name of the permission
+     * @param userId the user ID
+     * @return the GIDs of the permission
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    @NonNull
+    public abstract int[] getPermissionGids(@NonNull String permissionName, @UserIdInt int userId);
+
+    /**
+     * Get the packages that have requested an app op permission.
+     *
+     * @param permissionName the name of the app op permission
+     * @return the names of the packages that have requested the app op permission
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    @NonNull
+    public abstract String[] getAppOpPermissionPackages(@NonNull String permissionName);
 
     /**
      * Enforces the request is from the system or an app that has INTERACT_ACROSS_USERS
@@ -292,16 +418,10 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
     public abstract void enforceCrossUserPermission(int callingUid, int userId,
             boolean requireFullPermission, boolean checkShell,
             boolean requirePermissionWhenSameUser, @NonNull String message);
-    public abstract void enforceGrantRevokeRuntimePermissionPermissions(@NonNull String message);
-
-    public abstract @NonNull PermissionSettings getPermissionSettings();
-
-    /** Grants default browser permissions to the given package */
-    public abstract void grantDefaultPermissionsToDefaultBrowser(
-            @NonNull String packageName, @UserIdInt int userId);
 
     /** HACK HACK methods to allow for partial migration of data to the PermissionManager class */
-    public abstract @Nullable BasePermission getPermissionTEMP(@NonNull String permName);
+    @Nullable
+    public abstract Permission getPermissionTEMP(@NonNull String permName);
 
     /** Get all permissions that have a certain protection */
     public abstract @NonNull ArrayList<PermissionInfo> getAllPermissionsWithProtection(
@@ -461,5 +581,39 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
      * Removes invalid permissions which are not {@link PermissionInfo#FLAG_HARD_RESTRICTED} or
      * {@link PermissionInfo#FLAG_SOFT_RESTRICTED} from the input.
      */
-    public abstract void retainHardAndSoftRestrictedPermissions(@NonNull List<String> permissions);
+    public abstract void retainHardAndSoftRestrictedPermissions(
+            @NonNull List<String> permissionNames);
+
+    /**
+     * Read legacy permissions from legacy permission settings.
+     *
+     * TODO(zhanghai): This is a temporary method because we should not expose
+     * {@code LegacyPermissionSettings} which is a implementation detail that permission should not
+     * know. Instead, it should retrieve the legacy permissions via a defined API.
+     */
+    public abstract void readLegacyPermissionsTEMP(
+            @NonNull LegacyPermissionSettings legacyPermissionSettings);
+
+    /**
+     * Write legacy permissions to legacy permission settings.
+     *
+     * TODO(zhanghai): This is a temporary method and should be removed once we migrated persistence
+     * for permission.
+     */
+    public abstract void writeLegacyPermissionsTEMP(
+            @NonNull LegacyPermissionSettings legacyPermissionSettings);
+
+    /**
+     * Transfers ownership of permissions from one package to another.
+     */
+    public abstract void transferPermissions(@NonNull String oldPackageName,
+            @NonNull String newPackageName);
+
+    /**
+     * Check whether a permission can be propagated to instant app.
+     *
+     * @param permissionName the name of the permission
+     * @return whether the permission can be propagated
+     */
+    public abstract boolean canPropagatePermissionToInstantApp(@NonNull String permissionName);
 }

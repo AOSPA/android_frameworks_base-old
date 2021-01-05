@@ -80,6 +80,7 @@
 #include <bionic/mte.h>
 #include <bionic/mte_kernel.h>
 #include <cutils/fs.h>
+#include <cutils/memory.h>
 #include <cutils/multiuser.h>
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
@@ -329,31 +330,15 @@ static std::array<UsapTableEntry, USAP_POOL_SIZE_MAX_LIMIT> gUsapTable;
 static FileDescriptorTable* gOpenFdTable = nullptr;
 
 // Must match values in com.android.internal.os.Zygote.
-// The order of entries here must be kept in sync with ExternalStorageViews array values.
+// Note that there are gaps in the constants:
+// This is to further keep the values consistent with IVold.aidl
 enum MountExternalKind {
-  MOUNT_EXTERNAL_NONE = 0,
-  MOUNT_EXTERNAL_DEFAULT = 1,
-  MOUNT_EXTERNAL_READ = 2,
-  MOUNT_EXTERNAL_WRITE = 3,
-  MOUNT_EXTERNAL_LEGACY = 4,
-  MOUNT_EXTERNAL_INSTALLER = 5,
-  MOUNT_EXTERNAL_FULL = 6,
-  MOUNT_EXTERNAL_PASS_THROUGH = 7,
-  MOUNT_EXTERNAL_ANDROID_WRITABLE = 8,
-  MOUNT_EXTERNAL_COUNT = 9
-};
-
-// The order of entries here must be kept in sync with MountExternalKind enum values.
-static const std::array<const std::string, MOUNT_EXTERNAL_COUNT> ExternalStorageViews = {
-  "",                     // MOUNT_EXTERNAL_NONE
-  "/mnt/runtime/default", // MOUNT_EXTERNAL_DEFAULT
-  "/mnt/runtime/read",    // MOUNT_EXTERNAL_READ
-  "/mnt/runtime/write",   // MOUNT_EXTERNAL_WRITE
-  "/mnt/runtime/write",   // MOUNT_EXTERNAL_LEGACY
-  "/mnt/runtime/write",   // MOUNT_EXTERNAL_INSTALLER
-  "/mnt/runtime/full",    // MOUNT_EXTERNAL_FULL
-  "/mnt/runtime/full",    // MOUNT_EXTERNAL_PASS_THROUGH (only used w/ FUSE)
-  "/mnt/runtime/full",    // MOUNT_EXTERNAL_ANDROID_WRITABLE (only used w/ FUSE)
+    MOUNT_EXTERNAL_NONE = 0,
+    MOUNT_EXTERNAL_DEFAULT = 1,
+    MOUNT_EXTERNAL_INSTALLER = 5,
+    MOUNT_EXTERNAL_PASS_THROUGH = 7,
+    MOUNT_EXTERNAL_ANDROID_WRITABLE = 8,
+    MOUNT_EXTERNAL_COUNT = 9
 };
 
 // Must match values in com.android.internal.os.Zygote.
@@ -657,6 +642,13 @@ static void PreApplicationInit() {
   // Set the jemalloc decay time to 1.
   mallopt(M_DECAY_TIME, 1);
 
+  // Avoid potentially expensive memory mitigations, mostly meant for system
+  // processes, in apps. These may cause app compat problems, use more memory,
+  // or reduce performance. While it would be nice to have them for apps,
+  // we will have to wait until they are proven out, have more efficient
+  // hardware, and/or apply them only to new applications.
+  process_disable_memory_mitigations();
+
   void *mBelugaHandle = nullptr;
   void (*mBeluga)() = nullptr;
   mBelugaHandle = dlopen("libbeluga.so", RTLD_NOW);
@@ -818,10 +810,14 @@ static void PrepareDirIfNotPresent(const std::string& dir, mode_t mode, uid_t ui
   PrepareDir(dir, mode, uid, gid, fail_fn);
 }
 
+static bool BindMount(const std::string& source_dir, const std::string& target_dir) {
+  return !(TEMP_FAILURE_RETRY(mount(source_dir.c_str(), target_dir.c_str(), nullptr,
+                                    MS_BIND | MS_REC, nullptr)) == -1);
+}
+
 static void BindMount(const std::string& source_dir, const std::string& target_dir,
                       fail_fn_t fail_fn) {
-  if (TEMP_FAILURE_RETRY(mount(source_dir.c_str(), target_dir.c_str(), nullptr,
-                               MS_BIND | MS_REC, nullptr)) == -1) {
+  if (!BindMount(source_dir, target_dir)) {
     fail_fn(CREATE_ERROR("Failed to mount %s to %s: %s",
                          source_dir.c_str(), target_dir.c_str(), strerror(errno)));
   }
@@ -849,7 +845,7 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
   }
 
   if (mount_mode == MOUNT_EXTERNAL_NONE && !force_mount_namespace) {
-    // Sane default of no storage visible
+    // Valid default of no storage visible
     return;
   }
 
@@ -1131,7 +1127,7 @@ static pid_t ForkCommon(JNIEnv* env, bool is_system_server,
 
   // Temporarily block SIGCHLD during forks. The SIGCHLD handler might
   // log, which would result in the logging FDs we close being reopened.
-  // This would cause failures because the FDs are not whitelisted.
+  // This would cause failures because the FDs are not allowlisted.
   //
   // Note that the zygote process is single threaded at this point.
   BlockSignal(SIGCHLD, fail_fn);
@@ -1199,9 +1195,9 @@ static pid_t ForkCommon(JNIEnv* env, bool is_system_server,
 
 // Create an app data directory over tmpfs overlayed CE / DE storage, and bind mount it
 // from the actual app data directory in data mirror.
-static void createAndMountAppData(std::string_view package_name,
+static bool createAndMountAppData(std::string_view package_name,
     std::string_view mirror_pkg_dir_name, std::string_view mirror_data_path,
-    std::string_view actual_data_path, fail_fn_t fail_fn) {
+    std::string_view actual_data_path, fail_fn_t fail_fn, bool call_fail_fn) {
 
   char mirrorAppDataPath[PATH_MAX];
   char actualAppDataPath[PATH_MAX];
@@ -1210,6 +1206,29 @@ static void createAndMountAppData(std::string_view package_name,
   snprintf(actualAppDataPath, PATH_MAX, "%s/%s", actual_data_path.data(), package_name.data());
 
   PrepareDir(actualAppDataPath, 0700, AID_ROOT, AID_ROOT, fail_fn);
+
+  // Bind mount from original app data directory in mirror.
+  if (call_fail_fn) {
+    BindMount(mirrorAppDataPath, actualAppDataPath, fail_fn);
+  } else if(!BindMount(mirrorAppDataPath, actualAppDataPath)) {
+    ALOGW("Failed to mount %s to %s: %s",
+          mirrorAppDataPath, actualAppDataPath, strerror(errno));
+    return false;
+  }
+  return true;
+}
+
+// There is an app data directory over tmpfs overlaid CE / DE storage
+// bind mount it from the actual app data directory in data mirror.
+static void mountAppData(std::string_view package_name,
+    std::string_view mirror_pkg_dir_name, std::string_view mirror_data_path,
+    std::string_view actual_data_path, fail_fn_t fail_fn) {
+
+  char mirrorAppDataPath[PATH_MAX];
+  char actualAppDataPath[PATH_MAX];
+  snprintf(mirrorAppDataPath, PATH_MAX, "%s/%s", mirror_data_path.data(),
+      mirror_pkg_dir_name.data());
+  snprintf(actualAppDataPath, PATH_MAX, "%s/%s", actual_data_path.data(), package_name.data());
 
   // Bind mount from original app data directory in mirror.
   BindMount(mirrorAppDataPath, actualAppDataPath, fail_fn);
@@ -1289,10 +1308,17 @@ static void isolateAppDataPerPackage(int userId, std::string_view package_name,
   snprintf(mirrorCePath, PATH_MAX, "%s/%d", mirrorCeParent, userId);
   snprintf(mirrorDePath, PATH_MAX, "/data_mirror/data_de/%s/%d", volume_uuid.data(), userId);
 
-  createAndMountAppData(package_name, package_name, mirrorDePath, actualDePath, fail_fn);
+  createAndMountAppData(package_name, package_name, mirrorDePath, actualDePath, fail_fn,
+                        true /*call_fail_fn*/);
 
   std::string ce_data_path = getAppDataDirName(mirrorCePath, package_name, ce_data_inode, fail_fn);
-  createAndMountAppData(package_name, ce_data_path, mirrorCePath, actualCePath, fail_fn);
+  if (!createAndMountAppData(package_name, ce_data_path, mirrorCePath, actualCePath, fail_fn,
+                             false /*call_fail_fn*/)) {
+    // CE might unlocks and the name is decrypted
+    // get the name and mount again
+    ce_data_path=getAppDataDirName(mirrorCePath, package_name, ce_data_inode, fail_fn);
+    mountAppData(package_name, ce_data_path, mirrorCePath, actualCePath, fail_fn);
+  }
 }
 
 // Relabel directory
@@ -1337,7 +1363,7 @@ static void relabelAllDirs(const char* path, security_context_t context, fail_fn
  * in data directories.
  *
  * Steps:
- * 1). Collect a list of all related apps (apps with same uid and whitelisted apps) data info
+ * 1). Collect a list of all related apps (apps with same uid and allowlisted apps) data info
  * (package name, data stored volume uuid, and inode number of its CE data directory)
  * 2). Mount tmpfs on /data/data, /data/user(_de) and /mnt/expand, so apps no longer
  * able to access apps data directly.
@@ -1813,8 +1839,7 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
 #ifdef ANDROID_EXPERIMENTAL_MTE
       SetTagCheckingLevel(PR_MTE_TCF_SYNC);
 #endif
-      // TODO(pcc): Use SYNC here once the allocator supports it.
-      heap_tagging_level = M_HEAP_TAGGING_LEVEL_ASYNC;
+      heap_tagging_level = M_HEAP_TAGGING_LEVEL_SYNC;
       break;
     default:
 #ifdef ANDROID_EXPERIMENTAL_MTE
@@ -2073,7 +2098,7 @@ static void UnmountStorageOnInit(JNIEnv* env) {
     return;
   }
 
-  // Mark rootfs as being a slave so that changes from default
+  // Mark rootfs as being MS_SLAVE so that changes from default
   // namespace only flow into our children.
   if (mount("rootfs", "/", nullptr, (MS_SLAVE | MS_REC), nullptr) == -1) {
     RuntimeAbort(env, __LINE__, "Failed to mount() rootfs as MS_SLAVE");

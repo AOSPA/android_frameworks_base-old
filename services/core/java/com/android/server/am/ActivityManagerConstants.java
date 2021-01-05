@@ -28,6 +28,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Process;
 import android.os.SystemProperties;
+import android.os.Message;
 import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.OnPropertiesChangedListener;
 import android.provider.DeviceConfig.Properties;
@@ -92,6 +93,10 @@ final class ActivityManagerConstants extends ContentObserver {
     static final String KEY_MEMORY_INFO_THROTTLE_TIME = "memory_info_throttle_time";
     static final String KEY_TOP_TO_FGS_GRACE_DURATION = "top_to_fgs_grace_duration";
     static final String KEY_PENDINGINTENT_WARNING_THRESHOLD = "pendingintent_warning_threshold";
+    static final String KEY_MIN_CRASH_INTERVAL = "min_crash_interval";
+    static final String KEY_PROCESS_CRASH_COUNT_RESET_INTERVAL =
+            "process_crash_count_reset_interval";
+    static final String KEY_PROCESS_CRASH_COUNT_LIMIT = "process_crash_count_limit";
 
     private static int DEFAULT_MAX_CACHED_PROCESSES = 32;
     private static final long DEFAULT_BACKGROUND_SETTLE_TIME = 60*1000;
@@ -125,12 +130,22 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final long DEFAULT_MEMORY_INFO_THROTTLE_TIME = 5*60*1000;
     private static final long DEFAULT_TOP_TO_FGS_GRACE_DURATION = 15 * 1000;
     private static final int DEFAULT_PENDINGINTENT_WARNING_THRESHOLD = 2000;
+    private static final int DEFAULT_MIN_CRASH_INTERVAL = 2 * 60 * 1000;
+    private static final int DEFAULT_MAX_PHANTOM_PROCESSES = 32;
+    private static final int DEFAULT_PROCESS_CRASH_COUNT_RESET_INTERVAL = 12 * 60 * 60 * 1000;
+    private static final int DEFAULT_PROCESS_CRASH_COUNT_LIMIT = 12;
+
 
     // Flag stored in the DeviceConfig API.
     /**
      * Maximum number of cached processes.
      */
     private static final String KEY_MAX_CACHED_PROCESSES = "max_cached_processes";
+
+    /**
+     * Maximum number of cached processes.
+     */
+    private static final String KEY_MAX_PHANTOM_PROCESSES = "max_phantom_processes";
 
     /**
      * Default value for mFlagBackgroundActivityStartsEnabled if not explicitly set in
@@ -146,6 +161,20 @@ final class ActivityManagerConstants extends ContentObserver {
      */
     private static final String KEY_DEFAULT_BACKGROUND_FGS_STARTS_RESTRICTION_ENABLED =
             "default_background_fgs_starts_restriction_enabled";
+
+    /**
+     * Default value for mFlagFgsStartRestrictionEnabled if not explicitly set in
+     * Settings.Global.
+     */
+    private static final String KEY_DEFAULT_FGS_STARTS_RESTRICTION_ENABLED =
+            "default_fgs_starts_restriction_enabled";
+
+    /**
+     * Default value for mFlagFgsStartTempAllowListEnabled if not explicitly set in
+     * Settings.Global.
+     */
+    private static final String KEY_DEFAULT_FGS_STARTS_TEMP_ALLOWLIST_ENABLED =
+            "default_fgs_starts_temp_allowlist_enabled";
 
     // Maximum number of cached processes we will allow.
     public int MAX_CACHED_PROCESSES = DEFAULT_MAX_CACHED_PROCESSES;
@@ -277,6 +306,30 @@ final class ActivityManagerConstants extends ContentObserver {
     // this long.
     public long TOP_TO_FGS_GRACE_DURATION = DEFAULT_TOP_TO_FGS_GRACE_DURATION;
 
+    /**
+     * The minimum time we allow between crashes, for us to consider this
+     * application to be bad and stop its services and reject broadcasts.
+     * A reasonable interval here would be anything between 1-3 minutes.
+     */
+    public static int MIN_CRASH_INTERVAL = DEFAULT_MIN_CRASH_INTERVAL;
+
+    /**
+     * We will allow for a maximum number of {@link PROCESS_CRASH_COUNT_LIMIT} crashes within this
+     * time period before we consider the application to be bad and stop services and reject
+     * broadcasts.
+     * A reasonable reset interval here would be anything between 10-20 hours along with a crash
+     * count limit of 10-20 crashes.
+     */
+    static long PROCESS_CRASH_COUNT_RESET_INTERVAL = DEFAULT_PROCESS_CRASH_COUNT_RESET_INTERVAL;
+
+    /**
+     * The maximum number of crashes allowed within {@link PROCESS_CRASH_COUNT_RESET_INTERVAL_MS}
+     * before we consider the application to be bad and stop services and reject broadcasts.
+     * A reasonable crash count limit here would be anything between 10-20 crashes along with a
+     * reset interval of 10-20 hours.
+     */
+    static int PROCESS_CRASH_COUNT_LIMIT = DEFAULT_PROCESS_CRASH_COUNT_LIMIT;
+
     // Indicates whether the activity starts logging is enabled.
     // Controlled by Settings.Global.ACTIVITY_STARTS_LOGGING_ENABLED
     volatile boolean mFlagActivityStartsLoggingEnabled;
@@ -295,6 +348,15 @@ final class ActivityManagerConstants extends ContentObserver {
     // while-in-use permissions like location, camera and microphone. (The foreground service can be
     // started, the restriction is on while-in-use permissions.)
     volatile boolean mFlagBackgroundFgsStartRestrictionEnabled = true;
+
+    // Indicates whether the foreground service background start restriction is enabled.
+    // When the restriction is enabled, service is not allowed to startForeground from background
+    // at all.
+    volatile boolean mFlagFgsStartRestrictionEnabled = false;
+
+    // When the foreground service background start restriction is enabled, if the app in
+    // DeviceIdleController's Temp AllowList is allowed to bypass the restriction.
+    volatile boolean mFlagFgsStartTempAllowListEnabled = false;
 
     private final ActivityManagerService mService;
     private ContentResolver mResolver;
@@ -354,6 +416,11 @@ final class ActivityManagerConstants extends ContentObserver {
      * Component names of the services which will keep critical code path of the host warm
      */
     public final ArraySet<ComponentName> KEEP_WARMING_SERVICES = new ArraySet<ComponentName>();
+
+    /**
+     * Maximum number of phantom processes.
+     */
+    public int MAX_PHANTOM_PROCESSES = DEFAULT_MAX_PHANTOM_PROCESSES;
 
     private List<String> mDefaultImperceptibleKillExemptPackages;
     private List<Integer> mDefaultImperceptibleKillExemptProcStates;
@@ -448,6 +515,12 @@ final class ActivityManagerConstants extends ContentObserver {
                             case KEY_DEFAULT_BACKGROUND_FGS_STARTS_RESTRICTION_ENABLED:
                                 updateBackgroundFgsStartsRestriction();
                                 break;
+                            case KEY_DEFAULT_FGS_STARTS_RESTRICTION_ENABLED:
+                                updateFgsStartsRestriction();
+                                break;
+                            case KEY_DEFAULT_FGS_STARTS_TEMP_ALLOWLIST_ENABLED:
+                                updateFgsStartsTempAllowList();
+                                break;
                             case KEY_OOMADJ_UPDATE_POLICY:
                                 updateOomAdjUpdatePolicy();
                                 break;
@@ -468,6 +541,9 @@ final class ActivityManagerConstants extends ContentObserver {
                             case KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE:
                             case KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD:
                                 updateBinderHeavyHitterWatcher();
+                                break;
+                            case KEY_MAX_PHANTOM_PROCESSES:
+                                updateMaxPhantomProcesses();
                                 break;
                             default:
                                 break;
@@ -631,6 +707,8 @@ final class ActivityManagerConstants extends ContentObserver {
                 // with defaults.
                 Slog.e("ActivityManagerConstants", "Bad activity manager config settings", e);
             }
+            final long currentPowerCheckInterval = POWER_CHECK_INTERVAL;
+
             BACKGROUND_SETTLE_TIME = mParser.getLong(KEY_BACKGROUND_SETTLE_TIME,
                     DEFAULT_BACKGROUND_SETTLE_TIME);
             FGSERVICE_MIN_SHOWN_TIME = mParser.getLong(KEY_FGSERVICE_MIN_SHOWN_TIME,
@@ -691,9 +769,23 @@ final class ActivityManagerConstants extends ContentObserver {
                     DEFAULT_MEMORY_INFO_THROTTLE_TIME);
             TOP_TO_FGS_GRACE_DURATION = mParser.getDurationMillis(KEY_TOP_TO_FGS_GRACE_DURATION,
                     DEFAULT_TOP_TO_FGS_GRACE_DURATION);
+            MIN_CRASH_INTERVAL = mParser.getInt(KEY_MIN_CRASH_INTERVAL,
+                    DEFAULT_MIN_CRASH_INTERVAL);
             PENDINGINTENT_WARNING_THRESHOLD = mParser.getInt(KEY_PENDINGINTENT_WARNING_THRESHOLD,
                     DEFAULT_PENDINGINTENT_WARNING_THRESHOLD);
+            PROCESS_CRASH_COUNT_RESET_INTERVAL = mParser.getInt(
+                    KEY_PROCESS_CRASH_COUNT_RESET_INTERVAL,
+                    DEFAULT_PROCESS_CRASH_COUNT_RESET_INTERVAL);
+            PROCESS_CRASH_COUNT_LIMIT = mParser.getInt(KEY_PROCESS_CRASH_COUNT_LIMIT,
+                    DEFAULT_PROCESS_CRASH_COUNT_LIMIT);
 
+            if (POWER_CHECK_INTERVAL != currentPowerCheckInterval) {
+                mService.mHandler.removeMessages(
+                        ActivityManagerService.CHECK_EXCESSIVE_POWER_USE_MSG);
+                final Message msg = mService.mHandler.obtainMessage(
+                        ActivityManagerService.CHECK_EXCESSIVE_POWER_USE_MSG);
+                mService.mHandler.sendMessageDelayed(msg, POWER_CHECK_INTERVAL);
+            }
             // For new flags that are intended for server-side experiments, please use the new
             // DeviceConfig package.
         }
@@ -715,11 +807,26 @@ final class ActivityManagerConstants extends ContentObserver {
         mFlagForegroundServiceStartsLoggingEnabled = Settings.Global.getInt(mResolver,
                 Settings.Global.FOREGROUND_SERVICE_STARTS_LOGGING_ENABLED, 1) == 1;
     }
+
     private void updateBackgroundFgsStartsRestriction() {
         mFlagBackgroundFgsStartRestrictionEnabled = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 KEY_DEFAULT_BACKGROUND_FGS_STARTS_RESTRICTION_ENABLED,
                 /*defaultValue*/ true);
+    }
+
+    private void updateFgsStartsRestriction() {
+        mFlagFgsStartRestrictionEnabled = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_DEFAULT_FGS_STARTS_RESTRICTION_ENABLED,
+                /*defaultValue*/ false);
+    }
+
+    private void updateFgsStartsTempAllowList() {
+        mFlagFgsStartTempAllowListEnabled = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_DEFAULT_FGS_STARTS_TEMP_ALLOWLIST_ENABLED,
+                /*defaultValue*/ false);
     }
 
     private void updateOomAdjUpdatePolicy() {
@@ -834,6 +941,16 @@ final class ActivityManagerConstants extends ContentObserver {
         mService.scheduleUpdateBinderHeavyHitterWatcherConfig();
     }
 
+    private void updateMaxPhantomProcesses() {
+        final int oldVal = MAX_PHANTOM_PROCESSES;
+        MAX_PHANTOM_PROCESSES = DeviceConfig.getInt(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_MAX_PHANTOM_PROCESSES,
+                DEFAULT_MAX_PHANTOM_PROCESSES);
+        if (oldVal > MAX_PHANTOM_PROCESSES) {
+            mService.mHandler.post(mService.mPhantomProcessList::trimPhantomProcessesIfNecessary);
+        }
+    }
+
     void dump(PrintWriter pw) {
         pw.println("ACTIVITY MANAGER SETTINGS (dumpsys activity settings) "
                 + Settings.Global.ACTIVITY_MANAGER_CONSTANTS + ":");
@@ -900,6 +1017,12 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.println(MEMORY_INFO_THROTTLE_TIME);
         pw.print("  "); pw.print(KEY_TOP_TO_FGS_GRACE_DURATION); pw.print("=");
         pw.println(TOP_TO_FGS_GRACE_DURATION);
+        pw.print("  "); pw.print(KEY_MIN_CRASH_INTERVAL); pw.print("=");
+        pw.println(MIN_CRASH_INTERVAL);
+        pw.print("  "); pw.print(KEY_PROCESS_CRASH_COUNT_RESET_INTERVAL); pw.print("=");
+        pw.println(PROCESS_CRASH_COUNT_RESET_INTERVAL);
+        pw.print("  "); pw.print(KEY_PROCESS_CRASH_COUNT_LIMIT); pw.print("=");
+        pw.println(PROCESS_CRASH_COUNT_LIMIT);
         pw.print("  "); pw.print(KEY_IMPERCEPTIBLE_KILL_EXEMPT_PROC_STATES); pw.print("=");
         pw.println(Arrays.toString(IMPERCEPTIBLE_KILL_EXEMPT_PROC_STATES.toArray()));
         pw.print("  "); pw.print(KEY_IMPERCEPTIBLE_KILL_EXEMPT_PACKAGES); pw.print("=");
@@ -918,6 +1041,8 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.println(BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE);
         pw.print("  "); pw.print(KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD); pw.print("=");
         pw.println(BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD);
+        pw.print("  "); pw.print(KEY_MAX_PHANTOM_PROCESSES); pw.print("=");
+        pw.println(MAX_PHANTOM_PROCESSES);
 
         pw.println();
         if (mOverrideMaxCachedProcesses >= 0) {

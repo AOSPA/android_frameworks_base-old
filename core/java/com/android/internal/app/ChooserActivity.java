@@ -206,6 +206,7 @@ public class ChooserActivity extends ResolverActivity implements
     public static final int SELECTION_TYPE_APP = 2;
     public static final int SELECTION_TYPE_STANDARD = 3;
     public static final int SELECTION_TYPE_COPY = 4;
+    public static final int SELECTION_TYPE_NEARBY = 5;
 
     private static final int SCROLL_STATUS_IDLE = 0;
     private static final int SCROLL_STATUS_SCROLLING_VERTICAL = 1;
@@ -273,8 +274,6 @@ public class ChooserActivity extends ResolverActivity implements
     private int mLastNumberOfChildren = -1;
 
     private static final String TARGET_DETAILS_FRAGMENT_TAG = "targetDetailsFragment";
-    // TODO: Update to handle landscape instead of using static value
-    private static final int MAX_RANKED_TARGETS = 4;
 
     private final List<ChooserTargetServiceConnection> mServiceConnections = new ArrayList<>();
     private final Set<Pair<ComponentName, UserHandle>> mServicesRequested = new HashSet<>();
@@ -784,8 +783,8 @@ public class ChooserActivity extends ResolverActivity implements
                 FrameworkStatsLog.SHARESHEET_STARTED,
                 getReferrerPackageName(),
                 target.getType(),
-                initialIntents == null ? 0 : initialIntents.length,
                 mCallerChooserTargets == null ? 0 : mCallerChooserTargets.length,
+                initialIntents == null ? 0 : initialIntents.length,
                 isWorkProfile(),
                 findPreferredContentPreview(getTargetIntent(), getContentResolver()),
                 target.getAction()
@@ -951,7 +950,7 @@ public class ChooserActivity extends ResolverActivity implements
         updateStickyContentPreview();
         if (shouldShowStickyContentPreview()
                 || mChooserMultiProfilePagerAdapter
-                        .getCurrentRootAdapter().getContentPreviewRowCount() != 0) {
+                        .getCurrentRootAdapter().getSystemRowCount() != 0) {
             logActionShareWithPreview();
         }
         return postRebuildListInternal(rebuildCompleted);
@@ -1091,7 +1090,7 @@ public class ChooserActivity extends ResolverActivity implements
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         ViewPager viewPager = findViewById(R.id.profile_pager);
-        if (shouldShowTabs() && viewPager.isLayoutRtl()) {
+        if (viewPager.isLayoutRtl()) {
             mMultiProfilePagerAdapter.setupViewPager(viewPager);
         }
 
@@ -1135,7 +1134,8 @@ public class ChooserActivity extends ResolverActivity implements
         return displayContentPreview(previewType, targetIntent, getLayoutInflater(), parent);
     }
 
-    private ComponentName getNearbySharingComponent() {
+    @VisibleForTesting
+    protected ComponentName getNearbySharingComponent() {
         String nearbyComponent = Settings.Secure.getString(
                 getContentResolver(),
                 Settings.Secure.NEARBY_SHARING_COMPONENT);
@@ -1148,7 +1148,8 @@ public class ChooserActivity extends ResolverActivity implements
         return ComponentName.unflattenFromString(nearbyComponent);
     }
 
-    private TargetInfo getNearbySharingTarget(Intent originalIntent) {
+    @VisibleForTesting
+    protected TargetInfo getNearbySharingTarget(Intent originalIntent) {
         final ComponentName cn = getNearbySharingComponent();
         if (cn == null) return null;
 
@@ -1216,14 +1217,21 @@ public class ChooserActivity extends ResolverActivity implements
         final TargetInfo ti = getNearbySharingTarget(originalIntent);
         if (ti == null) return null;
 
-        return createActionButton(
+        final Button b = createActionButton(
                 ti.getDisplayIcon(this),
                 ti.getDisplayLabel(),
                 (View unused) -> {
+                    // Log share completion via nearby
+                    getChooserActivityLogger().logShareTargetSelected(
+                            SELECTION_TYPE_NEARBY,
+                            "",
+                            -1);
                     safelyStartActivity(ti);
                     finish();
                 }
         );
+        b.setId(R.id.chooser_nearby_button);
+        return b;
     }
 
     private void addActionButton(ViewGroup parent, Button b) {
@@ -1316,13 +1324,14 @@ public class ChooserActivity extends ResolverActivity implements
             ViewGroup parent) {
         ViewGroup contentPreviewLayout = (ViewGroup) layoutInflater.inflate(
                 R.layout.chooser_grid_preview_image, parent, false);
+        ViewGroup imagePreview = contentPreviewLayout.findViewById(R.id.content_preview_image_area);
 
         final ViewGroup actionRow =
                 (ViewGroup) contentPreviewLayout.findViewById(R.id.chooser_action_row);
         //TODO: addActionButton(actionRow, createCopyButton());
         addActionButton(actionRow, createNearbyButton(targetIntent));
 
-        mPreviewCoord = new ContentPreviewCoordinator(contentPreviewLayout, true);
+        mPreviewCoord = new ContentPreviewCoordinator(contentPreviewLayout, false);
 
         String action = targetIntent.getAction();
         if (Intent.ACTION_SEND.equals(action)) {
@@ -1342,7 +1351,7 @@ public class ChooserActivity extends ResolverActivity implements
             if (imageUris.size() == 0) {
                 Log.i(TAG, "Attempted to display image preview area with zero"
                         + " available images detected in EXTRA_STREAM list");
-                contentPreviewLayout.setVisibility(View.GONE);
+                imagePreview.setVisibility(View.GONE);
                 return contentPreviewLayout;
             }
 
@@ -1646,18 +1655,24 @@ public class ChooserActivity extends ResolverActivity implements
     private void showTargetDetails(DisplayResolveInfo ti) {
         if (ti == null) return;
 
-        List<DisplayResolveInfo> targetList;
+        ArrayList<DisplayResolveInfo> targetList;
 
         // For multiple targets, include info on all targets
         if (ti instanceof MultiDisplayResolveInfo) {
             MultiDisplayResolveInfo mti = (MultiDisplayResolveInfo) ti;
             targetList = mti.getTargets();
         } else {
-            targetList = Collections.singletonList(ti);
+            targetList = new ArrayList<DisplayResolveInfo>();
+            targetList.add(ti);
         }
 
-        ChooserTargetActionsDialogFragment f = new ChooserTargetActionsDialogFragment(
-                targetList, mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
+        ChooserTargetActionsDialogFragment f = new ChooserTargetActionsDialogFragment();
+        Bundle b = new Bundle();
+        b.putParcelable(ChooserTargetActionsDialogFragment.USER_HANDLE_KEY,
+                mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
+        b.putParcelableArrayList(ChooserTargetActionsDialogFragment.TARGET_INFOS_KEY,
+                targetList);
+        f.setArguments(b);
 
         f.show(getFragmentManager(), TARGET_DETAILS_FRAGMENT_TAG);
     }
@@ -1716,9 +1731,14 @@ public class ChooserActivity extends ResolverActivity implements
         if (targetInfo instanceof MultiDisplayResolveInfo) {
             MultiDisplayResolveInfo mti = (MultiDisplayResolveInfo) targetInfo;
             if (!mti.hasSelected()) {
-                ChooserStackedAppDialogFragment f = new ChooserStackedAppDialogFragment(
-                        mti, which,
+                ChooserStackedAppDialogFragment f = new ChooserStackedAppDialogFragment();
+                Bundle b = new Bundle();
+                b.putParcelable(ChooserTargetActionsDialogFragment.USER_HANDLE_KEY,
                         mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
+                b.putObject(ChooserStackedAppDialogFragment.MULTI_DRI_KEY,
+                        mti);
+                b.putInt(ChooserStackedAppDialogFragment.WHICH_KEY, which);
+                f.setArguments(b);
 
                 f.show(getFragmentManager(), TARGET_DETAILS_FRAGMENT_TAG);
                 return;
@@ -1762,7 +1782,7 @@ public class ChooserActivity extends ResolverActivity implements
                 case ChooserListAdapter.TARGET_CALLER:
                 case ChooserListAdapter.TARGET_STANDARD:
                     cat = MetricsEvent.ACTION_ACTIVITY_CHOOSER_PICKED_APP_TARGET;
-                    value -= currentListAdapter.getSelectableServiceTargetCount();
+                    value -= currentListAdapter.getSurfacedTargetInfo().size();
                     numCallerProvided = currentListAdapter.getCallerTargetCount();
                     getChooserActivityLogger().logShareTargetSelected(
                             SELECTION_TYPE_APP,
@@ -1846,6 +1866,7 @@ public class ChooserActivity extends ResolverActivity implements
 
     @VisibleForTesting
     protected void queryTargetServices(ChooserListAdapter adapter) {
+
         mQueriedTargetServicesTimeMs = System.currentTimeMillis();
 
         Context selectedProfileContext = createContextAsUser(
@@ -1862,15 +1883,14 @@ public class ChooserActivity extends ResolverActivity implements
                 continue;
             }
             final ActivityInfo ai = dri.getResolveInfo().activityInfo;
-            if (ChooserFlags.USE_SHORTCUT_MANAGER_FOR_DIRECT_TARGETS
-                    && sm.hasShareTargets(ai.packageName)) {
+            if (sm.hasShareTargets(ai.packageName)) {
                 // Share targets will be queried from ShortcutManager
                 continue;
             }
             final Bundle md = ai.metaData;
             final String serviceName = md != null ? convertServiceName(ai.packageName,
                     md.getString(ChooserTargetService.META_DATA_NAME)) : null;
-            if (serviceName != null) {
+            if (serviceName != null && ChooserFlags.USE_SERVICE_TARGETS_FOR_DIRECT_TARGETS) {
                 final ComponentName serviceComponent = new ComponentName(
                         ai.packageName, serviceName);
 
@@ -2616,7 +2636,9 @@ public class ChooserActivity extends ResolverActivity implements
         }
     }
 
-    static final class EmptyTargetInfo extends NotSelectableTargetInfo {
+    protected static final class EmptyTargetInfo extends NotSelectableTargetInfo {
+        public EmptyTargetInfo() {}
+
         public Drawable getDisplayIcon(Context context) {
             return null;
         }
@@ -2683,7 +2705,7 @@ public class ChooserActivity extends ResolverActivity implements
                 final int bottomInset = mSystemWindowInsets != null
                                             ? mSystemWindowInsets.bottom : 0;
                 int offset = bottomInset;
-                int rowsToShow = gridAdapter.getContentPreviewRowCount()
+                int rowsToShow = gridAdapter.getSystemRowCount()
                         + gridAdapter.getProfileRowCount()
                         + gridAdapter.getServiceTargetRowCount()
                         + gridAdapter.getCallerAndRankedTargetRowCount();
@@ -2872,8 +2894,7 @@ public class ChooserActivity extends ResolverActivity implements
             return;
         }
 
-        if (ChooserFlags.USE_SHORTCUT_MANAGER_FOR_DIRECT_TARGETS
-                || ChooserFlags.USE_PREDICTION_MANAGER_FOR_DIRECT_TARGETS) {
+        if (ChooserFlags.USE_PREDICTION_MANAGER_FOR_DIRECT_TARGETS) {
             if (DEBUG) {
                 Log.d(TAG, "querying direct share targets from ShortcutManager");
             }
@@ -3087,7 +3108,7 @@ public class ChooserActivity extends ResolverActivity implements
                     final TargetInfo ti = mChooserMultiProfilePagerAdapter.getActiveListAdapter()
                             .targetInfoForPosition(mListPosition, /* filtered */ true);
 
-                    // This should always be the case for ItemViewHolder, check for sanity
+                    // This should always be the case for ItemViewHolder, check for validity
                     if (ti instanceof DisplayResolveInfo) {
                         showTargetDetails((DisplayResolveInfo) ti);
                     }
@@ -3134,7 +3155,9 @@ public class ChooserActivity extends ResolverActivity implements
         // ends up disabled. That's because at some point the old tab's vertical scrolling is
         // disabled and the new tab's is enabled. For context, see b/159997845
         setVerticalScrollEnabled(true);
-        mResolverDrawerLayout.scrollNestedScrollableChildBackToTop();
+        if (mResolverDrawerLayout != null) {
+            mResolverDrawerLayout.scrollNestedScrollableChildBackToTop();
+        }
     }
 
     @Override
@@ -3281,7 +3304,7 @@ public class ChooserActivity extends ResolverActivity implements
 
         public int getRowCount() {
             return (int) (
-                    getContentPreviewRowCount()
+                    getSystemRowCount()
                             + getProfileRowCount()
                             + getServiceTargetRowCount()
                             + getCallerAndRankedTargetRowCount()
@@ -3293,22 +3316,21 @@ public class ChooserActivity extends ResolverActivity implements
         }
 
         /**
-         * Returns either {@code 0} or {@code 1} depending on whether we want to show the list item
-         * content preview. Not to be confused with the sticky content preview which is above the
-         * personal and work tabs.
+         * Whether the "system" row of targets is displayed.
+         * This area includes the content preview (if present) and action row.
          */
-        public int getContentPreviewRowCount() {
+        public int getSystemRowCount() {
             // For the tabbed case we show the sticky content preview above the tabs,
             // please refer to shouldShowStickyContentPreview
             if (shouldShowTabs()) {
                 return 0;
             }
+
             if (!isSendAction(getTargetIntent())) {
                 return 0;
             }
 
-            if (mHideContentPreview || mChooserListAdapter == null
-                    || mChooserListAdapter.getCount() == 0) {
+            if (mChooserListAdapter == null || mChooserListAdapter.getCount() == 0) {
                 return 0;
             }
 
@@ -3350,7 +3372,7 @@ public class ChooserActivity extends ResolverActivity implements
         @Override
         public int getItemCount() {
             return (int) (
-                    getContentPreviewRowCount()
+                    getSystemRowCount()
                             + getProfileRowCount()
                             + getServiceTargetRowCount()
                             + getCallerAndRankedTargetRowCount()
@@ -3405,7 +3427,7 @@ public class ChooserActivity extends ResolverActivity implements
         public int getItemViewType(int position) {
             int count;
 
-            int countSum = (count = getContentPreviewRowCount());
+            int countSum = (count = getSystemRowCount());
             if (count > 0 && position < countSum) return VIEW_TYPE_CONTENT_PREVIEW;
 
             countSum += (count = getProfileRowCount());
@@ -3466,7 +3488,7 @@ public class ChooserActivity extends ResolverActivity implements
                     v.setOnLongClickListener(v1 -> {
                         final TargetInfo ti = mChooserListAdapter.targetInfoForPosition(
                                 holder.getItemIndex(column), true);
-                        // This should always be the case for non-DS targets, check for sanity
+                        // This should always be the case for non-DS targets, check for validity
                         if (ti instanceof DisplayResolveInfo) {
                             showTargetDetails((DisplayResolveInfo) ti);
                         }
@@ -3629,7 +3651,7 @@ public class ChooserActivity extends ResolverActivity implements
         }
 
         int getListPosition(int position) {
-            position -= getContentPreviewRowCount() + getProfileRowCount();
+            position -= getSystemRowCount() + getProfileRowCount();
 
             final int serviceCount = mChooserListAdapter.getServiceTargetCount();
             final int serviceRows = (int) Math.ceil((float) serviceCount

@@ -74,7 +74,7 @@ public final class WallpaperColors implements Parcelable {
      */
     public static final int HINT_FROM_BITMAP = 1 << 2;
 
-    // Maximum size that a bitmap can have to keep our calculations sane
+    // Maximum size that a bitmap can have to keep our calculations valid
     private static final int MAX_BITMAP_SIZE = 112;
 
     // Even though we have a maximum size, we'll mainly match bitmap sizes
@@ -337,7 +337,7 @@ public final class WallpaperColors implements Parcelable {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }

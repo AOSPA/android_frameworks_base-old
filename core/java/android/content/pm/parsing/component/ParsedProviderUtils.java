@@ -23,7 +23,6 @@ import android.content.pm.PackageParser;
 import android.content.pm.PathPermission;
 import android.content.pm.ProviderInfo;
 import android.content.pm.parsing.ParsingPackage;
-import android.content.pm.parsing.ParsingPackageUtils;
 import android.content.pm.parsing.ParsingUtils;
 import android.content.pm.parsing.result.ParseInput;
 import android.content.pm.parsing.result.ParseResult;
@@ -45,7 +44,7 @@ import java.util.Objects;
 /** @hide */
 public class ParsedProviderUtils {
 
-    private static final String TAG = ParsingPackageUtils.TAG;
+    private static final String TAG = ParsingUtils.TAG;
 
     @NonNull
     public static ParseResult<ParsedProvider> parseProvider(String[] separateProcesses,
@@ -247,7 +246,7 @@ public class ParsedProviderUtils {
                 }
 
                 Slog.w(TAG, "Unknown element under <path-permission>: " + name + " at "
-                        + pkg.getBaseCodePath() + " " + parser.getPositionDescription());
+                        + pkg.getBaseApkPath() + " " + parser.getPositionDescription());
             }
 
             return input.success(provider);
@@ -293,7 +292,8 @@ public class ParsedProviderUtils {
                             "No readPermission or writePermission for <path-permission>");
                 }
                 Slog.w(TAG, "No readPermission or writePermission for <path-permission>: "
-                        + name + " at " + pkg.getBaseCodePath() + " " + parser.getPositionDescription());
+                        + name + " at " + pkg.getBaseApkPath() + " "
+                        + parser.getPositionDescription());
                 return input.success(provider);
             }
 
@@ -342,7 +342,7 @@ public class ParsedProviderUtils {
                 }
 
                 Slog.w(TAG, "No path, pathPrefix, or pathPattern for <path-permission>: "
-                        + name + " at " + pkg.getBaseCodePath()
+                        + name + " at " + pkg.getBaseApkPath()
                         + " "
                         + parser.getPositionDescription());
             }

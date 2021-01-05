@@ -27,6 +27,7 @@ import android.util.proto.ProtoOutputStream;
 import android.util.proto.ProtoUtils;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.server.am.UidObserverController.ChangeRecord;
 
 /**
  * Overall information about a uid that has actively running processes.
@@ -107,17 +108,9 @@ public final class UidRecord {
             UidRecordProto.CHANGE_UNCACHED,
     };
 
-    static final class ChangeItem {
-        UidRecord uidRecord;
-        int uid;
-        int change;
-        int processState;
-        int capability;
-        boolean ephemeral;
-        long procStateSeq;
-    }
+    // UidObserverController is the only thing that should modify this.
+    final ChangeRecord pendingChange = new ChangeRecord();
 
-    ChangeItem pendingChange;
     int lastReportedChange;
 
     public UidRecord(int _uid) {

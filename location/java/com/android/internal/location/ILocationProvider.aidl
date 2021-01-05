@@ -29,12 +29,14 @@ import com.android.internal.location.ProviderRequest;
  */
 interface ILocationProvider {
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, publicAlternatives = "{@code Do not use}")
     oneway void setLocationProviderManager(in ILocationProviderManager manager);
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, publicAlternatives = "{@code Do not use}")
     oneway void setRequest(in ProviderRequest request, in WorkSource ws);
 
-    @UnsupportedAppUsage
+    oneway void flush();
+
+    @UnsupportedAppUsage(maxTargetSdk = 30, publicAlternatives = "{@code Do not use}")
     oneway void sendExtraCommand(String command, in Bundle extras);
 }

@@ -18,6 +18,7 @@ package android.text.format;
 
 import android.util.TimeFormatException;
 
+import com.android.i18n.timezone.WallTime;
 import com.android.i18n.timezone.ZoneInfoData;
 import com.android.i18n.timezone.ZoneInfoDb;
 
@@ -345,9 +346,9 @@ public class Time {
     }
 
     /**
-     * Print the current value given the format string provided. See man
-     * strftime for what means what. The final string must be less than 256
-     * characters.
+     * Print the current value given the format string provided. See
+     * strftime(3) manual page for what means what. The final string must be
+     * less than 256 characters.
      * @param format a string containing the desired format.
      * @return a String containing the current time expressed in the current locale.
      */
@@ -1070,7 +1071,7 @@ public class Time {
      * to the enclosing object, but others do not: thus separate state is retained.
      */
     private static class TimeCalculator {
-        public final ZoneInfoData.WallTime wallTime;
+        public final WallTime wallTime;
         public String timezone;
 
         // Information about the current timezone.
@@ -1078,7 +1079,7 @@ public class Time {
 
         public TimeCalculator(String timezoneId) {
             this.mZoneInfoData = lookupZoneInfoData(timezoneId);
-            this.wallTime = new ZoneInfoData.WallTime();
+            this.wallTime = new WallTime();
         }
 
         public long toMillis(boolean ignoreDst) {

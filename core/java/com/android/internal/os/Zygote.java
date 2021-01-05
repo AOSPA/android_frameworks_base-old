@@ -172,23 +172,11 @@ public final class Zygote {
     public static final int MOUNT_EXTERNAL_NONE = IVold.REMOUNT_MODE_NONE;
     /** Default external storage should be mounted. */
     public static final int MOUNT_EXTERNAL_DEFAULT = IVold.REMOUNT_MODE_DEFAULT;
-    /** Read-only external storage should be mounted. */
-    public static final int MOUNT_EXTERNAL_READ = IVold.REMOUNT_MODE_READ;
-    /** Read-write external storage should be mounted. */
-    public static final int MOUNT_EXTERNAL_WRITE = IVold.REMOUNT_MODE_WRITE;
-    /**
-     * Mount mode for apps that are already installed on the device before the isolated_storage
-     * feature is enabled.
-     */
-    public static final int MOUNT_EXTERNAL_LEGACY = IVold.REMOUNT_MODE_LEGACY;
     /**
      * Mount mode for package installers which should give them access to
      * all obb dirs in addition to their package sandboxes
      */
     public static final int MOUNT_EXTERNAL_INSTALLER = IVold.REMOUNT_MODE_INSTALLER;
-    /** Read-write external storage should be mounted instead of package sandbox */
-    public static final int MOUNT_EXTERNAL_FULL = IVold.REMOUNT_MODE_FULL;
-
     /** The lower file system should be bind mounted directly on external storage */
     public static final int MOUNT_EXTERNAL_PASS_THROUGH = IVold.REMOUNT_MODE_PASS_THROUGH;
 
@@ -206,7 +194,7 @@ public final class Zygote {
     /** List of packages with the same uid, and its app data info: volume uuid and inode. */
     public static final String PKG_DATA_INFO_MAP = "--pkg-data-info-map";
 
-    /** List of whitelisted packages and its app data info: volume uuid and inode. */
+    /** List of allowlisted packages and its app data info: volume uuid and inode. */
     public static final String WHITELISTED_DATA_INFO_MAP = "--whitelisted-data-info-map";
 
     /** Bind mount app storage dirs to lower fs not via fuse */
@@ -327,7 +315,7 @@ public final class Zygote {
      * @param isTopApp true if the process is for top (high priority) application.
      * @param pkgDataInfoList A list that stores related packages and its app data
      * info: volume uuid and inode.
-     * @param whitelistedDataInfoList Like pkgDataInfoList, but it's for whitelisted apps.
+     * @param whitelistedDataInfoList Like pkgDataInfoList, but it's for allowlisted apps.
      * @param bindMountAppDataDirs  True if the zygote needs to mount data dirs.
      * @param bindMountAppStorageDirs  True if the zygote needs to mount storage dirs.
      *
@@ -395,7 +383,7 @@ public final class Zygote {
      * volume uuid and CE dir inode. For example, pkgDataInfoList = [app_a_pkg_name,
      * app_a_data_volume_uuid, app_a_ce_inode, app_b_pkg_name, app_b_data_volume_uuid,
      * app_b_ce_inode, ...];
-     * @param whitelistedDataInfoList Like pkgDataInfoList, but it's for whitelisted apps.
+     * @param whitelistedDataInfoList Like pkgDataInfoList, but it's for allowlisted apps.
      * @param bindMountAppDataDirs  True if the zygote needs to mount data dirs.
      * @param bindMountAppStorageDirs  True if the zygote needs to mount storage dirs.
      */
@@ -816,9 +804,9 @@ public final class Zygote {
             throw new IllegalArgumentException(USAP_ERROR_PREFIX + "--preload-app");
         } else if (args.mStartChildZygote) {
             throw new IllegalArgumentException(USAP_ERROR_PREFIX + "--start-child-zygote");
-        } else if (args.mApiBlacklistExemptions != null) {
+        } else if (args.mApiDenylistExemptions != null) {
             throw new IllegalArgumentException(
-                USAP_ERROR_PREFIX + "--set-api-blacklist-exemptions");
+                    USAP_ERROR_PREFIX + "--set-api-denylist-exemptions");
         } else if (args.mHiddenApiAccessLogSampleRate != -1) {
             throw new IllegalArgumentException(
                     USAP_ERROR_PREFIX + "--hidden-api-log-sampling-rate=");

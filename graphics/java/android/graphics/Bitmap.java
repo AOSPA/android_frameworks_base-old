@@ -80,7 +80,7 @@ public final class Bitmap implements Parcelable {
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769491)
     private byte[] mNinePatchChunk; // may be null
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private NinePatch.InsetStruct mNinePatchInsets; // may be null
     @UnsupportedAppUsage
     private int mWidth;
@@ -176,7 +176,7 @@ public final class Bitmap implements Parcelable {
      * width/height values
      */
     @SuppressWarnings("unused") // called from JNI
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     void reinit(int width, int height, boolean requestPremultiplied) {
         mWidth = width;
         mHeight = height;
@@ -684,15 +684,13 @@ public final class Bitmap implements Parcelable {
         return b;
     }
 
-    // FIXME: The maxTargetSdk should be R, once R is no longer set to
-    // CUR_DEVELOPMENT.
     /**
      * Creates a new immutable bitmap backed by ashmem which can efficiently
      * be passed between processes.
      *
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q,
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R,
             publicAlternatives = "Use {@link #asShared()} instead")
     public Bitmap createAshmemBitmap() {
         checkRecycled("Can't copy a recycled bitmap");

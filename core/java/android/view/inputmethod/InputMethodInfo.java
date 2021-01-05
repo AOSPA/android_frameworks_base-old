@@ -17,6 +17,7 @@
 package android.view.inputmethod;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
@@ -294,7 +295,7 @@ public final class InputMethodInfo implements Parcelable {
      */
     public InputMethodInfo(String packageName, String className,
             CharSequence label, String settingsActivity) {
-        this(buildDummyResolveInfo(packageName, className, label), false /* isAuxIme */,
+        this(buildFakeResolveInfo(packageName, className, label), false /* isAuxIme */,
                 settingsActivity, null /* subtypes */, 0 /* isDefaultResId */,
                 false /* forceDefault */, true /* supportsSwitchingToNextInputMethod */,
                 false /* inlineSuggestionsEnabled */, false /* isVrOnly */);
@@ -344,7 +345,7 @@ public final class InputMethodInfo implements Parcelable {
         mIsVrOnly = isVrOnly;
     }
 
-    private static ResolveInfo buildDummyResolveInfo(String packageName, String className,
+    private static ResolveInfo buildFakeResolveInfo(String packageName, String className,
             CharSequence label) {
         ResolveInfo ri = new ResolveInfo();
         ServiceInfo si = new ServiceInfo();
@@ -515,7 +516,7 @@ public final class InputMethodInfo implements Parcelable {
      *         {@link InputMethodInfo} and its Id is the same to this one.
      */
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (o == this) return true;
         if (o == null) return false;
 

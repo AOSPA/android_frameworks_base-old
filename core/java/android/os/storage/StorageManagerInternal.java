@@ -70,13 +70,6 @@ public abstract class StorageManagerInternal {
     public abstract void addExternalStoragePolicy(ExternalStorageMountPolicy policy);
 
     /**
-     * Notify the mount service that the mount policy for a UID changed.
-     * @param uid The UID for which policy changed.
-     * @param packageName The package in the UID for making the call.
-     */
-    public abstract void onExternalStoragePolicyChanged(int uid, String packageName);
-
-    /**
      * Gets the mount mode to use for a given UID as determined by consultin all
      * policies.
      *
@@ -118,7 +111,7 @@ public abstract class StorageManagerInternal {
      * affects them.
      */
     public abstract void onAppOpsChanged(int code, int uid,
-            @Nullable String packageName, int mode);
+            @Nullable String packageName, int mode, int previousMode);
 
     /**
      * Asks the StorageManager to reset all state for the provided user; this will result

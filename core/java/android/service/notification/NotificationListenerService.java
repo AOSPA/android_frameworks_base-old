@@ -22,7 +22,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
 import android.app.ActivityManager;
 import android.app.INotificationManager;
 import android.app.Notification;
@@ -64,6 +63,7 @@ import com.android.internal.os.SomeArgs;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -311,7 +311,7 @@ public abstract class NotificationListenerService extends Service {
     private Handler mHandler;
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected NotificationListenerWrapper mWrapper = null;
     private boolean isConnected = false;
 
@@ -451,7 +451,6 @@ public abstract class NotificationListenerService extends Service {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public void onNotificationRemoved(@NonNull StatusBarNotification sbn,
             @NonNull RankingMap rankingMap, @NonNull NotificationStats stats, int reason) {
@@ -1802,7 +1801,7 @@ public abstract class NotificationListenerService extends Service {
          * {@link NotificationAssistantService}
          */
         public @NonNull List<Notification.Action> getSmartActions() {
-            return mSmartActions;
+            return mSmartActions == null ? Collections.emptyList() : mSmartActions;
         }
 
         /**
@@ -1810,7 +1809,7 @@ public abstract class NotificationListenerService extends Service {
          * {@link NotificationAssistantService}
          */
         public @NonNull List<CharSequence> getSmartReplies() {
-            return mSmartReplies;
+            return mSmartReplies == null ? Collections.emptyList() : mSmartReplies;
         }
 
         /**
@@ -1864,8 +1863,9 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
-         * Returns whether this notification is a conversation notification.
-         * @hide
+         * Returns whether this notification is a conversation notification, and would appear
+         * in the conversation section of the notification shade, on devices that separate that
+         * type of notification.
          */
         public boolean isConversation() {
             return mIsConversation;
@@ -1880,9 +1880,12 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
-         * @hide
+         * Returns the shortcut information associated with this notification, if it is a
+         * {@link #isConversation() conversation notification}.
+         * <p>This might be null even if the notification is a conversation notification, if
+         * the posting app hasn't opted into the full conversation feature set yet.</p>
          */
-        public @Nullable ShortcutInfo getShortcutInfo() {
+        public @Nullable ShortcutInfo getConversationShortcutInfo() {
             return mShortcutInfo;
         }
 
@@ -2000,7 +2003,7 @@ public abstract class NotificationListenerService extends Service {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 
@@ -2076,7 +2079,7 @@ public abstract class NotificationListenerService extends Service {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 

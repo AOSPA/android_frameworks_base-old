@@ -21,22 +21,26 @@ import android.hardware.display.NightDisplayListener;
 import android.os.Handler;
 
 import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.media.dagger.MediaModule;
 import com.android.systemui.qs.AutoAddTracker;
+import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.QSTileHost;
 import com.android.systemui.statusbar.phone.AutoTileManager;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.policy.CastController;
 import com.android.systemui.statusbar.policy.DataSaverController;
 import com.android.systemui.statusbar.policy.HotspotController;
+import com.android.systemui.util.settings.SecureSettings;
 
+import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
 
 /**
  * Module for QS dependencies
  */
-// TODO: Add other QS classes
-@Module
+@Module(subcomponents = {QSFragmentComponent.class},
+        includes = {MediaModule.class})
 public interface QSModule {
 
     @Provides
@@ -45,15 +49,29 @@ public interface QSModule {
             AutoAddTracker.Builder autoAddTrackerBuilder,
             QSTileHost host,
             @Background Handler handler,
+            SecureSettings secureSettings,
             HotspotController hotspotController,
             DataSaverController dataSaverController,
             ManagedProfileController managedProfileController,
             NightDisplayListener nightDisplayListener,
             CastController castController) {
-        AutoTileManager manager = new AutoTileManager(context, autoAddTrackerBuilder,
-                host, handler, hotspotController, dataSaverController, managedProfileController,
-                nightDisplayListener, castController);
+        AutoTileManager manager = new AutoTileManager(
+                context,
+                autoAddTrackerBuilder,
+                host,
+                handler,
+                secureSettings,
+                hotspotController,
+                dataSaverController,
+                managedProfileController,
+                nightDisplayListener,
+                castController
+        );
         manager.init();
         return manager;
     }
+
+    /** */
+    @Binds
+    QSHost provideQsHost(QSTileHost controllerImpl);
 }

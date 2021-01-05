@@ -19,21 +19,28 @@ package com.android.systemui;
 import android.app.ActivityThread;
 import android.app.Application;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.os.Process;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.TimingsTraceLog;
 
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.systemui.dagger.ContextComponentHelper;
-import com.android.systemui.dagger.SystemUIRootComponent;
+import com.android.systemui.dagger.GlobalRootComponent;
+import com.android.systemui.dagger.SysUIComponent;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.people.PeopleSpaceActivity;
+import com.android.systemui.people.widget.PeopleSpaceWidgetProvider;
 import com.android.systemui.util.NotificationChannels;
 
 import java.lang.reflect.Constructor;
@@ -57,11 +64,14 @@ public class SystemUIApplication extends Application implements
     private SystemUI[] mServices;
     private boolean mServicesStarted;
     private SystemUIAppComponentFactory.ContextAvailableCallback mContextAvailableCallback;
-    private SystemUIRootComponent mRootComponent;
+    private GlobalRootComponent mRootComponent;
+    private SysUIComponent mSysUIComponent;
 
     public SystemUIApplication() {
         super();
         Log.v(TAG, "SystemUIApplication constructed.");
+        // SysUI may be building without protolog preprocessing in some cases
+        ProtoLog.REQUIRE_PROTOLOGTOOL = false;
     }
 
     @Override
@@ -75,8 +85,9 @@ public class SystemUIApplication extends Application implements
         log.traceBegin("DependencyInjection");
         mContextAvailableCallback.onContextAvailable(this);
         mRootComponent = SystemUIFactory.getInstance().getRootComponent();
-        mComponentHelper = mRootComponent.getContextComponentHelper();
-        mBootCompleteCache = mRootComponent.provideBootCacheImpl();
+        mSysUIComponent = SystemUIFactory.getInstance().getSysUIComponent();
+        mComponentHelper = mSysUIComponent.getContextComponentHelper();
+        mBootCompleteCache = mSysUIComponent.provideBootCacheImpl();
         log.traceEnd();
 
         // Set the application theme that is inherited by all services. Note that setting the
@@ -100,6 +111,35 @@ public class SystemUIApplication extends Application implements
                         for (int i = 0; i < N; i++) {
                             mServices[i].onBootCompleted();
                         }
+                    }
+                    // If flag SHOW_PEOPLE_SPACE is true, enable People Space launcher icon.
+                    // TODO(b/170396074): Remove this when we don't need an icon anymore.
+                    try {
+                        int showPeopleSpace = Settings.Global.getInt(context.getContentResolver(),
+                                Settings.Global.SHOW_PEOPLE_SPACE, 0);
+                        context.getPackageManager().setComponentEnabledSetting(
+                                new ComponentName(context, PeopleSpaceActivity.class),
+                                showPeopleSpace == 1
+                                        ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                                        : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                PackageManager.DONT_KILL_APP);
+                    } catch (Exception e) {
+                        Log.w(TAG, "Error enabling People Space launch icon:", e);
+                    }
+
+                    // If SHOW_PEOPLE_SPACE is true, enable People Space widget provider.
+                    // TODO(b/170396074): Remove this when we don't need a widget anymore.
+                    try {
+                        int showPeopleSpace = Settings.Global.getInt(context.getContentResolver(),
+                                Settings.Global.SHOW_PEOPLE_SPACE, 0);
+                        context.getPackageManager().setComponentEnabledSetting(
+                                new ComponentName(context, PeopleSpaceWidgetProvider.class),
+                                showPeopleSpace == 1
+                                        ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                                        : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                PackageManager.DONT_KILL_APP);
+                    } catch (Exception e) {
+                        Log.w(TAG, "Error enabling People Space widget:", e);
                     }
                 }
             }, bootCompletedFilter);
@@ -172,7 +212,7 @@ public class SystemUIApplication extends Application implements
             }
         }
 
-        final DumpManager dumpManager = mRootComponent.createDumpManager();
+        final DumpManager dumpManager = mSysUIComponent.createDumpManager();
 
         Log.v(TAG, "Starting SystemUI services for user " +
                 Process.myUserHandle().getIdentifier() + ".");
@@ -215,7 +255,7 @@ public class SystemUIApplication extends Application implements
 
             dumpManager.registerDumpable(mServices[i].getClass().getName(), mServices[i]);
         }
-        mRootComponent.getInitController().executePostInitTasks();
+        mSysUIComponent.getInitController().executePostInitTasks();
         log.traceEnd();
 
         mServicesStarted = true;
@@ -224,7 +264,7 @@ public class SystemUIApplication extends Application implements
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         if (mServicesStarted) {
-            mRootComponent.getConfigurationController().onConfigurationChanged(newConfig);
+            mSysUIComponent.getConfigurationController().onConfigurationChanged(newConfig);
             int len = mServices.length;
             for (int i = 0; i < len; i++) {
                 if (mServices[i] != null) {

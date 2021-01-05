@@ -16,6 +16,8 @@
 
 package android.app;
 
+import static android.app.WindowConfiguration.activityTypeToString;
+import static android.app.WindowConfiguration.windowingModeToString;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 
@@ -76,7 +78,6 @@ import android.util.DisplayMetrics;
 import android.util.Singleton;
 import android.util.Size;
 import android.view.Surface;
-import android.window.WindowContainerToken;
 
 import com.android.internal.app.LocalePicker;
 import com.android.internal.app.procstats.ProcessStats;
@@ -101,6 +102,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Executor;
 
 /**
  * <p>
@@ -170,6 +172,12 @@ public class ActivityManager {
      * @hide
      */
     public static final int INSTR_FLAG_DISABLE_TEST_API_CHECKS = 1 << 2;
+
+    /**
+     * Do not restart the target process when starting or finishing instrumentation.
+     * @hide
+     */
+    public static final int INSTR_FLAG_NO_RESTART = 1 << 3;
 
     static final class UidObserver extends IUidObserver.Stub {
         final OnUidImportanceListener mListener;
@@ -488,90 +496,98 @@ public class ActivityManager {
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProcessState {}
 
+    /*
+     * PROCESS_STATE_* must come from frameworks/base/core/java/android/app/ProcessStateEnum.aidl.
+     * This is to make sure that Java side uses the same values as native.
+     */
 
     /** @hide Not a real process state. */
-    public static final int PROCESS_STATE_UNKNOWN = -1;
+    public static final int PROCESS_STATE_UNKNOWN = ProcessStateEnum.UNKNOWN;
 
     /** @hide Process is a persistent system process. */
-    public static final int PROCESS_STATE_PERSISTENT = 0;
+    public static final int PROCESS_STATE_PERSISTENT = ProcessStateEnum.PERSISTENT;
 
     /** @hide Process is a persistent system process and is doing UI. */
-    public static final int PROCESS_STATE_PERSISTENT_UI = 1;
+    public static final int PROCESS_STATE_PERSISTENT_UI = ProcessStateEnum.PERSISTENT_UI;
 
     /** @hide Process is hosting the current top activities.  Note that this covers
      * all activities that are visible to the user. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_TOP = 2;
+    public static final int PROCESS_STATE_TOP = ProcessStateEnum.TOP;
 
-    /** @hide Process is bound to a TOP app. This is ranked below SERVICE_LOCATION so that
-     * it doesn't get the capability of location access while-in-use. */
-    public static final int PROCESS_STATE_BOUND_TOP = 3;
+    /** @hide Process is bound to a TOP app. */
+    public static final int PROCESS_STATE_BOUND_TOP = ProcessStateEnum.BOUND_TOP;
 
     /** @hide Process is hosting a foreground service. */
-    @UnsupportedAppUsage
-    public static final int PROCESS_STATE_FOREGROUND_SERVICE = 4;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int PROCESS_STATE_FOREGROUND_SERVICE = ProcessStateEnum.FOREGROUND_SERVICE;
 
     /** @hide Process is hosting a foreground service due to a system binding. */
-    @UnsupportedAppUsage
-    public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE = 5;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE =
+            ProcessStateEnum.BOUND_FOREGROUND_SERVICE;
 
     /** @hide Process is important to the user, and something they are aware of. */
-    public static final int PROCESS_STATE_IMPORTANT_FOREGROUND = 6;
+    public static final int PROCESS_STATE_IMPORTANT_FOREGROUND =
+            ProcessStateEnum.IMPORTANT_FOREGROUND;
 
     /** @hide Process is important to the user, but not something they are aware of. */
-    @UnsupportedAppUsage
-    public static final int PROCESS_STATE_IMPORTANT_BACKGROUND = 7;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int PROCESS_STATE_IMPORTANT_BACKGROUND =
+            ProcessStateEnum.IMPORTANT_BACKGROUND;
 
     /** @hide Process is in the background transient so we will try to keep running. */
-    public static final int PROCESS_STATE_TRANSIENT_BACKGROUND = 8;
+    public static final int PROCESS_STATE_TRANSIENT_BACKGROUND =
+            ProcessStateEnum.TRANSIENT_BACKGROUND;
 
     /** @hide Process is in the background running a backup/restore operation. */
-    public static final int PROCESS_STATE_BACKUP = 9;
+    public static final int PROCESS_STATE_BACKUP = ProcessStateEnum.BACKUP;
 
     /** @hide Process is in the background running a service.  Unlike oom_adj, this level
      * is used for both the normal running in background state and the executing
      * operations state. */
-    @UnsupportedAppUsage
-    public static final int PROCESS_STATE_SERVICE = 10;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int PROCESS_STATE_SERVICE = ProcessStateEnum.SERVICE;
 
     /** @hide Process is in the background running a receiver.   Note that from the
      * perspective of oom_adj, receivers run at a higher foreground level, but for our
      * prioritization here that is not necessary and putting them below services means
      * many fewer changes in some process states as they receive broadcasts. */
-    @UnsupportedAppUsage
-    public static final int PROCESS_STATE_RECEIVER = 11;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int PROCESS_STATE_RECEIVER = ProcessStateEnum.RECEIVER;
 
     /** @hide Same as {@link #PROCESS_STATE_TOP} but while device is sleeping. */
-    public static final int PROCESS_STATE_TOP_SLEEPING = 12;
+    public static final int PROCESS_STATE_TOP_SLEEPING = ProcessStateEnum.TOP_SLEEPING;
 
     /** @hide Process is in the background, but it can't restore its state so we want
      * to try to avoid killing it. */
-    public static final int PROCESS_STATE_HEAVY_WEIGHT = 13;
+    public static final int PROCESS_STATE_HEAVY_WEIGHT = ProcessStateEnum.HEAVY_WEIGHT;
 
     /** @hide Process is in the background but hosts the home activity. */
-    @UnsupportedAppUsage
-    public static final int PROCESS_STATE_HOME = 14;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int PROCESS_STATE_HOME = ProcessStateEnum.HOME;
 
     /** @hide Process is in the background but hosts the last shown activity. */
-    public static final int PROCESS_STATE_LAST_ACTIVITY = 15;
+    public static final int PROCESS_STATE_LAST_ACTIVITY = ProcessStateEnum.LAST_ACTIVITY;
 
     /** @hide Process is being cached for later use and contains activities. */
-    @UnsupportedAppUsage
-    public static final int PROCESS_STATE_CACHED_ACTIVITY = 16;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int PROCESS_STATE_CACHED_ACTIVITY = ProcessStateEnum.CACHED_ACTIVITY;
 
     /** @hide Process is being cached for later use and is a client of another cached
      * process that contains activities. */
-    public static final int PROCESS_STATE_CACHED_ACTIVITY_CLIENT = 17;
+    public static final int PROCESS_STATE_CACHED_ACTIVITY_CLIENT =
+            ProcessStateEnum.CACHED_ACTIVITY_CLIENT;
 
     /** @hide Process is being cached for later use and has an activity that corresponds
      * to an existing recent task. */
-    public static final int PROCESS_STATE_CACHED_RECENT = 18;
+    public static final int PROCESS_STATE_CACHED_RECENT = ProcessStateEnum.CACHED_RECENT;
 
     /** @hide Process is being cached for later use and is empty. */
-    public static final int PROCESS_STATE_CACHED_EMPTY = 19;
+    public static final int PROCESS_STATE_CACHED_EMPTY = ProcessStateEnum.CACHED_EMPTY;
 
     /** @hide Process does not exist. */
-    public static final int PROCESS_STATE_NONEXISTENT = 20;
+    public static final int PROCESS_STATE_NONEXISTENT = ProcessStateEnum.NONEXISTENT;
 
     /**
      * The set of flags for process capability.
@@ -1620,7 +1636,7 @@ public class ActivityManager {
         }
 
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(@Nullable Object obj) {
             if (!(obj instanceof TaskDescription)) {
                 return false;
             }
@@ -1694,6 +1710,13 @@ public class ActivityManager {
         @Deprecated
         public int affiliatedTaskId;
 
+        /**
+         * Information of organized child tasks.
+         *
+         * @hide
+         */
+        public ArrayList<RecentTaskInfo> childrenTaskInfos = new ArrayList<>();
+
         public RecentTaskInfo() {
         }
 
@@ -1709,6 +1732,7 @@ public class ActivityManager {
         public void readFromParcel(Parcel source) {
             id = source.readInt();
             persistentId = source.readInt();
+            childrenTaskInfos = source.readArrayList(RecentTaskInfo.class.getClassLoader());
             super.readFromParcel(source);
         }
 
@@ -1716,6 +1740,7 @@ public class ActivityManager {
         public void writeToParcel(Parcel dest, int flags) {
             dest.writeInt(id);
             dest.writeInt(persistentId);
+            dest.writeList(childrenTaskInfos);
             super.writeToParcel(dest, flags);
         }
 
@@ -1733,11 +1758,6 @@ public class ActivityManager {
          * @hide
          */
         public void dump(PrintWriter pw, String indent) {
-            final String activityType = WindowConfiguration.activityTypeToString(
-                    configuration.windowConfiguration.getActivityType());
-            final String windowingMode = WindowConfiguration.activityTypeToString(
-                    configuration.windowConfiguration.getActivityType());
-
             pw.println(); pw.print("   ");
             pw.print(" id="); pw.print(persistentId);
             pw.print(" stackId="); pw.print(stackId);
@@ -1763,8 +1783,8 @@ public class ActivityManager {
             pw.print("   ");
             pw.print(" isExcluded=");
             pw.print(((baseIntent.getFlags() & FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0));
-            pw.print(" activityType="); pw.print(activityType);
-            pw.print(" windowingMode="); pw.print(windowingMode);
+            pw.print(" activityType="); pw.print(activityTypeToString(getActivityType()));
+            pw.print(" windowingMode="); pw.print(windowingModeToString(getWindowingMode()));
             pw.print(" supportsSplitScreenMultiWindow=");
             pw.println(supportsSplitScreenMultiWindow);
             if (taskDescription != null) {
@@ -1931,7 +1951,7 @@ public class ActivityManager {
         ArrayList<AppTask> tasks = new ArrayList<AppTask>();
         List<IBinder> appTasks;
         try {
-            appTasks = getTaskService().getAppTasks(mContext.getPackageName());
+            appTasks = getTaskService().getAppTasks(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2198,7 +2218,7 @@ public class ActivityManager {
         /**
          * @return The size of the task at the point this snapshot was taken.
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public Point getTaskSize() {
             return mTaskSize;
         }
@@ -2466,7 +2486,7 @@ public class ActivityManager {
         try {
             ActivityThread thread = ActivityThread.currentActivityThread();
             IApplicationThread appThread = thread.getApplicationThread();
-            String packageName = mContext.getPackageName();
+            String packageName = mContext.getOpPackageName();
             getTaskService().moveTaskToFront(appThread, packageName, taskId, flags, options);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -2740,13 +2760,13 @@ public class ActivityManager {
         public boolean lowMemory;
 
         /** @hide */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long hiddenAppThreshold;
         /** @hide */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long secondaryServerThreshold;
         /** @hide */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long visibleAppThreshold;
         /** @hide */
         @UnsupportedAppUsage
@@ -2811,160 +2831,6 @@ public class ActivityManager {
             getService().getMemoryInfo(outInfo);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Information you can retrieve about an ActivityStack in the system.
-     * @hide
-     */
-    public static class StackInfo implements Parcelable {
-        @UnsupportedAppUsage
-        public int stackId;
-        @UnsupportedAppUsage
-        public Rect bounds = new Rect();
-        @UnsupportedAppUsage
-        public int[] taskIds;
-        @UnsupportedAppUsage
-        public String[] taskNames;
-        @UnsupportedAppUsage
-        public Rect[] taskBounds;
-        @UnsupportedAppUsage
-        public int[] taskUserIds;
-        @UnsupportedAppUsage
-        public ComponentName topActivity;
-        @UnsupportedAppUsage
-        public int displayId;
-        @UnsupportedAppUsage
-        public int userId;
-        @UnsupportedAppUsage
-        public boolean visible;
-        // Index of the stack in the display's stack list, can be used for comparison of stack order
-        // TODO: Can be removed since no one is using it.
-        @UnsupportedAppUsage
-        @Deprecated
-        public int position;
-        public WindowContainerToken stackToken;
-        /**
-         * The full configuration the stack is currently running in.
-         * @hide
-         */
-        final public Configuration configuration = new Configuration();
-
-        @Override
-        public int describeContents() {
-            return 0;
-        }
-
-        @Override
-        public void writeToParcel(Parcel dest, int flags) {
-            dest.writeInt(stackId);
-            dest.writeInt(bounds.left);
-            dest.writeInt(bounds.top);
-            dest.writeInt(bounds.right);
-            dest.writeInt(bounds.bottom);
-            dest.writeIntArray(taskIds);
-            dest.writeStringArray(taskNames);
-            final int boundsCount = taskBounds == null ? 0 : taskBounds.length;
-            dest.writeInt(boundsCount);
-            for (int i = 0; i < boundsCount; i++) {
-                dest.writeInt(taskBounds[i].left);
-                dest.writeInt(taskBounds[i].top);
-                dest.writeInt(taskBounds[i].right);
-                dest.writeInt(taskBounds[i].bottom);
-            }
-            dest.writeIntArray(taskUserIds);
-            dest.writeInt(displayId);
-            dest.writeInt(userId);
-            dest.writeInt(visible ? 1 : 0);
-            dest.writeInt(position);
-            stackToken.writeToParcel(dest, 0);
-            if (topActivity != null) {
-                dest.writeInt(1);
-                topActivity.writeToParcel(dest, 0);
-            } else {
-                dest.writeInt(0);
-            }
-            configuration.writeToParcel(dest, flags);
-        }
-
-        public void readFromParcel(Parcel source) {
-            stackId = source.readInt();
-            bounds = new Rect(
-                    source.readInt(), source.readInt(), source.readInt(), source.readInt());
-            taskIds = source.createIntArray();
-            taskNames = source.createStringArray();
-            final int boundsCount = source.readInt();
-            if (boundsCount > 0) {
-                taskBounds = new Rect[boundsCount];
-                for (int i = 0; i < boundsCount; i++) {
-                    taskBounds[i] = new Rect();
-                    taskBounds[i].set(
-                            source.readInt(), source.readInt(), source.readInt(), source.readInt());
-                }
-            } else {
-                taskBounds = null;
-            }
-            taskUserIds = source.createIntArray();
-            displayId = source.readInt();
-            userId = source.readInt();
-            visible = source.readInt() > 0;
-            position = source.readInt();
-            stackToken = WindowContainerToken.CREATOR.createFromParcel(source);
-            if (source.readInt() > 0) {
-                topActivity = ComponentName.readFromParcel(source);
-            }
-            configuration.readFromParcel(source);
-        }
-
-        public static final @android.annotation.NonNull Creator<StackInfo> CREATOR = new Creator<StackInfo>() {
-            @Override
-            public StackInfo createFromParcel(Parcel source) {
-                return new StackInfo(source);
-            }
-            @Override
-            public StackInfo[] newArray(int size) {
-                return new StackInfo[size];
-            }
-        };
-
-        public StackInfo() {
-        }
-
-        private StackInfo(Parcel source) {
-            readFromParcel(source);
-        }
-
-        @UnsupportedAppUsage
-        public String toString(String prefix) {
-            StringBuilder sb = new StringBuilder(256);
-            sb.append(prefix); sb.append("Stack id="); sb.append(stackId);
-                    sb.append(" bounds="); sb.append(bounds.toShortString());
-                    sb.append(" displayId="); sb.append(displayId);
-                    sb.append(" userId="); sb.append(userId);
-                    sb.append("\n");
-                    sb.append(" configuration="); sb.append(configuration);
-                    sb.append("\n");
-            prefix = prefix + "  ";
-            for (int i = 0; i < taskIds.length; ++i) {
-                sb.append(prefix); sb.append("taskId="); sb.append(taskIds[i]);
-                        sb.append(": "); sb.append(taskNames[i]);
-                        if (taskBounds != null) {
-                            sb.append(" bounds="); sb.append(taskBounds[i].toShortString());
-                        }
-                        sb.append(" userId=").append(taskUserIds[i]);
-                        sb.append(" visible=").append(visible);
-                        if (topActivity != null) {
-                            sb.append(" topActivity=").append(topActivity);
-                        }
-                        sb.append("\n");
-            }
-            return sb.toString();
-        }
-
-        @Override
-        public String toString() {
-            return toString("");
         }
     }
 
@@ -3191,7 +3057,7 @@ public class ActivityManager {
          * persistent system app.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static final int FLAG_PERSISTENT = 1<<1;
 
         /**
@@ -3199,7 +3065,7 @@ public class ActivityManager {
          * persistent system app.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static final int FLAG_HAS_ACTIVITIES = 1<<2;
 
         /**
@@ -3303,7 +3169,7 @@ public class ActivityManager {
          *
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         @TestApi
         public static final int IMPORTANCE_CANT_SAVE_STATE_PRE_26 = 170;
 
@@ -3363,7 +3229,7 @@ public class ActivityManager {
          * will be passed to a client, use {@link #procStateToImportanceForClient}.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static @Importance int procStateToImportance(int procState) {
             if (procState == PROCESS_STATE_NONEXISTENT) {
                 return IMPORTANCE_GONE;
@@ -3762,7 +3628,7 @@ public class ActivityManager {
      * running its code, {@link RunningAppProcessInfo#IMPORTANCE_GONE} is returned.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public @RunningAppProcessInfo.Importance int getPackageImportance(String packageName) {
         try {
@@ -3782,7 +3648,7 @@ public class ActivityManager {
      * running its code, {@link RunningAppProcessInfo#IMPORTANCE_GONE} is returned.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public @RunningAppProcessInfo.Importance int getUidImportance(int uid) {
         try {
@@ -3799,7 +3665,7 @@ public class ActivityManager {
      * {@link #addOnUidImportanceListener}.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     public interface OnUidImportanceListener {
         /**
          * The importance if a given uid has changed.  Will be one of the importance
@@ -3830,7 +3696,7 @@ public class ActivityManager {
      * {@link android.Manifest.permission#PACKAGE_USAGE_STATS}.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public void addOnUidImportanceListener(OnUidImportanceListener listener,
             @RunningAppProcessInfo.Importance int importanceCutpoint) {
@@ -3859,7 +3725,7 @@ public class ActivityManager {
      * @throws IllegalArgumentException If the listener is not registered.
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public void removeOnUidImportanceListener(OnUidImportanceListener listener) {
         synchronized (this) {
@@ -4001,7 +3867,7 @@ public class ActivityManager {
      * @see #forceStopPackageAsUser(String, int)
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.FORCE_STOP_PACKAGES)
     public void forceStopPackage(String packageName) {
         forceStopPackageAsUser(packageName, mContext.getUserId());
@@ -4322,7 +4188,7 @@ public class ActivityManager {
      * @param userid the user's id. Zero indicates the default user.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean switchUser(int userid) {
         try {
             return getService().switchUser(userid);
@@ -4340,7 +4206,6 @@ public class ActivityManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public boolean switchUser(@NonNull UserHandle user) {
         if (user == null) {
@@ -4350,15 +4215,18 @@ public class ActivityManager {
     }
 
     /**
-     * Updates mcc mnc configuration and applies changes to the entire system.
+     * Updates the MCC (Mobile Country Code) and MNC (Mobile Network Code) in the
+     * system configuration.
      *
-     * @param mcc mcc configuration to update.
-     * @param mnc mnc configuration to update.
+     * @param mcc The new MCC.
+     * @param mnc The new MNC.
      * @throws RemoteException; IllegalArgumentException if mcc or mnc is null;
      * @return Returns {@code true} if the configuration was updated successfully;
      *         {@code false} otherwise.
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
     @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION)
     public boolean updateMccMncConfiguration(@NonNull String mcc, @NonNull String mnc) {
         if (mcc == null || mnc == null) {
@@ -4773,7 +4641,7 @@ public class ActivityManager {
      *
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     @RequiresPermission(Manifest.permission.FORCE_STOP_PACKAGES)
     public void killProcessesWhenImperceptible(@NonNull int[] pids, @NonNull String reason) {
         try {
@@ -4880,9 +4748,9 @@ public class ActivityManager {
     }
 
     /**
-     * Get packages of bugreport-whitelisted apps to handle a bug report.
+     * Get packages of bugreport-allowlisted apps to handle a bug report.
      *
-     * @return packages of bugreport-whitelisted apps to handle a bug report.
+     * @return packages of bugreport-allowlisted apps to handle a bug report.
      * @hide
      */
     public List<String> getBugreportWhitelistedPackages() {
@@ -4907,31 +4775,43 @@ public class ActivityManager {
     }
 
     /**
-     * Register with {@link HomeVisibilityObserver} with ActivityManager.
-     * TODO: b/144351078 expose as SystemApi
+     * Register to be notified when the visibility of the home screen changes.
+     *
+     * @param executor The executor on which the listener should be called.
+     * @param listener The listener that is called when home visibility changes.
      * @hide
      */
-    public void registerHomeVisibilityObserver(@NonNull HomeVisibilityObserver observer) {
-        Preconditions.checkNotNull(observer);
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.SET_ACTIVITY_WATCHER)
+    public void addHomeVisibilityListener(@NonNull Executor executor,
+            @NonNull HomeVisibilityListener listener) {
+        Preconditions.checkNotNull(listener);
+        Preconditions.checkNotNull(executor);
         try {
-            observer.init(mContext, this);
-            getService().registerProcessObserver(observer.mObserver);
+            listener.init(mContext, executor, this);
+            getService().registerProcessObserver(listener.mObserver);
             // Notify upon first registration.
-            observer.onHomeVisibilityChanged(observer.mIsHomeActivityVisible);
+            executor.execute(() ->
+                    listener.onHomeVisibilityChanged(listener.mIsHomeActivityVisible));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
-     * Unregister with {@link HomeVisibilityObserver} with ActivityManager.
-     * TODO: b/144351078 expose as SystemApi
+     * Removes a listener that was previously added with {@link #addHomeVisibilityListener}.
+     *
+     * @param listener The listener that was previously added.
      * @hide
      */
-    public void unregisterHomeVisibilityObserver(@NonNull HomeVisibilityObserver observer) {
-        Preconditions.checkNotNull(observer);
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.SET_ACTIVITY_WATCHER)
+    public void removeHomeVisibilityListener(@NonNull HomeVisibilityListener listener) {
+        Preconditions.checkNotNull(listener);
         try {
-            getService().unregisterProcessObserver(observer.mObserver);
+            getService().unregisterProcessObserver(listener.mObserver);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4947,6 +4827,22 @@ public class ActivityManager {
     public void resetAppErrors() {
         try {
             getService().resetAppErrors();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Holds the AM lock for the specified amount of milliseconds.
+     * This is intended for use by the tests that need to imitate lock contention.
+     * The token should be obtained by
+     * {@link android.content.pm.PackageManager#getHoldLockToken()}.
+     * @hide
+     */
+    @TestApi
+    public void holdLock(IBinder token, int durationMs) {
+        try {
+            getService().holdLock(token, durationMs);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

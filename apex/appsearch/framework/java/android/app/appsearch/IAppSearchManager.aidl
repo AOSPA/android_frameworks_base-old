@@ -15,29 +15,37 @@
  */
 package android.app.appsearch;
 
+import android.os.Bundle;
+
 import com.android.internal.infra.AndroidFuture;
 
 parcelable AppSearchResult;
 parcelable AppSearchBatchResult;
+parcelable SearchResults;
 
 /** {@hide} */
 interface IAppSearchManager {
     /**
      * Sets the schema.
      *
-     * @param schemaBytes Serialized SchemaProto.
+     * @param databaseName  The databaseName this document resides in.
+     * @param schemaBundles List of AppSearchSchema bundles.
      * @param forceOverride Whether to apply the new schema even if it is incompatible. All
      *     incompatible documents will be deleted.
      * @param callback {@link AndroidFuture}&lt;{@link AppSearchResult}&lt;{@link Void}&gt&gt;.
      *     The results of the call.
      */
     void setSchema(
-        in byte[] schemaBytes, boolean forceOverride, in AndroidFuture<AppSearchResult> callback);
+        in String databaseName,
+        in List<Bundle> schemaBundles,
+        boolean forceOverride,
+        in AndroidFuture<AppSearchResult> callback);
 
     /**
      * Inserts documents into the index.
      *
-     * @param documentsBytes {@link List}&lt;byte[]&gt; of serialized DocumentProtos.
+     * @param databaseName  The name of the database where this document lives.
+     * @param documentBundes List of GenericDocument bundles.
      * @param callback
      *     {@link AndroidFuture}&lt;{@link AppSearchBatchResult}&lt;{@link String}, {@link Void}&gt;&gt;.
      *     If the call fails to start, {@code callback} will be completed exceptionally. Otherwise,
@@ -45,37 +53,49 @@ interface IAppSearchManager {
      *     {@link AppSearchBatchResult}&lt;{@link String}, {@link Void}&gt;
      *     where the keys are document URIs, and the values are {@code null}.
      */
-    void putDocuments(in List documentsBytes, in AndroidFuture<AppSearchBatchResult> callback);
+    void putDocuments(
+        in String databaseName,
+        in List<Bundle> documentBundles,
+        in AndroidFuture<AppSearchBatchResult> callback);
 
     /**
      * Retrieves documents from the index.
      *
+     * @param databaseName  The databaseName this document resides in.
+     * @param namespace    The namespace this document resides in.
      * @param uris The URIs of the documents to retrieve
      * @param callback
-     *     {@link AndroidFuture}&lt;{@link AppSearchBatchResult}&lt;{@link String}, {@link byte[]}&gt;&gt;.
+     *     {@link AndroidFuture}&lt;{@link AppSearchBatchResult}&lt;{@link String}, {@link Bundle}&gt;&gt;.
      *     If the call fails to start, {@code callback} will be completed exceptionally. Otherwise,
      *     {@code callback} will be completed with an
-     *     {@link AppSearchBatchResult}&lt;{@link String}, {@link byte[]}&gt;
-     *     where the keys are document URIs, and the values are serialized Document protos.
+     *     {@link AppSearchBatchResult}&lt;{@link String}, {@link Bundle}&gt;
+     *     where the keys are document URIs, and the values are Document bundles.
      */
-    void getDocuments(in List<String> uris, in AndroidFuture<AppSearchBatchResult> callback);
+    void getDocuments(
+        in String databaseName,
+        in String namespace,
+        in List<String> uris,
+        in AndroidFuture<AppSearchBatchResult> callback);
 
     /**
      * Searches a document based on a given specifications.
      *
-     * @param searchSpecBytes Serialized SearchSpecProto.
-     * @param resultSpecBytes Serialized SearchResultsProto.
-     * @param scoringSpecBytes Serialized ScoringSpecProto.
-     * @param callback {@link AndroidFuture}&lt;{@link AppSearchResult}&lt;{@link byte[]}&gt;&gt;
-     *     Will be completed with a serialized {@link SearchResultsProto}.
+     * @param databaseName The databaseName this query for.
+     * @param queryExpression String to search for
+     * @param searchSpecBundle SearchSpec bundle
+     * @param callback {@link AndroidFuture}&lt;{@link AppSearchResult}&lt;{@link SearchResults}&gt;&gt;
      */
     void query(
-        in byte[] searchSpecBytes, in byte[] resultSpecBytes, in byte[] scoringSpecBytes,
+        in String databaseName,
+        in String queryExpression,
+        in Bundle searchSpecBundle,
         in AndroidFuture<AppSearchResult> callback);
 
     /**
-     * Deletes documents by URI.
+     * Removes documents by URI.
      *
+     * @param databaseName The databaseName the document is in.
+     * @param namespace    Namespace of the document to remove.
      * @param uris The URIs of the documents to delete
      * @param callback
      *     {@link AndroidFuture}&lt;{@link AppSearchBatchResult}&lt;{@link String}, {@link Void}&gt;&gt;.
@@ -85,28 +105,23 @@ interface IAppSearchManager {
      *     where the keys are document URIs. If a document doesn't exist, it will be reported as a
      *     failure where the {@code throwable} is {@code null}.
      */
-    void delete(in List<String> uris, in AndroidFuture<AppSearchBatchResult> callback);
+    void removeByUri(
+        in String databaseName,
+        in String namespace,
+        in List<String> uris,
+        in AndroidFuture<AppSearchBatchResult> callback);
 
     /**
-     * Deletes documents by schema type.
+     * Removes documents by given query.
      *
-     * @param schemaTypes The schema types of the documents to delete
-     * @param callback
-     *     {@link AndroidFuture}&lt;{@link AppSearchBatchResult}&lt;{@link String}, {@link Void}&gt;&gt;.
-     *     If the call fails to start, {@code callback} will be completed exceptionally. Otherwise,
-     *     {@code callback} will be completed with an
-     *     {@link AppSearchBatchResult}&lt;{@link String}, {@link Void}&gt;
-     *     where the keys are schema types. If a schema type doesn't exist, it will be reported as a
-     *     failure where the {@code throwable} is {@code null}.
+     * @param databaseName The databaseName this query for.
+     * @param queryExpression String to search for
+     * @param searchSpecBundle SearchSpec bundle
+     * @param callback {@link AndroidFuture}&lt;{@link AppSearchResult}&lt;{@link SearchResults}&gt;&gt;
      */
-    void deleteByTypes(
-        in List<String> schemaTypes, in AndroidFuture<AppSearchBatchResult> callback);
-
-    /**
-     * Deletes all documents belonging to the calling app.
-     *
-     * @param callback {@link AndroidFuture}&lt;{@link AppSearchResult}&lt;{@link Void}&gt;&gt;.
-     *     Will be completed with the result of the call.
-     */
-    void deleteAll(in AndroidFuture<AppSearchResult> callback);
+    void removeByQuery(
+        in String databaseName,
+        in String queryExpression,
+        in Bundle searchSpecBundle,
+        in AndroidFuture<AppSearchResult> callback);
 }

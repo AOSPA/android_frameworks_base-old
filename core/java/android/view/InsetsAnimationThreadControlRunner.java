@@ -20,11 +20,13 @@ import static android.view.InsetsController.DEBUG;
 import static android.view.SyncRtSurfaceTransactionApplier.applyParams;
 
 import android.annotation.UiThread;
+import android.content.res.CompatibilityInfo;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Trace;
 import android.util.Log;
 import android.util.SparseArray;
+import android.util.proto.ProtoOutputStream;
 import android.view.InsetsController.AnimationType;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
 import android.view.WindowInsets.Type.InsetsType;
@@ -43,7 +45,6 @@ public class InsetsAnimationThreadControlRunner implements InsetsAnimationContro
     private final InsetsAnimationControlImpl mControl;
     private final InsetsAnimationControlCallbacks mOuterCallbacks;
     private final Handler mMainThreadHandler;
-    private final InsetsState mState = new InsetsState();
     private final InsetsAnimationControlCallbacks mCallbacks =
             new InsetsAnimationControlCallbacks() {
 
@@ -59,7 +60,7 @@ public class InsetsAnimationThreadControlRunner implements InsetsAnimationContro
 
         @Override
         public void scheduleApplyChangeInsets(InsetsAnimationControlRunner runner) {
-            mControl.applyChangeInsets(mState);
+            mControl.applyChangeInsets(null /* outState */);
         }
 
         @Override
@@ -102,11 +103,12 @@ public class InsetsAnimationThreadControlRunner implements InsetsAnimationContro
             InsetsState state, WindowInsetsAnimationControlListener listener,
             @InsetsType int types,
             InsetsAnimationControlCallbacks controller, long durationMs, Interpolator interpolator,
-            @AnimationType int animationType, Handler mainThreadHandler) {
+            @AnimationType int animationType, CompatibilityInfo.Translator translator,
+            Handler mainThreadHandler) {
         mMainThreadHandler = mainThreadHandler;
         mOuterCallbacks = controller;
         mControl = new InsetsAnimationControlImpl(controls, frame, state, listener,
-                types, mCallbacks, durationMs, interpolator, animationType);
+                types, mCallbacks, durationMs, interpolator, animationType, translator);
         InsetsAnimationThread.getHandler().post(() -> {
             Trace.asyncTraceBegin(Trace.TRACE_TAG_VIEW,
                     "InsetsAsyncAnimation: " + WindowInsets.Type.toString(types), types);
@@ -118,6 +120,12 @@ public class InsetsAnimationThreadControlRunner implements InsetsAnimationContro
         for (int i = controls.size() - 1; i >= 0; i--) {
             controls.valueAt(i).release(SurfaceControl::release);
         }
+    }
+
+    @Override
+    @UiThread
+    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
+        mControl.dumpDebug(proto, fieldId);
     }
 
     @Override

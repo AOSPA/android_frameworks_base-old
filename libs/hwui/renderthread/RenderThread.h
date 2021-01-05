@@ -17,10 +17,10 @@
 #ifndef RENDERTHREAD_H_
 #define RENDERTHREAD_H_
 
-#include <GrContext.h>
+#include <GrDirectContext.h>
 #include <SkBitmap.h>
-#include <apex/choreographer.h>
 #include <cutils/compiler.h>
+#include <private/android/choreographer.h>
 #include <thread/ThreadBase.h>
 #include <utils/Looper.h>
 #include <utils/Thread.h>
@@ -106,11 +106,11 @@ public:
     ProfileDataContainer& globalProfileData() { return mGlobalProfileData; }
     Readback& readback();
 
-    GrContext* getGrContext() const { return mGrContext.get(); }
-    void setGrContext(sk_sp<GrContext> cxt);
+    GrDirectContext* getGrContext() const { return mGrContext.get(); }
+    void setGrContext(sk_sp<GrDirectContext> cxt);
 
     CacheManager& cacheManager() { return *mCacheManager; }
-    VulkanManager& vulkanManager() { return *mVkManager; }
+    VulkanManager& vulkanManager();
 
     sk_sp<Bitmap> allocateHardwareBitmap(SkBitmap& skBitmap);
     void dumpGraphicsMemory(int fd);
@@ -186,9 +186,9 @@ private:
     ProfileDataContainer mGlobalProfileData;
     Readback* mReadback = nullptr;
 
-    sk_sp<GrContext> mGrContext;
+    sk_sp<GrDirectContext> mGrContext;
     CacheManager* mCacheManager;
-    VulkanManager* mVkManager;
+    sp<VulkanManager> mVkManager;
 };
 
 } /* namespace renderthread */

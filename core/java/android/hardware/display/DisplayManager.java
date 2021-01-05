@@ -16,6 +16,8 @@
 
 package android.hardware.display;
 
+import static android.view.Display.DEFAULT_DISPLAY;
+
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -29,6 +31,7 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.media.projection.MediaProjection;
+import android.os.Build;
 import android.os.Handler;
 import android.util.Pair;
 import android.util.SparseArray;
@@ -64,7 +67,7 @@ public final class DisplayManager {
      * </p>
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final String ACTION_WIFI_DISPLAY_STATUS_CHANGED =
             "android.hardware.display.action.WIFI_DISPLAY_STATUS_CHANGED";
 
@@ -72,7 +75,7 @@ public final class DisplayManager {
      * Contains a {@link WifiDisplayStatus} object.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final String EXTRA_WIFI_DISPLAY_STATUS =
             "android.hardware.display.extra.WIFI_DISPLAY_STATUS";
 
@@ -310,6 +313,7 @@ public final class DisplayManager {
      * @hide
      */
     // TODO (b/114338689): Remove the flag and use IWindowManager#setShouldShowSystemDecors
+    @TestApi
     public static final int VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS = 1 << 9;
 
     /**
@@ -320,7 +324,17 @@ public final class DisplayManager {
      * @see #VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
      * @hide
      */
+    @TestApi
     public static final int VIRTUAL_DISPLAY_FLAG_TRUSTED = 1 << 10;
+
+    /**
+     * Virtual display flags: Indicates that the display should not be a part of the default
+     * DisplayGroup and instead be part of a new DisplayGroup.
+     *
+     * @see #createVirtualDisplay
+     * @hide
+     */
+    public static final int VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP = 1 << 11;
 
     /** @hide */
     public DisplayManager(Context context) {
@@ -379,6 +393,7 @@ public final class DisplayManager {
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_EXTERNAL);
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_OVERLAY);
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_VIRTUAL);
+                    addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_INTERNAL);
                 }
                 return mTempDisplays.toArray(new Display[mTempDisplays.size()]);
             } finally {
@@ -399,6 +414,9 @@ public final class DisplayManager {
     private void addPresentationDisplaysLocked(
             ArrayList<Display> displays, int[] displayIds, int matchType) {
         for (int i = 0; i < displayIds.length; i++) {
+            if (displayIds[i] == DEFAULT_DISPLAY) {
+                continue;
+            }
             Display display = getOrCreateDisplayLocked(displayIds[i], true /*assumeValid*/);
             if (display != null
                     && (display.getFlags() & Display.FLAG_PRESENTATION) != 0
@@ -691,7 +709,6 @@ public final class DisplayManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public Point getStableDisplaySize() {
         return mGlobal.getStableDisplaySize();
     }
@@ -701,7 +718,6 @@ public final class DisplayManager {
      * @hide until we make it a system api.
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.BRIGHTNESS_SLIDER_USAGE)
     public List<BrightnessChangeEvent> getBrightnessEvents() {
         return mGlobal.getBrightnessEvents(mContext.getOpPackageName());
@@ -713,7 +729,6 @@ public final class DisplayManager {
      * @hide until we make it a system api
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.ACCESS_AMBIENT_LIGHT_STATS)
     public List<AmbientBrightnessDayStats> getAmbientBrightnessStats() {
         return mGlobal.getAmbientBrightnessStats();
@@ -725,7 +740,6 @@ public final class DisplayManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.CONFIGURE_DISPLAY_BRIGHTNESS)
     public void setBrightnessConfiguration(BrightnessConfiguration c) {
         setBrightnessConfigurationForUser(c, mContext.getUserId(), mContext.getPackageName());
@@ -750,7 +764,6 @@ public final class DisplayManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.CONFIGURE_DISPLAY_BRIGHTNESS)
     public BrightnessConfiguration getBrightnessConfiguration() {
         return getBrightnessConfigurationForUser(mContext.getUserId());
@@ -776,7 +789,6 @@ public final class DisplayManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.CONFIGURE_DISPLAY_BRIGHTNESS)
     @Nullable
     public BrightnessConfiguration getDefaultBrightnessConfiguration() {
@@ -836,6 +848,30 @@ public final class DisplayManager {
     @SystemApi
     public Pair<float[], float[]> getMinimumBrightnessCurve() {
         return mGlobal.getMinimumBrightnessCurve();
+    }
+
+    /**
+     * When enabled the app requested mode is always selected regardless of user settings and
+     * policies for low brightness, low battery, etc.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.OVERRIDE_DISPLAY_MODE_REQUESTS)
+    public void setShouldAlwaysRespectAppRequestedMode(boolean enabled) {
+        mGlobal.setShouldAlwaysRespectAppRequestedMode(enabled);
+    }
+
+    /**
+     * Returns whether we are running in a mode which always selects the app requested display mode
+     * and ignores user settings and policies for low brightness, low battery etc.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.OVERRIDE_DISPLAY_MODE_REQUESTS)
+    public boolean shouldAlwaysRespectAppRequestedMode() {
+        return mGlobal.shouldAlwaysRespectAppRequestedMode();
     }
 
     /**
@@ -915,6 +951,7 @@ public final class DisplayManager {
          */
         String KEY_PEAK_REFRESH_RATE_DEFAULT = "peak_refresh_rate_default";
 
+        // TODO(b/162536543): rename it once it is proved not harmful for users.
         /**
          * Key for controlling which packages are explicitly blocked from running at refresh rates
          * higher than 60hz. An app may be added to this list if they exhibit performance issues at

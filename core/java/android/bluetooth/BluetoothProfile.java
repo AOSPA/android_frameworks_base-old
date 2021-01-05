@@ -23,6 +23,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.os.Build;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -212,12 +213,18 @@ public interface BluetoothProfile {
     public static final int DUN = 22;
 
     /**
+     * Group Operation Profile (Client Role)
+     * @hide
+     */
+    public int GROUP_CLIENT = 23;
+
+    /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
      * the largest value assigned to a profile.
      *
      * @hide
      */
-    int MAX_PROFILE_ID = 22;
+    int MAX_PROFILE_ID = 23;
 
     /**
      * Default priority for devices that we try to auto-connect to and
@@ -225,7 +232,7 @@ public interface BluetoothProfile {
      *
      * @hide
      **/
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     int PRIORITY_AUTO_CONNECT = 1000;
 
     /**

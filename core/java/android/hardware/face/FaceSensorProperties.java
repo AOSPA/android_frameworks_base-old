@@ -16,52 +16,25 @@
 
 package android.hardware.face;
 
-import android.os.Parcel;
-import android.os.Parcelable;
+import android.hardware.biometrics.SensorProperties;
 
 /**
  * Container for face sensor properties.
  * @hide
  */
-public class FaceSensorProperties implements Parcelable {
-
-    public final int sensorId;
-    public final boolean supportsFaceDetection;
+public class FaceSensorProperties extends SensorProperties {
 
     /**
-     * Initializes SensorProperties with specified values
+     * @hide
      */
-    public FaceSensorProperties(int sensorId, boolean supportsFaceDetection) {
-        this.sensorId = sensorId;
-        this.supportsFaceDetection = supportsFaceDetection;
+    public static FaceSensorProperties from(FaceSensorPropertiesInternal internalProp) {
+        return new FaceSensorProperties(internalProp.sensorId, internalProp.sensorStrength);
+    }
+    /**
+     * @hide
+     */
+    public FaceSensorProperties(int sensorId, int sensorStrength) {
+        super(sensorId, sensorStrength);
     }
 
-    protected FaceSensorProperties(Parcel in) {
-        sensorId = in.readInt();
-        supportsFaceDetection = in.readBoolean();
-    }
-
-    public static final Creator<FaceSensorProperties> CREATOR =
-            new Creator<FaceSensorProperties>() {
-        @Override
-        public FaceSensorProperties createFromParcel(Parcel in) {
-            return new FaceSensorProperties(in);
-        }
-
-        @Override
-        public FaceSensorProperties[] newArray(int size) {
-            return new FaceSensorProperties[size];
-        }
-    };
-
-    @Override
-    public int describeContents() {
-        return 0;
-    }
-
-    @Override
-    public void writeToParcel(Parcel dest, int flags) {
-        dest.writeInt(sensorId);
-        dest.writeBoolean(supportsFaceDetection);
-    }
 }

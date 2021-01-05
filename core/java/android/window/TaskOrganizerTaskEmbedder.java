@@ -73,8 +73,8 @@ public class TaskOrganizerTaskEmbedder extends TaskEmbedder {
         // TODO(wm-shell): This currently prevents other organizers from controlling MULT_WINDOW
         // windowing mode tasks. Plan is to migrate this to a wm-shell front-end when that
         // infrastructure is ready.
-        mTaskOrganizer.registerOrganizer(WINDOWING_MODE_MULTI_WINDOW);
-        mTaskOrganizer.setInterceptBackPressedOnTaskRoot(true);
+        // mTaskOrganizer.registerOrganizer();
+        // mTaskOrganizer.setInterceptBackPressedOnTaskRoot(true);
 
         return super.onInitialize();
     }
@@ -109,7 +109,7 @@ public class TaskOrganizerTaskEmbedder extends TaskEmbedder {
         }
         WindowContainerTransaction wct = new WindowContainerTransaction();
         wct.setHidden(mTaskToken, false /* hidden */);
-        WindowOrganizer.applyTransaction(wct);
+        mTaskOrganizer.applyTransaction(wct);
         // TODO(b/151449487): Only call callback once we enable synchronization
         if (mListener != null) {
             mListener.onTaskVisibilityChanged(getTaskId(), true);
@@ -133,7 +133,7 @@ public class TaskOrganizerTaskEmbedder extends TaskEmbedder {
         }
         WindowContainerTransaction wct = new WindowContainerTransaction();
         wct.setHidden(mTaskToken, true /* hidden */);
-        WindowOrganizer.applyTransaction(wct);
+        mTaskOrganizer.applyTransaction(wct);
         // TODO(b/151449487): Only call callback once we enable synchronization
         if (mListener != null) {
             mListener.onTaskVisibilityChanged(getTaskId(), false);
@@ -165,7 +165,7 @@ public class TaskOrganizerTaskEmbedder extends TaskEmbedder {
         WindowContainerTransaction wct = new WindowContainerTransaction();
         wct.setBounds(mTaskToken, screenBounds);
         // TODO(b/151449487): Enable synchronization
-        WindowOrganizer.applyTransaction(wct);
+        mTaskOrganizer.applyTransaction(wct);
     }
 
     /**

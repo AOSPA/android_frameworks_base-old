@@ -16,16 +16,22 @@
 
 package com.android.server.wm;
 
-import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_ORGANIZER;
 
+import android.content.pm.ParceledListSlice;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.SurfaceControl;
+import android.window.DisplayAreaAppearedInfo;
 import android.window.IDisplayAreaOrganizer;
 import android.window.IDisplayAreaOrganizerController;
 
+import com.android.internal.protolog.common.ProtoLog;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerController.Stub {
     private static final String TAG = "DisplayAreaOrganizerController";
@@ -47,10 +53,7 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
         public void binderDied() {
             synchronized (mGlobalLock) {
                 mOrganizersByFeatureIds.remove(mFeature);
-                mService.mRootWindowContainer.forAllDisplayAreas((da) -> {
-                    if (da.mOrganizer != mOrganizer) return;
-                    da.setOrganizer(null);
-                });
+                removeOrganizer(mOrganizer);
             }
         }
     }
@@ -60,16 +63,20 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
         mGlobalLock = atm.mGlobalLock;
     }
 
-    private void enforceStackPermission(String func) {
-        mService.mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, func);
+    private void enforceTaskPermission(String func) {
+        mService.enforceTaskPermission(func);
     }
 
     @Override
-    public void registerOrganizer(IDisplayAreaOrganizer organizer, int feature) {
-        enforceStackPermission("registerOrganizer()");
+    public ParceledListSlice<DisplayAreaAppearedInfo> registerOrganizer(
+            IDisplayAreaOrganizer organizer, int feature) {
+        enforceTaskPermission("registerOrganizer()");
+        final long uid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
+                ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Register display organizer=%s uid=%d",
+                        organizer.asBinder(), uid);
                 if (mOrganizersByFeatureIds.get(feature) != null) {
                     throw new IllegalStateException(
                             "Replacing existing organizer currently unsupported");
@@ -81,12 +88,18 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
                 } catch (RemoteException e) {
                     // Oh well...
                 }
+
+                final List<DisplayAreaAppearedInfo> displayAreaInfos = new ArrayList<>();
                 mService.mRootWindowContainer.forAllDisplayAreas((da) -> {
                     if (da.mFeatureId != feature) return;
-                    da.setOrganizer(organizer);
+                    da.setOrganizer(organizer, true /* skipDisplayAreaAppeared */);
+                    displayAreaInfos.add(new DisplayAreaAppearedInfo(da.getDisplayAreaInfo(),
+                            new SurfaceControl(da.getSurfaceControl(),
+                                    "DisplayAreaOrganizerController.registerOrganizer")));
                 });
 
                 mOrganizersByFeatureIds.put(feature, organizer);
+                return new ParceledListSlice<>(displayAreaInfos);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -95,17 +108,16 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
 
     @Override
     public void unregisterOrganizer(IDisplayAreaOrganizer organizer) {
-        enforceStackPermission("unregisterTaskOrganizer()");
+        enforceTaskPermission("unregisterTaskOrganizer()");
+        final long uid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
+                ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Unregister display organizer=%s uid=%d",
+                        organizer.asBinder(), uid);
                 mOrganizersByFeatureIds.entrySet().removeIf(
                         entry -> entry.getValue().asBinder() == organizer.asBinder());
-
-                mService.mRootWindowContainer.forAllDisplayAreas((da) -> {
-                    if (da.mOrganizer != organizer) return;
-                    da.setOrganizer(null);
-                });
+                removeOrganizer(organizer);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -113,6 +125,7 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
     }
 
     void onDisplayAreaAppeared(IDisplayAreaOrganizer organizer, DisplayArea da) {
+        ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "DisplayArea appeared name=%s", da.getName());
         try {
             SurfaceControl outSurfaceControl = new SurfaceControl(da.getSurfaceControl(),
                     "DisplayAreaOrganizerController.onDisplayAreaAppeared");
@@ -123,6 +136,7 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
     }
 
     void onDisplayAreaVanished(IDisplayAreaOrganizer organizer, DisplayArea da) {
+        ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "DisplayArea vanished name=%s", da.getName());
         try {
             organizer.onDisplayAreaVanished(da.getDisplayAreaInfo());
         } catch (RemoteException e) {
@@ -131,10 +145,20 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
     }
 
     void onDisplayAreaInfoChanged(IDisplayAreaOrganizer organizer, DisplayArea da) {
+        ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "DisplayArea info changed name=%s", da.getName());
         try {
             organizer.onDisplayAreaInfoChanged(da.getDisplayAreaInfo());
         } catch (RemoteException e) {
             // Oh well...
         }
+    }
+
+    private void removeOrganizer(IDisplayAreaOrganizer organizer) {
+        IBinder organizerBinder = organizer.asBinder();
+        mService.mRootWindowContainer.forAllDisplayAreas((da) -> {
+            if (da.mOrganizer != null && da.mOrganizer.asBinder().equals(organizerBinder)) {
+                da.setOrganizer(null);
+            }
+        });
     }
 }

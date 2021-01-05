@@ -18,11 +18,8 @@ package com.android.systemui.privacy
 
 import android.app.ActivityManager
 import android.app.AppOpsManager
-import android.content.Context
-import android.content.Intent
 import android.content.pm.UserInfo
 import android.os.UserHandle
-import android.os.UserManager
 import android.provider.DeviceConfig
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper.RunWithLooper
@@ -31,11 +28,13 @@ import com.android.internal.config.sysui.SystemUiDeviceConfigFlags
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.appops.AppOpItem
 import com.android.systemui.appops.AppOpsController
-import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.dump.DumpManager
+import com.android.systemui.privacy.logging.PrivacyLogger
+import com.android.systemui.settings.UserTracker
 import com.android.systemui.util.DeviceConfigProxy
 import com.android.systemui.util.DeviceConfigProxyFake
 import com.android.systemui.util.concurrency.FakeExecutor
+import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.time.FakeSystemClock
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.not
@@ -44,6 +43,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThat
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentCaptor
@@ -52,6 +52,7 @@ import org.mockito.ArgumentMatchers.anyList
 import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito
+import org.mockito.Mockito.`when`
 import org.mockito.Mockito.atLeastOnce
 import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.mock
@@ -69,10 +70,11 @@ class PrivacyItemControllerTest : SysuiTestCase() {
     companion object {
         val CURRENT_USER_ID = ActivityManager.getCurrentUser()
         val TEST_UID = CURRENT_USER_ID * UserHandle.PER_USER_RANGE
-        const val SYSTEM_UID = 1000
         const val TEST_PACKAGE_NAME = "test"
-        const val DEVICE_SERVICES_STRING = "Device services"
-        const val TAG = "PrivacyItemControllerTest"
+
+        private const val ALL_INDICATORS =
+                SystemUiDeviceConfigFlags.PROPERTY_PERMISSIONS_HUB_ENABLED
+        private const val MIC_CAMERA = SystemUiDeviceConfigFlags.PROPERTY_MIC_CAMERA_ENABLED
         fun <T> capture(argumentCaptor: ArgumentCaptor<T>): T = argumentCaptor.capture()
         fun <T> eq(value: T): T = Mockito.eq(value) ?: value
         fun <T> any(): T = Mockito.any<T>()
@@ -83,11 +85,11 @@ class PrivacyItemControllerTest : SysuiTestCase() {
     @Mock
     private lateinit var callback: PrivacyItemController.Callback
     @Mock
-    private lateinit var userManager: UserManager
-    @Mock
-    private lateinit var broadcastDispatcher: BroadcastDispatcher
+    private lateinit var userTracker: UserTracker
     @Mock
     private lateinit var dumpManager: DumpManager
+    @Mock
+    private lateinit var logger: PrivacyLogger
     @Captor
     private lateinit var argCaptor: ArgumentCaptor<List<PrivacyItem>>
     @Captor
@@ -97,17 +99,15 @@ class PrivacyItemControllerTest : SysuiTestCase() {
     private lateinit var executor: FakeExecutor
     private lateinit var deviceConfigProxy: DeviceConfigProxy
 
-    fun PrivacyItemController(context: Context): PrivacyItemController {
+    fun PrivacyItemController(): PrivacyItemController {
         return PrivacyItemController(
-                context,
                 appOpsController,
                 executor,
                 executor,
-                broadcastDispatcher,
                 deviceConfigProxy,
-                userManager,
-                dumpManager
-        )
+                userTracker,
+                logger,
+                dumpManager)
     }
 
     @Before
@@ -116,19 +116,12 @@ class PrivacyItemControllerTest : SysuiTestCase() {
         executor = FakeExecutor(FakeSystemClock())
         deviceConfigProxy = DeviceConfigProxyFake()
 
-        appOpsController = mDependency.injectMockDependency(AppOpsController::class.java)
+        // Listen to everything by default
+        changeAll(true)
 
-        deviceConfigProxy.setProperty(DeviceConfig.NAMESPACE_PRIVACY,
-                SystemUiDeviceConfigFlags.PROPERTY_PERMISSIONS_HUB_ENABLED,
-                "true", false)
+        `when`(userTracker.userProfiles).thenReturn(listOf(UserInfo(CURRENT_USER_ID, "", 0)))
 
-        doReturn(listOf(object : UserInfo() {
-            init {
-                id = CURRENT_USER_ID
-            }
-        })).`when`(userManager).getProfiles(anyInt())
-
-        privacyItemController = PrivacyItemController(mContext)
+        privacyItemController = PrivacyItemController()
     }
 
     @Test
@@ -166,37 +159,26 @@ class PrivacyItemControllerTest : SysuiTestCase() {
     }
 
     @Test
-    fun testRegisterReceiver_allUsers() {
+    fun testRegisterCallback() {
         privacyItemController.addCallback(callback)
         executor.runAllReady()
-        verify(broadcastDispatcher, atLeastOnce()).registerReceiver(
-                eq(privacyItemController.userSwitcherReceiver), any(), eq(null), eq(UserHandle.ALL))
-        verify(broadcastDispatcher, never())
-                .unregisterReceiver(eq(privacyItemController.userSwitcherReceiver))
+        verify(userTracker, atLeastOnce()).addCallback(
+                eq(privacyItemController.userTrackerCallback), any())
+        verify(userTracker, never()).removeCallback(eq(privacyItemController.userTrackerCallback))
     }
 
     @Test
-    fun testReceiver_ACTION_USER_FOREGROUND() {
-        privacyItemController.userSwitcherReceiver.onReceive(context,
-                Intent(Intent.ACTION_USER_SWITCHED))
+    fun testCallback_userChanged() {
+        privacyItemController.userTrackerCallback.onUserChanged(0, mContext)
         executor.runAllReady()
-        verify(userManager).getProfiles(anyInt())
+        verify(userTracker).userProfiles
     }
 
     @Test
-    fun testReceiver_ACTION_MANAGED_PROFILE_ADDED() {
-        privacyItemController.userSwitcherReceiver.onReceive(context,
-                Intent(Intent.ACTION_MANAGED_PROFILE_AVAILABLE))
+    fun testReceiver_profilesChanged() {
+        privacyItemController.userTrackerCallback.onProfilesChanged(emptyList())
         executor.runAllReady()
-        verify(userManager).getProfiles(anyInt())
-    }
-
-    @Test
-    fun testReceiver_ACTION_MANAGED_PROFILE_REMOVED() {
-        privacyItemController.userSwitcherReceiver.onReceive(context,
-                Intent(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE))
-        executor.runAllReady()
-        verify(userManager).getProfiles(anyInt())
+        verify(userTracker).userProfiles
     }
 
     @Test
@@ -275,16 +257,101 @@ class PrivacyItemControllerTest : SysuiTestCase() {
     }
 
     @Test
+    @Ignore // TODO(b/168209929)
     fun testNotListeningWhenIndicatorsDisabled() {
-        deviceConfigProxy.setProperty(
-                DeviceConfig.NAMESPACE_PRIVACY,
-                SystemUiDeviceConfigFlags.PROPERTY_PERMISSIONS_HUB_ENABLED,
-                "false",
-                false
-        )
+        changeAll(false)
+        changeMicCamera(false)
         privacyItemController.addCallback(callback)
         executor.runAllReady()
         verify(appOpsController, never()).addCallback(eq(PrivacyItemController.OPS),
                 any())
+    }
+
+    @Test
+    fun testNotSendingLocationWhenOnlyMicCamera() {
+        changeAll(false)
+        changeMicCamera(true)
+        executor.runAllReady()
+
+        doReturn(listOf(AppOpItem(AppOpsManager.OP_CAMERA, TEST_UID, "", 0),
+                AppOpItem(AppOpsManager.OP_COARSE_LOCATION, TEST_UID, "", 0)))
+                .`when`(appOpsController).getActiveAppOpsForUser(anyInt())
+
+        privacyItemController.addCallback(callback)
+        executor.runAllReady()
+
+        verify(callback).onPrivacyItemsChanged(capture(argCaptor))
+
+        assertEquals(1, argCaptor.value.size)
+        assertEquals(PrivacyType.TYPE_CAMERA, argCaptor.value[0].privacyType)
+    }
+
+    @Test
+    fun testNotUpdated_LocationChangeWhenOnlyMicCamera() {
+        doReturn(listOf(AppOpItem(AppOpsManager.OP_COARSE_LOCATION, TEST_UID, "", 0)))
+                .`when`(appOpsController).getActiveAppOpsForUser(anyInt())
+
+        privacyItemController.addCallback(callback)
+        changeAll(false)
+        changeMicCamera(true)
+        executor.runAllReady()
+        reset(callback) // Clean callback
+
+        verify(appOpsController).addCallback(any(), capture(argCaptorCallback))
+        argCaptorCallback.value.onActiveStateChanged(
+                AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, true)
+
+        verify(callback, never()).onPrivacyItemsChanged(any())
+    }
+
+    @Test
+    fun testLogActiveChanged() {
+        privacyItemController.addCallback(callback)
+        executor.runAllReady()
+
+        verify(appOpsController).addCallback(any(), capture(argCaptorCallback))
+        argCaptorCallback.value.onActiveStateChanged(
+                AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, true)
+
+        verify(logger).logUpdatedItemFromAppOps(
+                AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, true)
+    }
+
+    @Test
+    fun testLogListUpdated() {
+        doReturn(listOf(
+                AppOpItem(AppOpsManager.OP_COARSE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, 0))
+        ).`when`(appOpsController).getActiveAppOpsForUser(anyInt())
+
+        privacyItemController.addCallback(callback)
+        executor.runAllReady()
+
+        verify(appOpsController).addCallback(any(), capture(argCaptorCallback))
+        argCaptorCallback.value.onActiveStateChanged(
+                AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, true)
+        executor.runAllReady()
+
+        val expected = PrivacyItem(
+                PrivacyType.TYPE_LOCATION,
+                PrivacyApplication(TEST_PACKAGE_NAME, TEST_UID)
+        )
+
+        val captor = argumentCaptor<String>()
+        verify(logger, atLeastOnce()).logUpdatedPrivacyItemsList(capture(captor))
+        // Let's look at the last log
+        val values = captor.allValues
+        assertTrue(values[values.size - 1].contains(expected.toLog()))
+    }
+
+    private fun changeMicCamera(value: Boolean?) = changeProperty(MIC_CAMERA, value)
+    private fun changeAll(value: Boolean?) = changeProperty(ALL_INDICATORS, value)
+
+    private fun changeProperty(name: String, value: Boolean?) {
+        deviceConfigProxy.setProperty(
+                DeviceConfig.NAMESPACE_PRIVACY,
+                name,
+                value?.toString(),
+                false
+        )
     }
 }

@@ -18,66 +18,85 @@ package com.android.server.timezonedetector;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
+import android.app.time.TimeZoneCapabilities;
+import android.app.time.TimeZoneCapabilitiesAndConfig;
+import android.app.time.TimeZoneConfiguration;
 import android.app.timezonedetector.ManualTimeZoneSuggestion;
 import android.app.timezonedetector.TelephonyTimeZoneSuggestion;
-import android.app.timezonedetector.TimeZoneCapabilities;
-import android.app.timezonedetector.TimeZoneConfiguration;
 import android.util.IndentingPrintWriter;
+
+import java.util.ArrayList;
+import java.util.List;
 
 class FakeTimeZoneDetectorStrategy implements TimeZoneDetectorStrategy {
 
-    private StrategyListener mListener;
+    private ConfigurationChangeListener mConfigurationChangeListener;
 
     // Fake state
-    private TimeZoneCapabilities mCapabilities;
-    private TimeZoneConfiguration mConfiguration;
+    private ConfigurationInternal mConfigurationInternal;
 
     // Call tracking.
     private GeolocationTimeZoneSuggestion mLastGeolocationSuggestion;
     private ManualTimeZoneSuggestion mLastManualSuggestion;
     private TelephonyTimeZoneSuggestion mLastTelephonySuggestion;
-    private boolean mHandleAutoTimeZoneConfigChangedCalled;
     private boolean mDumpCalled;
+    private final List<Dumpable> mDumpables = new ArrayList<>();
 
     @Override
-    public void setStrategyListener(@NonNull StrategyListener listener) {
-        mListener = listener;
+    public void addConfigChangeListener(@NonNull ConfigurationChangeListener listener) {
+        if (mConfigurationChangeListener != null) {
+            fail("Fake only supports one listener");
+        }
+        mConfigurationChangeListener = listener;
     }
 
     @Override
-    public TimeZoneCapabilities getCapabilities(@UserIdInt int userId) {
-        return mCapabilities;
+    public ConfigurationInternal getConfigurationInternal(int userId) {
+        if (mConfigurationInternal.getUserId() != userId) {
+            fail("Fake only supports one user");
+        }
+        return mConfigurationInternal;
+    }
+
+    @Override
+    public ConfigurationInternal getCurrentUserConfigurationInternal() {
+        return mConfigurationInternal;
     }
 
     @Override
     public boolean updateConfiguration(
-            @UserIdInt int userId, @NonNull TimeZoneConfiguration configuration) {
-        assertNotNull(mConfiguration);
-        assertNotNull(configuration);
+            @UserIdInt int userID, @NonNull TimeZoneConfiguration requestedChanges) {
+        assertNotNull(mConfigurationInternal);
+        assertNotNull(requestedChanges);
 
-        // Simulate the strategy's behavior: the new configuration will be the old configuration
-        // merged with the new.
-        TimeZoneConfiguration oldConfiguration = mConfiguration;
+        // Simulate the real strategy's behavior: the new configuration will be updated to be the
+        // old configuration merged with the new if the user has the capability to up the settings.
+        // Then, if the configuration changed, the change listener is invoked.
+        TimeZoneCapabilitiesAndConfig capabilitiesAndConfig =
+                mConfigurationInternal.createCapabilitiesAndConfig();
+        TimeZoneCapabilities capabilities = capabilitiesAndConfig.getCapabilities();
+        TimeZoneConfiguration configuration = capabilitiesAndConfig.getConfiguration();
         TimeZoneConfiguration newConfiguration =
-                new TimeZoneConfiguration.Builder(mConfiguration)
-                        .mergeProperties(configuration)
-                        .build();
-
-        if (newConfiguration.equals(oldConfiguration)) {
+                capabilities.tryApplyConfigChanges(configuration, requestedChanges);
+        if (newConfiguration == null) {
             return false;
         }
-        mConfiguration = newConfiguration;
-        mListener.onConfigurationChanged();
+
+        if (!newConfiguration.equals(capabilitiesAndConfig.getConfiguration())) {
+            mConfigurationInternal = mConfigurationInternal.merge(newConfiguration);
+
+            // Note: Unlike the real strategy, the listeners is invoked synchronously.
+            mConfigurationChangeListener.onChange();
+        }
         return true;
     }
 
-    @Override
-    @NonNull
-    public TimeZoneConfiguration getConfiguration(@UserIdInt int userId) {
-        return mConfiguration;
+    public void simulateConfigurationChangeForTests() {
+        mConfigurationChangeListener.onChange();
     }
 
     @Override
@@ -99,13 +118,8 @@ class FakeTimeZoneDetectorStrategy implements TimeZoneDetectorStrategy {
     }
 
     @Override
-    public void handleAutoTimeZoneConfigChanged() {
-        mHandleAutoTimeZoneConfigChangedCalled = true;
-    }
-
-    @Override
     public void addDumpable(Dumpable dumpable) {
-        // Stubbed
+        mDumpables.add(dumpable);
     }
 
     @Override
@@ -113,19 +127,14 @@ class FakeTimeZoneDetectorStrategy implements TimeZoneDetectorStrategy {
         mDumpCalled = true;
     }
 
-    void initializeConfiguration(TimeZoneConfiguration configuration) {
-        mConfiguration = configuration;
-    }
-
-    void initializeCapabilities(TimeZoneCapabilities capabilities) {
-        mCapabilities = capabilities;
+    void initializeConfiguration(ConfigurationInternal configurationInternal) {
+        mConfigurationInternal = configurationInternal;
     }
 
     void resetCallTracking() {
         mLastGeolocationSuggestion = null;
         mLastManualSuggestion = null;
         mLastTelephonySuggestion = null;
-        mHandleAutoTimeZoneConfigChangedCalled = false;
         mDumpCalled = false;
     }
 
@@ -142,11 +151,11 @@ class FakeTimeZoneDetectorStrategy implements TimeZoneDetectorStrategy {
         assertEquals(expectedSuggestion, mLastTelephonySuggestion);
     }
 
-    void verifyHandleAutoTimeZoneConfigChangedCalled() {
-        assertTrue(mHandleAutoTimeZoneConfigChangedCalled);
-    }
-
     void verifyDumpCalled() {
         assertTrue(mDumpCalled);
+    }
+
+    void verifyHasDumpable(Dumpable expected) {
+        assertTrue(mDumpables.contains(expected));
     }
 }

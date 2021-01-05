@@ -19,11 +19,18 @@ import static com.android.server.hdmi.HdmiControlService.INITIATED_BY_ENABLE_CEC
 
 import static com.google.common.truth.Truth.assertThat;
 
-import android.annotation.Nullable;
-import android.app.Instrumentation;
-import android.hardware.hdmi.HdmiDeviceInfo;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
+
+import android.content.Context;
+import android.content.ContextWrapper;
 import android.hardware.tv.cec.V1_0.SendMessageResult;
+import android.media.AudioManager;
+import android.os.Handler;
+import android.os.IPowerManager;
+import android.os.IThermalService;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.test.TestLooper;
 import android.platform.test.annotations.Presubmit;
 
@@ -31,10 +38,11 @@ import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
 
@@ -44,64 +52,51 @@ import java.util.ArrayList;
 @RunWith(JUnit4.class)
 public class ArcInitiationActionFromAvrTest {
 
-    private HdmiDeviceInfo mDeviceInfoForTests;
+    private Context mContextSpy;
     private HdmiCecLocalDeviceAudioSystem mHdmiCecLocalDeviceAudioSystem;
-    private HdmiCecController mHdmiCecController;
-    private HdmiControlService mHdmiControlService;
     private FakeNativeWrapper mNativeWrapper;
     private ArcInitiationActionFromAvr mAction;
 
     private TestLooper mTestLooper = new TestLooper();
-    private boolean mSendCecCommandSuccess;
-    private boolean mShouldDispatchARCInitiated;
-    private boolean mArcInitSent;
-    private boolean mRequestActiveSourceSent;
-    private Instrumentation mInstrumentation;
     private ArrayList<HdmiCecLocalDevice> mLocalDevices = new ArrayList<>();
 
+    @Mock private IPowerManager mIPowerManagerMock;
+    @Mock private IThermalService mIThermalServiceMock;
+    @Mock private AudioManager mAudioManager;
+
     @Before
-    public void setUp() {
-        mDeviceInfoForTests = new HdmiDeviceInfo(1000, 1);
+    public void setUp() throws Exception {
+        MockitoAnnotations.initMocks(this);
 
-        mInstrumentation = InstrumentationRegistry.getInstrumentation();
+        mContextSpy = spy(new ContextWrapper(InstrumentationRegistry.getTargetContext()));
 
-        mHdmiControlService =
-                new HdmiControlService(mInstrumentation.getTargetContext()) {
-                    @Override
-                    void sendCecCommand(
-                            HdmiCecMessage command, @Nullable SendMessageCallback callback) {
-                        switch (command.getOpcode()) {
-                            case Constants.MESSAGE_REQUEST_ACTIVE_SOURCE:
-                                if (callback != null) {
-                                    callback.onSendCompleted(
-                                            mSendCecCommandSuccess
-                                                    ? SendMessageResult.SUCCESS
-                                                    : SendMessageResult.NACK);
-                                }
-                                mRequestActiveSourceSent = true;
-                                break;
-                            case Constants.MESSAGE_INITIATE_ARC:
-                                if (callback != null) {
-                                    callback.onSendCompleted(
-                                            mSendCecCommandSuccess
-                                                    ? SendMessageResult.SUCCESS
-                                                    : SendMessageResult.NACK);
-                                }
-                                mArcInitSent = true;
-                                if (mShouldDispatchARCInitiated) {
-                                    mHdmiCecLocalDeviceAudioSystem.dispatchMessage(
-                                            HdmiCecMessageBuilder.buildReportArcInitiated(
-                                                    Constants.ADDR_TV,
-                                                    Constants.ADDR_AUDIO_SYSTEM));
-                                }
-                                break;
-                            default:
-                        }
-                    }
+        PowerManager powerManager = new PowerManager(mContextSpy, mIPowerManagerMock,
+                mIThermalServiceMock, new Handler(mTestLooper.getLooper()));
+        when(mContextSpy.getSystemService(Context.POWER_SERVICE)).thenReturn(powerManager);
+        when(mContextSpy.getSystemService(PowerManager.class)).thenReturn(powerManager);
+        when(mIPowerManagerMock.isInteractive()).thenReturn(true);
 
+        HdmiCecConfig hdmiCecConfig = new FakeHdmiCecConfig(mContextSpy);
+
+        HdmiControlService hdmiControlService =
+                new HdmiControlService(mContextSpy) {
                     @Override
                     boolean isPowerStandby() {
                         return false;
+                    }
+
+                    @Override
+                    void wakeUp() {
+                    }
+
+                    @Override
+                    PowerManager getPowerManager() {
+                        return powerManager;
+                    }
+
+                    @Override
+                    AudioManager getAudioManager() {
+                        return mAudioManager;
                     }
 
                     @Override
@@ -113,55 +108,118 @@ public class ArcInitiationActionFromAvrTest {
                     Looper getServiceLooper() {
                         return mTestLooper.getLooper();
                     }
-                };
-
-        mHdmiCecLocalDeviceAudioSystem =
-                new HdmiCecLocalDeviceAudioSystem(mHdmiControlService) {
-                    @Override
-                    HdmiDeviceInfo getDeviceInfo() {
-                        return mDeviceInfoForTests;
-                    }
 
                     @Override
-                    void setArcStatus(boolean enabled) {
-                        // do nothing
-                    }
-
-                    @Override
-                    protected boolean isSystemAudioActivated() {
-                        return true;
+                    HdmiCecConfig getHdmiCecConfig() {
+                        return hdmiCecConfig;
                     }
                 };
+
+        mHdmiCecLocalDeviceAudioSystem = new HdmiCecLocalDeviceAudioSystem(hdmiControlService) {
+            @Override
+            protected void setPreferredAddress(int addr) {
+            }
+        };
 
         mHdmiCecLocalDeviceAudioSystem.init();
         Looper looper = mTestLooper.getLooper();
-        mHdmiControlService.setIoLooper(looper);
+        hdmiControlService.setIoLooper(looper);
         mNativeWrapper = new FakeNativeWrapper();
-        mHdmiCecController =
-                HdmiCecController.createWithNativeWrapper(this.mHdmiControlService, mNativeWrapper);
-        mHdmiControlService.setCecController(mHdmiCecController);
-        mHdmiControlService.setHdmiMhlController(HdmiMhlControllerStub.create(mHdmiControlService));
-        mHdmiControlService.setMessageValidator(new HdmiCecMessageValidator(mHdmiControlService));
-        mHdmiControlService.initPortInfo();
+        HdmiCecController hdmiCecController = HdmiCecController.createWithNativeWrapper(
+                hdmiControlService, mNativeWrapper, hdmiControlService.getAtomWriter());
+        hdmiControlService.setCecController(hdmiCecController);
+        hdmiControlService.setHdmiMhlController(HdmiMhlControllerStub.create(hdmiControlService));
+        hdmiControlService.setMessageValidator(new HdmiCecMessageValidator(hdmiControlService));
+        hdmiControlService.initService();
         mAction = new ArcInitiationActionFromAvr(mHdmiCecLocalDeviceAudioSystem);
 
         mLocalDevices.add(mHdmiCecLocalDeviceAudioSystem);
-        mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
+        hdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
     }
 
-    @Ignore("b/120845532")
     @Test
-    public void arcInitiation_requestActiveSource() {
-        mSendCecCommandSuccess = true;
-        mShouldDispatchARCInitiated = true;
-        mRequestActiveSourceSent = false;
-        mArcInitSent = false;
+    public void arcInitiation_initiated() {
+        mHdmiCecLocalDeviceAudioSystem.addAndStartAction(mAction);
+        mTestLooper.dispatchAll();
+        HdmiCecMessage initiateArc = HdmiCecMessageBuilder.buildInitiateArc(
+                Constants.ADDR_AUDIO_SYSTEM, Constants.ADDR_TV);
 
+        assertThat(mNativeWrapper.getResultMessages()).contains(initiateArc);
+
+        mNativeWrapper.onCecMessage(
+                HdmiCecMessageBuilder.buildReportArcInitiated(
+                        Constants.ADDR_TV,
+                        Constants.ADDR_AUDIO_SYSTEM));
+        mTestLooper.dispatchAll();
+
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isArcEnabled()).isTrue();
+    }
+
+    @Test
+    public void arcInitiation_sendFailed() {
+        mNativeWrapper.setMessageSendResult(Constants.MESSAGE_INITIATE_ARC, SendMessageResult.NACK);
+        mHdmiCecLocalDeviceAudioSystem.addAndStartAction(mAction);
+        mTestLooper.dispatchAll();
+        HdmiCecMessage initiateArc = HdmiCecMessageBuilder.buildInitiateArc(
+                Constants.ADDR_AUDIO_SYSTEM, Constants.ADDR_TV);
+
+        assertThat(mNativeWrapper.getResultMessages()).contains(initiateArc);
+
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isArcEnabled()).isFalse();
+    }
+
+    @Test
+    public void arcInitiation_terminated() {
         mHdmiCecLocalDeviceAudioSystem.addAndStartAction(mAction);
         mTestLooper.dispatchAll();
 
-        assertThat(mArcInitSent).isTrue();
-        assertThat(mRequestActiveSourceSent).isTrue();
+        HdmiCecMessage initiateArc = HdmiCecMessageBuilder.buildInitiateArc(
+                Constants.ADDR_AUDIO_SYSTEM, Constants.ADDR_TV);
+
+        assertThat(mNativeWrapper.getResultMessages()).contains(initiateArc);
+
+        mNativeWrapper.onCecMessage(HdmiCecMessageBuilder.buildReportArcTerminated(
+                Constants.ADDR_TV,
+                Constants.ADDR_AUDIO_SYSTEM));
+        mTestLooper.dispatchAll();
+
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isArcEnabled()).isFalse();
+    }
+
+    @Test
+    public void arcInitiation_abort() {
+        mHdmiCecLocalDeviceAudioSystem.addAndStartAction(mAction);
+        mTestLooper.dispatchAll();
+
+        HdmiCecMessage initiateArc = HdmiCecMessageBuilder.buildInitiateArc(
+                Constants.ADDR_AUDIO_SYSTEM, Constants.ADDR_TV);
+
+        assertThat(mNativeWrapper.getResultMessages()).contains(initiateArc);
+
+        mNativeWrapper.onCecMessage(
+                HdmiCecMessageBuilder.buildFeatureAbortCommand(
+                        Constants.ADDR_TV,
+                        Constants.ADDR_AUDIO_SYSTEM, Constants.MESSAGE_INITIATE_ARC,
+                        Constants.ABORT_REFUSED));
+        mTestLooper.dispatchAll();
+
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isArcEnabled()).isFalse();
+    }
+
+    //Fail
+    @Test
+    public void arcInitiation_timeout() {
+        mHdmiCecLocalDeviceAudioSystem.addAndStartAction(mAction);
+        mTestLooper.dispatchAll();
+
+        HdmiCecMessage initiateArc = HdmiCecMessageBuilder.buildInitiateArc(
+                Constants.ADDR_AUDIO_SYSTEM, Constants.ADDR_TV);
+
+        assertThat(mNativeWrapper.getResultMessages()).contains(initiateArc);
+
+        mTestLooper.moveTimeForward(1001);
+        mTestLooper.dispatchAll();
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isArcEnabled()).isTrue();
     }
 }

@@ -257,7 +257,6 @@
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Wys Bluetooth-toestelle sonder name"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="1452342324349203434">"Deaktiveer absolute volume"</string>
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"Aktiveer Gabeldorsche"</string>
-    <string name="enhanced_connectivity" msgid="7201127377781666804">"Verbeterde konnektiwiteit"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="1710571610177659127">"Bluetooth AVRCP-weergawe"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7846922290083709633">"Kies Bluetooth AVRCP-weergawe"</string>
     <string name="bluetooth_select_map_version_string" msgid="526308145174175327">"Bluetooth MAP-weergawe"</string>
@@ -400,6 +399,9 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"Onaktief. Tik om te wissel."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"Aktief. Tik om te wissel."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"Programbystandstatus:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <string name="transcode_settings_title" msgid="6700974145733932357">"Mediakodewisselinginstellings"</string>
+    <string name="transcode_enable_all" msgid="4719796495995795404">"Aktiveer kodewisseling vir alle programme"</string>
+    <string name="transcode_skip_apps" msgid="5680997722349545778">"Deaktiveer kodewisseling vir programme"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"Lopende dienste"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"Sien en beheer dienste wat tans aktief is"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"WebView-implementering"</string>
@@ -546,12 +548,19 @@
     <string name="user_need_lock_message" msgid="4311424336209509301">"Voordat jy \'n beperkte profiel kan skep, moet jy \'n skermslot opstel om jou programme en persoonlike data te beskerm."</string>
     <string name="user_set_lock_button" msgid="1427128184982594856">"Stel slot op"</string>
     <string name="user_switch_to_user" msgid="6975428297154968543">"Skakel oor na <xliff:g id="USER_NAME">%s</xliff:g>"</string>
+    <string name="creating_new_user_dialog_message" msgid="7232880257538970375">"Skep tans nuwe gebruiker …"</string>
+    <string name="user_nickname" msgid="262624187455825083">"Bynaam"</string>
     <string name="guest_new_guest" msgid="3482026122932643557">"Voeg gas by"</string>
     <string name="guest_exit_guest" msgid="5908239569510734136">"Verwyder gas"</string>
     <string name="guest_nickname" msgid="6332276931583337261">"Gas"</string>
+    <string name="user_image_take_photo" msgid="467512954561638530">"Neem \'n foto"</string>
+    <string name="user_image_choose_photo" msgid="1363820919146782908">"Kies \'n prent"</string>
+    <string name="user_image_photo_selector" msgid="433658323306627093">"Kies foto"</string>
     <string name="cached_apps_freezer_device_default" msgid="2616594131750144342">"Toestelverstek"</string>
     <string name="cached_apps_freezer_disabled" msgid="4816382260660472042">"Gedeaktiveer"</string>
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"Geaktiveer"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"Jou toestel moet herselflaai om hierdie verandering toe te pas. Herselflaai nou of kanselleer."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"Bedraade oorfoon"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"Aan"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"Af"</string>
 </resources>

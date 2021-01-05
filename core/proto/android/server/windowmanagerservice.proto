@@ -30,6 +30,10 @@ import "frameworks/base/core/proto/android/view/windowlayoutparams.proto";
 import "frameworks/base/core/proto/android/privacy.proto";
 import "frameworks/base/core/proto/android/typedef.proto";
 
+import "frameworks/base/core/proto/android/view/surfacecontrol.proto";
+import "frameworks/base/core/proto/android/view/insetssource.proto";
+import "frameworks/base/core/proto/android/view/insetssourcecontrol.proto";
+
 package com.android.server.wm;
 
 option java_multiple_files = true;
@@ -44,9 +48,10 @@ message WindowManagerServiceDumpProto {
     optional string focused_app = 4;
     optional IdentifierProto input_method_window = 5;
     optional bool display_frozen = 6;
-    optional int32 rotation = 7 [(.android.typedef) = "android.view.Surface.Rotation"];
-    optional int32 last_orientation = 8 [(.android.typedef) = "android.content.pm.ActivityInfo.ScreenOrientation"];
+    optional int32 rotation = 7 [(.android.typedef) = "android.view.Surface.Rotation", deprecated=true];
+    optional int32 last_orientation = 8 [(.android.typedef) = "android.content.pm.ActivityInfo.ScreenOrientation", deprecated=true];
     optional int32 focused_display_id = 9;
+    optional bool hard_keyboard_available = 10;
 }
 
 /* represents RootWindowContainer object */
@@ -178,7 +183,7 @@ message DisplayContentProto {
     repeated WindowTokenProto ime_windows = 8 [deprecated=true];
     optional int32 dpi = 9;
     optional .android.view.DisplayInfoProto display_info = 10;
-    optional int32 rotation = 11 [(.android.typedef) = "android.view.Surface.Rotation"];
+    optional int32 rotation = 11 [(.android.typedef) = "android.view.Surface.Rotation", deprecated=true];
     optional ScreenRotationAnimationProto screen_rotation_animation = 12;
     optional DisplayFramesProto display_frames = 13;
     optional int32 surface_size = 14 [deprecated=true];
@@ -190,11 +195,20 @@ message DisplayContentProto {
     repeated WindowTokenProto overlay_windows = 20 [deprecated=true];
     optional DisplayAreaProto root_display_area = 21;
 
-    optional bool single_task_instance = 22;
+    optional bool single_task_instance = 22 [deprecated=true];
     optional int32 focused_root_task_id = 23;
     optional .com.android.server.wm.IdentifierProto resumed_activity = 24;
     repeated TaskProto tasks = 25 [deprecated=true];
     optional bool display_ready = 26;
+
+    optional WindowStateProto input_method_target = 27;
+    optional WindowStateProto input_method_input_target = 28;
+    optional WindowStateProto input_method_control_target = 29;
+    optional WindowStateProto current_focus = 30;
+    optional ImeInsetsSourceProviderProto ime_insets_source_provider = 31;
+    optional bool can_show_ime = 32;
+
+    optional DisplayRotationProto display_rotation = 33;
 }
 
 /* represents DisplayArea object */
@@ -204,6 +218,7 @@ message DisplayAreaProto {
     optional WindowContainerProto window_container = 1;
     optional string name = 2 [ (.android.privacy).dest = DEST_EXPLICIT ];
     repeated DisplayAreaChildProto children = 3 [deprecated=true];
+    optional bool is_task_display_area = 4;
 }
 
 /* represents a generic child of a DisplayArea */
@@ -225,6 +240,18 @@ message DisplayFramesProto {
     option (.android.msg_privacy).dest = DEST_AUTOMATIC;
 
     optional .android.graphics.RectProto stable_bounds = 1;
+    optional .android.graphics.RectProto dock = 2;
+    optional .android.graphics.RectProto current = 3;
+}
+
+message DisplayRotationProto {
+    option (.android.msg_privacy).dest = DEST_AUTOMATIC;
+
+    optional int32 rotation = 1 [(.android.typedef) = "android.view.Surface.Rotation"];
+    optional bool frozen_to_user_rotation = 2;
+    optional int32 user_rotation = 3 [(.android.typedef) = "android.view.Surface.Rotation"];
+    optional int32 fixed_to_user_rotation_mode = 4;
+    optional int32 last_orientation = 5 [(.android.typedef) = "android.content.pm.ActivityInfo.ScreenOrientation"];
 }
 
 /* represents DockedStackDividerController */
@@ -275,7 +302,7 @@ message TaskProto {
     optional bool adjusted_for_ime = 23;
     optional float adjust_ime_amount = 24;
     optional float adjust_divider_amount = 25;
-    optional bool animating_bounds = 26;
+    optional bool animating_bounds = 26 [deprecated = true];
     optional float minimize_amount = 27;
     optional bool created_by_organizer = 28;
 }
@@ -315,6 +342,7 @@ message ActivityRecordProto {
     optional bool front_of_task = 28;
     optional int32 proc_id = 29;
     optional bool translucent = 30;
+    optional bool pip_auto_enter_enabled = 31;
 }
 
 /* represents WindowToken */
@@ -485,4 +513,32 @@ message WindowFramesProto {
     optional .android.graphics.RectProto visible_insets = 13;
     optional .android.graphics.RectProto stable_insets = 14;
     optional .android.graphics.RectProto outsets = 15;
+}
+
+message InsetsSourceProviderProto {
+    option (.android.msg_privacy).dest = DEST_AUTOMATIC;
+
+    optional .android.view.InsetsSourceProto source = 1;
+    optional .android.graphics.RectProto frame = 2;
+    optional .android.view.InsetsSourceControlProto fake_control = 3;
+    optional .android.view.InsetsSourceControlProto control = 4;
+    optional WindowStateProto control_target = 5;
+    optional WindowStateProto pending_control_target = 6;
+    optional WindowStateProto fake_control_target = 7;
+    optional .android.view.SurfaceControlProto captured_leash = 8;
+    optional .android.graphics.RectProto ime_overridden_frame = 9;
+    optional bool is_leash_ready_for_dispatching = 10;
+    optional bool client_visible = 11;
+    optional bool server_visible = 12;
+    optional bool seamless_rotating = 13;
+    optional int64 finish_seamless_rotate_frame_number = 14;
+    optional bool controllable = 15;
+}
+
+message ImeInsetsSourceProviderProto {
+    option (.android.msg_privacy).dest = DEST_AUTOMATIC;
+
+    optional InsetsSourceProviderProto insets_source_provider = 1;
+    optional WindowStateProto ime_target_from_ime = 2;
+    optional bool is_ime_layout_drawn = 3;
 }

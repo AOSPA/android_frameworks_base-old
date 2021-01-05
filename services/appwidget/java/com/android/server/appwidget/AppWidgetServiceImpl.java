@@ -95,6 +95,8 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.SparseLongArray;
 import android.util.TypedValue;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
@@ -630,8 +632,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         final long identity = Binder.clearCallingIdentity();
         try {
             if (provider.maskedBySuspendedPackage) {
-                UserInfo userInfo = mUserManager.getUserInfo(providerUserId);
-                showBadge = userInfo.isManagedProfile();
+                showBadge = mUserManager.hasBadge(providerUserId);
                 final String suspendingPackage = mPackageManagerInternal.getSuspendingPackage(
                         providerPackage, providerUserId);
                 if (PLATFORM_PACKAGE_NAME.equals(suspendingPackage)) {
@@ -665,8 +666,12 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
                 if (targetWidget != null && targetWidget != widget) continue;
                 PendingIntent intent = null;
                 if (onClickIntent != null) {
+                    // Rare informational activity click is okay being
+                    // immutable; the tradeoff is more security in exchange for
+                    // losing bounds-based window animations
                     intent = PendingIntent.getActivity(mContext, widget.appWidgetId,
-                            onClickIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+                            onClickIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                 }
                 RemoteViews views = createMaskedWidgetRemoteViews(iconBitmap, showBadge, intent);
                 if (widget.replaceWithMaskedViewsLocked(views)) {
@@ -1001,7 +1006,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             Slog.i(TAG, "hasBindAppWidgetPermission() " + UserHandle.getCallingUserId());
         }
 
-        // A special permission is required for managing white listing.
+        // A special permission is required for managing allowlisting.
         mSecurityPolicy.enforceModifyAppWidgetBindPermissions(packageName);
 
         synchronized (mLock) {
@@ -1025,7 +1030,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             Slog.i(TAG, "setBindAppWidgetPermission() " + UserHandle.getCallingUserId());
         }
 
-        // A special permission is required for managing white listing.
+        // A special permission is required for managing allowlisting.
         mSecurityPolicy.enforceModifyAppWidgetBindPermissions(packageName);
 
         synchronized (mLock) {
@@ -1117,7 +1122,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         }
 
         // If the provider is not under the calling user, make sure this
-        // provider is white listed for access from the parent.
+        // provider is allowlisted for access from the parent.
         if (!mSecurityPolicy.isProviderInCallerOrInProfileAndWhitelListed(
                 providerComponent.getPackageName(), providerProfileId)) {
             return false;
@@ -1126,7 +1131,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         synchronized (mLock) {
             ensureGroupStateLoadedLocked(userId);
 
-            // A special permission or white listing is required to bind widgets.
+            // A special permission or allowlisting is required to bind widgets.
             if (!mSecurityPolicy.hasCallerBindPermissionOrBindWhiteListedLocked(
                     callingPackage)) {
                 return false;
@@ -1741,7 +1746,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
                     continue;
                 }
 
-                // Add providers only for the requested profile that are white-listed.
+                // Add providers only for the requested profile that are allowlisted.
                 final int providerProfileId = info.getProfile().getIdentifier();
                 if (providerProfileId == profileId
                         && mSecurityPolicy.isProviderInCallerOrInProfileAndWhitelListed(
@@ -2408,10 +2413,12 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             Intent intent = new Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE);
             intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds);
             intent.setComponent(provider.info.provider);
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
+                // Broadcast alarms sent by system are immutable
                 provider.broadcast = PendingIntent.getBroadcastAsUser(mContext, 1, intent,
-                        PendingIntent.FLAG_UPDATE_CURRENT, provider.info.getProfile());
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE,
+                        provider.info.getProfile());
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -3070,8 +3077,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         int N;
 
         try {
-            XmlSerializer out = new FastXmlSerializer();
-            out.setOutput(stream, StandardCharsets.UTF_8.name());
+            TypedXmlSerializer out = Xml.resolveSerializer(stream);
             out.startDocument(null, true);
             out.startTag(null, "gs");
             out.attribute(null, "version", String.valueOf(CURRENT_VERSION));
@@ -3133,8 +3139,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             List<LoadedWidgetState> outLoadedWidgets) {
         int version = -1;
         try {
-            XmlPullParser parser = Xml.newPullParser();
-            parser.setInput(stream, StandardCharsets.UTF_8.name());
+            TypedXmlPullParser parser = Xml.resolvePullParser(stream);
 
             int legacyProviderIndex = -1;
             int legacyHostIndex = -1;
@@ -3576,7 +3581,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
     @Override
     public void onCrossProfileWidgetProvidersChanged(int userId, List<String> packages) {
         final int parentId = mSecurityPolicy.getProfileParent(userId);
-        // We care only if the white-listed package is in a profile of
+        // We care only if the allowlisted package is in a profile of
         // the group parent as only the parent can add widgets from the
         // profile and not the other way around.
         if (parentId != userId) {
@@ -3600,7 +3605,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
                             userId, null);
                 }
 
-                // Remove widgets from hosts in parent user for packages not in the whitelist
+                // Remove widgets from hosts in parent user for packages not in the allowlist
                 final int removedCount = previousPackages.size();
                 for (int i = 0; i < removedCount; ++i) {
                     removeWidgetsForPackageLocked(previousPackages.valueAt(i),
@@ -3616,10 +3621,10 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
     }
 
     private boolean isProfileWithLockedParent(int userId) {
-        long token = Binder.clearCallingIdentity();
+        final long token = Binder.clearCallingIdentity();
         try {
             UserInfo userInfo = mUserManager.getUserInfo(userId);
-            if (userInfo != null && userInfo.isManagedProfile()) {
+            if (userInfo != null && userInfo.isProfile()) {
                 UserInfo parentInfo = mUserManager.getProfileParent(userId);
                 if (parentInfo != null
                         && !isUserRunningAndUnlocked(parentInfo.getUserHandle().getIdentifier())) {
@@ -3634,7 +3639,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
 
     private boolean isProfileWithUnlockedParent(int userId) {
         UserInfo userInfo = mUserManager.getUserInfo(userId);
-        if (userInfo != null && userInfo.isManagedProfile()) {
+        if (userInfo != null && userInfo.isProfile()) {
             UserInfo parentInfo = mUserManager.getProfileParent(userId);
             if (parentInfo != null
                     && mUserManager.isUserUnlockingOrUnlocked(parentInfo.getUserHandle())) {

@@ -156,6 +156,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -440,6 +441,7 @@ public class UserBackupManagerService {
     private long mAncestralToken = 0;
     private long mCurrentToken = 0;
     @Nullable private File mAncestralSerialNumberFile;
+    @OperationType private volatile long mAncestralOperationType;
 
     private final ContentObserver mSetupObserver;
     private final BroadcastReceiver mRunInitReceiver;
@@ -648,7 +650,7 @@ public class UserBackupManagerService {
                         context,
                         /* requestCode */ 0,
                         initIntent,
-                        /* flags */ 0,
+                        /* flags */ PendingIntent.FLAG_IMMUTABLE,
                         UserHandle.of(userId));
 
         // Set up the backup-request journaling
@@ -878,6 +880,10 @@ public class UserBackupManagerService {
 
     public void setAncestralToken(long ancestralToken) {
         mAncestralToken = ancestralToken;
+    }
+
+    public void setAncestralOperationType(@OperationType int operationType) {
+        mAncestralOperationType = operationType;
     }
 
     public long getCurrentToken() {
@@ -1154,23 +1160,30 @@ public class UserBackupManagerService {
 
     private void parseLeftoverJournals() {
         ArrayList<DataChangedJournal> journals = DataChangedJournal.listJournals(mJournalDir);
+        journals.removeAll(Collections.singletonList(mJournal));
+        if (!journals.isEmpty()) {
+            Slog.i(TAG, addUserIdToLogMessage(mUserId,
+                    "Found " + journals.size() + " stale backup journal(s), scheduling."));
+        }
+        Set<String> packageNames = new LinkedHashSet<>();
         for (DataChangedJournal journal : journals) {
-            if (!journal.equals(mJournal)) {
-                try {
-                    journal.forEach(packageName -> {
-                        Slog.i(
-                                TAG,
-                                addUserIdToLogMessage(
-                                        mUserId, "Found stale backup journal, scheduling"));
-                        if (MORE_DEBUG) {
-                            Slog.i(TAG, addUserIdToLogMessage(mUserId, "  " + packageName));
-                        }
+            try {
+                journal.forEach(packageName -> {
+                    if (packageNames.add(packageName)) {
                         dataChangedImpl(packageName);
-                    });
-                } catch (IOException e) {
-                    Slog.e(TAG, addUserIdToLogMessage(mUserId, "Can't read " + journal), e);
-                }
+                    }
+                });
+            } catch (IOException e) {
+                Slog.e(TAG, addUserIdToLogMessage(mUserId, "Can't read " + journal), e);
             }
+        }
+        if (!packageNames.isEmpty()) {
+            String msg = "Stale backup journals: Scheduled " + packageNames.size()
+                    + " package(s) total";
+            if (MORE_DEBUG) {
+                msg += ": " + packageNames;
+            }
+            Slog.i(TAG, addUserIdToLogMessage(mUserId, msg));
         }
     }
 
@@ -1643,13 +1656,15 @@ public class UserBackupManagerService {
 
     /** Fires off a backup agent, blocking until it attaches or times out. */
     @Nullable
-    public IBackupAgent bindToAgentSynchronous(ApplicationInfo app, int mode) {
+    public IBackupAgent bindToAgentSynchronous(ApplicationInfo app, int mode,
+            @OperationType int operationType) {
         IBackupAgent agent = null;
         synchronized (mAgentConnectLock) {
             mConnecting = true;
             mConnectedAgent = null;
             try {
-                if (mActivityManager.bindBackupAgent(app.packageName, mode, mUserId)) {
+                if (mActivityManager.bindBackupAgent(app.packageName, mode, mUserId,
+                        operationType)) {
                     Slog.d(TAG, addUserIdToLogMessage(mUserId, "awaiting agent for " + app));
 
                     // success; wait for the agent to arrive
@@ -1795,6 +1810,16 @@ public class UserBackupManagerService {
                         addUserIdToLogMessage(
                                 mUserId, "Clearing app data for " + packageName + " timed out"));
             }
+        }
+    }
+
+    private BackupEligibilityRules getEligibilityRulesForRestoreAtInstall(long restoreToken) {
+        if (mAncestralOperationType == OperationType.MIGRATION && restoreToken == mAncestralToken) {
+            return getEligibilityRulesForOperation(OperationType.MIGRATION);
+        } else {
+            // If we're not using the ancestral data set, it means we're restoring from a backup
+            // that happened on this device.
+            return mScheduledBackupEligibility;
         }
     }
 
@@ -2299,7 +2324,7 @@ public class UserBackupManagerService {
     public void enqueueFullBackup(String packageName, long lastBackedUp) {
         FullBackupEntry newEntry = new FullBackupEntry(packageName, lastBackedUp);
         synchronized (mQueueLock) {
-            // First, sanity check that we aren't adding a duplicate.  Slow but
+            // First, check that we aren't adding a duplicate.  Slow but
             // straightforward; we'll have at most on the order of a few hundred
             // items in this list.
             dequeueFullBackupLocked(packageName);
@@ -2864,16 +2889,18 @@ public class UserBackupManagerService {
                     mBackupHandler.sendMessageDelayed(msg, TRANSPORT_RETRY_INTERVAL);
                     return;
                 }
-                long oldId = Binder.clearCallingIdentity();
-                OnTaskFinishedListener listener =
-                        caller ->
-                                mTransportManager.disposeOfTransportClient(transportClient, caller);
-                mWakelock.acquire();
-                Message msg = mBackupHandler.obtainMessage(
-                        MSG_RUN_CLEAR,
-                        new ClearParams(transportClient, info, listener));
-                mBackupHandler.sendMessage(msg);
-                Binder.restoreCallingIdentity(oldId);
+                final long oldId = Binder.clearCallingIdentity();
+                try {
+                    OnTaskFinishedListener listener = caller -> mTransportManager
+                            .disposeOfTransportClient(transportClient, caller);
+                    mWakelock.acquire();
+                    Message msg = mBackupHandler.obtainMessage(
+                            MSG_RUN_CLEAR,
+                            new ClearParams(transportClient, info, listener));
+                    mBackupHandler.sendMessage(msg);
+                } finally {
+                    Binder.restoreCallingIdentity(oldId);
+                }
             }
         }
     }
@@ -2885,7 +2912,7 @@ public class UserBackupManagerService {
     public void backupNow() {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP, "backupNow");
 
-        long oldId = Binder.clearCallingIdentity();
+        final long oldId = Binder.clearCallingIdentity();
         try {
             final PowerSaveState result =
                     mPowerManager.getPowerSaveState(ServiceType.KEYVALUE_BACKUP);
@@ -2974,7 +3001,7 @@ public class UserBackupManagerService {
             }
         }
 
-        long oldId = Binder.clearCallingIdentity();
+        final long oldId = Binder.clearCallingIdentity();
         try {
             if (!mSetupComplete) {
                 Slog.i(TAG, addUserIdToLogMessage(mUserId, "Backup not supported before setup"));
@@ -3131,7 +3158,7 @@ public class UserBackupManagerService {
             throw new IllegalStateException("Restore supported only for the device owner");
         }
 
-        long oldId = Binder.clearCallingIdentity();
+        final long oldId = Binder.clearCallingIdentity();
 
         try {
             if (!mSetupComplete) {
@@ -3262,7 +3289,7 @@ public class UserBackupManagerService {
         mContext.enforceCallingPermission(android.Manifest.permission.BACKUP,
                 "acknowledgeAdbBackupOrRestore");
 
-        long oldId = Binder.clearCallingIdentity();
+        final long oldId = Binder.clearCallingIdentity();
         try {
 
             AdbParams params;
@@ -3323,7 +3350,7 @@ public class UserBackupManagerService {
 
         Slog.i(TAG, addUserIdToLogMessage(mUserId, "Backup enabled => " + enable));
 
-        long oldId = Binder.clearCallingIdentity();
+        final long oldId = Binder.clearCallingIdentity();
         try {
             boolean wasEnabled = mEnabled;
             synchronized (this) {
@@ -3452,7 +3479,7 @@ public class UserBackupManagerService {
     public ComponentName getCurrentTransportComponent() {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.BACKUP, "getCurrentTransportComponent");
-        long oldId = Binder.clearCallingIdentity();
+        final long oldId = Binder.clearCallingIdentity();
         try {
             return mTransportManager.getCurrentTransportComponent();
         } catch (TransportNotRegisteredException e) {
@@ -3965,7 +3992,8 @@ public class UserBackupManagerService {
                                 restoreSet,
                                 packageName,
                                 token,
-                                listener);
+                                listener,
+                                getEligibilityRulesForRestoreAtInstall(restoreSet));
                 mBackupHandler.sendMessage(msg);
             } catch (Exception e) {
                 // Calling into the transport broke; back off and proceed with the installation.
@@ -3994,13 +4022,15 @@ public class UserBackupManagerService {
     }
 
     /** Hand off a restore session. */
-    public IRestoreSession beginRestoreSession(String packageName, String transport) {
+    public IRestoreSession beginRestoreSession(String packageName, String transport,
+            @OperationType int operationType) {
         if (DEBUG) {
             Slog.v(
                     TAG,
                     addUserIdToLogMessage(
                             mUserId,
-                            "beginRestoreSession: pkg=" + packageName + " transport=" + transport));
+                            "beginRestoreSession: pkg=" + packageName + " transport=" + transport
+                                + "operationType=" + operationType));
         }
 
         boolean needPermission = true;
@@ -4057,9 +4087,10 @@ public class UserBackupManagerService {
                                 "Restore session requested but currently running backups"));
                 return null;
             }
-            mActiveRestoreSession = new ActiveRestoreSession(this, packageName, transport);
+            mActiveRestoreSession = new ActiveRestoreSession(this, packageName, transport,
+                    getEligibilityRulesForOperation(operationType));
             mBackupHandler.sendEmptyMessageDelayed(MSG_RESTORE_SESSION_TIMEOUT,
-                    mAgentTimeoutParameters.getRestoreAgentTimeoutMillis());
+                    mAgentTimeoutParameters.getRestoreSessionTimeoutMillis());
         }
         return mActiveRestoreSession;
     }
@@ -4136,7 +4167,7 @@ public class UserBackupManagerService {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.BACKUP, "isAppEligibleForBackup");
 
-        long oldToken = Binder.clearCallingIdentity();
+        final long oldToken = Binder.clearCallingIdentity();
         try {
             String callerLogString = "BMS.isAppEligibleForBackup";
             TransportClient transportClient =
@@ -4158,7 +4189,7 @@ public class UserBackupManagerService {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.BACKUP, "filterAppsEligibleForBackup");
 
-        long oldToken = Binder.clearCallingIdentity();
+        final long oldToken = Binder.clearCallingIdentity();
         try {
             String callerLogString = "BMS.filterAppsEligibleForBackup";
             TransportClient transportClient =
@@ -4192,7 +4223,7 @@ public class UserBackupManagerService {
 
     /** Prints service state for 'dumpsys backup'. */
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        long identityToken = Binder.clearCallingIdentity();
+        final long identityToken = Binder.clearCallingIdentity();
         try {
             if (args != null) {
                 for (String arg : args) {

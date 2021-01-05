@@ -20,6 +20,7 @@ package android.accessibilityservice;
 import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_DOUBLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_DOUBLE_TAP_AND_HOLD;
 import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SINGLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SINGLE_TAP_AND_HOLD;
 import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_DOWN;
 import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_LEFT;
 import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_RIGHT;
@@ -28,11 +29,13 @@ import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER
 import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_DOUBLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_DOUBLE_TAP_AND_HOLD;
 import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SINGLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SINGLE_TAP_AND_HOLD;
 import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_DOWN;
 import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_LEFT;
 import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_RIGHT;
 import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_UP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_TRIPLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_TRIPLE_TAP_AND_HOLD;
 import static android.accessibilityservice.AccessibilityService.GESTURE_4_FINGER_DOUBLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_4_FINGER_DOUBLE_TAP_AND_HOLD;
 import static android.accessibilityservice.AccessibilityService.GESTURE_4_FINGER_SINGLE_TAP;
@@ -43,6 +46,7 @@ import static android.accessibilityservice.AccessibilityService.GESTURE_4_FINGER
 import static android.accessibilityservice.AccessibilityService.GESTURE_4_FINGER_TRIPLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_DOUBLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_DOUBLE_TAP_AND_HOLD;
+import static android.accessibilityservice.AccessibilityService.GESTURE_PASSTHROUGH;
 import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_DOWN;
 import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_DOWN_AND_LEFT;
 import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_DOWN_AND_RIGHT;
@@ -59,15 +63,21 @@ import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_UP
 import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_UP_AND_DOWN;
 import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_UP_AND_LEFT;
 import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_UP_AND_RIGHT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_TOUCH_EXPLORATION;
+import static android.accessibilityservice.AccessibilityService.GESTURE_UNKNOWN;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.TestApi;
+import android.content.pm.ParceledListSlice;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.view.MotionEvent;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * This class describes the gesture event including gesture id and which display it happens
@@ -84,14 +94,19 @@ public final class AccessibilityGestureEvent implements Parcelable {
 
     /** @hide */
     @IntDef(prefix = { "GESTURE_" }, value = {
+          GESTURE_UNKNOWN,
+          GESTURE_TOUCH_EXPLORATION,
             GESTURE_2_FINGER_SINGLE_TAP,
+            GESTURE_2_FINGER_SINGLE_TAP_AND_HOLD,
             GESTURE_2_FINGER_DOUBLE_TAP,
             GESTURE_2_FINGER_DOUBLE_TAP_AND_HOLD,
             GESTURE_2_FINGER_TRIPLE_TAP,
             GESTURE_3_FINGER_SINGLE_TAP,
+            GESTURE_3_FINGER_SINGLE_TAP_AND_HOLD,
             GESTURE_3_FINGER_DOUBLE_TAP,
             GESTURE_3_FINGER_DOUBLE_TAP_AND_HOLD,
             GESTURE_3_FINGER_TRIPLE_TAP,
+            GESTURE_3_FINGER_TRIPLE_TAP_AND_HOLD,
             GESTURE_DOUBLE_TAP,
             GESTURE_DOUBLE_TAP_AND_HOLD,
             GESTURE_SWIPE_UP,
@@ -133,17 +148,27 @@ public final class AccessibilityGestureEvent implements Parcelable {
     @GestureId
     private final int mGestureId;
     private final int mDisplayId;
+    private List<MotionEvent> mMotionEvents = new ArrayList<>();
+
+    /** @hide */
+    public AccessibilityGestureEvent(
+            int gestureId, int displayId, @NonNull List<MotionEvent> motionEvents) {
+        mGestureId = gestureId;
+        mDisplayId = displayId;
+        mMotionEvents.addAll(motionEvents);
+    }
 
     /** @hide */
     @TestApi
     public AccessibilityGestureEvent(int gestureId, int displayId) {
-        mGestureId = gestureId;
-        mDisplayId = displayId;
+        this(gestureId, displayId, new ArrayList<MotionEvent>());
     }
 
     private AccessibilityGestureEvent(@NonNull Parcel parcel) {
         mGestureId = parcel.readInt();
         mDisplayId = parcel.readInt();
+        ParceledListSlice<MotionEvent> slice = parcel.readParcelable(getClass().getClassLoader());
+        mMotionEvents = slice.getList();
     }
 
     /**
@@ -166,6 +191,15 @@ public final class AccessibilityGestureEvent implements Parcelable {
         return mGestureId;
     }
 
+    /**
+     * Returns the motion events that lead to this gesture.
+     *
+     */
+    @NonNull
+    public List<MotionEvent> getMotionEvents() {
+        return mMotionEvents;
+    }
+
     @NonNull
     @Override
     public String toString() {
@@ -173,22 +207,42 @@ public final class AccessibilityGestureEvent implements Parcelable {
         stringBuilder.append("gestureId: ").append(eventTypeToString(mGestureId));
         stringBuilder.append(", ");
         stringBuilder.append("displayId: ").append(mDisplayId);
+        stringBuilder.append(", ");
+        stringBuilder.append("Motion Events: [");
+        for (int i = 0; i < mMotionEvents.size(); ++i) {
+            String action = MotionEvent.actionToString(mMotionEvents.get(i).getActionMasked());
+            stringBuilder.append(action);
+            if (i < (mMotionEvents.size() - 1)) {
+                stringBuilder.append(", ");
+            } else {
+                stringBuilder.append("]");
+            }
+        }
         stringBuilder.append(']');
         return stringBuilder.toString();
     }
 
     private static String eventTypeToString(int eventType) {
         switch (eventType) {
+            case GESTURE_UNKNOWN: return "GESTURE_UNKNOWN";
+            case GESTURE_PASSTHROUGH: return "GESTURE_PASSTHROUGH";
+            case GESTURE_TOUCH_EXPLORATION: return "GESTURE_TOUCH_EXPLORATION";
             case GESTURE_2_FINGER_SINGLE_TAP: return "GESTURE_2_FINGER_SINGLE_TAP";
+            case GESTURE_2_FINGER_SINGLE_TAP_AND_HOLD:
+                return "GESTURE_2_FINGER_SINGLE_TAP_AND_HOLD";
             case GESTURE_2_FINGER_DOUBLE_TAP: return "GESTURE_2_FINGER_DOUBLE_TAP";
             case GESTURE_2_FINGER_DOUBLE_TAP_AND_HOLD:
                 return "GESTURE_2_FINGER_DOUBLE_TAP_AND_HOLD";
             case GESTURE_2_FINGER_TRIPLE_TAP: return "GESTURE_2_FINGER_TRIPLE_TAP";
             case GESTURE_3_FINGER_SINGLE_TAP: return "GESTURE_3_FINGER_SINGLE_TAP";
+            case GESTURE_3_FINGER_SINGLE_TAP_AND_HOLD:
+                return "GESTURE_3_FINGER_SINGLE_TAP_AND_HOLD";
             case GESTURE_3_FINGER_DOUBLE_TAP: return "GESTURE_3_FINGER_DOUBLE_TAP";
             case GESTURE_3_FINGER_DOUBLE_TAP_AND_HOLD:
                 return "GESTURE_3_FINGER_DOUBLE_TAP_AND_HOLD";
             case GESTURE_3_FINGER_TRIPLE_TAP: return "GESTURE_3_FINGER_TRIPLE_TAP";
+            case GESTURE_3_FINGER_TRIPLE_TAP_AND_HOLD:
+                return "GESTURE_3_FINGER_TRIPLE_TAP_AND_HOLD";
             case GESTURE_4_FINGER_SINGLE_TAP: return "GESTURE_4_FINGER_SINGLE_TAP";
             case GESTURE_4_FINGER_DOUBLE_TAP: return "GESTURE_4_FINGER_DOUBLE_TAP";
             case GESTURE_4_FINGER_DOUBLE_TAP_AND_HOLD:
@@ -240,6 +294,7 @@ public final class AccessibilityGestureEvent implements Parcelable {
     public void writeToParcel(@NonNull Parcel parcel, int flags) {
         parcel.writeInt(mGestureId);
         parcel.writeInt(mDisplayId);
+        parcel.writeParcelable(new ParceledListSlice<MotionEvent>(mMotionEvents), 0);
     }
 
     /**

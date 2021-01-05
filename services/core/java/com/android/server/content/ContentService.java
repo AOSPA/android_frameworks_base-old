@@ -20,6 +20,7 @@ import static android.content.PermissionChecker.PERMISSION_GRANTED;
 
 import android.Manifest;
 import android.accounts.Account;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
@@ -75,6 +76,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 
 import java.io.FileDescriptor;
@@ -124,26 +126,25 @@ public final class ContentService extends IContentService.Stub {
             mService.onBootPhase(phase);
         }
 
-
         @Override
-        public void onStartUser(int userHandle) {
-            mService.onStartUser(userHandle);
+        public void onUserStarting(@NonNull TargetUser user) {
+            mService.onStartUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onUnlockUser(int userHandle) {
-            mService.onUnlockUser(userHandle);
+        public void onUserUnlocking(@NonNull TargetUser user) {
+            mService.onUnlockUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onStopUser(int userHandle) {
-            mService.onStopUser(userHandle);
+        public void onUserStopping(@NonNull TargetUser user) {
+            mService.onStopUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onCleanupUser(int userHandle) {
+        public void onUserStopped(@NonNull TargetUser user) {
             synchronized (mService.mCache) {
-                mService.mCache.remove(userHandle);
+                mService.mCache.remove(user.getUserIdentifier());
             }
         }
     }
@@ -595,7 +596,7 @@ public final class ContentService extends IContentService.Stub {
 
         // This makes it so that future permission checks will be in the context of this
         // process rather than the caller's process. We will restore this before returning.
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null) {
@@ -649,7 +650,7 @@ public final class ContentService extends IContentService.Stub {
 
         // This makes it so that future permission checks will be in the context of this
         // process rather than the caller's process. We will restore this before returning.
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager == null) {
@@ -717,7 +718,7 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to modify the sync settings for user " + userId);
         // This makes it so that future permission checks will be in the context of this
         // process rather than the caller's process. We will restore this before returning.
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         if (cname != null) {
             Slog.e(TAG, "cname not null.");
             return;
@@ -750,7 +751,7 @@ public final class ContentService extends IContentService.Stub {
         Bundle extras = new Bundle(request.getBundle());
         validateExtras(callingUid, extras);
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncStorageEngine.EndPoint info;
 
@@ -833,7 +834,7 @@ public final class ContentService extends IContentService.Stub {
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_SETTINGS,
                 "no permission to read the sync settings");
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null) {
@@ -865,7 +866,7 @@ public final class ContentService extends IContentService.Stub {
         final int callingPid = Binder.getCallingPid();
         final int syncExemptionFlag = getSyncExemptionForCaller(callingUid);
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null) {
@@ -898,7 +899,7 @@ public final class ContentService extends IContentService.Stub {
         pollFrequency = clampPeriod(pollFrequency);
         long defaultFlex = SyncStorageEngine.calculateDefaultFlexTime(pollFrequency);
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncStorageEngine.EndPoint info =
                     new SyncStorageEngine.EndPoint(account, authority, userId);
@@ -926,7 +927,7 @@ public final class ContentService extends IContentService.Stub {
         final int callingUid = Binder.getCallingUid();
 
         int userId = UserHandle.getCallingUserId();
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             getSyncManager()
                     .removePeriodicSync(
@@ -950,7 +951,7 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to read the sync settings");
 
         int userId = UserHandle.getCallingUserId();
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             return getSyncManager().getPeriodicSyncs(
                     new SyncStorageEngine.EndPoint(account, providerName, userId));
@@ -975,7 +976,7 @@ public final class ContentService extends IContentService.Stub {
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_SETTINGS,
                 "no permission to read the sync settings");
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null) {
@@ -1011,7 +1012,7 @@ public final class ContentService extends IContentService.Stub {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null) {
@@ -1039,7 +1040,7 @@ public final class ContentService extends IContentService.Stub {
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_SETTINGS,
                 "no permission to read the sync settings");
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null) {
@@ -1066,7 +1067,7 @@ public final class ContentService extends IContentService.Stub {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null) {
@@ -1083,7 +1084,7 @@ public final class ContentService extends IContentService.Stub {
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_STATS,
                 "no permission to read the sync stats");
         int userId = UserHandle.getCallingUserId();
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager == null) {
@@ -1115,7 +1116,7 @@ public final class ContentService extends IContentService.Stub {
         final boolean canAccessAccounts =
             mContext.checkCallingOrSelfPermission(Manifest.permission.GET_ACCOUNTS)
                 == PackageManager.PERMISSION_GRANTED;
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             return getSyncManager().getSyncStorageEngine()
                 .getCurrentSyncsCopy(userId, canAccessAccounts);
@@ -1145,7 +1146,7 @@ public final class ContentService extends IContentService.Stub {
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_STATS,
                 "no permission to read the sync stats");
 
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager == null) {
@@ -1175,7 +1176,7 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to read the sync stats");
         enforceCrossUserPermission(userId,
                 "no permission to retrieve the sync settings for user " + userId);
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         SyncManager syncManager = getSyncManager();
         if (syncManager == null) return false;
 
@@ -1195,7 +1196,7 @@ public final class ContentService extends IContentService.Stub {
     @Override
     public void addStatusChangeListener(int mask, ISyncStatusObserver callback) {
         final int callingUid = Binder.getCallingUid();
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null && callback != null) {
@@ -1209,7 +1210,7 @@ public final class ContentService extends IContentService.Stub {
 
     @Override
     public void removeStatusChangeListener(ISyncStatusObserver callback) {
-        long identityToken = clearCallingIdentity();
+        final long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
             if (syncManager != null && callback != null) {

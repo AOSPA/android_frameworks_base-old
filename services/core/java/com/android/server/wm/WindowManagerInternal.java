@@ -430,9 +430,6 @@ public abstract class WindowManagerInternal {
     public abstract void setOnHardKeyboardStatusChangeListener(
         OnHardKeyboardStatusChangeListener listener);
 
-    /** Returns true if a stack in the windowing mode is currently visible. */
-    public abstract boolean isStackVisibleLw(int windowingMode);
-
     /**
      * Requests the window manager to resend the windows for accessibility on specified display.
      *
@@ -597,4 +594,9 @@ public abstract class WindowManagerInternal {
      * @return The corresponding {@link WindowState#getName()}
      */
     public abstract @Nullable String getImeTargetNameForLogging(int displayId);
+
+    /**
+     * Moves the {@link WindowToken} {@code binder} to the display specified by {@code displayId}.
+     */
+    public abstract void moveWindowTokenToDisplay(IBinder binder, int displayId);
 }

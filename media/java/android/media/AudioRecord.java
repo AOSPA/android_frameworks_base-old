@@ -30,6 +30,7 @@ import android.media.audiopolicy.AudioMix;
 import android.media.audiopolicy.AudioPolicy;
 import android.media.projection.MediaProjection;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -174,14 +175,14 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
      * Accessed by native methods: provides access to the callback data.
      */
     @SuppressWarnings("unused")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private long mNativeCallbackCookie;
 
     /**
      * Accessed by native methods: provides access to the JNIDeviceCallback instance.
      */
     @SuppressWarnings("unused")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private long mNativeDeviceCallback;
 
 
@@ -261,7 +262,7 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
     /**
      * AudioAttributes
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private AudioAttributes mAudioAttributes;
     private boolean mIsSubmixFullVolume = false;
 
@@ -485,6 +486,11 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
 
             mState = STATE_INITIALIZED;
         }
+    }
+
+    /** @hide */
+    public AudioAttributes getAudioAttributes() {
+        return mAudioAttributes;
     }
 
     /**
@@ -844,23 +850,27 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
         //--------------
         // audio format
         switch (audioFormat) {
-        case AudioFormat.ENCODING_DEFAULT:
-            mAudioFormat = AudioFormat.ENCODING_PCM_16BIT;
-            break;
-        case AudioFormat.ENCODING_PCM_FLOAT:
-        case AudioFormat.ENCODING_PCM_16BIT:
-        case AudioFormat.ENCODING_PCM_8BIT:
-        case AudioFormat.ENCODING_AMRNB:
-        case AudioFormat.ENCODING_AMRWB:
-        case AudioFormat.ENCODING_EVRC:
-        case AudioFormat.ENCODING_EVRCB:
-        case AudioFormat.ENCODING_EVRCWB:
-        case AudioFormat.ENCODING_EVRCNW:
-            mAudioFormat = audioFormat;
-            break;
-        default:
-            throw new IllegalArgumentException("Unsupported sample encoding " + audioFormat
-                    + ". Should be ENCODING_PCM_8BIT, ENCODING_PCM_16BIT, or ENCODING_PCM_FLOAT.");
+            case AudioFormat.ENCODING_DEFAULT:
+                mAudioFormat = AudioFormat.ENCODING_PCM_16BIT;
+                break;
+            case AudioFormat.ENCODING_PCM_24BIT_PACKED:
+            case AudioFormat.ENCODING_PCM_32BIT:
+            case AudioFormat.ENCODING_PCM_FLOAT:
+            case AudioFormat.ENCODING_PCM_16BIT:
+            case AudioFormat.ENCODING_PCM_8BIT:
+            case AudioFormat.ENCODING_AMRNB:
+            case AudioFormat.ENCODING_AMRWB:
+            case AudioFormat.ENCODING_EVRC:
+            case AudioFormat.ENCODING_EVRCB:
+            case AudioFormat.ENCODING_EVRCWB:
+            case AudioFormat.ENCODING_EVRCNW:
+                mAudioFormat = audioFormat;
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported sample encoding " + audioFormat
+                        + ". Should be ENCODING_PCM_8BIT, ENCODING_PCM_16BIT,"
+                        + " ENCODING_PCM_24BIT_PACKED, ENCODING_PCM_32BIT,"
+                        + " or ENCODING_PCM_FLOAT.");
         }
     }
 
@@ -1272,6 +1282,7 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
      */
     public int read(@NonNull byte[] audioData, int offsetInBytes, int sizeInBytes,
             @ReadMode int readMode) {
+        // Note: we allow reads of extended integers into a byte array.
         if (mState != STATE_INITIALIZED  || mAudioFormat == AudioFormat.ENCODING_PCM_FLOAT) {
             return ERROR_INVALID_OPERATION;
         }
@@ -1344,7 +1355,10 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
      */
     public int read(@NonNull short[] audioData, int offsetInShorts, int sizeInShorts,
             @ReadMode int readMode) {
-        if (mState != STATE_INITIALIZED || mAudioFormat == AudioFormat.ENCODING_PCM_FLOAT) {
+        if (mState != STATE_INITIALIZED
+                || mAudioFormat == AudioFormat.ENCODING_PCM_FLOAT
+                // use ByteBuffer instead for later encodings
+                || mAudioFormat > AudioFormat.ENCODING_LEGACY_SHORT_ARRAY_THRESHOLD) {
             return ERROR_INVALID_OPERATION;
         }
 
@@ -1971,7 +1985,7 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
     // Java methods called from the native side
     //--------------------
     @SuppressWarnings("unused")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private static void postEventFromNative(Object audiorecord_ref,
             int what, int arg1, int arg2, Object obj) {
         //logd("Event posted from the native side: event="+ what + " args="+ arg1+" "+arg2);

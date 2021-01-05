@@ -23,6 +23,8 @@ import static com.google.common.truth.Truth.assertThat;
 
 import android.content.Context;
 import android.hardware.hdmi.HdmiControlManager;
+import android.hardware.hdmi.HdmiDeviceInfo;
+import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.tv.cec.V1_0.SendMessageResult;
 import android.os.Handler;
 import android.os.IPowerManager;
@@ -70,6 +72,9 @@ public class HdmiCecLocalDeviceTvTest {
         mMyLooper = mTestLooper.getLooper();
         PowerManager powerManager = new PowerManager(context, mIPowerManagerMock,
                 mIThermalServiceMock, new Handler(mMyLooper));
+
+        HdmiCecConfig hdmiCecConfig = new FakeHdmiCecConfig(context);
+
         mHdmiControlService =
                 new HdmiControlService(InstrumentationRegistry.getTargetContext()) {
                     @Override
@@ -91,19 +96,28 @@ public class HdmiCecLocalDeviceTvTest {
                     PowerManager getPowerManager() {
                         return powerManager;
                     }
+
+                    @Override
+                    HdmiCecConfig getHdmiCecConfig() {
+                        return hdmiCecConfig;
+                    }
                 };
 
         mHdmiCecLocalDeviceTv = new HdmiCecLocalDeviceTv(mHdmiControlService);
         mHdmiCecLocalDeviceTv.init();
         mHdmiControlService.setIoLooper(mMyLooper);
         mNativeWrapper = new FakeNativeWrapper();
-        mHdmiCecController =
-                HdmiCecController.createWithNativeWrapper(mHdmiControlService, mNativeWrapper);
+        mHdmiCecController = HdmiCecController.createWithNativeWrapper(
+                mHdmiControlService, mNativeWrapper, mHdmiControlService.getAtomWriter());
         mHdmiControlService.setCecController(mHdmiCecController);
         mHdmiControlService.setHdmiMhlController(HdmiMhlControllerStub.create(mHdmiControlService));
         mHdmiControlService.setMessageValidator(new HdmiCecMessageValidator(mHdmiControlService));
         mLocalDevices.add(mHdmiCecLocalDeviceTv);
-        mHdmiControlService.initPortInfo();
+        HdmiPortInfo[] hdmiPortInfos = new HdmiPortInfo[1];
+        hdmiPortInfos[0] =
+                new HdmiPortInfo(1, HdmiPortInfo.PORT_INPUT, 0x1000, true, false, false);
+        mNativeWrapper.setPortInfo(hdmiPortInfos);
+        mHdmiControlService.initService();
         mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTvPhysicalAddress = 0x0000;
         mNativeWrapper.setPhysicalAddress(mTvPhysicalAddress);
@@ -119,8 +133,9 @@ public class HdmiCecLocalDeviceTvTest {
 
     @Test
     public void onAddressAllocated_invokesDeviceDiscovery() {
+        mHdmiControlService.getHdmiCecNetwork().clearLocalDevices();
         mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
-        mHdmiCecLocalDeviceTv.onAddressAllocated(0, HdmiControlService.INITIATED_BY_BOOT_UP);
+        mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
 
         mTestLooper.dispatchAll();
 
@@ -129,5 +144,52 @@ public class HdmiCecLocalDeviceTvTest {
         HdmiCecMessage givePhysicalAddress = HdmiCecMessageBuilder.buildGivePhysicalAddress(ADDR_TV,
                 ADDR_PLAYBACK_1);
         assertThat(mNativeWrapper.getResultMessages()).contains(givePhysicalAddress);
+    }
+
+    @Test
+    public void getActiveSource_noActiveSource() {
+        mHdmiControlService.setActiveSource(Constants.ADDR_UNREGISTERED,
+                Constants.INVALID_PHYSICAL_ADDRESS, "HdmiControlServiceTest");
+        mHdmiCecLocalDeviceTv.setActivePath(HdmiDeviceInfo.PATH_INVALID);
+
+        assertThat(mHdmiControlService.getActiveSource()).isNull();
+    }
+
+    @Test
+    public void getActiveSource_deviceInNetworkIsActiveSource() {
+        HdmiDeviceInfo externalDevice = new HdmiDeviceInfo(Constants.ADDR_PLAYBACK_3, 0x1000, 0,
+                Constants.ADDR_PLAYBACK_1, 0, "Test Device");
+        mHdmiControlService.getHdmiCecNetwork().addCecDevice(externalDevice);
+        mTestLooper.dispatchAll();
+
+        mHdmiControlService.setActiveSource(externalDevice.getLogicalAddress(),
+                externalDevice.getPhysicalAddress(), "HdmiControlServiceTest");
+
+        assertThat(mHdmiControlService.getActiveSource()).isEqualTo(externalDevice);
+    }
+
+    @Test
+    public void getActiveSource_unknownLogicalAddressInNetworkIsActiveSource() {
+        HdmiDeviceInfo externalDevice = new HdmiDeviceInfo(0x1000, 1);
+
+        mHdmiControlService.setActiveSource(Constants.ADDR_UNREGISTERED,
+                externalDevice.getPhysicalAddress(), "HdmiControlServiceTest");
+        mHdmiCecLocalDeviceTv.setActivePath(0x1000);
+
+        assertThat(mHdmiControlService.getActiveSource()).isEqualTo(
+                externalDevice);
+    }
+
+    @Test
+    public void getActiveSource_unknownDeviceIsActiveSource() {
+        HdmiDeviceInfo externalDevice = new HdmiDeviceInfo(Constants.ADDR_PLAYBACK_3, 0x1000, 0,
+                Constants.ADDR_PLAYBACK_1, 0, "Test Device");
+
+        mHdmiControlService.setActiveSource(externalDevice.getLogicalAddress(),
+                externalDevice.getPhysicalAddress(), "HdmiControlServiceTest");
+        mHdmiCecLocalDeviceTv.setActivePath(0x1000);
+
+        assertThat(mHdmiControlService.getActiveSource().getPhysicalAddress()).isEqualTo(
+                externalDevice.getPhysicalAddress());
     }
 }

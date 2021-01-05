@@ -18,6 +18,7 @@ package com.android.server.notification;
 
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.NotificationChannel.PLACEHOLDER_CONVERSATION_ID;
+import static android.app.NotificationChannel.USER_LOCKED_IMPORTANCE;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_ALL;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_NONE;
 import static android.app.NotificationManager.IMPORTANCE_NONE;
@@ -79,6 +80,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class PreferencesHelper implements RankingConfig {
@@ -954,6 +956,23 @@ public class PreferencesHelper implements RankingConfig {
         channel.unlockFields(channel.getUserLockedFields());
     }
 
+    void unlockNotificationChannelImportance(String pkg, int uid, String updatedChannelId) {
+        Objects.requireNonNull(updatedChannelId);
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(pkg, uid);
+            if (r == null) {
+                throw new IllegalArgumentException("Invalid package");
+            }
+
+            NotificationChannel channel = r.channels.get(updatedChannelId);
+            if (channel == null || channel.isDeleted()) {
+                throw new IllegalArgumentException("Channel does not exist");
+            }
+            channel.unlockFields(USER_LOCKED_IMPORTANCE);
+        }
+    }
+
+
     @Override
     public void updateNotificationChannel(String pkg, int uid, NotificationChannel updatedChannel,
             boolean fromUser) {
@@ -1348,6 +1367,24 @@ public class PreferencesHelper implements RankingConfig {
         return groups;
     }
 
+    public NotificationChannelGroup getGroupForChannel(String pkg, int uid, String channelId) {
+        synchronized (mPackagePreferences) {
+            PackagePreferences p = getPackagePreferencesLocked(pkg, uid);
+            if (p != null) {
+                NotificationChannel nc = p.channels.get(channelId);
+                if (nc != null && !nc.isDeleted()) {
+                    if (nc.getGroup() != null) {
+                        NotificationChannelGroup group = p.groups.get(nc.getGroup());
+                        if (group != null) {
+                            return group;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     public ArrayList<ConversationChannelWrapper> getConversations(boolean onlyImportant) {
         synchronized (mPackagePreferences) {
             ArrayList<ConversationChannelWrapper> conversations = new ArrayList<>();
@@ -1428,7 +1465,8 @@ public class PreferencesHelper implements RankingConfig {
         }
     }
 
-    public @NonNull List<String> deleteConversation(String pkg, int uid, String conversationId) {
+    public @NonNull List<String> deleteConversations(String pkg, int uid,
+            Set<String> conversationIds) {
         synchronized (mPackagePreferences) {
             List<String> deletedChannelIds = new ArrayList<>();
             PackagePreferences r = getPackagePreferencesLocked(pkg, uid);
@@ -1438,7 +1476,8 @@ public class PreferencesHelper implements RankingConfig {
             int N = r.channels.size();
             for (int i = 0; i < N; i++) {
                 final NotificationChannel nc = r.channels.valueAt(i);
-                if (conversationId.equals(nc.getConversationId())) {
+                if (nc.getConversationId() != null
+                        && conversationIds.contains(nc.getConversationId())) {
                     nc.setDeleted(true);
                     LogMaker lm = getChannelLog(nc, pkg);
                     lm.setType(
@@ -2366,6 +2405,18 @@ public class PreferencesHelper implements RankingConfig {
                             DEFAULT_SHOW_BADGE ? 1 : 0, userId) != 0);
         }
         return mBadgingEnabled.get(userId, DEFAULT_SHOW_BADGE);
+    }
+
+    public void unlockAllNotificationChannels() {
+        synchronized (mPackagePreferences) {
+            final int numPackagePreferences = mPackagePreferences.size();
+            for (int i = 0; i < numPackagePreferences; i++) {
+                final PackagePreferences r = mPackagePreferences.valueAt(i);
+                for (NotificationChannel channel : r.channels.values()) {
+                    channel.unlockFields(USER_LOCKED_IMPORTANCE);
+                }
+            }
+        }
     }
 
     private void updateConfig() {

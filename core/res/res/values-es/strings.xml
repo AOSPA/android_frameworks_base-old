@@ -327,7 +327,7 @@
     <string name="capability_desc_canControlMagnification" msgid="2206586716709254805">"Controla el posicionamiento y el nivel de zoom de la pantalla."</string>
     <string name="capability_title_canPerformGestures" msgid="9106545062106728987">"Realizar gestos"</string>
     <string name="capability_desc_canPerformGestures" msgid="6619457251067929726">"Puedes tocar y pellizcar la pantalla, deslizar el dedo y hacer otros gestos."</string>
-    <string name="capability_title_canCaptureFingerprintGestures" msgid="1189053104594608091">"Gestos de huellas digitales"</string>
+    <string name="capability_title_canCaptureFingerprintGestures" msgid="1189053104594608091">"Gestos de huella digital"</string>
     <string name="capability_desc_canCaptureFingerprintGestures" msgid="6861869337457461274">"Puede capturar los gestos realizados en el sensor de huellas digitales del dispositivo."</string>
     <string name="capability_title_canTakeScreenshot" msgid="3895812893130071930">"Hacer captura"</string>
     <string name="capability_desc_canTakeScreenshot" msgid="7762297374317934052">"Puede hacer capturas de la pantalla."</string>
@@ -432,13 +432,17 @@
     <string name="permlab_modifyAudioSettings" msgid="6129039778010031815">"cambiar la configuración de audio"</string>
     <string name="permdesc_modifyAudioSettings" msgid="8687227609663124921">"Permite que la aplicación modifique la configuración de audio global (por ejemplo, el volumen y el altavoz de salida)."</string>
     <string name="permlab_recordAudio" msgid="1208457423054219147">"grabar sonido"</string>
-    <string name="permdesc_recordAudio" msgid="3976213377904701093">"Esta aplicación puede grabar audio con el micrófono en cualquier momento."</string>
+    <string name="permdesc_recordAudio" msgid="5857246765327514062">"Esta aplicación puede grabar audio con el micrófono mientras la estés usando."</string>
+    <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"Grabar audio en segundo plano"</string>
+    <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Esta aplicación puede grabar audio con el micrófono en cualquier momento."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"enviar comandos a la tarjeta SIM"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Permite que la aplicación envíe comandos a la tarjeta SIM. Este permiso es muy peligroso."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"reconocer actividad física"</string>
     <string name="permdesc_activityRecognition" msgid="8667484762991357519">"Esta aplicación puede reconocer tu actividad física."</string>
     <string name="permlab_camera" msgid="6320282492904119413">"realizar fotografías y vídeos"</string>
-    <string name="permdesc_camera" msgid="1354600178048761499">"Esta aplicación puede hacer fotografías y grabar vídeos con la cámara en cualquier momento."</string>
+    <string name="permdesc_camera" msgid="5240801376168647151">"Esta aplicación puede hacer fotografías y grabar vídeos con la cámara mientras la estés usando."</string>
+    <string name="permlab_backgroundCamera" msgid="7549917926079731681">"Hacer fotografías y grabar vídeos en segundo plano"</string>
+    <string name="permdesc_backgroundCamera" msgid="1615291686191138250">"Esta aplicación puede hacer fotografías y grabar vídeos con la cámara en cualquier momento."</string>
     <string name="permlab_systemCamera" msgid="3642917457796210580">"Permitir que una aplicación o servicio acceda a las cámaras del sistema para hacer fotos y vídeos"</string>
     <string name="permdesc_systemCamera" msgid="5938360914419175986">"Esta aplicación del sistema o con privilegios puede hacer fotos y grabar vídeos en cualquier momento con una cámara del sistema, aunque debe tener también el permiso android.permission.CAMERA para hacerlo"</string>
     <string name="permlab_cameraOpenCloseListener" msgid="5548732769068109315">"Permitir que una aplicación o servicio reciba retrollamadas cada vez que se abra o cierre una cámara."</string>
@@ -832,8 +836,7 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Pulsa la tecla de menú para desbloquear el teléfono o realizar una llamada de emergencia."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Pulsa la tecla de menú para desbloquear la pantalla."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Dibujar patrón de desbloqueo"</string>
-    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
-    <skip />
+    <string name="lockscreen_emergency_call" msgid="7549683825868928636">"Llamada de emergencia"</string>
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Volver a llamada"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Correcto"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Vuelve a intentarlo"</string>
@@ -1126,6 +1129,8 @@
     <string name="capital_off" msgid="7443704171014626777">"DESACTIVADO"</string>
     <string name="checked" msgid="9179896827054513119">"seleccionado"</string>
     <string name="not_checked" msgid="7972320087569023342">"no seleccionado"</string>
+    <string name="selected" msgid="6614607926197755875">"seleccionado"</string>
+    <string name="not_selected" msgid="410652016565864475">"no seleccionado"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Completar acción utilizando"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Completar acción con %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Completar acción"</string>
@@ -1623,10 +1628,10 @@
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"¿Quieres subir el volumen por encima del nivel recomendado?\n\nEscuchar sonidos fuertes durante mucho tiempo puede dañar los oídos."</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"¿Utilizar acceso directo de accesibilidad?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Si el acceso directo está activado, pulsa los dos botones de volumen durante 3 segundos para iniciar una función de accesibilidad."</string>
-    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"¿Activar funciones de accesibilidad?"</string>
+    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"¿Quieres activar el acceso directo a las funciones de accesibilidad?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Al mantener pulsadas las dos teclas de volumen durante unos segundos, se activan las funciones de accesibilidad, que pueden cambiar el funcionamiento del dispositivo.\n\nFunciones actuales:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nPuedes cambiar las funciones seleccionadas en Ajustes &gt; Accesibilidad."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"¿Quieres activar <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
+    <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"¿Quieres activar el acceso directo a <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Al mantener pulsadas ambas teclas de volumen durante unos segundos se activa <xliff:g id="SERVICE">%1$s</xliff:g>, una función de accesibilidad. Esta función puede modificar el funcionamiento del dispositivo.\n\nPuedes asignar este acceso directo a otra función en Ajustes &gt; Accesibilidad."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Activar"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"No activar"</string>
@@ -1771,7 +1776,7 @@
       <item quantity="other">Vuelve a intentarlo en <xliff:g id="COUNT">%d</xliff:g> segundos</item>
       <item quantity="one">Vuelve a intentarlo en 1 segundo</item>
     </plurals>
-    <string name="restr_pin_try_later" msgid="5897719962541636727">"Volver a intentar más tarde"</string>
+    <string name="restr_pin_try_later" msgid="5897719962541636727">"Reintentar más tarde"</string>
     <string name="immersive_cling_title" msgid="2307034298721541791">"Modo de pantalla completa"</string>
     <string name="immersive_cling_description" msgid="7092737175345204832">"Para salir, desliza el dedo de arriba abajo."</string>
     <string name="immersive_cling_positive" msgid="7047498036346489883">"Entendido"</string>
@@ -1830,6 +1835,7 @@
       <item quantity="other">Durante %d horas</item>
       <item quantity="one">Durante 1 hora</item>
     </plurals>
+    <string name="zen_mode_until_next_day" msgid="1403042784161725038">"Hasta las <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"Hasta <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"Hasta las <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (próxima alarma)"</string>
     <string name="zen_mode_forever" msgid="740585666364912448">"Hasta que lo desactives"</string>

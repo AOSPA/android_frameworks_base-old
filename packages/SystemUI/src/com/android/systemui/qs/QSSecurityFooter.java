@@ -15,13 +15,16 @@
  */
 package com.android.systemui.qs;
 
-import android.app.ActivityManager;
+import static com.android.systemui.qs.dagger.QSFragmentModule.QS_SECURITY_FOOTER_VIEW;
+
 import android.app.AlertDialog;
+import android.app.admin.DeviceAdminInfo;
 import android.app.admin.DevicePolicyEventLogger;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.UserInfo;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -40,15 +43,24 @@ import android.view.Window;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.android.internal.util.FrameworkStatsLog;
-import com.android.systemui.Dependency;
 import com.android.systemui.FontSizeUtils;
 import com.android.systemui.R;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.qs.dagger.QSScope;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
 import com.android.systemui.statusbar.policy.SecurityController;
 
-public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClickListener {
+import javax.inject.Inject;
+import javax.inject.Named;
+
+@QSScope
+class QSSecurityFooter implements OnClickListener, DialogInterface.OnClickListener {
     protected static final String TAG = "QSSecurityFooter";
     protected static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     private static final boolean DEBUG_FORCE_VISIBLE = false;
@@ -61,8 +73,7 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
     private final SecurityController mSecurityController;
     private final ActivityStarter mActivityStarter;
     private final Handler mMainHandler;
-
-    private final UserManager mUm;
+    private final UserTracker mUserTracker;
 
     private AlertDialog mDialog;
     private QSTileHost mHost;
@@ -73,19 +84,21 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
     private int mFooterTextId;
     private int mFooterIconId;
 
-    public QSSecurityFooter(QSPanel qsPanel, Context context) {
-        mRootView = LayoutInflater.from(context)
-                .inflate(R.layout.quick_settings_footer, qsPanel, false);
+    @Inject
+    QSSecurityFooter(@Named(QS_SECURITY_FOOTER_VIEW) View rootView, Context context,
+            UserTracker userTracker, @Main Handler mainHandler, ActivityStarter activityStarter,
+            SecurityController securityController, @Background Looper bgLooper) {
+        mRootView = rootView;
         mRootView.setOnClickListener(this);
-        mFooterText = (TextView) mRootView.findViewById(R.id.footer_text);
-        mFooterIcon = (ImageView) mRootView.findViewById(R.id.footer_icon);
+        mFooterText = mRootView.findViewById(R.id.footer_text);
+        mFooterIcon = mRootView.findViewById(R.id.footer_icon);
         mFooterIconId = R.drawable.ic_info_outline;
         mContext = context;
-        mMainHandler = new Handler(Looper.myLooper());
-        mActivityStarter = Dependency.get(ActivityStarter.class);
-        mSecurityController = Dependency.get(SecurityController.class);
-        mHandler = new H(Dependency.get(Dependency.BG_LOOPER));
-        mUm = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
+        mMainHandler = mainHandler;
+        mActivityStarter = activityStarter;
+        mSecurityController = securityController;
+        mHandler = new H(bgLooper);
+        mUserTracker = userTracker;
     }
 
     public void setHostEnvironment(QSTileHost host) {
@@ -138,7 +151,7 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
 
     private void handleRefreshState() {
         final boolean isDeviceManaged = mSecurityController.isDeviceManaged();
-        final UserInfo currentUser = mUm.getUserInfo(ActivityManager.getCurrentUser());
+        final UserInfo currentUser = mUserTracker.getUserInfo();
         final boolean isDemoDevice = UserManager.isDeviceInDemoMode(mContext) && currentUser != null
                 && currentUser.isDemo();
         final boolean hasWorkProfile = mSecurityController.hasWorkProfile();
@@ -152,15 +165,16 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
                 mSecurityController.getWorkProfileOrganizationName();
         final boolean isProfileOwnerOfOrganizationOwnedDevice =
                 mSecurityController.isProfileOwnerOfOrganizationOwnedDevice();
+        final boolean isParentalControlsEnabled = mSecurityController.isParentalControlsEnabled();
         // Update visibility of footer
         mIsVisible = (isDeviceManaged && !isDemoDevice) || hasCACerts || hasCACertsInWorkProfile
                 || vpnName != null || vpnNameWorkProfile != null
-                || isProfileOwnerOfOrganizationOwnedDevice;
+                || isProfileOwnerOfOrganizationOwnedDevice || isParentalControlsEnabled;
         // Update the string
         mFooterTextContent = getFooterText(isDeviceManaged, hasWorkProfile,
                 hasCACerts, hasCACertsInWorkProfile, isNetworkLoggingEnabled, vpnName,
                 vpnNameWorkProfile, organizationName, workProfileOrganizationName,
-                isProfileOwnerOfOrganizationOwnedDevice);
+                isProfileOwnerOfOrganizationOwnedDevice, isParentalControlsEnabled);
         // Update the icon
         int footerIconId = R.drawable.ic_info_outline;
         if (vpnName != null || vpnNameWorkProfile != null) {
@@ -181,7 +195,10 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
             boolean hasCACerts, boolean hasCACertsInWorkProfile, boolean isNetworkLoggingEnabled,
             String vpnName, String vpnNameWorkProfile, CharSequence organizationName,
             CharSequence workProfileOrganizationName,
-            boolean isProfileOwnerOfOrganizationOwnedDevice) {
+            boolean isProfileOwnerOfOrganizationOwnedDevice, boolean isParentalControlsEnabled) {
+        if (isParentalControlsEnabled) {
+            return mContext.getString(R.string.quick_settings_disclosure_parental_controls);
+        }
         if (isDeviceManaged || DEBUG_FORCE_VISIBLE) {
             if (hasCACerts || hasCACertsInWorkProfile || isNetworkLoggingEnabled) {
                 if (organizationName == null) {
@@ -264,6 +281,27 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
     }
 
     private void createDialog() {
+        mDialog = new SystemUIDialog(mContext);
+        mDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        mDialog.setButton(DialogInterface.BUTTON_POSITIVE, getPositiveButton(), this);
+        mDialog.setButton(DialogInterface.BUTTON_NEGATIVE, getNegativeButton(), this);
+
+        mDialog.setView(createDialogView());
+
+        mDialog.show();
+        mDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    @VisibleForTesting
+    View createDialogView() {
+        if (mSecurityController.isParentalControlsEnabled()) {
+            return createParentalControlsDialogView();
+        }
+        return createOrganizationDialogView();
+    }
+
+    private View createOrganizationDialogView() {
         final boolean isDeviceManaged = mSecurityController.isDeviceManaged();
         boolean isProfileOwnerOfOrganizationOwnedDevice =
                 mSecurityController.isProfileOwnerOfOrganizationOwnedDevice();
@@ -278,13 +316,10 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
         final String vpnName = mSecurityController.getPrimaryVpnName();
         final String vpnNameWorkProfile = mSecurityController.getWorkProfileVpnName();
 
-        mDialog = new SystemUIDialog(mContext);
-        mDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
         View dialogView = LayoutInflater.from(
                 new ContextThemeWrapper(mContext, R.style.Theme_SystemUI_Dialog))
                 .inflate(R.layout.quick_settings_footer_dialog, null, false);
-        mDialog.setView(dialogView);
-        mDialog.setButton(DialogInterface.BUTTON_POSITIVE, getPositiveButton(), this);
 
         // device management section
         CharSequence managementMessage = getManagementMessage(isDeviceManaged,
@@ -349,9 +384,26 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
                 vpnMessage != null,
                 dialogView);
 
-        mDialog.show();
-        mDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
+        return dialogView;
+    }
+
+    private View createParentalControlsDialogView() {
+        View dialogView = LayoutInflater.from(
+                new ContextThemeWrapper(mContext, R.style.Theme_SystemUI_Dialog))
+                .inflate(R.layout.quick_settings_footer_dialog_parental_controls, null, false);
+
+        DeviceAdminInfo info = mSecurityController.getDeviceAdminInfo();
+        Drawable icon = mSecurityController.getIcon(info);
+        if (icon != null) {
+            ImageView imageView = (ImageView) dialogView.findViewById(R.id.parental_controls_icon);
+            imageView.setImageDrawable(icon);
+        }
+
+        TextView parentalControlsTitle =
+                (TextView) dialogView.findViewById(R.id.parental_controls_title);
+        parentalControlsTitle.setText(mSecurityController.getLabel(info));
+
+        return dialogView;
     }
 
     protected void configSubtitleVisibility(boolean showDeviceManagement, boolean showCaCerts,
@@ -388,6 +440,13 @@ public class QSSecurityFooter implements OnClickListener, DialogInterface.OnClic
 
     private String getPositiveButton() {
         return mContext.getString(R.string.ok);
+    }
+
+    private String getNegativeButton() {
+        if (mSecurityController.isParentalControlsEnabled()) {
+            return mContext.getString(R.string.monitoring_button_view_controls);
+        }
+        return null;
     }
 
     protected CharSequence getManagementMessage(boolean isDeviceManaged,

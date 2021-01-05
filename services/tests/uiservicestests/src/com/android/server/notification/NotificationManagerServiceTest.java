@@ -43,6 +43,9 @@ import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_SCREEN_OFF;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_SCREEN_ON;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_STATUS_BAR;
+import static android.app.PendingIntent.FLAG_IMMUTABLE;
+import static android.app.PendingIntent.FLAG_MUTABLE;
+import static android.app.PendingIntent.FLAG_ONE_SHOT;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.PERMISSION_DENIED;
@@ -69,10 +72,12 @@ import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -102,10 +107,13 @@ import android.app.StatsManager;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.app.usage.UsageStatsManagerInternal;
 import android.companion.ICompanionDeviceManager;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.Context;
+import android.content.IIntentSender;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
@@ -166,6 +174,7 @@ import com.android.internal.util.FastXmlSerializer;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.UiServiceTestCase;
 import com.android.server.lights.LightsManager;
 import com.android.server.lights.LogicalLight;
@@ -178,10 +187,10 @@ import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.stubbing.Answer;
@@ -243,6 +252,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     Resources mResources;
     @Mock
     RankingHandler mRankingHandler;
+    @Mock
+    ActivityManagerInternal mAmi;
+
+    @Mock
+    IIntentSender pi1;
 
     private static final int MAX_POST_DELAY = 1000;
 
@@ -282,6 +296,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     NotificationHistoryManager mHistoryManager;
     @Mock
     StatsManager mStatsManager;
+    BroadcastReceiver mPackageIntentReceiver;
     NotificationRecordLoggerFake mNotificationRecordLogger = new NotificationRecordLoggerFake();
     private InstanceIdSequence mNotificationInstanceIdSequence = new InstanceIdSequenceFake(
             1 << 30);
@@ -385,8 +400,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         MockitoAnnotations.initMocks(this);
 
         DeviceIdleInternal deviceIdleInternal = mock(DeviceIdleInternal.class);
-        when(deviceIdleInternal.getNotificationWhitelistDuration()).thenReturn(3000L);
-        ActivityManagerInternal activityManagerInternal = mock(ActivityManagerInternal.class);
+        when(deviceIdleInternal.getNotificationAllowlistDuration()).thenReturn(3000L);
 
         LocalServices.removeServiceForTest(UriGrantsManagerInternal.class);
         LocalServices.addService(UriGrantsManagerInternal.class, mUgmInternal);
@@ -397,7 +411,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         LocalServices.removeServiceForTest(DeviceIdleInternal.class);
         LocalServices.addService(DeviceIdleInternal.class, deviceIdleInternal);
         LocalServices.removeServiceForTest(ActivityManagerInternal.class);
-        LocalServices.addService(ActivityManagerInternal.class, activityManagerInternal);
+        LocalServices.addService(ActivityManagerInternal.class, mAmi);
 
         doNothing().when(mContext).sendBroadcastAsUser(any(), any(), any());
 
@@ -471,7 +485,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 mGroupHelper, mAm, mAtm, mAppUsageStats,
                 mock(DevicePolicyManagerInternal.class), mUgm, mUgmInternal,
                 mAppOpsManager, mUm, mHistoryManager, mStatsManager,
-                mock(TelephonyManager.class));
+                mock(TelephonyManager.class), mAmi);
         mService.onBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY);
 
         mService.setAudioManager(mAudioManager);
@@ -479,6 +493,28 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mShortcutHelper = mService.getShortcutHelper();
         mShortcutHelper.setLauncherApps(mLauncherApps);
         mShortcutHelper.setShortcutServiceInternal(mShortcutServiceInternal);
+
+        // Capture PackageIntentReceiver
+        ArgumentCaptor<BroadcastReceiver> broadcastReceiverCaptor =
+                ArgumentCaptor.forClass(BroadcastReceiver.class);
+        ArgumentCaptor<IntentFilter> intentFilterCaptor =
+                ArgumentCaptor.forClass(IntentFilter.class);
+
+        verify(mContext, atLeastOnce()).registerReceiverAsUser(broadcastReceiverCaptor.capture(),
+                any(), intentFilterCaptor.capture(), any(), any());
+        List<BroadcastReceiver> broadcastReceivers = broadcastReceiverCaptor.getAllValues();
+        List<IntentFilter> intentFilters = intentFilterCaptor.getAllValues();
+
+        for (int i = 0; i < intentFilters.size(); i++) {
+            final IntentFilter filter = intentFilters.get(i);
+            if (filter.hasAction(Intent.ACTION_DISTRACTING_PACKAGES_CHANGED)
+                    && filter.hasAction(Intent.ACTION_PACKAGES_UNSUSPENDED)
+                    && filter.hasAction(Intent.ACTION_PACKAGES_SUSPENDED)) {
+                mPackageIntentReceiver = broadcastReceivers.get(i);
+                break;
+            }
+        }
+        assertNotNull("package intent receiver should exist", mPackageIntentReceiver);
 
         // Pretend the shortcut exists
         List<ShortcutInfo> shortcutInfos = new ArrayList<>();
@@ -526,9 +562,46 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void tearDown() throws Exception {
         if (mFile != null) mFile.delete();
         clearDeviceConfig();
-        mService.unregisterDeviceConfigChange();
+
+        try {
+            mService.onDestroy();
+        } catch (IllegalStateException e) {
+            // can throw if a broadcast receiver was never registered
+        }
+
         InstrumentationRegistry.getInstrumentation()
                 .getUiAutomation().dropShellPermissionIdentity();
+    }
+
+    private void simulatePackageSuspendBroadcast(boolean suspend, String pkg,
+            int uid) {
+        // mimics receive broadcast that package is (un)suspended
+        // but does not actually (un)suspend the package
+        final Bundle extras = new Bundle();
+        extras.putStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST,
+                new String[]{pkg});
+        extras.putIntArray(Intent.EXTRA_CHANGED_UID_LIST, new int[]{uid});
+
+        final String action = suspend ? Intent.ACTION_PACKAGES_SUSPENDED
+                : Intent.ACTION_PACKAGES_UNSUSPENDED;
+        final Intent intent = new Intent(action);
+        intent.putExtras(extras);
+
+        mPackageIntentReceiver.onReceive(getContext(), intent);
+    }
+
+    private void simulatePackageDistractionBroadcast(int flag, String[] pkgs, int[] uids) {
+        // mimics receive broadcast that package is (un)distracting
+        // but does not actually register that info with packagemanager
+        final Bundle extras = new Bundle();
+        extras.putStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST, pkgs);
+        extras.putInt(Intent.EXTRA_DISTRACTION_RESTRICTIONS, flag);
+        extras.putIntArray(Intent.EXTRA_CHANGED_UID_LIST, uids);
+
+        final Intent intent = new Intent(Intent.ACTION_DISTRACTING_PACKAGES_CHANGED);
+        intent.putExtras(extras);
+
+        mPackageIntentReceiver.onReceive(getContext(), intent);
     }
 
     private ArrayMap<Boolean, ArrayList<ComponentName>> generateResetComponentValues() {
@@ -609,7 +682,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         }
         Notification.Builder nb = new Notification.Builder(mContext, channel.getId())
                 .setContentTitle("foo")
-                .setSmallIcon(android.R.drawable.sym_def_app_icon);
+                .setSmallIcon(android.R.drawable.sym_def_app_icon)
+                .addAction(new Notification.Action.Builder(null, "test", null).build());
         if (extender != null) {
             nb.extend(extender);
         }
@@ -745,6 +819,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         PendingIntent pendingIntent = mock(PendingIntent.class);
         Intent intent = mock(Intent.class);
         when(pendingIntent.getIntent()).thenReturn(intent);
+        when(pendingIntent.getTarget()).thenReturn(pi1);
 
         ActivityInfo info = new ActivityInfo();
         info.resizeMode = RESIZE_MODE_RESIZEABLE;
@@ -1086,12 +1161,18 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     /**
-     * Confirm the system user on automotive devices can use car categories
+     * Confirm an application with the SEND_CATEGORY_CAR_NOTIFICATIONS permission on automotive
+     * devices can use car categories.
      */
     @Test
-    public void testEnqueuedRestrictedNotifications_asSystem() throws Exception {
+    public void testEnqueuedRestrictedNotifications_hasPermission() throws Exception {
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, 0))
                 .thenReturn(true);
+        // SEND_CATEGORY_CAR_NOTIFICATIONS is a system-level permission that this test cannot
+        // obtain. Mocking out enforce permission call to ensure notifications can be created when
+        // permitted.
+        doNothing().when(mContext).enforceCallingPermission(
+                eq("android.permission.SEND_CATEGORY_CAR_NOTIFICATIONS"), anyString());
         List<String> categories = Arrays.asList(Notification.CATEGORY_CAR_EMERGENCY,
                 Notification.CATEGORY_CAR_WARNING,
                 Notification.CATEGORY_CAR_INFORMATION);
@@ -1114,7 +1195,6 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
      */
     @Test
     public void testEnqueuedRestrictedNotifications_notAutomotive() throws Exception {
-        mService.isSystemUid = false;
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, 0))
                 .thenReturn(false);
         List<String> categories = Arrays.asList(Notification.CATEGORY_CAR_EMERGENCY,
@@ -1134,12 +1214,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     /**
-     * Confirm if a non-system user tries to use the car categories on a automotive device that
-     * they will get a security exception
+     * Confirm if an application tries to use the car categories on a automotive device without the
+     * SEND_CATEGORY_CAR_NOTIFICATIONS permission that a security exception will be thrown.
      */
     @Test
-    public void testEnqueuedRestrictedNotifications_badUser() throws Exception {
-        mService.isSystemUid = false;
+    public void testEnqueuedRestrictedNotifications_noPermission() throws Exception {
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, 0))
                 .thenReturn(true);
         List<String> categories = Arrays.asList(Notification.CATEGORY_CAR_EMERGENCY,
@@ -1804,7 +1883,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testGroupInstanceIds() throws Exception {
         final NotificationRecord group1 = generateNotificationRecord(
                 mTestNotificationChannel, 1, "group1", true);
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, "testFindGroupNotificationsLocked",
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "testGroupInstanceIds",
                 group1.getSbn().getId(), group1.getSbn().getNotification(),
                 group1.getSbn().getUserId());
         waitForIdle();
@@ -1812,7 +1891,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // same group, child, should be returned
         final NotificationRecord group1Child = generateNotificationRecord(
                 mTestNotificationChannel, 2, "group1", false);
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, "testFindGroupNotificationsLocked",
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "testGroupInstanceIds",
                 group1Child.getSbn().getId(),
                 group1Child.getSbn().getNotification(), group1Child.getSbn().getUserId());
         waitForIdle();
@@ -2529,10 +2608,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testHasCompanionDevice_noService() {
-        mService = new TestableNotificationManagerService(mContext,  mNotificationRecordLogger,
+        NotificationManagerService noManService =
+                new TestableNotificationManagerService(mContext, mNotificationRecordLogger,
                 mNotificationInstanceIdSequence);
 
-        assertFalse(mService.hasCompanionDevice(mListener));
+        assertFalse(noManService.hasCompanionDevice(mListener));
     }
 
     @Test
@@ -2800,16 +2880,17 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testSetListenerAccessForUser() throws Exception {
         UserHandle user = UserHandle.of(10);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
-        mBinderService.setNotificationListenerAccessGrantedForUser(c, user.getIdentifier(), true);
+        mBinderService.setNotificationListenerAccessGrantedForUser(
+                c, user.getIdentifier(), true, true);
 
 
         verify(mContext, times(1)).sendBroadcastAsUser(any(), eq(user), any());
         verify(mListeners, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), user.getIdentifier(), true, true);
+                c.flattenToString(), user.getIdentifier(), true, true, true);
         verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), user.getIdentifier(), false, true);
+                c.flattenToString(), user.getIdentifier(), false, true, true);
         verify(mAssistants, never()).setPackageOrComponentEnabled(
-                any(), anyInt(), anyBoolean(), anyBoolean());
+                any(), anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
     }
 
     @Test
@@ -2878,12 +2959,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testSetListenerAccess() throws Exception {
         ComponentName c = ComponentName.unflattenFromString("package/Component");
-        mBinderService.setNotificationListenerAccessGranted(c, true);
+        mBinderService.setNotificationListenerAccessGranted(c, true, true);
 
         verify(mListeners, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), 0, true, true);
+                c.flattenToString(), 0, true, true, true);
         verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), 0, false, true);
+                c.flattenToString(), 0, false, true, true);
         verify(mAssistants, never()).setPackageOrComponentEnabled(
                 any(), anyInt(), anyBoolean(), anyBoolean());
     }
@@ -3032,12 +3113,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testSetListenerAccess_onLowRam() throws Exception {
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
-        mBinderService.setNotificationListenerAccessGranted(c, true);
+        mBinderService.setNotificationListenerAccessGranted(c, true, true);
 
         verify(mListeners).setPackageOrComponentEnabled(
-                anyString(), anyInt(), anyBoolean(), anyBoolean());
+                anyString(), anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
         verify(mConditionProviders).setPackageOrComponentEnabled(
-                anyString(), anyInt(), anyBoolean(), anyBoolean());
+                anyString(), anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
         verify(mAssistants).migrateToXml();
         verify(mAssistants).resetDefaultAssistantsIfNecessary();
     }
@@ -3080,14 +3161,14 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
 
-        mBinderService.setNotificationListenerAccessGranted(c, true);
+        mBinderService.setNotificationListenerAccessGranted(c, true, true);
 
         verify(mListeners, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), 0, true, true);
+                c.flattenToString(), 0, true, true, true);
         verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
-                c.flattenToString(), 0, false, true);
+                c.flattenToString(), 0, false, true, true);
         verify(mAssistants, never()).setPackageOrComponentEnabled(
-                any(), anyInt(), anyBoolean(), anyBoolean());
+                any(), anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
     }
 
     @Test
@@ -3774,6 +3855,27 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testEnqueuedAdjustmentAppliesAdjustments_MultiNotifications() throws Exception {
+        final NotificationRecord r1 = generateNotificationRecord(mTestNotificationChannel);
+        final NotificationRecord r2 = generateNotificationRecord(mTestNotificationChannel);
+        mService.addEnqueuedNotification(r1);
+        mService.addEnqueuedNotification(r2);
+        when(mAssistants.isSameUser(eq(null), anyInt())).thenReturn(true);
+
+        Bundle signals = new Bundle();
+        signals.putInt(Adjustment.KEY_IMPORTANCE,
+                IMPORTANCE_HIGH);
+        Adjustment adjustment = new Adjustment(
+                r1.getSbn().getPackageName(), r1.getKey(), signals,
+                "", r1.getUser().getIdentifier());
+
+        mBinderService.applyEnqueuedAdjustmentFromAssistant(null, adjustment);
+
+        assertEquals(IMPORTANCE_HIGH, r1.getImportance());
+        assertEquals(IMPORTANCE_HIGH, r2.getImportance());
+    }
+
+    @Test
     public void testRestore() throws Exception {
         int systemChecks = mService.countSystemChecks;
         mBinderService.applyRestore(null, USER_SYSTEM);
@@ -3865,7 +3967,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.updateUriPermissions(recordB, recordA, mContext.getPackageName(),
                 USER_SYSTEM);
         verify(mUgmInternal, times(1)).revokeUriPermissionFromOwner(any(),
-                eq(message1.getDataUri()), anyInt(), anyInt());
+                eq(message1.getDataUri()), anyInt(), anyInt(), eq(null), eq(-1));
 
         // Update back means we grant access to first again
         reset(mUgm);
@@ -4322,13 +4424,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(notif2);
 
         // on broadcast, hide the 2 notifications
-        mService.simulatePackageSuspendBroadcast(true, PKG);
+        simulatePackageSuspendBroadcast(true, PKG, notif1.getUid());
         ArgumentCaptor<List> captorHide = ArgumentCaptor.forClass(List.class);
         verify(mListeners, times(1)).notifyHiddenLocked(captorHide.capture());
         assertEquals(2, captorHide.getValue().size());
 
         // on broadcast, unhide the 2 notifications
-        mService.simulatePackageSuspendBroadcast(false, PKG);
+        simulatePackageSuspendBroadcast(false, PKG, notif1.getUid());
         ArgumentCaptor<List> captorUnhide = ArgumentCaptor.forClass(List.class);
         verify(mListeners, times(1)).notifyUnhiddenLocked(captorUnhide.capture());
         assertEquals(2, captorUnhide.getValue().size());
@@ -4345,7 +4447,24 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(notif2);
 
         // on broadcast, nothing is hidden since no notifications are of package "test_package"
-        mService.simulatePackageSuspendBroadcast(true, "test_package");
+        simulatePackageSuspendBroadcast(true, "test_package", notif1.getUid());
+        ArgumentCaptor<List> captor = ArgumentCaptor.forClass(List.class);
+        verify(mListeners, times(1)).notifyHiddenLocked(captor.capture());
+        assertEquals(0, captor.getValue().size());
+    }
+
+    @Test
+    public void testNotificationFromDifferentUserHidden() {
+        // post 2 notification from this package
+        final NotificationRecord notif1 = generateNotificationRecord(
+                mTestNotificationChannel, 1, null, true);
+        final NotificationRecord notif2 = generateNotificationRecord(
+                mTestNotificationChannel, 2, null, false);
+        mService.addNotification(notif1);
+        mService.addNotification(notif2);
+
+        // on broadcast, nothing is hidden since no notifications are of user 10 with package PKG
+        simulatePackageSuspendBroadcast(true, PKG, 10);
         ArgumentCaptor<List> captor = ArgumentCaptor.forClass(List.class);
         verify(mListeners, times(1)).notifyHiddenLocked(captor.capture());
         assertEquals(0, captor.getValue().size());
@@ -4362,16 +4481,18 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(pkgB);
 
         // on broadcast, hide one of the packages
-        mService.simulatePackageDistractionBroadcast(
-                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"a"});
+        simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"a"},
+                new int[] {1000});
         ArgumentCaptor<List<NotificationRecord>> captorHide = ArgumentCaptor.forClass(List.class);
         verify(mListeners, times(1)).notifyHiddenLocked(captorHide.capture());
         assertEquals(1, captorHide.getValue().size());
         assertEquals("a", captorHide.getValue().get(0).getSbn().getPackageName());
 
         // on broadcast, unhide the package
-        mService.simulatePackageDistractionBroadcast(
-                PackageManager.RESTRICTION_HIDE_FROM_SUGGESTIONS, new String[] {"a"});
+        simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_FROM_SUGGESTIONS, new String[] {"a"},
+                new int[] {1000});
         ArgumentCaptor<List<NotificationRecord>> captorUnhide = ArgumentCaptor.forClass(List.class);
         verify(mListeners, times(1)).notifyUnhiddenLocked(captorUnhide.capture());
         assertEquals(1, captorUnhide.getValue().size());
@@ -4389,8 +4510,9 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(pkgB);
 
         // on broadcast, hide one of the packages
-        mService.simulatePackageDistractionBroadcast(
-                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"a", "b"});
+        simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"a", "b"},
+                new int[] {1000, 1001});
         ArgumentCaptor<List<NotificationRecord>> captorHide = ArgumentCaptor.forClass(List.class);
 
         // should be called only once.
@@ -4400,8 +4522,9 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertEquals("b", captorHide.getValue().get(1).getSbn().getPackageName());
 
         // on broadcast, unhide the package
-        mService.simulatePackageDistractionBroadcast(
-                PackageManager.RESTRICTION_HIDE_FROM_SUGGESTIONS, new String[] {"a", "b"});
+        simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_FROM_SUGGESTIONS, new String[] {"a", "b"},
+                new int[] {1000, 1001});
         ArgumentCaptor<List<NotificationRecord>> captorUnhide = ArgumentCaptor.forClass(List.class);
 
         // should be called only once.
@@ -4419,8 +4542,9 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(notif1);
 
         // on broadcast, nothing is hidden since no notifications are of package "test_package"
-        mService.simulatePackageDistractionBroadcast(
-                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"test_package"});
+        simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"test_package"},
+                new int[]{notif1.getUid()});
         ArgumentCaptor<List> captor = ArgumentCaptor.forClass(List.class);
         verify(mListeners, times(1)).notifyHiddenLocked(captor.capture());
         assertEquals(0, captor.getValue().size());
@@ -4799,6 +4923,32 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testDontCallShowToastAgainOnTheSameCustomToast() throws Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        setAppInForegroundForToasts(mUid, true);
+
+        Binder token = new Binder();
+        ITransientNotification callback = mock(ITransientNotification.class);
+        INotificationManager nmService = (INotificationManager) mService.mService;
+
+        // first time trying to show the toast, showToast gets called
+        nmService.enqueueToast(testPackage, token, callback, 2000, 0);
+        verify(callback, times(1)).show(any());
+
+        // second time trying to show the same toast, showToast isn't called again (total number of
+        // invocations stays at one)
+        nmService.enqueueToast(testPackage, token, callback, 2000, 0);
+        verify(callback, times(1)).show(any());
+    }
+
+    @Test
     public void testAllowForegroundTextToasts() throws Exception {
         final String testPackage = "testPackageName";
         assertEquals(0, mService.mToastQueue.size());
@@ -4832,6 +4982,97 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         ((INotificationManager) mService.mService).enqueueTextToast(testPackage, new Binder(),
                 "Text", 2000, 0, null);
         assertEquals(1, mService.mToastQueue.size());
+    }
+
+    @Test
+    public void testDontCallShowToastAgainOnTheSameTextToast() throws Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        setAppInForegroundForToasts(mUid, true);
+
+        Binder token = new Binder();
+        INotificationManager nmService = (INotificationManager) mService.mService;
+
+        // first time trying to show the toast, showToast gets called
+        nmService.enqueueTextToast(testPackage, token, "Text", 2000, 0, null);
+        verify(mStatusBar, times(1))
+                .showToast(anyInt(), any(), any(), any(), any(), anyInt(), any());
+
+        // second time trying to show the same toast, showToast isn't called again (total number of
+        // invocations stays at one)
+        nmService.enqueueTextToast(testPackage, token, "Text", 2000, 0, null);
+        verify(mStatusBar, times(1))
+                .showToast(anyInt(), any(), any(), any(), any(), anyInt(), any());
+    }
+
+    @Test
+    public void backgroundSystemCustomToast_callsSetProcessImportantAsForegroundForToast() throws
+            Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = true;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        // notifications from this package are blocked by the user
+        mService.setPreferencesHelper(mPreferencesHelper);
+        when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_NONE);
+
+        setAppInForegroundForToasts(mUid, false);
+
+        // enqueue toast -> toast should still enqueue
+        ((INotificationManager) mService.mService).enqueueToast(testPackage, new Binder(),
+                new TestableToastCallback(), 2000, 0);
+        assertEquals(1, mService.mToastQueue.size());
+        verify(mAm).setProcessImportant(any(), anyInt(), eq(true), any());
+    }
+
+    @Test
+    public void foregroundTextToast_callsSetProcessImportantAsNotForegroundForToast() throws
+            Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        setAppInForegroundForToasts(mUid, true);
+
+        // enqueue toast -> toast should still enqueue
+        ((INotificationManager) mService.mService).enqueueTextToast(testPackage, new Binder(),
+                "Text", 2000, 0, null);
+        assertEquals(1, mService.mToastQueue.size());
+        verify(mAm).setProcessImportant(any(), anyInt(), eq(false), any());
+    }
+
+    @Test
+    public void backgroundTextToast_callsSetProcessImportantAsNotForegroundForToast() throws
+            Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        setAppInForegroundForToasts(mUid, false);
+
+        // enqueue toast -> toast should still enqueue
+        ((INotificationManager) mService.mService).enqueueTextToast(testPackage, new Binder(),
+                "Text", 2000, 0, null);
+        assertEquals(1, mService.mToastQueue.size());
+        verify(mAm).setProcessImportant(any(), anyInt(), eq(false), any());
     }
 
     @Test
@@ -4973,7 +5214,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 10, 10, r.getKey(), actionIndex, action, notificationVisibility,
                 generatedByAssistant);
         verify(mAssistants).notifyAssistantActionClicked(
-                eq(r.getSbn()), eq(actionIndex), eq(action), eq(generatedByAssistant));
+                eq(r.getSbn()), eq(action), eq(generatedByAssistant));
 
         assertEquals(1, mNotificationRecordLogger.numCalls());
         assertEquals(
@@ -4997,7 +5238,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 10, 10, r.getKey(), actionIndex, action, notificationVisibility,
                 generatedByAssistant);
         verify(mAssistants).notifyAssistantActionClicked(
-                eq(r.getSbn()), eq(actionIndex), eq(action), eq(generatedByAssistant));
+                eq(r.getSbn()), eq(action), eq(generatedByAssistant));
 
         assertEquals(1, mNotificationRecordLogger.numCalls());
         assertEquals(
@@ -6434,7 +6675,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testOnUnlockUser() {
         UserInfo ui = new UserInfo();
         ui.id = 10;
-        mService.onUnlockUser(ui);
+        mService.onUserUnlocking(new TargetUser(ui));
         waitForIdle();
 
         verify(mHistoryManager, timeout(MAX_POST_DELAY).times(1)).onUserUnlocked(ui.id);
@@ -6444,7 +6685,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testOnStopUser() {
         UserInfo ui = new UserInfo();
         ui.id = 10;
-        mService.onStopUser(ui);
+        mService.onUserStopping(new TargetUser(ui));
         waitForIdle();
 
         verify(mHistoryManager, timeout(MAX_POST_DELAY).times(1)).onUserStopped(ui.id);
@@ -6504,7 +6745,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 orig)));
 
         mBinderService.createConversationNotificationChannelForPackage(
-                PKG, mUid, "key", orig, "friend");
+                PKG, mUid, orig, "friend");
 
         NotificationChannel friendChannel = mBinderService.getConversationNotificationChannel(
                 PKG, 0, PKG, original.getId(), false, "friend");
@@ -6539,10 +6780,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         String conversationId = "friend";
 
         mBinderService.createConversationNotificationChannelForPackage(
-                PKG, mUid, "key", NotificationChannel.CREATOR.createFromParcel(msgParcel),
+                PKG, mUid, NotificationChannel.CREATOR.createFromParcel(msgParcel),
                 conversationId);
         mBinderService.createConversationNotificationChannelForPackage(
-                PKG, mUid, "key", NotificationChannel.CREATOR.createFromParcel(callParcel),
+                PKG, mUid, NotificationChannel.CREATOR.createFromParcel(callParcel),
                 conversationId);
 
         NotificationChannel messagesChild = mBinderService.getConversationNotificationChannel(
@@ -6862,5 +7103,255 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertEquals(NotificationManagerService.MAX_PACKAGE_NOTIFICATIONS + 1, notifs.length);
         assertEquals(NotificationManagerService.MAX_PACKAGE_NOTIFICATIONS + 1,
                 mService.getNotificationRecordCount());
+    }
+
+    @Test
+    public void testIsVisibleToListener_notEnabled() {
+        StatusBarNotification sbn = mock(StatusBarNotification.class);
+        when(sbn.getUserId()).thenReturn(10);
+        ManagedServices.ManagedServiceInfo info = mock(ManagedServices.ManagedServiceInfo.class);
+        ManagedServices.ManagedServiceInfo assistant = mock(ManagedServices.ManagedServiceInfo.class);
+        info.userid = 10;
+        when(info.isSameUser(anyInt())).thenReturn(true);
+        when(assistant.isSameUser(anyInt())).thenReturn(true);
+        when(info.enabledAndUserMatches(info.userid)).thenReturn(false);
+        when(mAssistants.checkServiceTokenLocked(any())).thenReturn(assistant);
+
+        assertFalse(mService.isVisibleToListener(sbn, info));
+    }
+
+    @Test
+    public void testIsVisibleToListener_noAssistant() {
+        StatusBarNotification sbn = mock(StatusBarNotification.class);
+        when(sbn.getUserId()).thenReturn(10);
+        ManagedServices.ManagedServiceInfo info = mock(ManagedServices.ManagedServiceInfo.class);
+        info.userid = 10;
+        when(info.isSameUser(anyInt())).thenReturn(true);
+        when(info.enabledAndUserMatches(info.userid)).thenReturn(true);
+        when(mAssistants.checkServiceTokenLocked(any())).thenReturn(null);
+
+        assertTrue(mService.isVisibleToListener(sbn, info));
+    }
+
+    @Test
+    public void testIsVisibleToListener_assistant_differentUser() {
+        StatusBarNotification sbn = mock(StatusBarNotification.class);
+        when(sbn.getUserId()).thenReturn(10);
+        ManagedServices.ManagedServiceInfo info = mock(ManagedServices.ManagedServiceInfo.class);
+        ManagedServices.ManagedServiceInfo assistant = mock(ManagedServices.ManagedServiceInfo.class);
+        info.userid = 0;
+        when(info.isSameUser(anyInt())).thenReturn(true);
+        when(assistant.isSameUser(anyInt())).thenReturn(true);
+        when(info.enabledAndUserMatches(info.userid)).thenReturn(true);
+        when(mAssistants.checkServiceTokenLocked(any())).thenReturn(assistant);
+
+        assertFalse(mService.isVisibleToListener(sbn, info));
+    }
+
+    @Test
+    public void testIsVisibleToListener_assistant_sameUser() {
+        StatusBarNotification sbn = mock(StatusBarNotification.class);
+        when(sbn.getUserId()).thenReturn(10);
+        ManagedServices.ManagedServiceInfo info = mock(ManagedServices.ManagedServiceInfo.class);
+        ManagedServices.ManagedServiceInfo assistant = mock(ManagedServices.ManagedServiceInfo.class);
+        info.userid = 10;
+        when(info.isSameUser(anyInt())).thenReturn(true);
+        when(assistant.isSameUser(anyInt())).thenReturn(true);
+        when(info.enabledAndUserMatches(info.userid)).thenReturn(true);
+        when(mAssistants.checkServiceTokenLocked(any())).thenReturn(assistant);
+
+        assertTrue(mService.isVisibleToListener(sbn, info));
+    }
+
+    @Test
+    public void testUserInitiatedCancelAll_groupCancellationOrder_groupPostedFirst() {
+        final NotificationRecord parent = spy(generateNotificationRecord(
+                mTestNotificationChannel, 1, "group", true));
+        final NotificationRecord child = spy(generateNotificationRecord(
+                mTestNotificationChannel, 2, "group", false));
+        mService.addNotification(parent);
+        mService.addNotification(child);
+
+        InOrder inOrder = inOrder(parent, child);
+
+        mService.mNotificationDelegate.onClearAll(mUid, Binder.getCallingPid(),
+                parent.getUserId());
+        waitForIdle();
+        inOrder.verify(parent).recordDismissalSentiment(anyInt());
+        inOrder.verify(child).recordDismissalSentiment(anyInt());
+    }
+
+    @Test
+    public void testUserInitiatedCancelAll_groupCancellationOrder_groupPostedSecond() {
+        final NotificationRecord parent = spy(generateNotificationRecord(
+                mTestNotificationChannel, 1, "group", true));
+        final NotificationRecord child = spy(generateNotificationRecord(
+                mTestNotificationChannel, 2, "group", false));
+        mService.addNotification(child);
+        mService.addNotification(parent);
+
+        InOrder inOrder = inOrder(parent, child);
+
+        mService.mNotificationDelegate.onClearAll(mUid, Binder.getCallingPid(),
+                parent.getUserId());
+        waitForIdle();
+        inOrder.verify(parent).recordDismissalSentiment(anyInt());
+        inOrder.verify(child).recordDismissalSentiment(anyInt());
+    }
+
+    // TODO (b/171418004): renable after app outreach
+    /*@Test
+    public void testImmutableBubbleIntent() throws Exception {
+        when(mAmi.getPendingIntentFlags(pi1))
+                .thenReturn(FLAG_IMMUTABLE | FLAG_ONE_SHOT);
+        NotificationRecord r = generateMessageBubbleNotifRecord(true,
+                mTestNotificationChannel, 7, "testImmutableBubbleIntent", null, false);
+        try {
+            mBinderService.enqueueNotificationWithTag(PKG, PKG, r.getSbn().getTag(),
+                    r.getSbn().getId(), r.getNotification(), r.getSbn().getUserId());
+
+            waitForIdle();
+            fail("Allowed a bubble with an immutable intent to be posted");
+        } catch (IllegalArgumentException e) {
+            // good
+        }
+    }*/
+
+    @Test
+    public void testMutableBubbleIntent() throws Exception {
+        when(mAmi.getPendingIntentFlags(pi1))
+                .thenReturn(FLAG_MUTABLE | FLAG_ONE_SHOT);
+        NotificationRecord r = generateMessageBubbleNotifRecord(true,
+                mTestNotificationChannel, 7, "testMutableBubbleIntent", null, false);
+
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, r.getSbn().getTag(),
+                r.getSbn().getId(), r.getNotification(), r.getSbn().getUserId());
+
+        waitForIdle();
+        StatusBarNotification[] notifs =
+                mBinderService.getActiveNotifications(r.getSbn().getPackageName());
+        assertEquals(1, notifs.length);
+    }
+
+    @Test
+    public void testImmutableDirectReplyActionIntent() throws Exception {
+        when(mAmi.getPendingIntentFlags(any(IIntentSender.class)))
+                .thenReturn(FLAG_IMMUTABLE | FLAG_ONE_SHOT);
+        NotificationRecord r = generateMessageBubbleNotifRecord(false,
+                mTestNotificationChannel, 7, "testImmutableDirectReplyActionIntent", null, false);
+        try {
+            mBinderService.enqueueNotificationWithTag(PKG, PKG, r.getSbn().getTag(),
+                    r.getSbn().getId(), r.getNotification(), r.getSbn().getUserId());
+
+            waitForIdle();
+            fail("Allowed a direct reply with an immutable intent to be posted");
+        } catch (IllegalArgumentException e) {
+            // good
+        }
+    }
+
+    @Test
+    public void testMutableDirectReplyActionIntent() throws Exception {
+        when(mAmi.getPendingIntentFlags(any(IIntentSender.class)))
+                .thenReturn(FLAG_MUTABLE | FLAG_ONE_SHOT);
+        NotificationRecord r = generateMessageBubbleNotifRecord(false,
+                mTestNotificationChannel, 7, "testMutableDirectReplyActionIntent", null, false);
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, r.getSbn().getTag(),
+                r.getSbn().getId(), r.getNotification(), r.getSbn().getUserId());
+
+        waitForIdle();
+        StatusBarNotification[] notifs =
+                mBinderService.getActiveNotifications(r.getSbn().getPackageName());
+        assertEquals(1, notifs.length);
+    }
+
+    @Test
+    public void testImmutableDirectReplyContextualActionIntent() throws Exception {
+        when(mAmi.getPendingIntentFlags(any(IIntentSender.class)))
+                .thenReturn(FLAG_IMMUTABLE | FLAG_ONE_SHOT);
+        when(mAssistants.isSameUser(any(), anyInt())).thenReturn(true);
+
+        NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
+        ArrayList<Notification.Action> extraAction = new ArrayList<>();
+        RemoteInput remoteInput = new RemoteInput.Builder("reply_key").setLabel("reply").build();
+        PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(), 0);
+        Icon icon = Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon);
+        Notification.Action replyAction = new Notification.Action.Builder(icon, "Reply",
+                inputIntent).addRemoteInput(remoteInput)
+                .build();
+        extraAction.add(replyAction);
+        Bundle signals = new Bundle();
+        signals.putParcelableArrayList(Adjustment.KEY_CONTEXTUAL_ACTIONS, extraAction);
+        Adjustment adjustment = new Adjustment(r.getSbn().getPackageName(), r.getKey(), signals, "",
+                r.getUser());
+        r.addAdjustment(adjustment);
+        r.applyAdjustments();
+
+        try {
+            mService.checkDisqualifyingFeatures(r.getUserId(), r.getUid(), r.getSbn().getId(),
+                    r.getSbn().getTag(), r,false);
+            fail("Allowed a contextual direct reply with an immutable intent to be posted");
+        } catch (IllegalArgumentException e) {
+            // good
+        }
+    }
+
+    @Test
+    public void testMutableDirectReplyContextualActionIntent() throws Exception {
+        when(mAmi.getPendingIntentFlags(any(IIntentSender.class)))
+                .thenReturn(FLAG_MUTABLE | FLAG_ONE_SHOT);
+        when(mAssistants.isSameUser(any(), anyInt())).thenReturn(true);
+        NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
+        ArrayList<Notification.Action> extraAction = new ArrayList<>();
+        RemoteInput remoteInput = new RemoteInput.Builder("reply_key").setLabel("reply").build();
+        PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(), 0);
+        Icon icon = Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon);
+        Notification.Action replyAction = new Notification.Action.Builder(icon, "Reply",
+                inputIntent).addRemoteInput(remoteInput)
+                .build();
+        extraAction.add(replyAction);
+        Bundle signals = new Bundle();
+        signals.putParcelableArrayList(Adjustment.KEY_CONTEXTUAL_ACTIONS, extraAction);
+        Adjustment adjustment = new Adjustment(r.getSbn().getPackageName(), r.getKey(), signals, "",
+                r.getUser());
+        r.addAdjustment(adjustment);
+        r.applyAdjustments();
+
+        mService.checkDisqualifyingFeatures(r.getUserId(), r.getUid(), r.getSbn().getId(),
+                r.getSbn().getTag(), r,false);
+    }
+
+    @Test
+    public void testImmutableActionIntent() throws Exception {
+        when(mAmi.getPendingIntentFlags(any(IIntentSender.class)))
+                .thenReturn(FLAG_IMMUTABLE | FLAG_ONE_SHOT);
+        NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
+
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, r.getSbn().getTag(),
+                r.getSbn().getId(), r.getNotification(), r.getSbn().getUserId());
+
+        waitForIdle();
+        StatusBarNotification[] notifs =
+                mBinderService.getActiveNotifications(r.getSbn().getPackageName());
+        assertEquals(1, notifs.length);
+    }
+
+    @Test
+    public void testImmutableContextualActionIntent() throws Exception {
+        when(mAmi.getPendingIntentFlags(any(IIntentSender.class)))
+                .thenReturn(FLAG_IMMUTABLE | FLAG_ONE_SHOT);
+        when(mAssistants.isSameUser(any(), anyInt())).thenReturn(true);
+        NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
+        ArrayList<Notification.Action> extraAction = new ArrayList<>();
+        extraAction.add(new Notification.Action(0, "hello", null));
+        Bundle signals = new Bundle();
+        signals.putParcelableArrayList(Adjustment.KEY_CONTEXTUAL_ACTIONS, extraAction);
+        Adjustment adjustment = new Adjustment(r.getSbn().getPackageName(), r.getKey(), signals, "",
+                r.getUser());
+        r.addAdjustment(adjustment);
+        r.applyAdjustments();
+
+        mService.checkDisqualifyingFeatures(r.getUserId(), r.getUid(), r.getSbn().getId(),
+                    r.getSbn().getTag(), r,false);
     }
 }

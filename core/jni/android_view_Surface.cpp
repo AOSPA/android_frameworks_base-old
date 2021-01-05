@@ -32,9 +32,10 @@
 #include "android_os_Parcel.h"
 #include <binder/Parcel.h>
 
+#include <gui/BLASTBufferQueue.h>
 #include <gui/Surface.h>
-#include <gui/view/Surface.h>
 #include <gui/SurfaceControl.h>
+#include <gui/view/Surface.h>
 
 #include <ui/GraphicBuffer.h>
 #include <ui/Rect.h>
@@ -300,6 +301,26 @@ static jlong nativeGetFromSurfaceControl(JNIEnv* env, jclass clazz,
     return reinterpret_cast<jlong>(surface.get());
 }
 
+static jlong nativeGetFromBlastBufferQueue(JNIEnv* env, jclass clazz, jlong nativeObject,
+                                           jlong blastBufferQueueNativeObj) {
+    Surface* self(reinterpret_cast<Surface*>(nativeObject));
+    sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(blastBufferQueueNativeObj);
+    const sp<IGraphicBufferProducer>& bufferProducer = queue->getIGraphicBufferProducer();
+    // If the underlying IGBP's are the same, we don't need to do anything.
+    if (self != nullptr &&
+        IInterface::asBinder(self->getIGraphicBufferProducer()) ==
+                IInterface::asBinder(bufferProducer)) {
+        return nativeObject;
+    }
+
+    sp<Surface> surface = queue->getSurface(true /* includeSurfaceControlHandle */);
+    if (surface != NULL) {
+        surface->incStrong(&sRefBaseOwner);
+    }
+
+    return reinterpret_cast<jlong>(surface.get());
+}
+
 static jlong nativeReadFromParcel(JNIEnv* env, jclass clazz,
         jlong nativeObject, jobject parcelObj) {
     Parcel* parcel = parcelForJavaObject(env, parcelObj);
@@ -328,7 +349,8 @@ static jlong nativeReadFromParcel(JNIEnv* env, jclass clazz,
     sp<Surface> sur;
     if (surfaceShim.graphicBufferProducer != nullptr) {
         // we have a new IGraphicBufferProducer, create a new Surface for it
-        sur = new Surface(surfaceShim.graphicBufferProducer, true);
+        sur = new Surface(surfaceShim.graphicBufferProducer, true,
+                          surfaceShim.surfaceControlHandle);
         // and keep a reference before passing to java
         sur->incStrong(&sRefBaseOwner);
     }
@@ -352,6 +374,7 @@ static void nativeWriteToParcel(JNIEnv* env, jclass clazz,
     android::view::Surface surfaceShim;
     if (self != nullptr) {
         surfaceShim.graphicBufferProducer = self->getIGraphicBufferProducer();
+        surfaceShim.surfaceControlHandle = self->getSurfaceControlHandle();
     }
     // Calling code in Surface.java has already written the name of the Surface
     // to the Parcel
@@ -474,6 +497,7 @@ static const JNINativeMethod gSurfaceMethods[] = {
     {"nativeSetSharedBufferModeEnabled", "(JZ)I", (void*)nativeSetSharedBufferModeEnabled},
     {"nativeSetAutoRefreshEnabled", "(JZ)I", (void*)nativeSetAutoRefreshEnabled},
     {"nativeSetFrameRate", "(JFI)I", (void*)nativeSetFrameRate},
+    {"nativeGetFromBlastBufferQueue", "(JJ)J", (void*)nativeGetFromBlastBufferQueue},
 };
 
 int register_android_view_Surface(JNIEnv* env)

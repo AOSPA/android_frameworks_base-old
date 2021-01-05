@@ -16,13 +16,20 @@
 
 package com.android.server.wm;
 
+import static android.content.ActivityInfoProto.SCREEN_ORIENTATION_PORTRAIT;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.window.DisplayAreaOrganizer.FEATURE_DEFAULT_TASK_CONTAINER;
 import static android.window.DisplayAreaOrganizer.FEATURE_VENDOR_FIRST;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
+import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.wm.DisplayArea.Type.ABOVE_TASKS;
 import static com.android.server.wm.DisplayArea.Type.ANY;
 import static com.android.server.wm.DisplayArea.Type.BELOW_TASKS;
@@ -36,18 +43,24 @@ import static com.android.server.wm.testing.Assert.assertThrows;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 
+import android.content.pm.ActivityInfo;
+import android.graphics.Rect;
 import android.os.Binder;
 import android.platform.test.annotations.Presubmit;
+import android.view.SurfaceControl;
+import android.view.View;
+import android.view.WindowManager;
 
 import com.google.android.collect.Lists;
 
-import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,31 +75,22 @@ import java.util.function.Function;
  *  atest WmTests:DisplayAreaTest
  */
 @Presubmit
-public class DisplayAreaTest {
-
-    @Rule
-    public SystemServicesTestRule mWmsRule = new SystemServicesTestRule();
-
-    private WindowManagerService mWms;
-
-    @Before
-    public void setup() {
-        mWms = mWmsRule.getWindowManagerService();
-    }
+@RunWith(WindowTestRunner.class)
+public class DisplayAreaTest extends WindowTestsBase {
 
     @Test
     public void testDisplayArea_positionChanged_throwsIfIncompatibleChild() {
-        DisplayArea<WindowContainer> parent = new DisplayArea<>(mWms, BELOW_TASKS, "Parent");
-        DisplayArea<WindowContainer> child = new DisplayArea<>(mWms, ANY, "Child");
+        DisplayArea<WindowContainer> parent = new DisplayArea<>(mWm, BELOW_TASKS, "Parent");
+        DisplayArea<WindowContainer> child = new DisplayArea<>(mWm, ANY, "Child");
 
         assertThrows(IllegalStateException.class, () -> parent.addChild(child, 0));
     }
 
     @Test
     public void testType_typeOf() {
-        assertEquals(ABOVE_TASKS, typeOf(new DisplayArea<>(mWms, ABOVE_TASKS, "test")));
-        assertEquals(ANY, typeOf(new DisplayArea<>(mWms, ANY, "test")));
-        assertEquals(BELOW_TASKS, typeOf(new DisplayArea<>(mWms, BELOW_TASKS, "test")));
+        assertEquals(ABOVE_TASKS, typeOf(new DisplayArea<>(mWm, ABOVE_TASKS, "test")));
+        assertEquals(ANY, typeOf(new DisplayArea<>(mWm, ANY, "test")));
+        assertEquals(BELOW_TASKS, typeOf(new DisplayArea<>(mWm, BELOW_TASKS, "test")));
 
         assertEquals(ABOVE_TASKS, typeOf(createWindowToken(TYPE_APPLICATION_OVERLAY)));
         assertEquals(ABOVE_TASKS, typeOf(createWindowToken(TYPE_PRESENTATION)));
@@ -126,10 +130,10 @@ public class DisplayAreaTest {
 
     @Test
     public void testAsDisplayArea() {
-        final WindowContainer windowContainer = new WindowContainer(mWms);
-        final DisplayArea<WindowContainer> displayArea = new DisplayArea<>(mWms, ANY, "DA");
+        final WindowContainer windowContainer = new WindowContainer(mWm);
+        final DisplayArea<WindowContainer> displayArea = new DisplayArea<>(mWm, ANY, "DA");
         final TaskDisplayArea taskDisplayArea = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA", FEATURE_DEFAULT_TASK_CONTAINER);
+                mWm, "TDA", FEATURE_DEFAULT_TASK_CONTAINER);
 
         assertThat(windowContainer.asDisplayArea()).isNull();
         assertThat(displayArea.asDisplayArea()).isEqualTo(displayArea);
@@ -139,15 +143,15 @@ public class DisplayAreaTest {
     @Test
     public void testForAllTaskDisplayAreas_onlyTraversesDisplayAreaOfTypeAny() {
         final RootDisplayArea root =
-                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWms);
+                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWm);
         final Function<TaskDisplayArea, Boolean> callback0 = tda -> false;
         final Consumer<TaskDisplayArea> callback1 = tda -> { };
         final BiFunction<TaskDisplayArea, Integer, Integer> callback2 = (tda, result) -> result;
         final Function<TaskDisplayArea, TaskDisplayArea> callback3 = tda -> null;
 
         // Don't traverse the child if the current DA has type BELOW_TASKS
-        final DisplayArea<WindowContainer> da1 = new DisplayArea<>(mWms, BELOW_TASKS, "DA1");
-        final DisplayArea<WindowContainer> da2 = new DisplayArea<>(mWms, BELOW_TASKS, "DA2");
+        final DisplayArea<WindowContainer> da1 = new DisplayArea<>(mWm, BELOW_TASKS, "DA1");
+        final DisplayArea<WindowContainer> da2 = new DisplayArea<>(mWm, BELOW_TASKS, "DA2");
         root.addChild(da1, POSITION_BOTTOM);
         da1.addChild(da2, POSITION_TOP);
         spyOn(da2);
@@ -160,8 +164,8 @@ public class DisplayAreaTest {
         verifyZeroInteractions(da2);
 
         // Traverse the child if the current DA has type ANY
-        final DisplayArea<WindowContainer> da3 = new DisplayArea<>(mWms, ANY, "DA3");
-        final DisplayArea<WindowContainer> da4 = new DisplayArea<>(mWms, ANY, "DA4");
+        final DisplayArea<WindowContainer> da3 = new DisplayArea<>(mWm, ANY, "DA3");
+        final DisplayArea<WindowContainer> da4 = new DisplayArea<>(mWm, ANY, "DA4");
         root.addChild(da3, POSITION_TOP);
         da3.addChild(da4, POSITION_TOP);
         spyOn(da4);
@@ -179,8 +183,8 @@ public class DisplayAreaTest {
                 callback3, true /* traverseTopToBottom */);
 
         // Don't traverse the child if the current DA has type ABOVE_TASKS
-        final DisplayArea<WindowContainer> da5 = new DisplayArea<>(mWms, ABOVE_TASKS, "DA5");
-        final DisplayArea<WindowContainer> da6 = new DisplayArea<>(mWms, ABOVE_TASKS, "DA6");
+        final DisplayArea<WindowContainer> da5 = new DisplayArea<>(mWm, ABOVE_TASKS, "DA5");
+        final DisplayArea<WindowContainer> da6 = new DisplayArea<>(mWm, ABOVE_TASKS, "DA6");
         root.addChild(da5, POSITION_TOP);
         da5.addChild(da6, POSITION_TOP);
         spyOn(da6);
@@ -196,17 +200,17 @@ public class DisplayAreaTest {
     @Test
     public void testForAllTaskDisplayAreas_appliesOnTaskDisplayAreaInOrder() {
         final RootDisplayArea root =
-                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWms);
+                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWm);
         final DisplayArea<DisplayArea> da1 =
-                new DisplayArea<>(mWms, ANY, "DA1");
+                new DisplayArea<>(mWm, ANY, "DA1");
         final DisplayArea<DisplayArea> da2 =
-                new DisplayArea<>(mWms, ANY, "DA2");
+                new DisplayArea<>(mWm, ANY, "DA2");
         final TaskDisplayArea tda1 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA1", FEATURE_DEFAULT_TASK_CONTAINER);
+                mWm, "TDA1", FEATURE_DEFAULT_TASK_CONTAINER);
         final TaskDisplayArea tda2 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA2", FEATURE_VENDOR_FIRST);
+                mWm, "TDA2", FEATURE_VENDOR_FIRST);
         final TaskDisplayArea tda3 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA3", FEATURE_VENDOR_FIRST + 1);
+                mWm, "TDA3", FEATURE_VENDOR_FIRST + 1);
         root.addChild(da1, POSITION_TOP);
         root.addChild(da2, POSITION_TOP);
         da1.addChild(tda1, POSITION_TOP);
@@ -296,11 +300,11 @@ public class DisplayAreaTest {
     @Test
     public void testForAllTaskDisplayAreas_returnsWhenCallbackReturnTrue() {
         final RootDisplayArea root =
-                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWms);
+                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWm);
         final TaskDisplayArea tda1 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA1", FEATURE_DEFAULT_TASK_CONTAINER);
+                mWm, "TDA1", FEATURE_DEFAULT_TASK_CONTAINER);
         final TaskDisplayArea tda2 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA2", FEATURE_VENDOR_FIRST);
+                mWm, "TDA2", FEATURE_VENDOR_FIRST);
         root.addChild(tda1, POSITION_TOP);
         root.addChild(tda2, POSITION_TOP);
 
@@ -324,11 +328,11 @@ public class DisplayAreaTest {
     @Test
     public void testReduceOnAllTaskDisplayAreas_returnsTheAccumulativeResult() {
         final RootDisplayArea root =
-                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWms);
+                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWm);
         final TaskDisplayArea tda1 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA1", FEATURE_DEFAULT_TASK_CONTAINER);
+                mWm, "TDA1", FEATURE_DEFAULT_TASK_CONTAINER);
         final TaskDisplayArea tda2 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA2", FEATURE_VENDOR_FIRST);
+                mWm, "TDA2", FEATURE_VENDOR_FIRST);
         root.addChild(tda1, POSITION_TOP);
         root.addChild(tda2, POSITION_TOP);
 
@@ -350,11 +354,11 @@ public class DisplayAreaTest {
     @Test
     public void testGetItemFromTaskDisplayAreas_returnsWhenCallbackReturnNotNull() {
         final RootDisplayArea root =
-                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWms);
+                new DisplayAreaPolicyBuilderTest.SurfacelessDisplayAreaRoot(mWm);
         final TaskDisplayArea tda1 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA1", FEATURE_DEFAULT_TASK_CONTAINER);
+                mWm, "TDA1", FEATURE_DEFAULT_TASK_CONTAINER);
         final TaskDisplayArea tda2 = new TaskDisplayArea(null /* displayContent */,
-                mWms, "TDA2", FEATURE_VENDOR_FIRST);
+                mWm, "TDA2", FEATURE_VENDOR_FIRST);
         root.addChild(tda1, POSITION_TOP);
         root.addChild(tda2, POSITION_TOP);
 
@@ -379,8 +383,122 @@ public class DisplayAreaTest {
         assertThat(result).isEqualTo(tda1);
     }
 
+    @Test
+    public void testSetMaxBounds() {
+        final Rect parentBounds = new Rect(0, 0, 100, 100);
+        final Rect childBounds1 = new Rect(parentBounds.left, parentBounds.top,
+                parentBounds.right / 2, parentBounds.bottom);
+        final Rect childBounds2 = new Rect(parentBounds.right / 2, parentBounds.top,
+                parentBounds.right, parentBounds.bottom);
+        TestDisplayArea parentDa = new TestDisplayArea(mWm, parentBounds);
+        TestDisplayArea childDa1 = new TestDisplayArea(mWm, childBounds1);
+        TestDisplayArea childDa2 = new TestDisplayArea(mWm, childBounds2);
+        parentDa.addChild(childDa1, 0);
+        parentDa.addChild(childDa2, 1);
+
+        assertEquals(parentBounds, parentDa.getMaxBounds());
+        assertEquals(childBounds1, childDa1.getMaxBounds());
+        assertEquals(childBounds2, childDa2.getMaxBounds());
+
+        final WindowToken windowToken = createWindowToken(TYPE_APPLICATION);
+        childDa1.addChild(windowToken, 0);
+
+        assertEquals("DisplayArea's children must have the same max bounds as itself",
+                childBounds1, windowToken.getMaxBounds());
+    }
+
+    @Test
+    public void testGetOrientation() {
+        final DisplayArea.Tokens area = new DisplayArea.Tokens(mWm, ABOVE_TASKS, "test");
+        final WindowToken token = createWindowToken(TYPE_APPLICATION_OVERLAY);
+        spyOn(token);
+        doReturn(mock(DisplayContent.class)).when(token).getDisplayContent();
+        doNothing().when(token).setParent(any());
+        final WindowState win = createWindowState(token);
+        spyOn(win);
+        doNothing().when(win).setParent(any());
+        win.mAttrs.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+        token.addChild(win, 0);
+        area.addChild(token);
+
+        doReturn(true).when(win).isVisible();
+
+        assertEquals("Visible window can request orientation",
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+                area.getOrientation(ActivityInfo.SCREEN_ORIENTATION_NOSENSOR));
+
+        doReturn(false).when(win).isVisible();
+
+        assertEquals("Invisible window cannot request orientation",
+                ActivityInfo.SCREEN_ORIENTATION_NOSENSOR,
+                area.getOrientation(ActivityInfo.SCREEN_ORIENTATION_NOSENSOR));
+    }
+
+    @Test
+    public void testSetIgnoreOrientationRequest() {
+        final DisplayArea.Tokens area = new DisplayArea.Tokens(mWm, ABOVE_TASKS, "test");
+        final WindowToken token = createWindowToken(TYPE_APPLICATION_OVERLAY);
+        spyOn(token);
+        doReturn(mock(DisplayContent.class)).when(token).getDisplayContent();
+        doNothing().when(token).setParent(any());
+        final WindowState win = createWindowState(token);
+        spyOn(win);
+        doNothing().when(win).setParent(any());
+        win.mAttrs.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+        token.addChild(win, 0);
+        area.addChild(token);
+        doReturn(true).when(win).isVisible();
+
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, area.getOrientation());
+
+        area.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSET, area.getOrientation());
+    }
+
+    @Test
+    public void testSetIgnoreOrientationRequest_notCallSuperOnDescendantOrientationChanged() {
+        final TaskDisplayArea tda =
+                mDisplayContent.getDefaultTaskDisplayArea();
+        final Task stack =
+                new TaskBuilder(mSupervisor).setOnTop(!ON_TOP).setCreateActivity(true).build();
+        final ActivityRecord activity = stack.getTopNonFinishingActivity();
+
+        tda.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+
+        activity.setRequestedOrientation(SCREEN_ORIENTATION_LANDSCAPE);
+
+        verify(tda).onDescendantOrientationChanged(any(), any());
+        verify(mDisplayContent, never()).onDescendantOrientationChanged(any(), any());
+
+        tda.setIgnoreOrientationRequest(false /* ignoreOrientationRequest */);
+        activity.setRequestedOrientation(SCREEN_ORIENTATION_PORTRAIT);
+
+        verify(tda, times(2)).onDescendantOrientationChanged(any(), any());
+        verify(mDisplayContent).onDescendantOrientationChanged(any(), any());
+    }
+
+    private static class TestDisplayArea<T extends WindowContainer> extends DisplayArea<T> {
+        private TestDisplayArea(WindowManagerService wms, Rect bounds) {
+            super(wms, ANY, "half display area");
+            setBounds(bounds);
+        }
+
+        @Override
+        SurfaceControl.Builder makeChildSurface(WindowContainer child) {
+            return new MockSurfaceControlBuilder();
+        }
+    }
+
+    private WindowState createWindowState(WindowToken token) {
+        return new WindowState(mWm, mock(Session.class), new TestIWindow(), token,
+                null /* parentWindow */, 0 /* appOp */, new WindowManager.LayoutParams(),
+                View.VISIBLE, 0 /* ownerId */, 0 /* showUserId */,
+                false /* ownerCanAddInternalSystemWindow */);
+    }
+
     private WindowToken createWindowToken(int type) {
-        return new WindowToken(mWmsRule.getWindowManagerService(), new Binder(),
+        return new WindowToken(mWm, new Binder(),
                 type, false /* persist */, null /* displayContent */,
                 false /* canManageTokens */);
     }

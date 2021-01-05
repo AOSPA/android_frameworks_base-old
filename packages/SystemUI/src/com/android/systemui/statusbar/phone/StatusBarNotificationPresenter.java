@@ -30,7 +30,6 @@ import android.service.vr.IVrStateCallbacks;
 import android.util.Log;
 import android.util.Slog;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.TextView;
 
@@ -53,6 +52,7 @@ import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
@@ -61,9 +61,9 @@ import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
+import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptSuppressor;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
@@ -71,7 +71,7 @@ import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager.OnSettingsClickListener;
 import com.android.systemui.statusbar.notification.row.NotificationInfo.CheckSaveListener;
-import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger.LockscreenUiEvent;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -110,7 +110,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     private final AboveShelfObserver mAboveShelfObserver;
     private final DozeScrimController mDozeScrimController;
     private final ScrimController mScrimController;
-    private final Context mContext;
     private final KeyguardIndicationController mKeyguardIndicationController;
     private final StatusBar mStatusBar;
     private final ShadeController mShadeController;
@@ -119,7 +118,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     private final AccessibilityManager mAccessibilityManager;
     private final KeyguardManager mKeyguardManager;
     private final ActivityLaunchAnimator mActivityLaunchAnimator;
-    private final int mMaxAllowedKeyguardNotifications;
     private final IStatusBarService mBarService;
     private final DynamicPrivacyController mDynamicPrivacyController;
     private boolean mReinflateNotificationsOnUserSwitched;
@@ -127,13 +125,12 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     private TextView mNotificationPanelDebugText;
 
     protected boolean mVrMode;
-    private int mMaxKeyguardNotifications;
 
     public StatusBarNotificationPresenter(Context context,
             NotificationPanelViewController panel,
             HeadsUpManagerPhone headsUp,
             NotificationShadeWindowView statusBarWindow,
-            ViewGroup stackScroller,
+            NotificationStackScrollLayoutController stackScrollerController,
             DozeScrimController dozeScrimController,
             ScrimController scrimController,
             ActivityLaunchAnimator activityLaunchAnimator,
@@ -145,7 +142,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
             CommandQueue commandQueue,
             InitController initController,
             NotificationInterruptStateProvider notificationInterruptStateProvider) {
-        mContext = context;
         mKeyguardStateController = keyguardStateController;
         mNotificationPanel = panel;
         mHeadsUpManager = headsUp;
@@ -155,7 +151,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
         mStatusBar = statusBar;
         mShadeController = shadeController;
         mCommandQueue = commandQueue;
-        mAboveShelfObserver = new AboveShelfObserver(stackScroller);
+        mAboveShelfObserver = new AboveShelfObserver(stackScrollerController.getView());
         mActivityLaunchAnimator = activityLaunchAnimator;
         mAboveShelfObserver.setListener(statusBarWindow.findViewById(
                 R.id.notification_container_parent));
@@ -163,8 +159,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
         mDozeScrimController = dozeScrimController;
         mScrimController = scrimController;
         mKeyguardManager = context.getSystemService(KeyguardManager.class);
-        mMaxAllowedKeyguardNotifications = context.getResources().getInteger(
-                R.integer.keyguard_max_notification_count);
         mBarService = IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
 
@@ -190,7 +184,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
         remoteInputManager.getController().addCallback(
                 Dependency.get(NotificationShadeWindowController.class));
 
-        NotificationListContainer notifListContainer = (NotificationListContainer) stackScroller;
         initController.addPostInitTask(() -> {
             NotificationEntryListener notificationEntryListener = new NotificationEntryListener() {
                 @Override
@@ -207,7 +200,8 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
                 }
             };
 
-            mViewHierarchyManager.setUpWithPresenter(this, notifListContainer);
+            mViewHierarchyManager.setUpWithPresenter(this,
+                    stackScrollerController.getNotificationListContainer());
             mEntryManager.setUpWithPresenter(this);
             mEntryManager.addNotificationEntryListener(notificationEntryListener);
             mEntryManager.addNotificationLifetimeExtender(mHeadsUpManager);
@@ -217,9 +211,9 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
             notificationInterruptStateProvider.addSuppressor(mInterruptSuppressor);
             mLockscreenUserManager.setUpWithPresenter(this);
             mMediaManager.setUpWithPresenter(this);
-            mVisualStabilityManager.setUpWithPresenter(this);
             mGutsManager.setUpWithPresenter(this,
-                    notifListContainer, mCheckSaveListener, mOnSettingsClickListener);
+                    stackScrollerController.getNotificationListContainer(), mCheckSaveListener,
+                    mOnSettingsClickListener);
             // ForegroundServiceNotificationListener adds its listener in its constructor
             // but we need to request it here in order for it to be instantiated.
             // TODO: figure out how to do this correctly once Dependency.get() is gone.
@@ -394,17 +388,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     @Override
     public void updateMediaMetaData(boolean metaDataChanged, boolean allowEnterAnimation) {
         mMediaManager.updateMediaMetaData(metaDataChanged, allowEnterAnimation);
-    }
-
-    @Override
-    public int getMaxNotificationsWhileLocked(boolean recompute) {
-        if (recompute) {
-            mMaxKeyguardNotifications = Math.max(1,
-                    mNotificationPanel.computeMaxKeyguardNotifications(
-                            mMaxAllowedKeyguardNotifications));
-            return mMaxKeyguardNotifications;
-        }
-        return mMaxKeyguardNotifications;
     }
 
     @Override

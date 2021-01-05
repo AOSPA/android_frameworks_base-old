@@ -29,13 +29,17 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.android.settingslib.bluetooth.BluetoothCallback;
 import com.android.settingslib.bluetooth.CachedBluetoothDevice;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.settingslib.bluetooth.LocalBluetoothProfile;
 import com.android.settingslib.bluetooth.LocalBluetoothProfileManager;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.dump.DumpManager;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -46,16 +50,16 @@ import java.util.List;
 import java.util.WeakHashMap;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  */
-@Singleton
+@SysUISingleton
 public class BluetoothControllerImpl implements BluetoothController, BluetoothCallback,
         CachedBluetoothDevice.Callback, LocalBluetoothProfileManager.ServiceListener {
     private static final String TAG = "BluetoothController";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
+    private final DumpManager mDumpManager;
     private final LocalBluetoothManager mLocalBluetoothManager;
     private final UserManager mUserManager;
     private final int mCurrentUser;
@@ -75,8 +79,13 @@ public class BluetoothControllerImpl implements BluetoothController, BluetoothCa
     /**
      */
     @Inject
-    public BluetoothControllerImpl(Context context, @Background Looper bgLooper,
-            @Main Looper mainLooper, @Nullable LocalBluetoothManager localBluetoothManager) {
+    public BluetoothControllerImpl(
+            Context context,
+            DumpManager dumpManager,
+            @Background Looper bgLooper,
+            @Main Looper mainLooper,
+            @Nullable LocalBluetoothManager localBluetoothManager) {
+        mDumpManager = dumpManager;
         mLocalBluetoothManager = localBluetoothManager;
         mBgHandler = new Handler(bgLooper);
         mHandler = new H(mainLooper);
@@ -88,6 +97,7 @@ public class BluetoothControllerImpl implements BluetoothController, BluetoothCa
         }
         mUserManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
         mCurrentUser = ActivityManager.getCurrentUser();
+        mDumpManager.registerDumpable(TAG, this);
     }
 
     @Override
@@ -150,13 +160,13 @@ public class BluetoothControllerImpl implements BluetoothController, BluetoothCa
     }
 
     @Override
-    public void addCallback(Callback cb) {
+    public void addCallback(@NonNull Callback cb) {
         mHandler.obtainMessage(H.MSG_ADD_CALLBACK, cb).sendToTarget();
         mHandler.sendEmptyMessage(H.MSG_STATE_CHANGED);
     }
 
     @Override
-    public void removeCallback(Callback cb) {
+    public void removeCallback(@NonNull Callback cb) {
         mHandler.obtainMessage(H.MSG_REMOVE_CALLBACK, cb).sendToTarget();
     }
 

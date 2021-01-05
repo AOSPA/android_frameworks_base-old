@@ -19,6 +19,9 @@ package com.android.location.fused;
 import static android.content.Intent.ACTION_USER_SWITCHED;
 import static android.location.LocationManager.GPS_PROVIDER;
 import static android.location.LocationManager.NETWORK_PROVIDER;
+import static android.location.LocationRequest.QUALITY_LOW_POWER;
+
+import static com.android.location.provider.ProviderRequestUnbundled.INTERVAL_DISABLED;
 
 import android.annotation.Nullable;
 import android.content.BroadcastReceiver;
@@ -30,13 +33,11 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.location.LocationRequest;
-import android.os.Looper;
 import android.os.WorkSource;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.location.ProviderRequest;
 import com.android.location.provider.LocationProviderBase;
-import com.android.location.provider.LocationRequestUnbundled;
 import com.android.location.provider.ProviderPropertiesUnbundled;
 import com.android.location.provider.ProviderRequestUnbundled;
 
@@ -148,8 +149,8 @@ public class FusedLocationProvider extends LocationProviderBase {
 
         mRequest = new ProviderRequestUnbundled(ProviderRequest.EMPTY_REQUEST);
         mWorkSource = new WorkSource();
-        mGpsInterval = Long.MAX_VALUE;
-        mNetworkInterval = Long.MAX_VALUE;
+        mGpsInterval = INTERVAL_DISABLED;
+        mNetworkInterval = INTERVAL_DISABLED;
     }
 
     void start() {
@@ -176,30 +177,9 @@ public class FusedLocationProvider extends LocationProviderBase {
 
     @GuardedBy("mLock")
     private void updateRequirementsLocked() {
-        long gpsInterval = Long.MAX_VALUE;
-        long networkInterval = Long.MAX_VALUE;
-        if (mRequest.getReportLocation()) {
-            for (LocationRequestUnbundled request : mRequest.getLocationRequests()) {
-                switch (request.getQuality()) {
-                    case LocationRequestUnbundled.ACCURACY_FINE:
-                    case LocationRequestUnbundled.POWER_HIGH:
-                        if (request.getInterval() < gpsInterval) {
-                            gpsInterval = request.getInterval();
-                        }
-                        if (request.getInterval() < networkInterval) {
-                            networkInterval = request.getInterval();
-                        }
-                        break;
-                    case LocationRequestUnbundled.ACCURACY_BLOCK:
-                    case LocationRequestUnbundled.ACCURACY_CITY:
-                    case LocationRequestUnbundled.POWER_LOW:
-                        if (request.getInterval() < networkInterval) {
-                            networkInterval = request.getInterval();
-                        }
-                        break;
-                }
-            }
-        }
+        long gpsInterval = mRequest.getQuality() < QUALITY_LOW_POWER ? mRequest.getInterval()
+                : INTERVAL_DISABLED;
+        long networkInterval = mRequest.getInterval();
 
         if (gpsInterval != mGpsInterval) {
             resetProviderRequestLocked(GPS_PROVIDER, mGpsInterval, gpsInterval, mGpsListener);
@@ -215,17 +195,17 @@ public class FusedLocationProvider extends LocationProviderBase {
     @GuardedBy("mLock")
     private void resetProviderRequestLocked(String provider, long oldInterval, long newInterval,
             LocationListener listener) {
-        if (oldInterval != Long.MAX_VALUE) {
+        if (oldInterval != INTERVAL_DISABLED && newInterval == INTERVAL_DISABLED) {
             mLocationManager.removeUpdates(listener);
         }
-        if (newInterval != Long.MAX_VALUE) {
-            LocationRequest request = LocationRequest.createFromDeprecatedProvider(
-                    provider, newInterval, 0, false);
-            if (mRequest.isLocationSettingsIgnored()) {
-                request.setLocationSettingsIgnored(true);
-            }
-            request.setWorkSource(mWorkSource);
-            mLocationManager.requestLocationUpdates(request, listener, Looper.getMainLooper());
+        if (newInterval != INTERVAL_DISABLED) {
+            LocationRequest request = new LocationRequest.Builder(newInterval)
+                    .setQuality(mRequest.getQuality())
+                    .setLocationSettingsIgnored(mRequest.isLocationSettingsIgnored())
+                    .setWorkSource(mWorkSource)
+                    .build();
+            mLocationManager.requestLocationUpdates(provider, request, mContext.getMainExecutor(),
+                    listener);
         }
     }
 
@@ -256,10 +236,10 @@ public class FusedLocationProvider extends LocationProviderBase {
     void dump(PrintWriter writer) {
         synchronized (mLock) {
             writer.println("request: " + mRequest);
-            if (mGpsInterval != Long.MAX_VALUE) {
+            if (mGpsInterval != INTERVAL_DISABLED) {
                 writer.println("  gps interval: " + mGpsInterval);
             }
-            if (mNetworkInterval != Long.MAX_VALUE) {
+            if (mNetworkInterval != INTERVAL_DISABLED) {
                 writer.println("  network interval: " + mNetworkInterval);
             }
             if (mGpsLocation != null) {

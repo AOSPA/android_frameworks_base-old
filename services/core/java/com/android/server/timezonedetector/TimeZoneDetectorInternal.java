@@ -22,14 +22,21 @@ import android.annotation.NonNull;
  * The internal (in-process) system server API for the {@link
  * com.android.server.timezonedetector.TimeZoneDetectorService}.
  *
+ * <p>The methods on this class can be called from any thread.
  * @hide
  */
 public interface TimeZoneDetectorInternal extends Dumpable.Container {
 
+    /** Adds a listener that will be invoked when time zone detection configuration is changed. */
+    void addConfigurationListener(ConfigurationChangeListener listener);
+
+    /** Returns the {@link ConfigurationInternal} for the current user. */
+    ConfigurationInternal getCurrentUserConfigurationInternal();
+
     /**
      * Suggests the current time zone, determined using geolocation, to the detector. The
      * detector may ignore the signal based on system settings, whether better information is
-     * available, and so on.
+     * available, and so on. This method may be implemented asynchronously.
      */
     void suggestGeolocationTimeZone(@NonNull GeolocationTimeZoneSuggestion timeZoneSuggestion);
 }

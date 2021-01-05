@@ -18,8 +18,8 @@ package com.android.systemui.statusbar.policy;
 
 import android.annotation.Nullable;
 
-import com.android.systemui.DemoMode;
 import com.android.systemui.Dumpable;
+import com.android.systemui.demomode.DemoMode;
 import com.android.systemui.statusbar.policy.BatteryController.BatteryStateChangeCallback;
 
 import java.io.FileDescriptor;
@@ -79,6 +79,13 @@ public interface BatteryController extends DemoMode, Dumpable,
     default void setReverseState(boolean isReverse) {}
 
     /**
+     * Returns {@code true} if extreme battery saver is on.
+     */
+    default boolean isExtremeSaverOn() {
+        return false;
+    }
+
+    /**
      * A listener that will be notified whenever a change in battery level or power save mode has
      * occurred.
      */
@@ -90,7 +97,13 @@ public interface BatteryController extends DemoMode, Dumpable,
         default void onPowerSaveChanged(boolean isPowerSave) {
         }
 
+        default void onBatteryUnknownStateChanged(boolean isUnknown) {
+        }
+
         default void onReverseChanged(boolean isReverse, int level, String name) {
+        }
+
+        default void onExtremeBatterySaverChanged(boolean isExtreme) {
         }
     }
 

@@ -22,6 +22,7 @@ import static android.app.PendingIntent.FLAG_UPDATE_CURRENT;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
+import android.annotation.Nullable;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.ComponentName;
@@ -138,6 +139,12 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     // used to clean up the state of mIsAllowedBgActivityStartsByStart after a timeout
     private Runnable mCleanUpAllowBgActivityStartsByStartCallback;
     private ProcessRecord mAppForAllowingBgActivityStartsByStart;
+    // These are the originating tokens that currently allow bg activity starts by service start.
+    // This is used to trace back the grant when starting activities. We only pass such token to the
+    // ProcessRecord if it's the *only* cause for bg activity starts exemption, otherwise we pass
+    // null.
+    @GuardedBy("ams")
+    private List<IBinder> mBgActivityStartsByStartOriginatingTokens = new ArrayList<>();
 
     // allow while-in-use permissions in foreground service or not.
     // while-in-use permissions in FGS started from background might be restricted.
@@ -145,6 +152,12 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
 
     // the most recent package that start/bind this service.
     String mRecentCallingPackage;
+
+    // allow the service becomes foreground service? Service started from background may not be
+    // allowed to become a foreground service.
+    @ActiveServices.FgsFeatureRetCode int mAllowStartForeground;
+    String mInfoAllowStartForeground;
+    boolean mLoggedInfoAllowStartForeground;
 
     String stringName;      // caching of toString
 
@@ -408,6 +421,10 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                 pw.println(mAllowWhileInUsePermissionInFgs);
         pw.print(prefix); pw.print("recentCallingPackage=");
                 pw.println(mRecentCallingPackage);
+        pw.print(prefix); pw.print("allowStartForeground=");
+        pw.println(mAllowStartForeground);
+        pw.print(prefix); pw.print("infoAllowStartForeground=");
+        pw.println(mInfoAllowStartForeground);
         if (delayed) {
             pw.print(prefix); pw.print("delayed="); pw.println(delayed);
         }
@@ -528,8 +545,9 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             return tracker;
         }
         if ((serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0) {
-            tracker = ams.mProcessStats.getServiceStateLocked(serviceInfo.packageName,
-                    serviceInfo.applicationInfo.uid, serviceInfo.applicationInfo.longVersionCode,
+            tracker = ams.mProcessStats.getServiceState(serviceInfo.packageName,
+                    serviceInfo.applicationInfo.uid,
+                    serviceInfo.applicationInfo.longVersionCode,
                     serviceInfo.processName, serviceInfo.name);
             tracker.applyNewOwner(this);
         }
@@ -546,7 +564,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     public void makeRestarting(int memFactor, long now) {
         if (restartTracker == null) {
             if ((serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0) {
-                restartTracker = ams.mProcessStats.getServiceStateLocked(serviceInfo.packageName,
+                restartTracker = ams.mProcessStats.getServiceState(
+                        serviceInfo.packageName,
                         serviceInfo.applicationInfo.uid,
                         serviceInfo.applicationInfo.longVersionCode,
                         serviceInfo.processName, serviceInfo.name);
@@ -575,7 +594,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                     ? _proc : null;
             if (mIsAllowedBgActivityStartsByStart
                     || mIsAllowedBgActivityStartsByBinding) {
-                _proc.addAllowBackgroundActivityStartsToken(this);
+                _proc.addOrUpdateAllowBackgroundActivityStartsToken(this,
+                        getExclusiveOriginatingToken());
             } else {
                 _proc.removeAllowBackgroundActivityStartsToken(this);
             }
@@ -666,10 +686,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     }
 
     void setAllowedBgActivityStartsByBinding(boolean newValue) {
-        if (mIsAllowedBgActivityStartsByBinding != newValue) {
-            mIsAllowedBgActivityStartsByBinding = newValue;
-            updateParentProcessBgActivityStartsToken();
-        }
+        mIsAllowedBgActivityStartsByBinding = newValue;
+        updateParentProcessBgActivityStartsToken();
     }
 
     /**
@@ -678,7 +696,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
      * timeout. Note that the ability for starting background activities persists for the process
      * even if the service is subsequently stopped.
      */
-    void allowBgActivityStartsOnServiceStart() {
+    void allowBgActivityStartsOnServiceStart(@Nullable IBinder originatingToken) {
+        mBgActivityStartsByStartOriginatingTokens.add(originatingToken);
         setAllowedBgActivityStartsByStart(true);
         if (app != null) {
             mAppForAllowingBgActivityStartsByStart = app;
@@ -688,32 +707,49 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         if (mCleanUpAllowBgActivityStartsByStartCallback == null) {
             mCleanUpAllowBgActivityStartsByStartCallback = () -> {
                 synchronized (ams) {
-                    if (app == mAppForAllowingBgActivityStartsByStart) {
-                        // The process we allowed is still running the service. We remove
-                        // the ability by start, but it may still be allowed via bound connections.
-                        setAllowedBgActivityStartsByStart(false);
-                    } else  if (mAppForAllowingBgActivityStartsByStart != null) {
-                        // The process we allowed is not running the service. It therefore can't be
-                        // bound so we can unconditionally remove the ability.
-                        mAppForAllowingBgActivityStartsByStart
-                                .removeAllowBackgroundActivityStartsToken(ServiceRecord.this);
+                    mBgActivityStartsByStartOriginatingTokens.remove(0);
+                    if (!mBgActivityStartsByStartOriginatingTokens.isEmpty()) {
+                        // There are other callbacks in the queue, let's just update the originating
+                        // token
+                        if (mIsAllowedBgActivityStartsByStart) {
+                            mAppForAllowingBgActivityStartsByStart
+                                    .addOrUpdateAllowBackgroundActivityStartsToken(
+                                            this, getExclusiveOriginatingToken());
+                        } else {
+                            Slog.wtf(TAG,
+                                    "Service callback to revoke bg activity starts by service "
+                                            + "start triggered but "
+                                            + "mIsAllowedBgActivityStartsByStart = false. This "
+                                            + "should never happen.");
+                        }
+                    } else {
+                        // Last callback on the queue
+                        if (app == mAppForAllowingBgActivityStartsByStart) {
+                            // The process we allowed is still running the service. We remove
+                            // the ability by start, but it may still be allowed via bound
+                            // connections.
+                            setAllowedBgActivityStartsByStart(false);
+                        } else if (mAppForAllowingBgActivityStartsByStart != null) {
+                            // The process we allowed is not running the service. It therefore can't
+                            // be bound so we can unconditionally remove the ability.
+                            mAppForAllowingBgActivityStartsByStart
+                                    .removeAllowBackgroundActivityStartsToken(ServiceRecord.this);
+                        }
+                        mAppForAllowingBgActivityStartsByStart = null;
                     }
-                    mAppForAllowingBgActivityStartsByStart = null;
                 }
             };
         }
 
-        // if there's a request pending from the past, drop it before scheduling a new one
-        ams.mHandler.removeCallbacks(mCleanUpAllowBgActivityStartsByStartCallback);
+        // Existing callbacks will only update the originating token, only when the last callback is
+        // executed is the grant revoked.
         ams.mHandler.postDelayed(mCleanUpAllowBgActivityStartsByStartCallback,
                 ams.mConstants.SERVICE_BG_ACTIVITY_START_TIMEOUT);
     }
 
     private void setAllowedBgActivityStartsByStart(boolean newValue) {
-        if (mIsAllowedBgActivityStartsByStart != newValue) {
-            mIsAllowedBgActivityStartsByStart = newValue;
-            updateParentProcessBgActivityStartsToken();
-        }
+        mIsAllowedBgActivityStartsByStart = newValue;
+        updateParentProcessBgActivityStartsToken();
     }
 
     /**
@@ -723,7 +759,9 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
      * {@code mIsAllowedBgActivityStartsByBinding}. If either is true, this ServiceRecord
      * should be contributing as a token in parent ProcessRecord.
      *
-     * @see com.android.server.am.ProcessRecord#mAllowBackgroundActivityStartsTokens
+     * @see com.android.server.am.ProcessRecord#addOrUpdateAllowBackgroundActivityStartsToken(
+     * Binder, IBinder)
+     * @see com.android.server.am.ProcessRecord#removeAllowBackgroundActivityStartsToken(Binder)
      */
     private void updateParentProcessBgActivityStartsToken() {
         if (app == null) {
@@ -732,10 +770,35 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         if (mIsAllowedBgActivityStartsByStart || mIsAllowedBgActivityStartsByBinding) {
             // if the token is already there it's safe to "re-add it" - we're dealing with
             // a set of Binder objects
-            app.addAllowBackgroundActivityStartsToken(this);
+            app.addOrUpdateAllowBackgroundActivityStartsToken(this, getExclusiveOriginatingToken());
         } else {
             app.removeAllowBackgroundActivityStartsToken(this);
         }
+    }
+
+    /**
+     * Returns the originating token if that's the only reason background activity starts are
+     * allowed. In order for that to happen the service has to be allowed only due to starts, since
+     * bindings are not associated with originating tokens, and all the start tokens have to be the
+     * same and there can't be any null originating token in the queue.
+     *
+     * Originating tokens are optional, so the caller could provide null when it allows bg activity
+     * starts.
+     */
+    @Nullable
+    private IBinder getExclusiveOriginatingToken() {
+        if (mIsAllowedBgActivityStartsByBinding
+                || mBgActivityStartsByStartOriginatingTokens.isEmpty()) {
+            return null;
+        }
+        IBinder firstToken = mBgActivityStartsByStartOriginatingTokens.get(0);
+        for (int i = 1, n = mBgActivityStartsByStartOriginatingTokens.size(); i < n; i++) {
+            IBinder token = mBgActivityStartsByStartOriginatingTokens.get(i);
+            if (token != firstToken) {
+                return null;
+            }
+        }
+        return firstToken;
     }
 
     @GuardedBy("ams")
@@ -914,7 +977,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                         }
                         if (localForegroundNoti.getSmallIcon() == null) {
                             // Notifications whose icon is 0 are defined to not show
-                            // a notification, silently ignoring it.  We don't want to
+                            // a notification.  We don't want to
                             // just ignore it, we want to prevent the service from
                             // being foreground.
                             throw new RuntimeException("invalid service notification: "

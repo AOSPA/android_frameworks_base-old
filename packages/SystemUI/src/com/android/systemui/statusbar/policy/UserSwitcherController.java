@@ -23,6 +23,7 @@ import static com.android.systemui.DejankUtils.whitelistIpcs;
 
 import android.app.ActivityManager;
 import android.app.Dialog;
+import android.app.IActivityTaskManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -53,7 +54,6 @@ import android.widget.BaseAdapter;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
-import com.android.internal.util.UserIcons;
 import com.android.settingslib.RestrictedLockUtilsInternal;
 import com.android.systemui.Dumpable;
 import com.android.systemui.GuestResumeSessionReceiver;
@@ -62,12 +62,14 @@ import com.android.systemui.Prefs.Key;
 import com.android.systemui.R;
 import com.android.systemui.SystemUISecondaryUserService;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.qs.QSUserSwitcherEvent;
 import com.android.systemui.qs.tiles.UserDetailView;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
+import com.android.systemui.user.CreateUserActivity;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -76,12 +78,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Keeps a list of all users on the device for user switching.
  */
-@Singleton
+@SysUISingleton
 public class UserSwitcherController implements Dumpable {
 
     public static final float USER_SWITCH_ENABLED_ALPHA = 1.0f;
@@ -104,6 +105,7 @@ public class UserSwitcherController implements Dumpable {
     protected final Handler mHandler;
     private final ActivityStarter mActivityStarter;
     private final BroadcastDispatcher mBroadcastDispatcher;
+    private final IActivityTaskManager mActivityTaskManager;
 
     private ArrayList<UserRecord> mUsers = new ArrayList<>();
     private Dialog mExitGuestDialog;
@@ -121,9 +123,11 @@ public class UserSwitcherController implements Dumpable {
     @Inject
     public UserSwitcherController(Context context, KeyguardStateController keyguardStateController,
             @Main Handler handler, ActivityStarter activityStarter,
-            BroadcastDispatcher broadcastDispatcher, UiEventLogger uiEventLogger) {
+            BroadcastDispatcher broadcastDispatcher, UiEventLogger uiEventLogger,
+            IActivityTaskManager activityTaskManager) {
         mContext = context;
         mBroadcastDispatcher = broadcastDispatcher;
+        mActivityTaskManager = activityTaskManager;
         mUiEventLogger = uiEventLogger;
         if (!UserManager.isGuestUserEphemeral()) {
             mGuestResumeSessionReceiver.register(mBroadcastDispatcher);
@@ -206,7 +210,7 @@ public class UserSwitcherController implements Dumpable {
             @Override
             protected ArrayList<UserRecord> doInBackground(SparseArray<Bitmap>... params) {
                 final SparseArray<Bitmap> bitmaps = params[0];
-                List<UserInfo> infos = mUserManager.getUsers(true);
+                List<UserInfo> infos = mUserManager.getAliveUsers();
                 if (infos == null) {
                     return null;
                 }
@@ -363,7 +367,7 @@ public class UserSwitcherController implements Dumpable {
         }
     }
 
-    public void switchTo(UserRecord record) {
+    private void onUserListItemClicked(UserRecord record) {
         int id;
         if (record.isGuest && record.info == null) {
             // No guest user. Create one.
@@ -406,19 +410,6 @@ public class UserSwitcherController implements Dumpable {
         }
 
         switchToUserId(id);
-    }
-
-    public void switchTo(int userId) {
-        final int count = mUsers.size();
-        for (int i = 0; i < count; ++i) {
-            UserRecord record = mUsers.get(i);
-            if (record.info != null && record.info.id == userId) {
-                switchTo(record);
-                return;
-            }
-        }
-
-        Log.e(TAG, "Couldn't switch to user, id=" + userId);
     }
 
     protected void switchToUserId(int id) {
@@ -666,8 +657,11 @@ public class UserSwitcherController implements Dumpable {
             return position;
         }
 
-        public void switchTo(UserRecord record) {
-            mController.switchTo(record);
+        /**
+         * It handles click events on user list items.
+         */
+        public void onUserListItemClicked(UserRecord record) {
+            mController.onUserListItemClicked(record);
         }
 
         public String getName(Context context, UserRecord item) {
@@ -924,18 +918,33 @@ public class UserSwitcherController implements Dumpable {
                 if (ActivityManager.isUserAMonkey()) {
                     return;
                 }
-                UserInfo user = mUserManager.createUser(
-                        mContext.getString(R.string.user_new_user_name), 0 /* flags */);
-                if (user == null) {
-                    // Couldn't create user, most likely because there are too many, but we haven't
-                    // been able to reload the list yet.
-                    return;
+                Intent intent = CreateUserActivity.createIntentForStart(getContext());
+
+                // There are some differences between ActivityStarter and ActivityTaskManager in
+                // terms of how they start an activity. ActivityStarter hides the notification bar
+                // before starting the activity to make sure nothing is in front of the new
+                // activity. ActivityStarter also tries to unlock the device if it's locked.
+                // When locked with PIN/pattern/password then it shows the prompt, if there are no
+                // security steps then it dismisses the keyguard and then starts the activity.
+                // ActivityTaskManager doesn't hide the notification bar or unlocks the device, but
+                // it can start an activity on top of the locked screen.
+                if (!mKeyguardStateController.isUnlocked()
+                        && !mKeyguardStateController.canDismissLockScreen()) {
+                    // Device is locked and can't be unlocked without a PIN/pattern/password so we
+                    // need to use ActivityTaskManager to start the activity on top of the locked
+                    // screen.
+                    try {
+                        mActivityTaskManager.startActivity(null,
+                                mContext.getBasePackageName(), mContext.getAttributionTag(), intent,
+                                intent.resolveTypeIfNeeded(mContext.getContentResolver()), null,
+                                null, 0, 0, null, null);
+                    } catch (RemoteException e) {
+                        e.printStackTrace();
+                        Log.e(TAG, "Couldn't start create user activity", e);
+                    }
+                } else {
+                    mActivityStarter.startActivity(intent, true);
                 }
-                int id = user.id;
-                Bitmap icon = UserIcons.convertToBitmap(UserIcons.getDefaultUserIcon(
-                        mContext.getResources(), id, /* light= */ false));
-                mUserManager.setUserIcon(id, icon);
-                switchToUserId(id);
             }
         }
     }

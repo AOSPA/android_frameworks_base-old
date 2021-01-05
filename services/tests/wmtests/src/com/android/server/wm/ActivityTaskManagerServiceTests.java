@@ -23,20 +23,24 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSess
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.PictureInPictureParams;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.EnterPipRequestedItem;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
 import android.view.IDisplayWindowListener;
@@ -50,6 +54,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockitoSession;
 
 import java.util.ArrayList;
+import java.util.function.Consumer;
 
 /**
  * Tests for the {@link ActivityTaskManagerService} class.
@@ -60,40 +65,40 @@ import java.util.ArrayList;
 @Presubmit
 @MediumTest
 @RunWith(WindowTestRunner.class)
-public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
+public class ActivityTaskManagerServiceTests extends WindowTestsBase {
 
     private final ArgumentCaptor<ClientTransaction> mClientTransactionCaptor =
             ArgumentCaptor.forClass(ClientTransaction.class);
 
     @Before
     public void setUp() throws Exception {
-        setBooted(mService);
+        setBooted(mAtm);
     }
 
     /** Verify that activity is finished correctly upon request. */
     @Test
     public void testActivityFinish() {
-        final Task stack = new StackBuilder(mRootWindowContainer).build();
+        final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
-        assertTrue("Activity must be finished", mService.finishActivity(activity.appToken,
+        assertTrue("Activity must be finished", mAtm.finishActivity(activity.appToken,
                 0 /* resultCode */, null /* resultData */,
                 Activity.DONT_FINISH_TASK_WITH_ACTIVITY));
         assertTrue(activity.finishing);
 
         assertTrue("Duplicate activity finish request must also return 'true'",
-                mService.finishActivity(activity.appToken, 0 /* resultCode */,
+                mAtm.finishActivity(activity.appToken, 0 /* resultCode */,
                         null /* resultData */, Activity.DONT_FINISH_TASK_WITH_ACTIVITY));
     }
 
     @Test
     public void testOnPictureInPictureRequested() throws RemoteException {
-        final Task stack = new StackBuilder(mRootWindowContainer).build();
+        final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
         final ClientLifecycleManager mockLifecycleManager = mock(ClientLifecycleManager.class);
-        doReturn(mockLifecycleManager).when(mService).getLifecycleManager();
+        doReturn(mockLifecycleManager).when(mAtm).getLifecycleManager();
         doReturn(true).when(activity).checkEnterPictureInPictureState(anyString(), anyBoolean());
 
-        mService.requestPictureInPictureMode(activity.token);
+        mAtm.requestPictureInPictureMode(activity.token);
 
         verify(mockLifecycleManager).scheduleTransaction(mClientTransactionCaptor.capture());
         final ClientTransaction transaction = mClientTransactionCaptor.getValue();
@@ -106,13 +111,13 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
 
     @Test(expected = IllegalStateException.class)
     public void testOnPictureInPictureRequested_cannotEnterPip() throws RemoteException {
-        final Task stack = new StackBuilder(mRootWindowContainer).build();
+        final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
-        ClientLifecycleManager lifecycleManager = mService.getLifecycleManager();
+        ClientLifecycleManager lifecycleManager = mAtm.getLifecycleManager();
         doReturn(false).when(activity).inPinnedWindowingMode();
         doReturn(false).when(activity).checkEnterPictureInPictureState(anyString(), anyBoolean());
 
-        mService.requestPictureInPictureMode(activity.token);
+        mAtm.requestPictureInPictureMode(activity.token);
 
         // Check enter no transactions with enter pip requests are made.
         verify(lifecycleManager, times(0)).scheduleTransaction(any());
@@ -120,12 +125,12 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
 
     @Test(expected = IllegalStateException.class)
     public void testOnPictureInPictureRequested_alreadyInPIPMode() throws RemoteException {
-        final Task stack = new StackBuilder(mRootWindowContainer).build();
+        final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
-        ClientLifecycleManager lifecycleManager = mService.getLifecycleManager();
+        ClientLifecycleManager lifecycleManager = mAtm.getLifecycleManager();
         doReturn(true).when(activity).inPinnedWindowingMode();
 
-        mService.requestPictureInPictureMode(activity.token);
+        mAtm.requestPictureInPictureMode(activity.token);
 
         // Check that no transactions with enter pip requests are made.
         verify(lifecycleManager, times(0)).scheduleTransaction(any());
@@ -158,14 +163,14 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
             @Override
             public void onFixedRotationFinished(int displayId) {}
         };
-        mService.mWindowManager.registerDisplayWindowListener(listener);
+        mAtm.mWindowManager.registerDisplayWindowListener(listener);
         // Check that existing displays call added
-        assertEquals(1, added.size());
+        assertEquals(mRootWindowContainer.getChildCount(), added.size());
         assertEquals(0, changed.size());
         assertEquals(0, removed.size());
         added.clear();
         // Check adding a display
-        DisplayContent newDisp1 = new TestDisplayContent.Builder(mService, 600, 800).build();
+        DisplayContent newDisp1 = new TestDisplayContent.Builder(mAtm, 600, 800).build();
         assertEquals(1, added.size());
         assertEquals(0, changed.size());
         assertEquals(0, removed.size());
@@ -174,7 +179,7 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
         Configuration c = new Configuration(newDisp1.getRequestedOverrideConfiguration());
         c.windowConfiguration.setBounds(new Rect(0, 0, 1000, 1300));
         newDisp1.onRequestedOverrideConfigurationChanged(c);
-        mService.mRootWindowContainer.ensureVisibilityAndConfig(null /* starting */,
+        mAtm.mRootWindowContainer.ensureVisibilityAndConfig(null /* starting */,
                 newDisp1.mDisplayId, false /* markFrozenIfConfigChanged */,
                 false /* deferResume */);
         assertEquals(0, added.size());
@@ -214,16 +219,81 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
         //mock other operations
         doReturn(true).when(record)
                 .checkEnterPictureInPictureState("enterPictureInPictureMode", false);
-        doReturn(false).when(mService).isInPictureInPictureMode(any());
-        doReturn(false).when(mService).isKeyguardLocked();
+        doReturn(false).when(mAtm).isInPictureInPictureMode(any());
+        doReturn(false).when(mAtm).isKeyguardLocked();
 
         //to simulate NPE
         doReturn(null).when(record).getParent();
 
-        mService.enterPictureInPictureMode(token, params);
+        mAtm.enterPictureInPictureMode(token, params);
         //if record's null parent is not handled gracefully, test will fail with NPE
 
         mockSession.finishMocking();
+    }
+
+    @Test
+    public void testResumeNextActivityOnCrashedAppDied() {
+        mSupervisor.beginDeferResume();
+        final ActivityRecord homeActivity = new ActivityBuilder(mAtm)
+                .setTask(mRootWindowContainer.getDefaultTaskDisplayArea().getOrCreateRootHomeTask())
+                .build();
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setCreateTask(true).build();
+        activity.setState(Task.ActivityState.RESUMED, "test");
+        mSupervisor.endDeferResume();
+
+        assertEquals(activity.app, mAtm.mInternal.getTopApp());
+
+        // Assume the activity is finishing and hidden because it was crashed.
+        activity.finishing = true;
+        activity.mVisibleRequested = false;
+        activity.setVisible(false);
+        activity.getRootTask().mPausingActivity = activity;
+        homeActivity.setState(Task.ActivityState.PAUSED, "test");
+
+        // Even the visibility states are invisible, the next activity should be resumed because
+        // the crashed activity was pausing.
+        mAtm.mInternal.handleAppDied(activity.app, false /* restarting */,
+                null /* finishInstrumentationCallback */);
+        assertEquals(Task.ActivityState.RESUMED, homeActivity.getState());
+        assertEquals(homeActivity.app, mAtm.mInternal.getTopApp());
+    }
+
+    @Test
+    public void testUpdateSleep() {
+        doCallRealMethod().when(mWm.mRoot).hasAwakeDisplay();
+        mSupervisor.mGoingToSleepWakeLock = mock(PowerManager.WakeLock.class);
+        final ActivityRecord homeActivity = new ActivityBuilder(mAtm)
+                .setTask(mWm.mRoot.getDefaultTaskDisplayArea().getOrCreateRootHomeTask()).build();
+        final ActivityRecord topActivity = new ActivityBuilder(mAtm).setCreateTask(true).build();
+        topActivity.setState(Task.ActivityState.RESUMED, "test");
+
+        final Consumer<ActivityRecord> assertTopNonSleeping = activity -> {
+            assertFalse(mAtm.mInternal.isSleeping());
+            assertEquals(ActivityManager.PROCESS_STATE_TOP, mAtm.mInternal.getTopProcessState());
+            assertEquals(activity.app, mAtm.mInternal.getTopApp());
+        };
+        assertTopNonSleeping.accept(topActivity);
+
+        // Sleep all displays.
+        mWm.mRoot.forAllDisplays(display -> doReturn(true).when(display).shouldSleep());
+        mAtm.updateSleepIfNeededLocked();
+
+        assertEquals(Task.ActivityState.PAUSING, topActivity.getState());
+        assertTrue(mAtm.mInternal.isSleeping());
+        assertEquals(ActivityManager.PROCESS_STATE_TOP_SLEEPING,
+                mAtm.mInternal.getTopProcessState());
+        // The top app should not change while sleeping.
+        assertEquals(topActivity.app, mAtm.mInternal.getTopApp());
+
+        // Move the current top to back, the top app should update to the next activity.
+        topActivity.getRootTask().moveToBack("test", null /* self */);
+        assertEquals(homeActivity.app, mAtm.mInternal.getTopApp());
+
+        // Wake all displays.
+        mWm.mRoot.forAllDisplays(display -> doReturn(false).when(display).shouldSleep());
+        mAtm.updateSleepIfNeededLocked();
+
+        assertTopNonSleeping.accept(homeActivity);
     }
 }
 

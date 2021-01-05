@@ -27,6 +27,7 @@ import android.annotation.Nullable;
 import android.annotation.StyleRes;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.annotation.UiContext;
 import android.app.WindowConfiguration;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
@@ -161,7 +162,7 @@ public abstract class Window {
      * Max value used as a feature ID
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int FEATURE_MAX = FEATURE_ACTIVITY_TRANSITIONS;
 
     /**
@@ -280,6 +281,7 @@ public abstract class Window {
     public static final int DECOR_CAPTION_SHADE_DARK = 2;
 
     @UnsupportedAppUsage
+    @UiContext
     private final Context mContext;
 
     @UnsupportedAppUsage
@@ -722,7 +724,7 @@ public abstract class Window {
     }
 
 
-    public Window(Context context) {
+    public Window(@UiContext Context context) {
         mContext = context;
         mFeatures = mLocalFeatures = getDefaultFeatures(context);
     }
@@ -733,6 +735,7 @@ public abstract class Window {
      *
      * @return Context The Context that was supplied to the constructor.
      */
+    @UiContext
     public final Context getContext() {
         return mContext;
     }
@@ -788,7 +791,7 @@ public abstract class Window {
     }
 
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public final boolean isDestroyed() {
         return mDestroyed;
     }
@@ -1134,7 +1137,7 @@ public abstract class Window {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void addPrivateFlags(int flags) {
         setPrivateFlags(flags, flags);
     }
@@ -1384,6 +1387,7 @@ public abstract class Window {
     }
 
     /** @hide */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void alwaysReadCloseOnTouchAttr();
 
@@ -1564,6 +1568,7 @@ public abstract class Window {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract void clearContentView();
 
     /**
@@ -2557,19 +2562,20 @@ public abstract class Window {
     /**
      * System request to begin scroll capture.
      *
-     * @param controller the controller to receive responses
+     * @param callbacks to receive responses
      * @hide
      */
-    public void requestScrollCapture(IScrollCaptureController controller) {
+    public void requestScrollCapture(IScrollCaptureCallbacks callbacks) {
     }
 
     /**
-     * Registers a {@link ScrollCaptureCallback} with the root of this window.
+     * Used to provide scroll capture support for an arbitrary window. This registeres the given
+     * callback with the root view of the window.
      *
      * @param callback the callback to add
      * @hide
      */
-    public void addScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
+    public void registerScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
     }
 
     /**
@@ -2578,7 +2584,7 @@ public abstract class Window {
      * @param callback the callback to remove
      * @hide
      */
-    public void removeScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
+    public void unregisterScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
     }
 
     /** @hide */
@@ -2632,18 +2638,21 @@ public abstract class Window {
      * Called when the activity changes from fullscreen mode to multi-window mode and visa-versa.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract void onMultiWindowModeChanged();
 
     /**
      * Called when the activity changes to/from picture-in-picture mode.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract void onPictureInPictureModeChanged(boolean isInPictureInPictureMode);
 
     /**
      * Called when the activity just relaunched.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract void reportActivityRelaunched();
 
     /**

@@ -14,34 +14,40 @@
 
 package com.android.internal.util;
 
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
+import android.database.ContentObserver;
+import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
-import android.os.SystemProperties;
 import android.os.Trace;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.EventLog;
+import android.util.KeyValueListParser;
 import android.util.Log;
 import android.util.SparseLongArray;
 
 import com.android.internal.logging.EventLogTags;
+import com.android.internal.os.BackgroundThread;
+
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Class to track various latencies in SystemUI. It then outputs the latency to logcat so these
- * latencies can be captured by tests and then used for dashboards.
+ * Class to track various latencies in SystemUI. It then writes the latency to statsd and also
+ * outputs it to logcat so these latencies can be captured by tests and then used for dashboards.
  * <p>
  * This is currently only in Keyguard so it can be shared between SystemUI and Keyguard, but
  * eventually we'd want to merge these two packages together so Keyguard can use common classes
  * that are shared with SystemUI.
  */
 public class LatencyTracker {
-
-    private static final String ACTION_RELOAD_PROPERTY =
-            "com.android.systemui.RELOAD_LATENCY_TRACKER_PROPERTY";
-
     private static final String TAG = "LatencyTracker";
+    private static final String SETTINGS_ENABLED_KEY = "enabled";
+    private static final String SETTINGS_SAMPLING_INTERVAL_KEY = "sampling_interval";
+    /** Default to being enabled on debug builds. */
+    private static final boolean DEFAULT_ENABLED = Build.IS_DEBUGGABLE;
+    /** Default to collecting data for 1/5 of all actions (randomly sampled). */
+    private static final int DEFAULT_SAMPLING_INTERVAL = 5;
 
     /**
      * Time it takes until the first frame of the notification panel to be displayed while expanding
@@ -82,9 +88,9 @@ public class LatencyTracker {
     /*
      * Time between we get a face acquired signal until we start with the unlock animation
      */
-    public static final int ACTION_FACE_WAKE_AND_UNLOCK = 6;
+    public static final int ACTION_FACE_WAKE_AND_UNLOCK = 7;
 
-    private static final String[] NAMES = new String[] {
+    private static final String[] NAMES = new String[]{
             "expand panel",
             "toggle recents",
             "fingerprint wake-and-unlock",
@@ -92,32 +98,99 @@ public class LatencyTracker {
             "check credential unlocked",
             "turn on screen",
             "rotate the screen",
-            "face wake-and-unlock" };
+            "face wake-and-unlock"};
+
+    private static final int[] STATSD_ACTION = new int[]{
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_EXPAND_PANEL,
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_TOGGLE_RECENTS,
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_FINGERPRINT_WAKE_AND_UNLOCK,
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_CHECK_CREDENTIAL,
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_CHECK_CREDENTIAL_UNLOCKED,
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_TURN_ON_SCREEN,
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_ROTATE_SCREEN,
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_FACE_WAKE_AND_UNLOCK,
+    };
 
     private static LatencyTracker sLatencyTracker;
 
     private final SparseLongArray mStartRtc = new SparseLongArray();
-    private boolean mEnabled;
+    private final Context mContext;
+    private volatile int mSamplingInterval;
+    private volatile boolean mEnabled;
 
     public static LatencyTracker getInstance(Context context) {
         if (sLatencyTracker == null) {
-            sLatencyTracker = new LatencyTracker(context.getApplicationContext());
+            synchronized (LatencyTracker.class) {
+                if (sLatencyTracker == null) {
+                    sLatencyTracker = new LatencyTracker(context);
+                }
+            }
         }
         return sLatencyTracker;
     }
 
-    private LatencyTracker(Context context) {
-        context.registerReceiver(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                reloadProperty();
-            }
-        }, new IntentFilter(ACTION_RELOAD_PROPERTY));
-        reloadProperty();
+    public LatencyTracker(Context context) {
+        mContext = context;
+        mEnabled = DEFAULT_ENABLED;
+        mSamplingInterval = DEFAULT_SAMPLING_INTERVAL;
+
+        // Post initialization to the background in case we're running on the main thread.
+        BackgroundThread.getHandler().post(this::registerSettingsObserver);
+        BackgroundThread.getHandler().post(this::readSettings);
     }
 
-    private void reloadProperty() {
-        mEnabled = SystemProperties.getBoolean("debug.systemui.latency_tracking", false);
+    /**
+     * A helper method to translate action type to name.
+     *
+     * @param action the action type defined in AtomsProto.java
+     * @return the name of the action
+     */
+    public static String getNameOfAction(int action) {
+        // Defined in AtomsProto.java
+        switch (action) {
+            case 0:
+                return "UNKNOWN";
+            case 1:
+                return "ACTION_EXPAND_PANEL";
+            case 2:
+                return "ACTION_TOGGLE_RECENTS";
+            case 3:
+                return "ACTION_FINGERPRINT_WAKE_AND_UNLOCK";
+            case 4:
+                return "ACTION_CHECK_CREDENTIAL";
+            case 5:
+                return "ACTION_CHECK_CREDENTIAL_UNLOCKED";
+            case 6:
+                return "ACTION_TURN_ON_SCREEN";
+            case 7:
+                return "ACTION_ROTATE_SCREEN";
+            case 8:
+                return "ACTION_FACE_WAKE_AND_UNLOCK";
+            default:
+                throw new IllegalArgumentException("Invalid action");
+        }
+    }
+
+    private void registerSettingsObserver() {
+        Uri settingsUri = Settings.Global.getUriFor(Settings.Global.LATENCY_TRACKER);
+        mContext.getContentResolver().registerContentObserver(
+                settingsUri, false, new SettingsObserver(this), UserHandle.myUserId());
+    }
+
+    private void readSettings() {
+        KeyValueListParser parser = new KeyValueListParser(',');
+        String settingsValue = Settings.Global.getString(mContext.getContentResolver(),
+                Settings.Global.LATENCY_TRACKER);
+
+        try {
+            parser.setString(settingsValue);
+            mSamplingInterval = parser.getInt(SETTINGS_SAMPLING_INTERVAL_KEY,
+                    DEFAULT_SAMPLING_INTERVAL);
+            mEnabled = parser.getBoolean(SETTINGS_ENABLED_KEY, DEFAULT_ENABLED);
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "Incorrect settings format", e);
+            mEnabled = false;
+        }
     }
 
     public static boolean isEnabled(Context ctx) {
@@ -125,7 +198,7 @@ public class LatencyTracker {
     }
 
     public boolean isEnabled() {
-        return Build.IS_DEBUGGABLE && mEnabled;
+        return mEnabled;
     }
 
     /**
@@ -134,7 +207,7 @@ public class LatencyTracker {
      * @param action The action to start. One of the ACTION_* values.
      */
     public void onActionStart(int action) {
-        if (!mEnabled) {
+        if (!isEnabled()) {
             return;
         }
         Trace.asyncTraceBegin(Trace.TRACE_TAG_APP, NAMES[action], 0);
@@ -147,7 +220,7 @@ public class LatencyTracker {
      * @param action The action to end. One of the ACTION_* values.
      */
     public void onActionEnd(int action) {
-        if (!mEnabled) {
+        if (!isEnabled()) {
             return;
         }
         long endRtc = SystemClock.elapsedRealtime();
@@ -157,17 +230,48 @@ public class LatencyTracker {
         }
         mStartRtc.delete(action);
         Trace.asyncTraceEnd(Trace.TRACE_TAG_APP, NAMES[action], 0);
-        logAction(action, (int)(endRtc - startRtc));
+        logAction(action, (int) (endRtc - startRtc));
     }
 
     /**
      * Logs an action that has started and ended. This needs to be called from the main thread.
      *
-     * @param action The action to end. One of the ACTION_* values.
-     * @param duration The duration of the action in ms.
+     * @param action          The action to end. One of the ACTION_* values.
+     * @param duration        The duration of the action in ms.
      */
-    public static void logAction(int action, int duration) {
+    public void logAction(int action, int duration) {
+        boolean shouldSample = ThreadLocalRandom.current().nextInt() % mSamplingInterval == 0;
+        logActionDeprecated(action, duration, shouldSample);
+    }
+
+    /**
+     * Logs an action that has started and ended. This needs to be called from the main thread.
+     *
+     * @param action          The action to end. One of the ACTION_* values.
+     * @param duration        The duration of the action in ms.
+     * @param writeToStatsLog Whether to write the measured latency to FrameworkStatsLog.
+     */
+    public static void logActionDeprecated(int action, int duration, boolean writeToStatsLog) {
         Log.i(TAG, "action=" + action + " latency=" + duration);
         EventLog.writeEvent(EventLogTags.SYSUI_LATENCY, action, duration);
+
+        if (writeToStatsLog) {
+            FrameworkStatsLog.write(
+                    FrameworkStatsLog.UI_ACTION_LATENCY_REPORTED, STATSD_ACTION[action], duration);
+        }
+    }
+
+    private static class SettingsObserver extends ContentObserver {
+        private final LatencyTracker mThisTracker;
+
+        SettingsObserver(LatencyTracker thisTracker) {
+            super(BackgroundThread.getHandler());
+            mThisTracker = thisTracker;
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri, int userId) {
+            mThisTracker.readSettings();
+        }
     }
 }

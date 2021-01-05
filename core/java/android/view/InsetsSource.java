@@ -16,6 +16,10 @@
 
 package android.view;
 
+import static android.view.InsetsSourceProto.FRAME;
+import static android.view.InsetsSourceProto.TYPE;
+import static android.view.InsetsSourceProto.VISIBLE;
+import static android.view.InsetsSourceProto.VISIBLE_FRAME;
 import static android.view.InsetsState.ITYPE_CAPTION_BAR;
 import static android.view.InsetsState.ITYPE_IME;
 
@@ -25,6 +29,7 @@ import android.graphics.Insets;
 import android.graphics.Rect;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.proto.ProtoOutputStream;
 import android.view.InsetsState.InternalInsetsType;
 
 import java.io.PrintWriter;
@@ -183,6 +188,23 @@ public class InsetsSource implements Parcelable {
         return false;
     }
 
+    /**
+     * Export the state of {@link InsetsSource} into a protocol buffer output stream.
+     *
+     * @param proto   Stream to write the state to
+     * @param fieldId FieldId of InsetsSource as defined in the parent message
+     */
+    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(TYPE, InsetsState.typeToString(mType));
+        mFrame.dumpDebug(proto, FRAME);
+        if (mVisibleFrame != null) {
+            mVisibleFrame.dumpDebug(proto, VISIBLE_FRAME);
+        }
+        proto.write(VISIBLE, mVisible);
+        proto.end(token);
+    }
+
     public void dump(String prefix, PrintWriter pw) {
         pw.print(prefix);
         pw.print("InsetsSource type="); pw.print(InsetsState.typeToString(mType));
@@ -195,7 +217,7 @@ public class InsetsSource implements Parcelable {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         return equals(o, false);
     }
 
@@ -203,7 +225,7 @@ public class InsetsSource implements Parcelable {
      * @param excludeInvisibleImeFrames If {@link InsetsState#ITYPE_IME} frames should be ignored
      *                                  when IME is not visible.
      */
-    public boolean equals(Object o, boolean excludeInvisibleImeFrames) {
+    public boolean equals(@Nullable Object o, boolean excludeInvisibleImeFrames) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 

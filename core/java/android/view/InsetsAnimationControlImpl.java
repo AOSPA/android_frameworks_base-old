@@ -16,6 +16,15 @@
 
 package android.view;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.view.InsetsAnimationControlImplProto.CURRENT_ALPHA;
+import static android.view.InsetsAnimationControlImplProto.IS_CANCELLED;
+import static android.view.InsetsAnimationControlImplProto.IS_FINISHED;
+import static android.view.InsetsAnimationControlImplProto.PENDING_ALPHA;
+import static android.view.InsetsAnimationControlImplProto.PENDING_FRACTION;
+import static android.view.InsetsAnimationControlImplProto.PENDING_INSETS;
+import static android.view.InsetsAnimationControlImplProto.SHOWN_ON_FINISH;
+import static android.view.InsetsAnimationControlImplProto.TMP_MATRIX;
 import static android.view.InsetsController.ANIMATION_TYPE_SHOW;
 import static android.view.InsetsController.AnimationType;
 import static android.view.InsetsController.DEBUG;
@@ -24,10 +33,12 @@ import static android.view.InsetsState.ISIDE_LEFT;
 import static android.view.InsetsState.ISIDE_RIGHT;
 import static android.view.InsetsState.ISIDE_TOP;
 import static android.view.InsetsState.ITYPE_IME;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 
 import static com.android.internal.annotations.VisibleForTesting.Visibility.PACKAGE;
 
 import android.annotation.Nullable;
+import android.content.res.CompatibilityInfo;
 import android.graphics.Insets;
 import android.graphics.Matrix;
 import android.graphics.Rect;
@@ -36,6 +47,8 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.SparseSetArray;
+import android.util.imetracing.ImeTracing;
+import android.util.proto.ProtoOutputStream;
 import android.view.InsetsState.InternalInsetsSide;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
 import android.view.WindowInsets.Type.InsetsType;
@@ -46,6 +59,7 @@ import android.view.animation.Interpolator;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 /**
  * Implements {@link WindowInsetsAnimationController}
@@ -77,6 +91,7 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     private final WindowInsetsAnimation mAnimation;
     /** @see WindowInsetsAnimationController#hasZeroInsetsIme */
     private final boolean mHasZeroInsetsIme;
+    private final CompatibilityInfo.Translator mTranslator;
     private Insets mCurrentInsets;
     private Insets mPendingInsets;
     private float mPendingFraction;
@@ -94,7 +109,7 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             InsetsState state, WindowInsetsAnimationControlListener listener,
             @InsetsType int types,
             InsetsAnimationControlCallbacks controller, long durationMs, Interpolator interpolator,
-            @AnimationType int animationType) {
+            @AnimationType int animationType, CompatibilityInfo.Translator translator) {
         mControls = controls;
         mListener = listener;
         mTypes = types;
@@ -118,8 +133,13 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
                 durationMs);
         mAnimation.setAlpha(getCurrentAlpha());
         mAnimationType = animationType;
+        mTranslator = translator;
         mController.startAnimation(this, listener, types, mAnimation,
                 new Bounds(mHiddenInsets, mShownInsets));
+
+        if ((mTypes & WindowInsets.Type.ime()) != 0) {
+            ImeTracing.getInstance().triggerDump();
+        }
     }
 
     private boolean calculatePerceptible(Insets currentInsets, float currentAlpha) {
@@ -195,21 +215,21 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     /**
      * @return Whether the finish callback of this animation should be invoked.
      */
-    public boolean applyChangeInsets(InsetsState state) {
+    public boolean applyChangeInsets(@Nullable InsetsState outState) {
         if (mCancelled) {
             if (DEBUG) Log.d(TAG, "applyChangeInsets canceled");
             return false;
         }
         final Insets offset = Insets.subtract(mShownInsets, mPendingInsets);
         ArrayList<SurfaceParams> params = new ArrayList<>();
-        updateLeashesForSide(ISIDE_LEFT, offset.left, mShownInsets.left, mPendingInsets.left,
-                params, state, mPendingAlpha);
-        updateLeashesForSide(ISIDE_TOP, offset.top, mShownInsets.top, mPendingInsets.top, params,
-                state, mPendingAlpha);
-        updateLeashesForSide(ISIDE_RIGHT, offset.right, mShownInsets.right, mPendingInsets.right,
-                params, state, mPendingAlpha);
-        updateLeashesForSide(ISIDE_BOTTOM, offset.bottom, mShownInsets.bottom,
-                mPendingInsets.bottom, params, state, mPendingAlpha);
+        updateLeashesForSide(ISIDE_LEFT, offset.left, mPendingInsets.left, params, outState,
+                mPendingAlpha);
+        updateLeashesForSide(ISIDE_TOP, offset.top, mPendingInsets.top, params, outState,
+                mPendingAlpha);
+        updateLeashesForSide(ISIDE_RIGHT, offset.right, mPendingInsets.right, params, outState,
+                mPendingAlpha);
+        updateLeashesForSide(ISIDE_BOTTOM, offset.bottom, mPendingInsets.bottom, params, outState,
+                mPendingAlpha);
 
         mController.applySurfaceParams(params.toArray(new SurfaceParams[params.size()]));
         mCurrentInsets = mPendingInsets;
@@ -283,6 +303,20 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return mAnimation;
     }
 
+    @Override
+    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(IS_CANCELLED, mCancelled);
+        proto.write(IS_FINISHED, mFinished);
+        proto.write(TMP_MATRIX, Objects.toString(mTmpMatrix));
+        proto.write(PENDING_INSETS, Objects.toString(mPendingInsets));
+        proto.write(PENDING_FRACTION, mPendingFraction);
+        proto.write(SHOWN_ON_FINISH, mShownOnFinish);
+        proto.write(CURRENT_ALPHA, mCurrentAlpha);
+        proto.write(PENDING_ALPHA, mPendingAlpha);
+        proto.end(token);
+    }
+
     WindowInsetsAnimationControlListener getListener() {
         return mListener;
     }
@@ -308,8 +342,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
                 false /* isScreenRound */,
                 false /* alwaysConsumeSystemBars */, null /* displayCutout */,
                 LayoutParams.SOFT_INPUT_ADJUST_RESIZE /* legacySoftInputMode*/,
-                0 /* legacyWindowFlags */, 0 /* legacySystemUiFlags */, typeSideMap)
-               .getInsets(mTypes);
+                0 /* legacyWindowFlags */, 0 /* legacySystemUiFlags */, TYPE_APPLICATION,
+                WINDOWING_MODE_UNDEFINED, typeSideMap).getInsets(mTypes);
     }
 
     private Insets sanitize(Insets insets) {
@@ -326,8 +360,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return alpha >= 1 ? 1 : (alpha <= 0 ? 0 : alpha);
     }
 
-    private void updateLeashesForSide(@InternalInsetsSide int side, int offset, int maxInset,
-            int inset, ArrayList<SurfaceParams> surfaceParams, InsetsState state, Float alpha) {
+    private void updateLeashesForSide(@InternalInsetsSide int side, int offset, int inset,
+            ArrayList<SurfaceParams> surfaceParams, @Nullable InsetsState outState, float alpha) {
         ArraySet<InsetsSourceControl> items = mSideSourceMap.get(side);
         if (items == null) {
             return;
@@ -346,8 +380,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
                     ? (mAnimationType == ANIMATION_TYPE_SHOW ? true : !mFinished)
                     : inset != 0;
 
-            state.getSource(source.getType()).setVisible(visible);
-            state.getSource(source.getType()).setFrame(mTmpFrame);
+            if (outState != null) {
+                outState.getSource(source.getType()).setVisible(visible);
+                outState.getSource(source.getType()).setFrame(mTmpFrame);
+            }
 
             // If the system is controlling the insets source, the leash can be null.
             if (leash != null) {
@@ -363,21 +399,23 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
 
     private void addTranslationToMatrix(@InternalInsetsSide int side, int inset, Matrix m,
             Rect frame) {
+        final float surfaceOffset = mTranslator != null
+                ? mTranslator.translateLengthInAppWindowToScreen(inset) : inset;
         switch (side) {
             case ISIDE_LEFT:
-                m.postTranslate(-inset, 0);
+                m.postTranslate(-surfaceOffset, 0);
                 frame.offset(-inset, 0);
                 break;
             case ISIDE_TOP:
-                m.postTranslate(0, -inset);
+                m.postTranslate(0, -surfaceOffset);
                 frame.offset(0, -inset);
                 break;
             case ISIDE_RIGHT:
-                m.postTranslate(inset, 0);
+                m.postTranslate(surfaceOffset, 0);
                 frame.offset(inset, 0);
                 break;
             case ISIDE_BOTTOM:
-                m.postTranslate(0, inset);
+                m.postTranslate(0, surfaceOffset);
                 frame.offset(0, inset);
                 break;
         }

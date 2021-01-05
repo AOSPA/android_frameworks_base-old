@@ -314,7 +314,7 @@
     <string name="permgrouplab_calllog" msgid="7926834372073550288">"Registres de trucades"</string>
     <string name="permgroupdesc_calllog" msgid="2026996642917801803">"llegir i editar el registre de trucades del telèfon"</string>
     <string name="permgrouplab_phone" msgid="570318944091926620">"Telèfon"</string>
-    <string name="permgroupdesc_phone" msgid="270048070781478204">"fer i gestionar trucades"</string>
+    <string name="permgroupdesc_phone" msgid="270048070781478204">"fer i gestionar trucades telefòniques"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Sensors corporals"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"accedir a les dades del sensor sobre els signes vitals"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Recuperar el contingut de la finestra"</string>
@@ -327,7 +327,7 @@
     <string name="capability_desc_canControlMagnification" msgid="2206586716709254805">"Controla el nivell i la posició del zoom de la pantalla."</string>
     <string name="capability_title_canPerformGestures" msgid="9106545062106728987">"Fer gestos"</string>
     <string name="capability_desc_canPerformGestures" msgid="6619457251067929726">"Permet tocar, lliscar, pinçar i fer altres gestos."</string>
-    <string name="capability_title_canCaptureFingerprintGestures" msgid="1189053104594608091">"Gestos d\'empremtes dactilars"</string>
+    <string name="capability_title_canCaptureFingerprintGestures" msgid="1189053104594608091">"Gestos d\'empremtes digitals"</string>
     <string name="capability_desc_canCaptureFingerprintGestures" msgid="6861869337457461274">"Captura gestos realitzats en el sensor d\'empremtes dactilars del dispositiu."</string>
     <string name="capability_title_canTakeScreenshot" msgid="3895812893130071930">"Fes una captura de pantalla"</string>
     <string name="capability_desc_canTakeScreenshot" msgid="7762297374317934052">"Pots fer una captura de la pantalla."</string>
@@ -343,8 +343,8 @@
     <string name="permdesc_uninstall_shortcut" msgid="1924735350988629188">"Permet que l\'aplicació suprimeixi les dreceres de la pantalla d\'inici sense la intervenció de l\'usuari."</string>
     <string name="permlab_processOutgoingCalls" msgid="4075056020714266558">"desviació de les trucades sortints"</string>
     <string name="permdesc_processOutgoingCalls" msgid="7833149750590606334">"Permet que l\'aplicació vegi el número que s\'està marcant durant una trucada sortint, amb l\'opció de redirigir la trucada a un altre número o bé de cancel·lar-la completament."</string>
-    <string name="permlab_answerPhoneCalls" msgid="4131324833663725855">"contestar a trucades"</string>
-    <string name="permdesc_answerPhoneCalls" msgid="894386681983116838">"Permet que l\'aplicació contesti a una trucada entrant."</string>
+    <string name="permlab_answerPhoneCalls" msgid="4131324833663725855">"contestar a trucades telefòniques"</string>
+    <string name="permdesc_answerPhoneCalls" msgid="894386681983116838">"Permet que l\'aplicació contesti a una trucada telefònica entrant."</string>
     <string name="permlab_receiveSms" msgid="505961632050451881">"recepció de missatges de text (SMS)"</string>
     <string name="permdesc_receiveSms" msgid="1797345626687832285">"Permet que l\'aplicació rebi i processi missatges SMS. Això vol dir que l\'aplicació pot controlar o suprimir missatges que s\'han enviat al teu dispositiu sense mostrar-te\'ls."</string>
     <string name="permlab_receiveMms" msgid="4000650116674380275">"recepció de missatges de text (MMS)"</string>
@@ -432,13 +432,17 @@
     <string name="permlab_modifyAudioSettings" msgid="6129039778010031815">"canviar la configuració d\'àudio"</string>
     <string name="permdesc_modifyAudioSettings" msgid="8687227609663124921">"Permet que l\'aplicació modifiqui la configuració d\'àudio general, com ara el volum i l\'altaveu de sortida que es fa servir."</string>
     <string name="permlab_recordAudio" msgid="1208457423054219147">"gravar àudio"</string>
-    <string name="permdesc_recordAudio" msgid="3976213377904701093">"Aquesta aplicació pot gravar àudio amb el micròfon en qualsevol moment."</string>
+    <string name="permdesc_recordAudio" msgid="5857246765327514062">"Aquesta aplicació pot gravar àudio amb el micròfon mentre s\'està utilitzant."</string>
+    <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"gravar àudio en segon pla"</string>
+    <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Aquesta aplicació pot gravar àudio amb el micròfon en qualsevol moment."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"enviar ordres a la SIM"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Permet que l\'aplicació enviï ordres a la SIM. Això és molt perillós."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"reconèixer l\'activitat física"</string>
     <string name="permdesc_activityRecognition" msgid="8667484762991357519">"Aquesta aplicació pot reconèixer la teva activitat física."</string>
     <string name="permlab_camera" msgid="6320282492904119413">"fer fotos i vídeos"</string>
-    <string name="permdesc_camera" msgid="1354600178048761499">"Aquesta aplicació pot fer fotos i gravar vídeos amb la càmera en qualsevol moment."</string>
+    <string name="permdesc_camera" msgid="5240801376168647151">"Aquesta aplicació pot fer fotos i gravar vídeos amb la càmera mentre s\'està utilitzant."</string>
+    <string name="permlab_backgroundCamera" msgid="7549917926079731681">"fer fotos i gravar vídeos en segon pla"</string>
+    <string name="permdesc_backgroundCamera" msgid="1615291686191138250">"Aquesta aplicació pot fer fotos i gravar vídeos amb la càmera en qualsevol moment."</string>
     <string name="permlab_systemCamera" msgid="3642917457796210580">"Permet que una aplicació o un servei tinguin accés a les càmeres del sistema per fer fotos i vídeos"</string>
     <string name="permdesc_systemCamera" msgid="5938360914419175986">"Aquesta aplicació del sistema amb privilegis pot fer fotos i gravar vídeos amb una càmera del sistema en qualsevol moment. L\'aplicació també ha de tenir el permís android.permission.CAMERA per accedir-hi."</string>
     <string name="permlab_cameraOpenCloseListener" msgid="5548732769068109315">"Permet que una aplicació o un servei pugui rebre crides de retorn sobre els dispositius de càmera que s\'obren o es tanquen."</string>
@@ -470,10 +474,10 @@
     <string name="permdesc_wakeLock" product="tablet" msgid="2441742939101526277">"Permet que l\'aplicació impedeixi que la tauleta entri en repòs."</string>
     <string name="permdesc_wakeLock" product="tv" msgid="2329298966735118796">"Permet que l\'aplicació impedeixi que el dispositiu Android TV entri en repòs."</string>
     <string name="permdesc_wakeLock" product="default" msgid="3689523792074007163">"Permet que l\'aplicació impedeixi que el telèfon entri en repòs."</string>
-    <string name="permlab_transmitIr" msgid="8077196086358004010">"transmissió d\'infraroigs"</string>
-    <string name="permdesc_transmitIr" product="tablet" msgid="5884738958581810253">"Permet que l\'aplicació utilitzi el transmissor d\'infraroigs de la tauleta."</string>
-    <string name="permdesc_transmitIr" product="tv" msgid="3278506969529173281">"Permet que l\'aplicació faci servir el transmissor d\'infraroigs del dispositiu Android TV."</string>
-    <string name="permdesc_transmitIr" product="default" msgid="8484193849295581808">"Permet que l\'aplicació utilitzi el transmissor d\'infraroigs del telèfon."</string>
+    <string name="permlab_transmitIr" msgid="8077196086358004010">"transmissió d\'infrarojos"</string>
+    <string name="permdesc_transmitIr" product="tablet" msgid="5884738958581810253">"Permet que l\'aplicació utilitzi el transmissor d\'infrarojos de la tauleta."</string>
+    <string name="permdesc_transmitIr" product="tv" msgid="3278506969529173281">"Permet que l\'aplicació faci servir el transmissor d\'infrarojos del dispositiu Android TV."</string>
+    <string name="permdesc_transmitIr" product="default" msgid="8484193849295581808">"Permet que l\'aplicació utilitzi el transmissor d\'infrarojos del telèfon."</string>
     <string name="permlab_setWallpaper" msgid="6959514622698794511">"establir fons de pantalla"</string>
     <string name="permdesc_setWallpaper" msgid="2973996714129021397">"Permet que l\'aplicació estableixi el fons de pantalla del sistema."</string>
     <string name="permlab_setWallpaperHints" msgid="1153485176642032714">"ajustament de la mida del fons de pantalla"</string>
@@ -543,7 +547,7 @@
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"S\'ha cancel·lat l\'autenticació"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"No s\'ha reconegut"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"S\'ha cancel·lat l\'autenticació"</string>
-    <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"No s\'ha establert cap PIN, patró o contrasenya"</string>
+    <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"No s\'ha definit cap PIN, patró o contrasenya"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"Error en l\'autenticació"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"S\'ha detectat una empremta digital parcial. Torna-ho a provar."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"No s\'ha pogut processar l\'empremta digital. Torna-ho a provar."</string>
@@ -832,7 +836,7 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Premeu Menú per desbloquejar-lo o per fer una trucada d\'emergència."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Premeu Menú per desbloquejar."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Dibuixeu el patró de desbloqueig"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Emergència"</string>
+    <string name="lockscreen_emergency_call" msgid="7549683825868928636">"Trucada d\'emergència"</string>
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Torna a la trucada"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Correcte!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Torna-ho a provar"</string>
@@ -950,7 +954,7 @@
     <string name="autofill_district" msgid="6428712062213557327">"Districte"</string>
     <string name="autofill_department" msgid="9047276226873531529">"Departament"</string>
     <string name="autofill_prefecture" msgid="7267397763720241872">"Prefectura"</string>
-    <string name="autofill_parish" msgid="6847960518334530198">"Districte"</string>
+    <string name="autofill_parish" msgid="6847960518334530198">"Parròquia"</string>
     <string name="autofill_area" msgid="8289022370678448983">"Àrea"</string>
     <string name="autofill_emirate" msgid="2544082046790551168">"Emirat"</string>
     <string name="permlab_readHistoryBookmarks" msgid="9102293913842539697">"lectura dels marcadors i l\'historial web"</string>
@@ -991,8 +995,8 @@
     <string name="searchview_description_submit" msgid="6771060386117334686">"Envia la consulta"</string>
     <string name="searchview_description_voice" msgid="42360159504884679">"Cerca per veu"</string>
     <string name="enable_explore_by_touch_warning_title" msgid="5095399706284943314">"Vols activar l\'exploració tàctil?"</string>
-    <string name="enable_explore_by_touch_warning_message" product="tablet" msgid="1037295476738940824">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> vol activar l\'exploració tàctil. Quan l\'exploració tàctil està activada, pots escoltar o veure les descripcions del contingut seleccionat o utilitzar gestos per interactuar amb la tauleta."</string>
-    <string name="enable_explore_by_touch_warning_message" product="default" msgid="4312979647356179250">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> vol activar l\'exploració tàctil. Quan l\'exploració per tàctil està activada, pots escoltar o veure les descripcions del contingut seleccionat o utilitzar gestos per interactuar amb el telèfon."</string>
+    <string name="enable_explore_by_touch_warning_message" product="tablet" msgid="1037295476738940824">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> vol activar l\'exploració tàctil. Quan l\'exploració tàctil està activada, pots escoltar o veure les descripcions del contingut seleccionat o utilitzar gestos per interaccionar amb la tauleta."</string>
+    <string name="enable_explore_by_touch_warning_message" product="default" msgid="4312979647356179250">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> vol activar l\'exploració tàctil. Quan l\'exploració per tàctil està activada, pots escoltar o veure les descripcions del contingut seleccionat o utilitzar gestos per interaccionar amb el telèfon."</string>
     <string name="oneMonthDurationPast" msgid="4538030857114635777">"Fa 1 mes"</string>
     <string name="beforeOneMonthDurationPast" msgid="8315149541372065392">"Fa més d\'1 mes"</string>
     <plurals name="last_num_days" formatted="false" msgid="687443109145393632">
@@ -1125,6 +1129,8 @@
     <string name="capital_off" msgid="7443704171014626777">"NO"</string>
     <string name="checked" msgid="9179896827054513119">"seleccionat"</string>
     <string name="not_checked" msgid="7972320087569023342">"no seleccionat"</string>
+    <string name="selected" msgid="6614607926197755875">"seleccionat"</string>
+    <string name="not_selected" msgid="410652016565864475">"no seleccionat"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Completa l\'acció mitjançant"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Completa l\'acció amb %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Completa l\'acció"</string>
@@ -1222,9 +1228,9 @@
     <string name="volume_music" msgid="7727274216734955095">"Volum de multimèdia"</string>
     <string name="volume_music_hint_playing_through_bluetooth" msgid="2614142915948898228">"S\'està reproduint per Bluetooth"</string>
     <string name="volume_music_hint_silent_ringtone_selected" msgid="1514829655029062233">"S\'ha establert el so de silenci"</string>
-    <string name="volume_call" msgid="7625321655265747433">"Volum en trucada"</string>
-    <string name="volume_bluetooth_call" msgid="2930204618610115061">"Volum en trucada per Bluetooth"</string>
-    <string name="volume_alarm" msgid="4486241060751798448">"Volum de l\'alarma"</string>
+    <string name="volume_call" msgid="7625321655265747433">"Volum a la trucada"</string>
+    <string name="volume_bluetooth_call" msgid="2930204618610115061">"Volum a la trucada per Bluetooth"</string>
+    <string name="volume_alarm" msgid="4486241060751798448">"Volum d\'alarma"</string>
     <string name="volume_notification" msgid="6864412249031660057">"Volum de notificacions"</string>
     <string name="volume_unknown" msgid="4041914008166576293">"Volum"</string>
     <string name="volume_icon_description_bluetooth" msgid="7540388479345558400">"Volum del Bluetooth"</string>
@@ -1622,10 +1628,10 @@
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"Vols apujar el volum per sobre del nivell recomanat?\n\nSi escoltes música a un volum alt durant períodes llargs, pots danyar-te l\'oïda."</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"Vols fer servir la drecera d\'accessibilitat?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Si la drecera està activada, prem els dos botons de volum durant 3 segons per iniciar una funció d\'accessibilitat."</string>
-    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"Vols activar les funcions d\'accessibilitat?"</string>
+    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Vols desactivar la drecera de les funcions d\'accessibilitat?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Si mantens premudes les dues tecles de volum durant uns segons, s\'activaran les funcions d\'accessibilitat. Això podria canviar el funcionament del teu dispositiu.\n\nFuncions actuals:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nPots canviar les funcions seleccionades a Configuració &gt; Accessibilitat."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"Vols activar <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
+    <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Vols activar la drecera de <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Si mantens premudes les dues tecles de volum durant uns segons, la funció d\'accessibilitat <xliff:g id="SERVICE">%1$s</xliff:g> s\'activarà. Això podria canviar el funcionament del teu dispositiu.\n\nPots canviar la funció d\'aquesta drecera a Configuració &gt; Accessibilitat."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Activa"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"No activis"</string>
@@ -1829,6 +1835,7 @@
       <item quantity="other">Durant %d h</item>
       <item quantity="one">Durant 1 h</item>
     </plurals>
+    <string name="zen_mode_until_next_day" msgid="1403042784161725038">"Finalitza: <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"Fins a les <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"Fins a les <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (propera alarma)"</string>
     <string name="zen_mode_forever" msgid="740585666364912448">"Fins que no el desactivis"</string>

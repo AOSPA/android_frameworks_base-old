@@ -46,6 +46,7 @@ import android.content.pm.PackageManagerInternal;
 import android.os.Bundle;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -162,6 +163,7 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
 
     private final int mEphemeralOpToken;
     private final BackupAgentTimeoutParameters mAgentTimeoutParameters;
+    private final BackupEligibilityRules mBackupEligibilityRules;
 
     @VisibleForTesting
     PerformUnifiedRestoreTask(UserBackupManagerService backupManagerService) {
@@ -171,6 +173,7 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
         mTransportManager = null;
         mEphemeralOpToken = 0;
         mUserId = 0;
+        mBackupEligibilityRules = null;
         this.backupManagerService = backupManagerService;
     }
 
@@ -208,6 +211,7 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
         mAgentTimeoutParameters = Objects.requireNonNull(
                 backupManagerService.getAgentTimeoutParameters(),
                 "Timeout parameters cannot be null");
+        mBackupEligibilityRules = backupEligibilityRules;
 
         if (targetPackage != null) {
             // Single package restore
@@ -430,6 +434,8 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
             // Pull the Package Manager metadata from the restore set first
             mCurrentPackage = new PackageInfo();
             mCurrentPackage.packageName = PACKAGE_MANAGER_SENTINEL;
+            mCurrentPackage.applicationInfo = new ApplicationInfo();
+            mCurrentPackage.applicationInfo.uid = Process.SYSTEM_UID;
             mPmAgent = backupManagerService.makeMetadataAgent(null);
             mAgent = IBackupAgent.Stub.asInterface(mPmAgent.onBind());
             if (MORE_DEBUG) {
@@ -656,7 +662,8 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
         // Good to go!  Set up and bind the agent...
         mAgent = backupManagerService.bindToAgentSynchronous(
                 mCurrentPackage.applicationInfo,
-                ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL);
+                ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL,
+                mBackupEligibilityRules.getOperationType());
         if (mAgent == null) {
             Slog.w(TAG, "Can't find backup agent for " + packageName);
             mMonitor = BackupManagerMonitorUtils.monitorEvent(mMonitor,
@@ -756,7 +763,8 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
             // Kick off the restore, checking for hung agents.  The timeout or
             // the operationComplete() callback will schedule the next step,
             // so we do not do that here.
-            long restoreAgentTimeoutMillis = mAgentTimeoutParameters.getRestoreAgentTimeoutMillis();
+            long restoreAgentTimeoutMillis = mAgentTimeoutParameters.getRestoreAgentTimeoutMillis(
+                    app.applicationInfo.uid);
             backupManagerService.prepareOperationTimeout(
                     mEphemeralOpToken, restoreAgentTimeoutMillis, this, OP_TYPE_RESTORE_WAIT);
             startedAgentRestore = true;
@@ -913,7 +921,8 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
                     mCurrentPackage.packageName);
 
             mEngine = new FullRestoreEngine(backupManagerService, this, null,
-                    mMonitor, mCurrentPackage, false, mEphemeralOpToken, false);
+                    mMonitor, mCurrentPackage, false, mEphemeralOpToken, false,
+                    mBackupEligibilityRules);
             mEngineThread = new FullRestoreEngineThread(mEngine, mEnginePipes[0]);
 
             ParcelFileDescriptor eWriteEnd = mEnginePipes[1];
@@ -1117,7 +1126,8 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
         } else {
             // We were invoked via an active restore session, not by the Package
             // Manager, so start up the session timeout again.
-            long restoreAgentTimeoutMillis = mAgentTimeoutParameters.getRestoreAgentTimeoutMillis();
+            long restoreAgentTimeoutMillis =
+                    mAgentTimeoutParameters.getRestoreSessionTimeoutMillis();
             backupManagerService.getBackupHandler().sendEmptyMessageDelayed(
                     MSG_RESTORE_SESSION_TIMEOUT,
                     restoreAgentTimeoutMillis);
@@ -1131,6 +1141,8 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
         if (mIsSystemRestore && mPmAgent != null) {
             backupManagerService.setAncestralPackages(mPmAgent.getRestoredPackages());
             backupManagerService.setAncestralToken(mToken);
+            backupManagerService.setAncestralOperationType(
+                    mBackupEligibilityRules.getOperationType());
             backupManagerService.writeRestoreTokens();
         }
 

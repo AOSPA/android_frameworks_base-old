@@ -662,7 +662,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
-            @UnsupportedAppUsage
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
             public static Uri addMessage(int subId, ContentResolver resolver,
                     String address, String body, String subject, Long date, boolean read) {
                 return addMessageToUri(subId, resolver, CONTENT_URI, address, body,
@@ -722,7 +722,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
-            @UnsupportedAppUsage
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
             public static Uri addMessage(int subId, ContentResolver resolver,
                     String address, String body, String subject, Long date) {
                 return addMessageToUri(subId, resolver, CONTENT_URI, address, body,
@@ -769,7 +769,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
-            @UnsupportedAppUsage
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
             public static Uri addMessage(int subId, ContentResolver resolver,
                     String address, String body, String subject, Long date) {
                 return addMessageToUri(subId, resolver, CONTENT_URI, address, body,
@@ -816,7 +816,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
-            @UnsupportedAppUsage
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
             public static Uri addMessage(ContentResolver resolver,
                     String address, String body, String subject, Long date,
                     boolean deliveryReport, long threadId) {
@@ -4007,14 +4007,22 @@ public final class Telephony {
         public static final String APN_SET_ID = "apn_set_id";
 
         /**
-         * Possible value for the {@link #APN_SET_ID} field. By default APNs will not belong to a
-         * set. If the user manually selects an APN without apn set id, there is no need to
-         * prioritize any specific APN set ids.
+         * Possible value for the {@link #APN_SET_ID} field. By default APNs are added to set 0.
          * <p>Type: INTEGER</p>
          * @hide
          */
         @SystemApi
         public static final int NO_APN_SET_ID = 0;
+
+        /**
+         * Possible value for the {@link #APN_SET_ID} field.
+         * APNs with MATCH_ALL_APN_SET_ID will be used regardless of any set ids of
+         * the selected APN.
+         * <p>Type: INTEGER</p>
+         * @hide
+         */
+        @SystemApi
+        public static final int MATCH_ALL_APN_SET_ID = -1;
 
         /**
          * A unique carrier id associated with this APN
@@ -4088,7 +4096,6 @@ public final class Telephony {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final class CellBroadcasts implements BaseColumns {
 
         /**

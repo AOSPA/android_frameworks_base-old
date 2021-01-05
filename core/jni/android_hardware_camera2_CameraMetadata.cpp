@@ -249,6 +249,16 @@ static jint CameraMetadata_getEntryCount(JNIEnv *env, jclass thiz, jlong ptr) {
     return metadata->entryCount();
 }
 
+static jlong CameraMetadata_getBufferSize(JNIEnv *env, jclass thiz, jlong ptr) {
+    ALOGV("%s", __FUNCTION__);
+
+    CameraMetadata* metadata = CameraMetadata_getPointerThrow(env, ptr);
+
+    if (metadata == NULL) return 0;
+
+    return metadata->bufferSize();
+}
+
 // idempotent. calling more than once has no effect.
 static void CameraMetadata_close(JNIEnv *env, jclass thiz, jlong ptr) {
     ALOGV("%s", __FUNCTION__);
@@ -501,6 +511,15 @@ static void CameraMetadata_readFromParcel(JNIEnv *env, jclass thiz, jobject parc
                              "Failed to read from parcel (error code %d)", err);
         return;
     }
+
+    // Update vendor descriptor cache if necessary
+    auto vendorId = metadata->getVendorId();
+    if ((vendorId != CAMERA_METADATA_INVALID_VENDOR_ID) &&
+            !VendorTagDescriptorCache::isVendorCachePresent(vendorId)) {
+        ALOGW("%s: Tag vendor id missing or cache not initialized, trying to update!",
+                __FUNCTION__);
+        CameraMetadata_setupGlobalVendorTagDescriptor(env, thiz);
+    }
 }
 
 static void CameraMetadata_writeToParcel(JNIEnv *env, jclass thiz, jobject parcel, jlong ptr) {
@@ -552,6 +571,9 @@ static const JNINativeMethod gCameraMetadataMethods[] = {
   { "nativeGetEntryCount",
     "(J)I",
     (void*)CameraMetadata_getEntryCount },
+  { "nativeGetBufferSize",
+    "(J)J",
+    (void*)CameraMetadata_getBufferSize },
   { "nativeClose",
     "(J)V",
     (void*)CameraMetadata_close },
@@ -642,9 +664,7 @@ static jint CameraMetadata_getTypeFromTagLocal(JNIEnv *env, jclass thiz, jlong p
     CameraMetadata* metadata = CameraMetadata_getPointerNoThrow(ptr);
     metadata_vendor_id_t vendorId = CAMERA_METADATA_INVALID_VENDOR_ID;
     if (metadata) {
-        const camera_metadata_t *metaBuffer = metadata->getAndLock();
-        vendorId = get_camera_metadata_vendor_id(metaBuffer);
-        metadata->unlock(metaBuffer);
+        vendorId = metadata->getVendorId();
     }
 
     int tagType = get_local_camera_metadata_tag_type_vendor_id(tag, vendorId);
@@ -673,9 +693,7 @@ static jint CameraMetadata_getTagFromKeyLocal(JNIEnv *env, jclass thiz, jlong pt
     if (metadata) {
         sp<VendorTagDescriptorCache> cache = VendorTagDescriptorCache::getGlobalVendorTagCache();
         if (cache.get()) {
-            const camera_metadata_t *metaBuffer = metadata->getAndLock();
-            metadata_vendor_id_t vendorId = get_camera_metadata_vendor_id(metaBuffer);
-            metadata->unlock(metaBuffer);
+            auto vendorId = metadata->getVendorId();
             cache->getVendorTagDescriptor(vendorId, &vTags);
         }
     }
@@ -703,10 +721,8 @@ static jobject CameraMetadata_getAllVendorKeys(JNIEnv* env, jclass thiz, jlong p
         CameraMetadata* metadata = CameraMetadata_getPointerThrow(env, ptr);
         if (metadata == NULL) return NULL;
 
-        const camera_metadata_t *metaBuffer = metadata->getAndLock();
-        vendorId = get_camera_metadata_vendor_id(metaBuffer);
+        vendorId = metadata->getVendorId();
         cache->getVendorTagDescriptor(vendorId, &vTags);
-        metadata->unlock(metaBuffer);
         if (vTags.get() == nullptr) {
             return nullptr;
         }

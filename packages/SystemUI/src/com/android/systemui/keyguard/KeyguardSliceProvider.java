@@ -38,6 +38,7 @@ import android.provider.Settings;
 import android.service.notification.ZenModeConfig;
 import android.text.TextUtils;
 import android.text.style.StyleSpan;
+import android.util.Log;
 
 import androidx.core.graphics.drawable.IconCompat;
 import androidx.slice.Slice;
@@ -53,6 +54,7 @@ import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIAppComponentFactory;
 import com.android.systemui.SystemUIFactory;
+import com.android.systemui.dagger.SysUIComponent;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.StatusBarState;
@@ -63,6 +65,8 @@ import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.util.wakelock.SettableWakeLock;
 import com.android.systemui.util.wakelock.WakeLock;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -72,11 +76,16 @@ import javax.inject.Inject;
 
 /**
  * Simple Slice provider that shows the current date.
+ *
+ * Injection is handled by {@link SystemUIAppComponentFactory} +
+ * {@link com.android.systemui.dagger.GlobalRootComponent#inject(KeyguardSliceProvider)}.
  */
 public class KeyguardSliceProvider extends SliceProvider implements
         NextAlarmController.NextAlarmChangeCallback, ZenModeController.Callback,
         NotificationMediaManager.MediaListener, StatusBarStateController.StateListener,
         SystemUIAppComponentFactory.ContextInitializer {
+
+    private static final String TAG = "KgdSliceProvider";
 
     private static final StyleSpan BOLD_STYLE = new StyleSpan(Typeface.BOLD);
     public static final String KEYGUARD_SLICE_URI = "content://com.android.systemui.keyguard/main";
@@ -298,7 +307,8 @@ public class KeyguardSliceProvider extends SliceProvider implements
     @Override
     public boolean onCreateSliceProvider() {
         mContextAvailableCallback.onContextAvailable(getContext());
-        inject();
+        mMediaWakeLock = new SettableWakeLock(WakeLock.createPartial(getContext(), "media"),
+                "media");
         synchronized (KeyguardSliceProvider.sInstanceLock) {
             KeyguardSliceProvider oldInstance = KeyguardSliceProvider.sInstance;
             if (oldInstance != null) {
@@ -306,8 +316,27 @@ public class KeyguardSliceProvider extends SliceProvider implements
             }
             mDatePattern = getContext().getString(R.string.system_ui_aod_date_pattern);
             mPendingIntent = PendingIntent.getActivity(getContext(), 0,
-                    new Intent(getContext(), KeyguardSliceProvider.class), 0);
-            mMediaManager.addCallback(this);
+                    new Intent(getContext(), KeyguardSliceProvider.class),
+                    PendingIntent.FLAG_IMMUTABLE);
+            try {
+                //TODO(b/168778439): Remove this whole try catch. This is for debugging in dogfood.
+                mMediaManager.addCallback(this);
+            } catch (NullPointerException e) {
+                // We are sometimes failing to set the media manager. Why?
+                Log.w(TAG, "Failed to setup mMediaManager. Trying again.");
+                SysUIComponent rootComponent = SystemUIFactory.getInstance().getSysUIComponent();
+                try {
+                    Method injectMethod = rootComponent.getClass()
+                            .getMethod("inject", getClass());
+                    injectMethod.invoke(rootComponent, this);
+                    Log.w("TAG", "mMediaManager is now: " + mMediaManager);
+                } catch (NoSuchMethodException ex) {
+                    Log.e(TAG, "Failed to find inject method for KeyguardSliceProvider", ex);
+                } catch (IllegalAccessException | InvocationTargetException ex) {
+                    Log.e(TAG, "Failed to call inject", ex);
+                }
+                throw e;
+            }
             mStatusBarStateController.addCallback(this);
             mNextAlarmController.addCallback(this);
             mZenModeController.addCallback(this);
@@ -316,13 +345,6 @@ public class KeyguardSliceProvider extends SliceProvider implements
             updateClockLocked();
         }
         return true;
-    }
-
-    @VisibleForTesting
-    protected void inject() {
-        SystemUIFactory.getInstance().getRootComponent().inject(this);
-        mMediaWakeLock = new SettableWakeLock(WakeLock.createPartial(getContext(), "media"),
-                "media");
     }
 
     @VisibleForTesting

@@ -25,7 +25,6 @@ import android.net.Uri;
 import android.net.nsd.INsdManager;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
-import android.net.util.nsd.DnsSdTxtRecord;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
@@ -42,6 +41,7 @@ import com.android.internal.util.AsyncChannel;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
+import com.android.net.module.util.DnsSdTxtRecord;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -824,7 +824,7 @@ public class NsdService extends INsdManager.Stub {
 
         @Override
         public String toString() {
-            StringBuffer sb = new StringBuffer();
+            StringBuilder sb = new StringBuilder();
             sb.append("mChannel ").append(mChannel).append("\n");
             sb.append("mMessenger ").append(mMessenger).append("\n");
             sb.append("mResolvedService ").append(mResolvedService).append("\n");

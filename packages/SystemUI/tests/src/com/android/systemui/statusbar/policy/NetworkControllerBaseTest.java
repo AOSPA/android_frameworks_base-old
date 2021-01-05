@@ -45,7 +45,6 @@ import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.provider.Settings;
 import android.provider.Settings.Global;
-import android.telephony.CdmaEriInformation;
 import android.telephony.CellSignalStrength;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.PhoneStateListener;
@@ -66,6 +65,7 @@ import com.android.settingslib.net.DataUsageController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
@@ -113,13 +113,12 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     protected DeviceProvisionedController mMockProvisionController;
     protected DeviceProvisionedListener mUserCallback;
     protected Instrumentation mInstrumentation;
+    protected DemoModeController mDemoModeController;
 
     protected int mSubId;
 
     private NetworkCapabilities mNetCapabilities;
     private ConnectivityManager.NetworkCallback mNetworkCallback;
-
-    private CdmaEriInformation mEriInformation;
 
     @Rule
     public TestWatcher failWatcher = new TestWatcher() {
@@ -146,6 +145,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
         res.addOverride(R.string.cell_data_off_content_description, NO_DATA_STRING);
         res.addOverride(R.string.not_default_data_content_description, NOT_DEFAULT_DATA_STRING);
 
+        mDemoModeController = mock(DemoModeController.class);
         mMockWm = mock(WifiManager.class);
         mMockTm = mock(TelephonyManager.class);
         mMockSm = mock(SubscriptionManager.class);
@@ -181,11 +181,6 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
         doReturn(TelephonyManager.NETWORK_TYPE_LTE).when(mTelephonyDisplayInfo).getNetworkType();
         doReturn(TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE).when(mTelephonyDisplayInfo)
                 .getOverrideNetworkType();
-
-        mEriInformation = new CdmaEriInformation(CdmaEriInformation.ERI_OFF,
-                CdmaEriInformation.ERI_ICON_MODE_NORMAL);
-        when(mMockTm.getCdmaEriInformation()).thenReturn(mEriInformation);
-
         mConfig = new Config();
         mConfig.hspaDataDistinguishable = true;
         mCallbackHandler = mock(CallbackHandler.class);
@@ -200,10 +195,21 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
             return null;
         }).when(mMockProvisionController).addCallback(any());
 
-        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm,
-                mMockNsm, mMockSm, mConfig, TestableLooper.get(this).getLooper(), mCallbackHandler,
-                mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
-                mMockSubDefaults, mMockProvisionController, mMockBd);
+        mNetworkController = new NetworkControllerImpl(mContext,
+                mMockCm,
+                mMockTm,
+                mMockWm,
+                mMockNsm,
+                mMockSm,
+                mConfig,
+                TestableLooper.get(this).getLooper(),
+                mCallbackHandler,
+                mock(AccessPointControllerImpl.class),
+                mock(DataUsageController.class),
+                mMockSubDefaults,
+                mMockProvisionController,
+                mMockBd,
+                mDemoModeController);
         setupNetworkController();
 
         // Trigger blank callbacks to always get the current state (some tests don't trigger
@@ -254,7 +260,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                         mConfig, TestableLooper.get(this).getLooper(), mCallbackHandler,
                         mock(AccessPointControllerImpl.class),
                         mock(DataUsageController.class), mMockSubDefaults,
-                        mock(DeviceProvisionedController.class), mMockBd);
+                        mock(DeviceProvisionedController.class), mMockBd, mDemoModeController);
 
         setupNetworkController();
 
@@ -308,9 +314,8 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     }
 
     public void setCdmaRoaming(boolean isRoaming) {
-        mEriInformation.setEriIconIndex(isRoaming ?
-                CdmaEriInformation.ERI_ON : CdmaEriInformation.ERI_OFF);
-        when(mMockTm.getCdmaEriInformation()).thenReturn(mEriInformation);
+        when(mMockTm.getCdmaEnhancedRoamingIndicatorDisplayNumber()).thenReturn(
+                isRoaming ? TelephonyManager.ERI_ON : TelephonyManager.ERI_OFF);
     }
 
     public void setVoiceRegState(int voiceRegState) {

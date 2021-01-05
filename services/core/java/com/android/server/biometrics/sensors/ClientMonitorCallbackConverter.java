@@ -37,7 +37,7 @@ import android.os.RemoteException;
  * It may be possible at some point in the future to combine I<Sensor>ServiceReceivers to share
  * a common interface.
  */
-public final class ClientMonitorCallbackConverter {
+public class ClientMonitorCallbackConverter {
     private IBiometricSensorReceiver mSensorReceiver; // BiometricService
     private IFaceServiceReceiver mFaceServiceReceiver; // FaceManager
     private IFingerprintServiceReceiver mFingerprintServiceReceiver; // FingerprintManager
@@ -89,7 +89,8 @@ public final class ClientMonitorCallbackConverter {
         }
     }
 
-    void onError(int sensorId, int cookie, int error, int vendorCode) throws RemoteException {
+    public void onError(int sensorId, int cookie, int error, int vendorCode)
+            throws RemoteException {
         if (mSensorReceiver != null) {
             mSensorReceiver.onError(sensorId, cookie, error, vendorCode);
         } else if (mFaceServiceReceiver != null) {
@@ -128,11 +129,11 @@ public final class ClientMonitorCallbackConverter {
         }
     }
 
-    public void onChallengeGenerated(long challenge) throws RemoteException {
+    public void onChallengeGenerated(int sensorId, long challenge) throws RemoteException {
         if (mFaceServiceReceiver != null) {
-            mFaceServiceReceiver.onChallengeGenerated(challenge);
+            mFaceServiceReceiver.onChallengeGenerated(sensorId, challenge);
         } else if (mFingerprintServiceReceiver != null) {
-            mFingerprintServiceReceiver.onChallengeGenerated(challenge);
+            mFingerprintServiceReceiver.onChallengeGenerated(sensorId, challenge);
         }
     }
 
@@ -142,10 +143,21 @@ public final class ClientMonitorCallbackConverter {
         }
     }
 
-    public void onFeatureGet(boolean success, int feature, boolean value)
-            throws RemoteException {
+    public void onFeatureGet(boolean success, int feature, boolean value) throws RemoteException {
         if (mFaceServiceReceiver != null) {
             mFaceServiceReceiver.onFeatureGet(success, feature, value);
+        }
+    }
+
+    public void onChallengeInterrupted(int sensorId) throws RemoteException {
+        if (mFaceServiceReceiver != null) {
+            mFaceServiceReceiver.onChallengeInterrupted(sensorId);
+        }
+    }
+
+    public void onChallengeInterruptFinished(int sensorId) throws RemoteException {
+        if (mFaceServiceReceiver != null) {
+            mFaceServiceReceiver.onChallengeInterruptFinished(sensorId);
         }
     }
 }

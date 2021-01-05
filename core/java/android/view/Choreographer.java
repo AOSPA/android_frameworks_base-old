@@ -188,6 +188,8 @@ public final class Choreographer {
     private long mFrameIntervalNanos;
     private boolean mDebugPrintNextFrameTimeDelta;
     private int mFPSDivisor = 1;
+    private DisplayEventReceiver.VsyncEventData mLastVsyncEventData =
+            new DisplayEventReceiver.VsyncEventData();
     private int mTouchMoveNum = -1;
     private int mMotionEventType = -1;
     private boolean mConsumedMove = false;
@@ -195,6 +197,7 @@ public final class Choreographer {
     private boolean mIsVsyncScheduled = false;
     private long mLastTouchOptTimeNanos = 0;
     private boolean mIsDoFrameProcessing = false;
+
     /**
      * Contains information about the current frame for jank-tracking,
      * mainly timings of key events along with a bit of metadata about
@@ -656,11 +659,11 @@ public final class Choreographer {
                     long curr = System.nanoTime();
                     boolean skipFlag = curr - mLastTouchOptTimeNanos < mFrameIntervalNanos;
                     Trace.traceBegin(Trace.TRACE_TAG_VIEW, "scheduleFrameLocked-mMotionEventType:"
-                                     + mMotionEventType + " mTouchMoveNum:"+ mTouchMoveNum 
+                                     + mMotionEventType + " mTouchMoveNum:"+ mTouchMoveNum
                                      + " mConsumedDown:" + mConsumedDown
                                      + " mConsumedMove:" + mConsumedMove
                                      + " mIsDoFrameProcessing:" + mIsDoFrameProcessing
-                                     + " skip:" + skipFlag 
+                                     + " skip:" + skipFlag
                                      + " diff:" + (curr - mLastTouchOptTimeNanos));
                     Trace.traceEnd(Trace.TRACE_TAG_VIEW);
                     synchronized(this) {
@@ -729,14 +732,37 @@ public final class Choreographer {
         }
     }
 
+    /**
+     * Returns the vsync id of the last frame callback. Client are expected to call
+     * this function from their frame callback function to get the vsyncId and pass
+     * it together with a buffer or transaction to the Surface Composer. Calling
+     * this function from anywhere else will return an undefined value.
+     *
+     * @hide
+     */
+    public long getVsyncId() {
+        return mLastVsyncEventData.id;
+    }
+
+    /**
+     * Returns the frame deadline in {@link System#nanoTime()} timebase that it is allotted for the
+     * frame to be completed. Client are expected to call this function from their frame callback
+     * function. Calling this function from anywhere else will return an undefined value.
+     *
+     * @hide
+     */
+    public long getFrameDeadline() {
+        return mLastVsyncEventData.frameDeadline;
+    }
+
     void setFPSDivisor(int divisor) {
         if (divisor <= 0) divisor = 1;
         mFPSDivisor = divisor;
         ThreadedRenderer.setFPSDivisor(divisor);
     }
 
-    @UnsupportedAppUsage
-    void doFrame(long frameTimeNanos, int frame) {
+    void doFrame(long frameTimeNanos, int frame,
+            DisplayEventReceiver.VsyncEventData vsyncEventData) {
         final long startNanos;
         synchronized (mLock) {
             mIsVsyncScheduled = false;
@@ -787,9 +813,11 @@ public final class Choreographer {
                 }
             }
 
-            mFrameInfo.setVsync(intendedFrameTimeNanos, frameTimeNanos);
+            mFrameInfo.setVsync(intendedFrameTimeNanos, frameTimeNanos, vsyncEventData.id,
+                    vsyncEventData.frameDeadline);
             mFrameScheduled = false;
             mLastFrameTimeNanos = frameTimeNanos;
+            mLastVsyncEventData = vsyncEventData;
         }
 
         try {
@@ -909,7 +937,7 @@ public final class Choreographer {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private void scheduleVsyncLocked() {
         mDisplayEventReceiver.scheduleVsync();
         mIsVsyncScheduled = true;
@@ -980,7 +1008,7 @@ public final class Choreographer {
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case MSG_DO_FRAME:
-                    doFrame(System.nanoTime(), 0);
+                    doFrame(System.nanoTime(), 0, new DisplayEventReceiver.VsyncEventData());
                     break;
                 case MSG_DO_SCHEDULE_VSYNC:
                     doScheduleVsync();
@@ -997,6 +1025,7 @@ public final class Choreographer {
         private boolean mHavePendingVsync;
         private long mTimestampNanos;
         private int mFrame;
+        private VsyncEventData mLastVsyncEventData = new VsyncEventData();
 
         public FrameDisplayEventReceiver(Looper looper, int vsyncSource) {
             super(looper, vsyncSource, CONFIG_CHANGED_EVENT_SUPPRESS);
@@ -1006,7 +1035,8 @@ public final class Choreographer {
         // the internal display and DisplayEventReceiver#scheduleVsync only allows requesting VSYNC
         // for the internal display implicitly.
         @Override
-        public void onVsync(long timestampNanos, long physicalDisplayId, int frame) {
+        public void onVsync(long timestampNanos, long physicalDisplayId, int frame,
+                VsyncEventData vsyncEventData) {
             // Post the vsync event to the Handler.
             // The idea is to prevent incoming vsync events from completely starving
             // the message queue.  If there are no messages in the queue with timestamps
@@ -1029,6 +1059,7 @@ public final class Choreographer {
 
             mTimestampNanos = timestampNanos;
             mFrame = frame;
+            mLastVsyncEventData = vsyncEventData;
             ScrollOptimizer.setVsyncTime(mTimestampNanos);
             Message msg = Message.obtain(mHandler, this);
             msg.setAsynchronous(true);
@@ -1038,7 +1069,7 @@ public final class Choreographer {
         @Override
         public void run() {
             mHavePendingVsync = false;
-            doFrame(mTimestampNanos, mFrame);
+            doFrame(mTimestampNanos, mFrame, mLastVsyncEventData);
         }
     }
 
@@ -1048,7 +1079,7 @@ public final class Choreographer {
         public Object action; // Runnable or FrameCallback
         public Object token;
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public void run(long frameTimeNanos) {
             if (token == FRAME_CALLBACK_TOKEN) {
                 ((FrameCallback)action).doFrame(frameTimeNanos);

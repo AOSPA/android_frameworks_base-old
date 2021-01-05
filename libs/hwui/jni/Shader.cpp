@@ -133,11 +133,25 @@ static jlong LinearGradient_create(JNIEnv* env, jobject, jlong matrixPtr,
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-static jlong RadialGradient_create(JNIEnv* env, jobject, jlong matrixPtr, jfloat x, jfloat y,
-        jfloat radius, jlongArray colorArray, jfloatArray posArray, jint tileMode,
+static jlong RadialGradient_create(JNIEnv* env,
+        jobject,
+        jlong matrixPtr,
+        jfloat startX,
+        jfloat startY,
+        jfloat startRadius,
+        jfloat endX,
+        jfloat endY,
+        jfloat endRadius,
+        jlongArray colorArray,
+        jfloatArray posArray,
+        jint tileMode,
         jlong colorSpaceHandle) {
-    SkPoint center;
-    center.set(x, y);
+
+    SkPoint start;
+    start.set(startX, startY);
+
+    SkPoint end;
+    end.set(endX, endY);
 
     std::vector<SkColor4f> colors = convertColorLongs(env, colorArray);
 
@@ -148,11 +162,17 @@ static jlong RadialGradient_create(JNIEnv* env, jobject, jlong matrixPtr, jfloat
     #error Need to convert float array to SkScalar array before calling the following function.
 #endif
 
-    sk_sp<SkShader> shader = SkGradientShader::MakeRadial(center, radius, &colors[0],
-            GraphicsJNI::getNativeColorSpace(colorSpaceHandle), pos, colors.size(),
-            static_cast<SkTileMode>(tileMode), sGradientShaderFlags, nullptr);
+    auto colorSpace = GraphicsJNI::getNativeColorSpace(colorSpaceHandle);
+    auto skTileMode = static_cast<SkTileMode>(tileMode);
+    sk_sp<SkShader> shader = SkGradientShader::MakeTwoPointConical(start, startRadius, end,
+                    endRadius, &colors[0], std::move(colorSpace), pos, colors.size(), skTileMode,
+                    sGradientShaderFlags, nullptr);
     ThrowIAE_IfNull(env, shader);
 
+    // Explicitly create a new shader with the specified matrix to match existing behavior.
+    // Passing in the matrix in the instantiation above can throw exceptions for non-invertible
+    // matrices. However, makeWithLocalMatrix will still allow for the shader to be created
+    // and skia handles null-shaders internally (i.e. is ignored)
     const SkMatrix* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
     if (matrix) {
         shader = shader->makeWithLocalMatrix(*matrix);
@@ -211,14 +231,26 @@ static jlong ComposeShader_create(JNIEnv* env, jobject o, jlong matrixPtr,
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 static jlong RuntimeShader_create(JNIEnv* env, jobject, jlong shaderFactory, jlong matrixPtr,
-        jbyteArray inputs, jlong colorSpaceHandle, jboolean isOpaque) {
+        jbyteArray inputs, jlongArray inputShaders, jlong colorSpaceHandle, jboolean isOpaque) {
     SkRuntimeEffect* effect = reinterpret_cast<SkRuntimeEffect*>(shaderFactory);
     AutoJavaByteArray arInputs(env, inputs);
+
+    std::vector<sk_sp<SkShader>> shaderVector;
+    if (inputShaders) {
+        jsize shaderCount = env->GetArrayLength(inputShaders);
+        shaderVector.resize(shaderCount);
+        jlong* arrayPtr = env->GetLongArrayElements(inputShaders, NULL);
+        for (int i = 0; i < shaderCount; i++) {
+            shaderVector[i] = sk_ref_sp(reinterpret_cast<SkShader*>(arrayPtr[i]));
+        }
+        env->ReleaseLongArrayElements(inputShaders, arrayPtr, 0);
+    }
 
     sk_sp<SkData> fData;
     fData = SkData::MakeWithCopy(arInputs.ptr(), arInputs.length());
     const SkMatrix* matrix = reinterpret_cast<const SkMatrix*>(matrixPtr);
-    sk_sp<SkShader> shader = effect->makeShader(fData, nullptr, 0, matrix, isOpaque == JNI_TRUE);
+    sk_sp<SkShader> shader = effect->makeShader(fData, shaderVector.data(), shaderVector.size(),
+                                                matrix, isOpaque == JNI_TRUE);
     ThrowIAE_IfNull(env, shader);
 
     return reinterpret_cast<jlong>(shader.release());
@@ -228,9 +260,12 @@ static jlong RuntimeShader_create(JNIEnv* env, jobject, jlong shaderFactory, jlo
 
 static jlong RuntimeShader_createShaderFactory(JNIEnv* env, jobject, jstring sksl) {
     ScopedUtfChars strSksl(env, sksl);
-    sk_sp<SkRuntimeEffect> effect = std::get<0>(SkRuntimeEffect::Make(SkString(strSksl.c_str())));
-    ThrowIAE_IfNull(env, effect);
-
+    auto result = SkRuntimeEffect::Make(SkString(strSksl.c_str()));
+    sk_sp<SkRuntimeEffect> effect = std::get<0>(result);
+    if (!effect) {
+        const auto& err = std::get<1>(result);
+        doThrowIAE(env, err.c_str());
+    }
     return reinterpret_cast<jlong>(effect.release());
 }
 
@@ -264,7 +299,7 @@ static const JNINativeMethod gLinearGradientMethods[] = {
 };
 
 static const JNINativeMethod gRadialGradientMethods[] = {
-    { "nativeCreate",     "(JFFF[J[FIJ)J",  (void*)RadialGradient_create     },
+    { "nativeCreate",     "(JFFFFFF[J[FIJ)J",  (void*)RadialGradient_create     },
 };
 
 static const JNINativeMethod gSweepGradientMethods[] = {
@@ -277,7 +312,7 @@ static const JNINativeMethod gComposeShaderMethods[] = {
 
 static const JNINativeMethod gRuntimeShaderMethods[] = {
     { "nativeGetFinalizer",   "()J",    (void*)RuntimeShader_getNativeFinalizer },
-    { "nativeCreate",     "(JJ[BJZ)J",  (void*)RuntimeShader_create     },
+    { "nativeCreate",     "(JJ[B[JJZ)J",  (void*)RuntimeShader_create     },
     { "nativeCreateShaderFactory",     "(Ljava/lang/String;)J",
       (void*)RuntimeShader_createShaderFactory     },
 };

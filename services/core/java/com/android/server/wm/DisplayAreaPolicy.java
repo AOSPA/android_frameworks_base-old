@@ -22,8 +22,11 @@ import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_MAGNIFICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
+import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
+import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.window.DisplayAreaOrganizer.FEATURE_DEFAULT_TASK_CONTAINER;
 import static android.window.DisplayAreaOrganizer.FEATURE_FULLSCREEN_MAGNIFICATION;
+import static android.window.DisplayAreaOrganizer.FEATURE_HIDE_DISPLAY_CUTOUT;
 import static android.window.DisplayAreaOrganizer.FEATURE_ONE_HANDED;
 import static android.window.DisplayAreaOrganizer.FEATURE_WINDOWED_MAGNIFICATION;
 
@@ -37,18 +40,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Policy that manages DisplayAreas.
+ * Policy that manages {@link DisplayArea}.
  */
 public abstract class DisplayAreaPolicy {
     protected final WindowManagerService mWmService;
 
     /**
-     * The root DisplayArea. Attach all DisplayAreas to this area (directly or indirectly).
+     * The {@link RootDisplayArea} of the whole logical display. All {@link DisplayArea}s must be
+     * (direct or indirect) descendants of this area.
      */
     protected final RootDisplayArea mRoot;
 
     /**
-     * Construct a new {@link DisplayAreaPolicy}
+     * Constructs a new {@link DisplayAreaPolicy}
      *
      * @param wmService the window manager service instance
      * @param root the root display area under which the policy operates
@@ -59,9 +63,10 @@ public abstract class DisplayAreaPolicy {
     }
 
     /**
-     * Called to ask the policy to attach the given WindowToken to the DisplayArea hierarchy.
+     * Called to ask the policy to attach the given {@link WindowToken} to the {@link DisplayArea}
+     * hierarchy.
      *
-     * This must attach the token to mRoot (or one of its descendants).
+     * <p>This must attach the token to {@link #mRoot} (or one of its descendants).
      */
     public abstract void addWindow(WindowToken token);
 
@@ -97,6 +102,12 @@ public abstract class DisplayAreaPolicy {
                             // layer
                             .setNewDisplayAreaSupplier(DisplayArea.Dimmable::new)
                             .build())
+                    .addFeature(new Feature.Builder(wmService.mPolicy, "HideDisplayCutout",
+                            FEATURE_HIDE_DISPLAY_CUTOUT)
+                            .all()
+                            .except(TYPE_NAVIGATION_BAR, TYPE_NAVIGATION_BAR_PANEL, TYPE_STATUS_BAR,
+                                    TYPE_NOTIFICATION_SHADE)
+                            .build())
                     .addFeature(new Feature.Builder(wmService.mPolicy, "OneHanded",
                             FEATURE_ONE_HANDED)
                             .all()
@@ -121,13 +132,14 @@ public abstract class DisplayAreaPolicy {
     /**
      * Provider for {@link DisplayAreaPolicy} instances.
      *
-     * By implementing this interface and overriding the
+     * <p>By implementing this interface and overriding the
      * {@code config_deviceSpecificDisplayAreaPolicyProvider}, a device-specific implementations
      * of {@link DisplayAreaPolicy} can be supplied.
      */
     public interface Provider {
         /**
-         * Instantiates a new DisplayAreaPolicy. It should set up the {@link DisplayArea} hierarchy.
+         * Instantiates a new {@link DisplayAreaPolicy}. It should set up the {@link DisplayArea}
+         * hierarchy.
          *
          * @see DisplayAreaPolicy#DisplayAreaPolicy
          */

@@ -19,6 +19,7 @@ package com.android.server;
 import static com.android.internal.util.ArrayUtils.appendInt;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.pm.FeatureInfo;
@@ -45,6 +46,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.XmlUtils;
 
 import libcore.io.IoUtils;
+import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -54,7 +56,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -94,7 +95,7 @@ public class SystemConfig {
     private static final String VENDOR_SKU_PROPERTY = "ro.boot.product.vendor.sku";
 
     // Group-ids that are given to all packages as read from etc/permissions/*.xml.
-    int[] mGlobalGids;
+    int[] mGlobalGids = EmptyArray.INT;
 
     // These are the built-in uid -> permission mappings that were read from the
     // system configuration files.
@@ -244,6 +245,14 @@ public class SystemConfig {
      * value maps actor name to package name.
      */
     private Map<String, Map<String, String>> mNamedActors = null;
+
+    // Package name of the package pre-installed on a read-only
+    // partition that is used to verify if an overlay package fulfills
+    // the 'config_signature' policy by comparing their signatures:
+    // if the overlay package is signed with the same certificate as
+    // the package declared in 'overlay-config-signature' tag, then the
+    // overlay package fulfills the 'config_signature' policy.
+    private String mOverlayConfigSignaturePackage;
 
     public static SystemConfig getInstance() {
         if (!isSystemProcess()) {
@@ -430,6 +439,12 @@ public class SystemConfig {
     @NonNull
     public Map<String, Map<String, String>> getNamedActors() {
         return mNamedActors != null ? mNamedActors : Collections.emptyMap();
+    }
+
+    @Nullable
+    public String getOverlayConfigSignaturePackage() {
+        return TextUtils.isEmpty(mOverlayConfigSignaturePackage)
+                ? null : mOverlayConfigSignaturePackage;
     }
 
     /**
@@ -1137,6 +1152,27 @@ public class SystemConfig {
                         }
                         XmlUtils.skipCurrentTag(parser);
                     } break;
+                    case "overlay-config-signature": {
+                        if (allowAll) {
+                            String pkgName = parser.getAttributeValue(null, "package");
+                            if (pkgName == null) {
+                                Slog.w(TAG, "<" + name + "> without package in " + permFile
+                                        + " at " + parser.getPositionDescription());
+                            } else {
+                                if (TextUtils.isEmpty(mOverlayConfigSignaturePackage)) {
+                                    mOverlayConfigSignaturePackage = pkgName.intern();
+                                } else {
+                                    throw new IllegalStateException("Reference signature package "
+                                                  + "defined as both "
+                                                  + mOverlayConfigSignaturePackage
+                                                  + " and " + pkgName);
+                                }
+                            }
+                        } else {
+                            logNotAllowedInPartition(name, permFile, parser);
+                        }
+                        XmlUtils.skipCurrentTag(parser);
+                    } break;
                     case "rollback-whitelisted-app": {
                         String pkgname = parser.getAttributeValue(null, "package");
                         if (pkgname == null) {
@@ -1484,7 +1520,12 @@ public class SystemConfig {
         readPublicLibrariesListFile(new File("/vendor/etc/public.libraries.txt"));
         String[] dirs = {"/system/etc", "/system_ext/etc", "/product/etc"};
         for (String dir : dirs) {
-            for (File f : (new File(dir)).listFiles()) {
+            File[] files = new File(dir).listFiles();
+            if (files == null) {
+                Slog.w(TAG, "Public libraries file folder missing: " + dir);
+                continue;
+            }
+            for (File f : files) {
                 String name = f.getName();
                 if (name.startsWith("public.libraries-") && name.endsWith(".txt")) {
                     readPublicLibrariesListFile(f);

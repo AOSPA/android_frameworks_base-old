@@ -16,11 +16,11 @@
 
 package android.app.timezonedetector;
 
-import android.app.timezonedetector.ITimeZoneConfigurationListener;
+import android.app.time.ITimeZoneDetectorListener;
+import android.app.time.TimeZoneCapabilitiesAndConfig;
+import android.app.time.TimeZoneConfiguration;
 import android.app.timezonedetector.ManualTimeZoneSuggestion;
 import android.app.timezonedetector.TelephonyTimeZoneSuggestion;
-import android.app.timezonedetector.TimeZoneCapabilities;
-import android.app.timezonedetector.TimeZoneConfiguration;
 
 /**
  * System private API to communicate with time zone detector service.
@@ -32,16 +32,14 @@ import android.app.timezonedetector.TimeZoneConfiguration;
  * this Binder interface directly. See {@link android.app.timezonedetector.TimeZoneDetectorService}
  * for more complete documentation.
  *
- *
  * {@hide}
  */
 interface ITimeZoneDetectorService {
-  TimeZoneCapabilities getCapabilities();
+  TimeZoneCapabilitiesAndConfig getCapabilitiesAndConfig();
+  void addListener(ITimeZoneDetectorListener listener);
+  void removeListener(ITimeZoneDetectorListener listener);
 
-  TimeZoneConfiguration getConfiguration();
   boolean updateConfiguration(in TimeZoneConfiguration configuration);
-  void addConfigurationListener(ITimeZoneConfigurationListener listener);
-  void removeConfigurationListener(ITimeZoneConfigurationListener listener);
 
   boolean suggestManualTimeZone(in ManualTimeZoneSuggestion timeZoneSuggestion);
   void suggestTelephonyTimeZone(in TelephonyTimeZoneSuggestion timeZoneSuggestion);

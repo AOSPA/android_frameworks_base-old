@@ -25,6 +25,7 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.hardware.input.InputManager;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
@@ -88,7 +89,7 @@ public final class UiAutomationConnection extends IUiAutomationConnection.Stub {
 
     private int mOwningUid;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public UiAutomationConnection() {
     }
 
@@ -180,7 +181,7 @@ public final class UiAutomationConnection extends IUiAutomationConnection.Stub {
     }
 
     @Override
-    public Bitmap takeScreenshot(Rect crop, int rotation) {
+    public Bitmap takeScreenshot(Rect crop) {
         synchronized (mLock) {
             throwIfCalledByNotTrustedUidLocked();
             throwIfShutdownLocked();
@@ -190,7 +191,15 @@ public final class UiAutomationConnection extends IUiAutomationConnection.Stub {
         try {
             int width = crop.width();
             int height = crop.height();
-            return SurfaceControl.screenshot(crop, width, height, rotation);
+            final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
+            final SurfaceControl.DisplayCaptureArgs captureArgs =
+                    new SurfaceControl.DisplayCaptureArgs.Builder(displayToken)
+                            .setSourceCrop(crop)
+                            .setSize(width, height)
+                            .build();
+            final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
+                    SurfaceControl.captureDisplay(captureArgs);
+            return screenshotBuffer == null ? null : screenshotBuffer.asBitmap();
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -364,6 +373,13 @@ public final class UiAutomationConnection extends IUiAutomationConnection.Stub {
     @Override
     public void executeShellCommand(final String command, final ParcelFileDescriptor sink,
             final ParcelFileDescriptor source) throws RemoteException {
+        executeShellCommandWithStderr(command, sink, source, null /* stderrSink */);
+    }
+
+    @Override
+    public void executeShellCommandWithStderr(final String command, final ParcelFileDescriptor sink,
+            final ParcelFileDescriptor source, final ParcelFileDescriptor stderrSink)
+            throws RemoteException {
         synchronized (mLock) {
             throwIfCalledByNotTrustedUidLocked();
             throwIfShutdownLocked();
@@ -401,6 +417,18 @@ public final class UiAutomationConnection extends IUiAutomationConnection.Stub {
             writeToProcess = null;
         }
 
+        // Read from process stderr and write to pipe
+        final Thread readStderrFromProcess;
+        if (stderrSink != null) {
+            InputStream sink_in = process.getErrorStream();
+            OutputStream sink_out = new FileOutputStream(stderrSink.getFileDescriptor());
+
+            readStderrFromProcess = new Thread(new Repeater(sink_in, sink_out));
+            readStderrFromProcess.start();
+        } else {
+            readStderrFromProcess = null;
+        }
+
         Thread cleanup = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -411,14 +439,18 @@ public final class UiAutomationConnection extends IUiAutomationConnection.Stub {
                     if (readFromProcess != null) {
                         readFromProcess.join();
                     }
+                    if (readStderrFromProcess != null) {
+                        readStderrFromProcess.join();
+                    }
                 } catch (InterruptedException exc) {
                     Log.e(TAG, "At least one of the threads was interrupted");
                 }
                 IoUtils.closeQuietly(sink);
                 IoUtils.closeQuietly(source);
+                IoUtils.closeQuietly(stderrSink);
                 process.destroy();
-                }
-            });
+            }
+        });
         cleanup.start();
     }
 

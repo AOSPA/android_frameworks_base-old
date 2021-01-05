@@ -35,6 +35,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_BA
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UiContext;
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
 import android.app.SearchManager;
@@ -76,7 +77,7 @@ import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.IRotationWatcher.Stub;
-import android.view.IScrollCaptureController;
+import android.view.IScrollCaptureCallbacks;
 import android.view.IWindowManager;
 import android.view.InputDevice;
 import android.view.InputEvent;
@@ -342,17 +343,17 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
     static final RotationWatcher sRotationWatcher = new RotationWatcher();
 
     @UnsupportedAppUsage
-    public PhoneWindow(Context context) {
+    public PhoneWindow(@UiContext Context context) {
         super(context);
         mLayoutInflater = LayoutInflater.from(context);
         mRenderShadowsInCompositor = Settings.Global.getInt(context.getContentResolver(),
-                DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR, 0) != 0;
+                DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR, 1) != 0;
     }
 
     /**
      * Constructor for main window of an activity.
      */
-    public PhoneWindow(Context context, Window preservedWindow,
+    public PhoneWindow(@UiContext Context context, Window preservedWindow,
             ActivityConfigCallback activityConfigCallback) {
         this(context);
         // Only main activity windows use decor context, all the other windows depend on whatever
@@ -1510,11 +1511,13 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
         if (drawable != mBackgroundDrawable) {
             mBackgroundDrawable = drawable;
             if (mDecor != null) {
+                mDecor.startChanging();
                 mDecor.setWindowBackground(drawable);
                 if (mBackgroundFallbackDrawable != null) {
                     mDecor.setBackgroundFallback(drawable != null ? null :
                             mBackgroundFallbackDrawable);
                 }
+                mDecor.finishChanging();
             }
         }
     }
@@ -1915,8 +1918,8 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
                 // If we have a session send it the volume command, otherwise
                 // use the suggested stream.
                 if (mMediaController != null) {
-                    getMediaSessionManager().dispatchVolumeKeyEventAsSystemService(
-                            mMediaController.getSessionToken(), event);
+                    getMediaSessionManager().dispatchVolumeKeyEventToSessionAsSystemService(event,
+                            mMediaController.getSessionToken());
                 } else {
                     getMediaSessionManager().dispatchVolumeKeyEventAsSystemService(event,
                             mVolumeControlStreamType);
@@ -1937,8 +1940,8 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
             case KeyEvent.KEYCODE_MEDIA_RECORD:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: {
                 if (mMediaController != null) {
-                    if (getMediaSessionManager().dispatchMediaKeyEventAsSystemService(
-                            mMediaController.getSessionToken(), event)) {
+                    if (getMediaSessionManager().dispatchMediaKeyEventToSessionAsSystemService(
+                            event, mMediaController.getSessionToken())) {
                         return true;
                     }
                 }
@@ -2009,8 +2012,8 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
                 // If we have a session send it the volume command, otherwise
                 // use the suggested stream.
                 if (mMediaController != null) {
-                    getMediaSessionManager().dispatchVolumeKeyEventAsSystemService(
-                            mMediaController.getSessionToken(), event);
+                    getMediaSessionManager().dispatchVolumeKeyEventToSessionAsSystemService(event,
+                            mMediaController.getSessionToken());
                 } else {
                     getMediaSessionManager().dispatchVolumeKeyEventAsSystemService(
                             event, mVolumeControlStreamType);
@@ -2040,8 +2043,8 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
             case KeyEvent.KEYCODE_MEDIA_RECORD:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: {
                 if (mMediaController != null) {
-                    if (getMediaSessionManager().dispatchMediaKeyEventAsSystemService(
-                            mMediaController.getSessionToken(), event)) {
+                    if (getMediaSessionManager().dispatchMediaKeyEventToSessionAsSystemService(
+                            event, mMediaController.getSessionToken())) {
                         return true;
                     }
                 }
@@ -2536,6 +2539,9 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
                         android.R.styleable.Window_backgroundDimAmount, 0.5f);
             }
         }
+
+        params.backgroundBlurRadius = a.getDimensionPixelSize(
+                R.styleable.Window_windowBackgroundBlurRadius, 0);
 
         if (params.windowAnimations == 0) {
             params.windowAnimations = a.getResourceId(
@@ -3909,12 +3915,12 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
     /**
      * System request to begin scroll capture.
      *
-     * @param controller the controller to receive responses
+     * @param callbacks to receive responses
      * @hide
      */
     @Override
-    public void requestScrollCapture(IScrollCaptureController controller) {
-        getViewRootImpl().dispatchScrollCaptureRequest(controller);
+    public void requestScrollCapture(IScrollCaptureCallbacks callbacks) {
+        getViewRootImpl().dispatchScrollCaptureRequest(callbacks);
     }
 
     /**
@@ -3923,7 +3929,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
      * @param callback the callback to add
      */
     @Override
-    public void addScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
+    public void registerScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
         getViewRootImpl().addScrollCaptureCallback(callback);
     }
 
@@ -3933,7 +3939,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
      * @param callback the callback to remove
      */
     @Override
-    public void removeScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
+    public void unregisterScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
         getViewRootImpl().removeScrollCaptureCallback(callback);
     }
 

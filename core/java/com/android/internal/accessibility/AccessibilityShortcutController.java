@@ -70,7 +70,7 @@ import java.util.Map;
 public class AccessibilityShortcutController {
     private static final String TAG = "AccessibilityShortcutController";
 
-    // Dummy component names for framework features
+    // Placeholder component names for framework features
     public static final ComponentName COLOR_INVERSION_COMPONENT_NAME =
             new ComponentName("com.android.server.accessibility", "ColorInversion");
     public static final ComponentName DALTONIZER_COMPONENT_NAME =
@@ -80,6 +80,8 @@ public class AccessibilityShortcutController {
             "com.android.server.accessibility.MagnificationController";
     public static final ComponentName MAGNIFICATION_COMPONENT_NAME =
             new ComponentName("com.android.server.accessibility", "Magnification");
+    public static final ComponentName REDUCE_BRIGHT_COLORS_COMPONENT_NAME =
+            new ComponentName("com.android.server.accessibility", "ReduceBrightColors");
 
     private static final AudioAttributes VIBRATION_ATTRIBUTES = new AudioAttributes.Builder()
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -109,8 +111,8 @@ public class AccessibilityShortcutController {
     public FrameworkObjectProvider mFrameworkObjectProvider = new FrameworkObjectProvider();
 
     /**
-     * @return An immutable map from dummy component names to feature info for toggling a framework
-     *         feature
+     * @return An immutable map from placeholder component names to feature
+     *         info for toggling a framework feature
      */
     public static Map<ComponentName, ToggleableFrameworkFeatureInfo>
         getFrameworkShortcutFeaturesMap() {
@@ -126,6 +128,11 @@ public class AccessibilityShortcutController {
                             Settings.Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED,
                             "1" /* Value to enable */, "0" /* Value to disable */,
                             R.string.color_correction_feature_name));
+            featuresMap.put(REDUCE_BRIGHT_COLORS_COMPONENT_NAME,
+                    new ToggleableFrameworkFeatureInfo(
+                            Settings.Secure.REDUCE_BRIGHT_COLORS_ACTIVATED,
+                            "1" /* Value to enable */, "0" /* Value to disable */,
+                            R.string.reduce_bright_colors_feature_name));
             sFrameworkShortcutFeaturesMap = Collections.unmodifiableMap(featuresMap);
         }
         return sFrameworkShortcutFeaturesMap;

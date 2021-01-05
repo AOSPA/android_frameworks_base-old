@@ -17,13 +17,17 @@
 package com.android.systemui.accessibility;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.RemoteException;
 import android.testing.AndroidTestingRunner;
+import android.testing.TestableLooper;
 import android.view.Display;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.IWindowMagnificationConnection;
@@ -32,23 +36,28 @@ import android.view.accessibility.IWindowMagnificationConnectionCallback;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.statusbar.CommandQueue;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
+@TestableLooper.RunWithLooper
 public class WindowMagnificationTest extends SysuiTestCase {
 
     @Mock
     private AccessibilityManager mAccessibilityManager;
     @Mock
     private ModeSwitchesController mModeSwitchesController;
+    @Mock
+    private NavigationModeController mNavigationModeController;
+    @Mock
+    private IWindowMagnificationConnectionCallback mConnectionCallback;
     private CommandQueue mCommandQueue;
     private WindowMagnification mWindowMagnification;
 
@@ -56,10 +65,17 @@ public class WindowMagnificationTest extends SysuiTestCase {
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         getContext().addMockSystemService(Context.ACCESSIBILITY_SERVICE, mAccessibilityManager);
+        doAnswer(invocation -> {
+            IWindowMagnificationConnection connection = invocation.getArgument(0);
+            connection.setConnectionCallback(mConnectionCallback);
+            return null;
+        }).when(mAccessibilityManager).setWindowMagnificationConnection(
+                any(IWindowMagnificationConnection.class));
 
         mCommandQueue = new CommandQueue(getContext());
         mWindowMagnification = new WindowMagnification(getContext(),
-                getContext().getMainThreadHandler(), mCommandQueue, mModeSwitchesController);
+                getContext().getMainThreadHandler(), mCommandQueue, mModeSwitchesController,
+                mNavigationModeController);
         mWindowMagnification.start();
     }
 
@@ -79,21 +95,34 @@ public class WindowMagnificationTest extends SysuiTestCase {
 
     @Test
     public void onWindowMagnifierBoundsChanged() throws RemoteException {
-        final IWindowMagnificationConnectionCallback connectionCallback = Mockito.mock(
-                IWindowMagnificationConnectionCallback.class);
         final Rect testBounds = new Rect(0, 0, 500, 600);
-        doAnswer(invocation -> {
-            IWindowMagnificationConnection connection = invocation.getArgument(0);
-            connection.setConnectionCallback(connectionCallback);
-            return null;
-        }).when(mAccessibilityManager).setWindowMagnificationConnection(
-                any(IWindowMagnificationConnection.class));
         mCommandQueue.requestWindowMagnificationConnection(true);
         waitForIdleSync();
 
         mWindowMagnification.onWindowMagnifierBoundsChanged(Display.DEFAULT_DISPLAY, testBounds);
 
-        verify(connectionCallback).onWindowMagnifierBoundsChanged(Display.DEFAULT_DISPLAY,
+        verify(mConnectionCallback).onWindowMagnifierBoundsChanged(Display.DEFAULT_DISPLAY,
                 testBounds);
+    }
+
+    @Test
+    public void onPerformScaleAction_enabled_notifyCallback() throws RemoteException {
+        final float newScale = 4.0f;
+        mCommandQueue.requestWindowMagnificationConnection(true);
+        waitForIdleSync();
+
+        mWindowMagnification.onPerformScaleAction(Display.DEFAULT_DISPLAY, newScale);
+
+        verify(mConnectionCallback).onPerformScaleAction(eq(Display.DEFAULT_DISPLAY),
+                eq(newScale));
+    }
+
+    @Test
+    public void onConfigurationChanged_updateModeSwitches() {
+        final Configuration config = new Configuration();
+        config.densityDpi = Configuration.DENSITY_DPI_ANY;
+        mWindowMagnification.onConfigurationChanged(config);
+
+        verify(mModeSwitchesController).onConfigurationChanged(anyInt());
     }
 }

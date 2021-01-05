@@ -30,7 +30,6 @@ import com.android.systemui.statusbar.notification.row.ActivatableNotificationVi
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableView;
 import com.android.systemui.statusbar.notification.stack.StackScrollAlgorithm.SectionProvider;
-import com.android.systemui.statusbar.policy.HeadsUpManager;
 
 import java.util.ArrayList;
 
@@ -42,7 +41,7 @@ public class AmbientState {
     private static final float MAX_PULSE_HEIGHT = 100000f;
 
     private final SectionProvider mSectionProvider;
-    private ArrayList<ExpandableView> mDraggedViews = new ArrayList<>();
+    private ArrayList<View> mDraggedViews = new ArrayList<>();
     private int mScrollY;
     private int mAnchorViewIndex;
     private int mAnchorViewY;
@@ -50,7 +49,6 @@ public class AmbientState {
     private ActivatableNotificationView mActivatedChild;
     private float mOverScrollTopAmount;
     private float mOverScrollBottomAmount;
-    private int mSpeedBumpIndex = -1;
     private boolean mDozing;
     private boolean mHideSensitive;
     private float mStackTranslation;
@@ -81,17 +79,17 @@ public class AmbientState {
     private boolean mAppearing;
     private float mPulseHeight = MAX_PULSE_HEIGHT;
     private float mDozeAmount = 0.0f;
-    private HeadsUpManager mHeadUpManager;
     private Runnable mOnPulseHeightChangedListener;
     private ExpandableNotificationRow mTrackedHeadsUpRow;
     private float mAppearFraction;
 
+    /** Tracks the state from AlertingNotificationManager#hasNotifications() */
+    private boolean mHasAlertEntries;
+
     public AmbientState(
             Context context,
-            @NonNull SectionProvider sectionProvider,
-            HeadsUpManager headsUpManager) {
+            @NonNull SectionProvider sectionProvider) {
         mSectionProvider = sectionProvider;
-        mHeadUpManager = headsUpManager;
         reload(context);
     }
 
@@ -164,7 +162,7 @@ public class AmbientState {
     }
 
     /** Call when dragging begins. */
-    public void onBeginDrag(ExpandableView view) {
+    public void onBeginDrag(View view) {
         mDraggedViews.add(view);
     }
 
@@ -172,7 +170,7 @@ public class AmbientState {
         mDraggedViews.remove(view);
     }
 
-    public ArrayList<ExpandableView> getDraggedViews() {
+    public ArrayList<View> getDraggedViews() {
         return mDraggedViews;
     }
 
@@ -243,14 +241,6 @@ public class AmbientState {
 
     public float getOverScrollAmount(boolean top) {
         return top ? mOverScrollTopAmount : mOverScrollBottomAmount;
-    }
-
-    public int getSpeedBumpIndex() {
-        return mSpeedBumpIndex;
-    }
-
-    public void setSpeedBumpIndex(int shelfIndex) {
-        mSpeedBumpIndex = shelfIndex;
     }
 
     public SectionProvider getSectionProvider() {
@@ -393,7 +383,7 @@ public class AmbientState {
     }
 
     public boolean hasPulsingNotifications() {
-        return mPulsing && mHeadUpManager != null && mHeadUpManager.hasNotifications();
+        return mPulsing && mHasAlertEntries;
     }
 
     public void setPulsing(boolean hasPulsing) {
@@ -408,10 +398,7 @@ public class AmbientState {
     }
 
     public boolean isPulsing(NotificationEntry entry) {
-        if (!mPulsing || mHeadUpManager == null) {
-            return false;
-        }
-        return mHeadUpManager.isAlerting(entry.getKey());
+        return mPulsing && entry.isAlerting();
     }
 
     public boolean isPanelTracking() {
@@ -567,5 +554,9 @@ public class AmbientState {
 
     public float getAppearFraction() {
         return mAppearFraction;
+    }
+
+    public void setHasAlertEntries(boolean hasAlertEntries) {
+        mHasAlertEntries = hasAlertEntries;
     }
 }

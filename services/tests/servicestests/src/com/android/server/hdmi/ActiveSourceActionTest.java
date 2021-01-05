@@ -74,6 +74,8 @@ public class ActiveSourceActionTest {
         when(mContextSpy.getSystemService(PowerManager.class)).thenReturn(powerManager);
         when(mIPowerManagerMock.isInteractive()).thenReturn(true);
 
+        HdmiCecConfig hdmiCecConfig = new FakeHdmiCecConfig(mContextSpy);
+
         mHdmiControlService = new HdmiControlService(mContextSpy) {
             @Override
             AudioManager getAudioManager() {
@@ -104,17 +106,22 @@ public class ActiveSourceActionTest {
             void writeStringSystemProperty(String key, String value) {
                 // do nothing
             }
+
+            @Override
+            HdmiCecConfig getHdmiCecConfig() {
+                return hdmiCecConfig;
+            }
         };
 
         Looper looper = mTestLooper.getLooper();
         mHdmiControlService.setIoLooper(looper);
         mNativeWrapper = new FakeNativeWrapper();
         HdmiCecController hdmiCecController = HdmiCecController.createWithNativeWrapper(
-                this.mHdmiControlService, mNativeWrapper);
+                this.mHdmiControlService, mNativeWrapper, mHdmiControlService.getAtomWriter());
         mHdmiControlService.setCecController(hdmiCecController);
         mHdmiControlService.setHdmiMhlController(HdmiMhlControllerStub.create(mHdmiControlService));
         mHdmiControlService.setMessageValidator(new HdmiCecMessageValidator(mHdmiControlService));
-        mHdmiControlService.initPortInfo();
+        mHdmiControlService.initService();
         mPhysicalAddress = 0x2000;
         mNativeWrapper.setPhysicalAddress(mPhysicalAddress);
         mTestLooper.dispatchAll();
@@ -141,6 +148,26 @@ public class ActiveSourceActionTest {
 
         assertThat(mNativeWrapper.getResultMessages()).contains(activeSource);
         assertThat(mNativeWrapper.getResultMessages()).contains(menuStatus);
+    }
+
+    @Test
+    public void playbackDevice_updatesActiveSourceState() {
+        HdmiCecLocalDevicePlayback playbackDevice = new HdmiCecLocalDevicePlayback(
+                mHdmiControlService);
+        playbackDevice.init();
+        mLocalDevices.add(playbackDevice);
+        mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
+        mTestLooper.dispatchAll();
+
+        HdmiCecFeatureAction action = new com.android.server.hdmi.ActiveSourceAction(
+                playbackDevice, ADDR_TV);
+        playbackDevice.addAndStartAction(action);
+        mTestLooper.dispatchAll();
+
+        assertThat(playbackDevice.getActiveSource().logicalAddress).isEqualTo(
+                playbackDevice.mAddress);
+        assertThat(playbackDevice.getActiveSource().physicalAddress).isEqualTo(mPhysicalAddress);
+        assertThat(playbackDevice.isActiveSource()).isTrue();
     }
 
     @Test

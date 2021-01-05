@@ -235,6 +235,29 @@ import java.util.function.Consumer;
 public abstract class AccessibilityService extends Service {
 
     /**
+     * The user has performed a touch-exploration gesture on the touch screen without ever
+     * triggering gesture detection. This gesture is only dispatched when {@link
+     * AccessibilityServiceInfo#FLAG_SEND_MOTION_EVENTS} is set.
+     *
+     * @hide
+     */
+    public static final int GESTURE_TOUCH_EXPLORATION = -2;
+
+    /**
+     * The user has performed a passthrough gesture on the touch screen without ever triggering
+     * gesture detection. This gesture is only dispatched when {@link
+     * AccessibilityServiceInfo#FLAG_SEND_MOTION_EVENTS} is set.
+     * @hide
+     */
+    public static final int GESTURE_PASSTHROUGH = -1;
+
+    /**
+     * The user has performed an unrecognized gesture on the touch screen. This gesture is only
+     * dispatched when {@link AccessibilityServiceInfo#FLAG_SEND_MOTION_EVENTS} is set.
+     */
+    public static final int GESTURE_UNKNOWN = 0;
+
+    /**
      * The user has performed a swipe up gesture on the touch screen.
      */
     public static final int GESTURE_SWIPE_UP = 1;
@@ -420,6 +443,15 @@ public abstract class AccessibilityService extends Service {
 
     /** The user has performed a three-finger double tap and hold gesture on the touch screen. */
     public static final int GESTURE_3_FINGER_DOUBLE_TAP_AND_HOLD = 41;
+
+    /** The user has performed a two-finger  single-tap and hold gesture on the touch screen. */
+    public static final int GESTURE_2_FINGER_SINGLE_TAP_AND_HOLD = 43;
+
+    /** The user has performed a three-finger  single-tap and hold gesture on the touch screen. */
+    public static final int GESTURE_3_FINGER_SINGLE_TAP_AND_HOLD = 44;
+
+    /** The user has performed a three-finger  triple-tap and hold gesture on the touch screen. */
+    public static final int GESTURE_3_FINGER_TRIPLE_TAP_AND_HOLD = 45;
 
     /** The user has performed a two-finger double tap and hold gesture on the touch screen. */
     public static final int GESTURE_4_FINGER_DOUBLE_TAP_AND_HOLD = 42;

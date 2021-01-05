@@ -63,7 +63,7 @@ public final class GeofenceProxy {
     private GeofenceProxy(Context context, IGpsGeofenceHardware gpsGeofence) {
         mGpsGeofenceHardware = Objects.requireNonNull(gpsGeofence);
         mServiceWatcher = new ServiceWatcher(context, SERVICE_ACTION,
-                this::updateGeofenceHardware, null,
+                (binder, service) -> updateGeofenceHardware(binder), null,
                 com.android.internal.R.bool.config_enableGeofenceOverlay,
                 com.android.internal.R.string.config_geofenceProviderPackageName);
 
@@ -75,16 +75,16 @@ public final class GeofenceProxy {
     }
 
     private boolean register(Context context) {
-        if (mServiceWatcher.register()) {
+        boolean resolves = mServiceWatcher.checkServiceResolves();
+        if (resolves) {
+            mServiceWatcher.register();
             context.bindServiceAsUser(
                     new Intent(context, GeofenceHardwareService.class),
                     new GeofenceProxyServiceConnection(),
                     Context.BIND_AUTO_CREATE,
                     UserHandle.SYSTEM);
-            return true;
         }
-
-        return false;
+        return resolves;
     }
 
     private class GeofenceProxyServiceConnection implements ServiceConnection {

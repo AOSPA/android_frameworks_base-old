@@ -379,6 +379,7 @@ public class Binder implements IBinder {
      *
      * @see #clearCallingIdentity
      */
+    @CriticalNative
     public static final native void restoreCallingIdentity(long token);
 
     /**
@@ -391,8 +392,8 @@ public class Binder implements IBinder {
      * @hide
      */
     public static final void withCleanCallingIdentity(@NonNull ThrowingRunnable action) {
-        long callingIdentity = clearCallingIdentity();
         Throwable throwableToPropagate = null;
+        final long callingIdentity = clearCallingIdentity();
         try {
             action.runOrThrow();
         } catch (Throwable throwable) {
@@ -415,8 +416,8 @@ public class Binder implements IBinder {
      * @hide
      */
     public static final <T> T withCleanCallingIdentity(@NonNull ThrowingSupplier<T> action) {
-        long callingIdentity = clearCallingIdentity();
         Throwable throwableToPropagate = null;
+        final long callingIdentity = clearCallingIdentity();
         try {
             return action.getOrThrow();
         } catch (Throwable throwable) {
@@ -1102,7 +1103,6 @@ public class Binder implements IBinder {
     }
 
     private static native long getNativeBBinderHolder();
-    private static native long getFinalizer();
 
     /**
      * By default, we use the calling uid since we can always trust it.

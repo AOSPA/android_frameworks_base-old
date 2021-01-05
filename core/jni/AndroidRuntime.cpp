@@ -106,6 +106,7 @@ extern int register_android_util_SeempLog(JNIEnv* env);
  */
 extern int register_android_app_admin_SecurityLog(JNIEnv* env);
 extern int register_android_content_AssetManager(JNIEnv* env);
+extern int register_android_util_CharsetUtils(JNIEnv* env);
 extern int register_android_util_EventLog(JNIEnv* env);
 extern int register_android_util_Log(JNIEnv* env);
 extern int register_android_util_MemoryIntArray(JNIEnv* env);
@@ -190,6 +191,7 @@ extern int register_com_android_internal_content_om_OverlayConfig(JNIEnv *env);
 extern int register_com_android_internal_os_ClassLoaderFactory(JNIEnv* env);
 extern int register_com_android_internal_os_FuseAppLoop(JNIEnv* env);
 extern int register_com_android_internal_os_KernelCpuUidBpfMapReader(JNIEnv *env);
+extern int register_com_android_internal_os_KernelSingleProcessCpuThreadReader(JNIEnv* env);
 extern int register_com_android_internal_os_KernelSingleUidTimeReader(JNIEnv *env);
 extern int register_com_android_internal_os_Zygote(JNIEnv *env);
 extern int register_com_android_internal_os_ZygoteInit(JNIEnv *env);
@@ -1451,6 +1453,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_com_android_internal_os_RuntimeInit),
         REG_JNI(register_com_android_internal_os_ZygoteInit_nativeZygoteInit),
         REG_JNI(register_android_os_SystemClock),
+        REG_JNI(register_android_util_CharsetUtils),
         REG_JNI(register_android_util_EventLog),
         REG_JNI(register_android_util_Log),
         REG_JNI(register_android_util_MemoryIntArray),
@@ -1583,7 +1586,10 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_security_Scrypt),
         REG_JNI(register_com_android_internal_content_NativeLibraryHelper),
         REG_JNI(register_com_android_internal_os_FuseAppLoop),
+        REG_JNI(register_com_android_internal_os_KernelCpuUidBpfMapReader),
+        REG_JNI(register_com_android_internal_os_KernelSingleUidTimeReader),
         REG_JNI(register_com_android_internal_app_ActivityTrigger),
+        REG_JNI(register_com_android_internal_os_KernelSingleProcessCpuThreadReader),
 };
 
 /*

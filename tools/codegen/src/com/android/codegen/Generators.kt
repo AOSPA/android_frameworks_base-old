@@ -3,7 +3,10 @@ package com.android.codegen
 import com.github.javaparser.ast.body.FieldDeclaration
 import com.github.javaparser.ast.body.MethodDeclaration
 import com.github.javaparser.ast.body.VariableDeclarator
-import com.github.javaparser.ast.expr.*
+import com.github.javaparser.ast.expr.AnnotationExpr
+import com.github.javaparser.ast.expr.ArrayInitializerExpr
+import com.github.javaparser.ast.expr.LiteralExpr
+import com.github.javaparser.ast.expr.UnaryExpr
 import java.io.File
 
 
@@ -13,10 +16,7 @@ import java.io.File
 fun ClassPrinter.generateConstDefs() {
     val consts = classAst.fields.filter {
         it.isStatic && it.isFinal && it.variables.all { variable ->
-            val initializer = variable.initializer.orElse(null)
-            val isLiteral = initializer is LiteralExpr
-                    || (initializer is UnaryExpr && initializer.expression is LiteralExpr)
-            isLiteral && variable.type.asString() in listOf("int", "String")
+            variable.type.asString() in listOf("int", "String")
         } && it.annotations.none { it.nameAsString == DataClassSuppressConstDefs }
     }.flatMap { field -> field.variables.map { it to field } }
     val intConsts = consts.filter { it.first.type.asString() == "int" }
@@ -703,7 +703,7 @@ fun ClassPrinter.generateSetters() {
 
             generateFieldJavadoc(forceHide = FeatureFlag.SETTERS.hidden)
             +GENERATED_MEMBER_HEADER
-            "public $ClassType set$NameUpperCamel($annotatedTypeForSetterParam value)" {
+            "public @$NonNull $ClassType set$NameUpperCamel($annotatedTypeForSetterParam value)" {
                 generateSetFrom("value")
                 +"return this;"
             }

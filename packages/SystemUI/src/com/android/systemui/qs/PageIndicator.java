@@ -2,8 +2,11 @@ package com.android.systemui.qs;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.content.res.TypedArray;
+import android.graphics.drawable.Animatable2;
 import android.graphics.drawable.AnimatedVectorDrawable;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -29,9 +32,6 @@ public class PageIndicator extends ViewGroup {
 
     private static final long ANIMATION_DURATION = 250;
 
-    // The size of a single dot in relation to the whole animation.
-    private static final float SINGLE_SCALE = .4f;
-
     private static final float MINOR_ALPHA = .42f;
 
     private final ArrayList<Integer> mQueuedPositions = new ArrayList<>();
@@ -44,6 +44,24 @@ public class PageIndicator extends ViewGroup {
     private int mPosition = -1;
     private boolean mAnimating;
 
+    private final Animatable2.AnimationCallback mAnimationCallback =
+            new Animatable2.AnimationCallback() {
+
+                @Override
+                public void onAnimationEnd(Drawable drawable) {
+                    super.onAnimationEnd(drawable);
+                    if (DEBUG) Log.d(TAG, "onAnimationEnd - queued: " + mQueuedPositions.size());
+                    if (drawable instanceof AnimatedVectorDrawable) {
+                        ((AnimatedVectorDrawable) drawable).unregisterAnimationCallback(
+                                mAnimationCallback);
+                    }
+                    mAnimating = false;
+                    if (mQueuedPositions.size() != 0) {
+                        setPosition(mQueuedPositions.remove(0));
+                    }
+                }
+            };
+
     public PageIndicator(Context context, AttributeSet attrs) {
         super(context, attrs);
 
@@ -55,11 +73,10 @@ public class PageIndicator extends ViewGroup {
         }
         array.recycle();
 
-        mPageIndicatorWidth =
-                (int) mContext.getResources().getDimension(R.dimen.qs_page_indicator_width);
-        mPageIndicatorHeight =
-                (int) mContext.getResources().getDimension(R.dimen.qs_page_indicator_height);
-        mPageDotWidth = (int) (mPageIndicatorWidth * SINGLE_SCALE);
+        Resources res = context.getResources();
+        mPageIndicatorWidth = res.getDimensionPixelSize(R.dimen.qs_page_indicator_width);
+        mPageIndicatorHeight = res.getDimensionPixelSize(R.dimen.qs_page_indicator_height);
+        mPageDotWidth = res.getDimensionPixelSize(R.dimen.qs_page_indicator_dot_width);
     }
 
     public void setNumPages(int numPages) {
@@ -197,10 +214,8 @@ public class PageIndicator extends ViewGroup {
         final AnimatedVectorDrawable avd = (AnimatedVectorDrawable) getContext().getDrawable(res);
         imageView.setImageDrawable(avd);
         avd.forceAnimationOnUI();
+        avd.registerAnimationCallback(mAnimationCallback);
         avd.start();
-        // TODO: Figure out how to user an AVD animation callback instead, which doesn't
-        // seem to be working right now...
-        postDelayed(mAnimationDone, ANIMATION_DURATION);
     }
 
     private int getTransition(boolean fromB, boolean isMajorAState, boolean isMajor) {
@@ -264,15 +279,4 @@ public class PageIndicator extends ViewGroup {
             getChildAt(i).layout(left, 0, mPageIndicatorWidth + left, mPageIndicatorHeight);
         }
     }
-
-    private final Runnable mAnimationDone = new Runnable() {
-        @Override
-        public void run() {
-            if (DEBUG) Log.d(TAG, "onAnimationEnd - queued: " + mQueuedPositions.size());
-            mAnimating = false;
-            if (mQueuedPositions.size() != 0) {
-                setPosition(mQueuedPositions.remove(0));
-            }
-        }
-    };
 }

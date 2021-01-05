@@ -57,7 +57,7 @@ public class QSDetail extends LinearLayout {
     protected TextView mDetailDoneButton;
     private QSDetailClipper mClipper;
     private DetailAdapter mDetailAdapter;
-    private QSPanel mQsPanel;
+    private QSPanelController mQsPanelController;
 
     protected View mQsDetailHeader;
     protected TextView mQsDetailHeaderTitle;
@@ -76,7 +76,7 @@ public class QSDetail extends LinearLayout {
     private int mOpenY;
     private boolean mAnimatingOpen;
     private boolean mSwitchState;
-    private View mFooter;
+    private QSFooter mFooter;
 
     public QSDetail(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -114,18 +114,20 @@ public class QSDetail extends LinearLayout {
             public void onClick(View v) {
                 announceForAccessibility(
                         mContext.getString(R.string.accessibility_desc_quick_settings));
-                mQsPanel.closeDetail();
+                mQsPanelController.closeDetail();
             }
         };
         mDetailDoneButton.setOnClickListener(doneListener);
     }
 
-    public void setQsPanel(QSPanel panel, QuickStatusBarHeader header, View footer) {
-        mQsPanel = panel;
+    /** */
+    public void setQsPanel(QSPanelController panelController, QuickStatusBarHeader header,
+            QSFooter footer) {
+        mQsPanelController = panelController;
         mHeader = header;
         mFooter = footer;
         mHeader.setCallback(mQsPanelCallback);
-        mQsPanel.setCallback(mQsPanelCallback);
+        mQsPanelController.setCallback(mQsPanelCallback);
     }
 
     public void setHost(QSTileHost host) {
@@ -220,7 +222,7 @@ public class QSDetail extends LinearLayout {
             listener = mTeardownDetailWhenDone;
             mHeader.setVisibility(View.VISIBLE);
             mFooter.setVisibility(View.VISIBLE);
-            mQsPanel.setGridContentVisibility(true);
+            mQsPanelController.setGridContentVisibility(true);
             mQsPanelCallback.onScanStateChanged(false);
         }
         sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
@@ -361,7 +363,7 @@ public class QSDetail extends LinearLayout {
         public void onAnimationEnd(Animator animation) {
             // Only hide content if still in detail state.
             if (mDetailAdapter != null) {
-                mQsPanel.setGridContentVisibility(false);
+                mQsPanelController.setGridContentVisibility(false);
                 mHeader.setVisibility(View.INVISIBLE);
                 mFooter.setVisibility(View.INVISIBLE);
             }

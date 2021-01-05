@@ -22,7 +22,10 @@ import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.provider.Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_MAGNIFICATION_CONTROLLER;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_2BUTTON_OVERLAY;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY;
 
+import static com.android.internal.accessibility.AccessibilityShortcutController.MAGNIFICATION_CONTROLLER_NAME;
 import static com.android.providers.settings.SettingsState.FALLBACK_FILE_SUFFIX;
 
 import android.Manifest;
@@ -41,6 +44,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.om.IOverlayManager;
+import android.content.om.OverlayInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
@@ -325,10 +329,6 @@ public class SettingsProvider extends ContentProvider {
         return SettingsState.getUserIdFromKey(key);
     }
 
-    public static String settingTypeToString(int type) {
-        return SettingsState.settingTypeToString(type);
-    }
-
     public static String keyToString(int key) {
         return SettingsState.keyToString(key);
     }
@@ -370,8 +370,7 @@ public class SettingsProvider extends ContentProvider {
             }
 
             case Settings.CALL_METHOD_GET_SECURE: {
-                Setting setting = getSecureSetting(name, requestingUserId,
-                        /*enableOverride=*/ true);
+                Setting setting = getSecureSetting(name, requestingUserId);
                 return packageValueForCallResult(setting, isTrackingGeneration(args));
             }
 
@@ -578,7 +577,7 @@ public class SettingsProvider extends ContentProvider {
     }
 
     private ArrayList<String> buildSettingsList(Cursor cursor) {
-        final ArrayList<String> lines = new ArrayList<String>();
+        final ArrayList<String> lines = new ArrayList<>();
         try {
             while (cursor != null && cursor.moveToNext()) {
                 lines.add(cursor.getString(1) + "=" + cursor.getString(2));
@@ -1378,10 +1377,6 @@ public class SettingsProvider extends ContentProvider {
     }
 
     private Setting getSecureSetting(String name, int requestingUserId) {
-        return getSecureSetting(name, requestingUserId, /*enableOverride=*/ false);
-    }
-
-    private Setting getSecureSetting(String name, int requestingUserId, boolean enableOverride) {
         if (DEBUG) {
             Slog.v(LOG_TAG, "getSecureSetting(" + name + ", " + requestingUserId + ")");
         }
@@ -1409,14 +1404,6 @@ public class SettingsProvider extends ContentProvider {
             PackageInfo callingPkg = getCallingPackageInfo(owningUserId);
             synchronized (mLock) {
                 return getSsaidSettingLocked(callingPkg, owningUserId);
-            }
-        }
-        if (enableOverride) {
-            if (Secure.LOCATION_MODE.equals(name)) {
-                final Setting overridden = getLocationModeSetting(owningUserId);
-                if (overridden != null) {
-                    return overridden;
-                }
             }
         }
 
@@ -1506,35 +1493,6 @@ public class SettingsProvider extends ContentProvider {
             };
         }
         return null;
-    }
-
-    private Setting getLocationModeSetting(int owningUserId) {
-        synchronized (mLock) {
-            final Setting setting = getGlobalSetting(
-                    Global.LOCATION_GLOBAL_KILL_SWITCH);
-            if (!"1".equals(setting.getValue())) {
-                return null;
-            }
-            // Global kill-switch is enabled. Return an empty value.
-            final SettingsState settingsState = mSettingsRegistry.getSettingsLocked(
-                    SETTINGS_TYPE_SECURE, owningUserId);
-            return settingsState.new Setting(
-                    Secure.LOCATION_MODE,
-                    "", // value
-                    "", // tag
-                    "", // default value
-                    "", // package name
-                    false, // from system
-                    "0" // id
-            ) {
-                @Override
-                public boolean update(String value, boolean setDefault, String packageName,
-                        String tag, boolean forceNonSystemPackage, boolean overrideableByRestore) {
-                    Slog.wtf(LOG_TAG, "update shouldn't be called on this instance.");
-                    return false;
-                }
-            };
-        }
     }
 
     private boolean insertSecureSetting(String name, String value, String tag,
@@ -1805,12 +1763,8 @@ public class SettingsProvider extends ContentProvider {
 
     private boolean hasWriteSecureSettingsPermission() {
         // Write secure settings is a more protected permission. If caller has it we are good.
-        if (getContext().checkCallingOrSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-                == PackageManager.PERMISSION_GRANTED) {
-            return true;
-        }
-
-        return false;
+        return getContext().checkCallingOrSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     private void validateSystemSettingValue(String name, String value) {
@@ -2576,7 +2530,7 @@ public class SettingsProvider extends ContentProvider {
         public void syncSsaidTableOnStart() {
             synchronized (mLock) {
                 // Verify that each user's packages and ssaid's are in sync.
-                for (UserInfo user : mUserManager.getUsers(true)) {
+                for (UserInfo user : mUserManager.getAliveUsers()) {
                     // Get all uids for the user's packages.
                     final List<PackageInfo> packages;
                     try {
@@ -3007,7 +2961,7 @@ public class SettingsProvider extends ContentProvider {
 
                 final long identity = Binder.clearCallingIdentity();
                 try {
-                    List<UserInfo> users = mUserManager.getUsers(true);
+                    List<UserInfo> users = mUserManager.getAliveUsers();
 
                     final int userCount = users.size();
                     for (int i = 0; i < userCount; i++) {
@@ -3171,12 +3125,6 @@ public class SettingsProvider extends ContentProvider {
             if (isGlobalSettingsKey(key) || isConfigSettingsKey(key)) {
                 final long token = Binder.clearCallingIdentity();
                 try {
-                    if (Global.LOCATION_GLOBAL_KILL_SWITCH.equals(name)
-                            && isGlobalSettingsKey(key)) {
-                        // When the global kill switch is updated, send the
-                        // change notification for the location setting.
-                        notifyLocationChangeForRunningUsers();
-                    }
                     notifySettingChangeForRunningUsers(key, name);
                 } finally {
                     Binder.restoreCallingIdentity(token);
@@ -3244,33 +3192,13 @@ public class SettingsProvider extends ContentProvider {
             // is a singleton generation entry for the global settings which
             // is already incremented be the caller.
             final Uri uri = getNotificationUriFor(key, name);
-            final List<UserInfo> users = mUserManager.getUsers(/*excludeDying*/ true);
+            final List<UserInfo> users = mUserManager.getAliveUsers();
             for (int i = 0; i < users.size(); i++) {
                 final int userId = users.get(i).id;
                 if (mUserManager.isUserRunning(UserHandle.of(userId))) {
                     mHandler.obtainMessage(MyHandler.MSG_NOTIFY_URI_CHANGED,
                             userId, 0, uri).sendToTarget();
                 }
-            }
-        }
-
-        private void notifyLocationChangeForRunningUsers() {
-            final List<UserInfo> users = mUserManager.getUsers(/*excludeDying=*/ true);
-
-            for (int i = 0; i < users.size(); i++) {
-                final int userId = users.get(i).id;
-
-                if (!mUserManager.isUserRunning(UserHandle.of(userId))) {
-                    continue;
-                }
-
-                // Increment the generation first, so observers always see the new value
-                final int key = makeKey(SETTINGS_TYPE_SECURE, userId);
-                mGenerationRegistry.incrementGeneration(key);
-
-                final Uri uri = getNotificationUriFor(key, Secure.LOCATION_MODE);
-                mHandler.obtainMessage(MyHandler.MSG_NOTIFY_URI_CHANGED,
-                        userId, 0, uri).sendToTarget();
             }
         }
 
@@ -3414,7 +3342,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 191;
+            private static final int SETTINGS_VERSION = 195;
 
             private final int mUserId;
 
@@ -4793,6 +4721,72 @@ public class SettingsProvider extends ContentProvider {
                     currentVersion = 191;
                 }
 
+                if (currentVersion == 191) {
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    int mode = getContext().getResources().getInteger(
+                            com.android.internal.R.integer.config_navBarInteractionMode);
+                    if (mode == NAV_BAR_MODE_GESTURAL) {
+                        switchToDefaultGestureNavBackInset(userId, secureSettings);
+                    }
+                    migrateBackGestureSensitivity(Secure.BACK_GESTURE_INSET_SCALE_LEFT, userId,
+                            secureSettings);
+                    migrateBackGestureSensitivity(Secure.BACK_GESTURE_INSET_SCALE_RIGHT, userId,
+                            secureSettings);
+                    currentVersion = 192;
+                }
+
+                if (currentVersion == 192) {
+                    // Version 192: set the default value for magnification capabilities. If
+                    // magnification is enabled by the user, set it to full-screen, and set a value
+                    // to show a prompt when using the magnification first time after upgrading.
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    final Setting magnificationCapabilities = secureSettings.getSettingLocked(
+                            Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY);
+                    if (magnificationCapabilities.isNull()) {
+                        secureSettings.insertSettingLocked(
+                                Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY,
+                                String.valueOf(getContext().getResources().getInteger(
+                                        R.integer.def_accessibility_magnification_capabilities)),
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+
+                        if (isMagnificationSettingsOn(secureSettings)) {
+                            secureSettings.insertSettingLocked(
+                                    Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY, String.valueOf(
+                                            Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN),
+                                    null, false  /* makeDefault */,
+                                    SettingsState.SYSTEM_PACKAGE_NAME);
+                            secureSettings.insertSettingLocked(
+                                    Secure.ACCESSIBILITY_SHOW_WINDOW_MAGNIFICATION_PROMPT, "1",
+                                    null, false /* makeDefault */,
+                                    SettingsState.SYSTEM_PACKAGE_NAME);
+                        }
+                    }
+                    currentVersion = 193;
+                }
+
+                if (currentVersion == 193) {
+                    // Version 193: remove obsolete LOCATION_PROVIDERS_ALLOWED settings
+                    getSecureSettingsLocked(userId).deleteSettingLocked(
+                            Secure.LOCATION_PROVIDERS_ALLOWED);
+                    currentVersion = 194;
+                }
+
+                if (currentVersion == 194) {
+                    // Version 194: migrate the GNSS_SATELLITE_BLOCKLIST setting
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+                    final Setting newSetting = globalSettings.getSettingLocked(
+                            Global.GNSS_SATELLITE_BLOCKLIST);
+                    final String oldName = "gnss_satellite_blacklist";
+                    final Setting oldSetting = globalSettings.getSettingLocked(oldName);
+                    if (newSetting.isNull() && !oldSetting.isNull()) {
+                        globalSettings.insertSettingLocked(
+                                Global.GNSS_SATELLITE_BLOCKLIST, oldSetting.getValue(), null, true,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                        globalSettings.deleteSettingLocked(oldName);
+                    }
+                    currentVersion = 195;
+                }
+
                 // vXXX: Add new settings above this point.
 
                 if (currentVersion != newVersion) {
@@ -4808,6 +4802,83 @@ public class SettingsProvider extends ContentProvider {
 
                 // Return the current version.
                 return currentVersion;
+            }
+        }
+
+        /**
+         * Previously, We were using separate overlay packages for different back inset sizes. Now,
+         * we have a single overlay package for gesture navigation mode, and set the inset size via
+         * a secure.settings field.
+         *
+         * If a non-default overlay package is enabled, then enable the default overlay exclusively,
+         * and set the calculated inset size difference as a scale value in secure.settings.
+         */
+        private void switchToDefaultGestureNavBackInset(int userId, SettingsState secureSettings) {
+            try {
+                final IOverlayManager om = IOverlayManager.Stub.asInterface(
+                        ServiceManager.getService(Context.OVERLAY_SERVICE));
+                final OverlayInfo info = om.getOverlayInfo(NAV_BAR_MODE_GESTURAL_OVERLAY, userId);
+                if (info != null && !info.isEnabled()) {
+                    final int curInset = getContext().getResources().getDimensionPixelSize(
+                            com.android.internal.R.dimen.config_backGestureInset);
+                    om.setEnabledExclusiveInCategory(NAV_BAR_MODE_GESTURAL_OVERLAY, userId);
+                    final int defInset = getContext().getResources().getDimensionPixelSize(
+                            com.android.internal.R.dimen.config_backGestureInset);
+
+                    final float scale = defInset == 0 ? 1.0f : ((float) curInset) / defInset;
+                    if (scale != 1.0f) {
+                        secureSettings.insertSettingLocked(
+                                Secure.BACK_GESTURE_INSET_SCALE_LEFT,
+                                Float.toString(scale), null /* tag */, false /* makeDefault */,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                        secureSettings.insertSettingLocked(
+                                Secure.BACK_GESTURE_INSET_SCALE_RIGHT,
+                                Float.toString(scale), null /* tag */, false /* makeDefault */,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                        if (DEBUG) {
+                            Slog.v(LOG_TAG, "Moved back sensitivity for user " + userId
+                                    + " to scale " + scale);
+                        }
+                    }
+                }
+            } catch (SecurityException | IllegalStateException | RemoteException e) {
+                Slog.e(LOG_TAG, "Failed to switch to default gesture nav overlay for user "
+                        + userId);
+            }
+        }
+
+        private void migrateBackGestureSensitivity(String side, int userId,
+                SettingsState secureSettings) {
+            final Setting currentScale = secureSettings.getSettingLocked(side);
+            if (currentScale.isNull()) {
+                return;
+            }
+            float current = 1.0f;
+            try {
+                current = Float.parseFloat(currentScale.getValue());
+            } catch (NumberFormatException e) {
+                // Do nothing. Overwrite with default value.
+            }
+
+            // Inset scale migration across all devices
+            //     Old(24dp): 0.66  0.75  0.83  1.00  1.08  1.33  1.66
+            //     New(30dp): 0.60  0.60  1.00  1.00  1.00  1.00  1.33
+            final float low = 0.76f;   // Values smaller than this will map to 0.6
+            final float high = 1.65f;  // Values larger than this will map to 1.33
+            float newScale;
+            if (current < low) {
+                newScale = 0.6f;
+            } else if (current < high) {
+                newScale = 1.0f;
+            } else {
+                newScale = 1.33f;
+            }
+            secureSettings.insertSettingLocked(side, Float.toString(newScale),
+                    null /* tag */, false /* makeDefault */,
+                    SettingsState.SYSTEM_PACKAGE_NAME);
+            if (DEBUG) {
+                Slog.v(LOG_TAG, "Changed back sensitivity from " + current + " to " + newScale
+                        + " for user " + userId + " on " + side);
             }
         }
 
@@ -4853,6 +4924,46 @@ public class SettingsProvider extends ContentProvider {
 
                 }
             }
+        }
+
+        private boolean isMagnificationSettingsOn(SettingsState secureSettings) {
+            if ("1".equals(secureSettings.getSettingLocked(
+                    Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED).getValue())) {
+                return true;
+            }
+
+            final Set<String> a11yButtonTargets = transformColonDelimitedStringToSet(
+                    secureSettings.getSettingLocked(
+                            Secure.ACCESSIBILITY_BUTTON_TARGETS).getValue());
+            if (a11yButtonTargets != null && a11yButtonTargets.contains(
+                    MAGNIFICATION_CONTROLLER_NAME)) {
+                return true;
+            }
+
+            final Set<String> a11yShortcutServices = transformColonDelimitedStringToSet(
+                    secureSettings.getSettingLocked(
+                            Secure.ACCESSIBILITY_SHORTCUT_TARGET_SERVICE).getValue());
+            if (a11yShortcutServices != null && a11yShortcutServices.contains(
+                    MAGNIFICATION_CONTROLLER_NAME)) {
+                return true;
+            }
+            return false;
+        }
+
+        @Nullable
+        private Set<String> transformColonDelimitedStringToSet(String value) {
+            if (TextUtils.isEmpty(value)) return null;
+            final TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
+            splitter.setString(value);
+            final Set<String> items = new HashSet<>();
+            while (splitter.hasNext()) {
+                final String str = splitter.next();
+                if (TextUtils.isEmpty(str)) {
+                    continue;
+                }
+                items.add(str);
+            }
+            return items;
         }
     }
 }

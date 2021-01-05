@@ -32,6 +32,7 @@ import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
@@ -49,6 +50,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.net.wifi.WifiManager;
@@ -58,6 +60,8 @@ import android.os.Parcelable;
 import android.os.RemoteException;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.SparseArray;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
@@ -81,10 +85,13 @@ public class DeviceDiscoveryService extends Service {
 
     static DeviceDiscoveryService sInstance;
 
+    private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
     private WifiManager mWifiManager;
     @Nullable private BluetoothLeScanner mBLEScanner;
-    private ScanSettings mDefaultScanSettings = new ScanSettings.Builder().build();
+    private ScanSettings mDefaultScanSettings = new ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build();
 
     private List<DeviceFilter<?>> mFilters;
     private List<BluetoothLeDeviceFilter> mBLEFilters;
@@ -138,7 +145,8 @@ public class DeviceDiscoveryService extends Service {
 
         if (DEBUG) Log.i(LOG_TAG, "onCreate()");
 
-        mBluetoothAdapter = getSystemService(BluetoothManager.class).getAdapter();
+        mBluetoothManager = getSystemService(BluetoothManager.class);
+        mBluetoothAdapter = mBluetoothManager.getAdapter();
         mBLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
         mWifiManager = getSystemService(WifiManager.class);
 
@@ -181,6 +189,14 @@ public class DeviceDiscoveryService extends Service {
         }
         if (singleMacAddressFilter != null) {
             for (BluetoothDevice dev : emptyIfNull(mBluetoothAdapter.getBondedDevices())) {
+                onDeviceFound(DeviceFilterPair.findMatch(dev, mBluetoothFilters));
+            }
+            for (BluetoothDevice dev : emptyIfNull(
+                    mBluetoothManager.getConnectedDevices(BluetoothProfile.GATT))) {
+                onDeviceFound(DeviceFilterPair.findMatch(dev, mBluetoothFilters));
+            }
+            for (BluetoothDevice dev : emptyIfNull(
+                    mBluetoothManager.getConnectedDevices(BluetoothProfile.GATT_SERVER))) {
                 onDeviceFound(DeviceFilterPair.findMatch(dev, mBluetoothFilters));
             }
         }
@@ -259,18 +275,19 @@ public class DeviceDiscoveryService extends Service {
     private void onDeviceFound(@Nullable DeviceFilterPair device) {
         if (device == null) return;
 
-        if (mDevicesFound.contains(device)) {
-            return;
-        }
-
-        if (DEBUG) Log.i(LOG_TAG, "Found device " + device);
-
         Handler.getMain().sendMessage(obtainMessage(
                 DeviceDiscoveryService::onDeviceFoundMainThread, this, device));
     }
 
     @MainThread
     void onDeviceFoundMainThread(@NonNull DeviceFilterPair device) {
+        if (mDevicesFound.contains(device)) {
+            Log.i(LOG_TAG, "Skipping device " + device + " - already among found devices");
+            return;
+        }
+
+        Log.i(LOG_TAG, "Found device " + device);
+
         if (mDevicesFound.isEmpty()) {
             onReadyToShowUI();
         }
@@ -316,6 +333,8 @@ public class DeviceDiscoveryService extends Service {
         private Drawable BLUETOOTH_ICON = icon(android.R.drawable.stat_sys_data_bluetooth);
         private Drawable WIFI_ICON = icon(com.android.internal.R.drawable.ic_wifi_signal_3);
 
+        private SparseArray<Integer> mColors = new SparseArray();
+
         private Drawable icon(int drawableRes) {
             Drawable icon = getResources().getDrawable(drawableRes, null);
             icon.setTint(Color.DKGRAY);
@@ -342,23 +361,35 @@ public class DeviceDiscoveryService extends Service {
             textView.setText(device.getDisplayName());
             textView.setBackgroundColor(
                     device.equals(mSelectedDevice)
-                            ? Color.GRAY
+                            ? getColor(android.R.attr.colorControlHighlight)
                             : Color.TRANSPARENT);
             textView.setCompoundDrawablesWithIntrinsicBounds(
                     device.device instanceof android.net.wifi.ScanResult
                         ? WIFI_ICON
                         : BLUETOOTH_ICON,
                     null, null, null);
+            textView.getCompoundDrawables()[0].setTint(getColor(android.R.attr.colorForeground));
         }
 
-        //TODO move to a layout file
         private TextView newView() {
             final TextView textView = new TextView(DeviceDiscoveryService.this);
-            textView.setTextColor(Color.BLACK);
+            textView.setTextColor(getColor(android.R.attr.colorForeground));
             final int padding = DeviceChooserActivity.getPadding(getResources());
             textView.setPadding(padding, padding, padding, padding);
             textView.setCompoundDrawablePadding(padding);
             return textView;
+        }
+
+        private int getColor(int colorAttr) {
+            if (mColors.contains(colorAttr)) {
+                return mColors.get(colorAttr);
+            }
+            TypedValue typedValue = new TypedValue();
+            TypedArray a = obtainStyledAttributes(typedValue.data, new int[] { colorAttr });
+            int result = a.getColor(0, 0);
+            a.recycle();
+            mColors.put(colorAttr, result);
+            return result;
         }
     }
 
@@ -428,10 +459,10 @@ public class DeviceDiscoveryService extends Service {
 
         @Override
         public String toString() {
-            return "DeviceFilterPair{" +
-                    "device=" + device +
-                    ", filter=" + filter +
-                    '}';
+            return "DeviceFilterPair{"
+                    + "device=" + device + " " + getDisplayName()
+                    + ", filter=" + filter
+                    + '}';
         }
     }
 

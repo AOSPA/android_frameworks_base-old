@@ -16,19 +16,17 @@
 
 package com.android.location.fused.tests;
 
-import static android.location.LocationManager.FUSED_PROVIDER;
 import static android.location.LocationManager.GPS_PROVIDER;
 import static android.location.LocationManager.NETWORK_PROVIDER;
 
 import static androidx.test.ext.truth.location.LocationSubject.assertThat;
-
-import static com.google.common.truth.Truth.assertThat;
 
 import android.content.Context;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationManager;
 import android.location.LocationRequest;
+import android.location.LocationResult;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import android.os.WorkSource;
@@ -51,7 +49,6 @@ import org.junit.runner.RunWith;
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Random;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -63,7 +60,6 @@ public class FusedLocationServiceTest {
 
     private static final long TIMEOUT_MS = 5000;
 
-    private Context mContext;
     private Random mRandom;
     private LocationManager mLocationManager;
 
@@ -75,15 +71,15 @@ public class FusedLocationServiceTest {
         long seed = System.currentTimeMillis();
         Log.i(TAG, "location seed: " + seed);
 
-        mContext = InstrumentationRegistry.getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         mRandom = new Random(seed);
-        mLocationManager = mContext.getSystemService(LocationManager.class);
+        mLocationManager = context.getSystemService(LocationManager.class);
 
         setMockLocation(true);
 
         mManager = new LocationProviderManagerCapture();
         mProvider = ILocationProvider.Stub.asInterface(
-                new FusedLocationProvider(mContext).getBinder());
+                new FusedLocationProvider(context).getBinder());
         mProvider.setLocationProviderManager(mManager);
 
         mLocationManager.addTestProvider(NETWORK_PROVIDER,
@@ -121,13 +117,9 @@ public class FusedLocationServiceTest {
 
     @Test
     public void testNetworkRequest() throws Exception {
-        LocationRequest request = LocationRequest.createFromDeprecatedProvider(FUSED_PROVIDER, 1000,
-                0, false);
-
         mProvider.setRequest(
                         new ProviderRequest.Builder()
-                                .setInterval(1000)
-                                .setLocationRequests(Collections.singletonList(request))
+                                .setIntervalMillis(1000)
                                 .build(),
                 new WorkSource());
 
@@ -139,13 +131,10 @@ public class FusedLocationServiceTest {
 
     @Test
     public void testGpsRequest() throws Exception {
-        LocationRequest request = LocationRequest.createFromDeprecatedProvider(FUSED_PROVIDER, 1000,
-                0, false).setQuality(LocationRequest.POWER_HIGH);
-
         mProvider.setRequest(
                 new ProviderRequest.Builder()
-                        .setInterval(1000)
-                        .setLocationRequests(Collections.singletonList(request))
+                        .setQuality(LocationRequest.QUALITY_HIGH_ACCURACY)
+                        .setIntervalMillis(1000)
                         .build(),
                 new WorkSource());
 
@@ -153,41 +142,6 @@ public class FusedLocationServiceTest {
         mLocationManager.setTestProviderLocation(GPS_PROVIDER, location);
 
         assertThat(mManager.getNextLocation(TIMEOUT_MS)).isEqualTo(location);
-    }
-
-    @Test
-    public void testBypassRequest() throws Exception {
-        LocationRequest request = LocationRequest.createFromDeprecatedProvider(FUSED_PROVIDER, 1000,
-                0, false).setQuality(LocationRequest.POWER_HIGH).setLocationSettingsIgnored(true);
-
-        mProvider.setRequest(
-                new ProviderRequest.Builder()
-                        .setInterval(1000)
-                        .setLocationSettingsIgnored(true)
-                        .setLocationRequests(Collections.singletonList(request))
-                        .build(),
-                new WorkSource());
-
-        boolean containsNetworkBypass = false;
-        for (LocationRequest iRequest : mLocationManager.getTestProviderCurrentRequests(
-                NETWORK_PROVIDER)) {
-            if (iRequest.isLocationSettingsIgnored()) {
-                containsNetworkBypass = true;
-                break;
-            }
-        }
-
-        boolean containsGpsBypass = false;
-        for (LocationRequest iRequest : mLocationManager.getTestProviderCurrentRequests(
-                GPS_PROVIDER)) {
-            if (iRequest.isLocationSettingsIgnored()) {
-                containsGpsBypass = true;
-                break;
-            }
-        }
-
-        assertThat(containsNetworkBypass).isTrue();
-        assertThat(containsGpsBypass).isTrue();
     }
 
     private static class LocationProviderManagerCapture extends ILocationProviderManager.Stub {
@@ -214,8 +168,15 @@ public class FusedLocationServiceTest {
         }
 
         @Override
-        public void onReportLocation(Location location) {
-            mLocations.add(location);
+        public void onReportLocation(LocationResult locationResult) {
+            for (int i = 0; i < locationResult.size(); i++) {
+                mLocations.add(locationResult.get(i));
+            }
+        }
+
+        @Override
+        public void onFlushComplete() {
+
         }
 
         public Location getNextLocation(long timeoutMs) throws InterruptedException {

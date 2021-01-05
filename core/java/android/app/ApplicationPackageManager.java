@@ -16,6 +16,14 @@
 
 package android.app;
 
+import static android.content.pm.Checksum.TYPE_PARTIAL_MERKLE_ROOT_1M_SHA256;
+import static android.content.pm.Checksum.TYPE_PARTIAL_MERKLE_ROOT_1M_SHA512;
+import static android.content.pm.Checksum.TYPE_WHOLE_MD5;
+import static android.content.pm.Checksum.TYPE_WHOLE_MERKLE_ROOT_4K_SHA256;
+import static android.content.pm.Checksum.TYPE_WHOLE_SHA1;
+import static android.content.pm.Checksum.TYPE_WHOLE_SHA256;
+import static android.content.pm.Checksum.TYPE_WHOLE_SHA512;
+
 import android.annotation.DrawableRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -32,6 +40,7 @@ import android.content.IntentSender;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ChangedPackages;
+import android.content.pm.Checksum;
 import android.content.pm.ComponentInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.IPackageDataObserver;
@@ -73,6 +82,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelableException;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteException;
@@ -96,7 +106,6 @@ import android.util.ArraySet;
 import android.util.DebugUtils;
 import android.util.LauncherIcons;
 import android.util.Log;
-import android.view.Display;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.Immutable;
@@ -109,6 +118,9 @@ import dalvik.system.VMRuntime;
 import libcore.util.EmptyArray;
 
 import java.lang.ref.WeakReference;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -135,6 +147,13 @@ public class ApplicationPackageManager extends PackageManager {
 
     // Default flags to use with PackageManager when no flags are given.
     private static final int sDefaultFlags = GET_SHARED_LIBRARY_FILES;
+
+    /** Default set of checksums - includes all available checksums.
+     * @see PackageManager#requestChecksums  */
+    private static final int DEFAULT_CHECKSUMS =
+            TYPE_WHOLE_MERKLE_ROOT_4K_SHA256 | TYPE_WHOLE_MD5 | TYPE_WHOLE_SHA1 | TYPE_WHOLE_SHA256
+                    | TYPE_WHOLE_SHA512 | TYPE_PARTIAL_MERKLE_ROOT_1M_SHA256
+                    | TYPE_PARTIAL_MERKLE_ROOT_1M_SHA512;
 
     // Name of the resource which provides background permission button string
     public static final String APP_PERMISSION_BUTTON_ALLOW_ALWAYS =
@@ -452,6 +471,19 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public int getTargetSdkVersion(@NonNull String packageName) throws NameNotFoundException {
+        try {
+            int version = mPM.getTargetSdkVersion(packageName);
+            if (version != -1) {
+                return version;
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        throw new PackageManager.NameNotFoundException(packageName);
+    }
+
+    @Override
     public ActivityInfo getActivityInfo(ComponentName className, int flags)
             throws NameNotFoundException {
         final int userId = getUserId();
@@ -635,7 +667,7 @@ public class ApplicationPackageManager extends PackageManager {
                     name, version);
         }
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (o instanceof HasSystemFeatureQuery) {
                 HasSystemFeatureQuery r = (HasSystemFeatureQuery) o;
                 return Objects.equals(name, r.name) &&  version == r.version;
@@ -684,8 +716,7 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public int checkPermission(String permName, String pkgName) {
-        return PermissionManager
-                .checkPackageNamePermission(permName, pkgName, getUserId());
+        return PermissionManager.checkPackageNamePermission(permName, pkgName, getUserId());
     }
 
     @Override
@@ -947,6 +978,49 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
+    private static List<byte[]> encodeCertificates(List<Certificate> certs) throws
+            CertificateEncodingException {
+        if (certs == null) {
+            return null;
+        }
+        List<byte[]> result = new ArrayList<>(certs.size());
+        for (Certificate cert : certs) {
+            if (!(cert instanceof X509Certificate)) {
+                throw new CertificateEncodingException("Only X509 certificates supported.");
+            }
+            result.add(cert.getEncoded());
+        }
+        return result;
+    }
+
+    @Override
+    public void requestChecksums(@NonNull String packageName, boolean includeSplits,
+            @Checksum.Type int required, @NonNull List<Certificate> trustedInstallers,
+            @NonNull IntentSender statusReceiver)
+            throws CertificateEncodingException, NameNotFoundException {
+        Objects.requireNonNull(packageName);
+        Objects.requireNonNull(statusReceiver);
+        Objects.requireNonNull(trustedInstallers);
+        try {
+            if (trustedInstallers == TRUST_ALL) {
+                trustedInstallers = null;
+            } else if (trustedInstallers == TRUST_NONE) {
+                trustedInstallers = Collections.emptyList();
+            } else if (trustedInstallers.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "trustedInstallers has to be one of TRUST_ALL/TRUST_NONE or a non-empty "
+                                + "list of certificates.");
+            }
+            mPM.requestChecksums(packageName, includeSplits, DEFAULT_CHECKSUMS, required,
+                    encodeCertificates(trustedInstallers), statusReceiver, getUserId());
+        } catch (ParcelableException e) {
+            e.maybeRethrow(PackageManager.NameNotFoundException.class);
+            throw new RuntimeException(e);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     /**
      * Wrap the cached value in a class that does deep compares on string
      * arrays.  The comparison is needed only for the verification mode of
@@ -976,7 +1050,7 @@ public class ApplicationPackageManager extends PackageManager {
          * are handled first.
          */
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (o instanceof GetPackagesForUidResult) {
                 String [] r = ((GetPackagesForUidResult) o).mValue;
                 String [] l = mValue;
@@ -1235,7 +1309,7 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @Override
     public boolean setInstantAppCookie(@NonNull byte[] cookie) {
         try {
@@ -1749,7 +1823,7 @@ public class ApplicationPackageManager extends PackageManager {
         final Resources r = mContext.mMainThread.getTopLevelResources(
                     sameUid ? app.sourceDir : app.publicSourceDir,
                     sameUid ? app.splitSourceDirs : app.splitPublicSourceDirs,
-                    app.resourceDirs, app.sharedLibraryFiles, Display.DEFAULT_DISPLAY,
+                    app.resourceDirs, app.sharedLibraryFiles,
                     mContext.mPackageInfo);
         if (r != null) {
             return r;
@@ -2009,7 +2083,7 @@ public class ApplicationPackageManager extends PackageManager {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 
@@ -2348,7 +2422,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public @Nullable VolumeInfo getPackageCurrentVolume(ApplicationInfo app) {
         final StorageManager storage = mContext.getSystemService(StorageManager.class);
         return getPackageCurrentVolume(app, storage);

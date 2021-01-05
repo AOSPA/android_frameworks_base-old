@@ -83,6 +83,7 @@ import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputContentInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.view.inputmethod.SurroundingText;
 import android.view.inspector.InspectableProperty;
 import android.view.inspector.InspectableProperty.EnumEntry;
 import android.widget.RemoteViews.OnClickHandler;
@@ -257,7 +258,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Controls CHOICE_MODE_MULTIPLE_MODAL. null when inactive.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     ActionMode mChoiceActionMode;
 
     /**
@@ -292,7 +293,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Should be used by subclasses to listen to changes in the dataset
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     AdapterDataSetObserver mDataSetObserver;
 
     /**
@@ -456,7 +457,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Handles scrolling between positions within the list.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     AbsPositionScroller mPositionScroller;
 
     /**
@@ -1476,7 +1477,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @hide
      */
     @Override
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected boolean isVerticalScrollBarHidden() {
         return isFastScrollEnabled();
     }
@@ -1537,7 +1538,8 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         if (mOnScrollListener != null) {
             mOnScrollListener.onScroll(this, mFirstPosition, getChildCount(), mItemCount);
         }
-        onScrollChanged(0, 0, 0, 0); // dummy values, View's implementation does not use these.
+        // placeholder values, View's implementation does not use these.
+        onScrollChanged(0, 0, 0, 0);
     }
 
     /**
@@ -2270,7 +2272,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private boolean canScrollUp() {
         boolean canScrollUp;
         // 0th element is not visible
@@ -2287,7 +2289,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         return canScrollUp;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private boolean canScrollDown() {
         boolean canScrollDown;
         int count = getChildCount();
@@ -3296,7 +3298,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                 CheckForLongPress.INVALID_COORD);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     boolean performLongPress(final View child,
             final int longPressPosition, final long longPressId, float x, float y) {
         // CHOICE_MODE_MULTIPLE_MODAL takes over long press.
@@ -5426,6 +5428,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      *
      * @param down true if the scroll is going down, false if it is going up
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     abstract void fillGap(boolean down);
 
     void hideSelector() {
@@ -5463,6 +5466,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @param y Where the user touched
      * @return The position of the first (or only) item in the row containing y
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     abstract int findMotionRow(int y);
 
@@ -5510,6 +5514,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      *
      * @param position the position of the new selection
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     abstract void setSelectionInt(int position);
 
     /**
@@ -6073,6 +6078,12 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         public CharSequence getSelectedText(int flags) {
             if (mTarget == null) return "";
             return mTarget.getSelectedText(flags);
+        }
+
+        @Override
+        public SurroundingText getSurroundingText(int beforeLength, int afterLength, int flags) {
+            if (mTarget == null) return null;
+            return mTarget.getSurroundingText(beforeLength, afterLength, flags);
         }
 
         @Override
@@ -6766,7 +6777,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
          * scrap heap.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         int scrappedFromPosition;
 
         /**

@@ -16,9 +16,15 @@
 
 package android.service.voice;
 
+import static android.Manifest.permission.CAPTURE_AUDIO_HOTWORD;
+import static android.Manifest.permission.RECORD_AUDIO;
+
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityThread;
+import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
@@ -32,13 +38,17 @@ import android.hardware.soundtrigger.SoundTrigger.KeyphraseRecognitionExtra;
 import android.hardware.soundtrigger.SoundTrigger.ModuleProperties;
 import android.hardware.soundtrigger.SoundTrigger.RecognitionConfig;
 import android.media.AudioFormat;
+import android.media.permission.Identity;
 import android.os.AsyncTask;
+import android.os.Binder;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Message;
 import android.os.RemoteException;
 import android.util.Slog;
 
 import com.android.internal.app.IVoiceInteractionManagerService;
+import com.android.internal.app.IVoiceInteractionSoundTriggerSession;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -48,7 +58,12 @@ import java.util.Locale;
 /**
  * A class that lets a VoiceInteractionService implementation interact with
  * always-on keyphrase detection APIs.
+ *
+ * @hide
+ * TODO(b/168605867): Once Metalava supports expressing a removed public, but current system API,
+ *                    mark and track it as such.
  */
+@SystemApi
 public class AlwaysOnHotwordDetector {
     //---- States of Keyphrase availability. Return codes for onAvailabilityChanged() ----//
     /**
@@ -228,10 +243,12 @@ public class AlwaysOnHotwordDetector {
     private KeyphraseMetadata mKeyphraseMetadata;
     private final KeyphraseEnrollmentInfo mKeyphraseEnrollmentInfo;
     private final IVoiceInteractionManagerService mModelManagementService;
+    private final IVoiceInteractionSoundTriggerSession mSoundTriggerSession;
     private final SoundTriggerListener mInternalCallback;
     private final Callback mExternalCallback;
     private final Object mLock = new Object();
     private final Handler mHandler;
+    private final IBinder mBinder = new Binder();
 
     private int mAvailability = STATE_NOT_READY;
 
@@ -365,16 +382,23 @@ public class AlwaysOnHotwordDetector {
      * Callbacks for always-on hotword detection.
      */
     public static abstract class Callback {
+
         /**
-         * Called when the hotword availability changes.
-         * This indicates a change in the availability of recognition for the given keyphrase.
-         * It's called at least once with the initial availability.<p/>
+         * Updates the availability state of the active keyphrase and locale on every keyphrase
+         * sound model change.
          *
-         * Availability implies whether the hardware on this system is capable of listening for
-         * the given keyphrase or not. <p/>
+         * <p>This API is called whenever there's a possibility that the keyphrase associated
+         * with this detector has been updated. It is not guaranteed that there is in fact any
+         * change, as it may be called for other reasons.</p>
+         *
+         * <p>This API is also guaranteed to be called right after an AlwaysOnHotwordDetector
+         * instance is created to updated the current availability state.</p>
+         *
+         * <p>Availability implies the current enrollment state of the given keyphrase. If the
+         * hardware on this system is not capable of listening for the given keyphrase,
+         * {@link AlwaysOnHotwordDetector#STATE_HARDWARE_UNAVAILABLE} will be returned.
          *
          * @see AlwaysOnHotwordDetector#STATE_HARDWARE_UNAVAILABLE
-         * @see AlwaysOnHotwordDetector#STATE_KEYPHRASE_UNSUPPORTED
          * @see AlwaysOnHotwordDetector#STATE_KEYPHRASE_UNENROLLED
          * @see AlwaysOnHotwordDetector#STATE_KEYPHRASE_ENROLLED
          */
@@ -425,6 +449,14 @@ public class AlwaysOnHotwordDetector {
         mHandler = new MyHandler();
         mInternalCallback = new SoundTriggerListener(mHandler);
         mModelManagementService = modelManagementService;
+        try {
+            Identity identity = new Identity();
+            identity.packageName = ActivityThread.currentOpPackageName();
+            mSoundTriggerSession = mModelManagementService.createSoundTriggerSessionAsOriginator(
+                    identity, mBinder);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
         new RefreshAvailabiltyTask().execute();
     }
 
@@ -485,7 +517,7 @@ public class AlwaysOnHotwordDetector {
     private int getSupportedAudioCapabilitiesLocked() {
         try {
             ModuleProperties properties =
-                    mModelManagementService.getDspModuleProperties();
+                    mSoundTriggerSession.getDspModuleProperties();
             if (properties != null) {
                 return properties.getAudioCapabilities();
             }
@@ -513,6 +545,7 @@ public class AlwaysOnHotwordDetector {
      *         This may happen if another detector has been instantiated or the
      *         {@link VoiceInteractionService} hosting this detector has been shut down.
      */
+    @RequiresPermission(allOf = {RECORD_AUDIO, CAPTURE_AUDIO_HOTWORD})
     public boolean startRecognition(@RecognitionFlags int recognitionFlags) {
         if (DBG) Slog.d(TAG, "startRecognition(" + recognitionFlags + ")");
         synchronized (mLock) {
@@ -543,6 +576,7 @@ public class AlwaysOnHotwordDetector {
      *         This may happen if another detector has been instantiated or the
      *         {@link VoiceInteractionService} hosting this detector has been shut down.
      */
+    @RequiresPermission(allOf = {RECORD_AUDIO, CAPTURE_AUDIO_HOTWORD})
     public boolean stopRecognition() {
         if (DBG) Slog.d(TAG, "stopRecognition()");
         synchronized (mLock) {
@@ -577,6 +611,7 @@ public class AlwaysOnHotwordDetector {
      *         - {@link SoundTrigger#STATUS_INVALID_OPERATION} if the call is out of sequence or
      *           if API is not supported by HAL
      */
+    @RequiresPermission(allOf = {RECORD_AUDIO, CAPTURE_AUDIO_HOTWORD})
     public int setParameter(@ModelParams int modelParam, int value) {
         if (DBG) {
             Slog.d(TAG, "setParameter(" + modelParam + ", " + value + ")");
@@ -604,6 +639,7 @@ public class AlwaysOnHotwordDetector {
      * @param modelParam   {@link ModelParams}
      * @return value of parameter
      */
+    @RequiresPermission(allOf = {RECORD_AUDIO, CAPTURE_AUDIO_HOTWORD})
     public int getParameter(@ModelParams int modelParam) {
         if (DBG) {
             Slog.d(TAG, "getParameter(" + modelParam + ")");
@@ -628,6 +664,7 @@ public class AlwaysOnHotwordDetector {
      * @param modelParam {@link ModelParams}
      * @return supported range of parameter, null if not supported
      */
+    @RequiresPermission(allOf = {RECORD_AUDIO, CAPTURE_AUDIO_HOTWORD})
     @Nullable
     public ModelParamRange queryParameter(@ModelParams int modelParam) {
         if (DBG) {
@@ -658,6 +695,7 @@ public class AlwaysOnHotwordDetector {
      *         This may happen if another detector has been instantiated or the
      *         {@link VoiceInteractionService} hosting this detector has been shut down.
      */
+    @Nullable
     public Intent createEnrollIntent() {
         if (DBG) Slog.d(TAG, "createEnrollIntent");
         synchronized (mLock) {
@@ -679,6 +717,7 @@ public class AlwaysOnHotwordDetector {
      *         This may happen if another detector has been instantiated or the
      *         {@link VoiceInteractionService} hosting this detector has been shut down.
      */
+    @Nullable
     public Intent createUnEnrollIntent() {
         if (DBG) Slog.d(TAG, "createUnEnrollIntent");
         synchronized (mLock) {
@@ -700,6 +739,7 @@ public class AlwaysOnHotwordDetector {
      *         This may happen if another detector has been instantiated or the
      *         {@link VoiceInteractionService} hosting this detector has been shut down.
      */
+    @Nullable
     public Intent createReEnrollIntent() {
         if (DBG) Slog.d(TAG, "createReEnrollIntent");
         synchronized (mLock) {
@@ -782,7 +822,7 @@ public class AlwaysOnHotwordDetector {
 
         int code;
         try {
-            code = mModelManagementService.startRecognition(
+            code = mSoundTriggerSession.startRecognition(
                     mKeyphraseMetadata.getId(), mLocale.toLanguageTag(), mInternalCallback,
                     new RecognitionConfig(captureTriggerAudio, allowMultipleTriggers,
                             recognitionExtra, null /* additional data */, audioCapabilities));
@@ -799,7 +839,7 @@ public class AlwaysOnHotwordDetector {
     private int stopRecognitionLocked() {
         int code;
         try {
-            code = mModelManagementService.stopRecognition(mKeyphraseMetadata.getId(),
+            code = mSoundTriggerSession.stopRecognition(mKeyphraseMetadata.getId(),
                     mInternalCallback);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -813,7 +853,7 @@ public class AlwaysOnHotwordDetector {
 
     private int setParameterLocked(@ModelParams int modelParam, int value) {
         try {
-            int code = mModelManagementService.setParameter(mKeyphraseMetadata.getId(), modelParam,
+            int code = mSoundTriggerSession.setParameter(mKeyphraseMetadata.getId(), modelParam,
                     value);
 
             if (code != STATUS_OK) {
@@ -828,7 +868,7 @@ public class AlwaysOnHotwordDetector {
 
     private int getParameterLocked(@ModelParams int modelParam) {
         try {
-            return mModelManagementService.getParameter(mKeyphraseMetadata.getId(), modelParam);
+            return mSoundTriggerSession.getParameter(mKeyphraseMetadata.getId(), modelParam);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -838,7 +878,7 @@ public class AlwaysOnHotwordDetector {
     private ModelParamRange queryParameterLocked(@ModelParams int modelParam) {
         try {
             SoundTrigger.ModelParamRange modelParamRange =
-                    mModelManagementService.queryParameter(mKeyphraseMetadata.getId(), modelParam);
+                    mSoundTriggerSession.queryParameter(mKeyphraseMetadata.getId(), modelParam);
 
             if (modelParamRange == null) {
                 return null;
@@ -972,7 +1012,7 @@ public class AlwaysOnHotwordDetector {
             ModuleProperties dspModuleProperties;
             try {
                 dspModuleProperties =
-                        mModelManagementService.getDspModuleProperties();
+                        mSoundTriggerSession.getDspModuleProperties();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

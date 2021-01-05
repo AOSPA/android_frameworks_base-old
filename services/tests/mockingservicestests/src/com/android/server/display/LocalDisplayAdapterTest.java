@@ -42,6 +42,8 @@ import com.android.dx.mockito.inline.extended.StaticMockitoSession;
 import com.android.server.LocalServices;
 import com.android.server.lights.LightsManager;
 
+import com.google.common.truth.Truth;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -83,6 +85,8 @@ public class LocalDisplayAdapterTest {
 
     private LinkedList<DisplayAddress.Physical> mAddresses = new LinkedList<>();
 
+    private Injector mInjector;
+
     @Before
     public void setUp() throws Exception {
         mMockitoSession = mockitoSession()
@@ -94,8 +98,9 @@ public class LocalDisplayAdapterTest {
         doReturn(mMockedResources).when(mMockedContext).getResources();
         LocalServices.removeServiceForTest(LightsManager.class);
         LocalServices.addService(LightsManager.class, mMockedLightsManager);
+        mInjector = new Injector();
         mAdapter = new LocalDisplayAdapter(mMockedSyncRoot, mMockedContext, mHandler,
-                mListener);
+                mListener, mInjector);
         spyOn(mAdapter);
         doReturn(mMockedContext).when(mAdapter).getOverlayContext();
     }
@@ -187,6 +192,102 @@ public class LocalDisplayAdapterTest {
                 16000);
     }
 
+    private static class DisplayModeWrapper {
+        public SurfaceControl.DisplayConfig config;
+        public float[] expectedAlternativeRefreshRates;
+
+        DisplayModeWrapper(SurfaceControl.DisplayConfig config,
+                float[] expectedAlternativeRefreshRates) {
+            this.config = config;
+            this.expectedAlternativeRefreshRates = expectedAlternativeRefreshRates;
+        }
+    }
+
+    /**
+     * Updates the <code>display</code> using the given <code>modes</code> and then checks if the
+     * <code>expectedAlternativeRefreshRates</code> are present for each of the
+     * <code>modes</code>.
+     */
+    private void testAlternativeRefreshRatesCommon(FakeDisplay display, DisplayModeWrapper[] modes)
+            throws InterruptedException {
+        // Update the display.
+        SurfaceControl.DisplayConfig[] configs = new SurfaceControl.DisplayConfig[modes.length];
+        for (int i = 0; i < modes.length; i++) {
+            configs[i] = modes[i].config;
+        }
+        display.configs = configs;
+        setUpDisplay(display);
+        mInjector.getTransmitter().sendHotplug(display, /* connected */ true);
+        waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
+        assertThat(mListener.changedDisplays.size()).isGreaterThan(0);
+
+        // Verify the supported modes are updated accordingly.
+        DisplayDevice displayDevice =
+                mListener.changedDisplays.get(mListener.changedDisplays.size() - 1);
+        displayDevice.applyPendingDisplayDeviceInfoChangesLocked();
+        Display.Mode[] supportedModes = displayDevice.getDisplayDeviceInfoLocked().supportedModes;
+        assertThat(supportedModes.length).isEqualTo(configs.length);
+
+        for (int i = 0; i < modes.length; i++) {
+            assertModeIsSupported(supportedModes, configs[i],
+                    modes[i].expectedAlternativeRefreshRates);
+        }
+    }
+
+    @Test
+    public void testAfterDisplayChange_AlternativeRefreshRatesAreUpdated() throws Exception {
+        FakeDisplay display = new FakeDisplay(PORT_A);
+        setUpDisplay(display);
+        updateAvailableDisplays();
+        mAdapter.registerLocked();
+        waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
+
+        testAlternativeRefreshRatesCommon(display, new DisplayModeWrapper[] {
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 60f, 0), new float[]{24f, 50f}),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 50f, 0), new float[]{24f, 60f}),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 24f, 0), new float[]{50f, 60f}),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 60f, 0), new float[]{24f, 50f}),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 50f, 0), new float[]{24f, 60f}),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 24f, 0), new float[]{50f, 60f}),
+        });
+
+        testAlternativeRefreshRatesCommon(display, new DisplayModeWrapper[] {
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 60f, 0), new float[]{50f}),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 50f, 0), new float[]{60f}),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 24f, 1), new float[0]),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 60f, 2), new float[0]),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 50f, 3), new float[]{24f}),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 24f, 3), new float[]{50f}),
+        });
+
+        testAlternativeRefreshRatesCommon(display, new DisplayModeWrapper[] {
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 60f, 0), new float[0]),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 50f, 1), new float[0]),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(1920, 1080, 24f, 2), new float[0]),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 60f, 3), new float[0]),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 50f, 4), new float[0]),
+                new DisplayModeWrapper(
+                        createFakeDisplayConfig(3840, 2160, 24f, 5), new float[0]),
+        });
+    }
+
     @Test
     public void testAfterDisplayChange_DisplayModesAreUpdated() throws Exception {
         SurfaceControl.DisplayConfig displayConfig = createFakeDisplayConfig(1920, 1080, 60f);
@@ -222,7 +323,7 @@ public class LocalDisplayAdapterTest {
         display.configs = configs;
         display.activeConfig = 1;
         setUpDisplay(display);
-        mAdapter.registerLocked();
+        mInjector.getTransmitter().sendHotplug(display, /* connected */ true);
         waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
 
         assertThat(SurfaceControl.getActiveConfig(display.token)).isEqualTo(1);
@@ -249,6 +350,46 @@ public class LocalDisplayAdapterTest {
     }
 
     @Test
+    public void testAfterDisplayChange_ActiveModeIsUpdated() throws Exception {
+        SurfaceControl.DisplayConfig[] configs = new SurfaceControl.DisplayConfig[]{
+                createFakeDisplayConfig(1920, 1080, 60f),
+                createFakeDisplayConfig(1920, 1080, 50f)
+        };
+        FakeDisplay display = new FakeDisplay(PORT_A, configs, /* activeConfig */ 0);
+        setUpDisplay(display);
+        updateAvailableDisplays();
+        mAdapter.registerLocked();
+        waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
+
+        assertThat(mListener.addedDisplays.size()).isEqualTo(1);
+        assertThat(mListener.changedDisplays).isEmpty();
+
+        DisplayDeviceInfo displayDeviceInfo = mListener.addedDisplays.get(0)
+                .getDisplayDeviceInfoLocked();
+
+        Display.Mode activeMode = getModeById(displayDeviceInfo, displayDeviceInfo.modeId);
+        assertThat(activeMode.matches(1920, 1080, 60f)).isTrue();
+
+        // Change the display
+        display.activeConfig = 1;
+        setUpDisplay(display);
+        mInjector.getTransmitter().sendHotplug(display, /* connected */ true);
+        waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
+
+        assertThat(SurfaceControl.getActiveConfig(display.token)).isEqualTo(1);
+
+        assertThat(mListener.addedDisplays.size()).isEqualTo(1);
+        assertThat(mListener.changedDisplays.size()).isEqualTo(1);
+
+        DisplayDevice displayDevice = mListener.changedDisplays.get(0);
+        displayDevice.applyPendingDisplayDeviceInfoChangesLocked();
+        displayDeviceInfo = displayDevice.getDisplayDeviceInfoLocked();
+
+        activeMode = getModeById(displayDeviceInfo, displayDeviceInfo.modeId);
+        assertThat(activeMode.matches(1920, 1080, 50f)).isTrue();
+    }
+
+    @Test
     public void testAfterDisplayChange_HdrCapabilitiesAreUpdated() throws Exception {
         FakeDisplay display = new FakeDisplay(PORT_A);
         Display.HdrCapabilities initialHdrCapabilities = new Display.HdrCapabilities(new int[0],
@@ -272,7 +413,7 @@ public class LocalDisplayAdapterTest {
                 new int[Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS], 1000, 1000, 0);
         display.hdrCapabilities = changedHdrCapabilities;
         setUpDisplay(display);
-        mAdapter.registerLocked();
+        mInjector.getTransmitter().sendHotplug(display, /* connected */ true);
         waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
 
         assertThat(mListener.addedDisplays.size()).isEqualTo(1);
@@ -308,7 +449,7 @@ public class LocalDisplayAdapterTest {
         final int[] changedColorModes = new int[]{Display.COLOR_MODE_DEFAULT};
         display.colorModes = changedColorModes;
         setUpDisplay(display);
-        mAdapter.registerLocked();
+        mInjector.getTransmitter().sendHotplug(display, /* connected */ true);
         waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
 
         assertThat(mListener.addedDisplays.size()).isEqualTo(1);
@@ -320,6 +461,35 @@ public class LocalDisplayAdapterTest {
 
         assertThat(displayDeviceInfo.colorMode).isEqualTo(Display.COLOR_MODE_DEFAULT);
         assertThat(displayDeviceInfo.supportedColorModes).isEqualTo(changedColorModes);
+    }
+
+    @Test
+    public void testDisplayChange_withStaleDesiredDisplayConfigSpecs() throws Exception {
+        SurfaceControl.DisplayConfig[] configs = new SurfaceControl.DisplayConfig[]{
+                createFakeDisplayConfig(1920, 1080, 60f),
+                createFakeDisplayConfig(1920, 1080, 50f)
+        };
+        final int activeConfig = 0;
+        FakeDisplay display = new FakeDisplay(PORT_A, configs, activeConfig);
+        display.desiredDisplayConfigSpecs.defaultConfig = 1;
+
+        setUpDisplay(display);
+        updateAvailableDisplays();
+        mAdapter.registerLocked();
+        waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
+
+        // Change the display
+        display.configs = new SurfaceControl.DisplayConfig[]{
+                createFakeDisplayConfig(1920, 1080, 60f)
+        };
+        // SurfaceFlinger can return a stale defaultConfig. Make sure this doesn't
+        // trigger ArrayOutOfBoundsException.
+        display.desiredDisplayConfigSpecs.defaultConfig = 1;
+
+        setUpDisplay(display);
+        updateAvailableDisplays();
+        mInjector.getTransmitter().sendHotplug(display, /* connected */ true);
+        waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
     }
 
     private void assertDisplayDpi(DisplayDeviceInfo info, int expectedPort,
@@ -347,6 +517,23 @@ public class LocalDisplayAdapterTest {
                 x -> x.matches(mode.width, mode.height, mode.refreshRate))).isTrue();
     }
 
+    private void assertModeIsSupported(Display.Mode[] supportedModes,
+            SurfaceControl.DisplayConfig mode, float[] alternativeRefreshRates) {
+        float[] sortedAlternativeRates =
+                Arrays.copyOf(alternativeRefreshRates, alternativeRefreshRates.length);
+        Arrays.sort(sortedAlternativeRates);
+
+        String message = "Expected " + mode + " with alternativeRefreshRates = "
+                + Arrays.toString(alternativeRefreshRates) + " to be in list of supported modes = "
+                + Arrays.toString(supportedModes);
+        Truth.assertWithMessage(message)
+            .that(Arrays.stream(supportedModes)
+                .anyMatch(x -> x.matches(mode.width, mode.height, mode.refreshRate)
+                        && Arrays.equals(x.getAlternativeRefreshRates(), sortedAlternativeRates)))
+                .isTrue();
+    }
+
+
     private static class FakeDisplay {
         public final DisplayAddress.Physical address;
         public final IBinder token = new Binder();
@@ -356,6 +543,13 @@ public class LocalDisplayAdapterTest {
         public int[] colorModes = new int[]{ Display.COLOR_MODE_DEFAULT };
         public Display.HdrCapabilities hdrCapabilities = new Display.HdrCapabilities(new int[0],
                 1000, 1000, 0);
+        public SurfaceControl.DesiredDisplayConfigSpecs desiredDisplayConfigSpecs =
+                new SurfaceControl.DesiredDisplayConfigSpecs(/* defaultConfig */ 0,
+                    /* allowGroupSwitching */ false,
+                    /* primaryRefreshRateMin */ 60.f,
+                    /* primaryRefreshRateMax */ 60.f,
+                    /* appRefreshRateMin */ 60.f,
+                    /* appRefreshRateMax */60.f);
 
         private FakeDisplay(int port) {
             this.address = createDisplayAddress(port);
@@ -387,7 +581,7 @@ public class LocalDisplayAdapterTest {
                 () -> SurfaceControl.getDisplayColorModes(display.token));
         doReturn(display.hdrCapabilities).when(
                 () -> SurfaceControl.getHdrCapabilities(display.token));
-        doReturn(new SurfaceControl.DesiredDisplayConfigSpecs(0, 60.f, 60.f, 60.f, 60.f))
+        doReturn(display.desiredDisplayConfigSpecs)
                 .when(() -> SurfaceControl.getDesiredDisplayConfigSpecs(display.token));
     }
 
@@ -413,16 +607,22 @@ public class LocalDisplayAdapterTest {
 
     private static SurfaceControl.DisplayConfig createFakeDisplayConfig(int width, int height,
             float refreshRate) {
+        return createFakeDisplayConfig(width, height, refreshRate, 0);
+    }
+
+    private static SurfaceControl.DisplayConfig createFakeDisplayConfig(int width, int height,
+            float refreshRate, int configGroup) {
         final SurfaceControl.DisplayConfig config = new SurfaceControl.DisplayConfig();
         config.width = width;
         config.height = height;
         config.refreshRate = refreshRate;
         config.xDpi = 100;
         config.yDpi = 100;
+        config.configGroup = configGroup;
         return config;
     }
 
-    private void waitForHandlerToComplete(Handler handler, long waitTimeMs)
+    private static void waitForHandlerToComplete(Handler handler, long waitTimeMs)
             throws InterruptedException {
         final Object lock = new Object();
         synchronized (lock) {
@@ -432,6 +632,35 @@ public class LocalDisplayAdapterTest {
                 }
             });
             lock.wait(waitTimeMs);
+        }
+    }
+
+    private class HotplugTransmitter {
+        private final Handler mHandler;
+        private final LocalDisplayAdapter.DisplayEventListener mListener;
+
+        HotplugTransmitter(Looper looper, LocalDisplayAdapter.DisplayEventListener listener) {
+            mHandler = new Handler(looper);
+            mListener = listener;
+        }
+
+        public void sendHotplug(FakeDisplay display, boolean connected)
+                throws InterruptedException {
+            mHandler.post(() -> mListener.onHotplug(/* timestampNanos = */ 0,
+                    display.address.getPhysicalDisplayId(), connected));
+            waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
+        }
+    }
+
+    private class Injector extends LocalDisplayAdapter.Injector {
+        private HotplugTransmitter mTransmitter;
+        @Override
+        public void setDisplayEventListenerLocked(Looper looper,
+                LocalDisplayAdapter.DisplayEventListener listener) {
+            mTransmitter = new HotplugTransmitter(looper, listener);
+        }
+        public HotplugTransmitter getTransmitter() {
+            return mTransmitter;
         }
     }
 

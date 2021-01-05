@@ -153,15 +153,23 @@ public class WifiNl80211Manager {
         @Override
         public void OnScanResultReady() {
             Log.d(TAG, "Scan result ready event");
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> mCallback.onScanResultReady());
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mExecutor.execute(() -> mCallback.onScanResultReady());
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
 
         @Override
         public void OnScanFailed() {
             Log.d(TAG, "Scan failed event");
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> mCallback.onScanFailed());
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mExecutor.execute(() -> mCallback.onScanFailed());
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
     }
 
@@ -223,7 +231,11 @@ public class WifiNl80211Manager {
     /**
      * Callbacks for SoftAp interface registered using
      * {@link #registerApCallback(String, Executor, SoftApCallback)}.
+     *
+     * @deprecated The usage is replaced by vendor HAL
+     * {@code android.hardware.wifi.hostapd.V1_3.IHostapdCallback}.
      */
+    @Deprecated
     public interface SoftApCallback {
         /**
          * Invoked when there is a fatal failure and the SoftAp is shutdown.
@@ -341,15 +353,23 @@ public class WifiNl80211Manager {
         @Override
         public void OnPnoNetworkFound() {
             Log.d(TAG, "Pno scan result event");
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> mCallback.onScanResultReady());
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mExecutor.execute(() -> mCallback.onScanResultReady());
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
 
         @Override
         public void OnPnoScanFailed() {
             Log.d(TAG, "Pno Scan failed event");
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> mCallback.onScanFailed());
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mExecutor.execute(() -> mCallback.onScanFailed());
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
     }
 
@@ -372,9 +392,13 @@ public class WifiNl80211Manager {
 
         @Override
         public void onSoftApChannelSwitched(int frequency, int bandwidth) {
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> mSoftApListener.onSoftApChannelSwitched(frequency,
-                    toFrameworkBandwidth(bandwidth)));
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mExecutor.execute(() -> mSoftApListener.onSoftApChannelSwitched(frequency,
+                        toFrameworkBandwidth(bandwidth)));
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
 
         private @WifiAnnotations.Bandwidth int toFrameworkBandwidth(int bandwidth) {
@@ -427,8 +451,12 @@ public class WifiNl80211Manager {
                 if (mVerboseLoggingEnabled) {
                     Log.e(TAG, "Timed out waiting for ACK");
                 }
-                Binder.clearCallingIdentity();
-                mExecutor.execute(() -> mCallback.onFailure(SEND_MGMT_FRAME_ERROR_TIMEOUT));
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    mExecutor.execute(() -> mCallback.onFailure(SEND_MGMT_FRAME_ERROR_TIMEOUT));
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
             });
             mWasCalled = false;
 
@@ -443,8 +471,12 @@ public class WifiNl80211Manager {
             // post to main thread
             mEventHandler.post(() -> runIfFirstCall(() -> {
                 mAlarmManager.cancel(mTimeoutCallback);
-                Binder.clearCallingIdentity();
-                mExecutor.execute(() -> mCallback.onAck(elapsedTimeMs));
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    mExecutor.execute(() -> mCallback.onAck(elapsedTimeMs));
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
             }));
         }
 
@@ -454,8 +486,12 @@ public class WifiNl80211Manager {
             // post to main thread
             mEventHandler.post(() -> runIfFirstCall(() -> {
                 mAlarmManager.cancel(mTimeoutCallback);
-                Binder.clearCallingIdentity();
-                mExecutor.execute(() -> mCallback.onFailure(reason));
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    mExecutor.execute(() -> mCallback.onFailure(reason));
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
             }));
         }
     }
@@ -1038,6 +1074,7 @@ public class WifiNl80211Manager {
      * {@link WifiScanner#WIFI_BAND_5_GHZ},
      * {@link WifiScanner#WIFI_BAND_5_GHZ_DFS_ONLY},
      * {@link WifiScanner#WIFI_BAND_6_GHZ}
+     * {@link WifiScanner.WIFI_BAND_60_GHZ}
      * @return frequencies vector of valid frequencies (MHz), or an empty array for error.
      * @throws IllegalArgumentException if band is not recognized.
      */
@@ -1060,6 +1097,9 @@ public class WifiNl80211Manager {
                     break;
                 case WifiScanner.WIFI_BAND_6_GHZ:
                     result = mWificond.getAvailable6gChannels();
+                    break;
+                case WifiScanner.WIFI_BAND_60_GHZ:
+                    result = mWificond.getAvailable60gChannels();
                     break;
                 default:
                     throw new IllegalArgumentException("unsupported band " + band);
@@ -1115,7 +1155,11 @@ public class WifiNl80211Manager {
      * @param callback Callback for AP events.
      * @return true on success, false on failure (e.g. when called on an interface which has not
      * been set up).
+     *
+     * @deprecated The usage is replaced by vendor HAL
+     * {@code android.hardware.wifi.hostapd.V1_3.IHostapdCallback}.
      */
+    @Deprecated
     public boolean registerApCallback(@NonNull String ifaceName,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull SoftApCallback callback) {

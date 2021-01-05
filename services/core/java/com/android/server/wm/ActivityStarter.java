@@ -56,15 +56,14 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Process.INVALID_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
 import static com.android.server.wm.ActivityStackSupervisor.DEFER_RESUME;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
-import static com.android.server.wm.ActivityStackSupervisor.TAG_TASKS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ACTIVITY_STARTS;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_PERMISSIONS_REVIEW;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RESULTS;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_TASKS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_USER_LEAVING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_FOCUS;
@@ -76,7 +75,7 @@ import static com.android.server.wm.ActivityTaskManagerService.ANIMATE;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_BOUNDS;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_DISPLAY;
 import static com.android.server.wm.Task.ActivityState.RESUMED;
-import static com.android.server.wm.Task.REPARENT_MOVE_STACK_TO_FRONT;
+import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import android.annotation.NonNull;
@@ -117,8 +116,10 @@ import android.util.Slog;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.HeavyWeightSwitcherActivity;
 import com.android.internal.app.IVoiceInteractor;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.server.am.PendingIntentRecord;
 import com.android.server.pm.InstantAppResolver;
+import com.android.server.power.ShutdownCheckPoints;
 import com.android.server.uri.NeededUriGrants;
 import com.android.server.wm.ActivityMetricsLogger.LaunchingState;
 import com.android.server.wm.ActivityStackSupervisor.PendingActivityLaunch;
@@ -618,7 +619,7 @@ class ActivityStarter {
                     voiceInteractor, startFlags, doResume, options, inTask,
                     false /* restrictedBgActivity */, intentGrants);
             mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(launchingState,
-                    mLastStartActivityResult, mLastStartActivityRecord);
+                    mLastStartActivityResult, mLastStartActivityRecord, options);
         } finally {
             onExecutionComplete();
         }
@@ -651,6 +652,19 @@ class ActivityStarter {
                 mRequest.resolveActivity(mSupervisor);
             }
 
+            // Add checkpoint for this shutdown or reboot attempt, so we can record the original
+            // intent action and package name.
+            if (mRequest.intent != null) {
+                String intentAction = mRequest.intent.getAction();
+                String callingPackage = mRequest.callingPackage;
+                if (intentAction != null && callingPackage != null
+                        && (Intent.ACTION_REQUEST_SHUTDOWN.equals(intentAction)
+                                || Intent.ACTION_SHUTDOWN.equals(intentAction)
+                                || Intent.ACTION_REBOOT.equals(intentAction))) {
+                    ShutdownCheckPoints.recordCheckPoint(intentAction, callingPackage, null);
+                }
+            }
+
             int res;
             synchronized (mService.mGlobalLock) {
                 final boolean globalConfigWillChange = mRequest.globalConfig != null
@@ -659,10 +673,8 @@ class ActivityStarter {
                 if (stack != null) {
                     stack.mConfigWillChange = globalConfigWillChange;
                 }
-                if (DEBUG_CONFIGURATION) {
-                    Slog.v(TAG_CONFIGURATION, "Starting activity when config will change = "
-                            + globalConfigWillChange);
-                }
+                ProtoLog.v(WM_DEBUG_CONFIGURATION, "Starting activity when config "
+                        + "will change = %b", globalConfigWillChange);
 
                 final long origId = Binder.clearCallingIdentity();
 
@@ -685,18 +697,21 @@ class ActivityStarter {
                     if (stack != null) {
                         stack.mConfigWillChange = false;
                     }
-                    if (DEBUG_CONFIGURATION) {
-                        Slog.v(TAG_CONFIGURATION,
+                    ProtoLog.v(WM_DEBUG_CONFIGURATION,
                                 "Updating to new configuration after starting activity.");
-                    }
+
                     mService.updateConfigurationLocked(mRequest.globalConfig, null, false);
                 }
 
+                // The original options may have additional info about metrics. The mOptions is not
+                // used here because it may be cleared in setTargetStackIfNeeded.
+                final ActivityOptions originalOptions = mRequest.activityOptions != null
+                        ? mRequest.activityOptions.getOriginalOptions() : null;
                 // Notify ActivityMetricsLogger that the activity has launched.
                 // ActivityMetricsLogger will then wait for the windows to be drawn and populate
                 // WaitResult.
                 mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(launchingState, res,
-                        mLastStartActivityRecord);
+                        mLastStartActivityRecord, originalOptions);
                 return getExternalResult(mRequest.waitResult == null ? res
                         : waitForResult(res, mLastStartActivityRecord));
             }
@@ -1184,7 +1199,23 @@ class ActivityStarter {
             }
         }
 
-        mService.onStartActivitySetDidAppSwitch();
+        if (mService.getBalAppSwitchesProtectionEnabled()) {
+            // Only allow app switching to be resumed if activity is not a restricted background
+            // activity and target app is not home process, otherwise any background activity
+            // started in background task can stop home button protection mode.
+            // As the targeted app is not a home process and we don't need to wait for the 2nd
+            // activity to be started to resume app switching, we can just enable app switching
+            // directly.
+            WindowProcessController homeProcess = mService.mHomeProcess;
+            boolean isHomeProcess = homeProcess != null
+                    && aInfo.applicationInfo.uid == homeProcess.mUid;
+            if (!restrictedBgActivity && !isHomeProcess) {
+                mService.resumeAppSwitches();
+            }
+        } else {
+            mService.onStartActivitySetDidAppSwitch();
+        }
+
         mController.doPendingActivityLaunches(false);
 
         mLastStartActivityResult = startActivityUnchecked(r, sourceRecord, voiceSession,
@@ -1249,6 +1280,20 @@ class ActivityStarter {
             return false;
         }
 
+        // Always allow home application to start activities.
+        if (mService.mHomeProcess != null && callingUid == mService.mHomeProcess.mUid) {
+            if (DEBUG_ACTIVITY_STARTS) {
+                Slog.d(TAG, "Activity start allowed for home app callingUid (" + callingUid + ")");
+            }
+            return false;
+        }
+
+        // App switching will be allowed if BAL app switching flag is not enabled, or if
+        // its app switching rule allows it.
+        // This is used to block background activity launch even if the app is still
+        // visible to user after user clicking home button.
+        final boolean appSwitchAllowed = mService.getBalAppSwitchesAllowed();
+
         // don't abort if the callingUid has a visible window or is a persistent system process
         final int callingUidProcState = mService.getUidState(callingUid);
         final boolean callingUidHasAnyVisibleWindow =
@@ -1258,7 +1303,8 @@ class ActivityStarter {
                 || callingUidProcState == ActivityManager.PROCESS_STATE_BOUND_TOP;
         final boolean isCallingUidPersistentSystemProcess =
                 callingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
-        if (callingUidHasAnyVisibleWindow || isCallingUidPersistentSystemProcess) {
+        if ((appSwitchAllowed && callingUidHasAnyVisibleWindow)
+                || isCallingUidPersistentSystemProcess) {
             if (DEBUG_ACTIVITY_STARTS) {
                 Slog.d(TAG, "Activity start allowed: callingUidHasAnyVisibleWindow = " + callingUid
                         + ", isCallingUidPersistentSystemProcess = "
@@ -1284,6 +1330,7 @@ class ActivityStarter {
                         || realCallingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
         if (realCallingUid != callingUid) {
             // don't abort if the realCallingUid has a visible window
+            // TODO(b/171459802): We should check appSwitchAllowed also
             if (realCallingUidHasAnyVisibleWindow) {
                 if (DEBUG_ACTIVITY_STARTS) {
                     Slog.d(TAG, "Activity start allowed: realCallingUid (" + realCallingUid
@@ -1347,6 +1394,12 @@ class ActivityStarter {
             }
             return false;
         }
+        // don't abort if the callingUid has SYSTEM_ALERT_WINDOW permission
+        if (mService.hasSystemAlertWindowPermission(callingUid, callingPid, callingPackage)) {
+            Slog.w(TAG, "Background activity start for " + callingPackage
+                    + " allowed because SYSTEM_ALERT_WINDOW permission is granted.");
+            return false;
+        }
         // If we don't have callerApp at this point, no caller was provided to startActivity().
         // That's the case for PendingIntent-based starts, since the creator's process might not be
         // up and alive. If that's the case, we retrieve the WindowProcessController for the send()
@@ -1359,7 +1412,7 @@ class ActivityStarter {
         // don't abort if the callerApp or other processes of that uid are allowed in any way
         if (callerApp != null) {
             // first check the original calling process
-            if (callerApp.areBackgroundActivityStartsAllowed()) {
+            if (callerApp.areBackgroundActivityStartsAllowed(appSwitchAllowed)) {
                 if (DEBUG_ACTIVITY_STARTS) {
                     Slog.d(TAG, "Background activity start allowed: callerApp process (pid = "
                             + callerApp.getPid() + ", uid = " + callerAppUid + ") is allowed");
@@ -1372,7 +1425,8 @@ class ActivityStarter {
             if (uidProcesses != null) {
                 for (int i = uidProcesses.size() - 1; i >= 0; i--) {
                     final WindowProcessController proc = uidProcesses.valueAt(i);
-                    if (proc != callerApp && proc.areBackgroundActivityStartsAllowed()) {
+                    if (proc != callerApp
+                            && proc.areBackgroundActivityStartsAllowed(appSwitchAllowed)) {
                         if (DEBUG_ACTIVITY_STARTS) {
                             Slog.d(TAG,
                                     "Background activity start allowed: process " + proc.getPid()
@@ -1383,15 +1437,11 @@ class ActivityStarter {
                 }
             }
         }
-        // don't abort if the callingUid has SYSTEM_ALERT_WINDOW permission
-        if (mService.hasSystemAlertWindowPermission(callingUid, callingPid, callingPackage)) {
-            Slog.w(TAG, "Background activity start for " + callingPackage
-                    + " allowed because SYSTEM_ALERT_WINDOW permission is granted.");
-            return false;
-        }
         // anything that has fallen through would currently be aborted
         Slog.w(TAG, "Background activity start [callingPackage: " + callingPackage
                 + "; callingUid: " + callingUid
+                + "; appSwitchAllowed: " + appSwitchAllowed
+                + "; balAppSwitchEnabled: " + mService.getBalAppSwitchesProtectionEnabled()
                 + "; isCallingUidForeground: " + isCallingUidForeground
                 + "; callingUidHasAnyVisibleWindow: " + callingUidHasAnyVisibleWindow
                 + "; callingUidProcState: " + DebugUtils.valueToString(ActivityManager.class,
@@ -1485,9 +1535,10 @@ class ActivityStarter {
             // anyone interested in this piece of information.
             final Task homeStack = targetTask.getDisplayArea().getRootHomeTask();
             final boolean homeTaskVisible = homeStack != null && homeStack.shouldBeVisible(null);
+            final ActivityRecord top = targetTask.getTopNonFinishingActivity();
+            final boolean visible = top != null && top.isVisible();
             mService.getTaskChangeNotificationController().notifyActivityRestartAttempt(
-                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask,
-                    targetTask.getTopNonFinishingActivity().isVisible());
+                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask, visible);
         }
     }
 
@@ -1659,11 +1710,6 @@ class ActivityStarter {
                                         packageName, -1, BoostFramework.Launch.BOOST_V1);
             }
             setNewTask(taskToAffiliate);
-            if (mService.getLockTaskController().isLockTaskModeViolation(
-                    mStartActivity.getTask())) {
-                Slog.e(TAG, "Attempted Lock Task Mode violation mStartActivity=" + mStartActivity);
-                return START_RETURN_LOCK_TASK_MODE_VIOLATION;
-            }
         } else if (mAddingToTask) {
             addOrReparentStartingActivity(targetTask, "adding to task");
         }
@@ -1689,8 +1735,9 @@ class ActivityStarter {
             // we need to resolve resultTo to a uid as grantImplicitAccess deals explicitly in UIDs
             final PackageManagerInternal pmInternal =
                     mService.getPackageManagerInternalLocked();
-            final int resultToUid = pmInternal.getPackageUidInternal(
-                            mStartActivity.resultTo.info.packageName, 0, mStartActivity.mUserId);
+            final int resultToUid = pmInternal.getPackageUid(
+                    mStartActivity.resultTo.info.packageName, 0 /* flags */,
+                    mStartActivity.mUserId);
             pmInternal.grantImplicitAccess(mStartActivity.mUserId, mIntent,
                     UserHandle.getAppId(mStartActivity.info.applicationInfo.uid) /*recipient*/,
                     resultToUid /*visible*/, true /*direct*/);
@@ -1707,8 +1754,9 @@ class ActivityStarter {
         mRootWindowContainer.startPowerModeLaunchIfNeeded(
                 false /* forceSend */, mStartActivity);
 
-        mTargetStack.startActivityLocked(mStartActivity, topStack.getTopNonFinishingActivity(),
-                newTask, mKeepCurTransition, mOptions);
+        mTargetStack.startActivityLocked(mStartActivity,
+                topStack != null ? topStack.getTopNonFinishingActivity() : null, newTask,
+                mKeepCurTransition, mOptions);
         if (mDoResume) {
             final ActivityRecord topTaskActivity =
                     mStartActivity.getTask().topRunningActivityLocked();
@@ -1727,7 +1775,7 @@ class ActivityStarter {
                         0 /* configChanges */, !PRESERVE_WINDOWS);
                 // Go ahead and tell window manager to execute app transition for this activity
                 // since the app transition will not be triggered through the resume channel.
-                mTargetStack.getDisplay().mDisplayContent.executeAppTransition();
+                mTargetStack.mDisplayContent.executeAppTransition();
             } else {
                 // If the target stack was not previously focusable (previous top running activity
                 // on that stack was not visible) then any prior calls to move the stack to the
@@ -1762,8 +1810,8 @@ class ActivityStarter {
         } else if (mInTask != null) {
             return mInTask;
         } else {
-            final Task stack = getLaunchStack(mStartActivity, mLaunchFlags,
-                    null /* task */, mOptions);
+            final Task stack = getLaunchStack(mStartActivity, mLaunchFlags, null /* task */,
+                    mOptions);
             final ActivityRecord top = stack.getTopNonFinishingActivity();
             if (top != null) {
                 return top.getTask();
@@ -1828,7 +1876,14 @@ class ActivityStarter {
             }
         }
 
-        if (mRestrictedBgActivity && (newTask || !targetTask.isUidPresent(mCallingUid))
+        // Do not allow background activity start in new task or in a task that uid is not present.
+        // Also do not allow pinned window to start single instance activity in background,
+        // as it will recreate the window and makes it to foreground.
+        boolean blockBalInTask = (newTask
+                || !targetTask.isUidPresent(mCallingUid)
+                || (LAUNCH_SINGLE_INSTANCE == mLaunchMode && targetTask.inPinnedWindowingMode()));
+
+        if (mRestrictedBgActivity && blockBalInTask
                 && handleBackgroundActivityAbort(mStartActivity)) {
             Slog.e(TAG, "Abort background activity starts from " + mCallingUid);
             return START_ABORTED;
@@ -1840,10 +1895,17 @@ class ActivityStarter {
         final boolean isNewClearTask =
                 (mLaunchFlags & (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK))
                         == (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK);
-        if (!newTask && mService.getLockTaskController().isLockTaskModeViolation(targetTask,
-                isNewClearTask)) {
-            Slog.e(TAG, "Attempted Lock Task Mode violation mStartActivity=" + mStartActivity);
-            return START_RETURN_LOCK_TASK_MODE_VIOLATION;
+        if (!newTask) {
+            if (mService.getLockTaskController().isLockTaskModeViolation(targetTask,
+                    isNewClearTask)) {
+                Slog.e(TAG, "Attempted Lock Task Mode violation mStartActivity=" + mStartActivity);
+                return START_RETURN_LOCK_TASK_MODE_VIOLATION;
+            }
+        } else {
+            if (mService.getLockTaskController().isNewTaskLockTaskModeViolation(mStartActivity)) {
+                Slog.e(TAG, "Attempted Lock Task Mode violation mStartActivity=" + mStartActivity);
+                return START_RETURN_LOCK_TASK_MODE_VIOLATION;
+            }
         }
 
         return START_SUCCESS;
@@ -1866,13 +1928,7 @@ class ActivityStarter {
             return START_SUCCESS;
         }
 
-        boolean clearTaskForReuse = false;
         if (reusedTask != null) {
-            if (mStartActivity.getTask() == null) {
-                mStartActivity.setTaskForReuse(reusedTask);
-                clearTaskForReuse = true;
-            }
-
             if (targetTask.intent == null) {
                 // This task was started because of movement of the activity based on
                 // affinity...
@@ -1906,10 +1962,8 @@ class ActivityStarter {
             // if that is the case, so this is it!  And for paranoia, make sure we have
             // correctly resumed the top activity.
             if (!mMovedToFront && mDoResume) {
-                if (DEBUG_TASKS) {
-                    Slog.d(TAG_TASKS, "Bring to front target: " + mTargetStack
-                            + " from " + targetTaskTop);
-                }
+                ProtoLog.d(WM_DEBUG_TASKS, "Bring to front target: %s from %s", mTargetStack,
+                        targetTaskTop);
                 mTargetStack.moveToFront("intentActivityFound");
             }
             resumeTargetStackIfNeeded();
@@ -1918,13 +1972,6 @@ class ActivityStarter {
 
         complyActivityFlags(targetTask,
                 reusedTask != null ? reusedTask.getTopNonFinishingActivity() : null, intentGrants);
-
-        if (clearTaskForReuse) {
-            // Clear task for re-use so later code to methods
-            // {@link #setTaskFromReuseOrCreateNewTask}, {@link #setTaskFromSourceRecord}, or
-            // {@link #setTaskFromInTask} can parent it to the task.
-            mStartActivity.setTaskForReuse(null);
-        }
 
         if (mAddingToTask) {
             return START_SUCCESS;
@@ -2019,8 +2066,6 @@ class ActivityStarter {
             // of history or if it is finished immediately), thus disassociating the task. Also note
             // that mReuseTask is reset as a result of {@link Task#performClearTaskLocked}
             // launching another activity.
-            // TODO(b/36119896):  We shouldn't trigger activity launches in this path since we are
-            // already launching one.
             targetTask.performClearTaskLocked();
             targetTask.setIntent(mStartActivity);
             mAddingToTask = true;
@@ -2492,7 +2537,7 @@ class ActivityStarter {
         // to the front if the caller is not itself in the front.
         final boolean differentTopTask;
         if (mTargetStack.getDisplayArea() == mPreferredTaskDisplayArea) {
-            final Task focusStack = mTargetStack.getDisplay().getFocusedStack();
+            final Task focusStack = mTargetStack.mDisplayContent.getFocusedStack();
             final ActivityRecord curTop = (focusStack == null)
                     ? null : focusStack.topRunningNonDelayedActivityLocked(mNotTop);
             final Task topTask = curTop != null ? curTop.getTask() : null;
@@ -2513,8 +2558,8 @@ class ActivityStarter {
                     intentActivity.setTaskToAffiliateWith(mSourceRecord.getTask());
                 }
 
-                final Task launchStack =
-                        getLaunchStack(mStartActivity, mLaunchFlags, intentTask, mOptions);
+                final Task launchStack = getLaunchStack(mStartActivity, mLaunchFlags, intentTask,
+                        mOptions);
                 if (launchStack == null || launchStack == mTargetStack) {
                     // Do not set mMovedToFront to true below for split-screen-top stack, or
                     // START_TASK_TO_FRONT will be returned and trigger unexpected animations when a
@@ -2539,8 +2584,8 @@ class ActivityStarter {
                             "bringingFoundTaskToFront");
                     mMovedToFront = !isSplitScreenTopStack;
                 } else {
-                    intentTask.reparent(launchStack, ON_TOP, REPARENT_MOVE_STACK_TO_FRONT, ANIMATE,
-                            DEFER_RESUME, "reparentToTargetStack");
+                    intentTask.reparent(launchStack, ON_TOP, REPARENT_MOVE_ROOT_TASK_TO_FRONT,
+                            ANIMATE, DEFER_RESUME, "reparentToTargetStack");
                     mMovedToFront = true;
                 }
                 mOptions = null;
@@ -2555,6 +2600,10 @@ class ActivityStarter {
 
     private void resumeTargetStackIfNeeded() {
         if (mDoResume) {
+            final ActivityRecord next = mTargetStack.topRunningActivity(true /* focusableOnly */);
+            if (next != null) {
+                next.setCurrentLaunchCanTurnScreenOn(true);
+            }
             mRootWindowContainer.resumeFocusedStacksTopActivities(mTargetStack, null, mOptions);
         } else {
             ActivityOptions.abort(mOptions);
@@ -2570,10 +2619,8 @@ class ActivityStarter {
                 mVoiceInteractor, toTop, mStartActivity, mSourceRecord, mOptions);
         addOrReparentStartingActivity(task, "setTaskFromReuseOrCreateNewTask - mReuseTask");
 
-        if (DEBUG_TASKS) {
-            Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
-                    + " in new task " + mStartActivity.getTask());
-        }
+        ProtoLog.v(WM_DEBUG_TASKS, "Starting new activity %s in new task %s",
+                mStartActivity, mStartActivity.getTask());
 
         if (taskToAffiliate != null) {
             mStartActivity.setTaskToAffiliateWith(taskToAffiliate);

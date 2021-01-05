@@ -18,6 +18,7 @@ package com.android.server.location;
 
 import android.annotation.Nullable;
 import android.location.Location;
+import android.location.LocationResult;
 import android.os.SystemClock;
 
 import com.android.internal.annotations.GuardedBy;
@@ -77,6 +78,11 @@ public class LocationFudger {
     @GuardedBy("this")
     @Nullable private Location mCachedCoarseLocation;
 
+    @GuardedBy("this")
+    @Nullable private LocationResult mCachedFineLocationResult;
+    @GuardedBy("this")
+    @Nullable private LocationResult mCachedCoarseLocationResult;
+
     public LocationFudger(float accuracyM) {
         this(accuracyM, SystemClock.elapsedRealtimeClock(), new SecureRandom());
     }
@@ -100,6 +106,28 @@ public class LocationFudger {
     }
 
     /**
+     * Coarsens a LocationResult by coarsening every location within the location result with
+     * {@link #createCoarse(Location)}.
+     */
+    public LocationResult createCoarse(LocationResult fineLocationResult) {
+        synchronized (this) {
+            if (fineLocationResult == mCachedFineLocationResult
+                    || fineLocationResult == mCachedCoarseLocationResult) {
+                return mCachedCoarseLocationResult;
+            }
+        }
+
+        LocationResult coarseLocationResult = fineLocationResult.map(this::createCoarse);
+
+        synchronized (this) {
+            mCachedFineLocationResult = fineLocationResult;
+            mCachedCoarseLocationResult = coarseLocationResult;
+        }
+
+        return coarseLocationResult;
+    }
+
+    /**
      * Create a coarse location using two technique, random offsets and snap-to-grid.
      *
      * First we add a random offset to mitigate against detecting grid transitions. Without a random
@@ -111,8 +139,8 @@ public class LocationFudger {
      */
     public Location createCoarse(Location fine) {
         synchronized (this) {
-            if (fine == mCachedFineLocation) {
-                return new Location(mCachedCoarseLocation);
+            if (fine == mCachedFineLocation || fine == mCachedCoarseLocation) {
+                return mCachedCoarseLocation;
             }
         }
 
@@ -154,7 +182,7 @@ public class LocationFudger {
             mCachedCoarseLocation = coarse;
         }
 
-        return new Location(mCachedCoarseLocation);
+        return coarse;
     }
 
     /**

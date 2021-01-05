@@ -16,6 +16,7 @@
 
 package com.android.server.hdmi;
 
+import android.annotation.CallSuper;
 import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.hdmi.IHdmiControlCallback;
@@ -27,6 +28,8 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.hdmi.Constants.LocalActivePort;
 import com.android.server.hdmi.HdmiAnnotations.ServiceThreadOnly;
 
+import com.google.android.collect.Lists;
+
 import java.util.List;
 
 /**
@@ -35,10 +38,6 @@ import java.util.List;
 abstract class HdmiCecLocalDeviceSource extends HdmiCecLocalDevice {
 
     private static final String TAG = "HdmiCecLocalDeviceSource";
-
-    // Indicate if current device is Active Source or not
-    @VisibleForTesting
-    protected boolean mIsActiveSource = false;
 
     // Device has cec switch functionality or not.
     // Default is false.
@@ -78,7 +77,7 @@ abstract class HdmiCecLocalDeviceSource extends HdmiCecLocalDevice {
         if (mService.getPortInfo(portId).getType() == HdmiPortInfo.PORT_OUTPUT) {
             mCecMessageCache.flushAll();
         }
-        // We'll not clear mIsActiveSource on the hotplug event to pass CETC 11.2.2-2 ~ 3.
+        // We'll not invalidate the active source on the hotplug event to pass CETC 11.2.2-2 ~ 3.
         if (connected) {
             mService.wakeUp();
         }
@@ -114,15 +113,38 @@ abstract class HdmiCecLocalDeviceSource extends HdmiCecLocalDevice {
     }
 
     @ServiceThreadOnly
+    protected void onActiveSourceLost() {
+        // Nothing to do.
+    }
+
+    @Override
+    @CallSuper
+    @ServiceThreadOnly
+    void setActiveSource(int logicalAddress, int physicalAddress, String caller) {
+        boolean wasActiveSource = isActiveSource();
+        super.setActiveSource(logicalAddress, physicalAddress, caller);
+        if (wasActiveSource && !isActiveSource()) {
+            onActiveSourceLost();
+        }
+    }
+
+    @ServiceThreadOnly
+    protected void setActiveSource(int physicalAddress, String caller) {
+        assertRunOnServiceThread();
+        // Invalidate the internal active source record.
+        ActiveSource activeSource = ActiveSource.of(Constants.ADDR_INVALID, physicalAddress);
+        setActiveSource(activeSource, caller);
+    }
+
+    @ServiceThreadOnly
     protected boolean handleActiveSource(HdmiCecMessage message) {
         assertRunOnServiceThread();
         int logicalAddress = message.getSource();
         int physicalAddress = HdmiUtils.twoBytesToInt(message.getParams());
         ActiveSource activeSource = ActiveSource.of(logicalAddress, physicalAddress);
         if (!getActiveSource().equals(activeSource)) {
-            setActiveSource(activeSource);
+            setActiveSource(activeSource, "HdmiCecLocalDeviceSource#handleActiveSource()");
         }
-        setIsActiveSource(physicalAddress == mService.getPhysicalAddress());
         updateDevicePowerStatus(logicalAddress, HdmiControlManager.POWER_STATUS_ON);
         if (isRoutingControlFeatureEnabled()) {
             switchInputOnReceivingNewActivePath(physicalAddress);
@@ -146,7 +168,12 @@ abstract class HdmiCecLocalDeviceSource extends HdmiCecLocalDevice {
         // If current device is the target path, set to Active Source.
         // If the path is under the current device, should switch
         if (physicalAddress == mService.getPhysicalAddress() && mService.isPlaybackDevice()) {
-            setAndBroadcastActiveSource(message, physicalAddress);
+            setAndBroadcastActiveSource(message, physicalAddress,
+                    "HdmiCecLocalDeviceSource#handleSetStreamPath()");
+        } else if (physicalAddress != mService.getPhysicalAddress() || !isActiveSource()) {
+            // Invalidate the active source if stream path is set to other physical address or
+            // our physical address while not active source
+            setActiveSource(physicalAddress, "HdmiCecLocalDeviceSource#handleSetStreamPath()");
         }
         switchInputOnReceivingNewActivePath(physicalAddress);
         return true;
@@ -156,18 +183,17 @@ abstract class HdmiCecLocalDeviceSource extends HdmiCecLocalDevice {
     @ServiceThreadOnly
     protected boolean handleRoutingChange(HdmiCecMessage message) {
         assertRunOnServiceThread();
+        int physicalAddress = HdmiUtils.twoBytesToInt(message.getParams(), 2);
+        if (physicalAddress != mService.getPhysicalAddress() || !isActiveSource()) {
+            // Invalidate the active source if routing is changed to other physical address or
+            // our physical address while not active source
+            setActiveSource(physicalAddress, "HdmiCecLocalDeviceSource#handleRoutingChange()");
+        }
         if (!isRoutingControlFeatureEnabled()) {
             mService.maySendFeatureAbortCommand(message, Constants.ABORT_REFUSED);
             return true;
         }
-        int newPath = HdmiUtils.twoBytesToInt(message.getParams(), 2);
-        // if the current device is a pure playback device
-        if (!mIsSwitchDevice
-                && newPath == mService.getPhysicalAddress()
-                && mService.isPlaybackDevice()) {
-            setAndBroadcastActiveSource(message, newPath);
-        }
-        handleRoutingChangeAndInformation(newPath, message);
+        handleRoutingChangeAndInformation(physicalAddress, message);
         return true;
     }
 
@@ -175,16 +201,15 @@ abstract class HdmiCecLocalDeviceSource extends HdmiCecLocalDevice {
     @ServiceThreadOnly
     protected boolean handleRoutingInformation(HdmiCecMessage message) {
         assertRunOnServiceThread();
+        int physicalAddress = HdmiUtils.twoBytesToInt(message.getParams());
+        if (physicalAddress != mService.getPhysicalAddress() || !isActiveSource()) {
+            // Invalidate the active source if routing is changed to other physical address or
+            // our physical address while not active source
+            setActiveSource(physicalAddress, "HdmiCecLocalDeviceSource#handleRoutingInformation()");
+        }
         if (!isRoutingControlFeatureEnabled()) {
             mService.maySendFeatureAbortCommand(message, Constants.ABORT_REFUSED);
             return true;
-        }
-        int physicalAddress = HdmiUtils.twoBytesToInt(message.getParams());
-        // if the current device is a pure playback device
-        if (!mIsSwitchDevice
-                && physicalAddress == mService.getPhysicalAddress()
-                && mService.isPlaybackDevice()) {
-            setAndBroadcastActiveSource(message, physicalAddress);
         }
         handleRoutingChangeAndInformation(physicalAddress, message);
         return true;
@@ -210,23 +235,47 @@ abstract class HdmiCecLocalDeviceSource extends HdmiCecLocalDevice {
         // do nothing
     }
 
+    @Override
+    protected int getRcProfile() {
+        return Constants.RC_PROFILE_SOURCE;
+    }
+
+    @Override
+    protected List<Integer> getRcFeatures() {
+        return Lists.newArrayList(Constants.RC_PROFILE_SOURCE_HANDLES_CONTENTS_MENU,
+                Constants.RC_PROFILE_SOURCE_HANDLES_ROOT_MENU,
+                Constants.RC_PROFILE_SOURCE_HANDLES_SETUP_MENU,
+                Constants.RC_PROFILE_SOURCE_HANDLES_TOP_MENU);
+    }
+
+    @Override
+    protected List<Integer> getDeviceFeatures() {
+        return Lists.newArrayList();
+    }
+
     // Active source claiming needs to be handled in Service
     // since service can decide who will be the active source when the device supports
     // multiple device types in this method.
     // This method should only be called when the device can be the active source.
-    protected void setAndBroadcastActiveSource(HdmiCecMessage message, int physicalAddress) {
+    protected void setAndBroadcastActiveSource(HdmiCecMessage message, int physicalAddress,
+            String caller) {
         mService.setAndBroadcastActiveSource(
-                physicalAddress, getDeviceInfo().getDeviceType(), message.getSource());
+                physicalAddress, getDeviceInfo().getDeviceType(), message.getSource(), caller);
     }
 
+    // Indicates if current device is the active source or not
     @ServiceThreadOnly
-    void setIsActiveSource(boolean on) {
-        assertRunOnServiceThread();
-        mIsActiveSource = on;
+    protected boolean isActiveSource() {
+        if (getDeviceInfo() == null) {
+            return false;
+        }
+
+        return getActiveSource().equals(getDeviceInfo().getLogicalAddress(),
+                getDeviceInfo().getPhysicalAddress());
     }
 
     protected void wakeUpIfActiveSource() {
-        if (!mIsActiveSource) {
+        if (!isActiveSource()) {
             return;
         }
         // Wake up the device
@@ -235,7 +284,7 @@ abstract class HdmiCecLocalDeviceSource extends HdmiCecLocalDevice {
     }
 
     protected void maySendActiveSource(int dest) {
-        if (!mIsActiveSource) {
+        if (!isActiveSource()) {
             return;
         }
         addAndStartAction(new ActiveSourceAction(this, dest));

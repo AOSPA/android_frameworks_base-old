@@ -37,7 +37,6 @@ import android.util.Slog;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.backup.IBackupTransport;
 import com.android.internal.util.ArrayUtils;
-import com.android.server.LocalServices;
 import com.android.server.backup.transport.TransportClient;
 
 import com.google.android.collect.Sets;
@@ -49,8 +48,8 @@ import java.util.Set;
  */
 public class BackupEligibilityRules {
     private static final boolean DEBUG = false;
-    // Whitelist of system packages that are eligible for backup in non-system users.
-    private static final Set<String> systemPackagesWhitelistedForAllUsers =
+    // List of system packages that are eligible for backup in non-system users.
+    private static final Set<String> systemPackagesAllowedForAllUsers =
             Sets.newArraySet(PACKAGE_MANAGER_SENTINEL, PLATFORM_PACKAGE_NAME);
 
     private final PackageManager mPackageManager;
@@ -86,20 +85,24 @@ public class BackupEligibilityRules {
      *     <li>they run as a system-level uid but do not supply their own backup agent
      *     <li>it is the special shared-storage backup package used for 'adb backup'
      * </ol>
+     *
+     * However, the above eligibility rules are ignored for non-system apps in in case of
+     * device-to-device migration, see {@link OperationType}.
      */
     @VisibleForTesting
     public boolean appIsEligibleForBackup(ApplicationInfo app) {
-        // 1. their manifest states android:allowBackup="false"
-        boolean appAllowsBackup = (app.flags & ApplicationInfo.FLAG_ALLOW_BACKUP) != 0;
-        if (!appAllowsBackup && !forceFullBackup(app.uid, mOperationType)) {
+        // 1. their manifest states android:allowBackup="false" and this is not a device-to-device
+        // migration
+        if (!isAppBackupAllowed(app)) {
             return false;
         }
 
         // 2. they run as a system-level uid
         if (UserHandle.isCore(app.uid)) {
-            // and the backup is happening for non-system user on a non-whitelisted package.
+            // and the backup is happening for a non-system user on a package that is not explicitly
+            // allowed.
             if (mUserId != UserHandle.USER_SYSTEM
-                    && !systemPackagesWhitelistedForAllUsers.contains(app.packageName)) {
+                    && !systemPackagesAllowedForAllUsers.contains(app.packageName)) {
                 return false;
             }
 
@@ -120,6 +123,23 @@ public class BackupEligibilityRules {
         }
 
         return !appIsDisabled(app);
+    }
+
+    /**
+    * Check if this app allows backup. Apps can opt out of backup by stating
+    * android:allowBackup="false" in their manifest. However, this flag is ignored for non-system
+    * apps during device-to-device migrations, see {@link OperationType}.
+    *
+    * @param app The app under check.
+    * @return boolean indicating whether backup is allowed.
+    */
+    public boolean isAppBackupAllowed(ApplicationInfo app) {
+        if (mOperationType == OperationType.MIGRATION && !UserHandle.isCore(app.uid)) {
+            // Backup / restore of all apps is force allowed during device-to-device migration.
+            return true;
+        }
+
+        return (app.flags & ApplicationInfo.FLAG_ALLOW_BACKUP) != 0;
     }
 
     /**
@@ -317,5 +337,9 @@ public class BackupEligibilityRules {
             // we have found a match for all stored sigs
             return true;
         }
+    }
+
+    public int getOperationType() {
+        return mOperationType;
     }
 }

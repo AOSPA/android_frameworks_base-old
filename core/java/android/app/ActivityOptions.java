@@ -22,6 +22,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -36,7 +37,9 @@ import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.IRemoteCallback;
+import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
@@ -54,6 +57,8 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.window.WindowContainerToken;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 
 /**
@@ -290,6 +295,9 @@ public class ActivityOptions {
     private static final String KEY_EXIT_COORDINATOR_INDEX
             = "android:activity.exitCoordinatorIndex";
 
+    /** See {@link SourceInfo}. */
+    private static final String KEY_SOURCE_INFO = "android.activity.sourceInfo";
+
     private static final String KEY_USAGE_TIME_REPORT = "android:activity.usageTimeReport";
     private static final String KEY_ROTATION_ANIMATION_HINT = "android:activity.rotationAnimationHint";
 
@@ -298,6 +306,12 @@ public class ActivityOptions {
     private static final String KEY_SPECS_FUTURE = "android:activity.specsFuture";
     private static final String KEY_REMOTE_ANIMATION_ADAPTER
             = "android:activity.remoteAnimationAdapter";
+
+    /**
+     * @see #setLaunchCookie
+     * @hide
+     */
+    private static final String KEY_LAUNCH_COOKIE = "android.activity.launchCookie";
 
     /** @hide */
     public static final int ANIM_UNDEFINED = -1;
@@ -369,10 +383,12 @@ public class ActivityOptions {
     private boolean mAvoidMoveToFront;
     private boolean mFreezeRecentTasksReordering;
     private AppTransitionAnimationSpec mAnimSpecs[];
+    private SourceInfo mSourceInfo;
     private int mRotationAnimationHint = -1;
     private Bundle mAppVerificationBundle;
     private IAppTransitionAnimationSpecsFuture mSpecsFuture;
     private RemoteAnimationAdapter mRemoteAnimationAdapter;
+    private IBinder mLaunchCookie;
 
     /**
      * Create an ActivityOptions specifying a custom animation to run when
@@ -1055,6 +1071,7 @@ public class ActivityOptions {
             mAnimationFinishedListener = IRemoteCallback.Stub.asInterface(
                     opts.getBinder(KEY_ANIMATION_FINISHED_LISTENER));
         }
+        mSourceInfo = opts.getParcelable(KEY_SOURCE_INFO);
         mRotationAnimationHint = opts.getInt(KEY_ROTATION_ANIMATION_HINT, -1);
         mAppVerificationBundle = opts.getBundle(KEY_INSTANT_APP_VERIFICATION_BUNDLE);
         if (opts.containsKey(KEY_SPECS_FUTURE)) {
@@ -1062,6 +1079,7 @@ public class ActivityOptions {
                     KEY_SPECS_FUTURE));
         }
         mRemoteAnimationAdapter = opts.getParcelable(KEY_REMOTE_ANIMATION_ADAPTER);
+        mLaunchCookie = opts.getBinder(KEY_LAUNCH_COOKIE);
     }
 
     /**
@@ -1275,10 +1293,10 @@ public class ActivityOptions {
     }
 
     /**
-     * Sets the id of the display where activity should be launched.
-     * An app can launch activities on public displays or private displays that are owned by the app
-     * or where an app already has activities. Otherwise, trying to launch on a private display
-     * or providing an invalid display id will result in an exception.
+     * Sets the id of the display where the activity should be launched.
+     * An app can launch activities on public displays or displays where the app already has
+     * activities. Otherwise, trying to launch on a private display or providing an invalid display
+     * id will result in an exception.
      * <p>
      * Setting launch display id will be ignored on devices that don't have
      * {@link android.content.pm.PackageManager#FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS}.
@@ -1484,6 +1502,25 @@ public class ActivityOptions {
     /**  @hide */
     public boolean isApplyActivityFlagsForBubbles() {
         return mApplyActivityFlagsForBubbles;
+    }
+
+    /**
+     * Sets a launch cookie that can be used to track the activity and task that are launch as a
+     * result of this option.
+     *
+     * @hide
+     */
+    public void setLaunchCookie(IBinder launchCookie) {
+        mLaunchCookie = launchCookie;
+    }
+
+    /**
+     * @return The launch tracking cookie if set or {@code null} otherwise.
+     *
+     * @hide
+     */
+    public IBinder getLaunchCookie() {
+        return mLaunchCookie;
     }
 
     /**
@@ -1696,6 +1733,9 @@ public class ActivityOptions {
         if (mSpecsFuture != null) {
             b.putBinder(KEY_SPECS_FUTURE, mSpecsFuture.asBinder());
         }
+        if (mSourceInfo != null) {
+            b.putParcelable(KEY_SOURCE_INFO, mSourceInfo);
+        }
         if (mRotationAnimationHint != -1) {
             b.putInt(KEY_ROTATION_ANIMATION_HINT, mRotationAnimationHint);
         }
@@ -1704,6 +1744,9 @@ public class ActivityOptions {
         }
         if (mRemoteAnimationAdapter != null) {
             b.putParcelable(KEY_REMOTE_ANIMATION_ADAPTER, mRemoteAnimationAdapter);
+        }
+        if (mLaunchCookie != null) {
+            b.putBinder(KEY_LAUNCH_COOKIE, mLaunchCookie);
         }
         return b;
     }
@@ -1734,6 +1777,28 @@ public class ActivityOptions {
      */
     public void requestUsageTimeReport(PendingIntent receiver) {
         mUsageTimeReport = receiver;
+    }
+
+    /**
+     * Returns the launch source information set by {@link #setSourceInfo}.
+     * @hide
+     */
+    public @Nullable SourceInfo getSourceInfo() {
+        return mSourceInfo;
+    }
+
+    /**
+     * Sets the source information of the launch event.
+     *
+     * @param type The type of the startup source.
+     * @param uptimeMillis The event time of startup source in milliseconds since boot, not
+     *                     including sleep (e.g. from {@link android.view.MotionEvent#getEventTime}
+     *                     or {@link android.os.SystemClock#uptimeMillis}).
+     * @see SourceInfo
+     * @hide
+     */
+    public void setSourceInfo(@SourceInfo.SourceType int type, long uptimeMillis) {
+        mSourceInfo = new SourceInfo(type, uptimeMillis);
     }
 
     /**
@@ -1862,5 +1927,61 @@ public class ActivityOptions {
                 }
             }
         }
+    }
+
+    /**
+     * The information about the source of activity launch. E.g. describe an activity is launched
+     * from launcher by receiving a motion event with a timestamp.
+     * @hide
+     */
+    public static class SourceInfo implements Parcelable {
+        /** Launched from launcher. */
+        public static final int TYPE_LAUNCHER = 1;
+        /** Launched from notification. */
+        public static final int TYPE_NOTIFICATION = 2;
+        /** Launched from lockscreen, including notification while the device is locked. */
+        public static final int TYPE_LOCKSCREEN = 3;
+        /** Launched from recents gesture handler. */
+        public static final int TYPE_RECENTS_ANIMATION = 4;
+
+        @IntDef(flag = true, prefix = { "TYPE_" }, value = {
+                TYPE_LAUNCHER,
+                TYPE_NOTIFICATION,
+                TYPE_LOCKSCREEN,
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface SourceType {}
+
+        /** The type of the startup source. */
+        public final @SourceType int type;
+
+        /** The timestamp (uptime based) of the source to launch activity. */
+        public final long eventTimeMs;
+
+        SourceInfo(@SourceType int srcType, long uptimeMillis) {
+            type = srcType;
+            eventTimeMs = uptimeMillis;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeInt(type);
+            dest.writeLong(eventTimeMs);
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        public static final Creator<SourceInfo> CREATOR = new Creator<SourceInfo>() {
+            public SourceInfo createFromParcel(Parcel in) {
+                return new SourceInfo(in.readInt(), in.readLong());
+            }
+
+            public SourceInfo[] newArray(int size) {
+                return new SourceInfo[size];
+            }
+        };
     }
 }

@@ -60,12 +60,12 @@ import android.net.ipsec.ike.IkeTrafficSelector;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
-import android.net.util.IpRange;
 import android.system.OsConstants;
 import android.util.Log;
 
 import com.android.internal.net.VpnProfile;
 import com.android.internal.util.HexDump;
+import com.android.net.module.util.IpRange;
 
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -270,13 +270,13 @@ public class VpnIkev2Utils {
         @Override
         public void onClosed() {
             Log.d(mTag, "IkeClosed for network " + mNetwork);
-            mCallback.onSessionLost(mNetwork); // Server requested session closure. Retry?
+            mCallback.onSessionLost(mNetwork, null); // Server requested session closure. Retry?
         }
 
         @Override
         public void onClosedExceptionally(@NonNull IkeException exception) {
             Log.d(mTag, "IkeClosedExceptionally for network " + mNetwork, exception);
-            mCallback.onSessionLost(mNetwork);
+            mCallback.onSessionLost(mNetwork, exception);
         }
 
         @Override
@@ -306,13 +306,13 @@ public class VpnIkev2Utils {
         @Override
         public void onClosed() {
             Log.d(mTag, "ChildClosed for network " + mNetwork);
-            mCallback.onSessionLost(mNetwork);
+            mCallback.onSessionLost(mNetwork, null);
         }
 
         @Override
         public void onClosedExceptionally(@NonNull IkeException exception) {
             Log.d(mTag, "ChildClosedExceptionally for network " + mNetwork, exception);
-            mCallback.onSessionLost(mNetwork);
+            mCallback.onSessionLost(mNetwork, exception);
         }
 
         @Override
@@ -349,7 +349,7 @@ public class VpnIkev2Utils {
         @Override
         public void onLost(@NonNull Network network) {
             Log.d(mTag, "Tearing down; lost network: " + network);
-            mCallback.onSessionLost(network);
+            mCallback.onSessionLost(network, null);
         }
     }
 

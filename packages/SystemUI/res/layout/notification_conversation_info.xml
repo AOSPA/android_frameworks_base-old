@@ -34,7 +34,7 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:clipChildren="false"
-        android:paddingTop="11dp"
+        android:paddingTop="@dimen/notification_guts_header_top_padding"
         android:clipToPadding="true">
         <ImageView
             android:id="@+id/conversation_icon"
@@ -210,7 +210,7 @@
                     android:clickable="false"
                     android:focusable="false"
                     android:ellipsize="end"
-                    android:maxLines="3"
+                    android:maxLines="4"
                     android:textAppearance="@style/TextAppearance.NotificationImportanceDetail"/>
             </com.android.systemui.statusbar.notification.row.ButtonLinearLayout>
 

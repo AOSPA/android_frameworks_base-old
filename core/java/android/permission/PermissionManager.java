@@ -16,6 +16,8 @@
 
 package android.permission;
 
+import static android.os.Build.VERSION_CODES.S;
+
 import android.Manifest;
 import android.annotation.CallbackExecutor;
 import android.annotation.IntRange;
@@ -24,11 +26,13 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
-import android.annotation.TestApi;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.IActivityManager;
 import android.app.PropertyInvalidatedCache;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.content.Context;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
@@ -56,7 +60,6 @@ import java.util.function.Consumer;
  *
  * @hide
  */
-@TestApi
 @SystemApi
 @SystemService(Context.PERMISSION_SERVICE)
 public final class PermissionManager {
@@ -68,6 +71,17 @@ public final class PermissionManager {
     /** @hide */
     public static final String KILL_APP_REASON_GIDS_CHANGED =
             "permission grant or revoke changed gids";
+
+    /**
+     * Refuse to install package if groups of permissions are bad
+     * - Permission groups should only be shared between apps sharing a certificate
+     * - If a permission belongs to a group that group should be defined
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = S)
+    public static final long CANNOT_INSTALL_WITH_BAD_PERMISSION_GROUPS = 146211400;
 
     private final @NonNull Context mContext;
 
@@ -114,7 +128,6 @@ public final class PermissionManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(anyOf = {
             Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
@@ -135,7 +148,6 @@ public final class PermissionManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(anyOf = {
             Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
@@ -153,7 +165,7 @@ public final class PermissionManager {
      * Get set of permissions that have been split into more granular or dependent permissions.
      *
      * <p>E.g. before {@link android.os.Build.VERSION_CODES#Q} an app that was granted
-     * {@link Manifest.permission#ACCESS_COARSE_LOCATION} could access he location while it was in
+     * {@link Manifest.permission#ACCESS_COARSE_LOCATION} could access the location while it was in
      * foreground and background. On platforms after {@link android.os.Build.VERSION_CODES#Q}
      * the location permission only grants location access while the app is in foreground. This
      * would break apps that target before {@link android.os.Build.VERSION_CODES#Q}. Hence whenever
@@ -586,7 +598,7 @@ public final class PermissionManager {
         }
 
         @Override
-        public boolean equals(Object rval) {
+        public boolean equals(@Nullable Object rval) {
             // N.B. pid doesn't count toward equality!
             if (rval == null) {
                 return false;
@@ -608,7 +620,7 @@ public final class PermissionManager {
     /** @hide */
     private static final PropertyInvalidatedCache<PermissionQuery, Integer> sPermissionCache =
             new PropertyInvalidatedCache<PermissionQuery, Integer>(
-                    16, CACHE_KEY_PACKAGE_INFO) {
+                    2048, CACHE_KEY_PACKAGE_INFO, "checkPermission") {
                 @Override
                 protected Integer recompute(PermissionQuery query) {
                     return checkPermissionUncached(query.permission, query.pid, query.uid);
@@ -637,28 +649,29 @@ public final class PermissionManager {
     private static final class PackageNamePermissionQuery {
         final String permName;
         final String pkgName;
-        final int uid;
+        final int userId;
 
-        PackageNamePermissionQuery(@Nullable String permName, @Nullable String pkgName, int uid) {
+        PackageNamePermissionQuery(@Nullable String permName, @Nullable String pkgName,
+                @UserIdInt int userId) {
             this.permName = permName;
             this.pkgName = pkgName;
-            this.uid = uid;
+            this.userId = userId;
         }
 
         @Override
         public String toString() {
             return String.format(
-                    "PackageNamePermissionQuery(pkgName=\"%s\", permName=\"%s, uid=%s\")",
-                    pkgName, permName, uid);
+                    "PackageNamePermissionQuery(pkgName=\"%s\", permName=\"%s, userId=%s\")",
+                    pkgName, permName, userId);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(permName, pkgName, uid);
+            return Objects.hash(permName, pkgName, userId);
         }
 
         @Override
-        public boolean equals(Object rval) {
+        public boolean equals(@Nullable Object rval) {
             if (rval == null) {
                 return false;
             }
@@ -670,16 +683,16 @@ public final class PermissionManager {
             }
             return Objects.equals(permName, other.permName)
                     && Objects.equals(pkgName, other.pkgName)
-                    && uid == other.uid;
+                    && userId == other.userId;
         }
     }
 
     /* @hide */
     private static int checkPackageNamePermissionUncached(
-            String permName, String pkgName, int uid) {
+            String permName, String pkgName, @UserIdInt int userId) {
         try {
             return ActivityThread.getPermissionManager().checkPermission(
-                    permName, pkgName, uid);
+                    permName, pkgName, userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -689,11 +702,11 @@ public final class PermissionManager {
     private static PropertyInvalidatedCache<PackageNamePermissionQuery, Integer>
             sPackageNamePermissionCache =
             new PropertyInvalidatedCache<PackageNamePermissionQuery, Integer>(
-                    16, CACHE_KEY_PACKAGE_INFO) {
+                    16, CACHE_KEY_PACKAGE_INFO, "checkPackageNamePermission") {
                 @Override
                 protected Integer recompute(PackageNamePermissionQuery query) {
                     return checkPackageNamePermissionUncached(
-                            query.permName, query.pkgName, query.uid);
+                            query.permName, query.pkgName, query.userId);
                 }
             };
 
@@ -702,9 +715,10 @@ public final class PermissionManager {
      *
      * @hide
      */
-    public static int checkPackageNamePermission(String permName, String pkgName, int uid) {
+    public static int checkPackageNamePermission(String permName, String pkgName,
+            @UserIdInt int userId) {
         return sPackageNamePermissionCache.query(
-                new PackageNamePermissionQuery(permName, pkgName, uid));
+                new PackageNamePermissionQuery(permName, pkgName, userId));
     }
 
     /**

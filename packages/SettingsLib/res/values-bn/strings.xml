@@ -257,7 +257,6 @@
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"নামহীন ব্লুটুথ ডিভাইসগুলি দেখুন"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="1452342324349203434">"চূড়ান্ত ভলিউম অক্ষম করুন"</string>
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"Gabeldorsche ফিচার চালু করুন"</string>
-    <string name="enhanced_connectivity" msgid="7201127377781666804">"কানেক্টিভিটি উন্নত করা হয়েছে"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="1710571610177659127">"ব্লুটুথ AVRCP ভার্সন"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7846922290083709633">"ব্লুটুথ AVRCP ভার্সন বেছে নিন"</string>
     <string name="bluetooth_select_map_version_string" msgid="526308145174175327">"ব্লুটুথ MAP ভার্সন"</string>
@@ -400,6 +399,12 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"নিষ্ক্রিয় রয়েছে৷ টগল করতে আলতো চাপুন৷"</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"সক্রিয় রয়েছে৷ টগল করতে আলতো চাপুন৷"</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"অ্যাপ স্ট্যান্ডবাই-এর অবস্থা:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <!-- no translation found for transcode_settings_title (6700974145733932357) -->
+    <skip />
+    <!-- no translation found for transcode_enable_all (4719796495995795404) -->
+    <skip />
+    <!-- no translation found for transcode_skip_apps (5680997722349545778) -->
+    <skip />
     <string name="runningservices_settings_title" msgid="6460099290493086515">"এখন চলছে যে পরিষেবাগুলি"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"বর্তমান চলমান পরিষেবাগুলি দেখুন এবং নিয়ন্ত্রণ করুন"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"ওয়েবভিউ প্রয়োগ"</string>
@@ -488,8 +493,8 @@
     <string name="status_unavailable" msgid="5279036186589861608">"অনুপলভ্য"</string>
     <string name="wifi_status_mac_randomized" msgid="466382542497832189">"MAC র‍্যান্ডমাইজ করা হয়েছে"</string>
     <plurals name="wifi_tether_connected_summary" formatted="false" msgid="6317236306047306139">
-      <item quantity="one">%1$dটি ডিভাইস কানেক্ট</item>
-      <item quantity="other">%1$dটি ডিভাইস কানেক্ট</item>
+      <item quantity="one">%1$dটি ডিভাইস কানেক্ট রয়েছে</item>
+      <item quantity="other">%1$dটি ডিভাইস কানেক্ট রয়েছে</item>
     </plurals>
     <string name="accessibility_manual_zen_more_time" msgid="5141801092071134235">"আরও বেশি।"</string>
     <string name="accessibility_manual_zen_less_time" msgid="6828877595848229965">"আরও কম।"</string>
@@ -546,12 +551,19 @@
     <string name="user_need_lock_message" msgid="4311424336209509301">"আপনি একটি সীমাবদ্ধযুক্ত প্রোফাইল তৈরি করার আগে, আপনাকে আপনার অ্যাপ্লিকেশন এবং ব্যক্তিগত ডেটা সুরক্ষিত করার জন্য একটি স্ক্রিন লক সেট-আপ করতে হবে।"</string>
     <string name="user_set_lock_button" msgid="1427128184982594856">"লক সেট করুন"</string>
     <string name="user_switch_to_user" msgid="6975428297154968543">"<xliff:g id="USER_NAME">%s</xliff:g>-এ পাল্টান"</string>
+    <string name="creating_new_user_dialog_message" msgid="7232880257538970375">"নতুন ব্যবহারকারী তৈরি করা হচ্ছে…"</string>
+    <string name="user_nickname" msgid="262624187455825083">"বিশেষ নাম"</string>
     <string name="guest_new_guest" msgid="3482026122932643557">"অতিথি যোগ করুন"</string>
     <string name="guest_exit_guest" msgid="5908239569510734136">"অতিথি সরান"</string>
     <string name="guest_nickname" msgid="6332276931583337261">"অতিথি"</string>
+    <string name="user_image_take_photo" msgid="467512954561638530">"ফটো তুলুন"</string>
+    <string name="user_image_choose_photo" msgid="1363820919146782908">"একটি ইমেজ বেছে নিন"</string>
+    <string name="user_image_photo_selector" msgid="433658323306627093">"ফটো বেছে নিন"</string>
     <string name="cached_apps_freezer_device_default" msgid="2616594131750144342">"ডিভাইসের ডিফল্ট"</string>
     <string name="cached_apps_freezer_disabled" msgid="4816382260660472042">"বন্ধ করা আছে"</string>
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"চালু করা আছে"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"এই পরিবর্তনটি প্রয়োগ করার জন্য আপনার ডিভাইসটি অবশ্যই রিবুট করতে হবে। এখনই রিবুট করুন বা বাতিল করুন।"</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"তার যুক্ত হেডফোন"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"চালু আছে"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"বন্ধ আছে"</string>
 </resources>

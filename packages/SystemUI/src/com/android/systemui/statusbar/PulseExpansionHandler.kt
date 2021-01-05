@@ -30,24 +30,25 @@ import android.view.ViewConfiguration
 import com.android.systemui.Gefingerpoken
 import com.android.systemui.Interpolators
 import com.android.systemui.R
+import com.android.systemui.classifier.Classifier.NOTIFICATION_DRAG_DOWN
+import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.row.ExpandableView
 import com.android.systemui.statusbar.notification.stack.NotificationRoundnessManager
-import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone
 import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.statusbar.phone.ShadeController
 import javax.inject.Inject
-import javax.inject.Singleton
 import kotlin.math.max
 
 /**
  * A utility class to enable the downward swipe on when pulsing.
  */
-@Singleton
+@SysUISingleton
 class PulseExpansionHandler @Inject
 constructor(
     context: Context,
@@ -93,7 +94,7 @@ constructor(
         private set
     private val mTouchSlop: Float
     private lateinit var expansionCallback: ExpansionCallback
-    private lateinit var stackScroller: NotificationStackScrollLayout
+    private lateinit var stackScrollerController: NotificationStackScrollLayoutController
     private val mTemp2 = IntArray(2)
     private var mDraggedFarEnough: Boolean = false
     private var mStartingChild: ExpandableView? = null
@@ -106,7 +107,7 @@ constructor(
     private var velocityTracker: VelocityTracker? = null
 
     private val isFalseTouch: Boolean
-        get() = falsingManager.isFalseTouch
+        get() = falsingManager.isFalseTouch(NOTIFICATION_DRAG_DOWN)
     var qsExpanded: Boolean = false
     var pulseExpandAbortListener: Runnable? = null
     var bouncerShowing: Boolean = false
@@ -315,23 +316,23 @@ constructor(
     private fun findView(x: Float, y: Float): ExpandableView? {
         var totalX = x
         var totalY = y
-        stackScroller.getLocationOnScreen(mTemp2)
+        stackScrollerController.getLocationOnScreen(mTemp2)
         totalX += mTemp2[0].toFloat()
         totalY += mTemp2[1].toFloat()
-        val childAtRawPosition = stackScroller.getChildAtRawPosition(totalX, totalY)
+        val childAtRawPosition = stackScrollerController.getChildAtRawPosition(totalX, totalY)
         return if (childAtRawPosition != null && childAtRawPosition.isContentExpandable) {
             childAtRawPosition
         } else null
     }
 
     fun setUp(
-        stackScroller: NotificationStackScrollLayout,
+        stackScrollerController: NotificationStackScrollLayoutController,
         expansionCallback: ExpansionCallback,
         shadeController: ShadeController
     ) {
         this.expansionCallback = expansionCallback
         this.shadeController = shadeController
-        this.stackScroller = stackScroller
+        this.stackScrollerController = stackScrollerController
     }
 
     fun setPulsing(pulsing: Boolean) {

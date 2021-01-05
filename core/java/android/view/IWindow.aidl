@@ -26,9 +26,10 @@ import android.view.DisplayCutout;
 import android.view.DragEvent;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
-import android.view.IScrollCaptureController;
+import android.view.IScrollCaptureCallbacks;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.window.ClientWindowFrames;
 
 import com.android.internal.os.IResultReceiver;
 
@@ -52,11 +53,9 @@ oneway interface IWindow {
      */
     void executeCommand(String command, String parameters, in ParcelFileDescriptor descriptor);
 
-    void resized(in Rect frame, in Rect contentInsets,
-            in Rect visibleInsets, in Rect stableInsets, boolean reportDraw,
-            in MergedConfiguration newMergedConfiguration, in Rect backDropFrame,
-            boolean forceLayout, boolean alwaysConsumeSystemBars, int displayId,
-            in DisplayCutout.ParcelableWrapper displayCutout);
+    void resized(in ClientWindowFrames frames, boolean reportDraw,
+            in MergedConfiguration newMergedConfiguration,
+            boolean forceLayout, boolean alwaysConsumeSystemBars, int displayId);
 
     /**
      * Called when the window location in parent display has changed. The offset will only be a
@@ -121,12 +120,6 @@ oneway interface IWindow {
     void updatePointerIcon(float x, float y);
 
     /**
-     * System chrome visibility changes
-     */
-    void dispatchSystemUiVisibilityChanged(int seq, int globalVisibility,
-            int localValue, int localChanges);
-
-    /**
      * Called for non-application windows when the enter animation has completed.
      */
     void dispatchWindowShown();
@@ -144,7 +137,7 @@ oneway interface IWindow {
     /**
      * Called when Scroll Capture support is requested for a window.
      *
-     * @param controller the controller to receive responses
+     * @param callbacks to receive responses
      */
-    void requestScrollCapture(in IScrollCaptureController controller);
+    void requestScrollCapture(in IScrollCaptureCallbacks callbacks);
 }

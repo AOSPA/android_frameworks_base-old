@@ -16,12 +16,14 @@
 
 package android.net.wifi;
 
+import static org.junit.Assert.assertEquals;
+
 import android.net.MacAddress;
 import android.os.Parcel;
 
-import static org.junit.Assert.assertEquals;
-
 import androidx.test.filters.SmallTest;
+
+import com.android.modules.utils.build.SdkLevel;
 
 import org.junit.Test;
 
@@ -40,6 +42,7 @@ public class SoftApInfoTest {
         info.setFrequency(2412);
         info.setBandwidth(SoftApInfo.CHANNEL_WIDTH_20MHZ);
         info.setBssid(MacAddress.fromString("aa:bb:cc:dd:ee:ff"));
+        info.setWifiStandard(ScanResult.WIFI_STANDARD_LEGACY);
 
 
         SoftApInfo copiedInfo = new SoftApInfo(info);
@@ -57,6 +60,7 @@ public class SoftApInfoTest {
         info.setFrequency(2412);
         info.setBandwidth(SoftApInfo.CHANNEL_WIDTH_20MHZ);
         info.setBssid(MacAddress.fromString("aa:bb:cc:dd:ee:ff"));
+        info.setWifiStandard(ScanResult.WIFI_STANDARD_LEGACY);
 
         Parcel parcelW = Parcel.obtain();
         info.writeToParcel(parcelW, 0);
@@ -70,6 +74,21 @@ public class SoftApInfoTest {
 
         assertEquals(info, fromParcel);
         assertEquals(info.hashCode(), fromParcel.hashCode());
+    }
+
+
+    /**
+     * Verifies the initial value same as expected.
+     */
+    @Test
+    public void testInitialValue() throws Exception {
+        SoftApInfo info = new SoftApInfo();
+        assertEquals(info.getFrequency(), 0);
+        assertEquals(info.getBandwidth(), SoftApInfo.CHANNEL_WIDTH_INVALID);
+        if (SdkLevel.isAtLeastS()) {
+            assertEquals(info.getBssid(), null);
+            assertEquals(info.getWifiStandard(), ScanResult.WIFI_STANDARD_UNKNOWN);
+        }
     }
 
 }

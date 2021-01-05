@@ -23,7 +23,9 @@ import android.Manifest;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
+import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothHearingAid;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
 import android.bluetooth.IBluetooth;
@@ -63,7 +65,6 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.os.UserManagerInternal.UserRestrictionsListener;
-import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.text.TextUtils;
@@ -96,7 +97,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
     private static final String BLUETOOTH_ADMIN_PERM = android.Manifest.permission.BLUETOOTH_ADMIN;
     private static final String BLUETOOTH_PERM = android.Manifest.permission.BLUETOOTH;
-    private static final String BLUETOOTH_PRIVILEGED_PERM = android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+    private static final String BLUETOOTH_PRIVILEGED =
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
     private static final String SECURE_SETTINGS_BLUETOOTH_ADDR_VALID = "bluetooth_addr_valid";
     private static final String SECURE_SETTINGS_BLUETOOTH_ADDRESS = "bluetooth_address";
@@ -117,6 +119,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     // Delay for retrying enable and disable in msec
     private static final int ENABLE_DISABLE_DELAY_MS = 300;
     private static final int DELAY_BEFORE_RESTART_DUE_TO_INIT_FLAGS_CHANGED_MS = 300;
+    private static final int DELAY_FOR_RETRY_INIT_FLAG_CHECK_MS = 86400;
 
     private static final int MESSAGE_ENABLE = 1;
     private static final int MESSAGE_DISABLE = 2;
@@ -166,6 +169,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     private String mAddress;
     private String mName;
     private final ContentResolver mContentResolver;
+    private final int mUserId;
     private final RemoteCallbackList<IBluetoothManagerCallback> mCallbacks;
     private final RemoteCallbackList<IBluetoothStateChangeCallback> mStateChangeCallbacks;
     private IBinder mBluetoothBinder;
@@ -178,7 +182,11 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     private int mWaitForDisableRetry;
     private boolean mTryBindOnBindTimeout = false;
 
+    private BluetoothModeChangeHelper mBluetoothModeChangeHelper;
+
     private BluetoothAirplaneModeListener mBluetoothAirplaneModeListener;
+
+    private BluetoothDeviceConfigListener mBluetoothDeviceConfigListener;
 
     // used inside handler thread
     private boolean mQuietEnable = false;
@@ -284,31 +292,18 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 }
             };
 
-    private final DeviceConfig.OnPropertiesChangedListener mDeviceConfigChangedListener =
-            new DeviceConfig.OnPropertiesChangedListener() {
-                @Override
-                public void onPropertiesChanged(DeviceConfig.Properties properties) {
-                    if (!properties.getNamespace().equals(DeviceConfig.NAMESPACE_BLUETOOTH)) {
-                        return;
-                    }
-                    boolean foundInit = false;
-                    for (String name : properties.getKeyset()) {
-                        if (name.startsWith("INIT_")) {
-                            foundInit = true;
-                            break;
-                        }
-                    }
-                    if (!foundInit) {
-                        return;
-                    }
-                    mHandler.removeMessages(MESSAGE_INIT_FLAGS_CHANGED);
-                    mHandler.sendEmptyMessageDelayed(
-                            MESSAGE_INIT_FLAGS_CHANGED,
-                            DELAY_BEFORE_RESTART_DUE_TO_INIT_FLAGS_CHANGED_MS);
-                }
-            };
+    @VisibleForTesting
+    public void onInitFlagsChanged() {
+        mHandler.removeMessages(MESSAGE_INIT_FLAGS_CHANGED);
+        mHandler.sendEmptyMessageDelayed(
+                MESSAGE_INIT_FLAGS_CHANGED,
+                DELAY_BEFORE_RESTART_DUE_TO_INIT_FLAGS_CHANGED_MS);
+    }
 
     public boolean onFactoryReset() {
+        mContext.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
+                "Need BLUETOOTH_PRIVILEGED permission");
+
         // Wait for stable state if bluetooth is temporary state.
         int state = getState();
         if (state == BluetoothAdapter.STATE_BLE_TURNING_ON
@@ -395,12 +390,14 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     } finally {
                         mBluetoothLock.readLock().unlock();
                     }
-                } else if (st == BluetoothAdapter.STATE_ON) {
+                } else {
+                    Slog.d(TAG, "Airplane ON: sendDisableMsg");
                     sendDisableMsg(BluetoothProtoEnums.ENABLE_DISABLE_REASON_AIRPLANE_MODE,
                             mContext.getPackageName());
                 }
             } else if (mEnableExternal) {
-                if (st!= BluetoothAdapter.STATE_ON && isBluetoothPersistedStateOn()) {
+                if (isBluetoothPersistedStateOn()) {
+                    Slog.d(TAG, "Airplane OFF: sendEnableMsg");
                     sendEnableMsg(mQuietEnableExternal,
                             BluetoothProtoEnums.ENABLE_DISABLE_REASON_AIRPLANE_MODE,
                             mContext.getPackageName());
@@ -416,7 +413,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             if (BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED.equals(action)) {
                 String newName = intent.getStringExtra(BluetoothAdapter.EXTRA_LOCAL_NAME);
                 if (DBG) {
-                    Slog.d(TAG, "Bluetooth Adapter name changed to " + newName);
+                    Slog.d(TAG, "Bluetooth Adapter name changed to " + newName + " by "
+                            + mContext.getPackageName());
                 }
                 if (newName != null) {
                     storeNameAndAddress(newName, null);
@@ -454,6 +452,15 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         mHandler.sendMessage(msg);
                     }
                 }
+            } else if (BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED.equals(action)
+                    || BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED.equals(action)) {
+                final int state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE,
+                        BluetoothProfile.STATE_CONNECTED);
+                if (mHandler.hasMessages(MESSAGE_INIT_FLAGS_CHANGED)
+                        && state == BluetoothProfile.STATE_DISCONNECTED
+                        && !mBluetoothModeChangeHelper.isA2dpOrHearingAidConnected()) {
+                    onInitFlagsChanged();
+                }
             }
         }
     };
@@ -481,6 +488,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         mName = null;
         mErrorRecoveryRetryCounter = 0;
         mContentResolver = context.getContentResolver();
+        mUserId = mContentResolver.getUserId();
         // Observe BLE scan only mode settings change.
         registerForBleScanModeChange();
         mCallbacks = new RemoteCallbackList<IBluetoothManagerCallback>();
@@ -505,6 +513,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         filter.addAction(BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED);
         filter.addAction(BluetoothAdapter.ACTION_BLUETOOTH_ADDRESS_CHANGED);
         filter.addAction(Intent.ACTION_SETTING_RESTORED);
+        filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
+        filter.addAction(BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
         filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         mContext.registerReceiver(mReceiver, filter);
 
@@ -539,10 +549,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             Slog.w(TAG, "Unable to resolve SystemUI's UID.");
         }
         mSystemUiUid = systemUiUid;
-        DeviceConfig.addOnPropertiesChangedListener(
-                DeviceConfig.NAMESPACE_BLUETOOTH,
-                (Runnable r) -> r.run(),
-                mDeviceConfigChangedListener);
     }
 
     /**
@@ -601,7 +607,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             Slog.d(TAG, "Persisting Bluetooth Setting: " + value);
         }
         // waive WRITE_SECURE_SETTINGS permission check
-        long callingIdentity = Binder.clearCallingIdentity();
+        final long callingIdentity = Binder.clearCallingIdentity();
         Settings.Global.putInt(mContext.getContentResolver(), Settings.Global.BLUETOOTH_ON, value);
         Binder.restoreCallingIdentity(callingIdentity);
     }
@@ -625,7 +631,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         }
         if (mContext.getResources()
                 .getBoolean(com.android.internal.R.bool.config_bluetooth_address_validation)
-                && Settings.Secure.getInt(mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDR_VALID, 0)
+                && Settings.Secure.getIntForUser(mContentResolver,
+                SECURE_SETTINGS_BLUETOOTH_ADDR_VALID, 0, mUserId)
                 == 0) {
             // if the valid flag is not set, don't load the address and name
             if (DBG) {
@@ -633,8 +640,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             }
             return;
         }
-        mName = Settings.Secure.getString(mContentResolver, SECURE_SETTINGS_BLUETOOTH_NAME);
-        mAddress = Settings.Secure.getString(mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDRESS);
+        mName = Settings.Secure.getStringForUser(
+                mContentResolver, SECURE_SETTINGS_BLUETOOTH_NAME, mUserId);
+        mAddress = Settings.Secure.getStringForUser(
+                mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDRESS, mUserId);
         if (DBG) {
             Slog.d(TAG, "Stored bluetooth Name=" + mName + ",Address=" + mAddress);
         }
@@ -648,26 +657,31 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
      */
     private void storeNameAndAddress(String name, String address) {
         if (name != null) {
-            Settings.Secure.putString(mContentResolver, SECURE_SETTINGS_BLUETOOTH_NAME, name);
+            Settings.Secure.putStringForUser(mContentResolver, SECURE_SETTINGS_BLUETOOTH_NAME, name,
+                    mUserId);
             mName = name;
             if (DBG) {
-                Slog.d(TAG, "Stored Bluetooth name: " + Settings.Secure.getString(mContentResolver,
-                        SECURE_SETTINGS_BLUETOOTH_NAME));
+                Slog.d(TAG, "Stored Bluetooth name: " + Settings.Secure.getStringForUser(
+                        mContentResolver, SECURE_SETTINGS_BLUETOOTH_NAME,
+                        mUserId));
             }
         }
 
         if (address != null) {
-            Settings.Secure.putString(mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDRESS, address);
+            Settings.Secure.putStringForUser(mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDRESS,
+                    address, mUserId);
             mAddress = address;
             if (DBG) {
                 Slog.d(TAG,
-                        "Stored Bluetoothaddress: " + Settings.Secure.getString(mContentResolver,
-                                SECURE_SETTINGS_BLUETOOTH_ADDRESS));
+                        "Stored Bluetoothaddress: " + Settings.Secure.getStringForUser(
+                                mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDRESS,
+                                mUserId));
             }
         }
 
         if ((name != null) && (address != null)) {
-            Settings.Secure.putInt(mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDR_VALID, 1);
+            Settings.Secure.putIntForUser(mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDR_VALID, 1,
+                    mUserId);
         }
     }
 
@@ -1016,7 +1030,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                          BluetoothAdapter.nameForState(st));
                 return;
             }
-            if (!mEnableExternal && !isBleAppPresent()) {
+            if (!mEnableExternal && !isBleAppPresent() &&
+                !isBluetoothPersistedStateOnBluetooth()) {
                 Slog.i(TAG, "Bluetooth was disabled while enabling BLE, disable BLE now");
                 mEnable = false;
                 mBluetooth.onBrEdrDown();
@@ -1438,10 +1453,12 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             Message getMsg = mHandler.obtainMessage(MESSAGE_GET_NAME_AND_ADDRESS);
             mHandler.sendMessage(getMsg);
         }
+
+        mBluetoothModeChangeHelper = new BluetoothModeChangeHelper(mContext);
         if (mBluetoothAirplaneModeListener != null) {
-            mBluetoothAirplaneModeListener.start(
-                    new BluetoothAirplaneModeListener.AirplaneModeHelper(mContext));
+            mBluetoothAirplaneModeListener.start(mBluetoothModeChangeHelper);
         }
+        mBluetoothDeviceConfigListener = new BluetoothDeviceConfigListener(this);
     }
 
     /**
@@ -1780,7 +1797,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             }
 
             mContext.enforceCallingOrSelfPermission(
-                   BLUETOOTH_PRIVILEGED_PERM, "Need BLUETOOTH PRIVILEGED permission");
+                   BLUETOOTH_PRIVILEGED, "Need BLUETOOTH PRIVILEGED permission");
         }
         persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
 
@@ -1919,9 +1936,38 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     int quietEnable = msg.arg1;
                     if (mHandler.hasMessages(MESSAGE_HANDLE_DISABLE_DELAYED)
                             || mHandler.hasMessages(MESSAGE_HANDLE_ENABLE_DELAYED)) {
-                        // We are handling enable or disable right now, wait for it.
-                        mHandler.sendMessageDelayed(mHandler.obtainMessage(MESSAGE_ENABLE,
-                                quietEnable, 0), ENABLE_DISABLE_DELAY_MS);
+                        if (msg.arg2 == 0) {
+                            int delay = ENABLE_DISABLE_DELAY_MS;
+
+                            if (mHandler.hasMessages(MESSAGE_DISABLE)) {
+                                delay = ENABLE_DISABLE_DELAY_MS * 2;
+                            }
+                            // Keep only one MESSAGE_ENABLE and ensure it is the last one
+                            // to be taken out of the queue
+                            mHandler.removeMessages(MESSAGE_ENABLE);
+                            // We are handling enable or disable right now, wait for it.
+                            mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                                MESSAGE_ENABLE, quietEnable, 1), delay);
+                            Slog.d(TAG, "Queue new MESSAGE_ENABLE");
+                        } else {
+                            mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                                MESSAGE_ENABLE, quietEnable, 1), ENABLE_DISABLE_DELAY_MS);
+                            Slog.d(TAG, "Re-Queue previous MESSAGE_ENABLE");
+                            if (mHandler.hasMessages(MESSAGE_DISABLE)) {
+                                // Ensure the original order of just entering the queue
+                                // if MESSAGE_DISABLE present
+                                mHandler.removeMessages(MESSAGE_DISABLE);
+                                mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                                    MESSAGE_DISABLE, 0, 1), ENABLE_DISABLE_DELAY_MS * 2);
+                                Slog.d(TAG, "Re-Queue previous MESSAGE_DISABLE");
+                            }
+                        }
+                        break;
+                    } else if(msg.arg2 == 0 && mHandler.hasMessages(MESSAGE_DISABLE)) {
+                        mHandler.removeMessages(MESSAGE_ENABLE);
+                        mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                            MESSAGE_ENABLE, quietEnable, 1), ENABLE_DISABLE_DELAY_MS * 2);
+                        Slog.d(TAG, "MESSAGE_DISABLE exist. Queue new MESSAGE_ENABLE");
                         break;
                     }
 
@@ -1957,6 +2003,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     }
 
                     if (mBluetooth == null) {
+                        Slog.d(TAG, "MESSAGE_ENABLE: handleEnable");
                         handleEnable(mQuietEnable);
                     } else {
                         //
@@ -1976,6 +2023,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         // continuously failed to turn on itself.
                         //
                         mWaitForEnableRetry = 0;
+                        Slog.d(TAG, "Re-Queue MESSAGE_HANDLE_ENABLE_DELAYED");
                         Message enableDelayedMsg =
                                 mHandler.obtainMessage(MESSAGE_HANDLE_ENABLE_DELAYED);
                         mHandler.sendMessageDelayed(enableDelayedMsg, ENABLE_DISABLE_DELAY_MS);
@@ -1985,15 +2033,45 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 case MESSAGE_DISABLE:
                     if (mHandler.hasMessages(MESSAGE_HANDLE_DISABLE_DELAYED) || mBinding
                             || mHandler.hasMessages(MESSAGE_HANDLE_ENABLE_DELAYED)) {
-                        // We are handling enable or disable right now, wait for it.
-                        mHandler.sendMessageDelayed(mHandler.obtainMessage(MESSAGE_DISABLE),
-                                ENABLE_DISABLE_DELAY_MS);
+                        if (msg.arg2 == 0) {
+                            int delay = ENABLE_DISABLE_DELAY_MS;
+
+                            if (mHandler.hasMessages(MESSAGE_ENABLE)) {
+                                delay = ENABLE_DISABLE_DELAY_MS * 2;
+                            }
+                            // Keep only one MESSAGE_DISABLE and ensure it is the last one
+                            // to be taken out of the queue
+                            mHandler.removeMessages(MESSAGE_DISABLE);
+                            // We are handling enable or disable right now, wait for it.
+                            mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                                MESSAGE_DISABLE, 0, 1), delay);
+                            Slog.d(TAG, "Queue new MESSAGE_DISABLE");
+                        } else {
+                            mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                                MESSAGE_DISABLE, 0, 1), ENABLE_DISABLE_DELAY_MS);
+                            Slog.d(TAG, "Re-Queue previous MESSAGE_DISABLE");
+                            if (mHandler.hasMessages(MESSAGE_ENABLE)) {
+                                // Ensure the original order of just entering the queue
+                                // if MESSAGE_DISABLE present
+                                mHandler.removeMessages(MESSAGE_ENABLE);
+                                mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                                   MESSAGE_ENABLE, mQuietEnableExternal ? 1: 0, 1),
+                                   ENABLE_DISABLE_DELAY_MS * 2);
+                                Slog.d(TAG, "Re-Queue previous MESSAGE_ENABLE");
+                            }
+                        }
+                        break;
+                    } else if(msg.arg2 == 0 && mHandler.hasMessages(MESSAGE_ENABLE)) {
+                        mHandler.removeMessages(MESSAGE_DISABLE);
+                        mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                            MESSAGE_DISABLE, 0, 1), ENABLE_DISABLE_DELAY_MS * 2);
+                        Slog.d(TAG, "MESSAGE_ENABLE exist. Queue new MESSAGE_DISABLE");
                         break;
                     }
 
                     if (DBG) {
                         Slog.d(TAG, "MESSAGE_DISABLE: mBluetooth = " + mBluetooth
-                                + ", mBinding = " + mBinding);
+                                + ", mBinding = " + mBinding + " mEnable = " + mEnable);
                     }
                     mHandler.removeMessages(MESSAGE_RESTART_BLUETOOTH_SERVICE);
 
@@ -2002,9 +2080,11 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         Message disableDelayedMsg =
                                 mHandler.obtainMessage(MESSAGE_HANDLE_DISABLE_DELAYED, 0, 0);
                         mHandler.sendMessageDelayed(disableDelayedMsg, ENABLE_DISABLE_DELAY_MS);
+                        Slog.d(TAG, "Re-Queue MESSAGE_HANDLE_DISABLE_DELAYED(0)");
                     } else {
                         mEnable = false;
                         handleDisable();
+                        Slog.d(TAG, "MESSAGE_DISABLE: handleDisable");
                     }
                     break;
 
@@ -2012,7 +2092,14 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     /* The Bluetooth is turning off, wait for STATE_OFF then restart bluetooth
                      * if ble app running, then wait for BLE ON and continue bt turn on
                      */
-                    if ((mState == BluetoothAdapter.STATE_BLE_ON) && isBleAppPresent()) {
+                    Slog.d(TAG, "MESSAGE_HANDLE_ENABLE_DELAYED, mState=" +
+                        BluetoothAdapter.nameForState(mState) + " mEnableExternal = "
+                        + mEnableExternal + " getServiceRestartMs()="
+                        + getServiceRestartMs());
+                    if ((mState == BluetoothAdapter.STATE_BLE_ON) && (isBleAppPresent() ||
+                                mWaitForEnableRetry > 0)) {
+                        Slog.d(TAG, "isBleAppPresent(): " + isBleAppPresent() +
+                                " mWaitForEnableRetry=" + mWaitForEnableRetry);
                         mWaitForEnableRetry = 0;
                         if (mEnableExternal || isBluetoothPersistedStateOnBluetooth()) {
                            try {
@@ -2036,6 +2123,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                             Message enableDelayedMsg =
                                     mHandler.obtainMessage(MESSAGE_HANDLE_ENABLE_DELAYED);
                             mHandler.sendMessageDelayed(enableDelayedMsg, ENABLE_DISABLE_DELAY_MS);
+                            Slog.d(TAG, "Re-Queue MESSAGE_HANDLE_ENABLE_DELAYED");
                             break;
                         } else {
                             Slog.e(TAG, "Wait for STATE_OFF timeout");
@@ -2047,6 +2135,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     Message restartMsg =
                             mHandler.obtainMessage(MESSAGE_RESTART_BLUETOOTH_SERVICE);
                     mHandler.sendMessageDelayed(restartMsg, getServiceRestartMs());
+                    Slog.d(TAG, "Queue MESSAGE_RESTART_BLUETOOTH_SERVICE");
                     Slog.d(TAG, "Handle enable is finished");
                     break;
                 }
@@ -2073,6 +2162,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                                         MESSAGE_HANDLE_DISABLE_DELAYED, 0, 0);
                                 mHandler.sendMessageDelayed(disableDelayedMsg,
                                         ENABLE_DISABLE_DELAY_MS);
+                                Slog.d(TAG, "Re-Queue MESSAGE_HANDLE_DISABLE_DELAYED(0)");
                                 break;
                             } else {
                                 Slog.e(TAG, "Wait for STATE_ON timeout");
@@ -2082,11 +2172,13 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         // should move forward to the next step.
                         mWaitForDisableRetry = 0;
                         mEnable = false;
+                        Slog.d(TAG, "MESSAGE_HANDLE_DISABLE_DELAYED: handleDisable");
                         handleDisable();
                         // Wait for state exiting STATE_ON
                         Message disableDelayedMsg =
                                 mHandler.obtainMessage(MESSAGE_HANDLE_DISABLE_DELAYED, 1, 0);
                         mHandler.sendMessageDelayed(disableDelayedMsg, ENABLE_DISABLE_DELAY_MS);
+                        Slog.d(TAG, "Re-Queue MESSAGE_HANDLE_DISABLE_DELAYED(1)");
                     } else {
                         // The Bluetooth is turning off, wait for exiting STATE_ON
                         if (mState == BluetoothAdapter.STATE_ON) {
@@ -2096,6 +2188,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                                         MESSAGE_HANDLE_DISABLE_DELAYED, 1, 0);
                                 mHandler.sendMessageDelayed(disableDelayedMsg,
                                         ENABLE_DISABLE_DELAY_MS);
+                                Slog.d(TAG, "Re-Queue MESSAGE_HANDLE_DISABLE_DELAYED(1)");
                                 break;
                             } else {
                                 Slog.e(TAG, "Wait for exiting STATE_ON timeout");
@@ -2432,6 +2525,12 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         Slog.d(TAG, "MESSAGE_INIT_FLAGS_CHANGED");
                     }
                     mHandler.removeMessages(MESSAGE_INIT_FLAGS_CHANGED);
+                    if (mBluetoothModeChangeHelper.isA2dpOrHearingAidConnected()) {
+                        mHandler.sendEmptyMessageDelayed(
+                                MESSAGE_INIT_FLAGS_CHANGED,
+                                DELAY_FOR_RETRY_INIT_FLAG_CHECK_MS);
+                        break;
+                    }
                     if (mBluetooth != null && isEnabled()) {
                         restartForReason(
                                 BluetoothProtoEnums.ENABLE_DISABLE_REASON_INIT_FLAGS_CHANGED);
@@ -2605,7 +2704,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         int foregroundUser;
         int callingUser = UserHandle.getCallingUserId();
         int callingUid = Binder.getCallingUid();
-        long callingIdentity = Binder.clearCallingIdentity();
+        final long callingIdentity = Binder.clearCallingIdentity();
         UserManager um = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         UserInfo ui = um.getProfileParent(callingUser);
         int parentUser = (ui != null) ? ui.id : UserHandle.USER_NULL;
@@ -2864,7 +2963,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     }
 
     private boolean isBluetoothDisallowed() {
-        long callingIdentity = Binder.clearCallingIdentity();
+        final long callingIdentity = Binder.clearCallingIdentity();
         try {
             return mContext.getSystemService(UserManager.class)
                     .hasUserRestriction(UserManager.DISALLOW_BLUETOOTH, UserHandle.SYSTEM);

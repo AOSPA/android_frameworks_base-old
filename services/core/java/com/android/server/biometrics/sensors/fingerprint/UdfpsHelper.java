@@ -29,7 +29,7 @@ public class UdfpsHelper {
 
     private static final String TAG = "UdfpsHelper";
 
-    static void onFingerDown(IBiometricsFingerprint daemon, int x, int y, float minor,
+    public static void onFingerDown(IBiometricsFingerprint daemon, int x, int y, float minor,
             float major) {
         android.hardware.biometrics.fingerprint.V2_3.IBiometricsFingerprint extension =
                 android.hardware.biometrics.fingerprint.V2_3.IBiometricsFingerprint.castFrom(
@@ -46,7 +46,7 @@ public class UdfpsHelper {
         }
     }
 
-    static void onFingerUp(IBiometricsFingerprint daemon) {
+    public static void onFingerUp(IBiometricsFingerprint daemon) {
         android.hardware.biometrics.fingerprint.V2_3.IBiometricsFingerprint extension =
                 android.hardware.biometrics.fingerprint.V2_3.IBiometricsFingerprint.castFrom(
                         daemon);
@@ -62,23 +62,25 @@ public class UdfpsHelper {
         }
     }
 
-    static void showUdfpsOverlay(@Nullable IUdfpsOverlayController udfpsOverlayController) {
+    public static void showUdfpsOverlay(int sensorId,
+            @Nullable IUdfpsOverlayController udfpsOverlayController) {
         if (udfpsOverlayController == null) {
             return;
         }
         try {
-            udfpsOverlayController.showUdfpsOverlay();
+            udfpsOverlayController.showUdfpsOverlay(sensorId);
         } catch (RemoteException e) {
             Slog.e(TAG, "Remote exception when showing the UDFPS overlay", e);
         }
     }
 
-    static void hideUdfpsOverlay(@Nullable IUdfpsOverlayController udfpsOverlayController) {
+    public static void hideUdfpsOverlay(int sensorId,
+            @Nullable IUdfpsOverlayController udfpsOverlayController) {
         if (udfpsOverlayController == null) {
             return;
         }
         try {
-            udfpsOverlayController.hideUdfpsOverlay();
+            udfpsOverlayController.hideUdfpsOverlay(sensorId);
         } catch (RemoteException e) {
             Slog.e(TAG, "Remote exception when hiding the UDFPS overlay", e);
         }

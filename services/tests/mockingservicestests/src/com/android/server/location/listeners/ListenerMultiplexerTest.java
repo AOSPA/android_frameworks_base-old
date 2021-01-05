@@ -16,6 +16,8 @@
 
 package com.android.server.location.listeners;
 
+import static com.android.internal.util.ConcurrentUtils.DIRECT_EXECUTOR;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -27,8 +29,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.testng.Assert.assertThrows;
 
-import android.location.util.identity.CallerIdentity;
-import android.os.Process;
 import android.platform.test.annotations.Presubmit;
 
 import androidx.test.filters.SmallTest;
@@ -43,7 +43,6 @@ import org.mockito.InOrder;
 
 import java.util.Collection;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 
 @SuppressWarnings("unchecked")
 @Presubmit
@@ -58,6 +57,9 @@ public class ListenerMultiplexerTest {
 
         void onRegistrationAdded(Consumer<TestListenerRegistration> consumer,
                 TestListenerRegistration registration);
+
+        void onRegistrationReplaced(Consumer<TestListenerRegistration> consumer,
+                TestListenerRegistration oldRegistration, TestListenerRegistration newRegistration);
 
         void onRegistrationRemoved(Consumer<TestListenerRegistration> consumer,
                 TestListenerRegistration registration);
@@ -90,8 +92,39 @@ public class ListenerMultiplexerTest {
         assertThat(mMultiplexer.mRegistered).isTrue();
         assertThat(mMultiplexer.mMergedRequest).isEqualTo(0);
 
+        mMultiplexer.addListener(1, consumer);
+        mInOrder.verify(mCallbacks).onRegistrationRemoved(eq(consumer),
+                any(TestListenerRegistration.class));
+        mInOrder.verify(mCallbacks).onRegistrationReplaced(eq(consumer),
+                any(TestListenerRegistration.class), any(TestListenerRegistration.class));
+        assertThat(mMultiplexer.mRegistered).isTrue();
+        assertThat(mMultiplexer.mMergedRequest).isEqualTo(1);
+
         mMultiplexer.notifyListeners();
         verify(consumer).accept(any(TestListenerRegistration.class));
+    }
+
+    @Test
+    public void testReplace() {
+        Consumer<TestListenerRegistration> oldConsumer = mock(Consumer.class);
+        Consumer<TestListenerRegistration> consumer = mock(Consumer.class);
+
+        mMultiplexer.addListener(0, oldConsumer);
+        mInOrder.verify(mCallbacks).onRegister();
+        mInOrder.verify(mCallbacks).onRegistrationAdded(eq(oldConsumer),
+                any(TestListenerRegistration.class));
+        mInOrder.verify(mCallbacks).onActive();
+        mMultiplexer.replaceListener(1, oldConsumer, consumer);
+        mInOrder.verify(mCallbacks).onRegistrationRemoved(eq(oldConsumer),
+                any(TestListenerRegistration.class));
+        mInOrder.verify(mCallbacks).onRegistrationReplaced(eq(consumer),
+                any(TestListenerRegistration.class), any(TestListenerRegistration.class));
+        assertThat(mMultiplexer.mRegistered).isTrue();
+        assertThat(mMultiplexer.mMergedRequest).isEqualTo(1);
+
+        mMultiplexer.notifyListeners();
+        verify(consumer).accept(any(TestListenerRegistration.class));
+        verify(oldConsumer, never()).accept(any(TestListenerRegistration.class));
     }
 
     @Test
@@ -319,20 +352,18 @@ public class ListenerMultiplexerTest {
     }
 
     private static class TestListenerRegistration extends
-            ListenerRegistration<Integer, Consumer<TestListenerRegistration>> {
+            RequestListenerRegistration<Integer, Consumer<TestListenerRegistration>> {
 
         boolean mActive = true;
 
         protected TestListenerRegistration(Integer integer,
-                Consumer<TestListenerRegistration> consumer,
-                boolean outOfProcess) {
-            super(integer, CallerIdentity.forTest(Process.myUid(),
-                    Process.myPid() + (outOfProcess ? 1 : 0), "test", "test"), consumer);
+                Consumer<TestListenerRegistration> consumer) {
+            super(DIRECT_EXECUTOR, integer, consumer);
         }
     }
 
     private static class TestMultiplexer extends
-            ListenerMultiplexer<Consumer<TestListenerRegistration>, Integer,
+            ListenerMultiplexer<Consumer<TestListenerRegistration>,
                     Consumer<TestListenerRegistration>, TestListenerRegistration, Integer> {
 
         boolean mRegistered;
@@ -344,8 +375,19 @@ public class ListenerMultiplexerTest {
             mCallbacks = callbacks;
         }
 
+        @Override
+        public String getTag() {
+            return "TestMultiplexer";
+        }
+
         public void addListener(Integer request, Consumer<TestListenerRegistration> consumer) {
-            addRegistration(consumer, new TestListenerRegistration(request, consumer, true));
+            putRegistration(consumer, new TestListenerRegistration(request, consumer));
+        }
+
+        public void replaceListener(Integer request, Consumer<TestListenerRegistration> oldConsumer,
+                Consumer<TestListenerRegistration> consumer) {
+            replaceRegistration(oldConsumer, consumer,
+                    new TestListenerRegistration(request, consumer));
         }
 
         public void removeListener(Consumer<TestListenerRegistration> consumer) {
@@ -355,10 +397,6 @@ public class ListenerMultiplexerTest {
         public void removeListener(Consumer<TestListenerRegistration> consumer,
                 TestListenerRegistration registration) {
             removeRegistration(consumer, registration);
-        }
-
-        public void removeListenerIf(Predicate<Consumer<TestListenerRegistration>> predicate) {
-            removeRegistrationIf(predicate);
         }
 
         public void setActive(Integer request, boolean active) {
@@ -376,7 +414,8 @@ public class ListenerMultiplexerTest {
         }
 
         @Override
-        protected boolean registerWithService(Integer mergedRequest) {
+        protected boolean registerWithService(Integer mergedRequest,
+                Collection<TestListenerRegistration> registrations) {
             mRegistered = true;
             mMergedRequest = mergedRequest;
             return true;
@@ -419,13 +458,21 @@ public class ListenerMultiplexerTest {
         }
 
         @Override
+        protected void onRegistrationReplaced(Consumer<TestListenerRegistration> consumer,
+                TestListenerRegistration oldRegistration,
+                TestListenerRegistration newRegistration) {
+            mCallbacks.onRegistrationReplaced(consumer, oldRegistration, newRegistration);
+        }
+
+        @Override
         protected void onRegistrationRemoved(Consumer<TestListenerRegistration> consumer,
                 TestListenerRegistration registration) {
             mCallbacks.onRegistrationRemoved(consumer, registration);
         }
 
         @Override
-        protected Integer mergeRequests(Collection<TestListenerRegistration> testRegistrations) {
+        protected Integer mergeRegistrations(
+                Collection<TestListenerRegistration> testRegistrations) {
             int max = Integer.MIN_VALUE;
             for (TestListenerRegistration registration : testRegistrations) {
                 if (registration.getRequest() > max) {

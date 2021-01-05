@@ -23,6 +23,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.util.AttributeSet;
+import android.util.Pair;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -31,10 +32,10 @@ import androidx.dynamicanimation.animation.SpringForce;
 
 import com.android.systemui.R;
 import com.android.systemui.qs.customize.QSCustomizer;
-import com.android.systemui.util.animation.PhysicsAnimator;
+import com.android.wm.shell.animation.PhysicsAnimator;
 
 /**
- * Wrapper view with background which contains {@link QSPanel} and {@link BaseStatusBarHeader}
+ * Wrapper view with background which contains {@link QSPanel} and {@link QuickStatusBarHeader}
  */
 public class QSContainerImpl extends FrameLayout {
 
@@ -56,7 +57,6 @@ public class QSContainerImpl extends FrameLayout {
             SpringForce.DAMPING_RATIO_LOW_BOUNCY);
     private int mBackgroundBottom = -1;
     private int mHeightOverride = -1;
-    private QSPanel mQSPanel;
     private View mQSDetail;
     private QuickStatusBarHeader mHeader;
     private float mQsExpansion;
@@ -65,13 +65,10 @@ public class QSContainerImpl extends FrameLayout {
     private View mQSPanelContainer;
 
     private View mBackground;
-    private View mBackgroundGradient;
-    private View mStatusBarBackground;
 
     private int mSideMargins;
     private boolean mQsDisabled;
-    private int mContentPaddingStart = -1;
-    private int mContentPaddingEnd = -1;
+    private int mContentPadding = -1;
     private boolean mAnimateBottomOnNextLayout;
 
     public QSContainerImpl(Context context, AttributeSet attrs) {
@@ -81,29 +78,22 @@ public class QSContainerImpl extends FrameLayout {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mQSPanel = findViewById(R.id.quick_settings_panel);
         mQSPanelContainer = findViewById(R.id.expanded_qs_scroll_view);
         mQSDetail = findViewById(R.id.qs_detail);
         mHeader = findViewById(R.id.header);
         mQSCustomizer = findViewById(R.id.qs_customize);
         mDragHandle = findViewById(R.id.qs_drag_handle_view);
         mBackground = findViewById(R.id.quick_settings_background);
-        mStatusBarBackground = findViewById(R.id.quick_settings_status_bar_background);
-        mBackgroundGradient = findViewById(R.id.quick_settings_gradient_view);
-        updateResources();
         mHeader.getHeaderQsPanel().setMediaVisibilityChangedListener((visible) -> {
             if (mHeader.getHeaderQsPanel().isShown()) {
                 mAnimateBottomOnNextLayout = true;
             }
         });
-        mQSPanel.setMediaVisibilityChangedListener((visible) -> {
-            if (mQSPanel.isShown()) {
-                mAnimateBottomOnNextLayout = true;
-            }
-        });
-
-
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+    }
+
+    void onMediaVisibilityChanged(boolean qsVisible) {
+        mAnimateBottomOnNextLayout = qsVisible;
     }
 
     private void setBackgroundBottom(int value) {
@@ -123,8 +113,6 @@ public class QSContainerImpl extends FrameLayout {
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        setBackgroundGradientVisibility(newConfig);
-        updateResources();
         mSizePoint.set(0, 0); // Will be retrieved on next measure pass.
     }
 
@@ -193,25 +181,22 @@ public class QSContainerImpl extends FrameLayout {
         final boolean disabled = (state2 & DISABLE2_QUICK_SETTINGS) != 0;
         if (disabled == mQsDisabled) return;
         mQsDisabled = disabled;
-        setBackgroundGradientVisibility(getResources().getConfiguration());
         mBackground.setVisibility(mQsDisabled ? View.GONE : View.VISIBLE);
     }
 
-    private void updateResources() {
+    void updateResources(QSPanelController qsPanelController) {
         LayoutParams layoutParams = (LayoutParams) mQSPanelContainer.getLayoutParams();
         layoutParams.topMargin = mContext.getResources().getDimensionPixelSize(
                 com.android.internal.R.dimen.quick_qs_offset_height);
         mQSPanelContainer.setLayoutParams(layoutParams);
 
         mSideMargins = getResources().getDimensionPixelSize(R.dimen.notification_side_paddings);
-        mContentPaddingStart = getResources().getDimensionPixelSize(
-                com.android.internal.R.dimen.notification_content_margin_start);
-        int newPaddingEnd = getResources().getDimensionPixelSize(
-                com.android.internal.R.dimen.notification_content_margin_end);
-        boolean marginsChanged = newPaddingEnd != mContentPaddingEnd;
-        mContentPaddingEnd = newPaddingEnd;
+        int padding = getResources().getDimensionPixelSize(
+                R.dimen.notification_shade_content_margin_horizontal);
+        boolean marginsChanged = padding != mContentPadding;
+        mContentPadding = padding;
         if (marginsChanged) {
-            updatePaddingsAndMargins();
+            updatePaddingsAndMargins(qsPanelController);
         }
     }
 
@@ -261,28 +246,17 @@ public class QSContainerImpl extends FrameLayout {
                 + mHeader.getHeight();
     }
 
-    private void setBackgroundGradientVisibility(Configuration newConfig) {
-        if (newConfig.orientation == ORIENTATION_LANDSCAPE) {
-            mBackgroundGradient.setVisibility(View.INVISIBLE);
-            mStatusBarBackground.setVisibility(View.INVISIBLE);
-        } else {
-            mBackgroundGradient.setVisibility(mQsDisabled ? View.INVISIBLE : View.VISIBLE);
-            mStatusBarBackground.setVisibility(View.VISIBLE);
-        }
-    }
-
     public void setExpansion(float expansion) {
         mQsExpansion = expansion;
         mDragHandle.setAlpha(1.0f - expansion);
         updateExpansion();
     }
 
-    private void updatePaddingsAndMargins() {
+    private void updatePaddingsAndMargins(QSPanelController qsPanelController) {
         for (int i = 0; i < getChildCount(); i++) {
             View view = getChildAt(i);
-            if (view == mStatusBarBackground || view == mBackgroundGradient
-                    || view == mQSCustomizer) {
-                // Some views are always full width
+            if (view == mQSCustomizer) {
+                // Some views are always full width or have dependent padding
                 continue;
             }
             LayoutParams lp = (LayoutParams) view.getLayoutParams();
@@ -290,16 +264,19 @@ public class QSContainerImpl extends FrameLayout {
             lp.leftMargin = mSideMargins;
             if (view == mQSPanelContainer) {
                 // QS panel lays out some of its content full width
-                mQSPanel.setContentMargins(mContentPaddingStart, mContentPaddingEnd);
+                qsPanelController.setContentMargins(mContentPadding, mContentPadding);
+                Pair<Integer, Integer> margins = qsPanelController.getVisualSideMargins();
+                // Apply paddings based on QSPanel
+                mQSCustomizer.setContentPaddings(margins.first, margins.second);
             } else if (view == mHeader) {
                 // The header contains the QQS panel which needs to have special padding, to
                 // visually align them.
-                mHeader.setContentMargins(mContentPaddingStart, mContentPaddingEnd);
+                mHeader.setContentMargins(mContentPadding, mContentPadding);
             } else {
                 view.setPaddingRelative(
-                        mContentPaddingStart,
+                        mContentPadding,
                         view.getPaddingTop(),
-                        mContentPaddingEnd,
+                        mContentPadding,
                         view.getPaddingBottom());
             }
         }

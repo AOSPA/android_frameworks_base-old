@@ -29,7 +29,6 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator
 import com.android.systemui.statusbar.phone.BiometricUnlockController
 import com.android.systemui.statusbar.phone.DozeParameters
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.mockito.eq
 import org.junit.Before
@@ -46,6 +45,7 @@ import org.mockito.Mockito.anyString
 import org.mockito.Mockito.clearInvocations
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.never
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnit
 
@@ -80,6 +80,7 @@ class NotificationShadeDepthControllerTest : SysuiTestCase() {
     @Before
     fun setup() {
         `when`(root.viewRootImpl).thenReturn(viewRootImpl)
+        `when`(root.isAttachedToWindow).thenReturn(true)
         `when`(statusBarStateController.state).then { statusBarState }
         `when`(blurUtils.blurRadiusOfRatio(anyFloat())).then { answer ->
             (answer.arguments[0] as Float * maxBlur).toInt()
@@ -220,6 +221,13 @@ class NotificationShadeDepthControllerTest : SysuiTestCase() {
 
     @Test
     fun updateBlurCallback_invalidWindow() {
+        `when`(root.isAttachedToWindow).thenReturn(false)
+        notificationShadeDepthController.updateBlurCallback.doFrame(0)
+        verify(wallpaperManager, times(0)).setWallpaperZoomOut(any(), anyFloat())
+    }
+
+    @Test
+    fun updateBlurCallback_exception() {
         doThrow(IllegalArgumentException("test exception")).`when`(wallpaperManager)
                 .setWallpaperZoomOut(any(), anyFloat())
         notificationShadeDepthController.updateBlurCallback.doFrame(0)

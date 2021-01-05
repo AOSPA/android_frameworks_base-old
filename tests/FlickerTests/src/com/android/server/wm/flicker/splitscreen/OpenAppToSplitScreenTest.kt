@@ -16,15 +16,32 @@
 
 package com.android.server.wm.flicker.splitscreen
 
-import androidx.test.filters.LargeTest
-import com.android.server.wm.flicker.CommonTransitions
-import com.android.server.wm.flicker.LayersTraceSubject
-import com.android.server.wm.flicker.NonRotationTestBase
-import com.android.server.wm.flicker.StandardAppHelper
-import com.android.server.wm.flicker.TransitionRunner
-import com.android.server.wm.flicker.WmTraceSubject
+import android.platform.test.annotations.Presubmit
+import androidx.test.filters.FlakyTest
+import androidx.test.filters.RequiresDevice
+import androidx.test.platform.app.InstrumentationRegistry
+import com.android.server.wm.flicker.DOCKED_STACK_DIVIDER
+import com.android.server.wm.flicker.Flicker
+import com.android.server.wm.flicker.FlickerTestRunner
+import com.android.server.wm.flicker.FlickerTestRunnerFactory
+import com.android.server.wm.flicker.endRotation
+import com.android.server.wm.flicker.helpers.StandardAppHelper
+import com.android.server.wm.flicker.focusChanges
+import com.android.server.wm.flicker.helpers.buildTestTag
+import com.android.server.wm.flicker.helpers.exitSplitScreen
+import com.android.server.wm.flicker.helpers.isInSplitScreen
+import com.android.server.wm.flicker.helpers.launchSplitScreen
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerRotatesAndScales
+import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.noUncoveredRegions
+import com.android.server.wm.flicker.repetitions
+import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -33,46 +50,79 @@ import org.junit.runners.Parameterized
  * Test open app to split screen.
  * To run this test: `atest FlickerTests:OpenAppToSplitScreenTest`
  */
-@LargeTest
+@Presubmit
+@RequiresDevice
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@FlakyTest(bugId = 161435597)
 class OpenAppToSplitScreenTest(
-    beginRotationName: String,
-    beginRotation: Int
-) : NonRotationTestBase(beginRotationName, beginRotation) {
-    init {
-        testApp = StandardAppHelper(instrumentation,
+    testName: String,
+    flickerSpec: Flicker
+) : FlickerTestRunner(testName, flickerSpec) {
+    companion object {
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): Collection<Array<Any>> {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val testApp = StandardAppHelper(instrumentation,
                 "com.android.server.wm.flicker.testapp", "SimpleApp")
-    }
 
-    override val transitionToRun: TransitionRunner
-        get() = CommonTransitions.appToSplitScreen(testApp, instrumentation, uiDevice,
-                beginRotation).includeJankyRuns().build()
+            return FlickerTestRunnerFactory(instrumentation)
+                .buildTest { configuration ->
+                    withTestName {
+                        buildTestTag("appToSplitScreen", testApp, configuration)
+                    }
+                    repeat { configuration.repetitions }
+                    setup {
+                        test {
+                            device.wakeUpAndGoToHomeScreen()
+                        }
+                        eachRun {
+                            testApp.open()
+                            this.setRotation(configuration.endRotation)
+                        }
+                    }
+                    teardown {
+                        eachRun {
+                            if (device.isInSplitScreen()) {
+                                device.exitSplitScreen()
+                            }
+                        }
+                        test {
+                            testApp.exit()
+                        }
+                    }
+                    transitions {
+                        device.launchSplitScreen()
+                    }
+                    assertions {
+                        windowManagerTrace {
+                            navBarWindowIsAlwaysVisible()
+                            statusBarWindowIsAlwaysVisible()
+                        }
 
-    @Test
-    fun checkVisibility_navBarWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAboveAppWindow(NAVIGATION_BAR_WINDOW_TITLE).forAllEntries()
-        }
-    }
+                        layersTrace {
+                            navBarLayerIsAlwaysVisible(bugId = 140855415)
+                            statusBarLayerIsAlwaysVisible()
+                            noUncoveredRegions(configuration.endRotation, enabled = false)
+                            navBarLayerRotatesAndScales(configuration.endRotation,
+                                bugId = 140855415)
+                            statusBarLayerRotatesScales(configuration.endRotation)
 
-    @Test
-    fun checkVisibility_statusBarWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAboveAppWindow(STATUS_BAR_WINDOW_TITLE).forAllEntries()
-        }
-    }
+                            all("dividerLayerBecomesVisible") {
+                                this.hidesLayer(DOCKED_STACK_DIVIDER)
+                                    .then()
+                                    .showsLayer(DOCKED_STACK_DIVIDER)
+                            }
+                        }
 
-    @Test
-    fun checkVisibility_dividerLayerBecomesVisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .hidesLayer(DOCKED_STACK_DIVIDER)
-                    .then()
-                    .showsLayer(DOCKED_STACK_DIVIDER)
-                    .forAllEntries()
+                        eventLog {
+                            focusChanges(testApp.`package`,
+                                "recents_animation_input_consumer", "NexusLauncherActivity",
+                                bugId = 151179149)
+                        }
+                    }
+                }
         }
     }
 }

@@ -34,6 +34,7 @@ import java.io.PrintWriter;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -43,6 +44,8 @@ import java.util.function.Supplier;
 public final class TelephonyUtils {
     public static boolean IS_USER = "user".equals(android.os.Build.TYPE);
     public static boolean IS_DEBUGGABLE = SystemProperties.getInt("ro.debuggable", 0) == 1;
+
+    public static final Executor DIRECT_EXECUTOR = Runnable::run;
 
     /**
      * Verify that caller holds {@link android.Manifest.permission#DUMP}.
@@ -96,7 +99,7 @@ public final class TelephonyUtils {
      */
     public static void runWithCleanCallingIdentity(
             @NonNull Runnable action) {
-        long callingIdentity = Binder.clearCallingIdentity();
+        final long callingIdentity = Binder.clearCallingIdentity();
         try {
             action.run();
         } finally {
@@ -115,7 +118,7 @@ public final class TelephonyUtils {
      */
     public static <T> T runWithCleanCallingIdentity(
             @NonNull Supplier<T> action) {
-        long callingIdentity = Binder.clearCallingIdentity();
+        final long callingIdentity = Binder.clearCallingIdentity();
         try {
             return action.get();
         } finally {

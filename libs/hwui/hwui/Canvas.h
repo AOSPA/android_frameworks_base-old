@@ -32,6 +32,7 @@ class SkCanvasState;
 class SkVertices;
 
 namespace minikin {
+class Font;
 class Layout;
 class MeasuredText;
 enum class Bidi : uint8_t;
@@ -255,6 +256,9 @@ public:
      */
     virtual void drawVectorDrawable(VectorDrawableRoot* tree) = 0;
 
+    void drawGlyphs(const minikin::Font& font, const int* glyphIds, const float* positions,
+                    int glyphCount, const Paint& paint);
+
     /**
      * Converts utf16 text to glyphs, calculating position and boundary,
      * and delegating the final draw to virtual drawGlyphs method.
@@ -288,8 +292,7 @@ protected:
      * totalAdvance: used to define width of text decorations (underlines, strikethroughs).
      */
     virtual void drawGlyphs(ReadGlyphFunc glyphFunc, int count, const Paint& paint, float x,
-                            float y, float boundsLeft, float boundsTop, float boundsRight,
-                            float boundsBottom, float totalAdvance) = 0;
+                            float y,float totalAdvance) = 0;
     virtual void drawLayoutOnPath(const minikin::Layout& layout, float hOffset, float vOffset,
                                   const Paint& paint, const SkPath& path, size_t start,
                                   size_t end) = 0;

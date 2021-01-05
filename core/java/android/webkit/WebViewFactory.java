@@ -26,6 +26,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.os.Build;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.Trace;
@@ -47,7 +48,7 @@ public final class WebViewFactory {
     // visible for WebViewZygoteInit to look up the class by reflection and call preloadInZygote.
     /** @hide */
     private static final String CHROMIUM_WEBVIEW_FACTORY =
-            "com.android.webview.chromium.WebViewChromiumFactoryProviderForR";
+            "com.android.webview.chromium.WebViewChromiumFactoryProviderForS";
 
     private static final String CHROMIUM_WEBVIEW_FACTORY_METHOD = "create";
 
@@ -390,7 +391,7 @@ public final class WebViewFactory {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private static Class<WebViewFactoryProvider> getProviderClass() {
         Context webViewContext = null;
         Application initialApplication = AppGlobals.getInitialApplication();

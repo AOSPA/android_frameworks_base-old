@@ -17,12 +17,12 @@ package android.hardware.fingerprint;
 
 import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
+import android.hardware.biometrics.ITestSession;
 import android.hardware.fingerprint.IFingerprintClientActiveCallback;
 import android.hardware.fingerprint.IFingerprintServiceReceiver;
 import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.hardware.fingerprint.Fingerprint;
-import android.hardware.fingerprint.FingerprintSensorProperties;
-import android.view.Surface;
+import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import java.util.List;
 
 /**
@@ -30,31 +30,35 @@ import java.util.List;
  * @hide
  */
 interface IFingerprintService {
+
+    // Creates a test session with the specified sensorId
+    ITestSession createTestSession(int sensorId, String opPackageName);
+
     // Retrieve static sensor properties for all fingerprint sensors
-    List<FingerprintSensorProperties> getSensorProperties(String opPackageName);
+    List<FingerprintSensorPropertiesInternal> getSensorPropertiesInternal(String opPackageName);
 
     // Authenticate the given sessionId with a fingerprint. This is protected by
     // USE_FINGERPRINT/USE_BIOMETRIC permission. This is effectively deprecated, since it only comes
     // through FingerprintManager now.
     void authenticate(IBinder token, long operationId, int userId,
-            IFingerprintServiceReceiver receiver, String opPackageName, in Surface surface);
+            IFingerprintServiceReceiver receiver, String opPackageName);
 
     // Uses the fingerprint hardware to detect for the presence of a finger, without giving details
     // about accept/reject/lockout.
     void detectFingerprint(IBinder token, int userId, IFingerprintServiceReceiver receiver,
-            String opPackageName, in Surface surface);
+            String opPackageName);
 
     // This method prepares the service to start authenticating, but doesn't start authentication.
     // This is protected by the MANAGE_BIOMETRIC signatuer permission. This method should only be
     // called from BiometricService. The additional uid, pid, userId arguments should be determined
     // by BiometricService. To start authentication after the clients are ready, use
     // startPreparedClient().
-    void prepareForAuthentication(IBinder token, long operationId, int userId,
+    void prepareForAuthentication(int sensorId, IBinder token, long operationId, int userId,
             IBiometricSensorReceiver sensorReceiver, String opPackageName, int cookie,
-            int callingUid, int callingPid, int callingUserId, in Surface surface);
+            int callingUid, int callingPid, int callingUserId);
 
     // Starts authentication with the previously prepared client.
-    void startPreparedClient(int cookie);
+    void startPreparedClient(int sensorId, int cookie);
 
     // Cancel authentication for the given sessionId
     void cancelAuthentication(IBinder token, String opPackageName);
@@ -64,12 +68,12 @@ interface IFingerprintService {
 
     // Same as above, except this is protected by the MANAGE_BIOMETRIC signature permission. Takes
     // an additional uid, pid, userid.
-    void cancelAuthenticationFromService(IBinder token, String opPackageName,
+    void cancelAuthenticationFromService(int sensorId, IBinder token, String opPackageName,
             int callingUid, int callingPid, int callingUserId);
 
     // Start fingerprint enrollment
     void enroll(IBinder token, in byte [] hardwareAuthToken, int userId, IFingerprintServiceReceiver receiver,
-            String opPackageName, in Surface surface);
+            String opPackageName);
 
     // Cancel enrollment in progress
     void cancelEnrollment(IBinder token);
@@ -84,26 +88,35 @@ interface IFingerprintService {
     // Get a list of enrolled fingerprints in the given userId.
     List<Fingerprint> getEnrolledFingerprints(int userId, String opPackageName);
 
-    // Determine if HAL is loaded and ready
-    boolean isHardwareDetected(String opPackageName);
+    // Determine if the HAL is loaded and ready. Meant to support the deprecated FingerprintManager APIs
+    boolean isHardwareDetectedDeprecated(String opPackageName);
+
+    // Determine if the specified HAL is loaded and ready
+    boolean isHardwareDetected(int sensorId, String opPackageName);
 
     // Get a pre-enrollment authentication token
-    void generateChallenge(IBinder token, IFingerprintServiceReceiver receiver, String opPackageName);
+    void generateChallenge(IBinder token, int sensorId, int userId, IFingerprintServiceReceiver receiver, String opPackageName);
 
     // Finish an enrollment sequence and invalidate the authentication token
-    void revokeChallenge(IBinder token, String opPackageName);
+    void revokeChallenge(IBinder token, int sensorId, int userId, String opPackageName, long challenge);
 
-    // Determine if a user has at least one enrolled fingerprint
-    boolean hasEnrolledFingerprints(int userId, String opPackageName);
+    // Determine if a user has at least one enrolled fingerprint. Meant to support the deprecated FingerprintManager APIs
+    boolean hasEnrolledFingerprintsDeprecated(int userId, String opPackageName);
+
+    // Determine if a user has at least one enrolled fingerprint.
+    boolean hasEnrolledFingerprints(int sensorId, int userId, String opPackageName);
+
+    // Determine if a user has at least one enrolled fingerprint in any of the specified sensors
+    boolean hasEnrolledTemplatesForAnySensor(int userId, in List<FingerprintSensorPropertiesInternal> sensors, String opPackageName);
 
     // Return the LockoutTracker status for the specified user
-    int getLockoutModeForUser(int userId);
+    int getLockoutModeForUser(int sensorId, int userId);
 
     // Gets the authenticator ID for fingerprint
-    long getAuthenticatorId(int callingUserId);
+    long getAuthenticatorId(int sensorId, int callingUserId);
 
     // Reset the timeout when user authenticates with strong auth (e.g. PIN, pattern or password)
-    void resetLockout(int userId, in byte [] hardwareAuthToken);
+    void resetLockout(IBinder token, int sensorId, int userId, in byte[] hardwareAuthToken, String opPackageNAame);
 
     // Add a callback which gets notified when the fingerprint lockout period expired.
     void addLockoutResetCallback(IBiometricServiceLockoutResetCallback callback, String opPackageName);
@@ -118,13 +131,13 @@ interface IFingerprintService {
     void removeClientActiveCallback(IFingerprintClientActiveCallback callback);
 
     // Give FingerprintService its ID. See AuthService.java
-    void initializeConfiguration(int sensorId);
+    void initializeConfiguration(int sensorId, int strength);
 
     // Notifies about a finger touching the sensor area.
-    void onFingerDown(int x, int y, float minor, float major);
+    void onPointerDown(int sensorId, int x, int y, float minor, float major);
 
     // Notifies about a finger leaving the sensor area.
-    void onFingerUp();
+    void onPointerUp(int sensorId);
 
     // Sets the controller for managing the UDFPS overlay.
     void setUdfpsOverlayController(in IUdfpsOverlayController controller);

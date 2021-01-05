@@ -130,7 +130,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int fullBackupContent = 0;
 
     /**
@@ -148,8 +148,15 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public int uiOptions = 0;
 
     /**
-     * Value for {@link #flags}: if set, this application is installed in the
-     * device's system image.
+     * Value for {@link #flags}: if set, this application is installed in the device's system image.
+     * This should not be used to make security decisions. Instead, rely on
+     * {@linkplain android.content.pm.PackageManager#checkSignatures(java.lang.String,java.lang.String)
+     * signature checks} or
+     * <a href="https://developer.android.com/training/articles/security-tips#Permissions">permissions</a>.
+     *
+     * <p><b>Warning:</b> Note that does flag not behave the same as
+     * {@link android.R.attr#protectionLevel android:protectionLevel} {@code system} or
+     * {@code signatureOrSystem}.
      */
     public static final int FLAG_SYSTEM = 1<<0;
 
@@ -2028,7 +2035,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * Updates the hidden API enforcement policy for this app from the given values, if appropriate.
      *
      * This will have no effect if this app is not subject to hidden API enforcement, i.e. if it
-     * is on the package whitelist.
+     * is on the package allowlist.
      *
      * @param policy configured policy for this app, or {@link #HIDDEN_API_ENFORCEMENT_DEFAULT}
      *        if nothing configured.
@@ -2115,6 +2122,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     }
 
     /** @hide */
+    @SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
     public boolean isOem() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_OEM) != 0;
     }
@@ -2162,11 +2170,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     }
 
     /** @hide */
+    @SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
     public boolean isVendor() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_VENDOR) != 0;
     }
 
     /** @hide */
+    @SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
     public boolean isProduct() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_PRODUCT) != 0;
     }
@@ -2256,7 +2266,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /** {@hide} */ public void setOverrideRes(int overrideResolution) { overrideRes = overrideResolution; }
 
     /** {@hide} */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public String getCodePath() { return scanSourceDir; }
     /** {@hide} */ public String getBaseCodePath() { return sourceDir; }
     /** {@hide} */ public String[] getSplitCodePaths() { return splitSourceDirs; }

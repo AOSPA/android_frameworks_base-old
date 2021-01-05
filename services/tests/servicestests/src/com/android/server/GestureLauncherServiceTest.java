@@ -28,11 +28,13 @@ import static org.mockito.Mockito.when;
 
 import android.app.StatusBarManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
 import android.provider.Settings;
+import android.telecom.TelecomManager;
 import android.test.mock.MockContentResolver;
 import android.util.MutableBoolean;
 import android.view.KeyEvent;
@@ -44,7 +46,6 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.test.FakeSettingsProvider;
-import com.android.server.LocalServices;
 import com.android.server.statusbar.StatusBarManagerInternal;
 
 import org.junit.Before;
@@ -80,6 +81,7 @@ public class GestureLauncherServiceTest {
     private @Mock Context mContext;
     private @Mock Resources mResources;
     private @Mock StatusBarManagerInternal mStatusBarManagerInternal;
+    private @Mock TelecomManager mTelecomManager;
     private @Mock MetricsLogger mMetricsLogger;
     private MockContentResolver mContentResolver;
     private GestureLauncherService mGestureLauncherService;
@@ -104,6 +106,8 @@ public class GestureLauncherServiceTest {
         mContentResolver = new MockContentResolver(mContext);
         mContentResolver.addProvider(Settings.AUTHORITY, new FakeSettingsProvider());
         when(mContext.getContentResolver()).thenReturn(mContentResolver);
+        when(mContext.getSystemService(Context.TELECOM_SERVICE)).thenReturn(mTelecomManager);
+        when(mTelecomManager.createLaunchEmergencyDialerIntent(null)).thenReturn(new Intent());
 
         mGestureLauncherService = new GestureLauncherService(mContext, mMetricsLogger);
     }
@@ -153,16 +157,16 @@ public class GestureLauncherServiceTest {
     }
 
     @Test
-    public void testIsPanicButtonGestureEnabled_settingDisabled() {
-        withPanicGestureEnabledSettingValue(false);
-        assertFalse(mGestureLauncherService.isPanicButtonGestureEnabled(
+    public void testIsEmergencyGestureEnabled_settingDisabled() {
+        withEmergencyGestureEnabledSettingValue(false);
+        assertFalse(mGestureLauncherService.isEmergencyGestureEnabled(
                 mContext, FAKE_USER_ID));
     }
 
     @Test
-    public void testIsPanicButtonGestureEnabled_settingEnabled() {
-        withPanicGestureEnabledSettingValue(true);
-        assertTrue(mGestureLauncherService.isPanicButtonGestureEnabled(
+    public void testIsEmergencyGestureEnabled_settingEnabled() {
+        withEmergencyGestureEnabledSettingValue(true);
+        assertTrue(mGestureLauncherService.isEmergencyGestureEnabled(
                 mContext, FAKE_USER_ID));
     }
 
@@ -176,11 +180,25 @@ public class GestureLauncherServiceTest {
     }
 
     @Test
+    public void testHandleEmergencyGesture_userSetupComplete() {
+        withUserSetupCompleteValue(true);
+
+        assertTrue(mGestureLauncherService.handleEmergencyGesture());
+    }
+
+    @Test
     public void testHandleCameraLaunchGesture_userSetupNotComplete() {
         withUserSetupCompleteValue(false);
 
         boolean useWakeLock = false;
         assertFalse(mGestureLauncherService.handleCameraGesture(useWakeLock, FAKE_SOURCE));
+    }
+
+    @Test
+    public void testHandleEmergencyGesture_userSetupNotComplete() {
+        withUserSetupCompleteValue(false);
+
+        assertFalse(mGestureLauncherService.handleEmergencyGesture());
     }
 
     @Test
@@ -200,6 +218,25 @@ public class GestureLauncherServiceTest {
         assertFalse(intercepted);
         assertFalse(outLaunched.value);
         verify(mMetricsLogger).histogram("power_consecutive_short_tap_count", 1);
+        verify(mMetricsLogger).histogram("power_double_tap_interval", (int) eventTime);
+    }
+
+    @Test
+    public void testInterceptPowerKeyDown_firstPowerDown_emergencyGestureNotLaunched() {
+        withEmergencyGestureEnabledSettingValue(true);
+        mGestureLauncherService.updateEmergencyGestureEnabled();
+
+        long eventTime = INITIAL_EVENT_TIME_MILLIS
+                + GestureLauncherService.POWER_SHORT_TAP_SEQUENCE_MAX_INTERVAL_MS - 1;
+        KeyEvent keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                IGNORED_REPEAT);
+        boolean interactive = true;
+        MutableBoolean outLaunched = new MutableBoolean(true);
+        boolean intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                outLaunched);
+
+        assertFalse(intercepted);
+        assertFalse(outLaunched.value);
         verify(mMetricsLogger).histogram("power_double_tap_interval", (int) eventTime);
     }
 
@@ -383,6 +420,200 @@ public class GestureLauncherServiceTest {
         List<Integer> tapCounts = tapCountCaptor.getAllValues();
         assertEquals(1, tapCounts.get(0).intValue());
         assertEquals(2, tapCounts.get(1).intValue());
+    }
+
+    @Test
+    public void
+            testInterceptPowerKeyDown_fiveInboundPresses_cameraAndEmergencyEnabled_bothLaunch() {
+        withCameraDoubleTapPowerEnableConfigValue(true);
+        withCameraDoubleTapPowerDisableSettingValue(0);
+        withEmergencyGestureEnabledSettingValue(true);
+        mGestureLauncherService.updateCameraDoubleTapPowerEnabled();
+        mGestureLauncherService.updateEmergencyGestureEnabled();
+        withUserSetupCompleteValue(true);
+
+        // First button press does nothing
+        long eventTime = INITIAL_EVENT_TIME_MILLIS;
+        KeyEvent keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                IGNORED_REPEAT);
+        boolean interactive = true;
+        MutableBoolean outLaunched = new MutableBoolean(true);
+        boolean intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                outLaunched);
+        assertFalse(intercepted);
+        assertFalse(outLaunched.value);
+
+        final long interval = GestureLauncherService.CAMERA_POWER_DOUBLE_TAP_MAX_TIME_MS - 1;
+
+        // 2nd button triggers camera
+        eventTime += interval;
+        keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                IGNORED_REPEAT);
+        outLaunched.value = false;
+        intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                outLaunched);
+        assertTrue(intercepted);
+        assertTrue(outLaunched.value);
+
+        // Camera checks
+        verify(mStatusBarManagerInternal).onCameraLaunchGestureDetected(
+                StatusBarManager.CAMERA_LAUNCH_SOURCE_POWER_DOUBLE_TAP);
+        verify(mMetricsLogger)
+            .action(MetricsEvent.ACTION_DOUBLE_TAP_POWER_CAMERA_GESTURE, (int) interval);
+
+        final ArgumentCaptor<Integer> cameraIntervalCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(mMetricsLogger, times(2)).histogram(
+                eq("power_double_tap_interval"), cameraIntervalCaptor.capture());
+        List<Integer> cameraIntervals = cameraIntervalCaptor.getAllValues();
+        assertEquals((int) INITIAL_EVENT_TIME_MILLIS, cameraIntervals.get(0).intValue());
+        assertEquals((int) interval, cameraIntervals.get(1).intValue());
+
+        final ArgumentCaptor<Integer> tapCountCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(mMetricsLogger, times(2)).histogram(
+                eq("power_consecutive_short_tap_count"), tapCountCaptor.capture());
+        List<Integer> tapCounts = tapCountCaptor.getAllValues();
+        assertEquals(1, tapCounts.get(0).intValue());
+        assertEquals(2, tapCounts.get(1).intValue());
+
+        // Continue the button presses for the emergency gesture.
+
+        // Presses 3 and 4 should not trigger any gesture
+        for (int i = 0; i < 2; i++) {
+            eventTime += interval;
+            keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                    IGNORED_REPEAT);
+            outLaunched.value = false;
+            intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                    outLaunched);
+            assertTrue(intercepted);
+            assertFalse(outLaunched.value);
+        }
+
+        // Fifth button press should trigger the emergency flow
+        eventTime += interval;
+        keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                IGNORED_REPEAT);
+        outLaunched.value = false;
+        intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                outLaunched);
+        assertTrue(intercepted);
+        assertTrue(outLaunched.value);
+
+        // TODO (b/169960245) Verify metric event equiv. to ACTION_DOUBLE_TAP_POWER_CAMERA_GESTURE
+        verify(mStatusBarManagerInternal).onEmergencyActionLaunchGestureDetected();
+
+        final ArgumentCaptor<Integer> intervalCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(mMetricsLogger, times(5)).histogram(
+                eq("power_double_tap_interval"), intervalCaptor.capture());
+        List<Integer> intervals = intervalCaptor.getAllValues();
+        assertEquals((int) INITIAL_EVENT_TIME_MILLIS, intervals.get(0).intValue());
+        assertEquals((int) interval, intervals.get(1).intValue());
+    }
+
+    @Test
+    public void
+            testInterceptPowerKeyDown_fiveInboundPresses_emergencyGestureEnabled_launchesFlow() {
+        withEmergencyGestureEnabledSettingValue(true);
+        mGestureLauncherService.updateEmergencyGestureEnabled();
+        withUserSetupCompleteValue(true);
+
+        // First button press does nothing
+        long eventTime = INITIAL_EVENT_TIME_MILLIS;
+        KeyEvent keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                IGNORED_REPEAT);
+        boolean interactive = true;
+        MutableBoolean outLaunched = new MutableBoolean(true);
+        boolean intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                outLaunched);
+        assertFalse(intercepted);
+        assertFalse(outLaunched.value);
+
+        final long interval = GestureLauncherService.CAMERA_POWER_DOUBLE_TAP_MAX_TIME_MS - 1;
+        // 3 more button presses which should not trigger any gesture (camera gesture disabled)
+        for (int i = 0; i < 3; i++) {
+            eventTime += interval;
+            keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                    IGNORED_REPEAT);
+            outLaunched.value = false;
+            intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                    outLaunched);
+            assertTrue(intercepted);
+            assertFalse(outLaunched.value);
+        }
+
+        // Fifth button press should trigger the emergency flow
+        eventTime += interval;
+        keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                IGNORED_REPEAT);
+        outLaunched.value = false;
+        intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                outLaunched);
+        assertTrue(outLaunched.value);
+        assertTrue(intercepted);
+
+        // TODO (b/169960245) Verify metric event equiv. to ACTION_DOUBLE_TAP_POWER_CAMERA_GESTURE
+        verify(mStatusBarManagerInternal).onEmergencyActionLaunchGestureDetected();
+
+        final ArgumentCaptor<Integer> intervalCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(mMetricsLogger, times(5)).histogram(
+                eq("power_double_tap_interval"), intervalCaptor.capture());
+        List<Integer> intervals = intervalCaptor.getAllValues();
+        assertEquals((int) INITIAL_EVENT_TIME_MILLIS, intervals.get(0).intValue());
+        assertEquals((int) interval, intervals.get(1).intValue());
+    }
+
+    @Test
+    public void
+            testInterceptPowerKeyDown_tenInboundPresses_emergencyGestureEnabled_keyIntercepted() {
+        withEmergencyGestureEnabledSettingValue(true);
+        mGestureLauncherService.updateEmergencyGestureEnabled();
+        withUserSetupCompleteValue(true);
+
+        // First button press does nothing
+        long eventTime = INITIAL_EVENT_TIME_MILLIS;
+        KeyEvent keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                IGNORED_REPEAT);
+        boolean interactive = true;
+        MutableBoolean outLaunched = new MutableBoolean(true);
+        boolean intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                outLaunched);
+        assertFalse(intercepted);
+        assertFalse(outLaunched.value);
+
+        final long interval = GestureLauncherService.CAMERA_POWER_DOUBLE_TAP_MAX_TIME_MS - 1;
+        // 3 more button presses which should not trigger any gesture, but intercepts action.
+        for (int i = 0; i < 3; i++) {
+            eventTime += interval;
+            keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                    IGNORED_REPEAT);
+            outLaunched.value = false;
+            intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                    outLaunched);
+            assertTrue(intercepted);
+            assertFalse(outLaunched.value);
+        }
+
+        // Fifth button press should trigger the emergency flow
+        eventTime += interval;
+        keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                IGNORED_REPEAT);
+        outLaunched.value = false;
+        intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                outLaunched);
+        assertTrue(outLaunched.value);
+        assertTrue(intercepted);
+
+        // 5 more button presses which should not trigger any gesture, but intercepts action.
+        for (int i = 0; i < 5; i++) {
+            eventTime += interval;
+            keyEvent = new KeyEvent(IGNORED_DOWN_TIME, eventTime, IGNORED_ACTION, IGNORED_CODE,
+                    IGNORED_REPEAT);
+            outLaunched.value = false;
+            intercepted = mGestureLauncherService.interceptPowerKeyDown(keyEvent, interactive,
+                    outLaunched);
+            assertTrue(intercepted);
+            assertFalse(outLaunched.value);
+        }
     }
 
     @Test
@@ -896,10 +1127,10 @@ public class GestureLauncherServiceTest {
                 UserHandle.USER_CURRENT);
     }
 
-    private void withPanicGestureEnabledSettingValue(boolean enable) {
+    private void withEmergencyGestureEnabledSettingValue(boolean enable) {
         Settings.Secure.putIntForUser(
                 mContentResolver,
-                Settings.Secure.PANIC_GESTURE_ENABLED,
+                Settings.Secure.EMERGENCY_GESTURE_ENABLED,
                 enable ? 1 : 0,
                 UserHandle.USER_CURRENT);
     }

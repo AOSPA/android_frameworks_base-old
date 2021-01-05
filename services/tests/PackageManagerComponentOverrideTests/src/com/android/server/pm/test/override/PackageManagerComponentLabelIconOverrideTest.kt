@@ -33,7 +33,6 @@ import com.android.server.pm.parsing.pkg.PackageImpl
 import com.android.server.pm.parsing.pkg.ParsedPackage
 import com.android.server.pm.permission.PermissionManagerServiceInternal
 import com.android.server.pm.test.override.PackageManagerComponentLabelIconOverrideTest.Companion.Params.AppType
-import com.android.server.pm.test.override.R
 import com.android.server.testutils.TestHandler
 import com.android.server.testutils.mock
 import com.android.server.testutils.mockThrowOnUnmocked
@@ -46,6 +45,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
+import org.mockito.Mockito
 import org.mockito.Mockito.any
 import org.mockito.Mockito.anyBoolean
 import org.mockito.Mockito.anyInt
@@ -266,7 +266,7 @@ class PackageManagerComponentLabelIconOverrideTest {
                     .hideAsFinal()
 
     private fun makePkgSetting(pkgName: String) = spy(PackageSetting(pkgName, null, File("/test"),
-            File("/test"), null, null, null, null, 0, 0, 0, 0, null, null, null)) {
+            null, null, null, null, 0, 0, 0, 0, null, null, null)) {
         this.pkgState.isUpdatedSystemApp = params.isUpdatedSystemApp
     }
 
@@ -342,7 +342,8 @@ class PackageManagerComponentLabelIconOverrideTest {
             whenever(this.userManagerService) { mockUserManagerService }
             whenever(this.permissionManagerServiceInternal) { mockPermissionManagerService }
             whenever(this.settings) { mockSettings }
-            whenever(this.activityTaskManagerInternal) { mockActivityTaskManager }
+            whenever(this.getLocalService(ActivityTaskManagerInternal::class.java)) {
+                mockActivityTaskManager}
             whenever(this.appsFilter) { mockAppsFilter }
             whenever(this.context) { mockContext }
         }

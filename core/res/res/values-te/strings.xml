@@ -432,13 +432,17 @@
     <string name="permlab_modifyAudioSettings" msgid="6129039778010031815">"మీ ఆడియో సెట్టింగ్‌లను మార్చడం"</string>
     <string name="permdesc_modifyAudioSettings" msgid="8687227609663124921">"వాల్యూమ్ మరియు అవుట్‌పుట్ కోసం ఉపయోగించాల్సిన స్పీకర్ వంటి సార్వజనీన ఆడియో సెట్టింగ్‌లను సవరించడానికి యాప్‌ను అనుమతిస్తుంది."</string>
     <string name="permlab_recordAudio" msgid="1208457423054219147">"ఆడియోను రికార్డ్ చేయడం"</string>
-    <string name="permdesc_recordAudio" msgid="3976213377904701093">"ఈ యాప్ మైక్రోఫోన్‌ని ఉపయోగించి ఎప్పుడైనా ఆడియోను రికార్డ్ చేయగలదు."</string>
+    <string name="permdesc_recordAudio" msgid="5857246765327514062">"యాప్ ఉపయోగంలో ఉన్నపుడు మైక్రోఫోన్‌ను ఉపయోగించి ఈ యాప్, ఆడియోను రికార్డ్ చేయగలదు."</string>
+    <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"బ్యాక్‌గ్రౌండ్‌లో ఆడియోను రికార్డ్ చేయగలదు"</string>
+    <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"మైక్రోఫోన్‌ను ఉపయోగించి ఈ యాప్ ఎప్పుడైనా ఆడియోను రికార్డ్ చేయగలదు."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"SIMకి ఆదేశాలను పంపడం"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"సిమ్‌కు ఆదేశాలను పంపడానికి అనువర్తనాన్ని అనుమతిస్తుంది. ఇది చాలా ప్రమాదకరం."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"భౌతిక కార్యాకలాపాన్ని గుర్తించండి"</string>
     <string name="permdesc_activityRecognition" msgid="8667484762991357519">"ఈ యాప్ మీ భౌతిక కార్యాకలాపాన్ని గుర్తించగలదు."</string>
     <string name="permlab_camera" msgid="6320282492904119413">"చిత్రాలు మరియు వీడియోలు తీయడం"</string>
-    <string name="permdesc_camera" msgid="1354600178048761499">"ఈ యాప్‌ కెమెరాను ఉపయోగించి ఎప్పుడైనా చిత్రాలను తీయగలదు మరియు వీడియోలను రికార్డ్ చేయగలదు."</string>
+    <string name="permdesc_camera" msgid="5240801376168647151">"యాప్ ఉపయోగంలో ఉన్నపుడు కెమెరాను ఉపయోగించి ఈ యాప్ ఎప్పుడైనా ఫోటోలను తీయగలదు, వీడియోలను రికార్డ్ చేయగలదు."</string>
+    <string name="permlab_backgroundCamera" msgid="7549917926079731681">"బ్యాక్‌గ్రౌండ్‌లో ఫోటోలు, వీడియోలను తీయగలదు"</string>
+    <string name="permdesc_backgroundCamera" msgid="1615291686191138250">"కెమెరాను ఉపయోగించి ఈ యాప్ ఎప్పుడైనా ఫోటోలను తీయగలదు, వీడియోలను రికార్డ్ చేయగలదు."</string>
     <string name="permlab_systemCamera" msgid="3642917457796210580">"ఫోటోలు, వీడియోలు తీయడానికి సిస్టమ్ కెమెరాలకు యాప్, లేదా సేవా యాక్సెస్‌ను అనుమతించండి"</string>
     <string name="permdesc_systemCamera" msgid="5938360914419175986">"ఈ విశేష లేదా సిస్టమ్ యాప్ ఎప్పుడైనా సిస్టమ్ కెమెరాను ఉపయోగించి ఫోటోలు తీయగలదు, వీడియోలను రికార్డ్ చేయగలదు. యాప్‌కు android.permission.CAMERA అనుమతి ఇవ్వడం కూడా అవసరం"</string>
     <string name="permlab_cameraOpenCloseListener" msgid="5548732769068109315">"కెమెరా పరికరాలు తెరుచుకుంటున్నప్పుడు లేదా మూసుకుంటున్నప్పుడు కాల్‌బ్యాక్‌లను స్వీకరించడానికి యాప్‌ను లేదా సర్వీస్‌ను అనుమతించండి."</string>
@@ -825,15 +829,14 @@
     <string name="keyguard_password_enter_password_code" msgid="2751130557661643482">"అన్‌లాక్ చేయడానికి పాస్‌వర్డ్‌ను టైప్ చేయండి"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7792964196473964340">"అన్‌లాక్ చేయడానికి పిన్‌ను టైప్ చేయండి"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="8583732939138432793">"చెల్లని పిన్‌ కోడ్."</string>
-    <string name="keyguard_label_text" msgid="3841953694564168384">"అన్‌లాక్ చేయడానికి, మెను ఆపై 0ని నొక్కండి."</string>
+    <string name="keyguard_label_text" msgid="3841953694564168384">"అన్‌లాక్ చేయడానికి, మెనూ ఆపై 0ని నొక్కండి."</string>
     <string name="emergency_call_dialog_number_for_display" msgid="2978165477085612673">"అత్యవసర నంబర్"</string>
     <string name="lockscreen_carrier_default" msgid="6192313772955399160">"సేవ లేదు"</string>
     <string name="lockscreen_screen_locked" msgid="7364905540516041817">"స్క్రీన్ లాక్ చేయబడింది."</string>
-    <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"అన్‌లాక్ చేయడానికి లేదా అత్యవసర కాల్ చేయడానికి మెను నొక్కండి."</string>
-    <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"అన్‌లాక్ చేయడానికి మెను నొక్కండి."</string>
+    <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"అన్‌లాక్ చేయడానికి లేదా అత్యవసర కాల్ చేయడానికి మెనూ నొక్కండి."</string>
+    <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"అన్‌లాక్ చేయడానికి మెనూ నొక్కండి."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"అన్‌లాక్ చేయడానికి నమూనాను గీయండి"</string>
-    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
-    <skip />
+    <string name="lockscreen_emergency_call" msgid="7549683825868928636">"ఎమర్జెన్సీ కాల్"</string>
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"కాల్‌కు తిరిగి వెళ్లు"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"సరైనది!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"మళ్లీ ప్రయత్నించండి"</string>
@@ -974,7 +977,7 @@
     <string name="text_copied" msgid="2531420577879738860">"వచనం క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది."</string>
     <string name="copied" msgid="4675902854553014676">"కాపీ చేయబడింది"</string>
     <string name="more_item_label" msgid="7419249600215749115">"ఎక్కువ"</string>
-    <string name="prepend_shortcut_label" msgid="1743716737502867951">"మెను+"</string>
+    <string name="prepend_shortcut_label" msgid="1743716737502867951">"మెనూ+"</string>
     <string name="menu_meta_shortcut_label" msgid="1623390163674762478">"Meta+"</string>
     <string name="menu_ctrl_shortcut_label" msgid="131911133027196485">"Ctrl+"</string>
     <string name="menu_alt_shortcut_label" msgid="343761069945250991">"Alt+"</string>
@@ -984,9 +987,9 @@
     <string name="menu_space_shortcut_label" msgid="5949311515646872071">"space"</string>
     <string name="menu_enter_shortcut_label" msgid="6709499510082897320">"enter"</string>
     <string name="menu_delete_shortcut_label" msgid="4365787714477739080">"delete"</string>
-    <string name="search_go" msgid="2141477624421347086">"వెతుకు"</string>
+    <string name="search_go" msgid="2141477624421347086">"సెర్చ్"</string>
     <string name="search_hint" msgid="455364685740251925">"వెతుకు..."</string>
-    <string name="searchview_description_search" msgid="1045552007537359343">"శోధించండి"</string>
+    <string name="searchview_description_search" msgid="1045552007537359343">"సెర్చ్"</string>
     <string name="searchview_description_query" msgid="7430242366971716338">"ప్రశ్నను శోధించండి"</string>
     <string name="searchview_description_clear" msgid="1989371719192982900">"ప్రశ్నను క్లియర్ చేయి"</string>
     <string name="searchview_description_submit" msgid="6771060386117334686">"ప్రశ్నని సమర్పించండి"</string>
@@ -1126,6 +1129,8 @@
     <string name="capital_off" msgid="7443704171014626777">"ఆఫ్‌"</string>
     <string name="checked" msgid="9179896827054513119">"ఎంచుకోబడింది"</string>
     <string name="not_checked" msgid="7972320087569023342">"ఎంచుకోలేదు"</string>
+    <string name="selected" msgid="6614607926197755875">"ఎంచుకోబడింది"</string>
+    <string name="not_selected" msgid="410652016565864475">"ఎంచుకోబడలేదు"</string>
     <string name="whichApplication" msgid="5432266899591255759">"దీన్ని ఉపయోగించి చర్యను పూర్తి చేయండి"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"%1$sను ఉపయోగించి చర్యను పూర్తి చేయి"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"చర్యను పూర్తి చేయి"</string>
@@ -1402,7 +1407,7 @@
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"జూమ్ నియంత్రణ కోసం రెండుసార్లు నొక్కండి"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"విడ్జెట్‌ను జోడించడం సాధ్యపడలేదు."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"వెళ్లు"</string>
-    <string name="ime_action_search" msgid="4501435960587287668">"వెతుకు"</string>
+    <string name="ime_action_search" msgid="4501435960587287668">"సెర్చ్"</string>
     <string name="ime_action_send" msgid="8456843745664334138">"పంపు"</string>
     <string name="ime_action_next" msgid="4169702997635728543">"తర్వాత"</string>
     <string name="ime_action_done" msgid="6299921014822891569">"పూర్తయింది"</string>
@@ -1623,10 +1628,10 @@
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"వాల్యూమ్‌ను సిఫార్సు చేయబడిన స్థాయి కంటే ఎక్కువగా పెంచాలా?\n\nసుదీర్ఘ వ్యవధుల పాటు అధిక వాల్యూమ్‌లో వినడం వలన మీ వినికిడి శక్తి దెబ్బ తినవచ్చు."</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"యాక్సెస్ సామర్థ్యం షార్ట్‌కట్‌ను ఉపయోగించాలా?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"షార్ట్‌కట్ ఆన్ చేసి ఉన్నప్పుడు, రెండు వాల్యూమ్ బటన్‌లను 3 సెకన్ల పాటు నొక్కి ఉంచితే యాక్సెస్ సౌలభ్య ఫీచర్ ప్రారంభం అవుతుంది."</string>
-    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"యాక్సెసిబిలిటీ‌ ఫీచ‌ర్‌ల‌ను ఆన్ చేయాలా?"</string>
+    <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"యాక్సెస్ సౌలభ్య ఫీచర్‌ల కోసం షార్ట్‌కట్‌ను ఆన్ చేయాలా?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"రెండు వాల్యూమ్ కీలను కొంత సేపు నొక్కి పట్టుకుంటే యాక్సెసిబిలిటీ ఫీచ‌ర్‌లు ఆన్ అవుతాయి. ఇది మీ పరికరం పని చేసే విధానాన్ని మార్చవచ్చు.\n\nప్రస్తుత ఫీచర్లు:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nఎంపిక చేసిన ఫీచర్లను మీరు సెట్టింగ్‌లు&gt;యాక్సెసిబిలిటీలో మార్చవచ్చు."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"<xliff:g id="SERVICE">%1$s</xliff:g> ఆన్ చేయాాలా?"</string>
+    <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"<xliff:g id="SERVICE">%1$s</xliff:g> షార్ట్‌కట్‌ను ఆన్ చేయాలా?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"రెండు వాల్యూమ్ కీలను కొన్ని సెకన్ల పాటు నొక్కి పట్టుకోవడం ద్వారా యాక్సెసిబిలిటీ అయిన <xliff:g id="SERVICE">%1$s</xliff:g> ఆన్ అవుతుంది. ఇది మీ పరికరం పని చేసే విధానాన్ని మార్చవచ్చు.\n\nసెట్టింగ్‌లు &gt; యాక్సెసిబిలిటీలో, వేరొక ఫీచర్‌ను ప్రారంభించేలా ఈ షార్ట్ కట్‌ను మీరు మార్చవచ్చు."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"ఆన్ చేయి"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"ఆన్ చేయకండి"</string>
@@ -1830,6 +1835,7 @@
       <item quantity="other">%d గం పాటు</item>
       <item quantity="one">1 గం పాటు</item>
     </plurals>
+    <string name="zen_mode_until_next_day" msgid="1403042784161725038">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> వరకు"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> వరకు"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (తర్వాత అలారం) వరకు"</string>
     <string name="zen_mode_forever" msgid="740585666364912448">"మీరు ఆఫ్‌ చేసే వరకు"</string>
@@ -1882,7 +1888,7 @@
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"సూచించినవి"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"అన్ని భాషలు"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"అన్ని ప్రాంతాలు"</string>
-    <string name="locale_search_menu" msgid="6258090710176422934">"వెతుకు"</string>
+    <string name="locale_search_menu" msgid="6258090710176422934">"సెర్చ్"</string>
     <string name="app_suspended_title" msgid="888873445010322650">"యాప్ అందుబాటులో లేదు"</string>
     <string name="app_suspended_default_message" msgid="6451215678552004172">"<xliff:g id="APP_NAME_0">%1$s</xliff:g> ప్రస్తుతం అందుబాటులో లేదు. ఇది <xliff:g id="APP_NAME_1">%2$s</xliff:g> ద్వారా నిర్వహించబడుతుంది."</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"మరింత తెలుసుకోండి"</string>

@@ -36,7 +36,6 @@ import android.media.soundtrigger_middleware.Status;
 import android.os.IBinder;
 import android.os.IHwBinder;
 import android.os.RemoteException;
-import android.os.ServiceSpecificException;
 import android.util.Log;
 
 import java.util.ArrayList;
@@ -185,11 +184,13 @@ class SoundTriggerModule implements IHwBinder.DeathRecipient {
     @Override
     public void serviceDied(long cookie) {
         Log.w(TAG, String.format("Underlying HAL driver died."));
-        List<ISoundTriggerCallback> callbacks = new ArrayList<>(mActiveSessions.size());
+        List<ISoundTriggerCallback> callbacks;
         synchronized (this) {
+            callbacks = new ArrayList<>(mActiveSessions.size());
             for (Session session : mActiveSessions) {
                 callbacks.add(session.moduleDied());
             }
+            mActiveSessions.clear();
             reset();
         }
         // Trigger the callbacks outside of the lock to avoid deadlocks.
@@ -293,7 +294,11 @@ class SoundTriggerModule implements IHwBinder.DeathRecipient {
             } catch (Exception e) {
                 // We must do this outside the lock, to avoid possible deadlocks with the remote
                 // process that provides the audio sessions, which may also be calling into us.
-                mAudioSessionProvider.releaseSession(audioSession.mSessionHandle);
+                try {
+                    mAudioSessionProvider.releaseSession(audioSession.mSessionHandle);
+                } catch (Exception ee) {
+                    Log.e(TAG, "Failed to release session.", ee);
+                }
                 throw e;
             }
         }
@@ -321,7 +326,11 @@ class SoundTriggerModule implements IHwBinder.DeathRecipient {
             } catch (Exception e) {
                 // We must do this outside the lock, to avoid possible deadlocks with the remote
                 // process that provides the audio sessions, which may also be calling into us.
-                mAudioSessionProvider.releaseSession(audioSession.mSessionHandle);
+                try {
+                    mAudioSessionProvider.releaseSession(audioSession.mSessionHandle);
+                } catch (Exception ee) {
+                    Log.e(TAG, "Failed to release session.", ee);
+                }
                 throw e;
             }
         }
@@ -424,7 +433,6 @@ class SoundTriggerModule implements IHwBinder.DeathRecipient {
          */
         private ISoundTriggerCallback moduleDied() {
             ISoundTriggerCallback callback = mCallback;
-            removeSession(this);
             mCallback = null;
             return callback;
         }

@@ -20,6 +20,8 @@ import static android.hardware.hdmi.HdmiDeviceInfo.DEVICE_PLAYBACK;
 import static android.hardware.hdmi.HdmiDeviceInfo.DEVICE_TV;
 
 import static com.android.server.hdmi.Constants.ADDR_AUDIO_SYSTEM;
+import static com.android.server.hdmi.Constants.ADDR_BACKUP_1;
+import static com.android.server.hdmi.Constants.ADDR_BACKUP_2;
 import static com.android.server.hdmi.Constants.ADDR_PLAYBACK_1;
 import static com.android.server.hdmi.Constants.ADDR_PLAYBACK_2;
 import static com.android.server.hdmi.Constants.ADDR_PLAYBACK_3;
@@ -30,6 +32,7 @@ import static com.android.server.hdmi.Constants.ADDR_UNREGISTERED;
 import static junit.framework.Assert.assertEquals;
 
 import android.content.Context;
+import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.tv.cec.V1_0.SendMessageResult;
 import android.os.Looper;
 import android.os.test.TestLooper;
@@ -68,10 +71,15 @@ public class HdmiCecControllerTest {
         Looper getServiceLooper() {
             return mMyLooper;
         }
+
+        @Override
+        int getCecVersion() {
+            return mCecVersion;
+        }
     }
 
-    private HdmiControlService mHdmiControlService;
     private HdmiCecController mHdmiCecController;
+    private int mCecVersion = HdmiControlManager.HDMI_CEC_VERSION_1_4_b;
     private int mLogicalAddress = 16;
     private AllocateAddressCallback mCallback =
             new AllocateAddressCallback() {
@@ -87,22 +95,23 @@ public class HdmiCecControllerTest {
     public void SetUp() {
         mMyLooper = mTestLooper.getLooper();
         mMyLooper = mTestLooper.getLooper();
-        mHdmiControlService = new MyHdmiControlService(InstrumentationRegistry.getTargetContext());
+        HdmiControlService hdmiControlService = new MyHdmiControlService(
+                InstrumentationRegistry.getTargetContext());
         mNativeWrapper = new FakeNativeWrapper();
-        mHdmiCecController =
-                HdmiCecController.createWithNativeWrapper(mHdmiControlService, mNativeWrapper);
+        mHdmiCecController = HdmiCecController.createWithNativeWrapper(
+                hdmiControlService, mNativeWrapper, hdmiControlService.getAtomWriter());
     }
 
     /** Tests for {@link HdmiCecController#allocateLogicalAddress} */
     @Test
-    public void testAllocatLogicalAddress_TvDevicePreferredNotOcupied() {
+    public void testAllocateLogicalAddress_TvDevicePreferredNotOccupied() {
         mHdmiCecController.allocateLogicalAddress(DEVICE_TV, ADDR_TV, mCallback);
         mTestLooper.dispatchAll();
         assertEquals(ADDR_TV, mLogicalAddress);
     }
 
     @Test
-    public void testAllocatLogicalAddress_TvDeviceNonPreferredNotOcupied() {
+    public void testAllocateLogicalAddress_TvDeviceNonPreferredNotOccupied() {
 
         mHdmiCecController.allocateLogicalAddress(DEVICE_TV, ADDR_UNREGISTERED, mCallback);
         mTestLooper.dispatchAll();
@@ -110,7 +119,7 @@ public class HdmiCecControllerTest {
     }
 
     @Test
-    public void testAllocatLogicalAddress_TvDeviceNonPreferredFirstOcupied() {
+    public void testAllocateLogicalAddress_TvDeviceNonPreferredFirstOccupied() {
         mNativeWrapper.setPollAddressResponse(ADDR_TV, SendMessageResult.SUCCESS);
         mHdmiCecController.allocateLogicalAddress(DEVICE_TV, ADDR_UNREGISTERED, mCallback);
         mTestLooper.dispatchAll();
@@ -118,7 +127,7 @@ public class HdmiCecControllerTest {
     }
 
     @Test
-    public void testAllocatLogicalAddress_TvDeviceNonPreferredAllOcupied() {
+    public void testAllocateLogicalAddress_TvDeviceNonPreferredAllOccupied() {
         mNativeWrapper.setPollAddressResponse(ADDR_TV, SendMessageResult.SUCCESS);
         mNativeWrapper.setPollAddressResponse(ADDR_SPECIFIC_USE, SendMessageResult.SUCCESS);
         mHdmiCecController.allocateLogicalAddress(DEVICE_TV, ADDR_UNREGISTERED, mCallback);
@@ -127,7 +136,7 @@ public class HdmiCecControllerTest {
     }
 
     @Test
-    public void testAllocatLogicalAddress_AudioSystemNonPreferredNotOcupied() {
+    public void testAllocateLogicalAddress_AudioSystemNonPreferredNotOccupied() {
         mHdmiCecController.allocateLogicalAddress(
                 DEVICE_AUDIO_SYSTEM, ADDR_UNREGISTERED, mCallback);
         mTestLooper.dispatchAll();
@@ -135,7 +144,7 @@ public class HdmiCecControllerTest {
     }
 
     @Test
-    public void testAllocatLogicalAddress_AudioSystemNonPreferredAllOcupied() {
+    public void testAllocateLogicalAddress_AudioSystemNonPreferredAllOccupied() {
         mNativeWrapper.setPollAddressResponse(ADDR_AUDIO_SYSTEM, SendMessageResult.SUCCESS);
         mHdmiCecController.allocateLogicalAddress(
                 DEVICE_AUDIO_SYSTEM, ADDR_UNREGISTERED, mCallback);
@@ -144,14 +153,14 @@ public class HdmiCecControllerTest {
     }
 
     @Test
-    public void testAllocatLogicalAddress_PlaybackPreferredNotOccupied() {
+    public void testAllocateLogicalAddress_PlaybackPreferredNotOccupied() {
         mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_PLAYBACK_1, mCallback);
         mTestLooper.dispatchAll();
         assertEquals(ADDR_PLAYBACK_1, mLogicalAddress);
     }
 
     @Test
-    public void testAllocatLogicalAddress_PlaybackPreferredOcuppied() {
+    public void testAllocateLogicalAddress_PlaybackPreferredOccupied() {
         mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
         mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_PLAYBACK_1, mCallback);
         mTestLooper.dispatchAll();
@@ -159,14 +168,14 @@ public class HdmiCecControllerTest {
     }
 
     @Test
-    public void testAllocatLogicalAddress_PlaybackNoPreferredNotOcuppied() {
+    public void testAllocateLogicalAddress_PlaybackNoPreferredNotOccupied() {
         mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_UNREGISTERED, mCallback);
         mTestLooper.dispatchAll();
         assertEquals(ADDR_PLAYBACK_1, mLogicalAddress);
     }
 
     @Test
-    public void testAllocatLogicalAddress_PlaybackNoPreferredFirstOcuppied() {
+    public void testAllocateLogicalAddress_PlaybackNoPreferredFirstOccupied() {
         mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
         mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_UNREGISTERED, mCallback);
         mTestLooper.dispatchAll();
@@ -174,7 +183,7 @@ public class HdmiCecControllerTest {
     }
 
     @Test
-    public void testAllocatLogicalAddress_PlaybackNonPreferredFirstTwoOcuppied() {
+    public void testAllocateLogicalAddress_PlaybackNonPreferredFirstTwoOccupied() {
         mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
         mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_2, SendMessageResult.SUCCESS);
         mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_UNREGISTERED, mCallback);
@@ -183,10 +192,67 @@ public class HdmiCecControllerTest {
     }
 
     @Test
-    public void testAllocatLogicalAddress_PlaybackNonPreferredAllOcupied() {
+    public void testAllocateLogicalAddress_PlaybackNonPreferredAllOccupied() {
         mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
         mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_2, SendMessageResult.SUCCESS);
         mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_3, SendMessageResult.SUCCESS);
+        mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_UNREGISTERED, mCallback);
+        mTestLooper.dispatchAll();
+        assertEquals(ADDR_UNREGISTERED, mLogicalAddress);
+    }
+
+    @Test
+    public void testAllocateLogicalAddress_PlaybackNonPreferred_2_0_BackupOne() {
+        mCecVersion = HdmiControlManager.HDMI_CEC_VERSION_2_0;
+
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_2, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_3, SendMessageResult.SUCCESS);
+        mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_UNREGISTERED, mCallback);
+        mTestLooper.dispatchAll();
+        assertEquals(ADDR_BACKUP_1, mLogicalAddress);
+    }
+
+    @Test
+    public void testAllocateLogicalAddress_PlaybackNonPreferred_2_0_BackupTwo() {
+        mCecVersion = HdmiControlManager.HDMI_CEC_VERSION_2_0;
+
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_2, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_3, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_BACKUP_1, SendMessageResult.SUCCESS);
+        mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_UNREGISTERED, mCallback);
+        mTestLooper.dispatchAll();
+        assertEquals(ADDR_BACKUP_2, mLogicalAddress);
+    }
+
+    @Test
+    public void testAllocateLogicalAddress_PlaybackPreferredOccupiedDedicatedBelowAvailable() {
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_2, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_3, SendMessageResult.SUCCESS);
+        mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_PLAYBACK_2, mCallback);
+        mTestLooper.dispatchAll();
+        assertEquals(ADDR_PLAYBACK_1, mLogicalAddress);
+    }
+
+    @Test
+    public void testAllocateLogicalAddress_PlaybackPreferredOccupiedDedicatedAboveAvailable() {
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_2, SendMessageResult.SUCCESS);
+        mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_PLAYBACK_2, mCallback);
+        mTestLooper.dispatchAll();
+        assertEquals(ADDR_PLAYBACK_3, mLogicalAddress);
+    }
+
+    @Test
+    public void testAllocateLogicalAddress_PlaybackNonPreferred_2_0_AllOccupied() {
+        mCecVersion = HdmiControlManager.HDMI_CEC_VERSION_2_0;
+
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_2, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_3, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_BACKUP_1, SendMessageResult.SUCCESS);
+        mNativeWrapper.setPollAddressResponse(ADDR_BACKUP_2, SendMessageResult.SUCCESS);
         mHdmiCecController.allocateLogicalAddress(DEVICE_PLAYBACK, ADDR_UNREGISTERED, mCallback);
         mTestLooper.dispatchAll();
         assertEquals(ADDR_UNREGISTERED, mLogicalAddress);

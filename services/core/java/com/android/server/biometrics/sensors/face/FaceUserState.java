@@ -17,7 +17,6 @@
 package com.android.server.biometrics.sensors.face;
 
 import android.content.Context;
-import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.face.Face;
 import android.util.AtomicFile;
 import android.util.Slog;
@@ -41,10 +40,9 @@ import java.util.ArrayList;
  * Class managing the set of faces per user across device reboots.
  * @hide
  */
-public class FaceUserState extends BiometricUserState {
+public class FaceUserState extends BiometricUserState<Face> {
 
     private static final String TAG = "FaceState";
-    private static final String FACE_FILE = "settings_face.xml";
 
     private static final String TAG_FACES = "faces";
     private static final String TAG_FACE = "face";
@@ -52,8 +50,8 @@ public class FaceUserState extends BiometricUserState {
     private static final String ATTR_FACE_ID = "faceId";
     private static final String ATTR_DEVICE_ID = "deviceId";
 
-    public FaceUserState(Context ctx, int userId) {
-        super(ctx, userId);
+    public FaceUserState(Context ctx, int userId, String fileName) {
+        super(ctx, userId, fileName);
     }
 
     @Override
@@ -62,29 +60,14 @@ public class FaceUserState extends BiometricUserState {
     }
 
     @Override
-    protected String getBiometricFile() {
-        return FACE_FILE;
-    }
-
-    @Override
     protected int getNameTemplateResource() {
         return com.android.internal.R.string.face_name_template;
     }
 
     @Override
-    public void addBiometric(BiometricAuthenticator.Identifier identifier) {
-        if (identifier instanceof Face) {
-            super.addBiometric(identifier);
-        } else {
-            Slog.w(TAG, "Attempted to add non-face identifier");
-        }
-    }
-
-    @Override
-    protected ArrayList getCopy(ArrayList array) {
-        ArrayList<Face> result = new ArrayList<>(array.size());
-        for (int i = 0; i < array.size(); i++) {
-            Face f = (Face) array.get(i);
+    protected ArrayList<Face> getCopy(ArrayList<Face> array) {
+        final ArrayList<Face> result = new ArrayList<>();
+        for (Face f : array) {
             result.add(new Face(f.getName(), f.getBiometricId(), f.getDeviceId()));
         }
         return result;

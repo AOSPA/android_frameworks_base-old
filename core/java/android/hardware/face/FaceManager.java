@@ -49,9 +49,6 @@ import com.android.internal.os.SomeArgs;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A class that coordinates access to the face authentication hardware.
@@ -72,6 +69,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     private static final int MSG_SET_FEATURE_COMPLETED = 107;
     private static final int MSG_CHALLENGE_GENERATED = 108;
     private static final int MSG_FACE_DETECTED = 109;
+    private static final int MSG_CHALLENGE_INTERRUPTED = 110;
+    private static final int MSG_CHALLENGE_INTERRUPT_FINISHED = 111;
 
     private final IFaceService mService;
     private final Context mContext;
@@ -141,14 +140,19 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
 
         @Override
-        public void onChallengeGenerated(long challenge) {
-            if (mGenerateChallengeCallback instanceof InternalGenerateChallengeCallback) {
-                // Perform this on system_server thread, since the application's thread is
-                // blocked waiting for the result
-                mGenerateChallengeCallback.onGenerateChallengeResult(challenge);
-            } else {
-                mHandler.obtainMessage(MSG_CHALLENGE_GENERATED, challenge).sendToTarget();
-            }
+        public void onChallengeGenerated(int sensorId, long challenge) {
+            mHandler.obtainMessage(MSG_CHALLENGE_GENERATED, sensorId, 0, challenge)
+                    .sendToTarget();
+        }
+
+        @Override
+        public void onChallengeInterrupted(int sensorId) {
+            mHandler.obtainMessage(MSG_CHALLENGE_INTERRUPTED, sensorId).sendToTarget();
+        }
+
+        @Override
+        public void onChallengeInterruptFinished(int sensorId) {
+            mHandler.obtainMessage(MSG_CHALLENGE_INTERRUPT_FINISHED, sensorId).sendToTarget();
         }
     };
 
@@ -292,6 +296,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * int[], Surface)} with {@code surface} set to null.
      *
      * @see FaceManager#enroll(int, byte[], CancellationSignal, EnrollmentCallback, int[], Surface)
+     * @hide
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
     public void enroll(int userId, byte[] hardwareAuthToken, CancellationSignal cancel,
@@ -405,35 +410,6 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     }
 
     /**
-     * Same as {@link #generateChallenge(GenerateChallengeCallback)}, except blocks until the
-     * TEE/hardware operation is complete.
-     * @return challenge generated in the TEE/hardware
-     * @hide
-     */
-    @RequiresPermission(MANAGE_BIOMETRIC)
-    public long generateChallengeBlocking() {
-        final AtomicReference<Long> result = new AtomicReference<>();
-        final CountDownLatch latch = new CountDownLatch(1);
-        final GenerateChallengeCallback callback = new InternalGenerateChallengeCallback() {
-            @Override
-            public void onGenerateChallengeResult(long challenge) {
-                result.set(challenge);
-                latch.countDown();
-            }
-        };
-
-        generateChallenge(callback);
-
-        try {
-            latch.await(1, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Slog.e(TAG, "Interrupted while generatingChallenge", e);
-            e.printStackTrace();
-        }
-        return result.get();
-    }
-
-    /**
      * Generates a unique random challenge in the TEE. A typical use case is to have it wrapped in a
      * HardwareAuthenticationToken, minted by Gatekeeper upon PIN/Pattern/Password verification.
      * The HardwareAuthenticationToken can then be sent to the biometric HAL together with a
@@ -443,14 +419,17 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      *
      * @see com.android.server.locksettings.LockSettingsService
      *
+     * TODO(b/171335732): should take userId
+     *
      * @hide
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
-    public void generateChallenge(GenerateChallengeCallback callback) {
+    public void generateChallenge(int sensorId, GenerateChallengeCallback callback) {
         if (mService != null) {
             try {
                 mGenerateChallengeCallback = callback;
-                mService.generateChallenge(mToken, mServiceReceiver, mContext.getOpPackageName());
+                mService.generateChallenge(mToken, sensorId, 0 /* userId */, mServiceReceiver,
+                        mContext.getOpPackageName());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -458,15 +437,71 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     }
 
     /**
-     * Invalidates the current auth token.
+     * Same as {@link #generateChallenge(int, GenerateChallengeCallback)}, but assumes the first
+     * enumerated sensor.
+     * @hide
+     */
+    @RequiresPermission(MANAGE_BIOMETRIC)
+    public void generateChallenge(GenerateChallengeCallback callback) {
+        final List<FaceSensorPropertiesInternal> faceSensorProperties =
+                getSensorPropertiesInternal();
+        if (faceSensorProperties.isEmpty()) {
+            Slog.e(TAG, "No sensors");
+            return;
+        }
+
+        final int sensorId = faceSensorProperties.get(0).sensorId;
+        generateChallenge(sensorId, callback);
+    }
+
+    /**
+     * Invalidates the current challenge.
      *
      * @hide
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
     public void revokeChallenge() {
+        final List<FaceSensorPropertiesInternal> faceSensorProperties =
+                getSensorPropertiesInternal();
+        if (faceSensorProperties.isEmpty()) {
+            Slog.e(TAG, "No sensors during revokeChallenge");
+        }
+        revokeChallenge(faceSensorProperties.get(0).sensorId);
+    }
+
+    /**
+     * Invalidates the current challenge.
+     *
+     * TODO(b/171335732): should take userId and challenge
+     *
+     * @hide
+     */
+    @RequiresPermission(MANAGE_BIOMETRIC)
+    public void revokeChallenge(int sensorId) {
         if (mService != null) {
             try {
-                mService.revokeChallenge(mToken, mContext.getOpPackageName());
+                mService.revokeChallenge(mToken, sensorId, 0 /* userId */,
+                        mContext.getOpPackageName(), 0 /* challenge */);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Reset the lockout when user authenticates with strong auth (e.g. PIN, pattern or password)
+     *
+     * @param sensorId Sensor ID that this operation takes effect for
+     * @param userId User ID that this operation takes effect for.
+     * @param hardwareAuthToken An opaque token returned by password confirmation.
+     * @hide
+     */
+    @RequiresPermission(USE_BIOMETRIC_INTERNAL)
+    public void resetLockout(int sensorId, int userId, @Nullable byte[] hardwareAuthToken) {
+        if (mService != null) {
+            try {
+                mService.resetLockout(mToken, sensorId, userId, hardwareAuthToken,
+                        mContext.getOpPackageName());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -542,9 +577,17 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
     public List<Face> getEnrolledFaces(int userId) {
+        final List<FaceSensorPropertiesInternal> faceSensorProperties =
+                getSensorPropertiesInternal();
+        if (faceSensorProperties.isEmpty()) {
+            Slog.e(TAG, "No sensors");
+            return new ArrayList<>();
+        }
+
         if (mService != null) {
             try {
-                return mService.getEnrolledFaces(userId, mContext.getOpPackageName());
+                return mService.getEnrolledFaces(faceSensorProperties.get(0).sensorId, userId,
+                        mContext.getOpPackageName());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -567,18 +610,11 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * Determine if there is a face enrolled.
      *
      * @return true if a face is enrolled, false otherwise
+     * @hide
      */
     @RequiresPermission(USE_BIOMETRIC_INTERNAL)
     public boolean hasEnrolledTemplates() {
-        if (mService != null) {
-            try {
-                return mService.hasEnrolledFaces(
-                        UserHandle.myUserId(), mContext.getOpPackageName());
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-        }
-        return false;
+        return hasEnrolledTemplates(UserHandle.myUserId());
     }
 
     /**
@@ -588,9 +624,17 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
             USE_BIOMETRIC_INTERNAL,
             INTERACT_ACROSS_USERS})
     public boolean hasEnrolledTemplates(int userId) {
+        final List<FaceSensorPropertiesInternal> faceSensorProperties =
+                getSensorPropertiesInternal();
+        if (faceSensorProperties.isEmpty()) {
+            Slog.e(TAG, "No sensors");
+            return false;
+        }
+
         if (mService != null) {
             try {
-                return mService.hasEnrolledFaces(userId, mContext.getOpPackageName());
+                return mService.hasEnrolledFaces(faceSensorProperties.get(0).sensorId, userId,
+                        mContext.getOpPackageName());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -602,12 +646,21 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * Determine if face authentication sensor hardware is present and functional.
      *
      * @return true if hardware is present and functional, false otherwise.
+     * @hide
      */
     @RequiresPermission(USE_BIOMETRIC_INTERNAL)
     public boolean isHardwareDetected() {
+        final List<FaceSensorPropertiesInternal> faceSensorProperties =
+                getSensorPropertiesInternal();
+        if (faceSensorProperties.isEmpty()) {
+            Slog.e(TAG, "No sensors");
+            return false;
+        }
+
         if (mService != null) {
             try {
-                return mService.isHardwareDetected(mContext.getOpPackageName());
+                return mService.isHardwareDetected(faceSensorProperties.get(0).sensorId,
+                        mContext.getOpPackageName());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -618,17 +671,32 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     }
 
     /**
+     * Retrieves a list of properties for all face authentication sensors on the device.
+     * @hide
+     */
+    @NonNull
+    public List<FaceSensorProperties> getSensorProperties() {
+        final List<FaceSensorProperties> properties = new ArrayList<>();
+        final List<FaceSensorPropertiesInternal> internalProperties
+                = getSensorPropertiesInternal();
+        for (FaceSensorPropertiesInternal internalProp : internalProperties) {
+            properties.add(FaceSensorProperties.from(internalProp));
+        }
+        return properties;
+    }
+
+    /**
      * Get statically configured sensor properties.
      * @hide
      */
     @RequiresPermission(USE_BIOMETRIC_INTERNAL)
     @NonNull
-    public List<FaceSensorProperties> getSensorProperties() {
+    public List<FaceSensorPropertiesInternal> getSensorPropertiesInternal() {
         try {
-            if (mService == null || !mService.isHardwareDetected(mContext.getOpPackageName())) {
+            if (mService == null) {
                 return new ArrayList<>();
             }
-            return mService.getSensorProperties(mContext.getOpPackageName());
+            return mService.getSensorPropertiesInternal(mContext.getOpPackageName());
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         }
@@ -844,6 +912,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     /**
      * Container for callback data from {@link FaceManager#authenticate(CryptoObject,
      * CancellationSignal, int, AuthenticationCallback, Handler)}.
+     * @hide
      */
     public static class AuthenticationResult {
         private Face mFace;
@@ -913,6 +982,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * FaceManager#authenticate(CryptoObject, CancellationSignal,
      * int, AuthenticationCallback, Handler) } must provide an implementation of this for listening
      * to face events.
+     * @hide
      */
     public abstract static class AuthenticationCallback
             extends BiometricAuthenticator.AuthenticationCallback {
@@ -1071,14 +1141,26 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     }
 
     /**
+     * Callback structure provided to {@link #generateChallenge(int, GenerateChallengeCallback)}.
      * @hide
      */
-    public abstract static class GenerateChallengeCallback {
-        public abstract void onGenerateChallengeResult(long challenge);
-    }
+    public interface GenerateChallengeCallback {
+        /**
+         * Invoked when a challenge has been generated.
+         */
+        void onGenerateChallengeResult(int sensorId, long challenge);
 
-    private abstract static class InternalGenerateChallengeCallback
-            extends GenerateChallengeCallback {}
+        /**
+         * Invoked if the challenge has not been revoked and a subsequent caller/owner invokes
+         * {@link #generateChallenge(int, GenerateChallengeCallback)}, but
+         */
+        default void onChallengeInterrupted(int sensorId) {}
+
+        /**
+         * Invoked when the interrupting client has finished (e.g. revoked its challenge).
+         */
+        default void onChallengeInterruptFinished(int sensorId) {}
+    }
 
     private class OnEnrollCancelListener implements OnCancelListener {
         @Override
@@ -1151,11 +1233,17 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                     args.recycle();
                     break;
                 case MSG_CHALLENGE_GENERATED:
-                    sendChallengeGenerated((long) msg.obj /* challenge */);
+                    sendChallengeGenerated(msg.arg1 /* sensorId */, (long) msg.obj /* challenge */);
                     break;
                 case MSG_FACE_DETECTED:
                     sendFaceDetected(msg.arg1 /* sensorId */, msg.arg2 /* userId */,
                             (boolean) msg.obj /* isStrongBiometric */);
+                    break;
+                case MSG_CHALLENGE_INTERRUPTED:
+                    sendChallengeInterrupted((int) msg.obj /* sensorId */);
+                    break;
+                case MSG_CHALLENGE_INTERRUPT_FINISHED:
+                    sendChallengeInterruptFinished((int) msg.obj /* sensorId */);
                     break;
                 default:
                     Slog.w(TAG, "Unknown message: " + msg.what);
@@ -1178,11 +1266,11 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         mGetFeatureCallback.onCompleted(success, feature, value);
     }
 
-    private void sendChallengeGenerated(long challenge) {
+    private void sendChallengeGenerated(int sensorId, long challenge) {
         if (mGenerateChallengeCallback == null) {
             return;
         }
-        mGenerateChallengeCallback.onGenerateChallengeResult(challenge);
+        mGenerateChallengeCallback.onGenerateChallengeResult(sensorId, challenge);
     }
 
     private void sendFaceDetected(int sensorId, int userId, boolean isStrongBiometric) {
@@ -1191,6 +1279,22 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
             return;
         }
         mFaceDetectionCallback.onFaceDetected(sensorId, userId, isStrongBiometric);
+    }
+
+    private void sendChallengeInterrupted(int sensorId) {
+        if (mGenerateChallengeCallback == null) {
+            Slog.e(TAG, "sendChallengeInterrupted, callback null");
+            return;
+        }
+        mGenerateChallengeCallback.onChallengeInterrupted(sensorId);
+    }
+
+    private void sendChallengeInterruptFinished(int sensorId) {
+        if (mGenerateChallengeCallback == null) {
+            Slog.e(TAG, "sendChallengeInterruptFinished, callback null");
+            return;
+        }
+        mGenerateChallengeCallback.onChallengeInterruptFinished(sensorId);
     }
 
     private void sendRemovedResult(Face face, int remaining) {

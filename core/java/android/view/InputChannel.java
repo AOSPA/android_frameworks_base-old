@@ -17,6 +17,7 @@
 package android.view;
 
 import android.compat.annotation.UnsupportedAppUsage;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -54,7 +55,7 @@ public final class InputChannel implements Parcelable {
         }
     };
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private long mPtr; // used by native code
 
     private static native long[] nativeOpenInputChannelPair(String name);
@@ -83,7 +84,7 @@ public final class InputChannel implements Parcelable {
      *
      *  @hide
      */
-    public void setNativeInputChannel(long nativeChannel) {
+    private void setNativeInputChannel(long nativeChannel) {
         if (nativeChannel == 0) {
             throw new IllegalArgumentException("Attempting to set native input channel to null.");
         }
@@ -148,12 +149,11 @@ public final class InputChannel implements Parcelable {
     }
 
     /**
-     * Transfers ownership of the internal state of the input channel to another
-     * instance and invalidates this instance.  This is used to pass an input channel
+     * Creates a copy of this instance to the outParameter. This is used to pass an input channel
      * as an out parameter in a binder call.
      * @param other The other input channel instance.
      */
-    public void transferTo(InputChannel outParameter) {
+    public void copyTo(InputChannel outParameter) {
         if (outParameter == null) {
             throw new IllegalArgumentException("outParameter must not be null");
         }

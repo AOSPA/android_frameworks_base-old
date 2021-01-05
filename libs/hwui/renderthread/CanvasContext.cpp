@@ -139,7 +139,7 @@ void CanvasContext::destroy() {
     mAnimationContext->destroy();
 }
 
-static void setBufferCount(ANativeWindow* window, uint32_t extraBuffers) {
+static void setBufferCount(ANativeWindow* window) {
     int query_value;
     int err = window->query(window, NATIVE_WINDOW_MIN_UNDEQUEUED_BUFFERS, &query_value);
     if (err != 0 || query_value < 0) {
@@ -148,7 +148,9 @@ static void setBufferCount(ANativeWindow* window, uint32_t extraBuffers) {
     }
     auto min_undequeued_buffers = static_cast<uint32_t>(query_value);
 
-    int bufferCount = min_undequeued_buffers + 2 + extraBuffers;
+    // We only need to set min_undequeued + 2 because the renderahead amount was already factored into the
+    // query for min_undequeued
+    int bufferCount = min_undequeued_buffers + 2;
     native_window_set_buffer_count(window, bufferCount);
 }
 
@@ -174,17 +176,21 @@ void CanvasContext::setSurface(ANativeWindow* window, bool enableTimeout) {
     } else {
         mNativeSurface = nullptr;
     }
+    setupPipelineSurface();
+}
 
+void CanvasContext::setupPipelineSurface() {
     bool hasSurface = mRenderPipeline->setSurface(
             mNativeSurface ? mNativeSurface->getNativeWindow() : nullptr, mSwapBehavior);
 
     if (mNativeSurface && !mNativeSurface->didSetExtraBuffers()) {
-        setBufferCount(mNativeSurface->getNativeWindow(), mRenderAheadCapacity);
+        setBufferCount(mNativeSurface->getNativeWindow());
+
     }
 
     mFrameNumber = -1;
 
-    if (window != nullptr && hasSurface) {
+    if (mNativeSurface != nullptr && hasSurface) {
         mHaveNewSurface = true;
         mSwapHistory.clear();
         // Enable frame stats after the surface has been bound to the appropriate graphics API.
@@ -239,9 +245,9 @@ void CanvasContext::setOpaque(bool opaque) {
     mOpaque = opaque;
 }
 
-void CanvasContext::setWideGamut(bool wideGamut) {
-    ColorMode colorMode = wideGamut ? ColorMode::WideColorGamut : ColorMode::SRGB;
-    mRenderPipeline->setSurfaceColorProperties(colorMode);
+void CanvasContext::setColorMode(ColorMode mode) {
+    mRenderPipeline->setSurfaceColorProperties(mode);
+    setupPipelineSurface();
 }
 
 bool CanvasContext::makeCurrent() {
@@ -474,6 +480,7 @@ void CanvasContext::draw() {
         mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
         // Notify the callbacks, even if there's nothing to draw so they aren't waiting
         // indefinitely
+        waitOnFences();
         for (auto& func : mFrameCompleteCallbacks) {
             std::invoke(func, mFrameNumber);
         }
@@ -495,6 +502,14 @@ void CanvasContext::draw() {
     int64_t frameCompleteNr = getFrameNumber();
 
     waitOnFences();
+
+    if (mNativeSurface) {
+        // TODO(b/165985262): measure performance impact
+        if (const auto vsyncId = mCurrentFrameInfo->get(FrameInfoIndex::FrameTimelineVsyncId);
+                vsyncId != UiFrameInfoBuilder::INVALID_VSYNC_ID) {
+            native_window_set_frame_timeline_vsync(mNativeSurface->getNativeWindow(), vsyncId);
+        }
+    }
 
     bool requireSwap = false;
     int error = OK;
@@ -629,8 +644,12 @@ void CanvasContext::prepareAndDraw(RenderNode* node) {
     ATRACE_CALL();
 
     nsecs_t vsync = mRenderThread.timeLord().computeFrameTimeNanos();
+    int64_t vsyncId = mRenderThread.timeLord().lastVsyncId();
+    int64_t frameDeadline = mRenderThread.timeLord().lastFrameDeadline();
     int64_t frameInfo[UI_THREAD_FRAME_INFO_SIZE];
-    UiFrameInfoBuilder(frameInfo).addFlag(FrameInfoFlags::RTAnimation).setVsync(vsync, vsync);
+    UiFrameInfoBuilder(frameInfo)
+        .addFlag(FrameInfoFlags::RTAnimation)
+        .setVsync(vsync, vsync, vsyncId, frameDeadline);
 
     TreeInfo info(TreeInfo::MODE_RT_ONLY, *this);
     prepareTree(info, frameInfo, systemTime(SYSTEM_TIME_MONOTONIC), node);

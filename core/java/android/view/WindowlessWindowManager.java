@@ -26,6 +26,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.MergedConfiguration;
+import android.window.ClientWindowFrames;
 
 import java.util.HashMap;
 import java.util.Objects;
@@ -128,9 +129,8 @@ public class WindowlessWindowManager implements IWindowSession {
      * IWindowSession implementation.
      */
     @Override
-    public int addToDisplay(IWindow window, int seq, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, Rect outFrame, Rect outContentInsets,
-            Rect outStableInsets,
+    public int addToDisplay(IWindow window, WindowManager.LayoutParams attrs,
+            int viewVisibility, int displayId, InsetsState requestedVisibility, Rect outFrame,
             DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel,
             InsetsState outInsetsState, InsetsSourceControl[] outActiveControls) {
         final SurfaceControl.Builder b = new SurfaceControl.Builder(mSurfaceSession)
@@ -164,20 +164,18 @@ public class WindowlessWindowManager implements IWindowSession {
      * IWindowSession implementation. Currently this class doesn't need to support for multi-user.
      */
     @Override
-    public int addToDisplayAsUser(IWindow window, int seq, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, int userId, Rect outFrame,
-            Rect outContentInsets, Rect outStableInsets,
-            DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel,
-            InsetsState outInsetsState, InsetsSourceControl[] outActiveControls) {
-        return addToDisplay(window, seq, attrs, viewVisibility, displayId,
-                outFrame, outContentInsets, outStableInsets, outDisplayCutout, outInputChannel,
-                outInsetsState, outActiveControls);
+    public int addToDisplayAsUser(IWindow window, WindowManager.LayoutParams attrs,
+            int viewVisibility, int displayId, int userId, InsetsState requestedVisibility,
+            Rect outFrame, DisplayCutout.ParcelableWrapper outDisplayCutout,
+            InputChannel outInputChannel, InsetsState outInsetsState,
+            InsetsSourceControl[] outActiveControls) {
+        return addToDisplay(window, attrs, viewVisibility, displayId, requestedVisibility,
+                outFrame, outDisplayCutout, outInputChannel, outInsetsState, outActiveControls);
     }
 
     @Override
-    public int addToDisplayWithoutInputChannel(android.view.IWindow window, int seq,
+    public int addToDisplayWithoutInputChannel(android.view.IWindow window,
             android.view.WindowManager.LayoutParams attrs, int viewVisibility, int layerStackId,
-            android.graphics.Rect outContentInsets, android.graphics.Rect outStableInsets,
             android.view.InsetsState insetsState) {
         return 0;
     }
@@ -222,14 +220,11 @@ public class WindowlessWindowManager implements IWindowSession {
     }
 
     @Override
-    public int relayout(IWindow window, int seq, WindowManager.LayoutParams inAttrs,
+    public int relayout(IWindow window, WindowManager.LayoutParams inAttrs,
             int requestedWidth, int requestedHeight, int viewFlags, int flags, long frameNumber,
-            Rect outFrame, Rect outContentInsets, Rect outVisibleInsets,
-            Rect outStableInsets, Rect outBackdropFrame,
-            DisplayCutout.ParcelableWrapper cutout, MergedConfiguration mergedConfiguration,
+            ClientWindowFrames outFrames, MergedConfiguration mergedConfiguration,
             SurfaceControl outSurfaceControl, InsetsState outInsetsState,
-            InsetsSourceControl[] outActiveControls, Point outSurfaceSize,
-            SurfaceControl outBLASTSurfaceControl) {
+            InsetsSourceControl[] outActiveControls, Point outSurfaceSize) {
         final State state;
         synchronized (this) {
             state = mStateForWindow.get(window.asBinder());
@@ -255,7 +250,8 @@ public class WindowlessWindowManager implements IWindowSession {
             t.hide(sc).apply();
             outSurfaceControl.release();
         }
-        outFrame.set(0, 0, attrs.width, attrs.height);
+        outFrames.frame.set(0, 0, attrs.width, attrs.height);
+        outFrames.displayFrame.set(outFrames.frame);
 
         mergedConfiguration.setConfiguration(mConfiguration, mConfiguration);
 
@@ -289,11 +285,6 @@ public class WindowlessWindowManager implements IWindowSession {
     public void setInsets(android.view.IWindow window, int touchableInsets,
             android.graphics.Rect contentInsets, android.graphics.Rect visibleInsets,
             android.graphics.Region touchableRegion) {
-    }
-
-    @Override
-    public void getDisplayFrame(android.view.IWindow window,
-            android.graphics.Rect outDisplayFrame) {
     }
 
     @Override
@@ -456,5 +447,10 @@ public class WindowlessWindowManager implements IWindowSession {
       final Rect surfaceInsets = attrs.surfaceInsets;
       return surfaceInsets != null
           ? attrs.height + surfaceInsets.top + surfaceInsets.bottom : attrs.height;
+    }
+
+    @Override
+    public void grantEmbeddedWindowFocus(IWindow callingWindow, IBinder targetInputToken,
+                                         boolean grantFocus) {
     }
 }

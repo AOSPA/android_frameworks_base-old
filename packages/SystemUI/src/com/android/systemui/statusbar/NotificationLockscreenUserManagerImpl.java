@@ -48,12 +48,12 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -65,13 +65,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Handles keeping track of the current user, profiles, and various things related to hiding
  * contents, redacting notifications, and the lockscreen.
  */
-@Singleton
+@SysUISingleton
 public class NotificationLockscreenUserManagerImpl implements
         Dumpable, NotificationLockscreenUserManager, StateListener {
     private static final String TAG = "LockscreenUserManager";
@@ -345,8 +344,7 @@ public class NotificationLockscreenUserManagerImpl implements
             return false;
         }
         boolean exceedsPriorityThreshold;
-        if (NotificationUtils.useNewInterruptionModel(mContext)
-                && hideSilentNotificationsOnLockscreen()) {
+        if (hideSilentNotificationsOnLockscreen()) {
             exceedsPriorityThreshold =
                     entry.getBucket() == BUCKET_MEDIA_CONTROLS
                             || (entry.getBucket() != BUCKET_SILENT

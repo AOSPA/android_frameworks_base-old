@@ -19,6 +19,7 @@ package android.app;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
@@ -129,6 +130,73 @@ public class NotificationManager {
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED =
             "android.app.action.NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED";
+
+    /**
+     * Activity action: Toggle notification panel of the specified handler.
+     *
+     * <p><strong>Important:</strong>You must protect the activity that handles this action with
+     * the {@link android.Manifest.permission#STATUS_BAR_SERVICE} permission to ensure that only
+     * the SystemUI can launch this activity. Activities that are not properly protected will not
+     * be launched.
+     *
+     * <p class="note">This is currently only used on TV to allow a system app to handle the
+     * notification panel. The package handling the notification panel has to be specified by
+     * config_notificationHandlerPackage in values/config.xml.
+     *
+     * Input: nothing
+     * Output: nothing
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.STATUS_BAR_SERVICE)
+    @SdkConstant(SdkConstant.SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_TOGGLE_NOTIFICATION_HANDLER_PANEL =
+            "android.app.action.TOGGLE_NOTIFICATION_HANDLER_PANEL";
+
+    /**
+     * Activity action: Open notification panel of the specified handler.
+     *
+     * <p><strong>Important:</strong>You must protect the activity that handles this action with
+     * the {@link android.Manifest.permission#STATUS_BAR_SERVICE} permission to ensure that only
+     * the SystemUI can launch this activity. Activities that are not properly protected will
+     * not be launched.
+     *
+     * <p class="note"> This is currently only used on TV to allow a system app to handle the
+     * notification panel. The package handling the notification panel has to be specified by
+     * config_notificationHandlerPackage in values/config.xml.
+     *
+     * Input: nothing
+     * Output: nothing
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.STATUS_BAR_SERVICE)
+    @SdkConstant(SdkConstant.SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_OPEN_NOTIFICATION_HANDLER_PANEL =
+            "android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL";
+
+    /**
+     * Intent that is broadcast when the notification panel of the specified handler is to be
+     * closed.
+     *
+     * <p><strong>Important:</strong>You should protect the receiver that handles this action with
+     * the {@link android.Manifest.permission#STATUS_BAR_SERVICE} permission to ensure that only
+     * the SystemUI can send this broadcast to the notification handler.
+     *
+     * <p class="note"> This is currently only used on TV to allow a system app to handle the
+     * notification panel. The package handling the notification panel has to be specified by
+     * config_notificationHandlerPackage in values/config.xml. This is a protected intent that can
+     * only be sent by the system.
+     *
+     * Input: nothing.
+     * Output: nothing.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.STATUS_BAR_SERVICE)
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_CLOSE_NOTIFICATION_HANDLER_PANEL =
+            "android.app.action.CLOSE_NOTIFICATION_HANDLER_PANEL";
 
     /**
      * Extra for {@link #ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED} containing the id of the
@@ -280,6 +348,16 @@ public class NotificationManager {
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_INTERRUPTION_FILTER_CHANGED
             = "android.app.action.INTERRUPTION_FILTER_CHANGED";
+
+    /**
+     * Intent that is broadcast when the state of
+     * {@link #hasEnabledNotificationListener(String, UserHandle)} changes.
+     * @hide
+     */
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public static final String ACTION_NOTIFICATION_LISTENER_ENABLED_CHANGED =
+            "android.app.action.NOTIFICATION_LISTENER_ENABLED_CHANGED";
 
     /**
      * Intent that is broadcast when the state of getCurrentInterruptionFilter() changes.
@@ -802,8 +880,8 @@ public class NotificationManager {
      *
      * <p>The name and description should only be changed if the locale changes
      * or in response to the user renaming this channel. For example, if a user has a channel
-     * named 'John Doe' that represents messages from a 'John Doe', and 'John Doe' changes his name
-     * to 'John Smith,' the channel can be renamed to match.
+     * named 'Messages' and the user changes their locale, this channel's name should be updated
+     * with the translation of 'Messages' in the new locale.
      *
      * <p>The importance of an existing channel will only be changed if the new importance is lower
      * than the current value and the user has not altered any settings on this channel.
@@ -958,6 +1036,20 @@ public class NotificationManager {
      * @hide
      */
     @TestApi
+    public void updateNotificationChannel(@NonNull String pkg, int uid,
+            @NonNull NotificationChannel channel) {
+        INotificationManager service = getService();
+        try {
+            service.updateNotificationChannelForPackage(pkg, uid, channel);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    @TestApi
     public ComponentName getEffectsSuppressor() {
         INotificationManager service = getService();
         try {
@@ -1020,7 +1112,7 @@ public class NotificationManager {
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public ZenModeConfig getZenModeConfig() {
         INotificationManager service = getService();
         try {
@@ -1338,7 +1430,6 @@ public class NotificationManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public boolean isNotificationAssistantAccessGranted(@NonNull ComponentName assistant) {
         INotificationManager service = getService();
         try {
@@ -1374,7 +1465,6 @@ public class NotificationManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public @NonNull @Adjustment.Keys List<String> getAllowedAssistantAdjustments() {
         INotificationManager service = getService();
         try {
@@ -1476,10 +1566,29 @@ public class NotificationManager {
     }
 
     /** @hide */
-    public void setNotificationListenerAccessGranted(ComponentName listener, boolean granted) {
+    public void setNotificationListenerAccessGranted(
+            @NonNull ComponentName listener, boolean granted) {
+        setNotificationListenerAccessGranted(listener, granted, true);
+    }
+
+    /**
+     * Grants/revokes Notification Listener access to the given component for current user.
+     * To grant access for a particular user, obtain this service by using the {@link Context}
+     * provided by {@link Context#createPackageContextAsUser}
+     *
+     * @param listener Name of component to grant/revoke access
+     * @param granted Grant/revoke access
+     * @param userSet Whether the action was triggered explicitly by user
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_NOTIFICATION_LISTENERS)
+    public void setNotificationListenerAccessGranted(
+            @NonNull ComponentName listener, boolean granted, boolean userSet) {
         INotificationManager service = getService();
         try {
-            service.setNotificationListenerAccessGranted(listener, granted);
+            service.setNotificationListenerAccessGranted(listener, granted, userSet);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1490,7 +1599,7 @@ public class NotificationManager {
             boolean granted) {
         INotificationManager service = getService();
         try {
-            service.setNotificationListenerAccessGrantedForUser(listener, userId, granted);
+            service.setNotificationListenerAccessGrantedForUser(listener, userId, granted, true);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1507,7 +1616,6 @@ public class NotificationManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void setNotificationAssistantAccessGranted(@Nullable ComponentName assistant,
             boolean granted) {
         INotificationManager service = getService();
@@ -1516,6 +1624,20 @@ public class NotificationManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Gets the list of enabled notification listener components for current user.
+     * To query for a particular user, obtain this service by using the {@link Context}
+     * provided by {@link Context#createPackageContextAsUser}
+     *
+     * @return the list of {@link ComponentName}s of the notification listeners
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_NOTIFICATION_LISTENERS)
+    public @NonNull List<ComponentName> getEnabledNotificationListeners() {
+        return getEnabledNotificationListeners(mContext.getUserId());
     }
 
     /** @hide */
@@ -1530,7 +1652,6 @@ public class NotificationManager {
 
     /** @hide */
     @SystemApi
-    @TestApi
     public @Nullable ComponentName getAllowedNotificationAssistant() {
         INotificationManager service = getService();
         try {
@@ -1908,7 +2029,7 @@ public class NotificationManager {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (!(o instanceof Policy)) return false;
             if (o == this) return true;
             final Policy other = (Policy) o;

@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.policy;
 
+import android.annotation.ColorInt;
 import android.app.StatusBarManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -35,16 +36,17 @@ import android.text.format.DateFormat;
 import android.text.style.CharacterStyle;
 import android.text.style.RelativeSizeSpan;
 import android.util.AttributeSet;
+import android.view.ContextThemeWrapper;
 import android.view.Display;
 import android.view.View;
 import android.widget.TextView;
 
 import com.android.settingslib.Utils;
-import com.android.systemui.DemoMode;
 import com.android.systemui.Dependency;
 import com.android.systemui.FontSizeUtils;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.demomode.DemoModeCommandReceiver;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.settings.CurrentUserTracker;
@@ -62,7 +64,10 @@ import java.util.TimeZone;
 /**
  * Digital clock for the status bar.
  */
-public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.Callbacks,
+public class Clock extends TextView implements
+        DemoModeCommandReceiver,
+        Tunable,
+        CommandQueue.Callbacks,
         DarkReceiver, ConfigurationListener {
 
     public static final String CLOCK_SECONDS = "clock_seconds";
@@ -93,7 +98,6 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
     private static final int AM_PM_STYLE_GONE    = 2;
 
     private final int mAmPmStyle;
-    private final boolean mShowDark;
     private boolean mShowSeconds;
     private Handler mSecondsHandler;
 
@@ -123,7 +127,6 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
                 0, 0);
         try {
             mAmPmStyle = a.getInt(R.styleable.Clock_amPmStyle, AM_PM_STYLE_GONE);
-            mShowDark = a.getBoolean(R.styleable.Clock_showDark, true);
             mNonAdaptedColor = getCurrentTextColor();
         } finally {
             a.recycle();
@@ -191,11 +194,8 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
             mBroadcastDispatcher.registerReceiverWithHandler(mIntentReceiver, filter,
                     Dependency.get(Dependency.TIME_TICK_HANDLER), UserHandle.ALL);
             Dependency.get(TunerService.class).addTunable(this, CLOCK_SECONDS,
-                    StatusBarIconController.ICON_BLACKLIST);
+                    StatusBarIconController.ICON_HIDE_LIST);
             mCommandQueue.addCallback(this);
-            if (mShowDark) {
-                Dependency.get(DarkIconDispatcher.class).addDarkReceiver(this);
-            }
             mCurrentUserTracker.startTracking();
             mCurrentUserId = mCurrentUserTracker.getCurrentUserId();
         }
@@ -226,9 +226,6 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
             mAttached = false;
             Dependency.get(TunerService.class).removeTunable(this);
             mCommandQueue.removeCallback(this);
-            if (mShowDark) {
-                Dependency.get(DarkIconDispatcher.class).removeDarkReceiver(this);
-            }
             mCurrentUserTracker.stopTracking();
         }
     }
@@ -305,8 +302,8 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
         if (CLOCK_SECONDS.equals(key)) {
             mShowSeconds = TunerService.parseIntegerSwitch(newValue, false);
             updateShowSeconds();
-        } else {
-            setClockVisibleByUser(!StatusBarIconController.getIconBlacklist(getContext(), newValue)
+        } else if (StatusBarIconController.ICON_HIDE_LIST.equals(key)) {
+            setClockVisibleByUser(!StatusBarIconController.getIconHideList(getContext(), newValue)
                     .contains("clock"));
             updateClockVisibility();
         }
@@ -329,6 +326,13 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
         if (!mUseWallpaperTextColor) {
             setTextColor(mNonAdaptedColor);
         }
+    }
+
+    // Update text color based when shade scrim changes color.
+    public void onColorsChanged(boolean lightTheme) {
+        final Context context = new ContextThemeWrapper(mContext,
+                lightTheme ? R.style.Theme_SystemUI_Light : R.style.Theme_SystemUI);
+        setTextColor(Utils.getColorAttrDefaultColor(context, R.attr.wallpaperTextColor));
     }
 
     @Override
@@ -404,7 +408,7 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
             mContentDescriptionFormat = new SimpleDateFormat(format);
             /*
              * Search for an unquoted "a" in the format string, so we can
-             * add dummy characters around it to let us find it again after
+             * add marker characters around it to let us find it again after
              * formatting and change its size.
              */
             if (mAmPmStyle != AM_PM_STYLE_NORMAL) {
@@ -467,30 +471,35 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
 
     @Override
     public void dispatchDemoCommand(String command, Bundle args) {
-        if (!mDemoMode && command.equals(COMMAND_ENTER)) {
-            mDemoMode = true;
-        } else if (mDemoMode && command.equals(COMMAND_EXIT)) {
-            mDemoMode = false;
-            updateClock();
-        } else if (mDemoMode && command.equals(COMMAND_CLOCK)) {
-            String millis = args.getString("millis");
-            String hhmm = args.getString("hhmm");
-            if (millis != null) {
-                mCalendar.setTimeInMillis(Long.parseLong(millis));
-            } else if (hhmm != null && hhmm.length() == 4) {
-                int hh = Integer.parseInt(hhmm.substring(0, 2));
-                int mm = Integer.parseInt(hhmm.substring(2));
-                boolean is24 = DateFormat.is24HourFormat(getContext(), mCurrentUserId);
-                if (is24) {
-                    mCalendar.set(Calendar.HOUR_OF_DAY, hh);
-                } else {
-                    mCalendar.set(Calendar.HOUR, hh);
-                }
-                mCalendar.set(Calendar.MINUTE, mm);
+        // Only registered for COMMAND_CLOCK
+        String millis = args.getString("millis");
+        String hhmm = args.getString("hhmm");
+        if (millis != null) {
+            mCalendar.setTimeInMillis(Long.parseLong(millis));
+        } else if (hhmm != null && hhmm.length() == 4) {
+            int hh = Integer.parseInt(hhmm.substring(0, 2));
+            int mm = Integer.parseInt(hhmm.substring(2));
+            boolean is24 = DateFormat.is24HourFormat(getContext(), mCurrentUserId);
+            if (is24) {
+                mCalendar.set(Calendar.HOUR_OF_DAY, hh);
+            } else {
+                mCalendar.set(Calendar.HOUR, hh);
             }
-            setText(getSmallTime());
-            setContentDescription(mContentDescriptionFormat.format(mCalendar.getTime()));
+            mCalendar.set(Calendar.MINUTE, mm);
         }
+        setText(getSmallTime());
+        setContentDescription(mContentDescriptionFormat.format(mCalendar.getTime()));
+    }
+
+    @Override
+    public void onDemoModeStarted() {
+        mDemoMode = true;
+    }
+
+    @Override
+    public void onDemoModeFinished() {
+        mDemoMode = false;
+        updateClock();
     }
 
     private final BroadcastReceiver mScreenReceiver = new BroadcastReceiver() {

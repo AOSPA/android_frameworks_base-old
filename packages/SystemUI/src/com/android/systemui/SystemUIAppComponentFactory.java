@@ -29,6 +29,10 @@ import androidx.annotation.Nullable;
 import androidx.core.app.AppComponentFactory;
 
 import com.android.systemui.dagger.ContextComponentHelper;
+import com.android.systemui.dagger.SysUIComponent;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 import javax.inject.Inject;
 
@@ -61,7 +65,7 @@ public class SystemUIAppComponentFactory extends AppComponentFactory {
             ((ContextInitializer) app).setContextAvailableCallback(
                     context -> {
                         SystemUIFactory.createFromConfig(context);
-                        SystemUIFactory.getInstance().getRootComponent().inject(
+                        SystemUIFactory.getInstance().getSysUIComponent().inject(
                                 SystemUIAppComponentFactory.this);
                     }
             );
@@ -81,8 +85,17 @@ public class SystemUIAppComponentFactory extends AppComponentFactory {
             ((ContextInitializer) contentProvider).setContextAvailableCallback(
                     context -> {
                         SystemUIFactory.createFromConfig(context);
-                        SystemUIFactory.getInstance().getRootComponent().inject(
-                                contentProvider);
+                        SysUIComponent rootComponent =
+                                SystemUIFactory.getInstance().getSysUIComponent();
+                        try {
+                            Method injectMethod = rootComponent.getClass()
+                                    .getMethod("inject", contentProvider.getClass());
+                            injectMethod.invoke(rootComponent, contentProvider);
+                        } catch (NoSuchMethodException
+                                | IllegalAccessException
+                                | InvocationTargetException e) {
+                            // no-op
+                        }
                     }
             );
         }
@@ -98,7 +111,7 @@ public class SystemUIAppComponentFactory extends AppComponentFactory {
         if (mComponentHelper == null) {
             // This shouldn't happen, but is seen on occasion.
             // Bug filed against framework to take a look: http://b/141008541
-            SystemUIFactory.getInstance().getRootComponent().inject(
+            SystemUIFactory.getInstance().getSysUIComponent().inject(
                     SystemUIAppComponentFactory.this);
         }
         Activity activity = mComponentHelper.resolveActivity(className);
@@ -116,7 +129,7 @@ public class SystemUIAppComponentFactory extends AppComponentFactory {
         if (mComponentHelper == null) {
             // This shouldn't happen, but does when a device is freshly formatted.
             // Bug filed against framework to take a look: http://b/141008541
-            SystemUIFactory.getInstance().getRootComponent().inject(
+            SystemUIFactory.getInstance().getSysUIComponent().inject(
                     SystemUIAppComponentFactory.this);
         }
         Service service = mComponentHelper.resolveService(className);
@@ -134,7 +147,7 @@ public class SystemUIAppComponentFactory extends AppComponentFactory {
         if (mComponentHelper == null) {
             // This shouldn't happen, but does when a device is freshly formatted.
             // Bug filed against framework to take a look: http://b/141008541
-            SystemUIFactory.getInstance().getRootComponent().inject(
+            SystemUIFactory.getInstance().getSysUIComponent().inject(
                     SystemUIAppComponentFactory.this);
         }
         BroadcastReceiver receiver = mComponentHelper.resolveBroadcastReceiver(className);

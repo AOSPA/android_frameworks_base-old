@@ -305,8 +305,7 @@ public class BackupHandler extends Handler {
                                 params.isSystemRestore,
                                 params.filterSet,
                                 params.listener,
-                                backupManagerService.getEligibilityRulesForOperation(
-                                        OperationType.BACKUP));
+                                params.backupEligibilityRules);
 
                 synchronized (backupManagerService.getPendingRestores()) {
                     if (backupManagerService.isRestoreInProgress()) {
@@ -391,7 +390,7 @@ public class BackupHandler extends Handler {
                     // Done: reset the session timeout clock
                     removeMessages(MSG_RESTORE_SESSION_TIMEOUT);
                     sendEmptyMessageDelayed(MSG_RESTORE_SESSION_TIMEOUT,
-                            mAgentTimeoutParameters.getRestoreAgentTimeoutMillis());
+                            mAgentTimeoutParameters.getRestoreSessionTimeoutMillis());
 
                     params.listener.onFinished(callerLogString);
                 }

@@ -199,6 +199,9 @@
         <!-- The underline color and thickness for auto correction suggestion -->
         <attr name="textAppearanceAutoCorrectionSuggestion" format="reference" />
 
+        <!-- The underline color and thickness for grammar error suggestion -->
+        <attr name="textAppearanceGrammarErrorSuggestion" format="reference" />
+
         <!--  The underline color -->
         <attr name="textUnderlineColor" format="reference|color" />
         <!--  The underline thickness -->
@@ -2178,6 +2181,10 @@
              the decor view. -->
         <attr name="windowLightNavigationBar" format="boolean" />
 
+        <!-- @hide -->
+        <attr name="windowBackgroundBlurRadius" format="dimension"/>
+
+
         <!-- Controls how the window is laid out if there is a {@code DisplayCutout}.
         <p>
         Defaults to {@code default}.
@@ -2784,7 +2791,11 @@
              exactly one parameter of type View. For instance, if you specify
              <code>android:onClick="sayHello"</code>, you must declare a
              <code>public void sayHello(View v)</code> method of your context
-             (typically, your Activity). -->
+             (typically, your Activity).
+             {@deprecated View actually traverses the Context
+             hierarchy looking for the relevant method, which is fragile (an intermediate 
+             ContextWrapper adding a same-named method would change behavior) and restricts
+             bytecode optimizers such as R8. Instead, use View.setOnClickListener.}-->
         <attr name="onClick" format="string" />
 
         <!-- Defines over-scrolling behavior. This property is used only if the
@@ -3741,6 +3752,7 @@
             <flag name="flagServiceHandlesDoubleTap" value="0x00000800" />
             <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_REQUEST_MULTI_FINGER_GESTURES}. -->
             <flag name="flagRequestMultiFingerGestures" value="0x00001000" />
+            <flag name="flagSendMotionEvents" value="0x0004000" />
         </attr>
         <!-- Component name of an activity that allows the user to modify
              the settings for this service. This setting cannot be changed at runtime. -->
@@ -7505,7 +7517,11 @@
         <attr name="enabled" />
 
         <!-- Name of a method on the Context used to inflate the menu that will be
-             called when the item is clicked. -->
+             called when the item is clicked.
+             {@deprecated Menu actually traverses the Context hierarchy looking for the 
+             relevant method, which is fragile (an intermediate ContextWrapper adding a
+             same-named method would change behavior) and restricts bytecode optimizers
+             such as R8. Instead, use MenuItem.setOnMenuItemClickListener.} -->
         <attr name="onClick" />
 
         <!-- How this item should display in the Action Bar, if present. -->
@@ -9172,21 +9188,32 @@
         <attr name="fontVariationSettings" format="string" />
     </declare-styleable>
 
-    <!-- Attributes that are read when parsing a &lt;fontfamily&gt; tag. -->
+    <!-- Attributes that are read when parsing a &lt;fontfamily&gt; tag.
+         {@deprecated Use Jetpack Core library instead.}
+     -->
     <declare-styleable name="FontFamily">
-        <!-- The authority of the Font Provider to be used for the request. -->
+        <!-- The authority of the Font Provider to be used for the request.
+             {@deprecated Use app:fontProviderAuthority with Jetpack Core library instead for
+              consistent behavior across all devices.}
+         -->
         <attr name="fontProviderAuthority" format="string" />
         <!-- The package for the Font Provider to be used for the request. This is used to verify
-        the identity of the provider. -->
+        the identity of the provider.
+             {@deprecated Use app:fontProviderPackage with Jetpack Core library instead.}
+         -->
         <attr name="fontProviderPackage" format="string" />
         <!-- The query to be sent over to the provider. Refer to your font provider's documentation
-        on the format of this string. -->
+        on the format of this string.
+             {@deprecated Use app:fontProviderQuery with Jetpack Core library instead.}
+         -->
         <attr name="fontProviderQuery" format="string" />
         <!-- The sets of hashes for the certificates the provider should be signed with. This is
         used to verify the identity of the provider, and is only required if the provider is not
         part of the system image. This value may point to one list or a list of lists, where each
         individual list represents one collection of signature hashes. Refer to your font provider's
-        documentation for these values. -->
+        documentation for these values.
+             {@deprecated Use app:fontProviderCerts with Jetpack Core library instead.}
+         -->
         <attr name="fontProviderCerts" format="reference" />
     </declare-styleable>
 

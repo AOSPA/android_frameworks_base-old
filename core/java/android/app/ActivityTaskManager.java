@@ -29,6 +29,8 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.util.DisplayMetrics;
@@ -171,7 +173,7 @@ public class ActivityTaskManager {
      * @param toTop If the task should be moved to the top once the windowing mode changes.
      * @return Whether the task was successfully put into the specified windowing mode.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public boolean setTaskWindowingMode(int taskId, int windowingMode, boolean toTop)
             throws SecurityException {
         try {
@@ -198,7 +200,7 @@ public class ActivityTaskManager {
      *                    going into split-screen mode.
      * @return Whether the task was successfully put into splitscreen.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public boolean setTaskWindowingModeSplitScreenPrimary(int taskId, int createMode, boolean toTop,
             boolean animate, Rect initialBounds, boolean showRecents) throws SecurityException {
         try {
@@ -209,23 +211,23 @@ public class ActivityTaskManager {
     }
 
     /**
-     * Removes stacks in the windowing modes from the system if they are of activity type
+     * Removes root tasks in the windowing modes from the system if they are of activity type
      * ACTIVITY_TYPE_STANDARD or ACTIVITY_TYPE_UNDEFINED
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public void removeStacksInWindowingModes(int[] windowingModes) throws SecurityException {
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
+    public void removeRootTasksInWindowingModes(@NonNull int[] windowingModes) {
         try {
-            getService().removeStacksInWindowingModes(windowingModes);
+            getService().removeRootTasksInWindowingModes(windowingModes);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
-    /** Removes stack of the activity types from the system. */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public void removeStacksWithActivityTypes(int[] activityTypes) throws SecurityException {
+    /** Removes root tasks of the activity types from the system. */
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
+    public void removeRootTasksWithActivityTypes(@NonNull int[] activityTypes) {
         try {
-            getService().removeStacksWithActivityTypes(activityTypes);
+            getService().removeRootTasksWithActivityTypes(activityTypes);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -308,15 +310,15 @@ public class ActivityTaskManager {
     }
 
     /**
-     * Moves the top activity in the input stackId to the pinned stack.
-     * @param stackId Id of stack to move the top activity to pinned stack.
-     * @param bounds Bounds to use for pinned stack.
-     * @return True if the top activity of stack was successfully moved to the pinned stack.
+     * Moves the top activity in the input rootTaskId to the pinned root task.
+     * @param rootTaskId Id of root task to move the top activity to pinned root task.
+     * @param bounds Bounds to use for pinned root task.
+     * @return True if the top activity of root task was successfully moved to the pinned root task.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public boolean moveTopActivityToPinnedStack(int stackId, Rect bounds) {
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
+    public boolean moveTopActivityToPinnedRootTask(int rootTaskId, @NonNull Rect bounds) {
         try {
-            return getService().moveTopActivityToPinnedStack(stackId, bounds);
+            return getService().moveTopActivityToPinnedRootTask(rootTaskId, bounds);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -326,7 +328,7 @@ public class ActivityTaskManager {
      * Start to enter lock task mode for given task by system(UI).
      * @param taskId Id of task to lock.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public void startSystemLockTaskMode(int taskId) {
         try {
             getService().startSystemLockTaskMode(taskId);
@@ -338,7 +340,7 @@ public class ActivityTaskManager {
     /**
      * Stop lock task mode by system(UI).
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public void stopSystemLockTaskMode() {
         try {
             getService().stopSystemLockTaskMode();
@@ -348,15 +350,15 @@ public class ActivityTaskManager {
     }
 
     /**
-     * Move task to stack with given id.
+     * Move task to root task with given id.
      * @param taskId Id of the task to move.
-     * @param stackId Id of the stack for task moving.
+     * @param rootTaskId Id of the rootTask for task moving.
      * @param toTop Whether the given task should shown to top of stack.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public void moveTaskToStack(int taskId, int stackId, boolean toTop) {
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
+    public void moveTaskToRootTask(int taskId, int rootTaskId, boolean toTop) {
         try {
-            getService().moveTaskToStack(taskId, stackId, toTop);
+            getService().moveTaskToRootTask(taskId, rootTaskId, toTop);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -367,7 +369,7 @@ public class ActivityTaskManager {
      * @param taskId Id of task to resize.
      * @param bounds Bounds to resize task.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public void resizeTask(int taskId, Rect bounds) {
         try {
             getService().resizeTask(taskId, bounds, RESIZE_MODE_SYSTEM);
@@ -378,44 +380,23 @@ public class ActivityTaskManager {
 
     /**
      * Resize docked stack & its task to given stack & task bounds.
-     * @param stackBounds Bounds to resize stack.
+     * @param rootTaskBounds Bounds to resize stack.
      * @param taskBounds Bounds to resize task.
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public void resizeDockedStack(Rect stackBounds, Rect taskBounds) {
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
+    public void resizePrimarySplitScreen(@NonNull Rect rootTaskBounds, @NonNull Rect taskBounds) {
         try {
-            getService().resizeDockedStack(stackBounds, taskBounds, null, null, null);
+            getService().resizePrimarySplitScreen(rootTaskBounds, taskBounds, null, null, null);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-    }
-
-    /**
-     * List all activity stacks information.
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public String listAllStacks() {
-        final List<ActivityManager.StackInfo> stacks;
-        try {
-            stacks = getService().getAllStackInfos();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-
-        final StringBuilder sb = new StringBuilder();
-        if (stacks != null) {
-            for (ActivityManager.StackInfo info : stacks) {
-                sb.append(info).append("\n");
-            }
-        }
-        return sb.toString();
     }
 
     /**
      * Clears launch params for the given package.
      * @param packageNames the names of the packages of which the launch params are to be cleared
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public void clearLaunchParamsForPackages(List<String> packageNames) {
         try {
             getService().clearLaunchParamsForPackages(packageNames);
@@ -425,24 +406,11 @@ public class ActivityTaskManager {
     }
 
     /**
-     * Makes the display with the given id a single task instance display. I.e the display can only
-     * contain one task.
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public void setDisplayToSingleTaskInstance(int displayId) {
-        try {
-            getService().setDisplayToSingleTaskInstance(displayId);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
      * Requests that an activity should enter picture-in-picture mode if possible.
      * @hide
      */
     @TestApi
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     public void requestPictureInPictureMode(@NonNull IBinder token) {
         try {
             getService().requestPictureInPictureMode(token);
@@ -467,5 +435,103 @@ public class ActivityTaskManager {
     public static boolean currentUiModeSupportsErrorDialogs(@NonNull Context context) {
         final Configuration config = context.getResources().getConfiguration();
         return currentUiModeSupportsErrorDialogs(config);
+    }
+
+    /** @return max allowed number of actions in picture-in-picture mode. */
+    public static int getMaxNumPictureInPictureActions(@NonNull Context context) {
+        return context.getResources().getInteger(
+                com.android.internal.R.integer.config_pictureInPictureMaxNumberOfActions);
+    }
+
+    /**
+     * Information you can retrieve about a root task in the system.
+     * @hide
+     */
+    public static class RootTaskInfo extends TaskInfo implements Parcelable {
+        // TODO(b/148895075): Move some of the fields to TaskInfo.
+        public Rect bounds = new Rect();
+        public int[] childTaskIds;
+        public String[] childTaskNames;
+        public Rect[] childTaskBounds;
+        public int[] childTaskUserIds;
+        public boolean visible;
+        // Index of the stack in the display's stack list, can be used for comparison of stack order
+        public int position;
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeTypedObject(bounds, flags);
+            dest.writeIntArray(childTaskIds);
+            dest.writeStringArray(childTaskNames);
+            dest.writeTypedArray(childTaskBounds, flags);
+            dest.writeIntArray(childTaskUserIds);
+            dest.writeInt(visible ? 1 : 0);
+            dest.writeInt(position);
+            super.writeToParcel(dest, flags);
+        }
+
+        @Override
+        void readFromParcel(Parcel source) {
+            bounds = source.readTypedObject(Rect.CREATOR);
+            childTaskIds = source.createIntArray();
+            childTaskNames = source.createStringArray();
+            childTaskBounds = source.createTypedArray(Rect.CREATOR);
+            childTaskUserIds = source.createIntArray();
+            visible = source.readInt() > 0;
+            position = source.readInt();
+            super.readFromParcel(source);
+        }
+
+        public static final @NonNull Creator<RootTaskInfo> CREATOR = new Creator<>() {
+            @Override
+            public RootTaskInfo createFromParcel(Parcel source) {
+                return new RootTaskInfo(source);
+            }
+
+            @Override
+            public RootTaskInfo[] newArray(int size) {
+                return new RootTaskInfo[size];
+            }
+        };
+
+        public RootTaskInfo() {
+        }
+
+        private RootTaskInfo(Parcel source) {
+            readFromParcel(source);
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder(256);
+            sb.append("RootTask id="); sb.append(taskId);
+            sb.append(" bounds="); sb.append(bounds.toShortString());
+            sb.append(" displayId="); sb.append(displayId);
+            sb.append(" userId="); sb.append(userId);
+            sb.append("\n");
+
+            sb.append(" configuration="); sb.append(configuration);
+            sb.append("\n");
+
+            for (int i = 0; i < childTaskIds.length; ++i) {
+                sb.append("  taskId="); sb.append(childTaskIds[i]);
+                sb.append(": "); sb.append(childTaskNames[i]);
+                if (childTaskBounds != null) {
+                    sb.append(" bounds="); sb.append(childTaskBounds[i].toShortString());
+                }
+                sb.append(" userId=").append(childTaskUserIds[i]);
+                sb.append(" visible=").append(visible);
+                if (topActivity != null) {
+                    sb.append(" topActivity=").append(topActivity);
+                }
+                sb.append("\n");
+            }
+            return sb.toString();
+        }
     }
 }

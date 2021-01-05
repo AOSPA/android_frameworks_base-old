@@ -26,6 +26,8 @@ import android.app.ActivityOptions;
 import android.content.Context;
 import android.os.Handler;
 
+import com.android.systemui.shared.recents.model.Task;
+
 /**
  * Wrapper around internal ActivityOptions creation.
  */
@@ -85,5 +87,24 @@ public abstract class ActivityOptionsCompat {
     public static ActivityOptions setFreezeRecentTasksList(ActivityOptions opts) {
         opts.setFreezeRecentTasksReordering();
         return opts;
+    }
+
+    /**
+     * Sets the launch event time from launcher.
+     */
+    public static ActivityOptions setLauncherSourceInfo(ActivityOptions opts, long uptimeMillis) {
+        opts.setSourceInfo(ActivityOptions.SourceInfo.TYPE_LAUNCHER, uptimeMillis);
+        return opts;
+    }
+
+    /**
+     * Sets Task specific information to the activity options
+     */
+    public static void addTaskInfo(ActivityOptions opts, Task.TaskKey taskKey) {
+        if (taskKey.windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
+            // We show non-visible docked tasks in Recents, but we always want to launch
+            // them in the fullscreen stack.
+            opts.setLaunchWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
+        }
     }
 }

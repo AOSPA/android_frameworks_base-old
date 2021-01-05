@@ -16,6 +16,8 @@
 
 package com.android.systemui.media;
 
+import static android.provider.Settings.ACTION_MEDIA_CONTROLS_SETTINGS;
+
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -40,11 +42,12 @@ import androidx.annotation.UiThread;
 import androidx.constraintlayout.widget.ConstraintSet;
 
 import com.android.settingslib.Utils;
-import com.android.settingslib.media.MediaOutputSliceConstants;
 import com.android.settingslib.widget.AdaptiveIcon;
 import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.media.dialog.MediaOutputDialogFactory;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 import com.android.systemui.util.animation.TransitionLayout;
 
 import java.util.List;
@@ -52,12 +55,16 @@ import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 
+import dagger.Lazy;
+
 /**
  * A view controller used for Media Playback.
  */
 public class MediaControlPanel {
     private static final String TAG = "MediaControlPanel";
     private static final float DISABLED_ALPHA = 0.38f;
+
+    private static final Intent SETTINGS_INTENT = new Intent(ACTION_MEDIA_CONTROLS_SETTINGS);
 
     // Button IDs for QS controls
     static final int[] ACTION_IDS = {
@@ -75,15 +82,18 @@ public class MediaControlPanel {
 
     private Context mContext;
     private PlayerViewHolder mViewHolder;
+    private String mKey;
     private MediaViewController mMediaViewController;
     private MediaSession.Token mToken;
     private MediaController mController;
+    private KeyguardDismissUtil mKeyguardDismissUtil;
+    private Lazy<MediaDataManager> mMediaDataManagerLazy;
     private int mBackgroundColor;
     private int mAlbumArtSize;
     private int mAlbumArtRadius;
     // This will provide the corners for the album art.
     private final ViewOutlineProvider mViewOutlineProvider;
-
+    private final MediaOutputDialogFactory mMediaOutputDialogFactory;
     /**
      * Initialize a new control panel
      * @param context
@@ -93,12 +103,17 @@ public class MediaControlPanel {
     @Inject
     public MediaControlPanel(Context context, @Background Executor backgroundExecutor,
             ActivityStarter activityStarter, MediaViewController mediaViewController,
-            SeekBarViewModel seekBarViewModel) {
+            SeekBarViewModel seekBarViewModel, Lazy<MediaDataManager> lazyMediaDataManager,
+            KeyguardDismissUtil keyguardDismissUtil, MediaOutputDialogFactory
+            mediaOutputDialogFactory) {
         mContext = context;
         mBackgroundExecutor = backgroundExecutor;
         mActivityStarter = activityStarter;
         mSeekBarViewModel = seekBarViewModel;
         mMediaViewController = mediaViewController;
+        mMediaDataManagerLazy = lazyMediaDataManager;
+        mKeyguardDismissUtil = keyguardDismissUtil;
+        mMediaOutputDialogFactory = mediaOutputDialogFactory;
         loadDimens();
 
         mViewOutlineProvider = new ViewOutlineProvider() {
@@ -174,15 +189,31 @@ public class MediaControlPanel {
         mSeekBarViewModel.getProgress().observeForever(mSeekBarObserver);
         mSeekBarViewModel.attachTouchHandlers(vh.getSeekBar());
         mMediaViewController.attach(player);
+
+        mViewHolder.getPlayer().setOnLongClickListener(v -> {
+            if (!mMediaViewController.isGutsVisible()) {
+                mMediaViewController.openGuts();
+                return true;
+            } else {
+                return false;
+            }
+        });
+        mViewHolder.getCancel().setOnClickListener(v -> {
+            closeGuts();
+        });
+        mViewHolder.getSettings().setOnClickListener(v -> {
+            mActivityStarter.startActivity(SETTINGS_INTENT, true /* dismissShade */);
+        });
     }
 
     /**
      * Bind this view based on the data given
      */
-    public void bind(@NonNull MediaData data) {
+    public void bind(@NonNull MediaData data, String key) {
         if (mViewHolder == null) {
             return;
         }
+        mKey = key;
         MediaSession.Token token = data.getToken();
         mBackgroundColor = data.getBackgroundColor();
         if (mToken == null || !mToken.equals(token)) {
@@ -205,6 +236,7 @@ public class MediaControlPanel {
         PendingIntent clickIntent = data.getClickIntent();
         if (clickIntent != null) {
             mViewHolder.getPlayer().setOnClickListener(v -> {
+                if (mMediaViewController.isGutsVisible()) return;
                 mActivityStarter.postStartActivityDismissingKeyguard(clickIntent);
             });
         }
@@ -221,10 +253,9 @@ public class MediaControlPanel {
         // App icon
         ImageView appIcon = mViewHolder.getAppIcon();
         if (data.getAppIcon() != null) {
-            appIcon.setImageDrawable(data.getAppIcon());
+            appIcon.setImageIcon(data.getAppIcon());
         } else {
-            Drawable iconDrawable = mContext.getDrawable(R.drawable.ic_music_note);
-            appIcon.setImageDrawable(iconDrawable);
+            appIcon.setImageResource(R.drawable.ic_music_note);
         }
 
         // Song name
@@ -244,13 +275,7 @@ public class MediaControlPanel {
         setVisibleAndAlpha(collapsedSet, R.id.media_seamless, true /*visible */);
         setVisibleAndAlpha(expandedSet, R.id.media_seamless, true /*visible */);
         mViewHolder.getSeamless().setOnClickListener(v -> {
-            final Intent intent = new Intent()
-                    .setAction(MediaOutputSliceConstants.ACTION_MEDIA_OUTPUT)
-                    .putExtra(MediaOutputSliceConstants.EXTRA_PACKAGE_NAME,
-                            data.getPackageName())
-                    .putExtra(MediaOutputSliceConstants.KEY_MEDIA_SESSION_TOKEN, mToken);
-            mActivityStarter.startActivity(intent, false, true /* dismissShade */,
-                    Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            mMediaOutputDialogFactory.create(data.getPackageName(), true);
         });
 
         ImageView iconView = mViewHolder.getSeamlessIcon();
@@ -302,7 +327,7 @@ public class MediaControlPanel {
             int actionId = ACTION_IDS[i];
             final ImageButton button = mViewHolder.getAction(actionId);
             MediaAction mediaAction = actionIcons.get(i);
-            button.setImageDrawable(mediaAction.getDrawable());
+            button.setImageIcon(mediaAction.getIcon());
             button.setContentDescription(mediaAction.getContentDescription());
             Runnable action = mediaAction.getAction();
 
@@ -329,12 +354,44 @@ public class MediaControlPanel {
         final MediaController controller = getController();
         mBackgroundExecutor.execute(() -> mSeekBarViewModel.updateController(controller));
 
-        // Set up long press menu
-        // TODO: b/156036025 bring back media guts
+        // Guts label
+        boolean isDismissible = data.isClearable();
+        mViewHolder.getSettingsText().setText(isDismissible
+                ? R.string.controls_media_close_session
+                : R.string.controls_media_active_session);
+
+        // Dismiss
+        mViewHolder.getDismissLabel().setAlpha(isDismissible ? 1 : DISABLED_ALPHA);
+        mViewHolder.getDismiss().setEnabled(isDismissible);
+        mViewHolder.getDismiss().setOnClickListener(v -> {
+            if (mKey != null) {
+                closeGuts();
+                mKeyguardDismissUtil.executeWhenUnlocked(() -> {
+                    mMediaDataManagerLazy.get().dismissMediaData(mKey,
+                            MediaViewController.GUTS_ANIMATION_DURATION + 100);
+                    return true;
+                }, /* requiresShadeOpen */ true);
+            } else {
+                Log.w(TAG, "Dismiss media with null notification. Token uid="
+                        + data.getToken().getUid());
+            }
+        });
 
         // TODO: We don't need to refresh this state constantly, only if the state actually changed
         // to something which might impact the measurement
         mMediaViewController.refreshState();
+    }
+
+    /**
+     * Close the guts for this player.
+     * @param immediate {@code true} if it should be closed without animation
+     */
+    public void closeGuts(boolean immediate) {
+        mMediaViewController.closeGuts(immediate);
+    }
+
+    private void closeGuts() {
+        closeGuts(false);
     }
 
     @UiThread

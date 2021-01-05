@@ -25,7 +25,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
 import android.app.Notification;
 import android.bluetooth.BluetoothDevice;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -307,7 +306,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int CAPABILITY_SPEED_UP_MT_AUDIO = 0x00040000;
 
     /**
@@ -345,7 +343,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int CAPABILITY_CONFERENCE_HAS_NO_CHILDREN = 0x00200000;
 
     /**
@@ -383,15 +380,17 @@ public abstract class Connection extends Conferenceable {
 
     /**
      * When set, indicates that this {@link Connection} supports initiation of a conference call
-     * by directly adding participants using {@link #onAddConferenceParticipants(List)}.
-     * @hide
+     * by directly adding participants using {@link #onAddConferenceParticipants(List)}. When
+     * participants are added to a {@link Connection}, it will be replaced by a {@link Conference}
+     * instance with {@link #PROPERTY_IS_ADHOC_CONFERENCE} set to indicate that it is an adhoc
+     * conference call.
      */
     public static final int CAPABILITY_ADD_PARTICIPANT = 0x04000000;
 
     /**
      * Indicates that this {@code Connection} can be transferred to another
      * number.
-     * Connection supports the blind and assured call transfer feature.
+     * Connection supports the confirmed and unconfirmed call transfer feature.
      * @hide
      */
     public static final int CAPABILITY_TRANSFER = 0x08000000;
@@ -421,7 +420,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int PROPERTY_EMERGENCY_CALLBACK_MODE = 1<<0;
 
     /**
@@ -432,7 +430,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int PROPERTY_GENERIC_CONFERENCE = 1<<1;
 
     /**
@@ -484,7 +481,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int PROPERTY_IS_DOWNGRADED_CONFERENCE = 1<<6;
 
     /**
@@ -528,14 +524,12 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int PROPERTY_REMOTELY_HOSTED = 1 << 11;
 
     /**
-     * Set by the framework to indicate that it is an adhoc conference call.
+     * Set by the framework to indicate that a call is an adhoc conference call.
      * <p>
-     * This is used for Outgoing and incoming conference calls.
-     * @hide
+     * This is used for outgoing and incoming conference calls.
      */
     public static final int PROPERTY_IS_ADHOC_CONFERENCE = 1 << 12;
 
@@ -707,7 +701,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final String EXTRA_DISABLE_ADD_CALL =
             "android.telecom.extra.DISABLE_ADD_CALL";
 
@@ -779,6 +772,19 @@ public abstract class Connection extends Conferenceable {
     public static final @AudioCodec String EXTRA_AUDIO_CODEC =
             "android.telecom.extra.AUDIO_CODEC";
 
+    /**
+     * Float connection extra key used to store the audio codec bitrate in kbps for the current
+     * {@link Connection}.
+     */
+    public static final String EXTRA_AUDIO_CODEC_BITRATE_KBPS =
+            "android.telecom.extra.AUDIO_CODEC_BITRATE_KBPS";
+
+    /**
+     * Float connection extra key used to store the audio codec bandwidth in khz for the current
+     * {@link Connection}.
+     */
+    public static final String EXTRA_AUDIO_CODEC_BANDWIDTH_KHZ =
+            "android.telecom.extra.AUDIO_CODEC_BANDWIDTH_KHZ";
     /**
      * Connection event used to inform Telecom that it should play the on hold tone.  This is used
      * to play a tone when the peer puts the current call on hold.  Sent to Telecom via
@@ -2062,7 +2068,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public final @Nullable String getTelecomCallId() {
         return mTelecomCallId;
     }
@@ -2179,7 +2184,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public final @IntRange(from = 0) long getConnectTimeMillis() {
         return mConnectTimeMillis;
     }
@@ -2204,7 +2208,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public final @ElapsedRealtimeLong long getConnectionStartElapsedRealtimeMillis() {
         return mConnectElapsedTimeMillis;
     }
@@ -2287,7 +2290,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void setTelecomCallId(@NonNull String callId) {
         mTelecomCallId = callId;
     }
@@ -2636,7 +2638,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(MODIFY_PHONE_STATE)
     public final void setConnectTimeMillis(@IntRange(from = 0) long connectTimeMillis) {
         mConnectTimeMillis = connectTimeMillis;
@@ -2659,7 +2660,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(MODIFY_PHONE_STATE)
     public final void setConnectionStartElapsedRealtimeMillis(
             @ElapsedRealtimeLong long connectElapsedTimeMillis) {
@@ -2730,7 +2730,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public final void resetConnectionTime() {
         for (Listener l : mListeners) {
             l.onConnectionTimeReset(this);
@@ -3043,7 +3042,6 @@ public abstract class Connection extends Conferenceable {
      * Supports initiation of a conference call by directly adding participants to an ongoing call.
      *
      * @param participants with which conference call will be formed.
-     * @hide
      */
     public void onAddConferenceParticipants(@NonNull List<Uri> participants) {}
 
@@ -3514,7 +3512,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void setPhoneAccountHandle(@NonNull PhoneAccountHandle phoneAccountHandle) {
         if (mPhoneAccountHandle != phoneAccountHandle) {
             mPhoneAccountHandle = phoneAccountHandle;
@@ -3533,7 +3530,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public @Nullable PhoneAccountHandle getPhoneAccountHandle() {
         return mPhoneAccountHandle;
     }
@@ -3599,7 +3595,6 @@ public abstract class Connection extends Conferenceable {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void setCallDirection(@Call.Details.CallDirection int callDirection) {
         mCallDirection = callDirection;
     }

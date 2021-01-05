@@ -26,6 +26,7 @@ import android.hardware.SensorManager;
 import android.net.ConnectivityManager;
 import android.os.BatteryStats;
 import android.os.BatteryStats.Uid;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.MemoryFile;
 import android.os.Parcel;
@@ -133,6 +134,7 @@ public class BatteryStatsHelper {
     private double mMaxDrainedPower;
 
     PowerCalculator mCpuPowerCalculator;
+    SystemServicePowerCalculator mSystemServicePowerCalculator;
     PowerCalculator mWakelockPowerCalculator;
     MobileRadioPowerCalculator mMobileRadioPowerCalculator;
     PowerCalculator mWifiPowerCalculator;
@@ -271,7 +273,7 @@ public class BatteryStatsHelper {
         return mStats;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public Intent getBatteryBroadcast() {
         if (mBatteryBroadcast == null && mCollectBatteryBroadcast) {
             load();
@@ -360,7 +362,7 @@ public class BatteryStatsHelper {
     /**
      * Refreshes the power usage list.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void refreshStats(int statsType, SparseArray<UserHandle> asUsers) {
         refreshStats(statsType, asUsers, SystemClock.elapsedRealtime() * 1000,
                 SystemClock.uptimeMillis() * 1000);
@@ -395,6 +397,11 @@ public class BatteryStatsHelper {
             mCpuPowerCalculator = new CpuPowerCalculator(mPowerProfile);
         }
         mCpuPowerCalculator.reset();
+
+        if (mSystemServicePowerCalculator == null) {
+            mSystemServicePowerCalculator = new SystemServicePowerCalculator(mPowerProfile, mStats);
+        }
+        mSystemServicePowerCalculator.reset();
 
         if (mMemoryPowerCalculator == null) {
             mMemoryPowerCalculator = new MemoryPowerCalculator(mPowerProfile);
@@ -588,6 +595,8 @@ public class BatteryStatsHelper {
             mFlashlightPowerCalculator.calculateApp(app, u, mRawRealtimeUs, mRawUptimeUs,
                     mStatsType);
             mMediaPowerCalculator.calculateApp(app, u, mRawRealtimeUs, mRawUptimeUs, mStatsType);
+            mSystemServicePowerCalculator.calculateApp(app, u, mRawRealtimeUs, mRawUptimeUs,
+                    mStatsType);
 
             final double totalPower = app.sumPower();
             if (DEBUG && totalPower != 0) {

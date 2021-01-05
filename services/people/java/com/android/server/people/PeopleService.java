@@ -19,6 +19,8 @@ package com.android.server.people;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.app.people.ConversationChannel;
+import android.app.people.IPeopleManager;
 import android.app.prediction.AppPredictionContext;
 import android.app.prediction.AppPredictionSessionId;
 import android.app.prediction.AppTarget;
@@ -26,8 +28,12 @@ import android.app.prediction.AppTargetEvent;
 import android.app.prediction.IPredictionCallback;
 import android.content.Context;
 import android.content.pm.ParceledListSlice;
+import android.os.Binder;
 import android.os.CancellationSignal;
+import android.os.IBinder;
+import android.os.Process;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.Slog;
 
@@ -68,6 +74,7 @@ public class PeopleService extends SystemService {
 
     @Override
     public void onStart() {
+        publishBinderService(Context.PEOPLE_SERVICE, mService);
         publishLocalService(PeopleServiceInternal.class, new LocalService());
     }
 
@@ -80,6 +87,67 @@ public class PeopleService extends SystemService {
     public void onUserStopping(@NonNull TargetUser user) {
         mDataManager.onUserStopping(user.getUserIdentifier());
     }
+
+    /**
+     * Enforces that only the system or root UID can make certain calls.
+     *
+     * @param message used as message if SecurityException is thrown
+     * @throws SecurityException if the caller is not system or root
+     */
+    private static void enforceSystemOrRoot(String message) {
+        if (!isSystemOrRoot()) {
+            throw new SecurityException("Only system may " + message);
+        }
+    }
+
+    private static boolean isSystemOrRoot() {
+        final int uid = Binder.getCallingUid();
+        return UserHandle.isSameApp(uid, Process.SYSTEM_UID) || uid == Process.ROOT_UID;
+    }
+
+
+    /**
+     * Enforces that only the system, root UID or SystemUI can make certain calls.
+     *
+     * @param message used as message if SecurityException is thrown
+     * @throws SecurityException if the caller is not system or root
+     */
+    private static void enforceSystemRootOrSystemUI(Context context, String message) {
+        if (isSystemOrRoot()) return;
+        context.enforceCallingPermission(android.Manifest.permission.STATUS_BAR_SERVICE,
+                message);
+    }
+
+    final IBinder mService = new IPeopleManager.Stub() {
+
+        @Override
+        public ParceledListSlice<ConversationChannel> getRecentConversations() {
+            enforceSystemRootOrSystemUI(getContext(), "get recent conversations");
+            return new ParceledListSlice<>(
+                    mDataManager.getRecentConversations(
+                            Binder.getCallingUserHandle().getIdentifier()));
+        }
+
+        @Override
+        public void removeRecentConversation(String packageName, int userId, String shortcutId) {
+            enforceSystemOrRoot("remove a recent conversation");
+            mDataManager.removeRecentConversation(packageName, userId, shortcutId,
+                    Binder.getCallingUserHandle().getIdentifier());
+        }
+
+        @Override
+        public void removeAllRecentConversations() {
+            enforceSystemOrRoot("remove all recent conversations");
+            mDataManager.removeAllRecentConversations(
+                    Binder.getCallingUserHandle().getIdentifier());
+        }
+
+        @Override
+        public long getLastInteraction(String packageName, int userId, String shortcutId) {
+            enforceSystemRootOrSystemUI(getContext(), "get last interaction");
+            return mDataManager.getLastInteraction(packageName, userId, shortcutId);
+        }
+    };
 
     @VisibleForTesting
     final class LocalService extends PeopleServiceInternal {

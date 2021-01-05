@@ -318,8 +318,7 @@ public class LightsService extends SystemService {
                     SurfaceControl.setDisplayBrightness(mDisplayToken, brightness);
                 } else {
                     // Old system
-                    int brightnessInt = BrightnessSynchronizer.brightnessFloatToInt(
-                            getContext(), brightness);
+                    int brightnessInt = BrightnessSynchronizer.brightnessFloatToInt(brightness);
                     int color = brightnessInt & 0x000000ff;
                     color = 0xff000000 | (color << 16) | (color << 8) | color;
                     setLightLocked(color, LIGHT_FLASH_NONE, 0, 0, brightnessMode);
@@ -555,8 +554,8 @@ public class LightsService extends SystemService {
         @Override
         public synchronized ILights get() {
             if (mInstance == null) {
-                IBinder binder = Binder.allowBlocking(ServiceManager.waitForDeclaredService(
-                        "android.hardware.light.ILights/default"));
+                IBinder binder = Binder.allowBlocking(
+                        ServiceManager.waitForDeclaredService(ILights.DESCRIPTOR + "/default"));
                 if (binder != null) {
                     mInstance = ILights.Stub.asInterface(binder);
                     try {

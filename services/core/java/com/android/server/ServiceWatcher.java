@@ -80,10 +80,16 @@ public class ServiceWatcher implements ServiceConnection {
         default void onError() {}
     }
 
+    /** Function to run on binder interface when first bound. */
+    public interface OnBindRunner {
+        /** Called to run client code with the binder. */
+        void run(IBinder binder, ComponentName service) throws RemoteException;
+    }
+
     /**
      * Information on the service ServiceWatcher has selected as the best option for binding.
      */
-    public static final class ServiceInfo implements Comparable<ServiceInfo> {
+    private static final class ServiceInfo implements Comparable<ServiceInfo> {
 
         public static final ServiceInfo NONE = new ServiceInfo(Integer.MIN_VALUE, null,
                 UserHandle.USER_NULL, false);
@@ -179,25 +185,65 @@ public class ServiceWatcher implements ServiceConnection {
     private final Handler mHandler;
     private final Intent mIntent;
 
-    @Nullable private final BinderRunner mOnBind;
+    private final PackageMonitor mPackageMonitor = new PackageMonitor() {
+        @Override
+        public boolean onPackageChanged(String packageName, int uid, String[] components) {
+            return true;
+        }
+
+        @Override
+        public void onSomePackagesChanged() {
+            onBestServiceChanged(false);
+        }
+    };
+    private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (action == null) {
+                return;
+            }
+            int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL);
+            if (userId == UserHandle.USER_NULL) {
+                return;
+            }
+
+            switch (action) {
+                case Intent.ACTION_USER_SWITCHED:
+                    onUserSwitched(userId);
+                    break;
+                case Intent.ACTION_USER_UNLOCKED:
+                    onUserUnlocked(userId);
+                    break;
+                default:
+                    break;
+            }
+
+        }
+    };
+
+    @Nullable private final OnBindRunner mOnBind;
     @Nullable private final Runnable mOnUnbind;
+
+    // write from caller thread only, read anywhere
+    private volatile boolean mRegistered;
 
     // read/write from handler thread only
     private int mCurrentUserId;
 
     // write from handler thread only, read anywhere
-    private volatile ServiceInfo mServiceInfo;
+    private volatile ServiceInfo mTargetService;
     private volatile IBinder mBinder;
 
     public ServiceWatcher(Context context, String action,
-            @Nullable BinderRunner onBind, @Nullable Runnable onUnbind,
+            @Nullable OnBindRunner onBind, @Nullable Runnable onUnbind,
             @BoolRes int enableOverlayResId, @StringRes int nonOverlayPackageResId) {
         this(context, FgThread.getHandler(), action, onBind, onUnbind, enableOverlayResId,
                 nonOverlayPackageResId);
     }
 
     public ServiceWatcher(Context context, Handler handler, String action,
-            @Nullable BinderRunner onBind, @Nullable Runnable onUnbind,
+            @Nullable OnBindRunner onBind, @Nullable Runnable onUnbind,
             @BoolRes int enableOverlayResId, @StringRes int nonOverlayPackageResId) {
         mContext = context;
         mHandler = handler;
@@ -214,97 +260,74 @@ public class ServiceWatcher implements ServiceConnection {
 
         mCurrentUserId = UserHandle.USER_NULL;
 
-        mServiceInfo = ServiceInfo.NONE;
+        mTargetService = ServiceInfo.NONE;
         mBinder = null;
     }
 
     /**
-     * Register this class, which will start the process of determining the best matching service
-     * and maintaining a binding to it. Will return false and fail if there are no possible matching
-     * services at the time this functions is called.
+     * Returns true if there is at least one component that could satisfy the ServiceWatcher's
+     * constraints.
      */
-    public boolean register() {
-        if (mContext.getPackageManager().queryIntentServicesAsUser(mIntent,
+    public boolean checkServiceResolves() {
+        return !mContext.getPackageManager().queryIntentServicesAsUser(mIntent,
                 MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE | MATCH_SYSTEM_ONLY,
-                UserHandle.USER_SYSTEM).isEmpty()) {
-            return false;
-        }
+                UserHandle.USER_SYSTEM).isEmpty();
+    }
 
-        new PackageMonitor() {
-            @Override
-            public void onPackageUpdateFinished(String packageName, int uid) {
-                ServiceWatcher.this.onPackageChanged(packageName);
-            }
+    /**
+     * Starts the process of determining the best matching service and maintaining a binding to it.
+     */
+    public void register() {
+        Preconditions.checkState(!mRegistered);
 
-            @Override
-            public void onPackageAdded(String packageName, int uid) {
-                ServiceWatcher.this.onPackageChanged(packageName);
-            }
-
-            @Override
-            public void onPackageRemoved(String packageName, int uid) {
-                ServiceWatcher.this.onPackageChanged(packageName);
-            }
-
-            @Override
-            public boolean onPackageChanged(String packageName, int uid, String[] components) {
-                ServiceWatcher.this.onPackageChanged(packageName);
-                return super.onPackageChanged(packageName, uid, components);
-            }
-        }.register(mContext, UserHandle.ALL, true, mHandler);
+        mPackageMonitor.register(mContext, UserHandle.ALL, true, mHandler);
 
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(Intent.ACTION_USER_SWITCHED);
         intentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
-        mContext.registerReceiverAsUser(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                if (action == null) {
-                    return;
-                }
-                int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL);
-                if (userId == UserHandle.USER_NULL) {
-                    return;
-                }
-
-                switch (action) {
-                    case Intent.ACTION_USER_SWITCHED:
-                        onUserSwitched(userId);
-                        break;
-                    case Intent.ACTION_USER_UNLOCKED:
-                        onUserUnlocked(userId);
-                        break;
-                    default:
-                        break;
-                }
-
-            }
-        }, UserHandle.ALL, intentFilter, null, mHandler);
+        mContext.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, intentFilter, null,
+                mHandler);
 
         mCurrentUserId = ActivityManager.getCurrentUser();
 
+        mRegistered = true;
+
         mHandler.post(() -> onBestServiceChanged(false));
-        return true;
+    }
+
+    /**
+     * Stops the process of determining the best matching service and releases any binding.
+     */
+    public void unregister() {
+        Preconditions.checkState(mRegistered);
+
+        mRegistered = false;
+
+        mPackageMonitor.unregister();
+        mContext.unregisterReceiver(mBroadcastReceiver);
+
+        mHandler.post(() -> onBestServiceChanged(false));
     }
 
     private void onBestServiceChanged(boolean forceRebind) {
         Preconditions.checkState(Looper.myLooper() == mHandler.getLooper());
 
-        List<ResolveInfo> resolveInfos = mContext.getPackageManager().queryIntentServicesAsUser(
-                mIntent,
-                GET_META_DATA | MATCH_DIRECT_BOOT_AUTO | MATCH_SYSTEM_ONLY,
-                mCurrentUserId);
-
         ServiceInfo bestServiceInfo = ServiceInfo.NONE;
-        for (ResolveInfo resolveInfo : resolveInfos) {
-            ServiceInfo serviceInfo = new ServiceInfo(resolveInfo, mCurrentUserId);
-            if (serviceInfo.compareTo(bestServiceInfo) > 0) {
-                bestServiceInfo = serviceInfo;
+
+        if (mRegistered) {
+            List<ResolveInfo> resolveInfos = mContext.getPackageManager().queryIntentServicesAsUser(
+                    mIntent,
+                    GET_META_DATA | MATCH_DIRECT_BOOT_AUTO | MATCH_SYSTEM_ONLY,
+                    mCurrentUserId);
+            for (ResolveInfo resolveInfo : resolveInfos) {
+                ServiceInfo serviceInfo = new ServiceInfo(resolveInfo, mCurrentUserId);
+                if (serviceInfo.compareTo(bestServiceInfo) > 0) {
+                    bestServiceInfo = serviceInfo;
+                }
             }
         }
 
-        if (forceRebind || !bestServiceInfo.equals(mServiceInfo)) {
+        if (forceRebind || !bestServiceInfo.equals(mTargetService)) {
             rebind(bestServiceInfo);
         }
     }
@@ -312,32 +335,30 @@ public class ServiceWatcher implements ServiceConnection {
     private void rebind(ServiceInfo newServiceInfo) {
         Preconditions.checkState(Looper.myLooper() == mHandler.getLooper());
 
-        if (!mServiceInfo.equals(ServiceInfo.NONE)) {
+        if (!mTargetService.equals(ServiceInfo.NONE)) {
             if (D) {
-                Log.i(TAG, "[" + mIntent.getAction() + "] unbinding from " + mServiceInfo);
+                Log.d(TAG, "[" + mIntent.getAction() + "] unbinding from " + mTargetService);
             }
 
             mContext.unbindService(this);
-            onServiceDisconnected(mServiceInfo.component);
-            mServiceInfo = ServiceInfo.NONE;
+            onServiceDisconnected(mTargetService.component);
+            mTargetService = ServiceInfo.NONE;
         }
 
-        mServiceInfo = newServiceInfo;
-        if (mServiceInfo.equals(ServiceInfo.NONE)) {
+        mTargetService = newServiceInfo;
+        if (mTargetService.equals(ServiceInfo.NONE)) {
             return;
         }
 
-        Preconditions.checkState(mServiceInfo.component != null);
+        Preconditions.checkState(mTargetService.component != null);
 
-        if (D) {
-            Log.i(TAG, getLogPrefix() + " binding to " + mServiceInfo);
-        }
+        Log.i(TAG, getLogPrefix() + " binding to " + mTargetService);
 
-        Intent bindIntent = new Intent(mIntent).setComponent(mServiceInfo.component);
+        Intent bindIntent = new Intent(mIntent).setComponent(mTargetService.component);
         if (!mContext.bindServiceAsUser(bindIntent, this,
                 BIND_AUTO_CREATE | BIND_NOT_FOREGROUND | BIND_NOT_VISIBLE,
-                mHandler, UserHandle.of(mServiceInfo.userId))) {
-            mServiceInfo = ServiceInfo.NONE;
+                mHandler, UserHandle.of(mTargetService.userId))) {
+            mTargetService = ServiceInfo.NONE;
             Log.e(TAG, getLogPrefix() + " unexpected bind failure - retrying later");
             mHandler.postDelayed(() -> onBestServiceChanged(false), RETRY_DELAY_MS);
         }
@@ -349,17 +370,17 @@ public class ServiceWatcher implements ServiceConnection {
         Preconditions.checkState(mBinder == null);
 
         if (D) {
-            Log.i(TAG, getLogPrefix() + " connected to " + component.toShortString());
+            Log.d(TAG, getLogPrefix() + " connected to " + component.toShortString());
         }
 
         mBinder = binder;
         if (mOnBind != null) {
             try {
-                mOnBind.run(binder);
+                mOnBind.run(binder, component);
             } catch (RuntimeException | RemoteException e) {
                 // binders may propagate some specific non-RemoteExceptions from the other side
                 // through the binder as well - we cannot allow those to crash the system server
-                Log.e(TAG, getLogPrefix() + " exception running on " + mServiceInfo, e);
+                Log.e(TAG, getLogPrefix() + " exception running on " + component, e);
             }
         }
     }
@@ -373,7 +394,7 @@ public class ServiceWatcher implements ServiceConnection {
         }
 
         if (D) {
-            Log.i(TAG, getLogPrefix() + " disconnected from " + component.toShortString());
+            Log.d(TAG, getLogPrefix() + " disconnected from " + component.toShortString());
         }
 
         mBinder = null;
@@ -386,11 +407,14 @@ public class ServiceWatcher implements ServiceConnection {
     public final void onBindingDied(ComponentName component) {
         Preconditions.checkState(Looper.myLooper() == mHandler.getLooper());
 
-        if (D) {
-            Log.i(TAG, getLogPrefix() + " " + component.toShortString() + " died");
-        }
+        Log.i(TAG, getLogPrefix() + " " + component.toShortString() + " died");
 
         onBestServiceChanged(true);
+    }
+
+    @Override
+    public final void onNullBinding(ComponentName component) {
+        Log.e(TAG, getLogPrefix() + " " + component.toShortString() + " has null binding");
     }
 
     void onUserSwitched(@UserIdInt int userId) {
@@ -402,11 +426,6 @@ public class ServiceWatcher implements ServiceConnection {
         if (userId == mCurrentUserId) {
             onBestServiceChanged(false);
         }
-    }
-
-    void onPackageChanged(String packageName) {
-        // force a rebind if the changed package was the currently connected package
-        onBestServiceChanged(packageName.equals(mServiceInfo.getPackageName()));
     }
 
     /**
@@ -425,7 +444,7 @@ public class ServiceWatcher implements ServiceConnection {
             } catch (RuntimeException | RemoteException e) {
                 // binders may propagate some specific non-RemoteExceptions from the other side
                 // through the binder as well - we cannot allow those to crash the system server
-                Log.e(TAG, getLogPrefix() + " exception running on " + mServiceInfo, e);
+                Log.e(TAG, getLogPrefix() + " exception running on " + mTargetService, e);
                 runner.onError();
             }
         });
@@ -437,14 +456,14 @@ public class ServiceWatcher implements ServiceConnection {
 
     @Override
     public String toString() {
-        return mServiceInfo.toString();
+        return mTargetService.toString();
     }
 
     /**
      * Dump for debugging.
      */
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println("service=" + mServiceInfo);
+        pw.println("target service=" + mTargetService);
         pw.println("connected=" + (mBinder != null));
     }
 }

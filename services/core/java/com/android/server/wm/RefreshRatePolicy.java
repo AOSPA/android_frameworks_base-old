@@ -30,8 +30,9 @@ class RefreshRatePolicy {
 
     private final int mLowRefreshRateId;
     private final ArraySet<String> mNonHighRefreshRatePackages = new ArraySet<>();
-    private final HighRefreshRateBlacklist mHighRefreshRateBlacklist;
+    private final HighRefreshRateDenylist mHighRefreshRateDenylist;
     private final WindowManagerService mWmService;
+    private final ForceRefreshRatePackageList mForceList;
 
     /**
      * The following constants represent priority of the window. SF uses this information when
@@ -55,10 +56,11 @@ class RefreshRatePolicy {
     static final int LAYER_PRIORITY_NOT_FOCUSED_WITH_MODE = 2;
 
     RefreshRatePolicy(WindowManagerService wmService, DisplayInfo displayInfo,
-            HighRefreshRateBlacklist blacklist) {
+            HighRefreshRateDenylist denylist) {
         mLowRefreshRateId = findLowRefreshRateModeId(displayInfo);
-        mHighRefreshRateBlacklist = blacklist;
+        mHighRefreshRateDenylist = denylist;
         mWmService = wmService;
+        mForceList = new ForceRefreshRatePackageList(mWmService, displayInfo);
     }
 
     /**
@@ -96,8 +98,7 @@ class RefreshRatePolicy {
         }
 
         // If app is forced to specified refresh rate, return the specified refresh rate
-        ForceRefreshRatePackageList forceList = ForceRefreshRatePackageList.getInstance(mWmService);
-        int forceRefreshRateId = forceList.getForceRefreshRateId(w.getOwningPackage());
+        int forceRefreshRateId = mForceList.getForceRefreshRateId(w.getOwningPackage());
         if(forceRefreshRateId > 0) {
             return forceRefreshRateId;
         }
@@ -114,8 +115,8 @@ class RefreshRatePolicy {
             return mLowRefreshRateId;
         }
 
-        // If app is blacklisted using higher refresh rate, return default (lower) refresh rate
-        if (mHighRefreshRateBlacklist.isBlacklisted(packageName)) {
+        // If app is denylisted using higher refresh rate, return default (lower) refresh rate
+        if (mHighRefreshRateDenylist.isDenylisted(packageName)) {
             return mLowRefreshRateId;
         }
         return 0;

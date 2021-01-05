@@ -47,12 +47,11 @@ import com.android.settingslib.notification.ConversationIconFactory;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
-import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.settings.CurrentUserContextTracker;
+import com.android.systemui.settings.UserContextProvider;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
@@ -60,7 +59,6 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.notification.AssistantFeedbackController;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
 import com.android.systemui.statusbar.notification.dagger.NotificationsModule;
@@ -68,9 +66,11 @@ import com.android.systemui.statusbar.notification.row.NotificationInfo.CheckSav
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
+import com.android.systemui.wmshell.BubblesManager;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.Optional;
 
 import javax.inject.Provider;
 
@@ -88,10 +88,10 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
 
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
     private final Context mContext;
-    private final VisualStabilityManager mVisualStabilityManager;
     private final AccessibilityManager mAccessibilityManager;
     private final HighPriorityProvider mHighPriorityProvider;
     private final ChannelEditorDialogController mChannelEditorDialogController;
+    private final OnUserInteractionCallback mOnUserInteractionCallback;
 
     // Dependencies:
     private final NotificationLockscreenUserManager mLockscreenUserManager =
@@ -117,33 +117,35 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
     private final Lazy<StatusBar> mStatusBarLazy;
     private final Handler mMainHandler;
     private final Handler mBgHandler;
-    private final BubbleController mBubbleController;
+    private final Optional<BubblesManager> mBubblesManagerOptional;
     private Runnable mOpenRunnable;
     private final INotificationManager mNotificationManager;
     private final LauncherApps mLauncherApps;
     private final ShortcutManager mShortcutManager;
-    private final CurrentUserContextTracker mContextTracker;
+    private final UserContextProvider mContextTracker;
     private final Provider<PriorityOnboardingDialogController.Builder> mBuilderProvider;
     private final UiEventLogger mUiEventLogger;
 
     /**
      * Injected constructor. See {@link NotificationsModule}.
      */
-    public NotificationGutsManager(Context context, VisualStabilityManager visualStabilityManager,
-            Lazy<StatusBar> statusBarLazy, @Main Handler mainHandler, @Background Handler bgHandler,
+    public NotificationGutsManager(Context context,
+            Lazy<StatusBar> statusBarLazy,
+            @Main Handler mainHandler,
+            @Background Handler bgHandler,
             AccessibilityManager accessibilityManager,
             HighPriorityProvider highPriorityProvider,
             INotificationManager notificationManager,
             LauncherApps launcherApps,
             ShortcutManager shortcutManager,
             ChannelEditorDialogController channelEditorDialogController,
-            CurrentUserContextTracker contextTracker,
+            UserContextProvider contextTracker,
             Provider<PriorityOnboardingDialogController.Builder> builderProvider,
             AssistantFeedbackController assistantFeedbackController,
-            BubbleController bubbleController,
-            UiEventLogger uiEventLogger) {
+            Optional<BubblesManager> bubblesManagerOptional,
+            UiEventLogger uiEventLogger,
+            OnUserInteractionCallback onUserInteractionCallback) {
         mContext = context;
-        mVisualStabilityManager = visualStabilityManager;
         mStatusBarLazy = statusBarLazy;
         mMainHandler = mainHandler;
         mBgHandler = bgHandler;
@@ -156,8 +158,9 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         mBuilderProvider = builderProvider;
         mChannelEditorDialogController = channelEditorDialogController;
         mAssistantFeedbackController = assistantFeedbackController;
-        mBubbleController = bubbleController;
+        mBubblesManagerOptional = bubblesManagerOptional;
         mUiEventLogger = uiEventLogger;
+        mOnUserInteractionCallback = onUserInteractionCallback;
     }
 
     public void setUpWithPresenter(NotificationPresenter presenter,
@@ -268,8 +271,6 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         try {
             if (gutsView instanceof NotificationSnooze) {
                 initializeSnoozeView(row, (NotificationSnooze) gutsView);
-            } else if (gutsView instanceof AppOpsInfo) {
-                initializeAppOpsInfo(row, (AppOpsInfo) gutsView);
             } else if (gutsView instanceof NotificationInfo) {
                 initializeNotificationInfo(row, (NotificationInfo) gutsView);
             } else if (gutsView instanceof NotificationConversationInfo) {
@@ -306,36 +307,6 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         guts.setHeightChangedListener((NotificationGuts g) -> {
             mListContainer.onHeightChanged(row, row.isShown() /* needsAnimation */);
         });
-    }
-
-    /**
-     * Sets up the {@link AppOpsInfo} inside the notification row's guts.
-     *
-     * @param row view to set up the guts for
-     * @param appOpsInfoView view to set up/bind within {@code row}
-     */
-    private void initializeAppOpsInfo(
-            final ExpandableNotificationRow row,
-            AppOpsInfo appOpsInfoView) {
-        NotificationGuts guts = row.getGuts();
-        StatusBarNotification sbn = row.getEntry().getSbn();
-        UserHandle userHandle = sbn.getUser();
-        PackageManager pmUser = StatusBar.getPackageManagerForUser(mContext,
-                userHandle.getIdentifier());
-
-        AppOpsInfo.OnSettingsClickListener onSettingsClick =
-                (View v, String pkg, int uid, ArraySet<Integer> ops) -> {
-                    mUiEventLogger.logWithInstanceId(
-                            NotificationAppOpsEvent.NOTIFICATION_APP_OPS_SETTINGS_CLICK,
-                            sbn.getUid(), sbn.getPackageName(), sbn.getInstanceId());
-                    mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_OPS_GUTS_SETTINGS);
-                    guts.resetFalsingCheck();
-                    startAppOpsSettingsActivity(pkg, uid, ops, row);
-        };
-        if (!row.getEntry().mActiveAppOps.isEmpty()) {
-            appOpsInfoView.bindGuts(pmUser, onSettingsClick, sbn, mUiEventLogger,
-                    row.getEntry().mActiveAppOps);
-        }
     }
 
     /**
@@ -395,7 +366,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         notificationInfoView.bindNotification(
                 pmUser,
                 mNotificationManager,
-                mVisualStabilityManager,
+                mOnUserInteractionCallback,
                 mChannelEditorDialogController,
                 packageName,
                 row.getEntry().getChannel(),
@@ -506,7 +477,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 mShortcutManager,
                 pmUser,
                 mNotificationManager,
-                mVisualStabilityManager,
+                mOnUserInteractionCallback,
                 packageName,
                 entry.getChannel(),
                 entry,
@@ -514,13 +485,13 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 onSettingsClick,
                 onSnoozeClickListener,
                 iconFactoryLoader,
-                mContextTracker.getCurrentUserContext(),
+                mContextTracker.getUserContext(),
                 mBuilderProvider,
                 mDeviceProvisionedController.isDeviceProvisioned(),
                 mMainHandler,
                 mBgHandler,
                 onConversationSettingsListener,
-                mBubbleController);
+                mBubblesManagerOptional);
     }
 
     /**

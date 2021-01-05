@@ -16,14 +16,30 @@
 
 package com.android.server.wm.flicker.pip
 
+import android.view.Surface
 import androidx.test.filters.FlakyTest
-import androidx.test.filters.LargeTest
-import com.android.server.wm.flicker.CommonTransitions
-import com.android.server.wm.flicker.TransitionRunner
-import com.android.server.wm.flicker.WmTraceSubject
+import androidx.test.filters.RequiresDevice
+import androidx.test.platform.app.InstrumentationRegistry
+import com.android.server.wm.flicker.Flicker
+import com.android.server.wm.flicker.FlickerTestRunner
+import com.android.server.wm.flicker.FlickerTestRunnerFactory
+import com.android.server.wm.flicker.focusChanges
 import com.android.server.wm.flicker.helpers.PipAppHelper
+import com.android.server.wm.flicker.helpers.buildTestTag
+import com.android.server.wm.flicker.helpers.closePipWindow
+import com.android.server.wm.flicker.helpers.hasPipWindow
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerRotatesAndScales
+import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.noUncoveredRegions
+import com.android.server.wm.flicker.repetitions
+import com.android.server.wm.flicker.startRotation
+import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -32,29 +48,88 @@ import org.junit.runners.Parameterized
  * Test Pip launch.
  * To run this test: `atest FlickerTests:PipToHomeTest`
  */
-@LargeTest
+@RequiresDevice
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @FlakyTest(bugId = 152738416)
 class PipToHomeTest(
-    beginRotationName: String,
-    beginRotation: Int
-) : PipTestBase(beginRotationName, beginRotation) {
-    override val transitionToRun: TransitionRunner
-        get() = CommonTransitions.exitPipModeToHome(testApp as PipAppHelper, instrumentation,
-                uiDevice, beginRotation)
-                .includeJankyRuns().build()
+    testName: String,
+    flickerSpec: Flicker
+) : FlickerTestRunner(testName, flickerSpec) {
+    companion object {
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): List<Array<Any>> {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val testApp = PipAppHelper(instrumentation)
+            return FlickerTestRunnerFactory(instrumentation, listOf(Surface.ROTATION_0))
+                .buildTest { configuration ->
+                    withTestName { buildTestTag("exitPipModeToApp", testApp, configuration) }
+                    repeat { configuration.repetitions }
+                    setup {
+                        test {
+                            device.wakeUpAndGoToHomeScreen()
+                            device.pressHome()
+                        }
+                        eachRun {
+                            testApp.open()
+                            this.setRotation(configuration.startRotation)
+                            testApp.clickEnterPipButton(device)
+                            device.hasPipWindow()
+                        }
+                    }
+                    teardown {
+                        eachRun {
+                            this.setRotation(Surface.ROTATION_0)
+                            if (device.hasPipWindow()) {
+                                device.closePipWindow()
+                            }
+                        }
+                        test {
+                            if (device.hasPipWindow()) {
+                                device.closePipWindow()
+                            }
+                            testApp.exit()
+                        }
+                    }
+                    transitions {
+                        testApp.closePipWindow(device)
+                    }
+                    assertions {
+                        windowManagerTrace {
+                            navBarWindowIsAlwaysVisible()
+                            statusBarWindowIsAlwaysVisible()
 
-    @Test
-    fun checkVisibility_backgroundWindowVisibleBehindPipLayer() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAppWindowOnTop(sPipWindowTitle)
-                    .then()
-                    .showsBelowAppWindow("Wallpaper")
-                    .then()
-                    .showsAppWindowOnTop("Wallpaper")
-                    .forAllEntries()
+                            all("pipWindowBecomesInvisible") {
+                                this.showsAppWindow(PIP_WINDOW_TITLE)
+                                    .then()
+                                    .hidesAppWindow(PIP_WINDOW_TITLE)
+                            }
+                        }
+
+                        layersTrace {
+                            navBarLayerIsAlwaysVisible(bugId = 140855415)
+                            statusBarLayerIsAlwaysVisible()
+                            noUncoveredRegions(configuration.startRotation, Surface.ROTATION_0,
+                                enabled = false)
+                            navBarLayerRotatesAndScales(configuration.startRotation,
+                                Surface.ROTATION_0, bugId = 140855415)
+                            statusBarLayerRotatesScales(configuration.startRotation,
+                                Surface.ROTATION_0)
+
+                            all("pipLayerBecomesInvisible") {
+                                this.showsLayer(PIP_WINDOW_TITLE)
+                                    .then()
+                                    .hidesLayer(PIP_WINDOW_TITLE)
+                            }
+                        }
+
+                        eventLog {
+                            focusChanges(testApp.launcherName, "NexusLauncherActivity",
+                                bugId = 151179149)
+                        }
+                    }
+                }
         }
     }
 }

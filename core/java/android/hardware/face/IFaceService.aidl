@@ -19,7 +19,7 @@ import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
 import android.hardware.face.IFaceServiceReceiver;
 import android.hardware.face.Face;
-import android.hardware.face.FaceSensorProperties;
+import android.hardware.face.FaceSensorPropertiesInternal;
 import android.view.Surface;
 
 /**
@@ -29,10 +29,10 @@ import android.view.Surface;
  */
 interface IFaceService {
     // Retrieve static sensor properties for all face sensors
-    List<FaceSensorProperties> getSensorProperties(String opPackageName);
+    List<FaceSensorPropertiesInternal> getSensorPropertiesInternal(String opPackageName);
 
     // Authenticate the given sessionId with a face
-    void authenticate(IBinder token, long operationId, int userid, IFaceServiceReceiver receiver,
+    void authenticate(IBinder token, long operationId, int userId, IFaceServiceReceiver receiver,
             String opPackageName);
 
     // Uses the face hardware to detect for the presence of a face, without giving details
@@ -44,12 +44,12 @@ interface IFaceService {
     // called from BiometricService. The additional uid, pid, userId arguments should be determined
     // by BiometricService. To start authentication after the clients are ready, use
     // startPreparedClient().
-    void prepareForAuthentication(boolean requireConfirmation, IBinder token, long operationId,
+    void prepareForAuthentication(int sensorId, boolean requireConfirmation, IBinder token, long operationId,
             int userId, IBiometricSensorReceiver sensorReceiver, String opPackageName,
             int cookie, int callingUid, int callingPid, int callingUserId);
 
     // Starts authentication with the previously prepared client.
-    void startPreparedClient(int cookie);
+    void startPreparedClient(int sensorId, int cookie);
 
     // Cancel authentication for the given sessionId
     void cancelAuthentication(IBinder token, String opPackageName);
@@ -58,7 +58,7 @@ interface IFaceService {
     void cancelFaceDetect(IBinder token, String opPackageName);
 
     // Same as above, with extra arguments.
-    void cancelAuthenticationFromService(IBinder token, String opPackageName,
+    void cancelAuthenticationFromService(int sensorId, IBinder token, String opPackageName,
             int callingUid, int callingPid, int callingUserId);
 
     // Start face enrollment
@@ -77,28 +77,28 @@ interface IFaceService {
             String opPackageName);
 
     // Get the enrolled face for user.
-    List<Face> getEnrolledFaces(int userId, String opPackageName);
+    List<Face> getEnrolledFaces(int sensorId, int userId, String opPackageName);
 
     // Determine if HAL is loaded and ready
-    boolean isHardwareDetected(String opPackageName);
+    boolean isHardwareDetected(int sensorId, String opPackageName);
 
     // Get a pre-enrollment authentication token
-    void generateChallenge(IBinder token, IFaceServiceReceiver receiver, String opPackageName);
+    void generateChallenge(IBinder token, int sensorId, int userId, IFaceServiceReceiver receiver, String opPackageName);
 
     // Finish an enrollment sequence and invalidate the authentication token
-    void revokeChallenge(IBinder token, String opPackageName);
+    void revokeChallenge(IBinder token, int sensorId, int userId, String opPackageName, long challenge);
 
     // Determine if a user has at least one enrolled face
-    boolean hasEnrolledFaces(int userId, String opPackageName);
+    boolean hasEnrolledFaces(int sensorId, int userId, String opPackageName);
 
     // Return the LockoutTracker status for the specified user
-    int getLockoutModeForUser(int userId);
+    int getLockoutModeForUser(int sensorId, int userId);
 
     // Gets the authenticator ID for face
-    long getAuthenticatorId(int callingUserId);
+    long getAuthenticatorId(int sensorId, int callingUserId);
 
     // Reset the lockout when user authenticates with strong auth (e.g. PIN, pattern or password)
-    void resetLockout(int userId, in byte [] hardwareAuthToken);
+    void resetLockout(IBinder token, int sensorId, int userId, in byte [] hardwareAuthToken, String opPackageName);
 
     // Add a callback which gets notified when the face lockout period expired.
     void addLockoutResetCallback(IBiometricServiceLockoutResetCallback callback, String opPackageName);
@@ -110,5 +110,5 @@ interface IFaceService {
             String opPackageName);
 
     // Give FaceService its ID. See AuthService.java
-    void initializeConfiguration(int sensorId);
+    void initializeConfiguration(int sensorId, int strength);
 }

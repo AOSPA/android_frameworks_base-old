@@ -37,6 +37,7 @@ import android.annotation.Nullable;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.backup.BackupAgent;
+import android.app.backup.BackupManager;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ActivityLifecycleItem.LifecycleState;
 import android.app.servertransaction.ActivityRelaunchItem;
@@ -186,6 +187,7 @@ import com.android.org.conscrypt.OpenSSLSocketImpl;
 import com.android.org.conscrypt.TrustedCertificateStore;
 import com.android.server.am.MemInfoDumpProto;
 
+import dalvik.system.AppSpecializationHooks;
 import dalvik.system.CloseGuard;
 import dalvik.system.VMDebug;
 import dalvik.system.VMRuntime;
@@ -290,6 +292,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     private final Object mNetworkPolicyLock = new Object();
 
+    private static final String DEFAULT_FULL_BACKUP_AGENT = "android.app.backup.FullBackupAgent";
+
     /**
      * Denotes the sequence number of the process state change for which the main thread needs
      * to block until the network rules are updated for it.
@@ -344,7 +348,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     @UnsupportedAppUsage
     AppBindData mBoundApplication;
     Profiler mProfiler;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     int mCurDefaultDisplayDpi;
     @UnsupportedAppUsage
     boolean mDensityCompatMode;
@@ -378,6 +382,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     String mInstrumentedAppDir = null;
     String[] mInstrumentedSplitAppDirs = null;
     String mInstrumentedLibDir = null;
+    boolean mInstrumentingWithoutRestart;
     boolean mSystemThread = false;
     boolean mSomeActivitiesChanged = false;
     /* package */ boolean mHiddenApiWarningShown = false;
@@ -422,13 +427,18 @@ public final class ActivityThread extends ClientTransactionHandler {
         final String authority;
         final int userId;
 
+        @GuardedBy("mLock")
+        ContentProviderHolder mHolder; // Temp holder to be used between notifier and waiter
+        Object mLock; // The lock to be used to get notified when the provider is ready
+
         public ProviderKey(String authority, int userId) {
             this.authority = authority;
             this.userId = userId;
+            this.mLock = new Object();
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (o instanceof ProviderKey) {
                 final ProviderKey other = (ProviderKey) o;
                 return Objects.equals(authority, other.authority) && userId == other.userId;
@@ -438,7 +448,11 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         @Override
         public int hashCode() {
-            return ((authority != null) ? authority.hashCode() : 0) ^ userId;
+            return hashCode(authority, userId);
+        }
+
+        public static int hashCode(final String auth, final int userIdent) {
+            return ((auth != null) ? auth.hashCode() : 0) ^ userIdent;
         }
     }
 
@@ -459,9 +473,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     // Mitigation for b/74523247: Used to serialize calls to AM.getContentProvider().
     // Note we never removes items from this map but that's okay because there are only so many
     // users and so many authorities.
-    // TODO Remove it once we move CPR.wait() from AMS to the client side.
-    @GuardedBy("mGetProviderLocks")
-    final ArrayMap<ProviderKey, Object> mGetProviderLocks = new ArrayMap<>();
+    @GuardedBy("mGetProviderKeys")
+    final SparseArray<ProviderKey> mGetProviderKeys = new SparseArray<>();
 
     final ArrayMap<Activity, ArrayList<OnActivityPausedListener>> mOnPauseListeners
         = new ArrayMap<Activity, ArrayList<OnActivityPausedListener>>();
@@ -503,7 +516,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         @UnsupportedAppUsage
         boolean stopped;
         boolean hideForNow;
-        Configuration newConfig;
         Configuration createdConfig;
         Configuration overrideConfig;
         // Used to save the last reported configuration from server side so that activity
@@ -604,7 +616,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     throw new IllegalStateException(
                             "Received config update for non-existing activity");
                 }
-                activity.mMainThread.handleActivityConfigurationChanged(token, overrideConfig,
+                activity.mMainThread.handleActivityConfigurationChanged(this, overrideConfig,
                         newDisplayId);
             };
         }
@@ -738,6 +750,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         CompatibilityInfo compatInfo;
         int backupMode;
         int userId;
+        int operationType;
         public String toString() {
             return "CreateBackupAgentData{appInfo=" + appInfo
                     + " backupAgent=" + appInfo.backupAgentName
@@ -811,7 +824,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         boolean trackAllocation;
         @UnsupportedAppUsage
         boolean restrictedBackupMode;
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         boolean persistent;
         Configuration config;
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -958,12 +971,13 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         public final void scheduleCreateBackupAgent(ApplicationInfo app,
-                CompatibilityInfo compatInfo, int backupMode, int userId) {
+                CompatibilityInfo compatInfo, int backupMode, int userId, int operationType) {
             CreateBackupAgentData d = new CreateBackupAgentData();
             d.appInfo = app;
             d.compatInfo = compatInfo;
             d.backupMode = backupMode;
             d.userId = userId;
+            d.operationType = operationType;
 
             sendMessage(H.CREATE_BACKUP_AGENT, d);
         }
@@ -1752,6 +1766,29 @@ public final class ActivityThread extends ClientTransactionHandler {
                     ActivityThread.this, activityToken, actionId, arguments,
                     cancellationSignal, resultCallback));
         }
+
+        @Override
+        public void notifyContentProviderPublishStatus(@NonNull ContentProviderHolder holder,
+                @NonNull String auth, int userId, boolean published) {
+            final ProviderKey key = getGetProviderKey(auth, userId);
+            synchronized (key.mLock) {
+                key.mHolder = holder;
+                key.mLock.notifyAll();
+            }
+        }
+
+        @Override
+        public void instrumentWithoutRestart(ComponentName instrumentationName,
+                Bundle instrumentationArgs, IInstrumentationWatcher instrumentationWatcher,
+                IUiAutomationConnection instrumentationUiConnection, ApplicationInfo targetInfo) {
+            AppBindData data = new AppBindData();
+            data.instrumentationName = instrumentationName;
+            data.instrumentationArgs = instrumentationArgs;
+            data.instrumentationWatcher = instrumentationWatcher;
+            data.instrumentationUiAutomationConnection = instrumentationUiConnection;
+            data.appInfo = targetInfo;
+            sendMessage(H.INSTRUMENT_WITHOUT_RESTART, data);
+        }
     }
 
     private @NonNull SafeCancellationTransport createSafeCancellationTransport(
@@ -1857,6 +1894,9 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int PURGE_RESOURCES = 161;
         public static final int ATTACH_STARTUP_AGENTS = 162;
 
+        public static final int INSTRUMENT_WITHOUT_RESTART = 170;
+        public static final int FINISH_INSTRUMENTATION_WITHOUT_RESTART = 171;
+
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
                 switch (code) {
@@ -1899,6 +1939,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case RELAUNCH_ACTIVITY: return "RELAUNCH_ACTIVITY";
                     case PURGE_RESOURCES: return "PURGE_RESOURCES";
                     case ATTACH_STARTUP_AGENTS: return "ATTACH_STARTUP_AGENTS";
+                    case INSTRUMENT_WITHOUT_RESTART: return "INSTRUMENT_WITHOUT_RESTART";
+                    case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
+                        return "FINISH_INSTRUMENTATION_WITHOUT_RESTART";
                 }
             }
             return Integer.toString(code);
@@ -2080,6 +2123,12 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case ATTACH_STARTUP_AGENTS:
                     handleAttachStartupAgents((String) msg.obj);
                     break;
+                case INSTRUMENT_WITHOUT_RESTART:
+                    handleInstrumentWithoutRestart((AppBindData) msg.obj);
+                    break;
+                case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
+                    handleFinishInstrumentationWithoutRestart();
+                    break;
             }
             Object obj = msg.obj;
             if (obj instanceof SomeArgs) {
@@ -2200,29 +2249,14 @@ public final class ActivityThread extends ClientTransactionHandler {
         return sPermissionManager;
     }
 
-    private Configuration mMainThreadConfig = new Configuration();
-
-    Configuration applyConfigCompatMainThread(int displayDensity, Configuration config,
-            CompatibilityInfo compat) {
-        if (config == null) {
-            return null;
-        }
-        if (!compat.supportsScreen()) {
-            mMainThreadConfig.setTo(config);
-            config = mMainThreadConfig;
-            compat.applyToConfiguration(displayDensity, config);
-        }
-        return config;
-    }
-
     /**
      * Creates the top level resources for the given package. Will return an existing
      * Resources if one has already been created.
      */
     Resources getTopLevelResources(String resDir, String[] splitResDirs, String[] overlayDirs,
-            String[] libDirs, int displayId, LoadedApk pkgInfo) {
+            String[] libDirs, LoadedApk pkgInfo) {
         return mResourcesManager.getResources(null, resDir, splitResDirs, overlayDirs, libDirs,
-                displayId, null, pkgInfo.getCompatibilityInfo(), pkgInfo.getClassLoader(), null);
+                null, null, pkgInfo.getCompatibilityInfo(), pkgInfo.getClassLoader(), null);
     }
 
     @UnsupportedAppUsage
@@ -2282,7 +2316,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         return null;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public final LoadedApk getPackageInfo(ApplicationInfo ai, CompatibilityInfo compatInfo,
             int flags) {
         boolean includeCode = (flags&Context.CONTEXT_INCLUDE_CODE) != 0;
@@ -2769,7 +2803,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                         memInfo.getTotalPrivateDirty(),
                         memInfo.getTotalPrivateClean(),
                         memInfo.hasSwappedOutPss ? memInfo.getTotalSwappedOutPss() :
-                        memInfo.getTotalSwappedOut(), memInfo.getTotalPss(),
+                        memInfo.getTotalSwappedOut(), memInfo.getTotalRss(),
                         nativeMax+dalvikMax,
                         nativeAllocated+dalvikAllocated, nativeFree+dalvikFree);
             }
@@ -3030,7 +3064,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         proto.end(asToken);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void registerOnActivityPausedListener(Activity activity,
             OnActivityPausedListener listener) {
         synchronized (mOnPauseListeners) {
@@ -3043,7 +3077,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void unregisterOnActivityPausedListener(Activity activity,
             OnActivityPausedListener listener) {
         synchronized (mOnPauseListeners) {
@@ -3122,12 +3156,25 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
+    /**
+     * Returns {@code true} if the {@link android.app.ActivityManager.ProcessState} of the current
+     * process is cached.
+     */
+    @VisibleForTesting
+    public boolean isCachedProcessState() {
+        synchronized (mAppThread) {
+            return mLastProcessState >= ActivityManager.PROCESS_STATE_CACHED_ACTIVITY;
+        }
+    }
+
     @Override
     public void updateProcessState(int processState, boolean fromIpc) {
+        final boolean wasCached;
         synchronized (mAppThread) {
             if (mLastProcessState == processState) {
                 return;
             }
+            wasCached = isCachedProcessState();
             mLastProcessState = processState;
             // Defer the top state for VM to avoid aggressive JIT compilation affecting activity
             // launch time.
@@ -3142,6 +3189,24 @@ public final class ActivityThread extends ClientTransactionHandler {
             if (localLOGV) {
                 Slog.i(TAG, "******************* PROCESS STATE CHANGED TO: " + processState
                         + (fromIpc ? " (from ipc" : ""));
+            }
+        }
+
+        // Handle the pending configuration if the process state is changed from cached to
+        // non-cached. Except the case where there is a launching activity because the
+        // LaunchActivityItem will handle it.
+        if (wasCached && !isCachedProcessState() && mNumLaunchingActivities.get() == 0) {
+            final Configuration pendingConfig;
+            synchronized (mResourcesManager) {
+                pendingConfig = mPendingConfiguration;
+            }
+            if (pendingConfig == null) {
+                return;
+            }
+            if (Looper.myLooper() == mH.getLooper()) {
+                handleConfigurationChanged(pendingConfig);
+            } else {
+                sendMessage(H.CONFIGURATION_CHANGED, pendingConfig);
             }
         }
     }
@@ -3249,12 +3314,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         sendMessage(H.CLEAN_UP_CONTEXT, cci);
     }
 
-    @Override
-    public void handleFixedRotationAdjustments(@NonNull IBinder token,
-            @Nullable FixedRotationAdjustments fixedRotationAdjustments) {
-        handleFixedRotationAdjustments(token, fixedRotationAdjustments, null /* overrideConfig */);
-    }
-
     /**
      * Applies the rotation adjustments to override display information in resources belong to the
      * provided token. If the token is activity token, the adjustments also apply to application
@@ -3264,51 +3323,39 @@ public final class ActivityThread extends ClientTransactionHandler {
      * @param fixedRotationAdjustments The information to override the display adjustments of
      *                                 corresponding resources. If it is null, the exiting override
      *                                 will be cleared.
-     * @param overrideConfig The override configuration of activity. It is used to override
-     *                       application configuration. If it is non-null, it means the token is
-     *                       confirmed as activity token. Especially when launching new activity,
-     *                       {@link #mActivities} hasn't put the new token.
      */
-    private void handleFixedRotationAdjustments(@NonNull IBinder token,
-            @Nullable FixedRotationAdjustments fixedRotationAdjustments,
-            @Nullable Configuration overrideConfig) {
-        // The element of application configuration override is set only if the application
-        // adjustments are needed, because activity already has its own override configuration.
-        final Configuration[] appConfigOverride;
-        final Consumer<DisplayAdjustments> override;
-        if (fixedRotationAdjustments != null) {
-            appConfigOverride = new Configuration[1];
-            override = displayAdjustments -> {
-                displayAdjustments.setFixedRotationAdjustments(fixedRotationAdjustments);
-                if (appConfigOverride[0] != null) {
-                    displayAdjustments.getConfiguration().updateFrom(appConfigOverride[0]);
-                }
-            };
-        } else {
-            appConfigOverride = null;
-            override = null;
-        }
+    @Override
+    public void handleFixedRotationAdjustments(@NonNull IBinder token,
+            @Nullable FixedRotationAdjustments fixedRotationAdjustments) {
+        final Consumer<DisplayAdjustments> override = fixedRotationAdjustments != null
+                ? displayAdjustments -> displayAdjustments
+                        .setFixedRotationAdjustments(fixedRotationAdjustments)
+                : null;
         if (!mResourcesManager.overrideTokenDisplayAdjustments(token, override)) {
             // No resources are associated with the token.
             return;
         }
-        if (overrideConfig == null) {
-            final ActivityClientRecord r = mActivities.get(token);
-            if (r == null) {
-                // It is not an activity token. Nothing to do for application.
-                return;
-            }
-            overrideConfig = r.overrideConfig;
-        }
-        if (appConfigOverride != null) {
-            appConfigOverride[0] = overrideConfig;
+        if (mActivities.get(token) == null) {
+            // Nothing to do for application if it is not an activity token.
+            return;
         }
 
-        // Apply the last override to application resources for compatibility. Because the Resources
-        // of Display can be from application, e.g.
-        //    applicationContext.getSystemService(DisplayManager.class).getDisplay(displayId)
-        // and the deprecated usage:
-        //    applicationContext.getSystemService(WindowManager.class).getDefaultDisplay();
+        overrideApplicationDisplayAdjustments(token, override);
+    }
+
+    /**
+     * Applies the last override to application resources for compatibility. Because the Resources
+     * of Display can be from application, e.g.
+     *   applicationContext.getSystemService(DisplayManager.class).getDisplay(displayId)
+     * and the deprecated usage:
+     *   applicationContext.getSystemService(WindowManager.class).getDefaultDisplay();
+     *
+     * @param token The owner and target of the override.
+     * @param override The display adjustments override for application resources. If it is null,
+     *                 the override of the token will be removed and pop the last one to use.
+     */
+    private void overrideApplicationDisplayAdjustments(@NonNull IBinder token,
+            @Nullable Consumer<DisplayAdjustments> override) {
         final Consumer<DisplayAdjustments> appOverride;
         if (mActiveRotationAdjustments == null) {
             mActiveRotationAdjustments = new ArrayList<>(2);
@@ -3453,13 +3500,9 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handleStartActivity(IBinder token, PendingTransactionActions pendingActions) {
-        final ActivityClientRecord r = mActivities.get(token);
+    public void handleStartActivity(ActivityClientRecord r,
+            PendingTransactionActions pendingActions) {
         final Activity activity = r.activity;
-        if (r.activity == null) {
-            // TODO(lifecycler): What do we do in this case?
-            return;
-        }
         if (!r.stopped) {
             throw new IllegalStateException("Can't start activity that is not stopped.");
         }
@@ -3541,8 +3584,13 @@ public final class ActivityThread extends ClientTransactionHandler {
         // The rotation adjustments must be applied before creating the activity, so the activity
         // can get the adjusted display info during creation.
         if (r.mPendingFixedRotationAdjustments != null) {
-            handleFixedRotationAdjustments(r.token, r.mPendingFixedRotationAdjustments,
-                    r.overrideConfig);
+            // The adjustments should have been set by handleLaunchActivity, so the last one is the
+            // override for activity resources.
+            if (mActiveRotationAdjustments != null && !mActiveRotationAdjustments.isEmpty()) {
+                mResourcesManager.overrideTokenDisplayAdjustments(r.token,
+                        mActiveRotationAdjustments.get(
+                                mActiveRotationAdjustments.size() - 1).second);
+            }
             r.mPendingFixedRotationAdjustments = null;
         }
 
@@ -3581,6 +3629,13 @@ public final class ActivityThread extends ClientTransactionHandler {
             mProfiler.startProfiling();
         }
 
+        if (r.mPendingFixedRotationAdjustments != null) {
+            // The rotation adjustments must be applied before handling configuration, so process
+            // level display metrics can be adjusted.
+            overrideApplicationDisplayAdjustments(r.token, adjustments ->
+                    adjustments.setFixedRotationAdjustments(r.mPendingFixedRotationAdjustments));
+        }
+
         // Make sure we are running with the most recent config.
         handleConfigurationChanged(null, null);
 
@@ -3588,7 +3643,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             TAG, "Handling launch of " + r);
 
         // Initialize before creating the activity
-        if (!ThreadedRenderer.sRendererDisabled
+        if (ThreadedRenderer.sRendererEnabled
                 && (r.activityInfo.flags & ActivityInfo.FLAG_HARDWARE_ACCELERATED) != 0) {
             HardwareRenderer.preload();
         }
@@ -3665,12 +3720,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handleNewIntent(IBinder token, List<ReferrerIntent> intents) {
-        final ActivityClientRecord r = mActivities.get(token);
-        if (r == null) {
-            return;
-        }
-
+    public void handleNewIntent(ActivityClientRecord r, List<ReferrerIntent> intents) {
         checkAndBlockForNetworkAccess();
         deliverNewIntents(r, intents);
     }
@@ -3859,13 +3909,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handlePictureInPictureRequested(IBinder token) {
-        final ActivityClientRecord r = mActivities.get(token);
-        if (r == null) {
-            Log.w(TAG, "Activity to request PIP to no longer exists");
-            return;
-        }
-
+    public void handlePictureInPictureRequested(ActivityClientRecord r) {
         final boolean receivedByApp = r.activity.onPictureInPictureRequested();
         if (!receivedByApp) {
             // Previous recommendation was for apps to enter picture-in-picture in
@@ -4052,7 +4096,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     private void handleCreateBackupAgent(CreateBackupAgentData data) {
         if (DEBUG_BACKUP) Slog.v(TAG, "handleCreateBackupAgent: " + data);
 
-        // Sanity check the requested target package's uid against ours
+        // Validity check the requested target package's uid against ours
         try {
             PackageInfo requestedPackage = getPackageManager().getPackageInfo(
                     data.appInfo.packageName, 0, UserHandle.myUserId());
@@ -4076,12 +4120,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             return;
         }
 
-        String classname = data.appInfo.backupAgentName;
-        // full backup operation but no app-supplied agent?  use the default implementation
-        if (classname == null && (data.backupMode == ApplicationThreadConstants.BACKUP_MODE_FULL
-                || data.backupMode == ApplicationThreadConstants.BACKUP_MODE_RESTORE_FULL)) {
-            classname = "android.app.backup.FullBackupAgent";
-        }
+        String classname = getBackupAgentName(data);
 
         try {
             IBinder binder = null;
@@ -4105,7 +4144,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     context.setOuterContext(agent);
                     agent.attach(context);
 
-                    agent.onCreate(UserHandle.of(data.userId));
+                    agent.onCreate(UserHandle.of(data.userId), data.operationType);
                     binder = agent.onBind();
                     backupAgents.put(packageName, agent);
                 } catch (Exception e) {
@@ -4131,6 +4170,23 @@ public final class ActivityThread extends ClientTransactionHandler {
             throw new RuntimeException("Unable to create BackupAgent "
                     + classname + ": " + e.toString(), e);
         }
+    }
+
+    private String getBackupAgentName(CreateBackupAgentData data) {
+        String agentName = data.appInfo.backupAgentName;
+        if (!UserHandle.isCore(data.appInfo.uid)
+                && data.operationType == BackupManager.OperationType.MIGRATION) {
+            // If this is a migration, use the default backup agent regardless of the app's
+            // preferences.
+            agentName = DEFAULT_FULL_BACKUP_AGENT;
+        } else {
+            // full backup operation but no app-supplied agent?  use the default implementation
+            if (agentName == null && (data.backupMode == ApplicationThreadConstants.BACKUP_MODE_FULL
+                    || data.backupMode == ApplicationThreadConstants.BACKUP_MODE_RESTORE_FULL)) {
+                agentName = DEFAULT_FULL_BACKUP_AGENT;
+            }
+        }
+        return agentName;
     }
 
     // Tear down a BackupAgent
@@ -4383,22 +4439,21 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     /**
      * Resume the activity.
-     * @param token Target activity token.
+     * @param r Target activity record.
      * @param finalStateRequest Flag indicating if this is part of final state resolution for a
      *                          transaction.
      * @param reason Reason for performing the action.
      *
-     * @return The {@link ActivityClientRecord} that was resumed, {@code null} otherwise.
+     * @return {@code true} that was resumed, {@code false} otherwise.
      */
     @VisibleForTesting
-    public ActivityClientRecord performResumeActivity(IBinder token, boolean finalStateRequest,
+    public boolean performResumeActivity(ActivityClientRecord r, boolean finalStateRequest,
             String reason) {
-        final ActivityClientRecord r = mActivities.get(token);
         if (localLOGV) {
             Slog.v(TAG, "Performing resume of " + r + " finished=" + r.activity.mFinished);
         }
-        if (r == null || r.activity.mFinished) {
-            return null;
+        if (r.activity.mFinished) {
+            return false;
         }
         if (r.getLifecycleState() == ON_RESUME) {
             if (!finalStateRequest) {
@@ -4412,7 +4467,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 // handle two resume requests for the final state. For cases other than this
                 // one, we don't expect it to happen.
             }
-            return null;
+            return false;
         }
         if (finalStateRequest) {
             r.hideForNow = false;
@@ -4443,7 +4498,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                         + r.intent.getComponent().toShortString() + ": " + e.toString(), e);
             }
         }
-        return r;
+        return true;
     }
 
     static final void cleanUpPendingRemoveWindows(ActivityClientRecord r, boolean force) {
@@ -4464,20 +4519,19 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handleResumeActivity(IBinder token, boolean finalStateRequest, boolean isForward,
-            String reason) {
+    public void handleResumeActivity(ActivityClientRecord r, boolean finalStateRequest,
+            boolean isForward, String reason) {
         // If we are getting ready to gc after going to the background, well
         // we are back active so skip it.
         unscheduleGcIdler();
         mSomeActivitiesChanged = true;
 
         // TODO Push resumeArgs into the activity for consideration
-        final ActivityClientRecord r = performResumeActivity(token, finalStateRequest, reason);
-        if (r == null) {
-            // We didn't actually resume the activity, so skipping any follow-up actions.
+        // skip below steps for double-resume and r.mFinish = true case.
+        if (!performResumeActivity(r, finalStateRequest, reason)) {
             return;
         }
-        if (mActivitiesToBeDestroyed.containsKey(token)) {
+        if (mActivitiesToBeDestroyed.containsKey(r.token)) {
             // Although the activity is resumed, it is going to be destroyed. So the following
             // UI operations are unnecessary and also prevents exception because its token may
             // be gone that window manager cannot recognize it. All necessary cleanup actions
@@ -4555,14 +4609,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         // The window is now visible if it has been added, we are not
         // simply finishing, and we are not starting another activity.
         if (!r.activity.mFinished && willBeVisible && r.activity.mDecor != null && !r.hideForNow) {
-            if (r.newConfig != null) {
-                performConfigurationChangedForActivity(r, r.newConfig);
-                if (DEBUG_CONFIGURATION) {
-                    Slog.v(TAG, "Resuming activity " + r.activityInfo.name + " with newConfig "
-                            + r.activity.mCurrentConfig);
-                }
-                r.newConfig = null;
-            }
             if (localLOGV) Slog.v(TAG, "Resuming " + r + " with isForward=" + isForward);
             ViewRootImpl impl = r.window.getDecorView().getViewRootImpl();
             WindowManager.LayoutParams l = impl != null
@@ -4595,13 +4641,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
 
     @Override
-    public void handleTopResumedActivityChanged(IBinder token, boolean onTop, String reason) {
-        ActivityClientRecord r = mActivities.get(token);
-        if (r == null || r.activity == null) {
-            Slog.w(TAG, "Not found target activity to report position change for token: " + token);
-            return;
-        }
-
+    public void handleTopResumedActivityChanged(ActivityClientRecord r, boolean onTop,
+            String reason) {
         if (DEBUG_ORDER) {
             Slog.d(TAG, "Received position change to top: " + onTop + " for activity: " + r);
         }
@@ -4634,23 +4675,20 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handlePauseActivity(IBinder token, boolean finished, boolean userLeaving,
+    public void handlePauseActivity(ActivityClientRecord r, boolean finished, boolean userLeaving,
             int configChanges, PendingTransactionActions pendingActions, String reason) {
-        ActivityClientRecord r = mActivities.get(token);
-        if (r != null) {
-            if (userLeaving) {
-                performUserLeavingActivity(r);
-            }
-
-            r.activity.mConfigChangeFlags |= configChanges;
-            performPauseActivity(r, finished, reason, pendingActions);
-
-            // Make sure any pending writes are now committed.
-            if (r.isPreHoneycomb()) {
-                QueuedWork.waitToFinish();
-            }
-            mSomeActivitiesChanged = true;
+        if (userLeaving) {
+            performUserLeavingActivity(r);
         }
+
+        r.activity.mConfigChangeFlags |= configChanges;
+        performPauseActivity(r, finished, reason, pendingActions);
+
+        // Make sure any pending writes are now committed.
+        if (r.isPreHoneycomb()) {
+            QueuedWork.waitToFinish();
+        }
+        mSomeActivitiesChanged = true;
     }
 
     final void performUserLeavingActivity(ActivityClientRecord r) {
@@ -4747,8 +4785,11 @@ public final class ActivityThread extends ClientTransactionHandler {
         r.setState(ON_PAUSE);
     }
 
+    // TODO(b/127877792): Make LocalActivityManager call performStopActivityInner. We cannot remove
+    // this since it's a high usage hidden API.
     /** Called from {@link LocalActivityManager}. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 127877792,
+            publicAlternatives = "{@code N/A}")
     final void performStopActivity(IBinder token, boolean saveState, String reason) {
         ActivityClientRecord r = mActivities.get(token);
         performStopActivityInner(r, null /* stopInfo */, saveState, false /* finalStateRequest */,
@@ -4789,44 +4830,42 @@ public final class ActivityThread extends ClientTransactionHandler {
     private void performStopActivityInner(ActivityClientRecord r, StopInfo info,
             boolean saveState, boolean finalStateRequest, String reason) {
         if (localLOGV) Slog.v(TAG, "Performing stop of " + r);
-        if (r != null) {
-            if (r.stopped) {
-                if (r.activity.mFinished) {
-                    // If we are finishing, we won't call onResume() in certain
-                    // cases.  So here we likewise don't want to call onStop()
-                    // if the activity isn't resumed.
-                    return;
-                }
-                if (!finalStateRequest) {
-                    final RuntimeException e = new RuntimeException(
-                            "Performing stop of activity that is already stopped: "
-                                    + r.intent.getComponent().toShortString());
-                    Slog.e(TAG, e.getMessage(), e);
-                    Slog.e(TAG, r.getStateString());
-                }
+        if (r.stopped) {
+            if (r.activity.mFinished) {
+                // If we are finishing, we won't call onResume() in certain
+                // cases.  So here we likewise don't want to call onStop()
+                // if the activity isn't resumed.
+                return;
             }
-
-            // One must first be paused before stopped...
-            performPauseActivityIfNeeded(r, reason);
-
-            if (info != null) {
-                try {
-                    // First create a thumbnail for the activity...
-                    // For now, don't create the thumbnail here; we are
-                    // doing that by doing a screen snapshot.
-                    info.setDescription(r.activity.onCreateDescription());
-                } catch (Exception e) {
-                    if (!mInstrumentation.onException(r.activity, e)) {
-                        throw new RuntimeException(
-                                "Unable to save state of activity "
-                                + r.intent.getComponent().toShortString()
-                                + ": " + e.toString(), e);
-                    }
-                }
+            if (!finalStateRequest) {
+                final RuntimeException e = new RuntimeException(
+                        "Performing stop of activity that is already stopped: "
+                                + r.intent.getComponent().toShortString());
+                Slog.e(TAG, e.getMessage(), e);
+                Slog.e(TAG, r.getStateString());
             }
-
-            callActivityOnStop(r, saveState, reason);
         }
+
+        // One must first be paused before stopped...
+        performPauseActivityIfNeeded(r, reason);
+
+        if (info != null) {
+            try {
+                // First create a thumbnail for the activity...
+                // For now, don't create the thumbnail here; we are
+                // doing that by doing a screen snapshot.
+                info.setDescription(r.activity.onCreateDescription());
+            } catch (Exception e) {
+                if (!mInstrumentation.onException(r.activity, e)) {
+                    throw new RuntimeException(
+                            "Unable to save state of activity "
+                            + r.intent.getComponent().toShortString()
+                            + ": " + e.toString(), e);
+                }
+            }
+        }
+
+        callActivityOnStop(r, saveState, reason);
     }
 
     /**
@@ -4875,13 +4914,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                         r.activity.makeVisible();
                     }
                 }
-                if (r.newConfig != null) {
-                    performConfigurationChangedForActivity(r, r.newConfig);
-                    if (DEBUG_CONFIGURATION) Slog.v(TAG, "Updating activity vis "
-                            + r.activityInfo.name + " with new config "
-                            + r.activity.mCurrentConfig);
-                    r.newConfig = null;
-                }
             } else {
                 if (r.activity.mVisibleFromServer) {
                     r.activity.mVisibleFromServer = false;
@@ -4893,9 +4925,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handleStopActivity(IBinder token, int configChanges,
+    public void handleStopActivity(ActivityClientRecord r, int configChanges,
             PendingTransactionActions pendingActions, boolean finalStateRequest, String reason) {
-        final ActivityClientRecord r = mActivities.get(token);
         r.activity.mConfigChangeFlags |= configChanges;
 
         final StopInfo stopInfo = new StopInfo();
@@ -4931,8 +4962,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void performRestartActivity(IBinder token, boolean start) {
-        ActivityClientRecord r = mActivities.get(token);
+    public void performRestartActivity(ActivityClientRecord r, boolean start) {
         if (r.stopped) {
             r.activity.performRestart(start, "performRestartActivity");
             if (start) {
@@ -4969,15 +4999,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     private void relaunchAllActivities(boolean preserveWindows) {
-        for (Map.Entry<IBinder, ActivityClientRecord> entry : mActivities.entrySet()) {
-            final ActivityClientRecord r = entry.getValue();
-            // Schedule relaunch the activity if it is not a local object or finishing.
-            if (!r.activity.mFinished && !(r.token instanceof Binder)) {
-                if (preserveWindows && r.window != null) {
-                    r.mPreserveWindow = true;
-                }
-                scheduleRelaunchActivity(entry.getKey());
-            }
+        for (int i = mActivities.size() - 1; i >= 0; i--) {
+            scheduleRelaunchActivityIfPossible(mActivities.valueAt(i), preserveWindows);
         }
     }
 
@@ -5019,109 +5042,98 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handleSendResult(IBinder token, List<ResultInfo> results, String reason) {
-        ActivityClientRecord r = mActivities.get(token);
+    public void handleSendResult(ActivityClientRecord r, List<ResultInfo> results, String reason) {
         if (DEBUG_RESULTS) Slog.v(TAG, "Handling send result to " + r);
-        if (r != null) {
-            final boolean resumed = !r.paused;
-            if (!r.activity.mFinished && r.activity.mDecor != null
-                    && r.hideForNow && resumed) {
-                // We had hidden the activity because it started another
-                // one...  we have gotten a result back and we are not
-                // paused, so make sure our window is visible.
-                updateVisibility(r, true);
-            }
-            if (resumed) {
-                try {
-                    // Now we are idle.
-                    r.activity.mCalled = false;
-                    mInstrumentation.callActivityOnPause(r.activity);
-                    if (!r.activity.mCalled) {
-                        throw new SuperNotCalledException(
-                            "Activity " + r.intent.getComponent().toShortString()
-                            + " did not call through to super.onPause()");
-                    }
-                } catch (SuperNotCalledException e) {
-                    throw e;
-                } catch (Exception e) {
-                    if (!mInstrumentation.onException(r.activity, e)) {
-                        throw new RuntimeException(
-                                "Unable to pause activity "
-                                + r.intent.getComponent().toShortString()
-                                + ": " + e.toString(), e);
-                    }
-                }
-            }
-            checkAndBlockForNetworkAccess();
-            deliverResults(r, results, reason);
-            if (resumed) {
-                r.activity.performResume(false, reason);
-            }
+        final boolean resumed = !r.paused;
+        if (!r.activity.mFinished && r.activity.mDecor != null
+                && r.hideForNow && resumed) {
+            // We had hidden the activity because it started another
+            // one...  we have gotten a result back and we are not
+            // paused, so make sure our window is visible.
+            updateVisibility(r, true);
         }
-    }
-
-    /** Core implementation of activity destroy call. */
-    ActivityClientRecord performDestroyActivity(IBinder token, boolean finishing,
-            int configChanges, boolean getNonConfigInstance, String reason) {
-        ActivityClientRecord r = mActivities.get(token);
-        Class<? extends Activity> activityClass = null;
-        if (localLOGV) Slog.v(TAG, "Performing finish of " + r);
-        if (r != null) {
-            activityClass = r.activity.getClass();
-            r.activity.mConfigChangeFlags |= configChanges;
-            if (finishing) {
-                r.activity.mFinished = true;
-            }
-
-            performPauseActivityIfNeeded(r, "destroy");
-
-            if (!r.stopped) {
-                callActivityOnStop(r, false /* saveState */, "destroy");
-            }
-            if (getNonConfigInstance) {
-                try {
-                    r.lastNonConfigurationInstances
-                            = r.activity.retainNonConfigurationInstances();
-                } catch (Exception e) {
-                    if (!mInstrumentation.onException(r.activity, e)) {
-                        throw new RuntimeException(
-                                "Unable to retain activity "
-                                + r.intent.getComponent().toShortString()
-                                + ": " + e.toString(), e);
-                    }
-                }
-            }
+        if (resumed) {
             try {
+                // Now we are idle.
                 r.activity.mCalled = false;
-                mInstrumentation.callActivityOnDestroy(r.activity);
+                mInstrumentation.callActivityOnPause(r.activity);
                 if (!r.activity.mCalled) {
                     throw new SuperNotCalledException(
-                        "Activity " + safeToComponentShortString(r.intent) +
-                        " did not call through to super.onDestroy()");
-                }
-                if (r.window != null) {
-                    r.window.closeAllPanels();
+                        "Activity " + r.intent.getComponent().toShortString()
+                        + " did not call through to super.onPause()");
                 }
             } catch (SuperNotCalledException e) {
                 throw e;
             } catch (Exception e) {
                 if (!mInstrumentation.onException(r.activity, e)) {
                     throw new RuntimeException(
-                            "Unable to destroy activity " + safeToComponentShortString(r.intent)
+                            "Unable to pause activity "
+                            + r.intent.getComponent().toShortString()
                             + ": " + e.toString(), e);
                 }
             }
-            r.setState(ON_DESTROY);
         }
+        checkAndBlockForNetworkAccess();
+        deliverResults(r, results, reason);
+        if (resumed) {
+            r.activity.performResume(false, reason);
+        }
+    }
+
+    /** Core implementation of activity destroy call. */
+    void performDestroyActivity(ActivityClientRecord r, boolean finishing,
+            int configChanges, boolean getNonConfigInstance, String reason) {
+        Class<? extends Activity> activityClass = null;
+        if (localLOGV) Slog.v(TAG, "Performing finish of " + r);
+        activityClass = r.activity.getClass();
+        r.activity.mConfigChangeFlags |= configChanges;
+        if (finishing) {
+            r.activity.mFinished = true;
+        }
+
+        performPauseActivityIfNeeded(r, "destroy");
+
+        if (!r.stopped) {
+            callActivityOnStop(r, false /* saveState */, "destroy");
+        }
+        if (getNonConfigInstance) {
+            try {
+                r.lastNonConfigurationInstances = r.activity.retainNonConfigurationInstances();
+            } catch (Exception e) {
+                if (!mInstrumentation.onException(r.activity, e)) {
+                    throw new RuntimeException("Unable to retain activity "
+                            + r.intent.getComponent().toShortString() + ": " + e.toString(), e);
+                }
+            }
+        }
+        try {
+            r.activity.mCalled = false;
+            mInstrumentation.callActivityOnDestroy(r.activity);
+            if (!r.activity.mCalled) {
+                throw new SuperNotCalledException("Activity " + safeToComponentShortString(r.intent)
+                        + " did not call through to super.onDestroy()");
+            }
+            if (r.window != null) {
+                r.window.closeAllPanels();
+            }
+        } catch (SuperNotCalledException e) {
+            throw e;
+        } catch (Exception e) {
+            if (!mInstrumentation.onException(r.activity, e)) {
+                throw new RuntimeException("Unable to destroy activity "
+                        + safeToComponentShortString(r.intent) + ": " + e.toString(), e);
+            }
+        }
+        r.setState(ON_DESTROY);
+        mLastReportedWindowingMode.remove(r.activity.getActivityToken());
         schedulePurgeIdler();
         // updatePendingActivityConfiguration() reads from mActivities to update
         // ActivityClientRecord which runs in a different thread. Protect modifications to
         // mActivities to avoid race.
         synchronized (mResourcesManager) {
-            mActivities.remove(token);
+            mActivities.remove(r.token);
         }
         StrictMode.decrementExpectedActivityCount(activityClass);
-        return r;
     }
 
     private static String safeToComponentShortString(Intent intent) {
@@ -5135,70 +5147,65 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handleDestroyActivity(IBinder token, boolean finishing, int configChanges,
+    public void handleDestroyActivity(ActivityClientRecord r, boolean finishing, int configChanges,
             boolean getNonConfigInstance, String reason) {
-        ActivityClientRecord r = performDestroyActivity(token, finishing,
-                configChanges, getNonConfigInstance, reason);
-        if (r != null) {
-            cleanUpPendingRemoveWindows(r, finishing);
-            WindowManager wm = r.activity.getWindowManager();
-            View v = r.activity.mDecor;
-            if (v != null) {
-                if (r.activity.mVisibleFromServer) {
-                    mNumVisibleActivities--;
-                }
-                IBinder wtoken = v.getWindowToken();
-                if (r.activity.mWindowAdded) {
-                    if (r.mPreserveWindow) {
-                        // Hold off on removing this until the new activity's
-                        // window is being added.
-                        r.mPendingRemoveWindow = r.window;
-                        r.mPendingRemoveWindowManager = wm;
-                        // We can only keep the part of the view hierarchy that we control,
-                        // everything else must be removed, because it might not be able to
-                        // behave properly when activity is relaunching.
-                        r.window.clearContentView();
-                    } else {
-                        wm.removeViewImmediate(v);
-                    }
-                }
-                if (wtoken != null && r.mPendingRemoveWindow == null) {
-                    WindowManagerGlobal.getInstance().closeAll(wtoken,
-                            r.activity.getClass().getName(), "Activity");
-                } else if (r.mPendingRemoveWindow != null) {
-                    // We're preserving only one window, others should be closed so app views
-                    // will be detached before the final tear down. It should be done now because
-                    // some components (e.g. WebView) rely on detach callbacks to perform receiver
-                    // unregister and other cleanup.
-                    WindowManagerGlobal.getInstance().closeAllExceptView(token, v,
-                            r.activity.getClass().getName(), "Activity");
-                }
-                r.activity.mDecor = null;
+        performDestroyActivity(r, finishing, configChanges, getNonConfigInstance, reason);
+        cleanUpPendingRemoveWindows(r, finishing);
+        WindowManager wm = r.activity.getWindowManager();
+        View v = r.activity.mDecor;
+        if (v != null) {
+            if (r.activity.mVisibleFromServer) {
+                mNumVisibleActivities--;
             }
-            if (r.mPendingRemoveWindow == null) {
-                // If we are delaying the removal of the activity window, then
-                // we can't clean up all windows here.  Note that we can't do
-                // so later either, which means any windows that aren't closed
-                // by the app will leak.  Well we try to warning them a lot
-                // about leaking windows, because that is a bug, so if they are
-                // using this recreate facility then they get to live with leaks.
-                WindowManagerGlobal.getInstance().closeAll(token,
+            IBinder wtoken = v.getWindowToken();
+            if (r.activity.mWindowAdded) {
+                if (r.mPreserveWindow) {
+                    // Hold off on removing this until the new activity's window is being added.
+                    r.mPendingRemoveWindow = r.window;
+                    r.mPendingRemoveWindowManager = wm;
+                    // We can only keep the part of the view hierarchy that we control,
+                    // everything else must be removed, because it might not be able to
+                    // behave properly when activity is relaunching.
+                    r.window.clearContentView();
+                } else {
+                    wm.removeViewImmediate(v);
+                }
+            }
+            if (wtoken != null && r.mPendingRemoveWindow == null) {
+                WindowManagerGlobal.getInstance().closeAll(wtoken,
+                        r.activity.getClass().getName(), "Activity");
+            } else if (r.mPendingRemoveWindow != null) {
+                // We're preserving only one window, others should be closed so app views
+                // will be detached before the final tear down. It should be done now because
+                // some components (e.g. WebView) rely on detach callbacks to perform receiver
+                // unregister and other cleanup.
+                WindowManagerGlobal.getInstance().closeAllExceptView(r.token, v,
                         r.activity.getClass().getName(), "Activity");
             }
+            r.activity.mDecor = null;
+        }
+        if (r.mPendingRemoveWindow == null) {
+            // If we are delaying the removal of the activity window, then
+            // we can't clean up all windows here.  Note that we can't do
+            // so later either, which means any windows that aren't closed
+            // by the app will leak.  Well we try to warning them a lot
+            // about leaking windows, because that is a bug, so if they are
+            // using this recreate facility then they get to live with leaks.
+            WindowManagerGlobal.getInstance().closeAll(r.token,
+                    r.activity.getClass().getName(), "Activity");
+        }
 
-            // Mocked out contexts won't be participating in the normal
-            // process lifecycle, but if we're running with a proper
-            // ApplicationContext we need to have it tear down things
-            // cleanly.
-            Context c = r.activity.getBaseContext();
-            if (c instanceof ContextImpl) {
-                ((ContextImpl) c).scheduleFinalCleanup(
-                        r.activity.getClass().getName(), "Activity");
-            }
+        // Mocked out contexts won't be participating in the normal
+        // process lifecycle, but if we're running with a proper
+        // ApplicationContext we need to have it tear down things
+        // cleanly.
+        Context c = r.activity.getBaseContext();
+        if (c instanceof ContextImpl) {
+            ((ContextImpl) c).scheduleFinalCleanup(r.activity.getClass().getName(), "Activity");
         }
         if (finishing) {
             try {
-                ActivityTaskManager.getService().activityDestroyed(token);
+                ActivityTaskManager.getService().activityDestroyed(r.token);
             } catch (RemoteException ex) {
                 throw ex.rethrowFromSystemServer();
             }
@@ -5354,19 +5361,18 @@ public final class ActivityThread extends ClientTransactionHandler {
             throw e.rethrowFromSystemServer();
         }
 
-        // Save the current windowing mode to be restored and compared to the new configuration's
-        // windowing mode (needed because we update the last reported windowing mode when launching
-        // an activity and we can't tell inside performLaunchActivity whether we are relaunching)
-        final int oldWindowingMode = mLastReportedWindowingMode.getOrDefault(
-                r.activity.getActivityToken(), WINDOWING_MODE_UNDEFINED);
         handleRelaunchActivityInner(r, configChanges, tmp.pendingResults, tmp.pendingIntents,
                 pendingActions, tmp.startsNotResumed, tmp.overrideConfig, "handleRelaunchActivity");
-        mLastReportedWindowingMode.put(r.activity.getActivityToken(), oldWindowingMode);
-        handleWindowingModeChangeIfNeeded(r.activity, r.activity.mCurrentConfig);
-
         if (pendingActions != null) {
             // Only report a successful relaunch to WindowManager.
             pendingActions.setReportRelaunchToWindowManager(true);
+        }
+    }
+
+    void scheduleRelaunchActivity(IBinder token) {
+        final ActivityClientRecord r = mActivities.get(token);
+        if (r != null) {
+            scheduleRelaunchActivityIfPossible(r, !r.stopped /* preserveWindow */);
         }
     }
 
@@ -5376,9 +5382,18 @@ public final class ActivityThread extends ClientTransactionHandler {
      * lifecycle changes it was going through before. We need to make sure that we have finished
      * handling current transaction item before relaunching the activity.
      */
-    void scheduleRelaunchActivity(IBinder token) {
-        mH.removeMessages(H.RELAUNCH_ACTIVITY, token);
-        sendMessage(H.RELAUNCH_ACTIVITY, token);
+    private void scheduleRelaunchActivityIfPossible(@NonNull ActivityClientRecord r,
+            boolean preserveWindow) {
+        if (r.activity.mFinished || r.token instanceof Binder) {
+            // Do not schedule relaunch if the activity is finishing or not a local object (e.g.
+            // created by ActivtiyGroup that server side doesn't recognize it).
+            return;
+        }
+        if (preserveWindow && r.window != null) {
+            r.mPreserveWindow = true;
+        }
+        mH.removeMessages(H.RELAUNCH_ACTIVITY, r.token);
+        sendMessage(H.RELAUNCH_ACTIVITY, r.token);
     }
 
     /** Performs the activity relaunch locally vs. requesting from system-server. */
@@ -5391,12 +5406,11 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         final int prevState = r.getLifecycleState();
 
-        if (prevState < ON_RESUME || prevState > ON_STOP) {
-            Log.w(TAG, "Activity state must be in [ON_RESUME..ON_STOP] in order to be relaunched,"
+        if (prevState < ON_START || prevState > ON_STOP) {
+            Log.w(TAG, "Activity state must be in [ON_START..ON_STOP] in order to be relaunched,"
                     + "current state is " + prevState);
             return;
         }
-
 
         // Initialize a relaunch request.
         final MergedConfiguration mergedConfiguration = new MergedConfiguration(
@@ -5429,7 +5443,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             callActivityOnStop(r, true /* saveState */, reason);
         }
 
-        handleDestroyActivity(r.token, false, configChanges, true, reason);
+        handleDestroyActivity(r, false, configChanges, true, reason);
 
         r.activity = null;
         r.window = null;
@@ -5457,12 +5471,10 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void reportRelaunch(IBinder token, PendingTransactionActions pendingActions) {
+    public void reportRelaunch(ActivityClientRecord r, PendingTransactionActions pendingActions) {
         try {
-            ActivityTaskManager.getService().activityRelaunched(token);
-            final ActivityClientRecord r = mActivities.get(token);
-            if (pendingActions.shouldReportRelaunchToWindowManager() && r != null
-                    && r.window != null) {
+            ActivityTaskManager.getService().activityRelaunched(r.token);
+            if (pendingActions.shouldReportRelaunchToWindowManager() && r.window != null) {
                 r.window.reportActivityRelaunched();
             }
         } catch (RemoteException e) {
@@ -5482,8 +5494,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    ArrayList<ComponentCallbacks2> collectComponentCallbacks(
-            boolean allActivities, Configuration newConfig) {
+    ArrayList<ComponentCallbacks2> collectComponentCallbacks(boolean includeActivities) {
         ArrayList<ComponentCallbacks2> callbacks
                 = new ArrayList<ComponentCallbacks2>();
 
@@ -5492,29 +5503,11 @@ public final class ActivityThread extends ClientTransactionHandler {
             for (int i=0; i<NAPP; i++) {
                 callbacks.add(mAllApplications.get(i));
             }
-            final int NACT = mActivities.size();
-            for (int i=0; i<NACT; i++) {
-                ActivityClientRecord ar = mActivities.valueAt(i);
-                Activity a = ar.activity;
-                if (a != null) {
-                    Configuration thisConfig = applyConfigCompatMainThread(
-                            mCurDefaultDisplayDpi, newConfig,
-                            ar.packageInfo.getCompatibilityInfo());
-                    if (!ar.activity.mFinished && (allActivities || !ar.paused)) {
-                        // If the activity is currently resumed, its configuration
-                        // needs to change right now.
+            if (includeActivities) {
+                for (int i = mActivities.size() - 1; i >= 0; i--) {
+                    final Activity a = mActivities.valueAt(i).activity;
+                    if (a != null && !a.mFinished) {
                         callbacks.add(a);
-                    } else if (thisConfig != null) {
-                        // Otherwise, we will tell it about the change
-                        // the next time it is resumed or shown.  Note that
-                        // the activity manager may, before then, decide the
-                        // activity needs to be destroyed to handle its new
-                        // configuration.
-                        if (DEBUG_CONFIGURATION) {
-                            Slog.v(TAG, "Setting activity "
-                                    + ar.activityInfo.name + " newConfig=" + thisConfig);
-                        }
-                        ar.newConfig = thisConfig;
                     }
                 }
             }
@@ -5535,17 +5528,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         return callbacks;
-    }
-
-    /**
-     * Updates the configuration for an Activity in its current display.
-     *
-     * @see #performConfigurationChangedForActivity(ActivityClientRecord, Configuration, int,
-     *      boolean)
-     */
-    private void performConfigurationChangedForActivity(ActivityClientRecord r,
-            Configuration newBaseConfig) {
-        performConfigurationChangedForActivity(r, newBaseConfig, r.activity.getDisplayId());
     }
 
     /**
@@ -5621,16 +5603,11 @@ public final class ActivityThread extends ClientTransactionHandler {
      */
     private Configuration performActivityConfigurationChanged(Activity activity,
             Configuration newConfig, Configuration amOverrideConfig, int displayId) {
-        if (activity == null) {
-            throw new IllegalArgumentException("No activity provided.");
-        }
         final IBinder activityToken = activity.getActivityToken();
-        if (activityToken == null) {
-            throw new IllegalArgumentException("Activity token not set. Is the activity attached?");
-        }
 
-        // multi-window / pip mode changes, if any, should be sent before the configuration change
-        // callback, see also PinnedStackTests#testConfigurationChangeOrderDuringTransition
+        // WindowConfiguration differences aren't considered as public, check it separately.
+        // multi-window / pip mode changes, if any, should be sent before the configuration
+        // change callback, see also PinnedStackTests#testConfigurationChangeOrderDuringTransition
         handleWindowingModeChangeIfNeeded(activity, newConfig);
 
         final boolean movedToDifferentDisplay = isDifferentDisplay(activity, displayId);
@@ -5669,8 +5646,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         // many places.
         final Configuration finalOverrideConfig = createNewConfigAndUpdateIfNotNull(
                 amOverrideConfig, contextThemeWrapperOverrideConfig);
-        mResourcesManager.updateResourcesForActivity(activityToken, finalOverrideConfig,
-                displayId, movedToDifferentDisplay);
+        mResourcesManager.updateResourcesForActivity(activityToken, finalOverrideConfig, displayId);
 
         activity.mConfigChangeFlags = 0;
         activity.mCurrentConfig = new Configuration(newConfig);
@@ -5718,6 +5694,12 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     @Override
     public void handleConfigurationChanged(Configuration config) {
+        if (isCachedProcessState()) {
+            updatePendingConfiguration(config);
+            // If the process is in a cached state, delay the handling until the process is no
+            // longer cached.
+            return;
+        }
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "configChanged");
         mCurDefaultDisplayDpi = config.densityDpi;
         handleConfigurationChanged(config, null /* compat */);
@@ -5760,7 +5742,15 @@ public final class ActivityThread extends ClientTransactionHandler {
             if (DEBUG_CONFIGURATION) Slog.v(TAG, "Handle configuration changed: "
                     + config);
 
-            mResourcesManager.applyConfigurationToResourcesLocked(config, compat);
+            final Resources appResources = mInitialApplication.getResources();
+            if (appResources.hasOverrideDisplayAdjustments()) {
+                // The value of Display#getRealSize will be adjusted by FixedRotationAdjustments,
+                // but Display#getSize refers to DisplayAdjustments#mConfiguration. So the rotated
+                // configuration also needs to set to the adjustments for consistency.
+                appResources.getDisplayAdjustments().getConfiguration().updateFrom(config);
+            }
+            mResourcesManager.applyConfigurationToResourcesLocked(config, compat,
+                    appResources.getDisplayAdjustments());
             updateLocaleListFromAppContext(mInitialApplication.getApplicationContext(),
                     mResourcesManager.getConfiguration().getLocales());
 
@@ -5790,7 +5780,8 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
         }
 
-        ArrayList<ComponentCallbacks2> callbacks = collectComponentCallbacks(false, config);
+        final ArrayList<ComponentCallbacks2> callbacks =
+                collectComponentCallbacks(false /* includeActivities */);
 
         freeTextLayoutCachesIfNeeded(configDiff);
 
@@ -5798,13 +5789,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             final int N = callbacks.size();
             for (int i=0; i<N; i++) {
                 ComponentCallbacks2 cb = callbacks.get(i);
-                if (cb instanceof Activity) {
-                    // If callback is an Activity - call corresponding method to consider override
-                    // config and avoid onConfigurationChanged if it hasn't changed.
-                    Activity a = (Activity) cb;
-                    performConfigurationChangedForActivity(mActivities.get(a.getActivityToken()),
-                            config);
-                } else if (!equivalent) {
+                if (!equivalent) {
                     performConfigurationChanged(cb, config);
                 } else {
                     // TODO (b/135719017): Temporary log for debugging IME service.
@@ -5926,20 +5911,8 @@ public final class ActivityThread extends ClientTransactionHandler {
      * processing any configurations older than {@code overrideConfig}.
      */
     @Override
-    public void updatePendingActivityConfiguration(IBinder activityToken,
+    public void updatePendingActivityConfiguration(ActivityClientRecord r,
             Configuration overrideConfig) {
-        final ActivityClientRecord r;
-        synchronized (mResourcesManager) {
-            r = mActivities.get(activityToken);
-        }
-
-        if (r == null) {
-            if (DEBUG_CONFIGURATION) {
-                Slog.w(TAG, "Not found target activity to update its pending config.");
-            }
-            return;
-        }
-
         synchronized (r) {
             if (r.mPendingOverrideConfig != null
                     && !r.mPendingOverrideConfig.isOtherSeqNewer(overrideConfig)) {
@@ -5959,21 +5932,14 @@ public final class ActivityThread extends ClientTransactionHandler {
      * if {@link #updatePendingActivityConfiguration(IBinder, Configuration)} has been called with
      * a newer config than {@code overrideConfig}.
      *
-     * @param activityToken Target activity token.
+     * @param r Target activity record.
      * @param overrideConfig Activity override config.
      * @param displayId Id of the display where activity was moved to, -1 if there was no move and
      *                  value didn't change.
      */
     @Override
-    public void handleActivityConfigurationChanged(IBinder activityToken,
+    public void handleActivityConfigurationChanged(ActivityClientRecord r,
             @NonNull Configuration overrideConfig, int displayId) {
-        ActivityClientRecord r = mActivities.get(activityToken);
-        // Check input params.
-        if (r == null || r.activity == null) {
-            if (DEBUG_CONFIGURATION) Slog.w(TAG, "Not found target activity to report to: " + r);
-            return;
-        }
-
         synchronized (r) {
             if (overrideConfig.isOtherSeqNewer(r.mPendingOverrideConfig)) {
                 if (DEBUG_CONFIGURATION) {
@@ -5986,6 +5952,11 @@ public final class ActivityThread extends ClientTransactionHandler {
             r.mPendingOverrideConfig = null;
         }
 
+        if (displayId == INVALID_DISPLAY) {
+            // If INVALID_DISPLAY is passed assume that the activity should keep its current
+            // display.
+            displayId = r.activity.getDisplayId();
+        }
         final boolean movedToDifferentDisplay = isDifferentDisplay(r.activity, displayId);
         if (r.overrideConfig != null && !r.overrideConfig.isOtherSeqNewer(overrideConfig)
                 && !movedToDifferentDisplay) {
@@ -6206,7 +6177,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     final void handleLowMemory() {
-        ArrayList<ComponentCallbacks2> callbacks = collectComponentCallbacks(true, null);
+        final ArrayList<ComponentCallbacks2> callbacks =
+                collectComponentCallbacks(true /* includeActivities */);
 
         final int N = callbacks.size();
         for (int i=0; i<N; i++) {
@@ -6238,7 +6210,8 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
         }
 
-        ArrayList<ComponentCallbacks2> callbacks = collectComponentCallbacks(true, null);
+        final ArrayList<ComponentCallbacks2> callbacks =
+                collectComponentCallbacks(true /* includeActivities */);
 
         final int N = callbacks.size();
         for (int i = 0; i < N; i++) {
@@ -6375,6 +6348,9 @@ public final class ActivityThread extends ClientTransactionHandler {
         Process.setStartTimes(SystemClock.elapsedRealtime(), SystemClock.uptimeMillis());
 
         AppCompatCallbacks.install(data.disabledCompatChanges);
+        // Let libcore handle any compat changes after installing the list of compat changes.
+        AppSpecializationHooks.handleCompatChangesBeforeBindingApplication();
+
         mBoundApplication = data;
         mConfiguration = new Configuration(data.config);
         mCompatConfiguration = new Configuration(data.config);
@@ -6560,32 +6536,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         // setting up the app context.
         final InstrumentationInfo ii;
         if (data.instrumentationName != null) {
-            try {
-                ii = new ApplicationPackageManager(
-                        null, getPackageManager(), getPermissionManager())
-                        .getInstrumentationInfo(data.instrumentationName, 0);
-            } catch (PackageManager.NameNotFoundException e) {
-                throw new RuntimeException(
-                        "Unable to find instrumentation info for: " + data.instrumentationName);
-            }
-
-            // Warn of potential ABI mismatches.
-            if (!Objects.equals(data.appInfo.primaryCpuAbi, ii.primaryCpuAbi)
-                    || !Objects.equals(data.appInfo.secondaryCpuAbi, ii.secondaryCpuAbi)) {
-                Slog.w(TAG, "Package uses different ABI(s) than its instrumentation: "
-                        + "package[" + data.appInfo.packageName + "]: "
-                        + data.appInfo.primaryCpuAbi + ", " + data.appInfo.secondaryCpuAbi
-                        + " instrumentation[" + ii.packageName + "]: "
-                        + ii.primaryCpuAbi + ", " + ii.secondaryCpuAbi);
-            }
-
-            mInstrumentationPackageName = ii.packageName;
-            mInstrumentationAppDir = ii.sourceDir;
-            mInstrumentationSplitAppDirs = ii.splitSourceDirs;
-            mInstrumentationLibDir = getInstrumentationLibrary(data.appInfo, ii);
-            mInstrumentedAppDir = data.info.getAppDir();
-            mInstrumentedSplitAppDirs = data.info.getSplitAppDirs();
-            mInstrumentedLibDir = data.info.getLibDir();
+            ii = prepareInstrumentation(data);
         } else {
             ii = null;
         }
@@ -6623,48 +6574,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         // Continue loading instrumentation.
         if (ii != null) {
-            ApplicationInfo instrApp;
-            try {
-                instrApp = getPackageManager().getApplicationInfo(ii.packageName, 0,
-                        UserHandle.myUserId());
-            } catch (RemoteException e) {
-                instrApp = null;
-            }
-            if (instrApp == null) {
-                instrApp = new ApplicationInfo();
-            }
-            ii.copyTo(instrApp);
-            instrApp.initForUser(UserHandle.myUserId());
-            final LoadedApk pi = getPackageInfo(instrApp, data.compatInfo,
-                    appContext.getClassLoader(), false, true, false);
-
-            // The test context's op package name == the target app's op package name, because
-            // the app ops manager checks the op package name against the real calling UID,
-            // which is what the target package name is associated with.
-            final ContextImpl instrContext = ContextImpl.createAppContext(this, pi,
-                    appContext.getOpPackageName());
-
-            try {
-                final ClassLoader cl = instrContext.getClassLoader();
-                mInstrumentation = (Instrumentation)
-                    cl.loadClass(data.instrumentationName.getClassName()).newInstance();
-            } catch (Exception e) {
-                throw new RuntimeException(
-                    "Unable to instantiate instrumentation "
-                    + data.instrumentationName + ": " + e.toString(), e);
-            }
-
-            final ComponentName component = new ComponentName(ii.packageName, ii.name);
-            mInstrumentation.init(this, instrContext, appContext, component,
-                    data.instrumentationWatcher, data.instrumentationUiAutomationConnection);
-
-            if (mProfiler.profileFile != null && !ii.handleProfiling
-                    && mProfiler.profileFd == null) {
-                mProfiler.handlingProfiling = true;
-                final File file = new File(mProfiler.profileFile);
-                file.getParentFile().mkdirs();
-                Debug.startMethodTracing(file.toString(), 8 * 1024 * 1024);
-            }
+            initInstrumentation(ii, data, appContext);
         } else {
             mInstrumentation = new Instrumentation();
             mInstrumentation.basicInit(this);
@@ -6777,6 +6687,120 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
+    private void handleInstrumentWithoutRestart(AppBindData data) {
+        try {
+            data.compatInfo = CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO;
+            data.info = getPackageInfoNoCheck(data.appInfo, data.compatInfo);
+            mInstrumentingWithoutRestart = true;
+            final InstrumentationInfo ii = prepareInstrumentation(data);
+            final ContextImpl appContext =
+                    ContextImpl.createAppContext(this, data.info);
+
+            initInstrumentation(ii, data, appContext);
+
+            try {
+                mInstrumentation.onCreate(data.instrumentationArgs);
+            } catch (Exception e) {
+                throw new RuntimeException(
+                        "Exception thrown in onCreate() of "
+                                + data.instrumentationName + ": " + e.toString(), e);
+            }
+
+        } catch (Exception e) {
+            Slog.e(TAG, "Error in handleInstrumentWithoutRestart", e);
+        }
+    }
+
+    private InstrumentationInfo prepareInstrumentation(AppBindData data) {
+        final InstrumentationInfo ii;
+        try {
+            ii = new ApplicationPackageManager(
+                    null, getPackageManager(), getPermissionManager())
+                    .getInstrumentationInfo(data.instrumentationName, 0);
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new RuntimeException(
+                    "Unable to find instrumentation info for: " + data.instrumentationName);
+        }
+
+        // Warn of potential ABI mismatches.
+        if (!Objects.equals(data.appInfo.primaryCpuAbi, ii.primaryCpuAbi)
+                || !Objects.equals(data.appInfo.secondaryCpuAbi, ii.secondaryCpuAbi)) {
+            Slog.w(TAG, "Package uses different ABI(s) than its instrumentation: "
+                    + "package[" + data.appInfo.packageName + "]: "
+                    + data.appInfo.primaryCpuAbi + ", " + data.appInfo.secondaryCpuAbi
+                    + " instrumentation[" + ii.packageName + "]: "
+                    + ii.primaryCpuAbi + ", " + ii.secondaryCpuAbi);
+        }
+
+        mInstrumentationPackageName = ii.packageName;
+        mInstrumentationAppDir = ii.sourceDir;
+        mInstrumentationSplitAppDirs = ii.splitSourceDirs;
+        mInstrumentationLibDir = getInstrumentationLibrary(data.appInfo, ii);
+        mInstrumentedAppDir = data.info.getAppDir();
+        mInstrumentedSplitAppDirs = data.info.getSplitAppDirs();
+        mInstrumentedLibDir = data.info.getLibDir();
+
+        return ii;
+    }
+
+    private void initInstrumentation(
+            InstrumentationInfo ii, AppBindData data, ContextImpl appContext) {
+        ApplicationInfo instrApp;
+        try {
+            instrApp = getPackageManager().getApplicationInfo(ii.packageName, 0,
+                    UserHandle.myUserId());
+        } catch (RemoteException e) {
+            instrApp = null;
+        }
+        if (instrApp == null) {
+            instrApp = new ApplicationInfo();
+        }
+        ii.copyTo(instrApp);
+        instrApp.initForUser(UserHandle.myUserId());
+        final LoadedApk pi = getPackageInfo(instrApp, data.compatInfo,
+                appContext.getClassLoader(), false, true, false);
+
+        // The test context's op package name == the target app's op package name, because
+        // the app ops manager checks the op package name against the real calling UID,
+        // which is what the target package name is associated with.
+        final ContextImpl instrContext = ContextImpl.createAppContext(this, pi,
+                appContext.getOpPackageName());
+
+        try {
+            final ClassLoader cl = instrContext.getClassLoader();
+            mInstrumentation = (Instrumentation)
+                    cl.loadClass(data.instrumentationName.getClassName()).newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Unable to instantiate instrumentation "
+                            + data.instrumentationName + ": " + e.toString(), e);
+        }
+
+        final ComponentName component = new ComponentName(ii.packageName, ii.name);
+        mInstrumentation.init(this, instrContext, appContext, component,
+                data.instrumentationWatcher, data.instrumentationUiAutomationConnection);
+
+        if (mProfiler.profileFile != null && !ii.handleProfiling
+                && mProfiler.profileFd == null) {
+            mProfiler.handlingProfiling = true;
+            final File file = new File(mProfiler.profileFile);
+            file.getParentFile().mkdirs();
+            Debug.startMethodTracing(file.toString(), 8 * 1024 * 1024);
+        }
+    }
+
+    private void handleFinishInstrumentationWithoutRestart() {
+        mInstrumentation.onDestroy();
+        mInstrumentationPackageName = null;
+        mInstrumentationAppDir = null;
+        mInstrumentationSplitAppDirs = null;
+        mInstrumentationLibDir = null;
+        mInstrumentedAppDir = null;
+        mInstrumentedSplitAppDirs = null;
+        mInstrumentedLibDir = null;
+        mInstrumentingWithoutRestart = false;
+    }
+
     /*package*/ final void finishInstrumentation(int resultCode, Bundle results) {
         IActivityManager am = ActivityManager.getService();
         if (mProfiler.profileFile != null && mProfiler.handlingProfiling
@@ -6789,6 +6813,9 @@ public final class ActivityThread extends ClientTransactionHandler {
             am.finishInstrumentation(mAppThread, resultCode, results);
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
+        }
+        if (mInstrumentingWithoutRestart) {
+            sendMessage(H.FINISH_INSTRUMENTATION_WITHOUT_RESTART, null);
         }
     }
 
@@ -6837,13 +6864,33 @@ public final class ActivityThread extends ClientTransactionHandler {
         // provider since it might take a long time to run and it could also potentially
         // be re-entrant in the case where the provider is in the same process.
         ContentProviderHolder holder = null;
+        final ProviderKey key = getGetProviderKey(auth, userId);
         try {
-            synchronized (getGetProviderLock(auth, userId)) {
+            synchronized (key) {
                 holder = ActivityManager.getService().getContentProvider(
                         getApplicationThread(), c.getOpPackageName(), auth, userId, stable);
+                // If the returned holder is non-null but its provider is null and it's not
+                // local, we'll need to wait for the publishing of the provider.
+                if (holder != null && holder.provider == null && !holder.mLocal) {
+                    synchronized (key.mLock) {
+                        key.mLock.wait(ContentResolver.CONTENT_PROVIDER_READY_TIMEOUT_MILLIS);
+                        holder = key.mHolder;
+                    }
+                    if (holder != null && holder.provider == null) {
+                        // probably timed out
+                        holder = null;
+                    }
+                }
             }
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
+        } catch (InterruptedException e) {
+            holder = null;
+        } finally {
+            // Clear the holder from the key since the key itself is never cleared.
+            synchronized (key.mLock) {
+                key.mHolder = null;
+            }
         }
         if (holder == null) {
             if (UserManager.get(c).isUserUnlocked(userId)) {
@@ -6861,13 +6908,13 @@ public final class ActivityThread extends ClientTransactionHandler {
         return holder.provider;
     }
 
-    private Object getGetProviderLock(String auth, int userId) {
-        final ProviderKey key = new ProviderKey(auth, userId);
-        synchronized (mGetProviderLocks) {
-            Object lock = mGetProviderLocks.get(key);
+    private ProviderKey getGetProviderKey(String auth, int userId) {
+        final int key = ProviderKey.hashCode(auth, userId);
+        synchronized (mGetProviderKeys) {
+            ProviderKey lock = mGetProviderKeys.get(key);
             if (lock == null) {
-                lock = key;
-                mGetProviderLocks.put(key, lock);
+                lock = new ProviderKey(auth, userId);
+                mGetProviderKeys.put(key, lock);
             }
             return lock;
         }
@@ -7418,7 +7465,8 @@ public final class ActivityThread extends ClientTransactionHandler {
                 // We need to apply this change to the resources immediately, because upon returning
                 // the view hierarchy will be informed about it.
                 if (mResourcesManager.applyConfigurationToResourcesLocked(globalConfig,
-                        null /* compat */)) {
+                        null /* compat */,
+                        mInitialApplication.getResources().getDisplayAdjustments())) {
                     updateLocaleListFromAppContext(mInitialApplication.getApplicationContext(),
                             mResourcesManager.getConfiguration().getLocales());
 
@@ -7436,14 +7484,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     @UnsupportedAppUsage
     public static ActivityThread systemMain() {
-        // The system process on low-memory devices do not get to use hardware
-        // accelerated drawing, since this can add too much overhead to the
-        // process.
-        if (!ActivityManager.isHighEndGfx()) {
-            ThreadedRenderer.disable(true);
-        } else {
-            ThreadedRenderer.enableForegroundTrimming();
-        }
+        ThreadedRenderer.initForSystemProcess();
         ActivityThread thread = new ActivityThread();
         thread.attach(true, 0);
         return thread;

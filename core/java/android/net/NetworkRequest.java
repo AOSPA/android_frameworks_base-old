@@ -43,7 +43,7 @@ public class NetworkRequest implements Parcelable {
      * The {@link NetworkCapabilities} that define this request.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public final @NonNull NetworkCapabilities networkCapabilities;
 
     /**
@@ -52,7 +52,7 @@ public class NetworkRequest implements Parcelable {
      * the request.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public final int requestId;
 
     /**
@@ -553,7 +553,7 @@ public class NetworkRequest implements Parcelable {
         proto.end(token);
     }
 
-    public boolean equals(Object obj) {
+    public boolean equals(@Nullable Object obj) {
         if (obj instanceof NetworkRequest == false) return false;
         NetworkRequest that = (NetworkRequest)obj;
         return (that.legacyType == this.legacyType &&

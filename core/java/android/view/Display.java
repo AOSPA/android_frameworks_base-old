@@ -26,6 +26,7 @@ import android.annotation.SuppressLint;
 import android.annotation.TestApi;
 import android.app.KeyguardManager;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.Context;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -261,6 +262,15 @@ public final class Display {
     public static final int FLAG_TRUSTED = 1 << 7;
 
     /**
+     * Flag: Indicates that the display should not be a part of the default DisplayGroup and
+     * instead be part of a new DisplayGroup.
+     *
+     * @hide
+     * @see #getFlags()
+     */
+    public static final int FLAG_OWN_DISPLAY_GROUP = 1 << 8;
+
+    /**
      * Display flag: Indicates that the contents of the display should not be scaled
      * to fit the physical screen dimensions.  Used for development only to emulate
      * devices with smaller physicals screens while preserving density.
@@ -288,7 +298,7 @@ public final class Display {
      * Display type: Physical display connected through an external port.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final int TYPE_EXTERNAL = 2;
 
@@ -1157,9 +1167,19 @@ public final class Display {
      * </p><p>
      * The real size may be smaller than the physical size of the screen when the
      * window manager is emulating a smaller display (using adb shell wm size).
-     * </p>
+     * </p><p>
+     * In general, {@link #getRealSize(Point)} and {@link WindowManager#getMaximumWindowMetrics()}
+     * report the same bounds except that certain areas of the display may not be available to
+     * windows created in the {@link WindowManager}'s {@link Context}.
+     *
+     * For example, imagine a device which has a multi-task mode that limits windows to half of the
+     * screen. In this case, {@link WindowManager#getMaximumWindowMetrics()} reports the
+     * bounds of the screen half where the window is located, while {@link #getRealSize(Point)}
+     * still reports the bounds of the whole display.
      *
      * @param outSize Set to the real size of the display.
+     *
+     * @see WindowManager#getMaximumWindowMetrics()
      */
     public void getRealSize(Point outSize) {
         synchronized (this) {
@@ -1385,16 +1405,29 @@ public final class Display {
         private final int mWidth;
         private final int mHeight;
         private final float mRefreshRate;
+        @NonNull
+        private final float[] mAlternativeRefreshRates;
 
         /**
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public Mode(int modeId, int width, int height, float refreshRate) {
+            this(modeId, width, height, refreshRate, new float[0]);
+        }
+
+        /**
+         * @hide
+         */
+        public Mode(int modeId, int width, int height, float refreshRate,
+                float[] alternativeRefreshRates) {
             mModeId = modeId;
             mWidth = width;
             mHeight = height;
             mRefreshRate = refreshRate;
+            mAlternativeRefreshRates =
+                    Arrays.copyOf(alternativeRefreshRates, alternativeRefreshRates.length);
+            Arrays.sort(mAlternativeRefreshRates);
         }
 
         /**
@@ -1444,6 +1477,28 @@ public final class Display {
         }
 
         /**
+         * Returns an array of refresh rates which can be switched to seamlessly.
+         * <p>
+         * A seamless switch is one without visual interruptions, such as a black screen for
+         * a second or two.
+         * <p>
+         * Presence in this list does not guarantee a switch will occur to the desired
+         * refresh rate, but rather, if a switch does occur to a refresh rate in this list,
+         * it is guaranteed to be seamless.
+         * <p>
+         * The binary relation "refresh rate X is alternative to Y" is non-reflexive,
+         * symmetric and transitive. For example the mode 1920x1080 60Hz, will never have an
+         * alternative refresh rate of 60Hz. If 1920x1080 60Hz has an alternative of 50Hz
+         * then 1920x1080 50Hz will have alternative refresh rate of 60Hz. If 1920x1080 60Hz
+         * has an alternative of 50Hz and 1920x1080 50Hz has an alternative of 24Hz, then 1920x1080
+         * 60Hz will also have an alternative of 24Hz.
+         */
+        @NonNull
+        public float[] getAlternativeRefreshRates() {
+            return mAlternativeRefreshRates;
+        }
+
+        /**
          * Returns {@code true} if this mode matches the given parameters.
          *
          * @hide
@@ -1455,7 +1510,7 @@ public final class Display {
         }
 
         @Override
-        public boolean equals(Object other) {
+        public boolean equals(@Nullable Object other) {
             if (this == other) {
                 return true;
             }
@@ -1463,7 +1518,8 @@ public final class Display {
                 return false;
             }
             Mode that = (Mode) other;
-            return mModeId == that.mModeId && matches(that.mWidth, that.mHeight, that.mRefreshRate);
+            return mModeId == that.mModeId && matches(that.mWidth, that.mHeight, that.mRefreshRate)
+                    && Arrays.equals(mAlternativeRefreshRates, that.mAlternativeRefreshRates);
         }
 
         @Override
@@ -1473,6 +1529,7 @@ public final class Display {
             hash = hash * 17 + mWidth;
             hash = hash * 17 + mHeight;
             hash = hash * 17 + Float.floatToIntBits(mRefreshRate);
+            hash = hash * 17 + Arrays.hashCode(mAlternativeRefreshRates);
             return hash;
         }
 
@@ -1483,6 +1540,8 @@ public final class Display {
                     .append(", width=").append(mWidth)
                     .append(", height=").append(mHeight)
                     .append(", fps=").append(mRefreshRate)
+                    .append(", alternativeRefreshRates=")
+                    .append(Arrays.toString(mAlternativeRefreshRates))
                     .append("}")
                     .toString();
         }
@@ -1493,7 +1552,7 @@ public final class Display {
         }
 
         private Mode(Parcel in) {
-            this(in.readInt(), in.readInt(), in.readInt(), in.readFloat());
+            this(in.readInt(), in.readInt(), in.readInt(), in.readFloat(), in.createFloatArray());
         }
 
         @Override
@@ -1502,6 +1561,7 @@ public final class Display {
             out.writeInt(mWidth);
             out.writeInt(mHeight);
             out.writeFloat(mRefreshRate);
+            out.writeFloatArray(mAlternativeRefreshRates);
         }
 
         @SuppressWarnings("hiding")
@@ -1572,7 +1632,7 @@ public final class Display {
         /**
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public HdrCapabilities(int[] supportedHdrTypes, float maxLuminance,
                 float maxAverageLuminance, float minLuminance) {
             mSupportedHdrTypes = supportedHdrTypes;
@@ -1609,7 +1669,7 @@ public final class Display {
         }
 
         @Override
-        public boolean equals(Object other) {
+        public boolean equals(@Nullable Object other) {
             if (this == other) {
                 return true;
             }

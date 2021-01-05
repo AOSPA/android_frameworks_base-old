@@ -327,7 +327,7 @@ public final class StorageVolume implements Parcelable {
      * parse or UUID is unknown.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int getFatVolumeId() {
         if (mFsUuid == null || mFsUuid.length() != 9) {
             return -1;
@@ -435,7 +435,7 @@ public final class StorageVolume implements Parcelable {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(@Nullable Object obj) {
         if (obj instanceof StorageVolume && mPath != null) {
             StorageVolume volume = (StorageVolume)obj;
             return (mPath.equals(volume.mPath));

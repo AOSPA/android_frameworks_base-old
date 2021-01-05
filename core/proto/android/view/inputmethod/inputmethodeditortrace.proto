@@ -22,10 +22,12 @@ package android.view.inputmethod;
 import "frameworks/base/core/proto/android/view/inputmethod/inputmethodmanager.proto";
 import "frameworks/base/core/proto/android/view/viewrootimpl.proto";
 import "frameworks/base/core/proto/android/view/insetscontroller.proto";
-import "frameworks/base/core/proto/android/view/insetssourceconsumer.proto";
 import "frameworks/base/core/proto/android/view/imeinsetssourceconsumer.proto";
 import "frameworks/base/core/proto/android/view/inputmethod/editorinfo.proto";
 import "frameworks/base/core/proto/android/view/imefocuscontroller.proto";
+
+import "frameworks/base/core/proto/android/server/inputmethod/inputmethodmanagerservice.proto";
+import "frameworks/base/core/proto/android/inputmethodservice/inputmethodservice.proto";
 
 /**
  * Represents a file full of input method editor trace entries.
@@ -54,14 +56,21 @@ message InputMethodEditorProto {
 
     /* required: elapsed realtime in nanos since boot of when this entry was logged */
     optional fixed64 elapsed_realtime_nanos = 1;
-    optional ClientSideProto client_side_dump = 2;
+    optional ClientsProto clients = 2;
+    optional .android.inputmethodservice.InputMethodServiceProto input_method_service = 3;
+    optional .android.server.inputmethod.InputMethodManagerServiceProto input_method_manager_service = 4;
+
+    // this wrapper helps to simplify the dumping logic
+    message ClientsProto {
+        repeated ClientSideProto client = 1;
+    }
 
     /* groups together the dump from ime related client side classes */
     message ClientSideProto {
-        optional InputMethodManagerProto input_method_manager = 1;
-        optional ViewRootImplProto view_root_impl = 2;
-        optional InsetsControllerProto insets_controller = 3;
-        optional InsetsSourceConsumerProto insets_source_consumer = 4;
+        optional int32 display_id = 1;
+        optional InputMethodManagerProto input_method_manager = 2;
+        optional ViewRootImplProto view_root_impl = 3;
+        optional InsetsControllerProto insets_controller = 4;
         optional ImeInsetsSourceConsumerProto ime_insets_source_consumer = 5;
         optional EditorInfoProto editor_info = 6;
         optional ImeFocusControllerProto ime_focus_controller = 7;

@@ -43,7 +43,6 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.UserInfo;
 import android.content.pm.UserInfo.UserInfoFlag;
-import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -68,7 +67,7 @@ import java.util.Set;
 
 /**
  * Manages users and user details on a multi-user system. There are two major categories of
- * users: fully customizable users with their own login, and managed profiles that share a workspace
+ * users: fully customizable users with their own login, and profiles that share a workspace
  * with a related user.
  * <p>
  * Users are different from accounts, which are managed by
@@ -831,7 +830,7 @@ public class UserManager {
     public static final String DISALLOW_UNMUTE_MICROPHONE = "no_unmute_microphone";
 
     /**
-     * Specifies if a user is disallowed from adjusting the master volume. If set, the master volume
+     * Specifies if a user is disallowed from adjusting the global volume. If set, the global volume
      * will be muted. This can be set by device owners from API 21 and profile owners from API 24.
      * The default value is <code>false</code>.
      *
@@ -1021,7 +1020,7 @@ public class UserManager {
      * @see #getUserRestrictions()
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final String DISALLOW_RECORD_AUDIO = "no_record_audio";
 
     /**
@@ -1057,7 +1056,7 @@ public class UserManager {
     public static final String DISALLOW_CAMERA = "no_camera";
 
     /**
-     * Specifies if a user is not allowed to unmute the device's master volume.
+     * Specifies if a user is not allowed to unmute the device's global volume.
      *
      * @see DevicePolicyManager#setMasterVolumeMuted(ComponentName, boolean)
      * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
@@ -1294,7 +1293,7 @@ public class UserManager {
      * in {@link UserManager} & {@link DevicePolicyManager}.
      * Note: This is slightly different from the real set of user restrictions listed in {@link
      * com.android.server.pm.UserRestrictionsUtils#USER_RESTRICTIONS}. For example
-     * {@link #KEY_RESTRICTIONS_PENDING} is not a real user restriction, but is a a legitimate
+     * {@link #KEY_RESTRICTIONS_PENDING} is not a real user restriction, but is a legitimate
      * value that can be passed into {@link #hasUserRestriction(String)}.
      * @hide
      */
@@ -1408,8 +1407,7 @@ public class UserManager {
      *
      * @hide
      */
-    @SystemApi
-    @TestApi // To allow seeing it from CTS.
+    @SystemApi // To allow seeing it from CTS.
     public static final String ACTION_USER_RESTRICTIONS_CHANGED =
             "android.os.action.USER_RESTRICTIONS_CHANGED";
 
@@ -1467,6 +1465,48 @@ public class UserManager {
             SWITCHABILITY_STATUS_SYSTEM_USER_LOCKED
     })
     public @interface UserSwitchabilityResult {}
+
+    /**
+     * A response code from {@link #removeUserOrSetEphemeral(int)} indicating that the specified
+     * user has been successfully removed.
+     * @hide
+     */
+    public static final int REMOVE_RESULT_REMOVED = 0;
+
+    /**
+     * A response code from {@link #removeUserOrSetEphemeral(int)} indicating that the specified
+     * user has had its {@link UserInfo#FLAG_EPHEMERAL} flag set to {@code true}, so that it will be
+     * removed when the user is stopped or on boot.
+     * @hide
+     */
+    public static final int REMOVE_RESULT_SET_EPHEMERAL = 1;
+
+    /**
+     * A response code from {@link #removeUserOrSetEphemeral(int)} indicating that the specified
+     * user is already in the process of being removed.
+     * @hide
+     */
+    public static final int REMOVE_RESULT_ALREADY_BEING_REMOVED = 2;
+
+    /**
+     * A response code from {@link #removeUserOrSetEphemeral(int)} indicating that an error occurred
+     * that prevented the user from being removed or set as ephemeral.
+     * @hide
+     */
+    public static final int REMOVE_RESULT_ERROR = 3;
+
+    /**
+     * Possible response codes from {@link #removeUserOrSetEphemeral(int)}.
+     * @hide
+     */
+    @IntDef(prefix = { "REMOVE_RESULT_" }, value = {
+            REMOVE_RESULT_REMOVED,
+            REMOVE_RESULT_SET_EPHEMERAL,
+            REMOVE_RESULT_ALREADY_BEING_REMOVED,
+            REMOVE_RESULT_ERROR,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface RemoveResult {}
 
     /**
      * Indicates user operation is successful.
@@ -1664,7 +1704,7 @@ public class UserManager {
      * @hide
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean canSwitchUsers() {
         boolean allowUserSwitchingWhenSystemUserLocked = Settings.Global.getInt(
                 mContext.getContentResolver(),
@@ -2026,7 +2066,7 @@ public class UserManager {
      * @return whether user is a guest user.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.CREATE_USERS})
     public boolean isGuestUser(@UserIdInt int userId) {
@@ -2258,7 +2298,7 @@ public class UserManager {
      * private app data storage is available.
      * <p>Requires {@code android.permission.MANAGE_USERS} or
      * {@code android.permission.INTERACT_ACROSS_USERS}, otherwise specified {@link UserHandle user}
-     * must be the calling user or a managed profile associated with it.
+     * must be the calling user or a profile associated with it.
      *
      * @param user to retrieve the unlocked state for.
      * @see Intent#ACTION_USER_UNLOCKED
@@ -2357,7 +2397,7 @@ public class UserManager {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public long getUserStartRealtime() {
         try {
             return mService.getUserStartRealtime();
@@ -2372,7 +2412,7 @@ public class UserManager {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public long getUserUnlockRealtime() {
         try {
             return mService.getUserUnlockRealtime();
@@ -2456,7 +2496,7 @@ public class UserManager {
      *
      * <p>Requires {@code android.permission.MANAGE_USERS} or
      * {@code android.permission.INTERACT_ACROSS_USERS}, otherwise specified {@link UserHandle user}
-     * must be the calling user or a managed profile associated with it.
+     * must be the calling user or a profile associated with it.
      */
     @RequiresPermission(anyOf = {
             android.Manifest.permission.MANAGE_USERS,
@@ -2580,7 +2620,7 @@ public class UserManager {
      *
      * <p>Requires {@code android.permission.MANAGE_USERS} or
      * {@code android.permission.INTERACT_ACROSS_USERS}, otherwise specified {@link UserHandle user}
-     * must be the calling user or a managed profile associated with it.
+     * must be the calling user or a profile associated with it.
      *
      * @hide
      */
@@ -3174,28 +3214,55 @@ public class UserManager {
     }
 
     /**
-     * Returns information for all users on this device, including ones marked for deletion.
-     * To retrieve only users that are alive, use {@link #getUsers(boolean)}.
+     * Returns information for all fully-created users on this device, including ones marked for
+     * deletion.
      *
-     * @return the list of users that exist on the device.
+     * <p>To retrieve only users that are not marked for deletion, use {@link #getAliveUsers()}.
+     *
+     * <p>To retrieve *all* users (including partial and pre-created users), use
+     * {@link #getUsers(boolean, boolean, boolean)) getUsers(false, false, false)}.
+     *
+     * <p>To retrieve a more specific list of users, use
+     * {@link #getUsers(boolean, boolean, boolean)}.
+     *
+     * @return the list of users that were created.
+     *
      * @hide
      */
     @UnsupportedAppUsage
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public List<UserInfo> getUsers() {
-        return getUsers(/* excludeDying= */ false);
+        return getUsers(/*excludePartial= */ true, /* excludeDying= */ false,
+                /* excludePreCreated= */ true);
     }
 
     /**
-     * Returns information for all users on this device. Requires
-     * {@link android.Manifest.permission#MANAGE_USERS} permission.
+     * Returns information for all "usable" users on this device (i.e, it excludes users that are
+     * marked for deletion, pre-created users, etc...).
      *
-     * @param excludeDying specify if the list should exclude users being
-     *            removed.
+     * <p>To retrieve all fully-created users, use {@link #getUsers()}.
+     *
+     * <p>To retrieve a more specific list of users, use
+     * {@link #getUsers(boolean, boolean, boolean)}.
+     *
      * @return the list of users that were created.
      * @hide
      */
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public @NonNull List<UserInfo> getAliveUsers() {
+        return getUsers(/*excludePartial= */ true, /* excludeDying= */ true,
+                /* excludePreCreated= */ true);
+    }
+
+    /**
+     * @deprecated use {@link #getAliveUsers()} for {@code getUsers(true)}, or
+     * {@link #getUsers()} for @code getUsers(false)}.
+     *
+     * @hide
+     */
+    @Deprecated
     @UnsupportedAppUsage
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public @NonNull List<UserInfo> getUsers(boolean excludeDying) {
         return getUsers(/*excludePartial= */ true, excludeDying,
                 /* excludePreCreated= */ true);
@@ -3226,7 +3293,8 @@ public class UserManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public @NonNull List<UserHandle> getUserHandles(boolean excludeDying) {
-        List<UserInfo> users = getUsers(excludeDying);
+        List<UserInfo> users = getUsers(/* excludePartial= */ true, excludeDying,
+                /* excludePreCreated= */ true);
         List<UserHandle> result = new ArrayList<>(users.size());
         for (UserInfo user : users) {
             result.add(user.getUserHandle());
@@ -3244,7 +3312,8 @@ public class UserManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public long[] getSerialNumbersOfUsers(boolean excludeDying) {
-        List<UserInfo> users = getUsers(excludeDying);
+        List<UserInfo> users = getUsers(/* excludePartial= */ true, excludeDying,
+                /* excludePreCreated= */ true);
         long[] result = new long[users.size()];
         for (int i = 0; i < result.length; i++) {
             result[i] = users.get(i).serialNumber;
@@ -3310,7 +3379,7 @@ public class UserManager {
     public boolean canAddMoreUsers() {
         // TODO(b/142482943): UMS has different logic, excluding Demo and Profile from counting. Why
         //                    not here? The logic is inconsistent. See UMS.canAddMoreManagedProfiles
-        final List<UserInfo> users = getUsers(true);
+        final List<UserInfo> users = getAliveUsers();
         final int totalUserCount = users.size();
         int aliveUserCount = 0;
         for (int i = 0; i < totalUserCount; i++) {
@@ -3360,6 +3429,7 @@ public class UserManager {
      * Returns list of the profiles of userId including userId itself.
      * Note that this returns both enabled and not enabled profiles. See
      * {@link #getEnabledProfiles(int)} if you need only the enabled ones.
+     * <p>Note that this includes all profile types (not including Restricted profiles).
      *
      * <p>Requires {@link android.Manifest.permission#MANAGE_USERS}.
      * {@link android.Manifest.permission#CREATE_USERS} suffices if userId is the calling user.
@@ -3412,6 +3482,7 @@ public class UserManager {
     /**
      * Returns list of the profiles of userId including userId itself.
      * Note that this returns only enabled.
+     * <p>Note that this includes all profile types (not including Restricted profiles).
      *
      * <p>Requires {@link android.Manifest.permission#MANAGE_USERS}.
      * {@link android.Manifest.permission#CREATE_USERS} suffices if userId is the calling user.
@@ -3433,6 +3504,7 @@ public class UserManager {
     /**
      * Returns a list of UserHandles for profiles associated with the user that the calling process
      * is running on, including the user itself.
+     * <p>Note that this includes all profile types (not including Restricted profiles).
      *
      * @return A non-empty list of UserHandles associated with the calling user.
      */
@@ -3448,6 +3520,7 @@ public class UserManager {
     /**
      * Returns a list of ids for enabled profiles associated with the context user including the
      * user itself.
+     * <p>Note that this includes all profile types (not including Restricted profiles).
      *
      * @return A non-empty list of UserHandles associated with the calling user.
      * @hide
@@ -3463,6 +3536,7 @@ public class UserManager {
     /**
      * Returns a list of ids for all profiles associated with the context user including the user
      * itself.
+     * <p>Note that this includes all profile types (not including Restricted profiles).
      *
      * @return A non-empty list of UserHandles associated with the calling user.
      * @hide
@@ -3478,6 +3552,7 @@ public class UserManager {
     /**
      * Returns a list of ids for profiles associated with the context user including the user
      * itself.
+     * <p>Note that this includes all profile types (not including Restricted profiles).
      *
      * @param enabledOnly whether to return only {@link UserInfo#isEnabled() enabled} profiles
      * @return A non-empty list of UserHandles associated with the calling user.
@@ -3497,6 +3572,7 @@ public class UserManager {
     /**
      * Returns a list of ids for profiles associated with the specified user including the user
      * itself.
+     * <p>Note that this includes all profile types (not including Restricted profiles).
      *
      * @param userId      id of the user to return profiles for
      * @param enabledOnly whether return only {@link UserInfo#isEnabled() enabled} profiles
@@ -3950,6 +4026,24 @@ public class UserManager {
     }
 
     /**
+     * Immediately removes the user or, if the user cannot be removed, such as when the user is
+     * the current user, then set the user as ephemeral so that it will be removed when it is
+     * stopped.
+     *
+     * @return the {@link RemoveResult} code
+     * @hide
+     */
+    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
+            Manifest.permission.CREATE_USERS})
+    public @RemoveResult int removeUserOrSetEphemeral(@UserIdInt int userId) {
+        try {
+            return mService.removeUserOrSetEphemeral(userId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Updates the user's name.
      *
      * @param userId the user's integer id
@@ -4118,7 +4212,7 @@ public class UserManager {
 
     /** Returns whether there are any users (other than the current user) to which to switch. */
     private boolean areThereUsersToWhichToSwitch() {
-        final List<UserInfo> users = getUsers(true);
+        final List<UserInfo> users = getAliveUsers();
         if (users == null) {
             return false;
         }
@@ -4134,7 +4228,7 @@ public class UserManager {
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static boolean isDeviceInDemoMode(Context context) {
         return Settings.Global.getInt(context.getContentResolver(),
                 Settings.Global.DEVICE_DEMO_MODE, 0) > 0;
@@ -4269,8 +4363,9 @@ public class UserManager {
     }
 
     /**
-     * Returns creation time of the user or of a managed profile associated with the calling user.
-     * @param userHandle user handle of the user or a managed profile associated with the
+     * Returns creation time of the given user. The given user must be the calling user or
+     * a profile associated with it.
+     * @param userHandle user handle of the calling user or a profile associated with the
      *                   calling user.
      * @return creation time in milliseconds since Epoch time.
      */

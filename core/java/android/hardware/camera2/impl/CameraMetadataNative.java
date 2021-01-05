@@ -64,6 +64,7 @@ import android.hardware.camera2.params.TonemapCurve;
 import android.hardware.camera2.utils.TypeReference;
 import android.location.Location;
 import android.location.LocationManager;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.ServiceSpecificException;
@@ -72,6 +73,7 @@ import android.util.Range;
 import android.util.Size;
 
 import dalvik.annotation.optimization.FastNative;
+import dalvik.system.VMRuntime;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -260,7 +262,7 @@ public class CameraMetadataNative implements Parcelable {
          *
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public final boolean hasTag() {
             return mHasTag;
         }
@@ -270,7 +272,7 @@ public class CameraMetadataNative implements Parcelable {
          *
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public final void cacheTag(int tag) {
             mHasTag = true;
             mTag = tag;
@@ -351,6 +353,7 @@ public class CameraMetadataNative implements Parcelable {
         if (mMetadataPtr == 0) {
             throw new OutOfMemoryError("Failed to allocate native CameraMetadata");
         }
+        updateNativeAllocation();
     }
 
     /**
@@ -362,6 +365,7 @@ public class CameraMetadataNative implements Parcelable {
         if (mMetadataPtr == 0) {
             throw new OutOfMemoryError("Failed to allocate native CameraMetadata");
         }
+        updateNativeAllocation();
     }
 
     /**
@@ -443,6 +447,7 @@ public class CameraMetadataNative implements Parcelable {
 
     public void readFromParcel(Parcel in) {
         nativeReadFromParcel(in, mMetadataPtr);
+        updateNativeAllocation();
     }
 
     /**
@@ -533,6 +538,11 @@ public class CameraMetadataNative implements Parcelable {
         // Delete native pointer, but does not clear it
         nativeClose(mMetadataPtr);
         mMetadataPtr = 0;
+
+        if (mBufferSize > 0) {
+            VMRuntime.getRuntime().registerNativeFree(mBufferSize);
+        }
+        mBufferSize = 0;
     }
 
     private <T> T getBase(CameraCharacteristics.Key<T> key) {
@@ -1645,9 +1655,26 @@ public class CameraMetadataNative implements Parcelable {
         return true;
     }
 
+    private void updateNativeAllocation() {
+        long currentBufferSize = nativeGetBufferSize(mMetadataPtr);
+
+        if (currentBufferSize != mBufferSize) {
+            if (mBufferSize > 0) {
+                VMRuntime.getRuntime().registerNativeFree(mBufferSize);
+            }
+
+            mBufferSize = currentBufferSize;
+
+            if (mBufferSize > 0) {
+                VMRuntime.getRuntime().registerNativeAllocation(mBufferSize);
+            }
+        }
+    }
+
     private int mCameraId = -1;
     private boolean mHasMandatoryConcurrentStreams = false;
     private Size mDisplaySize = new Size(0, 0);
+    private long mBufferSize = 0;
 
     /**
      * Set the current camera Id.
@@ -1683,7 +1710,7 @@ public class CameraMetadataNative implements Parcelable {
         mDisplaySize = displaySize;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private long mMetadataPtr; // native std::shared_ptr<CameraMetadata>*
 
     @FastNative
@@ -1705,8 +1732,10 @@ public class CameraMetadataNative implements Parcelable {
     private static synchronized native boolean nativeIsEmpty(long ptr);
     @FastNative
     private static synchronized native int nativeGetEntryCount(long ptr);
+    @FastNative
+    private static synchronized native long nativeGetBufferSize(long ptr);
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @FastNative
     private static synchronized native byte[] nativeReadValues(int tag, long ptr);
     @FastNative
@@ -1715,11 +1744,11 @@ public class CameraMetadataNative implements Parcelable {
 
     @FastNative
     private static synchronized native ArrayList nativeGetAllVendorKeys(long ptr, Class keyClass);
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @FastNative
     private static synchronized native int nativeGetTagFromKeyLocal(long ptr, String keyName)
             throws IllegalArgumentException;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @FastNative
     private static synchronized native int nativeGetTypeFromTagLocal(long ptr, int tag)
             throws IllegalArgumentException;
@@ -1744,6 +1773,8 @@ public class CameraMetadataNative implements Parcelable {
         mCameraId = other.mCameraId;
         mHasMandatoryConcurrentStreams = other.mHasMandatoryConcurrentStreams;
         mDisplaySize = other.mDisplaySize;
+        updateNativeAllocation();
+        other.updateNativeAllocation();
     }
 
     /**

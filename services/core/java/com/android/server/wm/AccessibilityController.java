@@ -177,7 +177,7 @@ final class AccessibilityController {
 
     public void performComputeChangedWindowsNotLocked(int displayId, boolean forceSend) {
         WindowsForAccessibilityObserver observer = null;
-        synchronized (mService) {
+        synchronized (mService.mGlobalLock) {
             final WindowsForAccessibilityObserver windowsForA11yObserver =
                     mWindowsForAccessibilityObserver.get(displayId);
             if (windowsForA11yObserver != null) {
@@ -266,7 +266,7 @@ final class AccessibilityController {
         // Not relevant for the display magnifier.
 
         WindowsForAccessibilityObserver observer = null;
-        synchronized (mService) {
+        synchronized (mService.mGlobalLock) {
             final WindowsForAccessibilityObserver windowsForA11yObserver =
                     mWindowsForAccessibilityObserver.get(displayId);
             if (windowsForA11yObserver != null) {
@@ -489,18 +489,18 @@ final class AccessibilityController {
         public void onAppWindowTransitionLocked(int displayId, int transition) {
             if (DEBUG_WINDOW_TRANSITIONS) {
                 Slog.i(LOG_TAG, "Window transition: "
-                        + AppTransition.appTransitionToString(transition)
+                        + AppTransition.appTransitionOldToString(transition)
                         + " displayId: " + displayId);
             }
             final boolean magnifying = mMagnifedViewport.isMagnifyingLocked();
             if (magnifying) {
                 switch (transition) {
-                    case WindowManager.TRANSIT_ACTIVITY_OPEN:
-                    case WindowManager.TRANSIT_TASK_OPEN:
-                    case WindowManager.TRANSIT_TASK_TO_FRONT:
-                    case WindowManager.TRANSIT_WALLPAPER_OPEN:
-                    case WindowManager.TRANSIT_WALLPAPER_CLOSE:
-                    case WindowManager.TRANSIT_WALLPAPER_INTRA_OPEN: {
+                    case WindowManager.TRANSIT_OLD_ACTIVITY_OPEN:
+                    case WindowManager.TRANSIT_OLD_TASK_OPEN:
+                    case WindowManager.TRANSIT_OLD_TASK_TO_FRONT:
+                    case WindowManager.TRANSIT_OLD_WALLPAPER_OPEN:
+                    case WindowManager.TRANSIT_OLD_WALLPAPER_CLOSE:
+                    case WindowManager.TRANSIT_OLD_WALLPAPER_INTRA_OPEN: {
                         mHandler.sendEmptyMessage(MyHandler.MESSAGE_NOTIFY_USER_CONTEXT_CHANGED);
                     }
                 }
@@ -510,7 +510,7 @@ final class AccessibilityController {
         public void onWindowTransitionLocked(WindowState windowState, int transition) {
             if (DEBUG_WINDOW_TRANSITIONS) {
                 Slog.i(LOG_TAG, "Window transition: "
-                        + AppTransition.appTransitionToString(transition)
+                        + AppTransition.appTransitionOldToString(transition)
                         + " displayId: " + windowState.getDisplayId());
             }
             final boolean magnifying = mMagnifedViewport.isMagnifyingLocked();
@@ -700,8 +700,8 @@ final class AccessibilityController {
                     touchableRegion.getBounds(touchableFrame);
                     RectF windowFrame = mTempRectF;
                     windowFrame.set(touchableFrame);
-                    windowFrame.offset(-windowState.getFrameLw().left,
-                            -windowState.getFrameLw().top);
+                    windowFrame.offset(-windowState.getFrame().left,
+                            -windowState.getFrame().top);
                     matrix.mapRect(windowFrame);
                     Region windowBounds = mTempRegion2;
                     windowBounds.set((int) windowFrame.left, (int) windowFrame.top,
@@ -730,7 +730,7 @@ final class AccessibilityController {
                     }
 
                     // Count letterbox into nonMagnifiedBounds
-                    if (windowState.isLetterboxedForDisplayCutoutLw()) {
+                    if (windowState.isLetterboxedForDisplayCutout()) {
                         Region letterboxBounds = getLetterboxBounds(windowState);
                         nonMagnifiedBounds.op(letterboxBounds, Region.Op.UNION);
                         availableBounds.op(letterboxBounds, Region.Op.DIFFERENCE);
@@ -857,7 +857,7 @@ final class AccessibilityController {
             private void populateWindowsOnScreenLocked(SparseArray<WindowState> outWindows) {
                 mTempLayer = 0;
                 mDisplayContent.forAllWindows((w) -> {
-                    if (w.isOnScreen() && w.isVisibleLw()
+                    if (w.isOnScreen() && w.isVisible()
                             && (w.mAttrs.alpha != 0)) {
                         mTempLayer++;
                         outWindows.put(mTempLayer, w);
@@ -1429,11 +1429,11 @@ final class AccessibilityController {
                         // Account for all space in the task, whether the windows in it are
                         // touchable or not. The modal window blocks all touches from the task's
                         // area.
-                        unaccountedSpace.op(windowState.getDisplayFrameLw(), unaccountedSpace,
+                        unaccountedSpace.op(windowState.getDisplayFrame(), unaccountedSpace,
                                 Region.Op.REVERSE_DIFFERENCE);
                     } else {
                         // If a window has tap exclude region, we need to account it.
-                        final Region displayRegion = new Region(windowState.getDisplayFrameLw());
+                        final Region displayRegion = new Region(windowState.getDisplayFrame());
                         final Region tapExcludeRegion = new Region();
                         windowState.getTapExcludeRegion(tapExcludeRegion);
                         displayRegion.op(tapExcludeRegion, displayRegion,
@@ -1470,7 +1470,7 @@ final class AccessibilityController {
                 // Move to origin as all transforms are captured by the matrix.
                 RectF windowFrame = mTempRectF;
                 windowFrame.set(rect);
-                windowFrame.offset(-windowState.getFrameLw().left, -windowState.getFrameLw().top);
+                windowFrame.offset(-windowState.getFrame().left, -windowState.getFrame().top);
 
                 matrix.mapRect(windowFrame);
 
@@ -1517,7 +1517,7 @@ final class AccessibilityController {
             }
 
             dc.forAllWindows(w -> {
-                if (w.isVisibleLw()) {
+                if (w.isVisible()) {
                     tempWindowStatesList.add(w);
                 }
             }, false /* traverseTopToBottom */);
@@ -1529,7 +1529,7 @@ final class AccessibilityController {
                     return;
                 }
 
-                if (w.isVisibleLw() && tempWindowStatesList.contains(parentWindow)) {
+                if (w.isVisible() && tempWindowStatesList.contains(parentWindow)) {
                     tempWindowStatesList.add(tempWindowStatesList.lastIndexOf(parentWindow), w);
                 }
             }, false /* traverseTopToBottom */);

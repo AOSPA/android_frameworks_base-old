@@ -700,7 +700,7 @@ public class PackageInstaller {
      * installer was created.
      *
      * <p>This will
-     * {@link PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set) whitelist
+     * {@link PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set) allowlist
      * all restricted permissions}.
      *
      * @param packageName The package to install.
@@ -1219,6 +1219,36 @@ public class PackageInstaller {
         }
 
         /**
+         * Adds installer-provided checksums for the APK file in session.
+         *
+         * @param name      previously written as part of this session.
+         *                  {@link #openWrite}
+         * @param checksums installer intends to make available via
+         *                  {@link PackageManager#requestChecksums}.
+         * @throws SecurityException if called after the session has been
+         *                           committed or abandoned.
+         * @deprecated  do not use installer-provided checksums,
+         *              use platform-enforced checksums
+         *              e.g. {@link Checksum#TYPE_WHOLE_MERKLE_ROOT_4K_SHA256}
+         *              in {@link PackageManager#requestChecksums}.
+         */
+        @Deprecated
+        public void addChecksums(@NonNull String name, @NonNull List<Checksum> checksums)
+                throws IOException {
+            Objects.requireNonNull(name);
+            Objects.requireNonNull(checksums);
+
+            try {
+                mSession.addChecksums(name, checksums.toArray(new Checksum[checksums.size()]));
+            } catch (RuntimeException e) {
+                ExceptionUtils.maybeUnwrapIOException(e);
+                throw e;
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
          * Attempt to commit everything staged in this session. This may require
          * user intervention, and so it may not happen immediately. The final
          * result of the commit will be reported through the given callback.
@@ -1326,7 +1356,9 @@ public class PackageInstaller {
          * Completely abandon this session, destroying all staged data and
          * rendering it invalid. Abandoned sessions will be reported to
          * {@link SessionCallback} listeners as failures. This is equivalent to
-         * opening the session and calling {@link Session#abandon()}.
+         * {@link #abandonSession(int)}.
+         * <p>If the parent is abandoned, all children will also be abandoned. Any written data
+         * would be destroyed and the created {@link Session} information will be discarded.</p>
          */
         public void abandon() {
             try {
@@ -1389,7 +1421,8 @@ public class PackageInstaller {
          * when this session is committed.
          *
          * <p>If the parent is staged or has rollback enabled, all children must have
-         * the same properties.
+         * the same properties.</p>
+         * <p>If the parent is abandoned, all children will also be abandoned.</p>
          *
          * @param sessionId the session ID to add to this multi-package session.
          */
@@ -1467,13 +1500,13 @@ public class PackageInstaller {
         /** {@hide} */
         public @InstallReason int installReason = PackageManager.INSTALL_REASON_UNKNOWN;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long sizeBytes = -1;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public String appPackageName;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public Bitmap appIcon;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -1483,7 +1516,7 @@ public class PackageInstaller {
         /** {@hide} */
         public Uri originatingUri;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public int originatingUid = UID_UNKNOWN;
         /** {@hide} */
         public Uri referrerUri;
@@ -1692,7 +1725,6 @@ public class PackageInstaller {
          *
          * @hide
          */
-        @TestApi
         @SystemApi
         @RequiresPermission(android.Manifest.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS)
         public void setGrantedRuntimePermissions(String[] permissions) {
@@ -1701,25 +1733,25 @@ public class PackageInstaller {
         }
 
         /**
-         * Sets which restricted permissions to be whitelisted for the app. Whitelisting
+         * Sets which restricted permissions to be allowlisted for the app. Allowlisting
          * is not granting the permissions, rather it allows the app to hold permissions
-         * which are otherwise restricted. Whitelisting a non restricted permission has
+         * which are otherwise restricted. Allowlisting a non restricted permission has
          * no effect.
          *
          * <p> Permissions can be hard restricted which means that the app cannot hold
          * them or soft restricted where the app can hold the permission but in a weaker
          * form. Whether a permission is {@link PermissionInfo#FLAG_HARD_RESTRICTED hard
          * restricted} or {@link PermissionInfo#FLAG_SOFT_RESTRICTED soft restricted}
-         * depends on the permission declaration. Whitelisting a hard restricted permission
-         * allows the app to hold that permission and whitelisting a soft restricted
+         * depends on the permission declaration. Allowlisting a hard restricted permission
+         * allows the app to hold that permission and allowlisting a soft restricted
          * permission allows the app to hold the permission in its full, unrestricted form.
          *
-         * <p> Permissions can also be immutably restricted which means that the whitelist
+         * <p> Permissions can also be immutably restricted which means that the allowlist
          * state of the permission can be determined only at install time and cannot be
          * changed on updated or at a later point via the package manager APIs.
          *
-         * <p>Initially, all restricted permissions are whitelisted but you can change
-         * which ones are whitelisted by calling this method or the corresponding ones
+         * <p>Initially, all restricted permissions are allowlisted but you can change
+         * which ones are allowlisted by calling this method or the corresponding ones
          * on the {@link PackageManager}. Only soft or hard restricted permissions on the current
          * Android version are supported and any invalid entries will be removed.
          *
@@ -1764,7 +1796,7 @@ public class PackageInstaller {
          * @see SessionParams#setEnableRollback(boolean, int)
          * @hide
          */
-        @SystemApi @TestApi
+        @SystemApi
         public void setEnableRollback(boolean enable) {
             if (enable) {
                 installFlags |= PackageManager.INSTALL_ENABLE_ROLLBACK;
@@ -1788,7 +1820,7 @@ public class PackageInstaller {
          * @param dataPolicy the rollback data policy for this session
          * @hide
          */
-        @SystemApi @TestApi
+        @SystemApi
         public void setEnableRollback(boolean enable,
                 @PackageManager.RollbackDataPolicy int dataPolicy) {
             if (enable) {
@@ -1811,7 +1843,7 @@ public class PackageInstaller {
         }
 
         /** {@hide} */
-        @SystemApi @TestApi
+        @SystemApi
         public void setRequestDowngrade(boolean requestDowngrade) {
             if (requestDowngrade) {
                 installFlags |= PackageManager.INSTALL_REQUEST_DOWNGRADE;
@@ -1934,7 +1966,7 @@ public class PackageInstaller {
          *
          * {@hide}
          */
-        @SystemApi @TestApi
+        @SystemApi
         @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
         public void setStaged() {
             this.isStaged = true;
@@ -1945,7 +1977,7 @@ public class PackageInstaller {
          *
          * {@hide}
          */
-        @SystemApi @TestApi
+        @SystemApi
         @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
         public void setInstallAsApex() {
             installFlags |= PackageManager.INSTALL_APEX;
@@ -2075,7 +2107,8 @@ public class PackageInstaller {
                 STAGED_SESSION_NO_ERROR,
                 STAGED_SESSION_VERIFICATION_FAILED,
                 STAGED_SESSION_ACTIVATION_FAILED,
-                STAGED_SESSION_UNKNOWN})
+                STAGED_SESSION_UNKNOWN,
+                STAGED_SESSION_CONFLICT})
         @Retention(RetentionPolicy.SOURCE)
         public @interface StagedSessionErrorCode{}
         /**
@@ -2101,6 +2134,12 @@ public class PackageInstaller {
          */
         public static final int STAGED_SESSION_UNKNOWN = 3;
 
+        /**
+         * Constant indicating that the session was in conflict with another staged session and had
+         * to be sacrificed for resolution.
+         */
+        public static final int STAGED_SESSION_CONFLICT = 4;
+
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public int sessionId;
@@ -2112,13 +2151,13 @@ public class PackageInstaller {
         /** {@hide} */
         public String installerAttributionTag;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public String resolvedBaseCodePath;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public float progress;
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public boolean sealed;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -2191,7 +2230,7 @@ public class PackageInstaller {
         public int rollbackDataPolicy;
 
         /** {@hide} */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public SessionInfo() {
         }
 
@@ -2437,12 +2476,11 @@ public class PackageInstaller {
 
         /**
          * Get the value set in {@link SessionParams#setWhitelistedRestrictedPermissions(Set)}.
-         * Note that if all permissions are whitelisted this method returns {@link
+         * Note that if all permissions are allowlisted this method returns {@link
          * SessionParams#RESTRICTED_PERMISSIONS_ALL}.
          *
          * @hide
          */
-        @TestApi
         @SystemApi
         public @NonNull Set<String> getWhitelistedRestrictedPermissions() {
             if ((installFlags & PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS) != 0) {
@@ -2466,7 +2504,6 @@ public class PackageInstaller {
          *
          * @hide
          */
-        @TestApi
         @SystemApi
         public int getAutoRevokePermissionsMode() {
             return autoRevokePermissionsMode;
@@ -2505,12 +2542,16 @@ public class PackageInstaller {
         }
 
         /**
-         * If {@link SessionParams#setInstallAsInstantApp(boolean)} was called with {@code true},
-         * return true. If it was called with {@code false} or if it was not called return false.
+         * Get if this session is to be installed as Instant Apps.
          *
-         * @hide
+         * @param isInstantApp an unused parameter and is ignored.
+         * @return {@code true} if {@link SessionParams#setInstallAsInstantApp(boolean)} was called
+         * with {@code true}; {@code false} if it was called with {@code false} or if it was not
+         * called.
          *
          * @see #getInstallAsFullApp
+         *
+         * @hide
          */
         @SystemApi
         public boolean getInstallAsInstantApp(boolean isInstantApp) {
@@ -2518,12 +2559,16 @@ public class PackageInstaller {
         }
 
         /**
-         * If {@link SessionParams#setInstallAsInstantApp(boolean)} was called with {@code false},
-         * return true. If it was called with {@code true} or if it was not called return false.
+         * Get if this session is to be installed as full apps.
          *
-         * @hide
+         * @param isInstantApp an unused parameter and is ignored.
+         * @return {@code true} if {@link SessionParams#setInstallAsInstantApp(boolean)} was called
+         * with {@code false}; {code false} if it was called with {@code true} or if it was not
+         * called.
          *
          * @see #getInstallAsInstantApp
+         *
+         * @hide
          */
         @SystemApi
         public boolean getInstallAsFullApp(boolean isInstantApp) {
@@ -2587,7 +2632,7 @@ public class PackageInstaller {
          *
          * @hide
          */
-        @SystemApi @TestApi
+        @SystemApi
         @PackageManager.RollbackDataPolicy
         public int getRollbackDataPolicy() {
             return rollbackDataPolicy;

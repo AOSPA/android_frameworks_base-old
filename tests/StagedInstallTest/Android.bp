@@ -18,19 +18,24 @@ android_test_helper_app {
     srcs: ["app/src/**/*.java"],
     static_libs: ["androidx.test.rules", "cts-install-lib"],
     test_suites: ["general-tests"],
+    java_resources: [
+        ":com.android.apex.apkrollback.test_v2",
+    ],
 }
 
 java_test_host {
     name: "StagedInstallInternalTest",
     srcs: ["src/**/*.java"],
-    libs: ["tradefed"],
+    libs: ["tradefed", "cts-shim-host-lib"],
     static_libs: [
         "testng",
         "compatibility-tradefed",
         "frameworks-base-hostutils",
         "module_test_util",
+        "cts-install-lib-host",
     ],
     data: [
+        ":com.android.apex.apkrollback.test_v1",
         ":com.android.apex.cts.shim.v2_prebuilt",
         ":TestAppAv1",
     ],

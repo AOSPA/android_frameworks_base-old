@@ -24,15 +24,15 @@ import android.service.notification.NotificationListenerService.Ranking
 import android.service.notification.NotificationListenerService.RankingMap
 import com.android.internal.statusbar.NotificationVisibility
 import com.android.internal.widget.ConversationLayout
+import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.statusbar.notification.collection.NotificationEntry
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.row.NotificationContentView
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator
-import com.android.systemui.statusbar.phone.NotificationGroupManager
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /** Populates additional information in conversation notifications */
 class ConversationNotificationProcessor @Inject constructor(
@@ -46,7 +46,7 @@ class ConversationNotificationProcessor @Inject constructor(
                     Notification.MessagingStyle.CONVERSATION_TYPE_IMPORTANT
                 else
                     Notification.MessagingStyle.CONVERSATION_TYPE_NORMAL
-        entry.ranking.shortcutInfo?.let { shortcutInfo ->
+        entry.ranking.conversationShortcutInfo?.let { shortcutInfo ->
             messagingStyle.shortcutIcon = launcherApps.getShortcutIcon(shortcutInfo)
             shortcutInfo.label?.let { label ->
                 messagingStyle.conversationTitle = label
@@ -61,10 +61,10 @@ class ConversationNotificationProcessor @Inject constructor(
  * Tracks state related to conversation notifications, and updates the UI of existing notifications
  * when necessary.
  */
-@Singleton
+@SysUISingleton
 class ConversationNotificationManager @Inject constructor(
     private val notificationEntryManager: NotificationEntryManager,
-    private val notificationGroupManager: NotificationGroupManager,
+    private val notificationGroupManager: NotificationGroupManagerLegacy,
     private val context: Context,
     @Main private val mainHandler: Handler
 ) {
@@ -85,38 +85,43 @@ class ConversationNotificationManager @Inject constructor(
                 for (entry in activeConversationEntries) {
                     if (rankingMap.getRanking(entry.sbn.key, ranking) && ranking.isConversation) {
                         val important = ranking.channel.isImportantConversation
-                        val layouts = entry.row?.layouts?.asSequence()
+                        var changed = false
+                        entry.row?.layouts?.asSequence()
                                 ?.flatMap(::getLayouts)
                                 ?.mapNotNull { it as? ConversationLayout }
-                                ?: emptySequence()
-                        var changed = false
-                        for (layout in layouts) {
-                            if (important == layout.isImportantConversation) {
-                                continue
-                            }
-                            changed = true
-                            if (important && entry.isMarkedForUserTriggeredMovement) {
-                                // delay this so that it doesn't animate in until after
-                                // the notif has been moved in the shade
-                                mainHandler.postDelayed({
-                                    layout.setIsImportantConversation(
-                                            important, true /* animate */)
-                                }, IMPORTANCE_ANIMATION_DELAY.toLong())
-                            } else {
-                                layout.setIsImportantConversation(important)
-                            }
-                        }
+                                ?.filterNot { it.isImportantConversation == important }
+                                ?.forEach { layout ->
+                                    changed = true
+                                    if (important && entry.isMarkedForUserTriggeredMovement) {
+                                        // delay this so that it doesn't animate in until after
+                                        // the notif has been moved in the shade
+                                        mainHandler.postDelayed(
+                                                {
+                                                    layout.setIsImportantConversation(
+                                                            important,
+                                                            true)
+                                                },
+                                                IMPORTANCE_ANIMATION_DELAY.toLong())
+                                    } else {
+                                        layout.setIsImportantConversation(important, false)
+                                    }
+                                }
                         if (changed) {
                             notificationGroupManager.updateIsolation(entry)
+                            // ensure that the conversation icon isn't hidden
+                            // (ex: if it was showing in the shelf)
+                            entry.row?.updateIconVisibilities()
                         }
                     }
                 }
             }
 
             override fun onEntryInflated(entry: NotificationEntry) {
-                if (!entry.ranking.isConversation) return
+                if (!entry.ranking.isConversation) {
+                    return
+                }
                 fun updateCount(isExpanded: Boolean) {
-                    if (isExpanded && (!notifPanelCollapsed || entry.isPinnedAndExpanded())) {
+                    if (isExpanded && (!notifPanelCollapsed || entry.isPinnedAndExpanded)) {
                         resetCount(entry.key)
                         entry.row?.let(::resetBadgeUi)
                     }

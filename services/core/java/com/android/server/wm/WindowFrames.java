@@ -203,30 +203,8 @@ public class WindowFrames {
     /**
      * @return true if the width or height has changed since last reported to the client.
      */
-    private boolean didFrameSizeChange() {
+    boolean didFrameSizeChange() {
         return (mLastFrame.width() != mFrame.width()) || (mLastFrame.height() != mFrame.height());
-    }
-
-    // TODO(b/118118435): Remove after migration.
-    /**
-     * Calculate the insets for the type
-     * {@link android.view.WindowManager.LayoutParams#TYPE_DOCK_DIVIDER}
-     *
-     * @param cutoutInsets The insets for the cutout.
-     */
-    void calculateDockedDividerInsets(Rect cutoutInsets) {
-        // For the docked divider, we calculate the stable insets like a full-screen window
-        // so it can use it to calculate the snap positions.
-        mTmpRect.set(mDisplayFrame);
-        mTmpRect.inset(cutoutInsets);
-        mTmpRect.intersectUnchecked(mStableFrame);
-        InsetUtils.insetsBetweenFrames(mDisplayFrame, mTmpRect, mStableInsets);
-
-        // The divider doesn't care about insets in any case, so set it to empty so we don't
-        // trigger a relayout when moving it.
-        mContentInsets.setEmpty();
-        mVisibleInsets.setEmpty();
-        mDisplayCutout = WmDisplayCutout.NO_CUTOUT;
     }
 
     /**

@@ -16,6 +16,7 @@
 
 package com.android.server.hdmi;
 
+import android.annotation.CallSuper;
 import android.annotation.Nullable;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.IHdmiControlCallback;
@@ -38,10 +39,13 @@ import com.android.server.hdmi.Constants.LocalActivePort;
 import com.android.server.hdmi.HdmiAnnotations.ServiceThreadOnly;
 import com.android.server.hdmi.HdmiControlService.SendMessageCallback;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Class that models a logical CEC device hosted in this system. Handles initialization, CEC
@@ -50,6 +54,7 @@ import java.util.List;
 abstract class HdmiCecLocalDevice {
     private static final String TAG = "HdmiCecLocalDevice";
 
+    private static final int MAX_HDMI_ACTIVE_SOURCE_HISTORY = 10;
     private static final int MSG_DISABLE_DEVICE_TIMEOUT = 1;
     private static final int MSG_USER_CONTROL_RELEASE_TIMEOUT = 2;
     // Timeout in millisecond for device clean up (5s).
@@ -67,6 +72,10 @@ abstract class HdmiCecLocalDevice {
     protected HdmiDeviceInfo mDeviceInfo;
     protected int mLastKeycode = HdmiCecKeycode.UNSUPPORTED_KEYCODE;
     protected int mLastKeyRepeatCount = 0;
+
+    // Stores recent changes to the active source in the CEC network.
+    private final ArrayBlockingQueue<HdmiCecController.Dumpable> mActiveSourceHistory =
+            new ArrayBlockingQueue<>(MAX_HDMI_ACTIVE_SOURCE_HISTORY);
 
     static class ActiveSource {
         int logicalAddress;
@@ -119,7 +128,7 @@ abstract class HdmiCecLocalDevice {
 
         @Override
         public String toString() {
-            StringBuffer s = new StringBuffer();
+            StringBuilder s = new StringBuilder();
             String logicalAddressString =
                     (logicalAddress == Constants.ADDR_INVALID)
                             ? "invalid"
@@ -342,6 +351,8 @@ abstract class HdmiCecLocalDevice {
                 return handleRequestShortAudioDescriptor(message);
             case Constants.MESSAGE_REPORT_SHORT_AUDIO_DESCRIPTOR:
                 return handleReportShortAudioDescriptor(message);
+            case Constants.MESSAGE_GIVE_FEATURES:
+                return handleGiveFeatures(message);
             default:
                 return false;
         }
@@ -463,8 +474,27 @@ abstract class HdmiCecLocalDevice {
         return false;
     }
 
+    @CallSuper
     protected boolean handleReportPhysicalAddress(HdmiCecMessage message) {
-        return false;
+        // <Report Physical Address>  is also handled in HdmiCecNetwork to update the local network
+        // state
+
+        int address = message.getSource();
+
+        // Ignore if [Device Discovery Action] is going on.
+        if (hasAction(DeviceDiscoveryAction.class)) {
+            Slog.i(TAG, "Ignored while Device Discovery Action is in progress: " + message);
+            return true;
+        }
+
+        HdmiDeviceInfo cecDeviceInfo = mService.getHdmiCecNetwork().getCecDeviceInfo(address);
+        // If no non-default display name is available for the device, request the devices OSD name.
+        if (cecDeviceInfo.getDisplayName().equals(HdmiUtils.getDefaultDeviceName(address))) {
+            mService.sendCecCommand(
+                    HdmiCecMessageBuilder.buildGiveOsdNameCommand(mAddress, address));
+        }
+
+        return true;
     }
 
     protected boolean handleSystemAudioModeStatus(HdmiCecMessage message) {
@@ -521,6 +551,33 @@ abstract class HdmiCecLocalDevice {
 
     protected boolean handleReportShortAudioDescriptor(HdmiCecMessage message) {
         return false;
+    }
+
+    protected abstract int getRcProfile();
+
+    protected abstract List<Integer> getRcFeatures();
+
+    protected abstract List<Integer> getDeviceFeatures();
+
+    protected boolean handleGiveFeatures(HdmiCecMessage message) {
+        if (mService.getCecVersion() < Constants.VERSION_2_0) {
+            return false;
+        }
+
+        List<Integer> localDeviceTypes = new ArrayList<>();
+        for (HdmiCecLocalDevice localDevice : mService.getAllLocalDevices()) {
+            localDeviceTypes.add(localDevice.mDeviceType);
+        }
+
+
+        int rcProfile = getRcProfile();
+        List<Integer> rcFeatures = getRcFeatures();
+        List<Integer> deviceFeatures = getDeviceFeatures();
+
+        mService.sendCecCommand(
+                HdmiCecMessageBuilder.buildReportFeatures(mAddress, mService.getCecVersion(),
+                        localDeviceTypes, rcProfile, rcFeatures, deviceFeatures));
+        return true;
     }
 
     @ServiceThreadOnly
@@ -700,7 +757,7 @@ abstract class HdmiCecLocalDevice {
     }
 
     protected boolean handleSetOsdName(HdmiCecMessage message) {
-        // The default behavior of <Set Osd Name> is doing nothing.
+        // <Set OSD name> is also handled in HdmiCecNetwork to update the local network state
         return true;
     }
 
@@ -716,7 +773,8 @@ abstract class HdmiCecLocalDevice {
     }
 
     protected boolean handleReportPowerStatus(HdmiCecMessage message) {
-        return false;
+        // <Report Power Status> is also handled in HdmiCecNetwork to update the local network state
+        return true;
     }
 
     protected boolean handleTimerStatus(HdmiCecMessage message) {
@@ -893,16 +951,16 @@ abstract class HdmiCecLocalDevice {
         return mService.getLocalActiveSource();
     }
 
-    void setActiveSource(ActiveSource newActive) {
-        setActiveSource(newActive.logicalAddress, newActive.physicalAddress);
+    void setActiveSource(ActiveSource newActive, String caller) {
+        setActiveSource(newActive.logicalAddress, newActive.physicalAddress, caller);
     }
 
-    void setActiveSource(HdmiDeviceInfo info) {
-        setActiveSource(info.getLogicalAddress(), info.getPhysicalAddress());
+    void setActiveSource(HdmiDeviceInfo info, String caller) {
+        setActiveSource(info.getLogicalAddress(), info.getPhysicalAddress(), caller);
     }
 
-    void setActiveSource(int logicalAddress, int physicalAddress) {
-        mService.setActiveSource(logicalAddress, physicalAddress);
+    void setActiveSource(int logicalAddress, int physicalAddress, String caller) {
+        mService.setActiveSource(logicalAddress, physicalAddress, caller);
         mService.setLastInputForMhl(Constants.INVALID_PORT_ID);
     }
 
@@ -966,6 +1024,11 @@ abstract class HdmiCecLocalDevice {
      *     HdmiControlService#STANDBY_SCREEN_OFF} or {@link HdmiControlService#STANDBY_SHUTDOWN}
      */
     protected void onStandby(boolean initiatedByCec, int standbyAction) {}
+
+    /**
+     * Called when the initialization of local devices is complete.
+     */
+    protected void onInitializeCecComplete(int initiatedBy) {}
 
     /**
      * Disable device. {@code callback} is used to get notified when all pending actions are
@@ -1120,6 +1183,20 @@ abstract class HdmiCecLocalDevice {
                 HdmiCecMessageBuilder.buildUserControlReleased(mAddress, targetAddress));
     }
 
+    void addActiveSourceHistoryItem(ActiveSource activeSource, boolean isActiveSource,
+            String caller) {
+        ActiveSourceHistoryRecord record = new ActiveSourceHistoryRecord(activeSource,
+                isActiveSource, caller);
+        if (!mActiveSourceHistory.offer(record)) {
+            mActiveSourceHistory.poll();
+            mActiveSourceHistory.offer(record);
+        }
+    }
+
+    public ArrayBlockingQueue<HdmiCecController.Dumpable> getActiveSourceHistory() {
+        return this.mActiveSourceHistory;
+    }
+
     /** Dump internal status of HdmiCecLocalDevice object. */
     protected void dump(final IndentingPrintWriter pw) {
         pw.println("mDeviceType: " + mDeviceType);
@@ -1151,5 +1228,30 @@ abstract class HdmiCecLocalDevice {
             }
         }
         return finalMask | myPhysicalAddress;
+    }
+
+    private static final class ActiveSourceHistoryRecord extends HdmiCecController.Dumpable {
+        private final ActiveSource mActiveSource;
+        private final boolean mIsActiveSource;
+        private final String mCaller;
+
+        private ActiveSourceHistoryRecord(ActiveSource mActiveSource, boolean mIsActiveSource,
+                String caller) {
+            this.mActiveSource = mActiveSource;
+            this.mIsActiveSource = mIsActiveSource;
+            this.mCaller = caller;
+        }
+
+        @Override
+        void dump(final IndentingPrintWriter pw, SimpleDateFormat sdf) {
+            pw.print("time=");
+            pw.print(sdf.format(new Date(mTime)));
+            pw.print(" active source=");
+            pw.print(mActiveSource);
+            pw.print(" isActiveSource=");
+            pw.print(mIsActiveSource);
+            pw.print(" from=");
+            pw.println(mCaller);
+        }
     }
 }

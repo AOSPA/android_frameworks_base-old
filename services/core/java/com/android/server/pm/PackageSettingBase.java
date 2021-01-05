@@ -25,6 +25,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.content.ComponentName;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.IncrementalStatesInfo;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.UninstallReason;
@@ -33,6 +34,7 @@ import android.content.pm.PackageUserState;
 import android.content.pm.Signature;
 import android.content.pm.SuspendDialogInfo;
 import android.os.PersistableBundle;
+import android.os.incremental.IncrementalManager;
 import android.service.pm.PackageProto;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -40,6 +42,7 @@ import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.io.File;
 import java.util.Arrays;
@@ -59,15 +62,9 @@ public abstract class PackageSettingBase extends SettingBase {
     public final String name;
     final String realName;
 
-    /**
-     * Path where this package was found on disk. For monolithic packages
-     * this is path to single base APK file; for cluster packages this is
-     * path to the cluster directory.
-     */
-    File codePath;
-    String codePathString;
-    File resourcePath;
-    String resourcePathString;
+    /** @see AndroidPackage#getPath() */
+    private File mPath;
+    private String mPathString;
 
     String[] usesStaticLibraries;
     long[] usesStaticLibrariesVersions;
@@ -138,7 +135,10 @@ public abstract class PackageSettingBase extends SettingBase {
 
     boolean forceQueryableOverride;
 
-    PackageSettingBase(String name, String realName, File codePath, File resourcePath,
+    @NonNull
+    public IncrementalStates incrementalStates;
+
+    PackageSettingBase(String name, String realName, @NonNull File path,
             String legacyNativeLibraryPathString, String primaryCpuAbiString,
             String secondaryCpuAbiString, String cpuAbiOverrideString,
             long pVersionCode, int pkgFlags, int pkgPrivateFlags,
@@ -148,10 +148,7 @@ public abstract class PackageSettingBase extends SettingBase {
         this.realName = realName;
         this.usesStaticLibraries = usesStaticLibraries;
         this.usesStaticLibrariesVersions = usesStaticLibrariesVersions;
-        this.codePath = codePath;
-        this.codePathString = codePath.toString();
-        this.resourcePath = resourcePath;
-        this.resourcePathString = resourcePath.toString();
+        setPath(path);
         this.legacyNativeLibraryPathString = legacyNativeLibraryPathString;
         this.primaryCpuAbiString = primaryCpuAbiString;
         this.secondaryCpuAbiString = secondaryCpuAbiString;
@@ -159,6 +156,7 @@ public abstract class PackageSettingBase extends SettingBase {
         this.versionCode = pVersionCode;
         this.signatures = new PackageSignatures();
         this.installSource = InstallSource.EMPTY;
+        this.incrementalStates = new IncrementalStates();
     }
 
     /**
@@ -235,8 +233,7 @@ public abstract class PackageSettingBase extends SettingBase {
     }
 
     private void doCopy(PackageSettingBase orig) {
-        codePath = orig.codePath;
-        codePathString = orig.codePathString;
+        setPath(orig.getPath());
         cpuAbiOverrideString = orig.cpuAbiOverrideString;
         firstInstallTime = orig.firstInstallTime;
         installPermissionsFixed = orig.installPermissionsFixed;
@@ -246,8 +243,6 @@ public abstract class PackageSettingBase extends SettingBase {
         legacyNativeLibraryPathString = orig.legacyNativeLibraryPathString;
         // Intentionally skip mOldCodePaths; it's not relevant for copies
         primaryCpuAbiString = orig.primaryCpuAbiString;
-        resourcePath = orig.resourcePath;
-        resourcePathString = orig.resourcePathString;
         secondaryCpuAbiString = orig.secondaryCpuAbiString;
         signatures = orig.signatures;
         timeStamp = orig.timeStamp;
@@ -268,6 +263,7 @@ public abstract class PackageSettingBase extends SettingBase {
                        orig.usesStaticLibrariesVersions.length) : null;
         updateAvailable = orig.updateAvailable;
         forceQueryableOverride = orig.forceQueryableOverride;
+        incrementalStates = orig.incrementalStates;
     }
 
     @VisibleForTesting
@@ -706,6 +702,25 @@ public abstract class PackageSettingBase extends SettingBase {
     }
 
     /**
+     * @see #mPath
+     */
+    PackageSettingBase setPath(@NonNull File path) {
+        this.mPath = path;
+        this.mPathString = path.toString();
+        return this;
+    }
+
+    /** @see #mPath */
+    File getPath() {
+        return mPath;
+    }
+
+    /** @see #mPath */
+    String getPathString() {
+        return mPathString;
+    }
+
+    /**
      * @see PackageUserState#overrideLabelAndIcon(ComponentName, String, Integer)
      *
      * @param userId the specific user to change the label/icon for
@@ -725,12 +740,70 @@ public abstract class PackageSettingBase extends SettingBase {
         modifyUserState(userId).resetOverrideComponentLabelIcon();
     }
 
+    /**
+     * @return True if package is startable, false otherwise.
+     */
+    public boolean isPackageStartable() {
+        return incrementalStates.isStartable();
+    }
+
+    /**
+     * @return True if package is still being loaded, false if the package is fully loaded.
+     */
+    public boolean isPackageLoading() {
+        return incrementalStates.isLoading();
+    }
+
+    /**
+     * @return all current states in a Parcelable.
+     */
+    public IncrementalStatesInfo getIncrementalStates() {
+        return incrementalStates.getIncrementalStatesInfo();
+    }
+
+    /**
+     * Called to indicate that the package installation has been committed. This will create a
+     * new startable state and a new loading state with default values. By default, the package is
+     * startable after commit. For a package installed on Incremental, the loading state is true.
+     * For non-Incremental packages, the loading state is false.
+     */
+    public void setStatesOnCommit() {
+        incrementalStates.onCommit(IncrementalManager.isIncrementalPath(getPathString()));
+    }
+
+    /**
+     * Called to indicate that the running app has crashed or ANR'd. This might change the startable
+     * state of the package, depending on whether the package is fully loaded.
+     */
+    public void setStatesOnCrashOrAnr() {
+        incrementalStates.onCrashOrAnr();
+    }
+
+    /**
+     * Called to set the callback to listen for startable state changes.
+     */
+    public void setIncrementalStatesCallback(IncrementalStates.Callback callback) {
+        incrementalStates.setCallback(callback);
+    }
+
+    /**
+     * Called to report progress changes. This might trigger loading state change.
+     * @see IncrementalStates#setProgress(float)
+     */
+    public void setLoadingProgress(float progress) {
+        incrementalStates.setProgress(progress);
+    }
+
+    /**
+     * @see IncrementalStates#onStorageHealthStatusChanged(int)
+     */
+    public void setStorageHealthStatus(int status) {
+        incrementalStates.onStorageHealthStatusChanged(status);
+    }
+
     protected PackageSettingBase updateFrom(PackageSettingBase other) {
         super.copyFrom(other);
-        this.codePath = other.codePath;
-        this.codePathString = other.codePathString;
-        this.resourcePath = other.resourcePath;
-        this.resourcePathString = other.resourcePathString;
+        setPath(other.getPath());
         this.usesStaticLibraries = other.usesStaticLibraries;
         this.usesStaticLibrariesVersions = other.usesStaticLibrariesVersions;
         this.legacyNativeLibraryPathString = other.legacyNativeLibraryPathString;
@@ -751,6 +824,7 @@ public abstract class PackageSettingBase extends SettingBase {
         this.updateAvailable = other.updateAvailable;
         this.verificationInfo = other.verificationInfo;
         this.forceQueryableOverride = other.forceQueryableOverride;
+        this.incrementalStates = other.incrementalStates;
 
         if (mOldCodePaths != null) {
             if (other.mOldCodePaths != null) {

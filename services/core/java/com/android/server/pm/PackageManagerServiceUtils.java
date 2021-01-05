@@ -34,7 +34,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfoLite;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageParser;
 import android.content.pm.PackageParser.PackageParserException;
 import android.content.pm.ResolveInfo;
@@ -68,7 +67,6 @@ import com.android.server.EventLogTags;
 import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.dex.PackageDexUsage;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
-import com.android.server.pm.permission.PermissionsState;
 
 import dalvik.system.VMRuntime;
 
@@ -105,7 +103,8 @@ import java.util.zip.GZIPInputStream;
  * {@hide}
  */
 public class PackageManagerServiceUtils {
-    private final static long SEVEN_DAYS_IN_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
+    private static final long SEVEN_DAYS_IN_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
+    private static final long MAX_CRITICAL_INFO_DUMP_SIZE = 3 * 1000 * 1000; // 3MB
 
     public final static Predicate<PackageSetting> REMOVE_IF_NULL_PKG =
             pkgSetting -> pkgSetting.pkg == null;
@@ -328,11 +327,11 @@ public class PackageManagerServiceUtils {
     }
 
     public static long getLastModifiedTime(AndroidPackage pkg) {
-        final File srcFile = new File(pkg.getCodePath());
+        final File srcFile = new File(pkg.getPath());
         if (!srcFile.isDirectory()) {
             return srcFile.lastModified();
         }
-        final File baseFile = new File(pkg.getBaseCodePath());
+        final File baseFile = new File(pkg.getBaseApkPath());
         long maxModifiedTime = baseFile.lastModified();
         if (pkg.getSplitCodePaths() != null) {
             for (int i = pkg.getSplitCodePaths().length - 1; i >=0; --i) {
@@ -351,7 +350,12 @@ public class PackageManagerServiceUtils {
     }
 
     public static void dumpCriticalInfo(ProtoOutputStream proto) {
-        try (BufferedReader in = new BufferedReader(new FileReader(getSettingsProblemFile()))) {
+        final File file = getSettingsProblemFile();
+        final long skipSize = file.length() - MAX_CRITICAL_INFO_DUMP_SIZE;
+        try (BufferedReader in = new BufferedReader(new FileReader(file))) {
+            if (skipSize > 0) {
+                in.skip(skipSize);
+            }
             String line = null;
             while ((line = in.readLine()) != null) {
                 if (line.contains("ignored: updated version")) continue;
@@ -362,7 +366,12 @@ public class PackageManagerServiceUtils {
     }
 
     public static void dumpCriticalInfo(PrintWriter pw, String msg) {
-        try (BufferedReader in = new BufferedReader(new FileReader(getSettingsProblemFile()))) {
+        final File file = getSettingsProblemFile();
+        final long skipSize = file.length() - MAX_CRITICAL_INFO_DUMP_SIZE;
+        try (BufferedReader in = new BufferedReader(new FileReader(file))) {
+            if (skipSize > 0) {
+                in.skip(skipSize);
+            }
             String line = null;
             while ((line = in.readLine()) != null) {
                 if (line.contains("ignored: updated version")) continue;
@@ -423,18 +432,13 @@ public class PackageManagerServiceUtils {
 
     /**
      * Derive the value of the {@code cpuAbiOverride} based on the provided
-     * value and an optional stored value from the package settings.
+     * value.
      */
-    public static String deriveAbiOverride(String abiOverride, PackageSetting settings) {
-        String cpuAbiOverride = null;
+    public static String deriveAbiOverride(String abiOverride) {
         if (NativeLibraryHelper.CLEAR_ABI_OVERRIDE.equals(abiOverride)) {
-            cpuAbiOverride = null;
-        } else if (abiOverride != null) {
-            cpuAbiOverride = abiOverride;
-        } else if (settings != null) {
-            cpuAbiOverride = settings.cpuAbiOverrideString;
+            return null;
         }
-        return cpuAbiOverride;
+        return abiOverride;
     }
 
     /**
@@ -485,6 +489,18 @@ public class PackageManagerServiceUtils {
             return PackageManager.SIGNATURE_MATCH;
         }
         return PackageManager.SIGNATURE_NO_MATCH;
+    }
+
+    /**
+     * Returns true if the signature set of the package is identical to the specified signature
+     * set or if the signing details of the package are unknown.
+     */
+    public static boolean comparePackageSignatures(PackageSetting pkgSetting,
+            Signature[] signatures) {
+        return pkgSetting.signatures.mSigningDetails
+                == PackageParser.SigningDetails.UNKNOWN
+                || compareSignatures(pkgSetting.signatures.mSigningDetails.signatures, signatures)
+                == PackageManager.SIGNATURE_MATCH;
     }
 
     /**
@@ -953,20 +969,6 @@ public class PackageManagerServiceUtils {
         } finally {
             IoUtils.closeQuietly(source);
         }
-    }
-
-    /**
-     * Returns the {@link PermissionsState} for the given package. If the {@link PermissionsState}
-     * could not be found, {@code null} will be returned.
-     */
-    public static PermissionsState getPermissionsState(
-            PackageManagerInternal packageManagerInternal, AndroidPackage pkg) {
-        final PackageSetting packageSetting = packageManagerInternal.getPackageSetting(
-                pkg.getPackageName());
-        if (packageSetting == null) {
-            return null;
-        }
-        return packageSetting.getPermissionsState();
     }
 
     /**

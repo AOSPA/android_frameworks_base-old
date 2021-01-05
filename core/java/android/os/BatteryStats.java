@@ -21,6 +21,7 @@ import static android.os.BatteryStatsManager.NUM_WIFI_STATES;
 import static android.os.BatteryStatsManager.NUM_WIFI_SUPPL_STATES;
 
 import android.annotation.IntDef;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.job.JobParameters;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -86,7 +87,7 @@ public abstract class BatteryStats implements Parcelable {
     /**
      * A constant indicating a partial wake lock timer.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int WAKE_TYPE_PARTIAL = 0;
 
     /**
@@ -743,6 +744,12 @@ public abstract class BatteryStats implements Parcelable {
         @UnsupportedAppUsage
         public abstract ArrayMap<String, ? extends Pkg> getPackageStats();
 
+        /**
+         * Returns the proportion of power consumed by the System Service
+         * calls made by this UID.
+         */
+        public abstract double getProportionalSystemServiceUsage();
+
         public abstract ControllerActivityCounter getWifiControllerActivity();
         public abstract ControllerActivityCounter getBluetoothControllerActivity();
         public abstract ControllerActivityCounter getModemControllerActivity();
@@ -783,7 +790,7 @@ public abstract class BatteryStats implements Parcelable {
          * Returns the timer keeping track of background wifi scans.
          */
         public abstract Timer getWifiScanBackgroundTimer();
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public abstract long getWifiBatchedScanTime(int csphBin, long elapsedRealtimeUs, int which);
         public abstract int getWifiBatchedScanCount(int csphBin, int which);
         @UnsupportedAppUsage
@@ -1492,7 +1499,7 @@ public abstract class BatteryStats implements Parcelable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 
@@ -1776,7 +1783,7 @@ public abstract class BatteryStats implements Parcelable {
         public static final int EVENT_PACKAGE_INACTIVE = 0x000f;
         // Event for a package becoming active due to an interaction.
         public static final int EVENT_PACKAGE_ACTIVE = 0x0010;
-        // Event for a package being on the temporary whitelist.
+        // Event for a package being on the temporary allowlist.
         public static final int EVENT_TEMP_WHITELIST = 0x0011;
         // Event for the screen waking up.
         public static final int EVENT_SCREEN_WAKE_UP = 0x0012;
@@ -2882,6 +2889,20 @@ public abstract class BatteryStats implements Parcelable {
     public abstract int getDischargeAmountScreenDozeSinceCharge();
 
     /**
+     * Returns the approximate CPU time (in microseconds) spent by the system server handling
+     * incoming service calls from apps.  The result is returned as an array of longs,
+     * organized as a sequence like this:
+     * <pre>
+     *     cluster1-speeed1, cluster1-speed2, ..., cluster2-speed1, cluster2-speed2, ...
+     * </pre>
+     *
+     * @see com.android.internal.os.PowerProfile#getNumCpuClusters()
+     * @see com.android.internal.os.PowerProfile#getNumSpeedStepsInCpuCluster(int)
+     */
+    @Nullable
+    public abstract long[] getSystemServiceTimeAtCpuSpeeds();
+
+    /**
      * Returns the total, last, or current battery uptime in microseconds.
      *
      * @param curTime the elapsed realtime in microseconds.
@@ -2937,7 +2958,7 @@ public abstract class BatteryStats implements Parcelable {
      * enough current data to make a decision, or the battery is currently
      * charging.
      *
-     * @param curTime The current elepsed realtime in microseconds.
+     * @param curTime The current elapsed realtime in microseconds.
      */
     @UnsupportedAppUsage
     public abstract long computeBatteryTimeRemaining(long curTime);
@@ -4028,7 +4049,8 @@ public abstract class BatteryStats implements Parcelable {
         if (cpuFreqs != null) {
             sb.setLength(0);
             for (int i = 0; i < cpuFreqs.length; ++i) {
-                sb.append((i == 0 ? "" : ",") + cpuFreqs[i]);
+                if (i != 0) sb.append(',');
+                sb.append(cpuFreqs[i]);
             }
             dumpLine(pw, 0 /* uid */, category, GLOBAL_CPU_FREQ_DATA, sb.toString());
         }
@@ -4347,12 +4369,13 @@ public abstract class BatteryStats implements Parcelable {
                 if (cpuFreqTimeMs != null && cpuFreqTimeMs.length == cpuFreqs.length) {
                     sb.setLength(0);
                     for (int i = 0; i < cpuFreqTimeMs.length; ++i) {
-                        sb.append((i == 0 ? "" : ",") + cpuFreqTimeMs[i]);
+                        if (i != 0) sb.append(',');
+                        sb.append(cpuFreqTimeMs[i]);
                     }
                     final long[] screenOffCpuFreqTimeMs = u.getScreenOffCpuFreqTimes(which);
                     if (screenOffCpuFreqTimeMs != null) {
                         for (int i = 0; i < screenOffCpuFreqTimeMs.length; ++i) {
-                            sb.append("," + screenOffCpuFreqTimeMs[i]);
+                            sb.append(',').append(screenOffCpuFreqTimeMs[i]);
                         }
                     } else {
                         for (int i = 0; i < cpuFreqTimeMs.length; ++i) {
@@ -4368,13 +4391,14 @@ public abstract class BatteryStats implements Parcelable {
                     if (timesMs != null && timesMs.length == cpuFreqs.length) {
                         sb.setLength(0);
                         for (int i = 0; i < timesMs.length; ++i) {
-                            sb.append((i == 0 ? "" : ",") + timesMs[i]);
+                            if (i != 0) sb.append(',');
+                            sb.append(timesMs[i]);
                         }
                         final long[] screenOffTimesMs = u.getScreenOffCpuFreqTimes(
                                 which, procState);
                         if (screenOffTimesMs != null) {
                             for (int i = 0; i < screenOffTimesMs.length; ++i) {
-                                sb.append("," + screenOffTimesMs[i]);
+                                sb.append(',').append(screenOffTimesMs[i]);
                             }
                         } else {
                             for (int i = 0; i < timesMs.length; ++i) {
@@ -5406,7 +5430,7 @@ public abstract class BatteryStats implements Parcelable {
             sb.setLength(0);
             sb.append("  CPU freqs:");
             for (int i = 0; i < cpuFreqs.length; ++i) {
-                sb.append(" " + cpuFreqs[i]);
+                sb.append(' ').append(cpuFreqs[i]);
             }
             pw.println(sb.toString());
             pw.println();
@@ -6015,7 +6039,7 @@ public abstract class BatteryStats implements Parcelable {
                 sb.setLength(0);
                 sb.append("    Total cpu time per freq:");
                 for (int i = 0; i < cpuFreqTimes.length; ++i) {
-                    sb.append(" " + cpuFreqTimes[i]);
+                    sb.append(' ').append(cpuFreqTimes[i]);
                 }
                 pw.println(sb.toString());
             }
@@ -6024,7 +6048,7 @@ public abstract class BatteryStats implements Parcelable {
                 sb.setLength(0);
                 sb.append("    Total screen-off cpu time per freq:");
                 for (int i = 0; i < screenOffCpuFreqTimes.length; ++i) {
-                    sb.append(" " + screenOffCpuFreqTimes[i]);
+                    sb.append(' ').append(screenOffCpuFreqTimes[i]);
                 }
                 pw.println(sb.toString());
             }
@@ -6033,8 +6057,8 @@ public abstract class BatteryStats implements Parcelable {
                 final long[] cpuTimes = u.getCpuFreqTimes(which, procState);
                 if (cpuTimes != null) {
                     sb.setLength(0);
-                    sb.append("    Cpu times per freq at state "
-                            + Uid.PROCESS_STATE_NAMES[procState] + ":");
+                    sb.append("    Cpu times per freq at state ")
+                            .append(Uid.PROCESS_STATE_NAMES[procState]).append(':');
                     for (int i = 0; i < cpuTimes.length; ++i) {
                         sb.append(" " + cpuTimes[i]);
                     }
@@ -6044,8 +6068,8 @@ public abstract class BatteryStats implements Parcelable {
                 final long[] screenOffCpuTimes = u.getScreenOffCpuFreqTimes(which, procState);
                 if (screenOffCpuTimes != null) {
                     sb.setLength(0);
-                    sb.append("   Screen-off cpu times per freq at state "
-                            + Uid.PROCESS_STATE_NAMES[procState] + ":");
+                    sb.append("   Screen-off cpu times per freq at state ")
+                            .append(Uid.PROCESS_STATE_NAMES[procState]).append(':');
                     for (int i = 0; i < screenOffCpuTimes.length; ++i) {
                         sb.append(" " + screenOffCpuTimes[i]);
                     }

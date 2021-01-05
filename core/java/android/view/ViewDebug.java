@@ -29,11 +29,11 @@ import android.graphics.Picture;
 import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
 import android.graphics.RenderNode;
+import android.os.Build;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.os.RemoteException;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
@@ -477,7 +477,7 @@ public class ViewDebug {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static long getViewRootImplCount() {
         return Debug.countInstancesOfClass(ViewRootImpl.class);
     }
@@ -532,7 +532,7 @@ public class ViewDebug {
     @UnsupportedAppUsage
     static void dispatchCommand(View view, String command, String parameters,
             OutputStream clientStream) throws IOException {
-        // Paranoid but safe...
+        // Just being cautious...
         view = view.getRootView();
 
         if (REMOTE_COMMAND_DUMP.equalsIgnoreCase(command)) {
@@ -755,11 +755,7 @@ public class ViewDebug {
 
         try {
             Rect outRect = new Rect();
-            try {
-                root.mAttachInfo.mSession.getDisplayFrame(root.mAttachInfo.mWindow, outRect);
-            } catch (RemoteException e) {
-                // Ignore
-            }
+            root.mAttachInfo.mViewRootImpl.getDisplayFrame(outRect);
 
             clientStream.writeInt(outRect.width());
             clientStream.writeInt(outRect.height());
@@ -1157,7 +1153,7 @@ public class ViewDebug {
      * @hide
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static void dump(View root, boolean skipChildren, boolean includeProperties,
             OutputStream clientStream) throws IOException {
         BufferedWriter out = null;

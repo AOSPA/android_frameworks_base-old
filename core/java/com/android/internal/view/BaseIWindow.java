@@ -18,21 +18,20 @@ package com.android.internal.view;
 
 import android.compat.annotation.UnsupportedAppUsage;
 import android.graphics.Point;
-import android.graphics.Rect;
 import android.hardware.input.InputManager;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.util.MergedConfiguration;
-import android.view.DisplayCutout;
 import android.view.DragEvent;
-import android.view.IScrollCaptureController;
+import android.view.IScrollCaptureCallbacks;
 import android.view.IWindow;
 import android.view.IWindowSession;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
 import android.view.PointerIcon;
 import android.view.WindowInsets.Type.InsetsType;
+import android.window.ClientWindowFrames;
 
 import com.android.internal.os.IResultReceiver;
 
@@ -44,18 +43,15 @@ public class BaseIWindow extends IWindow.Stub {
     public BaseIWindow() {}
 
     private IWindowSession mSession;
-    public int mSeq;
 
     public void setSession(IWindowSession session) {
         mSession = session;
     }
 
     @Override
-    public void resized(Rect frame, Rect contentInsets, Rect visibleInsets,
-            Rect stableInsets, boolean reportDraw,
-            MergedConfiguration mergedConfiguration, Rect backDropFrame, boolean forceLayout,
-            boolean alwaysConsumeSystemBars, int displayId,
-            DisplayCutout.ParcelableWrapper displayCutout) {
+    public void resized(ClientWindowFrames frames, boolean reportDraw,
+            MergedConfiguration mergedConfiguration, boolean forceLayout,
+            boolean alwaysConsumeSystemBars, int displayId) {
         if (reportDraw) {
             try {
                 mSession.finishDrawing(this, null /* postDrawTransaction */);
@@ -143,12 +139,6 @@ public class BaseIWindow extends IWindow.Stub {
     }
 
     @Override
-    public void dispatchSystemUiVisibilityChanged(int seq, int globalUi,
-            int localValue, int localChanges) {
-        mSeq = seq;
-    }
-
-    @Override
     public void dispatchWallpaperCommand(String action, int x, int y,
             int z, Bundle extras, boolean sync) {
         if (sync) {
@@ -172,9 +162,9 @@ public class BaseIWindow extends IWindow.Stub {
     }
 
     @Override
-    public void requestScrollCapture(IScrollCaptureController controller) {
+    public void requestScrollCapture(IScrollCaptureCallbacks callbacks) {
         try {
-            controller.onClientUnavailable();
+            callbacks.onUnavailable();
         } catch (RemoteException ex) {
             // ignore
         }

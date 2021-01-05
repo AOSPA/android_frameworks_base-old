@@ -88,6 +88,7 @@ import org.mockito.quality.Strictness;
 
 import java.io.File;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /**
  * JUnit test rule to correctly setting up system services like {@link WindowManagerService}
@@ -112,6 +113,7 @@ public class SystemServicesTestRule implements TestRule {
     private WindowState.PowerManagerWrapper mPowerManagerWrapper;
     private InputManagerService mImService;
     private InputChannel mInputChannel;
+    private Supplier<Surface> mSurfaceFactory = () -> mock(Surface.class);
     /**
      * Spied {@link SurfaceControl.Transaction} class than can be used to verify calls.
      */
@@ -236,6 +238,7 @@ public class SystemServicesTestRule implements TestRule {
         inputChannels[0].dispose();
         mInputChannel = inputChannels[1];
         doReturn(mInputChannel).when(mImService).monitorInput(anyString(), anyInt());
+        doReturn(mInputChannel).when(mImService).createInputChannel(anyString());
 
         // StatusBarManagerInternal
         final StatusBarManagerInternal sbmi = mock(StatusBarManagerInternal.class);
@@ -285,7 +288,7 @@ public class SystemServicesTestRule implements TestRule {
         DisplayThread.getHandler().post(StrictMode::allowThreadDiskWritesMask);
         mWmService = WindowManagerService.main(
                 mContext, mImService, false, false, mWMPolicy, mAtmService, StubTransaction::new,
-                () -> mock(Surface.class), (unused) -> new MockSurfaceControlBuilder());
+                () -> mSurfaceFactory.get(), (unused) -> new MockSurfaceControlBuilder());
         spyOn(mWmService);
         spyOn(mWmService.mRoot);
         // Invoked during {@link ActivityStack} creation.
@@ -294,7 +297,8 @@ public class SystemServicesTestRule implements TestRule {
         doReturn(true).when(mWmService.mRoot).hasAwakeDisplay();
         // Called when moving activity to pinned stack.
         doNothing().when(mWmService.mRoot).ensureActivitiesVisible(any(),
-                anyInt(), anyBoolean(), anyBoolean());
+                anyInt(), anyBoolean(), anyBoolean(), anyBoolean());
+        spyOn(mWmService.mDisplayWindowSettings);
 
         // Setup factory classes to prevent calls to native code.
         mTransaction = spy(StubTransaction.class);
@@ -318,6 +322,9 @@ public class SystemServicesTestRule implements TestRule {
         display.setDisplayWindowingMode(WINDOWING_MODE_FULLSCREEN);
         spyOn(display);
         final TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
+
+        // Set the default focused TDA.
+        display.setLastFocusedTaskDisplayArea(taskDisplayArea);
         spyOn(taskDisplayArea);
         final Task homeStack = taskDisplayArea.getStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
@@ -334,7 +341,7 @@ public class SystemServicesTestRule implements TestRule {
         // HighRefreshRateBlacklist with DeviceConfig. We need to undo that here to avoid
         // leaking mWmService.
         mWmService.mConstants.dispose();
-        mWmService.mHighRefreshRateBlacklist.dispose();
+        mWmService.mHighRefreshRateDenylist.dispose();
 
         // This makes sure the posted messages without delay are processed, e.g.
         // DisplayPolicy#release, WindowManagerService#setAnimationScale.
@@ -389,6 +396,10 @@ public class SystemServicesTestRule implements TestRule {
 
     WindowState.PowerManagerWrapper getPowerManagerWrapper() {
         return mPowerManagerWrapper;
+    }
+
+    void setSurfaceFactory(Supplier<Surface> factory) {
+        mSurfaceFactory = factory;
     }
 
     void cleanupWindowManagerHandlers() {
@@ -534,11 +545,14 @@ public class SystemServicesTestRule implements TestRule {
             doNothing().when(this).scheduleIdleTimeout(any());
             // unit test version does not handle launch wake lock
             doNothing().when(this).acquireLaunchWakelock();
-            doReturn(mock(KeyguardController.class)).when(this).getKeyguardController();
 
             mLaunchingActivityWakeLock = mock(PowerManager.WakeLock.class);
 
             initialize();
+
+            final KeyguardController controller = getKeyguardController();
+            spyOn(controller);
+            doReturn(true).when(controller).checkKeyguardVisibility(any());
         }
     }
 

@@ -262,7 +262,7 @@ public class Camera {
      * Camera HAL device API version 1.0
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int CAMERA_HAL_API_VERSION_1_0 = 0x100;
 
     /**
@@ -1306,7 +1306,7 @@ public class Camera {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private static void postEventFromNative(Object camera_ref,
                                             int what, int arg1, int arg2, Object obj)
     {
@@ -2427,7 +2427,7 @@ public class Camera {
          *         same as those of this size. {@code false} otherwise.
          */
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(@Nullable Object obj) {
             if (!(obj instanceof Size)) {
                 return false;
             }
@@ -2498,7 +2498,7 @@ public class Camera {
          *         the same as those of this area. {@code false} otherwise.
          */
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(@Nullable Object obj) {
             if (!(obj instanceof Area)) {
                 return false;
             }
@@ -4727,7 +4727,7 @@ public class Camera {
         // Splits a comma delimited string to an ArrayList of Area objects.
         // Example string: "(-10,-10,0,0,300),(0,0,10,10,700)". Return null if
         // the passing string is null or the size is 0 or (0,0,0,0,0).
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         private ArrayList<Area> splitArea(String str) {
             if (str == null || str.charAt(0) != '('
                     || str.charAt(str.length() - 1) != ')') {

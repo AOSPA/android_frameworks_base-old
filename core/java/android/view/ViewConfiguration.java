@@ -20,6 +20,7 @@ import static android.os.StrictMode.vmIncorrectContextUseEnabled;
 
 import android.annotation.FloatRange;
 import android.annotation.TestApi;
+import android.annotation.UiContext;
 import android.app.Activity;
 import android.app.AppGlobals;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -99,7 +100,7 @@ public class ViewConfiguration {
      * Defines the duration in milliseconds a user needs to hold down the
      * appropriate buttons (power + volume down) to trigger the screenshot chord.
      */
-    private static final int SCREENSHOT_CHORD_KEY_TIMEOUT = 500;
+    private static final int SCREENSHOT_CHORD_KEY_TIMEOUT = 0;
 
     /**
      * Defines the duration in milliseconds a user needs to hold down the
@@ -391,7 +392,7 @@ public class ViewConfiguration {
      * @see #get(android.content.Context)
      * @see android.util.DisplayMetrics
      */
-    private ViewConfiguration(Context context) {
+    private ViewConfiguration(@UiContext Context context) {
         mConstructedWithContext = true;
         final Resources res = context.getResources();
         final DisplayMetrics metrics = res.getDisplayMetrics();
@@ -498,7 +499,8 @@ public class ViewConfiguration {
      *                be {@link Activity} or other {@link Context} created with
      *                {@link Context#createWindowContext(int, Bundle)}.
      */
-    public static ViewConfiguration get(Context context) {
+
+    public static ViewConfiguration get(@UiContext Context context) {
         if (!context.isUiContext() && vmIncorrectContextUseEnabled()) {
             final String errorMessage = "Tried to access UI constants from a non-visual Context:"
                     + context;
@@ -602,7 +604,6 @@ public class ViewConfiguration {
     /**
      * @return the duration in milliseconds between the first tap's up event and the second tap's
      * down event for an interaction to be considered part of the same multi-press.
-     * @hide
      */
     public static int getMultiPressTimeout() {
         return AppGlobals.getIntCoreSetting(Settings.Secure.MULTI_PRESS_TIMEOUT,
@@ -678,7 +679,7 @@ public class ViewConfiguration {
      * to a hover movement gesture.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static int getHoverTapSlop() {
         return HOVER_TAP_SLOP;
     }

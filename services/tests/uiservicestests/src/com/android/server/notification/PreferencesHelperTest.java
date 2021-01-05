@@ -19,6 +19,7 @@ import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.NotificationChannel.CONVERSATION_CHANNEL_ID_FORMAT;
+import static android.app.NotificationChannel.USER_LOCKED_IMPORTANCE;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_ALL;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_NONE;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_SELECTED;
@@ -127,6 +128,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 @SmallTest
@@ -216,6 +218,22 @@ public class PreferencesHelperTest extends UiServiceTestCase {
             });
             return null;
         }).when(mTestIContentProvider).canonicalizeAsync(any(), any(), any(), any());
+        doAnswer(invocation -> {
+            String callingPkg = invocation.getArgument(0);
+            String featureId = invocation.getArgument(1);
+            Uri uri = invocation.getArgument(2);
+            RemoteCallback cb = invocation.getArgument(3);
+            IContentProvider mock = (IContentProvider) (invocation.getMock());
+            AsyncTask.SERIAL_EXECUTOR.execute(() -> {
+                final Bundle bundle = new Bundle();
+                try {
+                    bundle.putParcelable(ContentResolver.REMOTE_CALLBACK_RESULT,
+                            mock.uncanonicalize(callingPkg, featureId, uri));
+                } catch (RemoteException e) { /* consume */ }
+                cb.sendResult(bundle);
+            });
+            return null;
+        }).when(mTestIContentProvider).uncanonicalizeAsync(any(), any(), any(), any());
         doAnswer(invocation -> {
             Uri uri = invocation.getArgument(0);
             RemoteCallback cb = invocation.getArgument(1);
@@ -3502,8 +3520,9 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testDeleteConversation() {
+    public void testDeleteConversations() {
         String convoId = "convo";
+        String convoIdC = "convoC";
         NotificationChannel messages =
                 new NotificationChannel("messages", "Messages", IMPORTANCE_DEFAULT);
         mHelper.createNotificationChannel(PKG_O, UID_O, messages, true, false);
@@ -3526,10 +3545,16 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         channel2.setConversationId(calls.getId(), convoId);
         mHelper.createNotificationChannel(PKG_O, UID_O, channel2, true, false);
 
+        NotificationChannel channel3 =
+                new NotificationChannel("C person msgs", "msgs from C", IMPORTANCE_DEFAULT);
+        channel3.setConversationId(messages.getId(), convoIdC);
+        mHelper.createNotificationChannel(PKG_O, UID_O, channel3, true, false);
+
         assertEquals(channel, mHelper.getNotificationChannel(PKG_O, UID_O, channel.getId(), false));
         assertEquals(channel2,
                 mHelper.getNotificationChannel(PKG_O, UID_O, channel2.getId(), false));
-        assertEquals(2, mHelper.deleteConversation(PKG_O, UID_O, convoId).size());
+        List<String> deleted = mHelper.deleteConversations(PKG_O, UID_O, Set.of(convoId, convoIdC));
+        assertEquals(3, deleted.size());
 
         assertEquals(messages,
                 mHelper.getNotificationChannel(PKG_O, UID_O, messages.getId(), false));
@@ -3542,7 +3567,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertEquals(channel2,
                 mHelper.getNotificationChannel(PKG_O, UID_O, channel2.getId(), true));
 
-        assertEquals(7, mLogger.getCalls().size());
+        assertEquals(9, mLogger.getCalls().size());
         assertEquals(
                 NotificationChannelLogger.NotificationChannelEvent.NOTIFICATION_CHANNEL_CREATED,
                 mLogger.get(0).event);  // Channel messages
@@ -3563,12 +3588,20 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                 mLogger.get(4).event);  // Channel channel2 - Conversation A person calls
         assertEquals(
                 NotificationChannelLogger.NotificationChannelEvent
-                        .NOTIFICATION_CHANNEL_CONVERSATION_DELETED,
-                mLogger.get(5).event);  // Delete Channel channel - Conversation A person msgs
+                        .NOTIFICATION_CHANNEL_CONVERSATION_CREATED,
+                mLogger.get(5).event);  // Channel channel3 - Conversation C person msgs
         assertEquals(
                 NotificationChannelLogger.NotificationChannelEvent
                         .NOTIFICATION_CHANNEL_CONVERSATION_DELETED,
-                mLogger.get(6).event);  // Delete Channel channel2 - Conversation A person calls
+                mLogger.get(6).event);  // Delete Channel channel - Conversation A person msgs
+        assertEquals(
+                NotificationChannelLogger.NotificationChannelEvent
+                        .NOTIFICATION_CHANNEL_CONVERSATION_DELETED,
+                mLogger.get(7).event);  // Delete Channel channel2 - Conversation A person calls
+        assertEquals(
+                NotificationChannelLogger.NotificationChannelEvent
+                        .NOTIFICATION_CHANNEL_CONVERSATION_DELETED,
+                mLogger.get(8).event);  // Delete Channel channel3 - Conversation C person msgs
     }
 
     @Test
@@ -3763,5 +3796,41 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                         IS_IMPORTANT_CONVERSATION_FIELD_NUMBER));
             }
         }
+    }
+
+    @Test
+    public void testUnlockNotificationChannelImportance() {
+        NotificationChannel channel = new NotificationChannel("a", "a", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG_O, UID_O, channel, true, false);
+        channel.lockFields(USER_LOCKED_IMPORTANCE);
+        assertTrue((channel.getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0);
+
+        mHelper.unlockNotificationChannelImportance(PKG_O, UID_O, channel.getId());
+        assertTrue((channel.getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0);
+
+    }
+
+    @Test
+    public void testUnlockAllNotificationChannels() {
+        NotificationChannel channelA = new NotificationChannel("a", "a", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG_O, UID_O, channelA, true, false);
+        NotificationChannel channelB = new NotificationChannel("b", "b", IMPORTANCE_DEFAULT);
+        mHelper.createNotificationChannel(PKG_P, UID_P, channelB, true, false);
+        NotificationChannel channelC = new NotificationChannel("c", "c", IMPORTANCE_HIGH);
+        mHelper.createNotificationChannel(PKG_P, UID_O, channelC, false, false);
+
+        channelA.lockFields(USER_LOCKED_IMPORTANCE);
+        channelB.lockFields(USER_LOCKED_IMPORTANCE);
+        channelC.lockFields(USER_LOCKED_IMPORTANCE);
+
+        assertTrue((channelA.getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0);
+        assertTrue((channelB.getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0);
+        assertTrue((channelC.getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0);
+
+        mHelper.unlockAllNotificationChannels();
+        assertTrue((channelA.getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0);
+        assertTrue((channelB.getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0);
+        assertTrue((channelC.getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0);
+
     }
 }

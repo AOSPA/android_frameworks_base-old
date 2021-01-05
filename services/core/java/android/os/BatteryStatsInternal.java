@@ -51,4 +51,9 @@ public abstract class BatteryStatsInternal {
      */
     public abstract void noteBinderCallStats(int workSourceUid, long incrementalBinderCallCount,
             Collection<BinderCallsStats.CallStat> callStats);
+
+    /**
+     * Informs battery stats of native thread IDs of threads taking incoming binder calls.
+     */
+    public abstract void noteBinderThreadNativeIds(int[] binderThreadNativeTids);
 }

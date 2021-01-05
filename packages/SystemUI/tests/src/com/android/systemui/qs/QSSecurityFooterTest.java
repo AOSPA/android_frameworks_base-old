@@ -17,15 +17,15 @@ package com.android.systemui.qs;
 import static junit.framework.Assert.assertEquals;
 
 import static org.junit.Assert.assertFalse;
-import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.content.Context;
 import android.content.pm.UserInfo;
-import android.os.UserManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
@@ -39,15 +39,18 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.policy.SecurityController;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 
 /*
  * Compile and run the whole SystemUI test suite:
@@ -67,27 +70,29 @@ public class QSSecurityFooterTest extends SysuiTestCase {
     private final String DEVICE_OWNER_PACKAGE = "TestDPC";
     private final String VPN_PACKAGE = "TestVPN";
     private final String VPN_PACKAGE_2 = "TestVPN 2";
+    private static final String PARENTAL_CONTROLS_LABEL = "Parental Control App";
 
     private ViewGroup mRootView;
     private TextView mFooterText;
     private TestableImageView mFooterIcon;
     private QSSecurityFooter mFooter;
-    private SecurityController mSecurityController = mock(SecurityController.class);
-    private UserManager mUserManager;
+    @Mock
+    private SecurityController mSecurityController;
+    @Mock
+    private UserTracker mUserTracker;
+    @Mock
+    private ActivityStarter mActivityStarter;
 
     @Before
     public void setUp() {
-        mDependency.injectTestDependency(SecurityController.class, mSecurityController);
-        mDependency.injectTestDependency(Dependency.BG_LOOPER,
-                TestableLooper.get(this).getLooper());
-        mContext.addMockSystemService(Context.LAYOUT_INFLATER_SERVICE,
-                new LayoutInflaterBuilder(mContext)
-                        .replace("ImageView", TestableImageView.class)
-                        .build());
-        mUserManager = Mockito.mock(UserManager.class);
-        mContext.addMockSystemService(Context.USER_SERVICE, mUserManager);
-        mFooter = new QSSecurityFooter(null, mContext);
-        mRootView = (ViewGroup) mFooter.getView();
+        MockitoAnnotations.initMocks(this);
+        Looper looper = TestableLooper.get(this).getLooper();
+        when(mUserTracker.getUserInfo()).thenReturn(mock(UserInfo.class));
+        mRootView = (ViewGroup) new LayoutInflaterBuilder(mContext)
+                .replace("ImageView", TestableImageView.class)
+                .build().inflate(R.layout.quick_settings_footer, null, false);
+        mFooter = new QSSecurityFooter(mRootView, mContext, mUserTracker, new Handler(looper),
+                mActivityStarter, mSecurityController, looper);
         mFooterText = mRootView.findViewById(R.id.footer_text);
         mFooterIcon = mRootView.findViewById(R.id.footer_icon);
         mFooter.setHostEnvironment(null);
@@ -141,7 +146,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         when(mSecurityController.getDeviceOwnerOrganizationName()).thenReturn(null);
         final UserInfo mockUserInfo = Mockito.mock(UserInfo.class);
         when(mockUserInfo.isDemo()).thenReturn(true);
-        when(mUserManager.getUserInfo(anyInt())).thenReturn(mockUserInfo);
+        when(mUserTracker.getUserInfo()).thenReturn(mockUserInfo);
         Settings.Global.putInt(mContext.getContentResolver(), Settings.Global.DEVICE_DEMO_MODE, 1);
 
         mFooter.refreshState();
@@ -524,6 +529,27 @@ public class QSSecurityFooterTest extends SysuiTestCase {
 
         // Proxy for dialog being created
         verify(mockHost, never()).collapsePanels();
+    }
+
+    @Test
+    public void testParentalControls() {
+        when(mSecurityController.isParentalControlsEnabled()).thenReturn(true);
+        mFooter.refreshState();
+
+        TestableLooper.get(this).processAllMessages();
+
+        assertEquals(mContext.getString(R.string.quick_settings_disclosure_parental_controls),
+                mFooterText.getText());
+    }
+
+    @Test
+    public void testParentalControlsDialog() {
+        when(mSecurityController.isParentalControlsEnabled()).thenReturn(true);
+        when(mSecurityController.getLabel(any())).thenReturn(PARENTAL_CONTROLS_LABEL);
+
+        View view = mFooter.createDialogView();
+        TextView textView = (TextView) view.findViewById(R.id.parental_controls_title);
+        assertEquals(PARENTAL_CONTROLS_LABEL, textView.getText());
     }
 
     private CharSequence addLink(CharSequence description) {

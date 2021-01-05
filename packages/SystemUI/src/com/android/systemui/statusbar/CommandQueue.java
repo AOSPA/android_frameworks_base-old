@@ -44,19 +44,27 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
+import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
 import android.view.InsetsState.InternalInsetsType;
 import android.view.WindowInsetsController.Appearance;
+
+import androidx.annotation.NonNull;
 
 import com.android.internal.os.SomeArgs;
 import com.android.internal.statusbar.IStatusBar;
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.view.AppearanceRegion;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
+import com.android.systemui.statusbar.commandline.CommandRegistry;
 import com.android.systemui.statusbar.policy.CallbackController;
 import com.android.systemui.tracing.ProtoTracer;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 
 /**
@@ -68,6 +76,8 @@ import java.util.ArrayList;
  */
 public class CommandQueue extends IStatusBar.Stub implements CallbackController<Callbacks>,
         DisplayManager.DisplayListener {
+    private static final String TAG = CommandQueue.class.getSimpleName();
+
     private static final int INDEX_MASK = 0xffff;
     private static final int MSG_SHIFT  = 16;
     private static final int MSG_MASK   = 0xffff << MSG_SHIFT;
@@ -129,6 +139,9 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     private static final int MSG_TRACING_STATE_CHANGED             = 55 << MSG_SHIFT;
     private static final int MSG_SUPPRESS_AMBIENT_DISPLAY          = 56 << MSG_SHIFT;
     private static final int MSG_REQUEST_WINDOW_MAGNIFICATION_CONNECTION = 57 << MSG_SHIFT;
+    private static final int MSG_HANDLE_WINDOW_MANAGER_LOGGING_COMMAND = 58 << MSG_SHIFT;
+    //TODO(b/169175022) Update name and when feature name is locked.
+    private static final int MSG_EMERGENCY_ACTION_LAUNCH_GESTURE      = 59 << MSG_SHIFT;
 
     public static final int FLAG_EXCLUDE_NONE = 0;
     public static final int FLAG_EXCLUDE_SEARCH_PANEL = 1 << 0;
@@ -150,6 +163,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
      */
     private int mLastUpdatedImeDisplayId = INVALID_DISPLAY;
     private ProtoTracer mProtoTracer;
+    private final @Nullable CommandRegistry mRegistry;
 
     /**
      * These methods are called back on the main thread.
@@ -246,6 +260,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         default void showAssistDisclosure() { }
         default void startAssist(Bundle args) { }
         default void onCameraLaunchGestureDetected(int source) { }
+
+        /**
+         * Notifies SysUI that the emergency action gesture was detected.
+         */
+        default void onEmergencyActionLaunchGestureDetected() { }
         default void showPictureInPictureMenu() { }
         default void setTopAppHidesStatusBar(boolean topAppHidesStatusBar) { }
 
@@ -265,7 +284,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
 
         default void showAuthenticationDialog(PromptInfo promptInfo,
                 IBiometricSysuiReceiver receiver,
-                @BiometricAuthenticator.Modality int biometricModality,
+                int[] sensorIds, boolean credentialAllowed,
                 boolean requireConfirmation, int userId, String opPackageName,
                 long operationId) { }
         default void onBiometricAuthenticated() { }
@@ -351,14 +370,20 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
          * @param connect {@code true} if needs connection, otherwise set the connection to null.
          */
         default void requestWindowMagnificationConnection(boolean connect) { }
+
+        /**
+         * Handles a window manager shell logging command.
+         */
+        default void handleWindowManagerLoggingCommand(String[] args, ParcelFileDescriptor outFd) {}
     }
 
     public CommandQueue(Context context) {
-        this(context, null);
+        this(context, null, null);
     }
 
-    public CommandQueue(Context context, ProtoTracer protoTracer) {
+    public CommandQueue(Context context, ProtoTracer protoTracer, CommandRegistry registry) {
         mProtoTracer = protoTracer;
+        mRegistry = registry;
         context.getSystemService(DisplayManager.class).registerDisplayListener(this, mHandler);
         // We always have default display.
         setDisabled(DEFAULT_DISPLAY, DISABLE_NONE, DISABLE2_NONE);
@@ -391,7 +416,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                 && !ONLY_CORE_APPS;
     }
 
-    public void addCallback(Callbacks callbacks) {
+    @Override
+    public void addCallback(@NonNull Callbacks callbacks) {
         mCallbacks.add(callbacks);
         // TODO(b/117478341): find a better way to pass disable flags by display.
         for (int i = 0; i < mDisplayDisabled.size(); i++) {
@@ -402,7 +428,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         }
     }
 
-    public void removeCallback(Callbacks callbacks) {
+    @Override
+    public void removeCallback(@NonNull Callbacks callbacks) {
         mCallbacks.remove(callbacks);
     }
 
@@ -710,6 +737,14 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     }
 
     @Override
+    public void onEmergencyActionLaunchGestureDetected() {
+        synchronized (mLock) {
+            mHandler.removeMessages(MSG_EMERGENCY_ACTION_LAUNCH_GESTURE);
+            mHandler.obtainMessage(MSG_EMERGENCY_ACTION_LAUNCH_GESTURE).sendToTarget();
+        }
+    }
+
+    @Override
     public void addQsTile(ComponentName tile) {
         synchronized (mLock) {
             mHandler.obtainMessage(MSG_ADD_QS_TILE, tile).sendToTarget();
@@ -794,17 +829,18 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
 
     @Override
     public void showAuthenticationDialog(PromptInfo promptInfo, IBiometricSysuiReceiver receiver,
-            @BiometricAuthenticator.Modality int biometricModality, boolean requireConfirmation,
+            int[] sensorIds, boolean credentialAllowed, boolean requireConfirmation,
             int userId, String opPackageName, long operationId) {
         synchronized (mLock) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = promptInfo;
             args.arg2 = receiver;
-            args.argi1 = biometricModality;
-            args.arg3 = requireConfirmation;
-            args.argi2 = userId;
-            args.arg4 = opPackageName;
-            args.arg5 = operationId;
+            args.arg3 = sensorIds; //
+            args.arg4 = credentialAllowed; //
+            args.arg5 = requireConfirmation;
+            args.argi1 = userId;
+            args.arg6 = opPackageName;
+            args.arg7 = operationId;
             mHandler.obtainMessage(MSG_BIOMETRIC_SHOW, args)
                     .sendToTarget();
         }
@@ -980,10 +1016,49 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     }
 
     @Override
+    public void handleWindowManagerLoggingCommand(String[] args, ParcelFileDescriptor outFd) {
+        synchronized (mLock) {
+            SomeArgs internalArgs = SomeArgs.obtain();
+            internalArgs.arg1 = args;
+            internalArgs.arg2 = outFd;
+            mHandler.obtainMessage(MSG_HANDLE_WINDOW_MANAGER_LOGGING_COMMAND, internalArgs)
+                    .sendToTarget();
+        }
+    }
+
+    @Override
     public void suppressAmbientDisplay(boolean suppress) {
         synchronized (mLock) {
             mHandler.obtainMessage(MSG_SUPPRESS_AMBIENT_DISPLAY, suppress).sendToTarget();
         }
+    }
+
+    @Override
+    public void passThroughShellCommand(String[] args, ParcelFileDescriptor pfd) {
+        final FileOutputStream fos = new FileOutputStream(pfd.getFileDescriptor());
+        final PrintWriter pw = new PrintWriter(fos);
+        // This is mimicking Binder#dumpAsync, but on this side of the binder. Might be possible
+        // to just throw this work onto the handler just like the other messages
+        Thread thr = new Thread("Sysui.passThroughShellCommand") {
+            public void run() {
+                try {
+                    if (mRegistry == null) {
+                        return;
+                    }
+
+                    // Registry blocks this thread until finished
+                    mRegistry.onShellCommand(pw, args);
+                } finally {
+                    pw.flush();
+                    try {
+                        // Close the file descriptor so the TransferPipe finishes its thread
+                        pfd.close();
+                    } catch (Exception e) {
+                    }
+                }
+            }
+        };
+        thr.start();
     }
 
     private final class H extends Handler {
@@ -1127,6 +1202,10 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                         mCallbacks.get(i).onCameraLaunchGestureDetected(msg.arg1);
                     }
                     break;
+                case MSG_EMERGENCY_ACTION_LAUNCH_GESTURE:
+                    for (int i = 0; i < mCallbacks.size(); i++) {
+                        mCallbacks.get(i).onEmergencyActionLaunchGestureDetected();
+                    }
                 case MSG_SHOW_PICTURE_IN_PICTURE_MENU:
                     for (int i = 0; i < mCallbacks.size(); i++) {
                         mCallbacks.get(i).showPictureInPictureMenu();
@@ -1186,11 +1265,12 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                         mCallbacks.get(i).showAuthenticationDialog(
                                 (PromptInfo) someArgs.arg1,
                                 (IBiometricSysuiReceiver) someArgs.arg2,
-                                someArgs.argi1 /* biometricModality */,
-                                (boolean) someArgs.arg3 /* requireConfirmation */,
-                                someArgs.argi2 /* userId */,
-                                (String) someArgs.arg4 /* opPackageName */,
-                                (long) someArgs.arg5 /* operationId */);
+                                (int[]) someArgs.arg3 /* sensorIds */,
+                                (boolean) someArgs.arg4 /* credentialAllowed */,
+                                (boolean) someArgs.arg5 /* requireConfirmation */,
+                                someArgs.argi1 /* userId */,
+                                (String) someArgs.arg6 /* opPackageName */,
+                                (long) someArgs.arg7 /* operationId */);
                     }
                     someArgs.recycle();
                     break;
@@ -1329,6 +1409,18 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                     for (int i = 0; i < mCallbacks.size(); i++) {
                         mCallbacks.get(i).requestWindowMagnificationConnection((Boolean) msg.obj);
                     }
+                    break;
+                case MSG_HANDLE_WINDOW_MANAGER_LOGGING_COMMAND:
+                    args = (SomeArgs) msg.obj;
+                    try (ParcelFileDescriptor pfd = (ParcelFileDescriptor) args.arg2) {
+                        for (int i = 0; i < mCallbacks.size(); i++) {
+                            mCallbacks.get(i).handleWindowManagerLoggingCommand(
+                                    (String[]) args.arg1, pfd);
+                        }
+                    } catch (IOException e) {
+                        Log.e(TAG, "Failed to handle logging command", e);
+                    }
+                    args.recycle();
                     break;
             }
         }

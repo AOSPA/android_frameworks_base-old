@@ -79,7 +79,7 @@ public class LocationFudgerTest {
             Location coarse = mFudger.createCoarse(fine);
 
             assertThat(coarse).isNotNull();
-            assertThat(coarse).isNotSameAs(fine);
+            assertThat(coarse).isNotSameInstanceAs(fine);
             assertThat(coarse.hasBearing()).isFalse();
             assertThat(coarse.hasSpeed()).isFalse();
             assertThat(coarse.hasAltitude()).isFalse();
@@ -148,7 +148,7 @@ public class LocationFudgerTest {
         // accurate the coarsened average will be. we use 70% as a lower bound by -very- roughly
         // taking the area within a grid where we expect a reasonable percentage of points generated
         // by step() to fall in another grid square. this likely doesn't have much mathematical
-        // validity, but it serves as a sanity test as least.
+        // validity, but it serves as a validity test as least.
         assertThat(passed / (double) iterations).isGreaterThan(.70);
     }
 

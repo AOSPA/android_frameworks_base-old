@@ -48,8 +48,8 @@ import static com.android.server.am.ActivityManagerService.STOCK_PM_FLAGS;
 import static com.android.server.am.ActivityManagerService.TAG_LRU;
 import static com.android.server.am.ActivityManagerService.TAG_NETWORK;
 import static com.android.server.am.ActivityManagerService.TAG_PROCESSES;
-import static com.android.server.am.ActivityManagerService.TAG_PSS;
 import static com.android.server.am.ActivityManagerService.TAG_UID_OBSERVERS;
+import static com.android.server.am.AppProfiler.TAG_PSS;
 
 import android.app.ActivityManager;
 import android.app.ActivityThread;
@@ -92,7 +92,6 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
-import android.os.storage.StorageManager;
 import android.os.storage.StorageManagerInternal;
 import android.system.Os;
 import android.text.TextUtils;
@@ -154,10 +153,6 @@ public final class ProcessList {
     // A system property to control if obb app data isolation is enabled in vold.
     static final String ANDROID_VOLD_APP_DATA_ISOLATION_ENABLED_PROPERTY =
             "persist.sys.vold_app_data_isolation_enabled";
-
-    // The minimum time we allow between crashes, for us to consider this
-    // application to be bad and stop and its services and reject broadcasts.
-    static final int MIN_CRASH_INTERVAL = 60 * 1000;
 
     // OOM adjustments for processes in various states:
 
@@ -334,7 +329,7 @@ public final class ProcessList {
     /**
      * How long between a process kill and we actually receive its death recipient
      */
-    private static final int PROC_KILL_TIMEOUT = 2000; // 2 seconds;
+    static final int PROC_KILL_TIMEOUT = 2000; // 2 seconds;
 
     /**
      * Native heap allocations will now have a non-zero tag in the most significant byte.
@@ -1333,19 +1328,6 @@ public final class ProcessList {
         return test ? PSS_TEST_MIN_TIME_FROM_STATE_CHANGE : PSS_MIN_TIME_FROM_STATE_CHANGE;
     }
 
-    public static void commitNextPssTime(ProcStateMemTracker tracker) {
-        if (tracker.mPendingMemState >= 0) {
-            tracker.mHighestMem[tracker.mPendingMemState] = tracker.mPendingHighestMemState;
-            tracker.mScalingFactor[tracker.mPendingMemState] = tracker.mPendingScalingFactor;
-            tracker.mTotalHighestMem = tracker.mPendingHighestMemState;
-            tracker.mPendingMemState = -1;
-        }
-    }
-
-    public static void abortNextPssTime(ProcStateMemTracker tracker) {
-        tracker.mPendingMemState = -1;
-    }
-
     public static long computeNextPssTime(int procState, ProcStateMemTracker tracker, boolean test,
             boolean sleeping, long now) {
         boolean first;
@@ -1538,30 +1520,10 @@ public final class ProcessList {
                 && proc.setProcState >= ActivityManager.PROCESS_STATE_CACHED_EMPTY
                 && proc.lastCachedPss >= 4000) {
             // Turn this condition on to cause killing to happen regularly, for testing.
-            if (proc.baseProcessTracker != null) {
-                proc.baseProcessTracker.reportCachedKill(proc.pkgList.mPkgList, proc.lastCachedPss);
-                for (int ipkg = proc.pkgList.size() - 1; ipkg >= 0; ipkg--) {
-                    ProcessStats.ProcessStateHolder holder = proc.pkgList.valueAt(ipkg);
-                    FrameworkStatsLog.write(FrameworkStatsLog.CACHED_KILL_REPORTED,
-                            proc.info.uid,
-                            holder.state.getName(),
-                            holder.state.getPackage(),
-                            proc.lastCachedPss, holder.appVersion);
-                }
-            }
-            proc.kill(Long.toString(proc.lastCachedPss) + "k from cached",
-                    ApplicationExitInfo.REASON_OTHER,
-                    ApplicationExitInfo.SUBREASON_LARGE_CACHED,
-                    true);
-        } else if (proc != null && !keepIfLarge
-                && mService.mLastMemoryLevel > ProcessStats.ADJ_MEM_FACTOR_NORMAL
-                && proc.setProcState >= ActivityManager.PROCESS_STATE_CACHED_EMPTY) {
-            if (DEBUG_PSS) Slog.d(TAG_PSS, "May not keep " + proc + ": pss=" + proc
-                    .lastCachedPss);
-            if (proc.lastCachedPss >= getCachedRestoreThresholdKb()) {
+            synchronized (mService.mProcessStats.mLock) {
                 if (proc.baseProcessTracker != null) {
-                    proc.baseProcessTracker.reportCachedKill(proc.pkgList.mPkgList,
-                            proc.lastCachedPss);
+                    proc.baseProcessTracker.reportCachedKill(
+                            proc.pkgList.mPkgList, proc.lastCachedPss);
                     for (int ipkg = proc.pkgList.size() - 1; ipkg >= 0; ipkg--) {
                         ProcessStats.ProcessStateHolder holder = proc.pkgList.valueAt(ipkg);
                         FrameworkStatsLog.write(FrameworkStatsLog.CACHED_KILL_REPORTED,
@@ -1569,6 +1531,31 @@ public final class ProcessList {
                                 holder.state.getName(),
                                 holder.state.getPackage(),
                                 proc.lastCachedPss, holder.appVersion);
+                    }
+                }
+            }
+            proc.kill(Long.toString(proc.lastCachedPss) + "k from cached",
+                    ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.SUBREASON_LARGE_CACHED,
+                    true);
+        } else if (proc != null && !keepIfLarge
+                && !mService.mAppProfiler.isLastMemoryLevelNormal()
+                && proc.setProcState >= ActivityManager.PROCESS_STATE_CACHED_EMPTY) {
+            if (DEBUG_PSS) Slog.d(TAG_PSS, "May not keep " + proc + ": pss=" + proc
+                    .lastCachedPss);
+            if (proc.lastCachedPss >= getCachedRestoreThresholdKb()) {
+                synchronized (mService.mProcessStats.mLock) {
+                    if (proc.baseProcessTracker != null) {
+                        proc.baseProcessTracker.reportCachedKill(proc.pkgList.mPkgList,
+                                proc.lastCachedPss);
+                        for (int ipkg = proc.pkgList.size() - 1; ipkg >= 0; ipkg--) {
+                            ProcessStats.ProcessStateHolder holder = proc.pkgList.valueAt(ipkg);
+                            FrameworkStatsLog.write(FrameworkStatsLog.CACHED_KILL_REPORTED,
+                                    proc.info.uid,
+                                    holder.state.getName(),
+                                    holder.state.getPackage(),
+                                    proc.lastCachedPss, holder.appVersion);
+                        }
                     }
                 }
                 proc.kill(Long.toString(proc.lastCachedPss) + "k from cached",
@@ -1777,7 +1764,7 @@ public final class ProcessList {
         mService.mProcessesOnHold.remove(app);
 
         checkSlow(startTime, "startProcess: starting to update cpu stats");
-        mService.updateCpuStats();
+        mService.updateCpuStatsLocked();
         checkSlow(startTime, "startProcess: done updating cpu stats");
 
         try {
@@ -1798,14 +1785,10 @@ public final class ProcessList {
                     final IPackageManager pm = AppGlobals.getPackageManager();
                     permGids = pm.getPackageGids(app.info.packageName,
                             MATCH_DIRECT_BOOT_AUTO, app.userId);
-                    if (StorageManager.hasIsolatedStorage() && mountExtStorageFull) {
-                        mountExternal = Zygote.MOUNT_EXTERNAL_FULL;
-                    } else {
-                        StorageManagerInternal storageManagerInternal = LocalServices.getService(
-                                StorageManagerInternal.class);
-                        mountExternal = storageManagerInternal.getExternalStorageMountMode(uid,
-                                app.info.packageName);
-                    }
+                    StorageManagerInternal storageManagerInternal = LocalServices.getService(
+                            StorageManagerInternal.class);
+                    mountExternal = storageManagerInternal.getExternalStorageMountMode(uid,
+                            app.info.packageName);
                 } catch (RemoteException e) {
                     throw e.rethrowAsRuntimeException();
                 }
@@ -1936,7 +1919,9 @@ public final class ProcessList {
 
             String instructionSet = null;
             if (app.info.primaryCpuAbi != null) {
-                instructionSet = VMRuntime.getInstructionSet(app.info.primaryCpuAbi);
+                // If ABI override is specified, use the isa derived from the value of ABI override.
+                // Otherwise, use the isa derived from primary ABI
+                instructionSet = VMRuntime.getInstructionSet(requiredAbi);
             }
 
             app.gids = gids;
@@ -1945,7 +1930,7 @@ public final class ProcessList {
 
             // If instructionSet is non-null, this indicates that the system_server is spawning a
             // process with an ISA that may be different from its own. System (kernel and hardware)
-            // compatililty for these features is checked in the decideTaggingLevel in the
+            // compatibility for these features is checked in the decideTaggingLevel in the
             // system_server process (not the child process). As both MTE and TBI are only supported
             // in aarch64, we can simply ensure that the new process is also aarch64. This prevents
             // the mismatch where a 64-bit system server spawns a 32-bit child that thinks it should
@@ -2228,7 +2213,8 @@ public final class ProcessList {
                 // access /mnt/user anyway.
                 && app.mountMode != Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE
                 && app.mountMode != Zygote.MOUNT_EXTERNAL_PASS_THROUGH
-                && app.mountMode != Zygote.MOUNT_EXTERNAL_INSTALLER;
+                && app.mountMode != Zygote.MOUNT_EXTERNAL_INSTALLER
+                && app.mountMode != Zygote.MOUNT_EXTERNAL_NONE;
     }
 
     private Process.ProcessStartResult startProcess(HostingRecord hostingRecord, String entryPoint,
@@ -2376,7 +2362,7 @@ public final class ProcessList {
             if ((intentFlags & Intent.FLAG_FROM_BACKGROUND) != 0) {
                 // If we are in the background, then check to see if this process
                 // is bad.  If so, we will just silently fail.
-                if (mService.mAppErrors.isBadProcessLocked(processName, info.uid)) {
+                if (mService.mAppErrors.isBadProcess(processName, info.uid)) {
                     if (DEBUG_PROCESSES) Slog.v(TAG, "Bad process: " + info.uid
                             + "/" + processName);
                     return null;
@@ -2389,11 +2375,11 @@ public final class ProcessList {
                 if (DEBUG_PROCESSES) Slog.v(TAG, "Clearing bad process: " + info.uid
                         + "/" + processName);
                 mService.mAppErrors.resetProcessCrashTimeLocked(processName, info.uid);
-                if (mService.mAppErrors.isBadProcessLocked(processName, info.uid)) {
+                if (mService.mAppErrors.isBadProcess(processName, info.uid)) {
                     EventLog.writeEvent(EventLogTags.AM_PROC_GOOD,
                             UserHandle.getUserId(info.uid), info.uid,
                             info.processName);
-                    mService.mAppErrors.clearBadProcessLocked(processName, info.uid);
+                    mService.mAppErrors.clearBadProcess(processName, info.uid);
                     if (app != null) {
                         app.bad = false;
                     }
@@ -2433,7 +2419,8 @@ public final class ProcessList {
             ProcessList.killProcessGroup(app.uid, app.pid);
             checkSlow(startTime, "startProcess: done killing old proc");
 
-            if (!app.killed || mService.mLastMemoryLevel <= ProcessStats.ADJ_MEM_FACTOR_NORMAL
+            if (!app.killed
+                    || mService.mAppProfiler.isLastMemoryLevelNormal()
                     || app.setProcState < ActivityManager.PROCESS_STATE_CACHED_EMPTY
                     || app.lastCachedPss < getCachedRestoreThresholdKb()) {
                 // Throw a wtf if it's not killed, or killed but not because the system was in
@@ -2566,8 +2553,8 @@ public final class ProcessList {
                 app.hostingRecord.getName() != null ? app.hostingRecord.getName() : "");
 
         try {
-            AppGlobals.getPackageManager().logAppProcessStartIfNeeded(app.processName, app.uid,
-                    app.seInfo, app.info.sourceDir, pid);
+            AppGlobals.getPackageManager().logAppProcessStartIfNeeded(app.info.packageName,
+                    app.processName, app.uid, app.seInfo, app.info.sourceDir, pid);
         } catch (RemoteException ex) {
             // Ignore
         }
@@ -2652,6 +2639,7 @@ public final class ProcessList {
                 mLruProcessServiceStart--;
             }
             mLruProcesses.remove(lrui);
+            mService.removeOomAdjTargetLocked(app, true);
         }
     }
 
@@ -2964,25 +2952,27 @@ public final class ProcessList {
         if ((expecting == null) || (old == expecting)) {
             mProcessNames.remove(name, uid);
         }
-        if (old != null && old.uidRecord != null) {
-            old.uidRecord.numProcs--;
-            old.uidRecord.procRecords.remove(old);
-            if (old.uidRecord.numProcs == 0) {
+        final ProcessRecord record = expecting != null ? expecting : old;
+        if (record != null && record.uidRecord != null) {
+            final UidRecord uidRecord = record.uidRecord;
+            uidRecord.numProcs--;
+            uidRecord.procRecords.remove(record);
+            if (uidRecord.numProcs == 0) {
                 // No more processes using this uid, tell clients it is gone.
                 if (DEBUG_UID_OBSERVERS) Slog.i(TAG_UID_OBSERVERS,
-                        "No more processes in " + old.uidRecord);
-                mService.enqueueUidChangeLocked(old.uidRecord, -1, UidRecord.CHANGE_GONE);
+                        "No more processes in " + uidRecord);
+                mService.enqueueUidChangeLocked(uidRecord, -1,
+                        UidRecord.CHANGE_GONE);
                 EventLogTags.writeAmUidStopped(uid);
                 mActiveUids.remove(uid);
                 mService.noteUidProcessState(uid, ActivityManager.PROCESS_STATE_NONEXISTENT,
                         ActivityManager.PROCESS_CAPABILITY_NONE);
             }
-            old.uidRecord = null;
+            record.uidRecord = null;
         }
         mIsolatedProcesses.remove(uid);
         mGlobalIsolatedUids.freeIsolatedUidLocked(uid);
         // Remove the (expected) ProcessRecord from the app zygote
-        final ProcessRecord record = expecting != null ? expecting : old;
         if (record != null && record.appZygote) {
             removeProcessFromAppZygoteLocked(record);
         }
@@ -3584,7 +3574,7 @@ public final class ProcessList {
             int clientTargetSdk) {
         outInfo.pid = app.pid;
         outInfo.uid = app.info.uid;
-        if (mService.mAtmInternal.isHeavyWeightProcess(app.getWindowProcessController())) {
+        if (app.getWindowProcessController().isHeavyWeightProcess()) {
             outInfo.flags |= ActivityManager.RunningAppProcessInfo.FLAG_CANT_SAVE_STATE;
         }
         if (app.isPersistent()) {
@@ -4080,7 +4070,8 @@ public final class ProcessList {
         boolean enqueueLocked(ProcessRecord app, String reason, int requester) {
             // Throttle the killing request for potential bad app to avoid cpu thrashing
             Long last = app.isolated ? null : mLastProcessKillTimes.get(app.processName, app.uid);
-            if (last != null && SystemClock.uptimeMillis() < last + MIN_CRASH_INTERVAL) {
+            if ((last != null) && (SystemClock.uptimeMillis()
+                    < (last + ActivityManagerConstants.MIN_CRASH_INTERVAL))) {
                 return false;
             }
 

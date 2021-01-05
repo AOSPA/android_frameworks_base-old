@@ -257,7 +257,6 @@
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Prikaži Bluetooth uređaje bez naziva"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="1452342324349203434">"Onemogući apsolutnu glasnoću"</string>
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"Omogući Gabeldorsche"</string>
-    <string name="enhanced_connectivity" msgid="7201127377781666804">"Poboljšana povezivost"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="1710571610177659127">"Verzija AVRCP-a za Bluetooth"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7846922290083709633">"Odaberite verziju AVRCP-a za Bluetooth"</string>
     <string name="bluetooth_select_map_version_string" msgid="526308145174175327">"Verzija MAP-a za Bluetooth"</string>
@@ -400,6 +399,9 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"Nije aktivno. Dodirnite da biste to promijenili."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"Aktivno. Dodirnite da biste to promijenili."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"Stanje aplikacije u mirovanju: <xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <string name="transcode_settings_title" msgid="6700974145733932357">"Postavke konvertiranja medija"</string>
+    <string name="transcode_enable_all" msgid="4719796495995795404">"Omogućavanje konvertiranja za sve aplikacije"</string>
+    <string name="transcode_skip_apps" msgid="5680997722349545778">"Onemogućivanje konvertiranja za aplikacije"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"Pokrenute usluge"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"Pregledajte i kontrolirajte pokrenute usluge"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"Implementacija WebViewa"</string>
@@ -547,12 +549,19 @@
     <string name="user_need_lock_message" msgid="4311424336209509301">"Prije izrade ograničenog profila trebate postaviti zaključavanje zaslona radi zaštite svojih aplikacija i osobnih podataka."</string>
     <string name="user_set_lock_button" msgid="1427128184982594856">"Postavi zaključavanje"</string>
     <string name="user_switch_to_user" msgid="6975428297154968543">"Prelazak na korisnika <xliff:g id="USER_NAME">%s</xliff:g>"</string>
+    <string name="creating_new_user_dialog_message" msgid="7232880257538970375">"Izrada novog korisnika…"</string>
+    <string name="user_nickname" msgid="262624187455825083">"Nadimak"</string>
     <string name="guest_new_guest" msgid="3482026122932643557">"Dodavanje gosta"</string>
     <string name="guest_exit_guest" msgid="5908239569510734136">"Uklanjanje gosta"</string>
     <string name="guest_nickname" msgid="6332276931583337261">"Gost"</string>
+    <string name="user_image_take_photo" msgid="467512954561638530">"Fotografiraj"</string>
+    <string name="user_image_choose_photo" msgid="1363820919146782908">"Odaberi sliku"</string>
+    <string name="user_image_photo_selector" msgid="433658323306627093">"Odabir slike"</string>
     <string name="cached_apps_freezer_device_default" msgid="2616594131750144342">"Zadana postavka uređaja"</string>
     <string name="cached_apps_freezer_disabled" msgid="4816382260660472042">"Onemogućeno"</string>
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"Omogućeno"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"Uređaj se mora ponovno pokrenuti da bi se ta promjena primijenila. Ponovo pokrenite uređaj odmah ili odustanite."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"Žičane slušalice"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"Uključeno"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"Isključeno"</string>
 </resources>

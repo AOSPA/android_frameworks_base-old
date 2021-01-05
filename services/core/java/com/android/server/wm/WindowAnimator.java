@@ -16,7 +16,7 @@
 
 package com.android.server.wm;
 
-import static com.android.server.wm.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
+import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_RECENTS;
@@ -36,8 +36,8 @@ import android.util.TimeUtils;
 import android.view.Choreographer;
 import android.view.SurfaceControl;
 
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.server.policy.WindowManagerPolicy;
-import com.android.server.protolog.common.ProtoLog;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -68,7 +68,6 @@ public class WindowAnimator {
     Object mLastWindowFreezeSource;
 
     SparseArray<DisplayContentsAnimator> mDisplayContentsAnimators = new SparseArray<>(2);
-
     private boolean mInitialized = false;
 
     // When set to true the animator will go over all windows after an animation frame is posted and
@@ -104,7 +103,8 @@ public class WindowAnimator {
         mAnimationFrameCallback = frameTimeNs -> {
             synchronized (mService.mGlobalLock) {
                 mAnimationFrameCallbackScheduled = false;
-                animate(frameTimeNs);
+                final long vsyncId = mChoreographer.getVsyncId();
+                animate(frameTimeNs, vsyncId);
                 if (mNotifyWhenNoAnimation && !mLastRootAnimating) {
                     mService.mGlobalLock.notifyAll();
                 }
@@ -126,13 +126,15 @@ public class WindowAnimator {
         mInitialized = true;
     }
 
-    private void animate(long frameTimeNs) {
+    private void animate(long frameTimeNs, long vsyncId) {
         if (!mInitialized) {
             return;
         }
 
         // Schedule next frame already such that back-pressure happens continuously.
         scheduleAnimation();
+
+        mTransaction.setFrameTimelineVsync(vsyncId);
 
         mCurrentTime = frameTimeNs / TimeUtils.NANOS_PER_MS;
         mBulkUpdateParams = SET_ORIENTATION_CHANGE_COMPLETE;

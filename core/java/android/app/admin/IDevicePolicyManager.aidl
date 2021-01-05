@@ -87,6 +87,8 @@ interface IDevicePolicyManager {
     boolean isProfileActivePasswordSufficientForParent(int userHandle);
     boolean isPasswordSufficientAfterProfileUnification(int userHandle, int profileUser);
     int getPasswordComplexity(boolean parent);
+    void setRequiredPasswordComplexity(int passwordComplexity, boolean parent);
+    int getRequiredPasswordComplexity(boolean parent);
     boolean isUsingUnifiedPassword(in ComponentName admin);
     int getCurrentFailedPasswordAttempts(int userHandle, boolean parent);
     int getProfileWithMinimumFailedPasswordsForWipe(int userHandle, boolean parent);
@@ -156,7 +158,6 @@ interface IDevicePolicyManager {
 
     boolean setProfileOwner(in ComponentName who, String ownerName, int userHandle);
     ComponentName getProfileOwnerAsUser(int userHandle);
-    ComponentName getProfileOwner(int userHandle);
     ComponentName getProfileOwnerOrDeviceOwnerSupervisionComponent(in UserHandle userHandle);
     String getProfileOwnerName(int userHandle);
     void setProfileEnabled(in ComponentName who);
@@ -197,12 +198,12 @@ interface IDevicePolicyManager {
     void setCertInstallerPackage(in ComponentName who, String installerPackage);
     String getCertInstallerPackage(in ComponentName who);
 
-    boolean setAlwaysOnVpnPackage(in ComponentName who, String vpnPackage, boolean lockdown, in List<String> lockdownWhitelist);
+    boolean setAlwaysOnVpnPackage(in ComponentName who, String vpnPackage, boolean lockdown, in List<String> lockdownAllowlist);
     String getAlwaysOnVpnPackage(in ComponentName who);
     String getAlwaysOnVpnPackageForUser(int userHandle);
     boolean isAlwaysOnVpnLockdownEnabled(in ComponentName who);
     boolean isAlwaysOnVpnLockdownEnabledForUser(int userHandle);
-    List<String> getAlwaysOnVpnLockdownWhitelist(in ComponentName who);
+    List<String> getAlwaysOnVpnLockdownAllowlist(in ComponentName who);
 
     void addPersistentPreferredActivity(in ComponentName admin, in IntentFilter filter, in ComponentName activity);
     void clearPackagePersistentPreferredActivities(in ComponentName admin, String packageName);
@@ -345,7 +346,6 @@ interface IDevicePolicyManager {
     void setKeepUninstalledPackages(in ComponentName admin, in String callerPackage, in List<String> packageList);
     List<String> getKeepUninstalledPackages(in ComponentName admin, in String callerPackage);
     boolean isManagedProfile(in ComponentName admin);
-    boolean isSystemOnlyUser(in ComponentName admin);
     String getWifiMacAddress(in ComponentName admin);
     void reboot(in ComponentName admin);
 

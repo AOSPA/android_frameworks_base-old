@@ -18,6 +18,8 @@ package android.app.servertransaction;
 
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityThread.ActivityClientRecord;
 import android.app.ClientTransactionHandler;
 import android.app.ProfilerInfo;
@@ -163,7 +165,7 @@ public class LaunchActivityItem extends ClientTransactionItem {
                 in.readTypedObject(FixedRotationAdjustments.CREATOR));
     }
 
-    public static final @android.annotation.NonNull Creator<LaunchActivityItem> CREATOR =
+    public static final @NonNull Creator<LaunchActivityItem> CREATOR =
             new Creator<LaunchActivityItem>() {
         public LaunchActivityItem createFromParcel(Parcel in) {
             return new LaunchActivityItem(in);
@@ -175,7 +177,7 @@ public class LaunchActivityItem extends ClientTransactionItem {
     };
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) {
             return true;
         }

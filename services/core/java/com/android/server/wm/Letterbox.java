@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.os.IInputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.view.SurfaceControl.HIDDEN;
 
 import android.graphics.Point;
@@ -190,7 +191,6 @@ public class Letterbox {
     }
 
     private static class InputInterceptor {
-        final InputChannel mServerChannel;
         final InputChannel mClientChannel;
         final InputWindowHandle mWindowHandle;
         final InputEventReceiver mInputEventReceiver;
@@ -200,13 +200,10 @@ public class Letterbox {
         InputInterceptor(String namePrefix, WindowState win) {
             mWmService = win.mWmService;
             final String name = namePrefix + (win.mActivityRecord != null ? win.mActivityRecord : win);
-            final InputChannel[] channels = InputChannel.openInputChannelPair(name);
-            mServerChannel = channels[0];
-            mClientChannel = channels[1];
+            mClientChannel = mWmService.mInputManager.createInputChannel(name);
             mInputEventReceiver = new SimpleInputReceiver(mClientChannel);
 
-            mWmService.mInputManager.registerInputChannel(mServerChannel);
-            mToken = mServerChannel.getToken();
+            mToken = mClientChannel.getToken();
 
             mWindowHandle = new InputWindowHandle(null /* inputApplicationHandle */,
                     win.getDisplayId());
@@ -217,8 +214,7 @@ public class Letterbox {
                     | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH
                     | WindowManager.LayoutParams.FLAG_SLIPPERY;
             mWindowHandle.layoutParamsType = WindowManager.LayoutParams.TYPE_INPUT_CONSUMER;
-            mWindowHandle.dispatchingTimeoutNanos =
-                    WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
+            mWindowHandle.dispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
             mWindowHandle.visible = true;
             mWindowHandle.ownerPid = Process.myPid();
             mWindowHandle.ownerUid = Process.myUid();
@@ -239,9 +235,8 @@ public class Letterbox {
         }
 
         void dispose() {
-            mWmService.mInputManager.unregisterInputChannel(mServerChannel);
+            mWmService.mInputManager.removeInputChannel(mToken);
             mInputEventReceiver.dispose();
-            mServerChannel.dispose();
             mClientChannel.dispose();
         }
 

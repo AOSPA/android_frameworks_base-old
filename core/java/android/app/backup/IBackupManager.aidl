@@ -74,7 +74,7 @@ interface IBackupManager {
     /**
      * {@link android.app.backup.IBackupManager.clearBackupDataForUser} for the calling user id.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void clearBackupData(String transportName, String packageName);
 
     /**
@@ -157,7 +157,7 @@ interface IBackupManager {
     /**
      * {@link android.app.backup.IBackupManager.setBackupEnabledForUser} for the calling user id.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void setBackupEnabled(boolean isEnabled);
 
     /**
@@ -181,7 +181,7 @@ interface IBackupManager {
     /**
      * {@link android.app.backup.IBackupManager.setAutoRestoreForUser} for the calling user id.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void setAutoRestore(boolean doAutoRestore);
 
     /**
@@ -198,7 +198,7 @@ interface IBackupManager {
     /**
      * {@link android.app.backup.IBackupManager.isBackupEnabledForUser} for the calling user id.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean isBackupEnabled();
 
     /**
@@ -327,7 +327,7 @@ interface IBackupManager {
      * {@link android.app.backup.IBackupManager.acknowledgeFullBackupOrRestoreForUser} for the
      * calling user id.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void acknowledgeFullBackupOrRestore(int token, boolean allow,
             in String curPassword, in String encryptionPassword,
             IFullBackupRestoreObserver observer);
@@ -404,7 +404,7 @@ interface IBackupManager {
     /**
      * {@link android.app.backup.IBackupManager.listAllTransportsForUser} for the calling user id.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     String[] listAllTransports();
 
     /**
@@ -442,7 +442,7 @@ interface IBackupManager {
      * {@link android.app.backup.IBackupManager.selectBackupTransportForUser} for the calling user
      * id.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     String selectBackupTransport(String transport);
 
     /**
@@ -547,9 +547,11 @@ interface IBackupManager {
      *        set can be restored.
      * @param transportID The name of the transport to use for the restore operation.
      *        May be null, in which case the current active transport is used.
+     * @param operationType Type of the operation, see {@link BackupManager#OperationType}
      * @return An interface to the restore session, or null on error.
      */
-    IRestoreSession beginRestoreSessionForUser(int userId, String packageName, String transportID);
+    IRestoreSession beginRestoreSessionForUser(int userId, String packageName, String transportID,
+            int operationType);
 
     /**
      * Notify the backup manager that a BackupAgent has completed the operation
@@ -593,7 +595,7 @@ interface IBackupManager {
      * @param whichUser User handle of the defined user whose backup active state
      *     is being queried.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean isBackupServiceActive(int whichUser);
 
     /**

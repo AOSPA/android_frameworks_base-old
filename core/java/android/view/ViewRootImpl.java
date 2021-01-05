@@ -33,6 +33,23 @@ import static android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
 import static android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
 import static android.view.View.SYSTEM_UI_FLAG_LOW_PROFILE;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+import static android.view.ViewRootImplProto.ADDED;
+import static android.view.ViewRootImplProto.APP_VISIBLE;
+import static android.view.ViewRootImplProto.CUR_SCROLL_Y;
+import static android.view.ViewRootImplProto.DISPLAY_ID;
+import static android.view.ViewRootImplProto.HEIGHT;
+import static android.view.ViewRootImplProto.IS_ANIMATING;
+import static android.view.ViewRootImplProto.IS_DRAWING;
+import static android.view.ViewRootImplProto.LAST_WINDOW_INSETS;
+import static android.view.ViewRootImplProto.PENDING_DISPLAY_CUTOUT;
+import static android.view.ViewRootImplProto.REMOVED;
+import static android.view.ViewRootImplProto.SCROLL_Y;
+import static android.view.ViewRootImplProto.SOFT_INPUT_MODE;
+import static android.view.ViewRootImplProto.VIEW;
+import static android.view.ViewRootImplProto.VISIBLE_RECT;
+import static android.view.ViewRootImplProto.WIDTH;
+import static android.view.ViewRootImplProto.WINDOW_ATTRIBUTES;
+import static android.view.ViewRootImplProto.WIN_FRAME;
 import static android.view.WindowCallbacks.RESIZE_MODE_DOCKED_DIVIDER;
 import static android.view.WindowCallbacks.RESIZE_MODE_FREEFORM;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
@@ -53,17 +70,24 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_APPEARANCE_CO
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_BEHAVIOR_CONTROLLED;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FIT_INSETS_CONTROLLED;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DECOR_VIEW_VISIBILITY;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INSET_PARENT_FRAME_BY_IME;
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodEditorProto.ClientSideProto.IME_FOCUS_CONTROLLER;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodEditorProto.ClientSideProto.INSETS_CONTROLLER;
 
 import android.Manifest;
 import android.animation.LayoutTransition;
 import android.annotation.AnyThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UiContext;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.ResourcesManager;
@@ -81,6 +105,7 @@ import android.graphics.BLASTBufferQueue;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.FrameInfo;
+import android.graphics.HardwareRenderer;
 import android.graphics.HardwareRenderer.FrameDrawingCallback;
 import android.graphics.Insets;
 import android.graphics.Matrix;
@@ -124,6 +149,8 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
+import android.util.imetracing.ImeTracing;
+import android.util.proto.ProtoOutputStream;
 import android.view.InputDevice.InputSourceClass;
 import android.view.InsetsState.InternalInsetsType;
 import android.view.Surface.OutOfResourcesException;
@@ -134,7 +161,6 @@ import android.view.View.MeasureSpec;
 import android.view.Window.OnContentApplyWindowInsetsListener;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
-import android.view.WindowManager.LayoutParams;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
@@ -157,10 +183,13 @@ import android.view.contentcapture.ContentCaptureSession;
 import android.view.contentcapture.MainContentCaptureSession;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Scroller;
+import android.window.ClientWindowFrames;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
+import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.policy.DecorView;
@@ -179,6 +208,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 
@@ -218,45 +248,6 @@ public final class ViewRootImpl implements ViewParent,
     private static final boolean MT_RENDERER_AVAILABLE = true;
 
     /**
-     * If set to 2, the view system will switch from using rectangles retrieved from window to
-     * dispatch to the view hierarchy to using {@link InsetsController}, that derives the insets
-     * directly from the full configuration, enabling richer information about the insets state, as
-     * well as new APIs to control it frame-by-frame, and synchronize animations with it.
-     * <p>
-     * Only set this to 2 once the new insets system is productionized and the old APIs are
-     * fully migrated over.
-     * <p>
-     * If set to 1, this will switch to a mode where we only use the new approach for IME, but not
-     * for the status/navigation bar.
-     */
-    private static final String USE_NEW_INSETS_PROPERTY = "persist.debug.new_insets";
-
-    /**
-     * @see #USE_NEW_INSETS_PROPERTY
-     * @hide
-     */
-    public static final int NEW_INSETS_MODE_NONE = 0;
-
-    /**
-     * @see #USE_NEW_INSETS_PROPERTY
-     * @hide
-     */
-    public static final int NEW_INSETS_MODE_IME = 1;
-
-    /**
-     * @see #USE_NEW_INSETS_PROPERTY
-     * @hide
-     */
-    public static final int NEW_INSETS_MODE_FULL = 2;
-
-    /**
-     * @see #USE_NEW_INSETS_PROPERTY
-     * @hide
-     */
-    public static int sNewInsetsMode =
-            SystemProperties.getInt(USE_NEW_INSETS_PROPERTY, NEW_INSETS_MODE_FULL);
-
-    /**
      * Set this system property to true to force the view hierarchy to render
      * at 60 Hz. This can be used to measure the potential framerate.
      */
@@ -283,7 +274,7 @@ public final class ViewRootImpl implements ViewParent,
      */
     private static final int CONTENT_CAPTURE_ENABLED_FALSE = 2;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     static final ThreadLocal<HandlerActionQueue> sRunQueues = new ThreadLocal<HandlerActionQueue>();
 
     static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList<>();
@@ -350,6 +341,7 @@ public final class ViewRootImpl implements ViewParent,
     @GuardedBy("mWindowCallbacks")
     final ArrayList<WindowCallbacks> mWindowCallbacks = new ArrayList<>();
     @UnsupportedAppUsage
+    @UiContext
     public final Context mContext;
 
     @UnsupportedAppUsage
@@ -373,8 +365,6 @@ public final class ViewRootImpl implements ViewParent,
     final IBinder mLeashToken;
 
     final int mTargetSdkVersion;
-
-    int mSeq;
 
     @UnsupportedAppUsage
     View mView;
@@ -429,11 +419,11 @@ public final class ViewRootImpl implements ViewParent,
     final Region mTransparentRegion;
     final Region mPreviousTransparentRegion;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     int mWidth;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     int mHeight;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     Rect mDirty;
     public boolean mIsAnimating;
 
@@ -450,8 +440,8 @@ public final class ViewRootImpl implements ViewParent,
     @UnsupportedAppUsage
     final View.AttachInfo mAttachInfo;
     final SystemUiVisibilityInfo mCompatibleVisibilityInfo;
-    int mDispatchedSystemUiVisibility =
-            ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_FULL ? 0 : -1;
+    int mDispatchedSystemUiVisibility;
+    int mDispatchedSystemBarAppearance;
     InputQueue.Callback mInputQueueCallback;
     InputQueue mInputQueue;
     @UnsupportedAppUsage
@@ -461,6 +451,7 @@ public final class ViewRootImpl implements ViewParent,
     // used in relayout to get SurfaceControl size
     // for BLAST adapter surface setup
     private final Point mSurfaceSize = new Point();
+    private final Point mLastSurfaceSize = new Point();
 
     final Rect mTempRect; // used in the transaction to not thrash the heap.
     final Rect mVisRect; // used to retrieve visible rect of focused view.
@@ -531,7 +522,6 @@ public final class ViewRootImpl implements ViewParent,
     @UnsupportedAppUsage
     public final Surface mSurface = new Surface();
     private final SurfaceControl mSurfaceControl = new SurfaceControl();
-    private SurfaceControl mBlastSurfaceControl = new SurfaceControl();
 
     private BLASTBufferQueue mBlastBufferQueue;
 
@@ -555,8 +545,11 @@ public final class ViewRootImpl implements ViewParent,
     boolean mAdded;
     boolean mAddedTouchMode;
 
-    final Rect mTmpFrame = new Rect();
-    final Rect mTmpRect = new Rect();
+    /**
+     * It usually keeps the latest layout result from {@link IWindow#resized} or
+     * {@link IWindowSession#relayout}.
+     */
+    private final ClientWindowFrames mTmpFrames = new ClientWindowFrames();
 
     // These are accessed by multiple threads.
     final Rect mWinFrame; // frame given by window manager.
@@ -571,6 +564,9 @@ public final class ViewRootImpl implements ViewParent,
             = new ViewTreeObserver.InternalInsetsInfo();
 
     private WindowInsets mLastWindowInsets;
+    private final Rect mSystemInsetsCache = new Rect();
+    private final Rect mVisibleInsetsCache = new Rect();
+    private final Rect mStableInsetsCache = new Rect();
 
     // Insets types hidden by legacy window flags or system UI flags.
     private @InsetsType int mTypesHiddenByFlags = 0;
@@ -658,7 +654,10 @@ public final class ViewRootImpl implements ViewParent,
     private final InsetsController mInsetsController;
     private final ImeFocusController mImeFocusController;
 
-    private ScrollCaptureClient mScrollCaptureClient;
+    private ScrollCaptureConnection mScrollCaptureConnection;
+
+    private final BackgroundBlurDrawable.Aggregator mBlurRegionAggregator =
+            new BackgroundBlurDrawable.Aggregator(this);
 
     /**
      * @return {@link ImeFocusController} for this instance.
@@ -668,10 +667,10 @@ public final class ViewRootImpl implements ViewParent,
         return mImeFocusController;
     }
 
-    /** @return The current {@link ScrollCaptureClient} for this instance, if any is active. */
+    /** @return The current {@link ScrollCaptureConnection} for this instance, if any is active. */
     @Nullable
-    public ScrollCaptureClient getScrollCaptureClient() {
-        return mScrollCaptureClient;
+    public ScrollCaptureConnection getScrollCaptureConnection() {
+        return mScrollCaptureConnection;
     }
 
     private final GestureExclusionTracker mGestureExclusionTracker = new GestureExclusionTracker();
@@ -679,32 +678,30 @@ public final class ViewRootImpl implements ViewParent,
     private IAccessibilityEmbeddedConnection mAccessibilityEmbeddedConnection;
 
     static final class SystemUiVisibilityInfo {
-        int seq;
         int globalVisibility;
         int localValue;
         int localChanges;
     }
 
-    // If set, ViewRootImpl will call BLASTBufferQueue::setNextTransaction with
-    // mRtBLASTSyncTransaction, prior to invoking draw. This provides a way
-    // to redirect the buffers in to transactions.
+    // If set, ViewRootImpl will request a callback from HWRender when it's ready to render the next
+    // frame. This will allow VRI to call BLASTBufferQueue::setNextTransaction with
+    // mRtBLASTSyncTransaction, so the next frame submitted will be added to the
+    // mRtBLASTSyncTransaction instead of getting applied.
     private boolean mNextDrawUseBLASTSyncTransaction;
-    // Set when calling setNextTransaction, we can't just reuse mNextDrawUseBLASTSyncTransaction
-    // because, imagine this scenario:
-    //     1. First draw is using BLAST, mNextDrawUseBLAST = true
-    //     2. We call perform draw and are waiting on the callback
-    //     3. After the first perform draw but before the first callback and the
-    //        second perform draw, a second draw sets mNextDrawUseBLAST = true (it already was)
-    //     4. At this point the callback fires and we set mNextDrawUseBLAST = false;
-    //     5. We get to performDraw and fail to sync as we intended because mNextDrawUseBLAST
-    //        is now false.
-    // This is why we use a two-step latch with the two booleans, one consumed from
-    // performDraw and one consumed from finishBLASTSync()
-    private boolean mNextReportConsumeBLAST;
-    // Be very careful with the threading here. This is used from the render thread while
-    // the UI thread is paused and then applied and cleared from the UI thread right after
-    // draw returns.
-    private SurfaceControl.Transaction mRtBLASTSyncTransaction = new SurfaceControl.Transaction();
+
+    // This is used to signal if the mRtBLASTSyncTransaction should be applied/merged. When true,
+    // it indicates mRtBLASTSyncTransaction was sent to BLASTBufferQueue::setNextTransaction.
+    // Therefore, in onFrameComplete, if mRtNextFrameReportConsumeWithBlast is true, that means
+    // mRtBLASTSyncTransaction now contains the next buffer frame to be applied.
+    private boolean mRtNextFrameReportedConsumeWithBlast;
+
+    // Be very careful with the threading here. This is used from a thread pool generated by the
+    // render thread. Therefore, it needs to be locked when updating from the thread pool since
+    // multiple threads can be accessing it. It does not need to be locked when applied or merged
+    // since that can only happen from the frame complete callback after the other callbacks have
+    // been invoked.
+    private final SurfaceControl.Transaction mRtBLASTSyncTransaction =
+            new SurfaceControl.Transaction();
 
     // Keeps track of whether the WM requested us to use BLAST Sync when calling relayout.
     //  We use this to make sure we don't send the WM transactions from an internal BLAST sync
@@ -712,6 +709,11 @@ public final class ViewRootImpl implements ViewParent,
     private boolean mSendNextFrameToWm = false;
 
     private HashSet<ScrollCaptureCallback> mRootScrollCaptureCallbacks;
+
+    /**
+     * Increment this value when the surface has been replaced.
+     */
+    private int mSurfaceSequenceId = 0;
 
     private String mTag = TAG;
     boolean mHaveMoveEvent = false;
@@ -721,11 +723,11 @@ public final class ViewRootImpl implements ViewParent,
                 false /* useSfChoreographer */);
     }
 
-    public ViewRootImpl(Context context, Display display, IWindowSession session) {
+    public ViewRootImpl(@UiContext Context context, Display display, IWindowSession session) {
         this(context, display, session, false /* useSfChoreographer */);
     }
 
-    public ViewRootImpl(Context context, Display display, IWindowSession session,
+    public ViewRootImpl(@UiContext Context context, Display display, IWindowSession session,
             boolean useSfChoreographer) {
         mContext = context;
         mWindowSession = session;
@@ -805,7 +807,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /** Add static config callback to be notified about global config changes. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static void addConfigCallback(ConfigChangedCallback callback) {
         synchronized (sConfigCallbacks) {
             sConfigCallbacks.add(callback);
@@ -1028,12 +1030,17 @@ public final class ViewRootImpl implements ViewParent,
                     mAttachInfo.mRecomputeGlobalAttributes = true;
                     collectViewAttributes();
                     adjustLayoutParamsForCompatibility(mWindowAttributes);
-                    res = mWindowSession.addToDisplayAsUser(mWindow, mSeq, mWindowAttributes,
-                            getHostVisibility(), mDisplay.getDisplayId(), userId, mTmpFrame,
-                            mAttachInfo.mContentInsets, mAttachInfo.mStableInsets,
+                    controlInsetsForCompatibility(mWindowAttributes);
+                    res = mWindowSession.addToDisplayAsUser(mWindow, mWindowAttributes,
+                            getHostVisibility(), mDisplay.getDisplayId(), userId,
+                            mInsetsController.getRequestedVisibility(), mTmpFrames.frame,
                             mAttachInfo.mDisplayCutout, inputChannel,
                             mTempInsets, mTempControls);
-                    setFrame(mTmpFrame);
+                    if (mTranslator != null) {
+                        mTranslator.translateRectInScreenToAppWindow(mTmpFrames.frame);
+                        mTranslator.translateInsetsStateInScreenToAppWindow(mTempInsets);
+                    }
+                    setFrame(mTmpFrames.frame);
                 } catch (RemoteException e) {
                     mAdded = false;
                     mView = null;
@@ -1049,9 +1056,6 @@ public final class ViewRootImpl implements ViewParent,
                     }
                 }
 
-                if (mTranslator != null) {
-                    mTranslator.translateRectInScreenToAppWindow(mAttachInfo.mContentInsets);
-                }
                 mPendingDisplayCutout.set(mAttachInfo.mDisplayCutout);
                 mAttachInfo.mAlwaysConsumeSystemBars =
                         (res & WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_SYSTEM_BARS) != 0;
@@ -1177,7 +1181,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public int getWindowFlags() {
         return mWindowAttributes.flags;
     }
@@ -1298,10 +1302,6 @@ public final class ViewRootImpl implements ViewParent,
                 (attrs.flags & WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED) != 0;
 
         if (hardwareAccelerated) {
-            if (!ThreadedRenderer.isAvailable()) {
-                return;
-            }
-
             // Persistent processes (including the system) should not do
             // accelerated rendering on low-end devices.  In that case,
             // sRendererDisabled will be set.  In addition, the system process
@@ -1321,8 +1321,7 @@ public final class ViewRootImpl implements ViewParent,
                 // shows for launching applications, so they will look more like
                 // the app being launched.
                 mAttachInfo.mHardwareAccelerationRequested = true;
-            } else if (!ThreadedRenderer.sRendererDisabled
-                    || (ThreadedRenderer.sSystemRendererDisabled && forceHwAccelerated)) {
+            } else if (ThreadedRenderer.sRendererEnabled || forceHwAccelerated) {
                 if (mAttachInfo.mThreadedRenderer != null) {
                     mAttachInfo.mThreadedRenderer.destroy();
                 }
@@ -1331,13 +1330,9 @@ public final class ViewRootImpl implements ViewParent,
                 final boolean hasSurfaceInsets = insets.left != 0 || insets.right != 0
                         || insets.top != 0 || insets.bottom != 0;
                 final boolean translucent = attrs.format != PixelFormat.OPAQUE || hasSurfaceInsets;
-                final boolean wideGamut =
-                        mContext.getResources().getConfiguration().isScreenWideColorGamut()
-                        && attrs.getColorMode() == ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT;
-
                 mAttachInfo.mThreadedRenderer = ThreadedRenderer.create(mContext, translucent,
                         attrs.getTitle().toString());
-                mAttachInfo.mThreadedRenderer.setWideGamut(wideGamut);
+                updateColorModeIfNeeded(attrs.getColorMode());
                 updateForceDarkMode();
                 if (mAttachInfo.mThreadedRenderer != null) {
                     mAttachInfo.mHardwareAccelerated =
@@ -1406,6 +1401,10 @@ public final class ViewRootImpl implements ViewParent,
             attrs.systemUiVisibility = mWindowAttributes.systemUiVisibility;
             attrs.subtreeSystemUiVisibility = mWindowAttributes.subtreeSystemUiVisibility;
 
+            // Transfer over appearance and behavior values as they carry current state.
+            attrs.insetsFlags.appearance = mWindowAttributes.insetsFlags.appearance;
+            attrs.insetsFlags.behavior = mWindowAttributes.insetsFlags.behavior;
+
             final int changes = mWindowAttributes.copyFrom(attrs);
             if ((changes & WindowManager.LayoutParams.TRANSLUCENT_FLAGS_CHANGED) != 0) {
                 // Recompute system ui visibility.
@@ -1443,14 +1442,13 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             // Don't lose the mode we last auto-computed.
-            if ((attrs.softInputMode & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST)
+            if ((attrs.softInputMode & SOFT_INPUT_MASK_ADJUST)
                     == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_UNSPECIFIED) {
                 mWindowAttributes.softInputMode = (mWindowAttributes.softInputMode
-                        & ~WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST)
-                        | (oldSoftInputMode & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST);
+                        & ~SOFT_INPUT_MASK_ADJUST) | (oldSoftInputMode & SOFT_INPUT_MASK_ADJUST);
             }
 
-            if ((changes & LayoutParams.SOFT_INPUT_MODE_CHANGED) != 0) {
+            if (mWindowAttributes.softInputMode != oldSoftInputMode) {
                 requestFitSystemWindows();
             }
 
@@ -1474,6 +1472,55 @@ public final class ViewRootImpl implements ViewParent,
         mNewSurfaceNeeded = true;
         mFullRedrawNeeded = true;
         scheduleTraversals();
+    }
+
+    /** Handles messages {@link #MSG_RESIZED} and {@link #MSG_RESIZED_REPORT}. */
+    private void handleResized(int msg, SomeArgs args) {
+        if (!mAdded) {
+            return;
+        }
+
+        final ClientWindowFrames frames = (ClientWindowFrames) args.arg1;
+        final MergedConfiguration mergedConfiguration = (MergedConfiguration) args.arg2;
+        final boolean forceNextWindowRelayout = args.argi1 != 0;
+        final int displayId = args.argi3;
+        final Rect backdropFrame = frames.backdropFrame;
+        final DisplayCutout displayCutout = frames.displayCutout.get();
+
+        final boolean frameChanged = !mWinFrame.equals(frames.frame);
+        final boolean cutoutChanged = !mPendingDisplayCutout.get().equals(displayCutout);
+        final boolean backdropFrameChanged = !mPendingBackDropFrame.equals(backdropFrame);
+        final boolean configChanged = !mLastReportedMergedConfiguration.equals(mergedConfiguration);
+        final boolean displayChanged = mDisplay.getDisplayId() != displayId;
+        if (msg == MSG_RESIZED && !frameChanged && !cutoutChanged && !backdropFrameChanged
+                && !configChanged && !displayChanged && !forceNextWindowRelayout) {
+            return;
+        }
+
+        if (configChanged) {
+            // If configuration changed - notify about that and, maybe, about move to display.
+            performConfigurationChange(mergedConfiguration, false /* force */,
+                    displayChanged ? displayId : INVALID_DISPLAY /* same display */);
+        } else if (displayChanged) {
+            // Moved to display without config change - report last applied one.
+            onMovedToDisplay(displayId, mLastConfigurationFromResources);
+        }
+
+        setFrame(frames.frame);
+        mTmpFrames.displayFrame.set(frames.displayFrame);
+        mPendingDisplayCutout.set(displayCutout);
+        mPendingBackDropFrame.set(backdropFrame);
+        mForceNextWindowRelayout = forceNextWindowRelayout;
+        mPendingAlwaysConsumeSystemBars = args.argi2 != 0;
+
+        if (msg == MSG_RESIZED_REPORT) {
+            reportNextDraw();
+        }
+
+        if (mView != null && (frameChanged || cutoutChanged || configChanged)) {
+            forceLayout(mView);
+        }
+        requestLayout();
     }
 
     private final DisplayListener mDisplayListener = new DisplayListener() {
@@ -1576,9 +1623,6 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void notifyInsetsChanged() {
-        if (sNewInsetsMode == NEW_INSETS_MODE_NONE) {
-            return;
-        }
         mApplyInsetsRequested = true;
         requestLayout();
 
@@ -1720,7 +1764,6 @@ public final class ViewRootImpl implements ViewParent,
                 destroySurface();
             }
         }
-        scheduleConsumeBatchedInputImmediately();
     }
 
 
@@ -1775,62 +1818,69 @@ public final class ViewRootImpl implements ViewParent,
             mBoundsLayer = new SurfaceControl.Builder(mSurfaceSession)
                     .setContainerLayer()
                     .setName("Bounds for - " + getTitle().toString())
-                    .setParent(getRenderSurfaceControl())
+                    .setParent(getSurfaceControl())
                     .setCallsite("ViewRootImpl.getBoundsLayer")
                     .build();
-            setBoundsLayerCrop();
+            setBoundsLayerCrop(mTransaction);
             mTransaction.show(mBoundsLayer).apply();
         }
        return mBoundsLayer;
     }
 
     Surface getOrCreateBLASTSurface(int width, int height) {
-        if (mSurfaceControl == null
-                || !mSurfaceControl.isValid()
-                || mBlastSurfaceControl == null
-                || !mBlastSurfaceControl.isValid()) {
+        if (!mSurfaceControl.isValid()) {
             return null;
         }
 
         Surface ret = null;
         if (mBlastBufferQueue == null) {
-            mBlastBufferQueue = new BLASTBufferQueue(
-                mBlastSurfaceControl, width, height, mEnableTripleBuffering);
+            mBlastBufferQueue = new BLASTBufferQueue(mTag,
+                    mSurfaceControl, width, height, mEnableTripleBuffering);
             // We only return the Surface the first time, as otherwise
             // it hasn't changed and there is no need to update.
-            ret = mBlastBufferQueue.getSurface();
+            ret = mBlastBufferQueue.createSurface();
         } else {
-            mBlastBufferQueue.update(mBlastSurfaceControl, width, height);
+            mBlastBufferQueue.update(mSurfaceControl, width, height);
         }
 
         return ret;
     }
 
-    private void setBoundsLayerCrop() {
+    private void setBoundsLayerCrop(Transaction t) {
         // mWinFrame is already adjusted for surface insets. So offset it and use it as
         // the cropping bounds.
         mTempBoundsRect.set(mWinFrame);
         mTempBoundsRect.offsetTo(mWindowAttributes.surfaceInsets.left,
                 mWindowAttributes.surfaceInsets.top);
-        mTransaction.setWindowCrop(mBoundsLayer, mTempBoundsRect);
+        t.setWindowCrop(mBoundsLayer, mTempBoundsRect);
     }
 
     /**
      * Called after window layout to update the bounds surface. If the surface insets have changed
      * or the surface has resized, update the bounds surface.
-     *
-     * @param shouldReparent Whether it should reparent the bounds layer to the main SurfaceControl.
      */
-    private void updateBoundsLayer(boolean shouldReparent) {
+    private boolean updateBoundsLayer(SurfaceControl.Transaction t) {
         if (mBoundsLayer != null) {
-            setBoundsLayerCrop();
-            mTransaction.deferTransactionUntil(mBoundsLayer, getRenderSurfaceControl(),
-                    mSurface.getNextFrameNumber());
+            setBoundsLayerCrop(t);
+            t.deferTransactionUntil(mBoundsLayer, getSurfaceControl(),
+                mSurface.getNextFrameNumber());
+            return true;
+        }
+        return false;
+    }
 
-            if (shouldReparent) {
-                mTransaction.reparent(mBoundsLayer, getRenderSurfaceControl());
-            }
-            mTransaction.apply();
+    private void prepareSurfaces(boolean sizeChanged) {
+        final SurfaceControl.Transaction t = mTransaction;
+        final SurfaceControl sc = getSurfaceControl();
+        if (!sc.isValid()) return;
+
+        boolean applyTransaction = updateBoundsLayer(t);
+        if (sizeChanged) {
+            applyTransaction = true;
+            t.setBufferSize(sc, mSurfaceSize.x, mSurfaceSize.y);
+        }
+        if (applyTransaction) {
+            t.apply();
         }
     }
 
@@ -1842,9 +1892,10 @@ public final class ViewRootImpl implements ViewParent,
         mSurface.release();
         mSurfaceControl.release();
 
-        mBlastSurfaceControl.release();
-        // We should probably add an explicit dispose.
-        mBlastBufferQueue = null;
+        if (mBlastBufferQueue != null) {
+            mBlastBufferQueue.destroy();
+            mBlastBufferQueue = null;
+        }
     }
 
     /**
@@ -1913,7 +1964,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     void scheduleTraversals() {
         if (!mTraversalScheduled) {
             mTraversalScheduled = true;
@@ -1979,11 +2030,7 @@ public final class ViewRootImpl implements ViewParent,
             mCompatibleVisibilityInfo.globalVisibility =
                     (mCompatibleVisibilityInfo.globalVisibility & ~View.SYSTEM_UI_FLAG_LOW_PROFILE)
                             | (mAttachInfo.mSystemUiVisibility & View.SYSTEM_UI_FLAG_LOW_PROFILE);
-            if (mDispatchedSystemUiVisibility != mCompatibleVisibilityInfo.globalVisibility) {
-                mHandler.removeMessages(MSG_DISPATCH_SYSTEM_UI_VISIBILITY);
-                mHandler.sendMessage(mHandler.obtainMessage(
-                        MSG_DISPATCH_SYSTEM_UI_VISIBILITY, mCompatibleVisibilityInfo));
-            }
+            dispatchDispatchSystemUiVisibilityChanged(mCompatibleVisibilityInfo);
             if (mAttachInfo.mKeepScreenOn != oldScreenOn
                     || mAttachInfo.mSystemUiVisibility != params.subtreeSystemUiVisibility
                     || mAttachInfo.mHasSystemUiListeners != params.hasSystemUiListeners) {
@@ -2018,8 +2065,7 @@ public final class ViewRootImpl implements ViewParent,
      */
     void updateCompatSysUiVisibility(@InternalInsetsType int type, boolean visible,
             boolean hasControl) {
-        if ((type != ITYPE_STATUS_BAR && type != ITYPE_NAVIGATION_BAR)
-                || ViewRootImpl.sNewInsetsMode != ViewRootImpl.NEW_INSETS_MODE_FULL) {
+        if (type != ITYPE_STATUS_BAR && type != ITYPE_NAVIGATION_BAR) {
             return;
         }
         final SystemUiVisibilityInfo info = mCompatibleVisibilityInfo;
@@ -2037,21 +2083,34 @@ public final class ViewRootImpl implements ViewParent,
             info.globalVisibility |= systemUiFlag;
             info.localChanges &= ~systemUiFlag;
         }
-        if (mDispatchedSystemUiVisibility != info.globalVisibility) {
+        dispatchDispatchSystemUiVisibilityChanged(info);
+    }
+
+    /**
+     * If the system is forcing showing any system bar, the legacy low profile flag should be
+     * cleared for compatibility.
+     *
+     * @param showTypes {@link InsetsType types} shown by the system.
+     * @param fromIme {@code true} if the invocation is from IME.
+     */
+    private void clearLowProfileModeIfNeeded(@InsetsType int showTypes, boolean fromIme) {
+        final SystemUiVisibilityInfo info = mCompatibleVisibilityInfo;
+        if ((showTypes & Type.systemBars()) != 0 && !fromIme
+                && (info.globalVisibility & SYSTEM_UI_FLAG_LOW_PROFILE) != 0) {
+            info.globalVisibility &= ~SYSTEM_UI_FLAG_LOW_PROFILE;
+            info.localChanges |= SYSTEM_UI_FLAG_LOW_PROFILE;
+            dispatchDispatchSystemUiVisibilityChanged(info);
+        }
+    }
+
+    private void dispatchDispatchSystemUiVisibilityChanged(SystemUiVisibilityInfo args) {
+        if (mDispatchedSystemUiVisibility != args.globalVisibility) {
             mHandler.removeMessages(MSG_DISPATCH_SYSTEM_UI_VISIBILITY);
-            mHandler.sendMessage(mHandler.obtainMessage(MSG_DISPATCH_SYSTEM_UI_VISIBILITY, info));
+            mHandler.sendMessage(mHandler.obtainMessage(MSG_DISPATCH_SYSTEM_UI_VISIBILITY, args));
         }
     }
 
     private void handleDispatchSystemUiVisibilityChanged(SystemUiVisibilityInfo args) {
-        if (mSeq != args.seq && sNewInsetsMode != NEW_INSETS_MODE_FULL) {
-            // The sequence has changed, so we need to update our value and make
-            // sure to do a traversal afterward so the window manager is given our
-            // most recent data.
-            mSeq = args.seq;
-            mAttachInfo.mForceReportNewAttributes = true;
-            scheduleTraversals();
-        }
         if (mView == null) return;
         if (args.localChanges != 0) {
             mView.updateLocalSystemUiVisibility(args.localValue, args.localChanges);
@@ -2067,12 +2126,10 @@ public final class ViewRootImpl implements ViewParent,
 
     @VisibleForTesting
     public static void adjustLayoutParamsForCompatibility(WindowManager.LayoutParams inOutParams) {
-        if (sNewInsetsMode != NEW_INSETS_MODE_FULL) {
-            return;
-        }
         final int sysUiVis = inOutParams.systemUiVisibility | inOutParams.subtreeSystemUiVisibility;
         final int flags = inOutParams.flags;
         final int type = inOutParams.type;
+        final int adjust = inOutParams.softInputMode & SOFT_INPUT_MASK_ADJUST;
 
         if ((inOutParams.privateFlags & PRIVATE_FLAG_APPEARANCE_CONTROLLED) == 0) {
             inOutParams.insetsFlags.appearance = 0;
@@ -2098,12 +2155,13 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
+        inOutParams.privateFlags &= ~PRIVATE_FLAG_INSET_PARENT_FRAME_BY_IME;
+
         if ((inOutParams.privateFlags & PRIVATE_FLAG_FIT_INSETS_CONTROLLED) != 0) {
             return;
         }
 
         int types = inOutParams.getFitInsetsTypes();
-        int sides = inOutParams.getFitInsetsSides();
         boolean ignoreVis = inOutParams.isFitInsetsIgnoringVisibility();
 
         if (((sysUiVis & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) != 0
@@ -2118,10 +2176,13 @@ public final class ViewRootImpl implements ViewParent,
         if (type == TYPE_TOAST || type == TYPE_SYSTEM_ALERT) {
             ignoreVis = true;
         } else if ((types & Type.systemBars()) == Type.systemBars()) {
-            types |= Type.ime();
+            if (adjust == SOFT_INPUT_ADJUST_RESIZE) {
+                types |= Type.ime();
+            } else {
+                inOutParams.privateFlags |= PRIVATE_FLAG_INSET_PARENT_FRAME_BY_IME;
+            }
         }
         inOutParams.setFitInsetsTypes(types);
-        inOutParams.setFitInsetsSides(sides);
         inOutParams.setFitInsetsIgnoringVisibility(ignoreVis);
 
         // The fitting of insets are not really controlled by the clients, so we remove the flag.
@@ -2129,9 +2190,6 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void controlInsetsForCompatibility(WindowManager.LayoutParams params) {
-        if (sNewInsetsMode != NEW_INSETS_MODE_FULL) {
-            return;
-        }
         final int sysUiVis = params.systemUiVisibility | params.subtreeSystemUiVisibility;
         final int flags = params.flags;
         final boolean matchParent = params.width == MATCH_PARENT && params.height == MATCH_PARENT;
@@ -2256,19 +2314,19 @@ public final class ViewRootImpl implements ViewParent,
 
     /* package */ WindowInsets getWindowInsets(boolean forceConstruct) {
         if (mLastWindowInsets == null || forceConstruct) {
+            final Configuration config = mContext.getResources().getConfiguration();
             mLastWindowInsets = mInsetsController.calculateInsets(
-                    mContext.getResources().getConfiguration().isScreenRound(),
-                    mAttachInfo.mAlwaysConsumeSystemBars, mPendingDisplayCutout.get(),
+                    config.isScreenRound(), mAttachInfo.mAlwaysConsumeSystemBars,
+                    mPendingDisplayCutout.get(), mWindowAttributes.type,
+                    config.windowConfiguration.getWindowingMode(),
                     mWindowAttributes.softInputMode, mWindowAttributes.flags,
                     (mWindowAttributes.systemUiVisibility
                             | mWindowAttributes.subtreeSystemUiVisibility));
 
-            Rect visibleInsets = mInsetsController.calculateVisibleInsets(
-                    mWindowAttributes.softInputMode);
-
-            mAttachInfo.mVisibleInsets.set(visibleInsets);
-            mAttachInfo.mContentInsets.set(mLastWindowInsets.getSystemWindowInsets().toRect());
-            mAttachInfo.mStableInsets.set(mLastWindowInsets.getStableInsets().toRect());
+            mSystemInsetsCache.set(mLastWindowInsets.getSystemWindowInsets().toRect());
+            mStableInsetsCache.set(mLastWindowInsets.getStableInsets().toRect());
+            mVisibleInsetsCache.set(mInsetsController.calculateVisibleInsets(
+                    mWindowAttributes.softInputMode));
         }
         return mLastWindowInsets;
     }
@@ -2491,8 +2549,7 @@ public final class ViewRootImpl implements ViewParent,
 
         if (mFirst || mAttachInfo.mViewVisibilityChanged) {
             mAttachInfo.mViewVisibilityChanged = false;
-            int resizeMode = mSoftInputMode &
-                    WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
+            int resizeMode = mSoftInputMode & SOFT_INPUT_MASK_ADJUST;
             // If we are in auto resize mode, then we need to determine
             // what mode to use now.
             if (resizeMode == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_UNSPECIFIED) {
@@ -2505,11 +2562,8 @@ public final class ViewRootImpl implements ViewParent,
                 if (resizeMode == 0) {
                     resizeMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN;
                 }
-                if ((lp.softInputMode &
-                        WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST) != resizeMode) {
-                    lp.softInputMode = (lp.softInputMode &
-                            ~WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST) |
-                            resizeMode;
+                if ((lp.softInputMode & SOFT_INPUT_MASK_ADJUST) != resizeMode) {
+                    lp.softInputMode = (lp.softInputMode & ~SOFT_INPUT_MASK_ADJUST) | resizeMode;
                     params = lp;
                 }
             }
@@ -2565,7 +2619,7 @@ public final class ViewRootImpl implements ViewParent,
         boolean surfaceSizeChanged = false;
         boolean surfaceCreated = false;
         boolean surfaceDestroyed = false;
-        /* True if surface generation id changes. */
+        // True if surface generation id changes or relayout result is RELAYOUT_RES_SURFACE_CHANGED.
         boolean surfaceReplaced = false;
 
         final boolean windowAttributesChanged = mWindowAttributesChanged;
@@ -2581,24 +2635,22 @@ public final class ViewRootImpl implements ViewParent,
             }
             adjustLayoutParamsForCompatibility(params);
             controlInsetsForCompatibility(params);
+            if (mDispatchedSystemBarAppearance != params.insetsFlags.appearance) {
+                mDispatchedSystemBarAppearance = params.insetsFlags.appearance;
+                mView.onSystemBarAppearanceChanged(mDispatchedSystemBarAppearance);
+            }
         }
 
         if (mFirst || windowShouldResize || viewVisibilityChanged || cutoutChanged || params != null
                 || mForceNextWindowRelayout) {
             mForceNextWindowRelayout = false;
 
-            if (isViewVisible) {
-                // If this window is giving internal insets to the window
-                // manager, and it is being added or changing its visibility,
-                // then we want to first give the window manager "fake"
-                // insets to cause it to effectively ignore the content of
-                // the window during layout.  This avoids it briefly causing
-                // other windows to resize/move based on the raw frame of the
-                // window, waiting until we can finish laying out this window
-                // and get back to the window manager with the ultimately
-                // computed insets.
-                insetsPending = computesInternalInsets && (mFirst || viewVisibilityChanged);
-            }
+            // If this window is giving internal insets to the window manager, then we want to first
+            // make the provided insets unchanged during layout. This avoids it briefly causing
+            // other windows to resize/move based on the raw frame of the window, waiting until we
+            // can finish laying out this window and get back to the window manager with the
+            // ultimately computed insets.
+            insetsPending = computesInternalInsets;
 
             if (mSurfaceHolder != null) {
                 mSurfaceHolder.mSurfaceLock.lock();
@@ -2646,15 +2698,28 @@ public final class ViewRootImpl implements ViewParent,
                 }
 
                 cutoutChanged = !mPendingDisplayCutout.equals(mAttachInfo.mDisplayCutout);
-                surfaceSizeChanged = (relayoutResult
-                        & WindowManagerGlobal.RELAYOUT_RES_SURFACE_RESIZED) != 0;
+                surfaceSizeChanged = false;
+                if (!mLastSurfaceSize.equals(mSurfaceSize)) {
+                    surfaceSizeChanged = true;
+                    mLastSurfaceSize.set(mSurfaceSize.x, mSurfaceSize.y);
+                }
                 final boolean alwaysConsumeSystemBarsChanged =
                         mPendingAlwaysConsumeSystemBars != mAttachInfo.mAlwaysConsumeSystemBars;
-                final boolean colorModeChanged = hasColorModeChanged(lp.getColorMode());
+                updateColorModeIfNeeded(lp.getColorMode());
                 surfaceCreated = !hadSurface && mSurface.isValid();
                 surfaceDestroyed = hadSurface && !mSurface.isValid();
-                surfaceReplaced = (surfaceGenerationId != mSurface.getGenerationId())
+
+                // When using Blast, the surface generation id may not change when there's a new
+                // SurfaceControl. In that case, we also check relayout flag
+                // RELAYOUT_RES_SURFACE_CHANGED since it should indicate that WMS created a new
+                // SurfaceControl.
+                surfaceReplaced = (surfaceGenerationId != mSurface.getGenerationId()
+                        || (relayoutResult & RELAYOUT_RES_SURFACE_CHANGED)
+                        == RELAYOUT_RES_SURFACE_CHANGED)
                         && mSurface.isValid();
+                if (surfaceReplaced) {
+                    mSurfaceSequenceId++;
+                }
 
                 if (cutoutChanged) {
                     mAttachInfo.mDisplayCutout.set(mPendingDisplayCutout);
@@ -2678,10 +2743,6 @@ public final class ViewRootImpl implements ViewParent,
                     // We applied insets so force contentInsetsChanged to ensure the
                     // hierarchy is measured below.
                     dispatchApplyInsets = true;
-                }
-                if (colorModeChanged && mAttachInfo.mThreadedRenderer != null) {
-                    mAttachInfo.mThreadedRenderer.setWideGamut(
-                            lp.getColorMode() == ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT);
                 }
 
                 if (surfaceCreated) {
@@ -2727,7 +2788,7 @@ public final class ViewRootImpl implements ViewParent,
                         mAttachInfo.mThreadedRenderer.destroy();
                     }
                 } else if ((surfaceReplaced
-                        || surfaceSizeChanged || windowRelayoutWasForced || colorModeChanged)
+                        || surfaceSizeChanged || windowRelayoutWasForced)
                         && mSurfaceHolder == null
                         && mAttachInfo.mThreadedRenderer != null
                         && mSurface.isValid()) {
@@ -2767,8 +2828,7 @@ public final class ViewRootImpl implements ViewParent,
                                         && mWinFrame.height() == mPendingBackDropFrame.height();
                         // TODO: Need cutout?
                         startDragResizing(mPendingBackDropFrame, !backdropSizeMatchesFrame,
-                                mLastWindowInsets.getSystemWindowInsets().toRect(),
-                                mLastWindowInsets.getStableInsets().toRect(), mResizeMode);
+                                mSystemInsetsCache, mStableInsetsCache, mResizeMode);
                     } else {
                         // We shouldn't come here, but if we come we should end the resize.
                         endDragResizing();
@@ -2922,7 +2982,7 @@ public final class ViewRootImpl implements ViewParent,
             // stopping, but on the client side it doesn't get stopped since it's restarted quick
             // enough. WMS doesn't want to keep around old children since they will leak when the
             // client creates new children.
-            updateBoundsLayer(surfaceReplaced);
+            prepareSurfaces(surfaceSizeChanged);
         }
 
         final boolean didLayout = layoutRequested && (!mStopped || mReportNextDraw);
@@ -3054,8 +3114,7 @@ public final class ViewRootImpl implements ViewParent,
 
         if (changedVisibility || regainedFocus) {
             // Toasts are presented as notifications - don't present them as windows as well
-            boolean isToast = (mWindowAttributes == null) ? false
-                    : (mWindowAttributes.type == TYPE_TOAST);
+            boolean isToast = mWindowAttributes.type == TYPE_TOAST;
             if (!isToast) {
                 host.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
             }
@@ -3176,9 +3235,6 @@ public final class ViewRootImpl implements ViewParent,
         final boolean windowMoved = mAttachInfo.mWindowLeft != frame.left
                 || mAttachInfo.mWindowTop != frame.top;
         if (windowMoved) {
-            if (mTranslator != null) {
-                mTranslator.translateRectInScreenToAppWinFrame(frame);
-            }
             mAttachInfo.mWindowLeft = frame.left;
             mAttachInfo.mWindowTop = frame.top;
         }
@@ -3202,14 +3258,12 @@ public final class ViewRootImpl implements ViewParent,
             hasWindowFocus = mUpcomingWindowFocus;
             inTouchMode = mUpcomingInTouchMode;
         }
-        if (sNewInsetsMode != NEW_INSETS_MODE_NONE) {
-            // TODO (b/131181940): Make sure this doesn't leak Activity with mActivityConfigCallback
-            // config changes.
-            if (hasWindowFocus) {
-                mInsetsController.onWindowFocusGained();
-            } else {
-                mInsetsController.onWindowFocusLost();
-            }
+        // TODO (b/131181940): Make sure this doesn't leak Activity with mActivityConfigCallback
+        // config changes.
+        if (hasWindowFocus) {
+            mInsetsController.onWindowFocusGained();
+        } else {
+            mInsetsController.onWindowFocusLost();
         }
 
         if (mAdded) {
@@ -3220,8 +3274,7 @@ public final class ViewRootImpl implements ViewParent,
                 if (mAttachInfo.mThreadedRenderer != null && mSurface.isValid()) {
                     mFullRedrawNeeded = true;
                     try {
-                        final WindowManager.LayoutParams lp = mWindowAttributes;
-                        final Rect surfaceInsets = lp != null ? lp.surfaceInsets : null;
+                        final Rect surfaceInsets = mWindowAttributes.surfaceInsets;
                         mAttachInfo.mThreadedRenderer.initializeIfNeeded(
                                 mWidth, mHeight, mAttachInfo, mSurface, surfaceInsets);
                     } catch (OutOfResourcesException e) {
@@ -3257,8 +3310,8 @@ public final class ViewRootImpl implements ViewParent,
 
             // Note: must be done after the focus change callbacks,
             // so all of the view state is set up correctly.
-            mImeFocusController.onPostWindowFocus(mView.findFocus(), hasWindowFocus,
-                    mWindowAttributes);
+            mImeFocusController.onPostWindowFocus(mView != null ? mView.findFocus() : null,
+                    hasWindowFocus, mWindowAttributes);
 
             if (hasWindowFocus) {
                 // Clear the forward bit.  We can just do this directly, since
@@ -3762,6 +3815,92 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    /**
+     * The callback will run on the render thread.
+     */
+    private HardwareRenderer.FrameCompleteCallback createFrameCompleteCallback(Handler handler,
+            boolean reportNextDraw, ArrayList<Runnable> commitCallbacks) {
+        return frameNr -> {
+            mBlurRegionAggregator.dispatchBlurTransactionIfNeeded(frameNr);
+
+            // Use a new transaction here since mRtBLASTSyncTransaction can only be accessed by
+            // the render thread and mSurfaceChangedTransaction can only be accessed by the UI
+            // thread. The temporary transaction is used so mRtBLASTSyncTransaction can be merged
+            // with mSurfaceChangedTransaction without synchronization issues.
+            final Transaction t = new Transaction();
+            finishBLASTSyncOnRT(!mSendNextFrameToWm, t);
+            handler.postAtFrontOfQueue(() -> {
+                mSurfaceChangedTransaction.merge(t);
+                if (reportNextDraw) {
+                    // TODO: Use the frame number
+                    pendingDrawFinished();
+                }
+                if (commitCallbacks != null) {
+                    for (int i = 0; i < commitCallbacks.size(); i++) {
+                        commitCallbacks.get(i).run();
+                    }
+                }
+            });
+        };
+    }
+
+    private boolean addFrameCompleteCallbackIfNeeded() {
+        if (mAttachInfo.mThreadedRenderer == null || !mAttachInfo.mThreadedRenderer.isEnabled()) {
+            return false;
+        }
+
+        ArrayList<Runnable> commitCallbacks = mAttachInfo.mTreeObserver
+                .captureFrameCommitCallbacks();
+        final boolean needFrameCompleteCallback =
+                mNextDrawUseBLASTSyncTransaction || mReportNextDraw
+                        || (commitCallbacks != null && commitCallbacks.size() > 0)
+                        || mBlurRegionAggregator.hasRegions();
+        if (needFrameCompleteCallback) {
+            mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(
+                    createFrameCompleteCallback(mAttachInfo.mHandler, mReportNextDraw,
+                            commitCallbacks));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * The callback will run on a worker thread pool from the render thread.
+     */
+    private HardwareRenderer.FrameDrawingCallback createFrameDrawingCallback() {
+        return frame -> {
+            mRtNextFrameReportedConsumeWithBlast = true;
+            if (mBlastBufferQueue != null) {
+                // We don't need to synchronize mRtBLASTSyncTransaction here since it's not
+                // being modified and only sent to BlastBufferQueue.
+                mBlastBufferQueue.setNextTransaction(mRtBLASTSyncTransaction);
+            }
+        };
+    }
+
+    private void addFrameCallbackIfNeeded() {
+        // Frame callbacks will always occur after submitting draw requests and before
+        // the draw actually occurs. This will ensure that we set the next transaction
+        // for the frame that's about to get drawn and not on a previous frame that.
+        //
+        // This is thread safe since mRtNextFrameReportConsumeWithBlast will only be
+        // modified in onFrameDraw and then again in onFrameComplete. This is to ensure the
+        // next frame completed should be reported with the blast sync transaction.
+        if (mNextDrawUseBLASTSyncTransaction) {
+            registerRtFrameCallback(createFrameDrawingCallback());
+            mNextDrawUseBLASTSyncTransaction = false;
+        } else if (mReportNextDraw) {
+            registerRtFrameCallback(frame -> {
+                if (mBlastBufferQueue != null) {
+                    // If we need to report next draw, wait for adapter to flush its shadow queue
+                    // by processing previously queued buffers so that we can submit the
+                    // transaction a timely manner.
+                    mBlastBufferQueue.flushShadowQueue();
+                }
+            });
+        }
+    }
+
     private void performDraw() {
         if (mAttachInfo.mDisplayState == Display.STATE_OFF && !mReportNextDraw) {
             return;
@@ -3769,61 +3908,21 @@ public final class ViewRootImpl implements ViewParent,
             return;
         }
 
-        final boolean fullRedrawNeeded = mFullRedrawNeeded || mReportNextDraw;
+        final boolean fullRedrawNeeded =
+                mFullRedrawNeeded || mReportNextDraw || mNextDrawUseBLASTSyncTransaction;
         mFullRedrawNeeded = false;
 
         mIsDrawing = true;
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "draw");
 
-        boolean usingAsyncReport = false;
-        boolean reportNextDraw = mReportNextDraw; // Capture the original value
-        if (mAttachInfo.mThreadedRenderer != null && mAttachInfo.mThreadedRenderer.isEnabled()) {
-            ArrayList<Runnable> commitCallbacks = mAttachInfo.mTreeObserver
-                    .captureFrameCommitCallbacks();
-            final boolean needFrameCompleteCallback = mNextDrawUseBLASTSyncTransaction ||
-                (commitCallbacks != null && commitCallbacks.size() > 0) ||
-                mReportNextDraw;
-            usingAsyncReport = mReportNextDraw;
-            if (needFrameCompleteCallback) {
-                final Handler handler = mAttachInfo.mHandler;
-                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) -> {
-                        finishBLASTSync(!mSendNextFrameToWm);
-                        handler.postAtFrontOfQueue(() -> {
-                            if (reportNextDraw) {
-                                // TODO: Use the frame number
-                                pendingDrawFinished();
-                            }
-                            if (commitCallbacks != null) {
-                                for (int i = 0; i < commitCallbacks.size(); i++) {
-                                    commitCallbacks.get(i).run();
-                                }
-                            }
-                        });});
-            }
-        }
+        boolean usingAsyncReport = addFrameCompleteCallbackIfNeeded();
+        addFrameCallbackIfNeeded();
 
         try {
-            if (mNextDrawUseBLASTSyncTransaction) {
-                // TODO(b/149747443)
-                // We aren't prepared to handle overlapping use of mRtBLASTSyncTransaction
-                // so if we are BLAST syncing we make sure the previous draw has
-                // totally finished.
-                if (mAttachInfo.mThreadedRenderer != null) {
-                    mAttachInfo.mThreadedRenderer.pause();
-                }
-
-                mNextReportConsumeBLAST = true;
-                mNextDrawUseBLASTSyncTransaction = false;
-
-                if (mBlastBufferQueue != null) {
-                    mBlastBufferQueue.setNextTransaction(mRtBLASTSyncTransaction);
-                }
-            }
             boolean canUseAsync = draw(fullRedrawNeeded);
             if (usingAsyncReport && !canUseAsync) {
                 mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(null);
                 usingAsyncReport = false;
-                finishBLASTSync(true /* apply */);
             }
         } finally {
             mIsDrawing = false;
@@ -4034,7 +4133,7 @@ public final class ViewRootImpl implements ViewParent,
             yOffset -= surfaceInsets.top;
 
             // Offset dirty rect for surface insets.
-            dirty.offset(surfaceInsets.left, surfaceInsets.right);
+            dirty.offset(surfaceInsets.left, surfaceInsets.top);
         }
 
         boolean accessibilityFocusDirty = false;
@@ -4353,8 +4452,8 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     boolean scrollToRectOrFocus(Rect rectangle, boolean immediate) {
-        final Rect ci = getWindowInsets(false).getSystemWindowInsetsAsRect();
-        final Rect vi = mAttachInfo.mVisibleInsets;
+        final Rect ci = mSystemInsetsCache;
+        final Rect vi = mVisibleInsetsCache;
         int scrollY = 0;
         boolean handled = false;
 
@@ -4559,18 +4658,16 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    private boolean hasColorModeChanged(int colorMode) {
+    private void updateColorModeIfNeeded(int colorMode) {
         if (mAttachInfo.mThreadedRenderer == null) {
-            return false;
+            return;
         }
-        final boolean isWideGamut = colorMode == ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT;
-        if (mAttachInfo.mThreadedRenderer.isWideGamut() == isWideGamut) {
-            return false;
+        // TODO: Centralize this sanitization? Why do we let setting bad modes?
+        // Alternatively, can we just let HWUI figure it out? Do we need to care here?
+        if (!mContext.getResources().getConfiguration().isScreenWideColorGamut()) {
+            colorMode = ActivityInfo.COLOR_MODE_DEFAULT;
         }
-        if (isWideGamut && !mContext.getResources().getConfiguration().isScreenWideColorGamut()) {
-            return false;
-        }
-        return true;
+        mAttachInfo.mThreadedRenderer.setColorMode(colorMode);
     }
 
     @Override
@@ -4939,60 +5036,13 @@ public final class ViewRootImpl implements ViewParent,
                 case MSG_DISPATCH_GET_NEW_SURFACE:
                     handleGetNewSurface();
                     break;
-                case MSG_RESIZED: {
-                    // Recycled in the fall through...
-                    SomeArgs args = (SomeArgs) msg.obj;
-                    if (mWinFrame.equals(args.arg1)
-                            && mPendingDisplayCutout.get().equals(args.arg9)
-                            && mPendingBackDropFrame.equals(args.arg8)
-                            && mLastReportedMergedConfiguration.equals(args.arg4)
-                            && args.argi1 == 0
-                            && mDisplay.getDisplayId() == args.argi3) {
-                        break;
-                    }
-                } // fall through...
-                case MSG_RESIZED_REPORT:
-                    if (mAdded) {
-                        SomeArgs args = (SomeArgs) msg.obj;
-
-                        final int displayId = args.argi3;
-                        MergedConfiguration mergedConfiguration = (MergedConfiguration) args.arg4;
-                        final boolean displayChanged = mDisplay.getDisplayId() != displayId;
-                        boolean configChanged = false;
-
-                        if (!mLastReportedMergedConfiguration.equals(mergedConfiguration)) {
-                            // If configuration changed - notify about that and, maybe,
-                            // about move to display.
-                            performConfigurationChange(mergedConfiguration, false /* force */,
-                                    displayChanged
-                                            ? displayId : INVALID_DISPLAY /* same display */);
-                            configChanged = true;
-                        } else if (displayChanged) {
-                            // Moved to display without config change - report last applied one.
-                            onMovedToDisplay(displayId, mLastConfigurationFromResources);
-                        }
-
-                        final boolean framesChanged = !mWinFrame.equals(args.arg1)
-                                || !mPendingDisplayCutout.get().equals(args.arg9);
-
-                        setFrame((Rect) args.arg1);
-                        mPendingDisplayCutout.set((DisplayCutout) args.arg9);
-                        mPendingBackDropFrame.set((Rect) args.arg8);
-                        mForceNextWindowRelayout = args.argi1 != 0;
-                        mPendingAlwaysConsumeSystemBars = args.argi2 != 0;
-
-                        args.recycle();
-
-                        if (msg.what == MSG_RESIZED_REPORT) {
-                            reportNextDraw();
-                        }
-
-                        if (mView != null && (framesChanged || configChanged)) {
-                            forceLayout(mView);
-                        }
-                        requestLayout();
-                    }
+                case MSG_RESIZED:
+                case MSG_RESIZED_REPORT: {
+                    final SomeArgs args = (SomeArgs) msg.obj;
+                    handleResized(msg.what, args);
+                    args.recycle();
                     break;
+                }
                 case MSG_INSETS_CHANGED:
                     mInsetsController.onStateChanged((InsetsState) msg.obj);
                     break;
@@ -5014,6 +5064,7 @@ public final class ViewRootImpl implements ViewParent,
                                 String.format("Calling showInsets(%d,%b) on window that no longer"
                                         + " has views.", msg.arg1, msg.arg2 == 1));
                     }
+                    clearLowProfileModeIfNeeded(msg.arg1, msg.arg2 == 1);
                     mInsetsController.show(msg.arg1, msg.arg2 == 1);
                     break;
                 }
@@ -5027,11 +5078,11 @@ public final class ViewRootImpl implements ViewParent,
                         final int h = mWinFrame.height();
                         final int l = msg.arg1;
                         final int t = msg.arg2;
-                        mTmpFrame.left = l;
-                        mTmpFrame.right = l + w;
-                        mTmpFrame.top = t;
-                        mTmpFrame.bottom = t + h;
-                        setFrame(mTmpFrame);
+                        mTmpFrames.frame.left = l;
+                        mTmpFrames.frame.right = l + w;
+                        mTmpFrames.frame.top = t;
+                        mTmpFrames.frame.bottom = t + h;
+                        setFrame(mTmpFrames.frame);
 
                         mPendingBackDropFrame.set(mWinFrame);
                         maybeHandleWindowMove(mWinFrame);
@@ -5143,7 +5194,7 @@ public final class ViewRootImpl implements ViewParent,
                     updateLocationInParentDisplay(msg.arg1, msg.arg2);
                 } break;
                 case MSG_REQUEST_SCROLL_CAPTURE:
-                    handleScrollCaptureRequest((IScrollCaptureController) msg.obj);
+                    handleScrollCaptureRequest((IScrollCaptureCallbacks) msg.obj);
                     break;
             }
         }
@@ -5160,7 +5211,7 @@ public final class ViewRootImpl implements ViewParent,
      * @param inTouchMode Whether we want to be in touch mode.
      * @return True if the touch mode changed and focus changed was changed as a result
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     boolean ensureTouchMode(boolean inTouchMode) {
         if (DBG) Log.d("touchmode", "ensureTouchMode(" + inTouchMode + "), current "
                 + "touch mode is " + mAttachInfo.mInTouchMode);
@@ -7199,7 +7250,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /* drag/drop */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     void setLocalDragState(Object obj) {
         mLocalDragState = obj;
     }
@@ -7440,13 +7491,14 @@ public final class ViewRootImpl implements ViewParent,
             frameNumber = mSurface.getNextFrameNumber();
         }
 
-        int relayoutResult = mWindowSession.relayout(mWindow, mSeq, params,
+        int relayoutResult = mWindowSession.relayout(mWindow, params,
                 (int) (mView.getMeasuredWidth() * appScale + 0.5f),
                 (int) (mView.getMeasuredHeight() * appScale + 0.5f), viewVisibility,
                 insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0, frameNumber,
-                mTmpFrame, mTmpRect, mTmpRect, mTmpRect, mPendingBackDropFrame,
-                mPendingDisplayCutout, mPendingMergedConfiguration, mSurfaceControl, mTempInsets,
-                mTempControls, mSurfaceSize, mBlastSurfaceControl);
+                mTmpFrames, mPendingMergedConfiguration, mSurfaceControl, mTempInsets,
+                mTempControls, mSurfaceSize);
+        mPendingDisplayCutout.set(mTmpFrames.displayCutout);
+        mPendingBackDropFrame.set(mTmpFrames.backdropFrame);
         if (mSurfaceControl.isValid()) {
             if (!useBLAST()) {
                 mSurface.copyFrom(mSurfaceControl);
@@ -7472,9 +7524,10 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         if (mTranslator != null) {
-            mTranslator.translateRectInScreenToAppWinFrame(mTmpFrame);
+            mTranslator.translateRectInScreenToAppWindow(mTmpFrames.frame);
+            mTranslator.translateInsetsStateInScreenToAppWindow(mTempInsets);
         }
-        setFrame(mTmpFrame);
+        setFrame(mTmpFrames.frame);
         mInsetsController.onStateChanged(mTempInsets);
         mInsetsController.onControlsChanged(mTempControls);
         return relayoutResult;
@@ -7483,6 +7536,30 @@ public final class ViewRootImpl implements ViewParent,
     private void setFrame(Rect frame) {
         mWinFrame.set(frame);
         mInsetsController.onFrameChanged(frame);
+    }
+
+    /**
+     * Gets the current display size in which the window is being laid out, accounting for screen
+     * decorations around it.
+     */
+    void getDisplayFrame(Rect outFrame) {
+        outFrame.set(mTmpFrames.displayFrame);
+    }
+
+    /**
+     * Gets the current display size in which the window is being laid out, accounting for screen
+     * decorations around it.
+     */
+    void getWindowVisibleDisplayFrame(Rect outFrame) {
+        outFrame.set(mTmpFrames.displayFrame);
+        // XXX This is really broken, and probably all needs to be done
+        // in the window manager, and we need to know more about whether
+        // we want the area behind or in front of the IME.
+        final Rect insets = mVisibleInsetsCache;
+        outFrame.left += insets.left;
+        outFrame.top += insets.top;
+        outFrame.right -= insets.right;
+        outFrame.bottom -= insets.bottom;
     }
 
     /**
@@ -7561,38 +7638,70 @@ public final class ViewRootImpl implements ViewParent,
         mView.debug();
     }
 
+    /**
+     * Export the state of {@link ViewRootImpl} and other relevant classes into a protocol buffer
+     * output stream.
+     *
+     * @param proto Stream to write the state to
+     * @param fieldId FieldId of ViewRootImpl as defined in the parent message
+     */
+    @GuardedBy("this")
+    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(VIEW, Objects.toString(mView));
+        proto.write(DISPLAY_ID, mDisplay.getDisplayId());
+        proto.write(APP_VISIBLE, mAppVisible);
+        proto.write(HEIGHT, mHeight);
+        proto.write(WIDTH, mWidth);
+        proto.write(IS_ANIMATING, mIsAnimating);
+        mVisRect.dumpDebug(proto, VISIBLE_RECT);
+        proto.write(IS_DRAWING, mIsDrawing);
+        proto.write(ADDED, mAdded);
+        mWinFrame.dumpDebug(proto, WIN_FRAME);
+        mPendingDisplayCutout.get().dumpDebug(proto, PENDING_DISPLAY_CUTOUT);
+        proto.write(LAST_WINDOW_INSETS, Objects.toString(mLastWindowInsets));
+        proto.write(SOFT_INPUT_MODE, InputMethodDebug.softInputModeToString(mSoftInputMode));
+        proto.write(SCROLL_Y, mScrollY);
+        proto.write(CUR_SCROLL_Y, mCurScrollY);
+        proto.write(REMOVED, mRemoved);
+        mWindowAttributes.dumpDebug(proto, WINDOW_ATTRIBUTES);
+        proto.end(token);
+        mInsetsController.dumpDebug(proto, INSETS_CONTROLLER);
+        mImeFocusController.dumpDebug(proto, IME_FOCUS_CONTROLLER);
+    }
+
     public void dump(String prefix, FileDescriptor fd, PrintWriter writer, String[] args) {
         String innerPrefix = prefix + "  ";
-        writer.print(prefix); writer.println("ViewRoot:");
-        writer.print(innerPrefix); writer.print("mAdded="); writer.print(mAdded);
-                writer.print(" mRemoved="); writer.println(mRemoved);
-        writer.print(innerPrefix); writer.print("mConsumeBatchedInputScheduled=");
-                writer.println(mConsumeBatchedInputScheduled);
-        writer.print(innerPrefix); writer.print("mConsumeBatchedInputImmediatelyScheduled=");
-                writer.println(mConsumeBatchedInputImmediatelyScheduled);
-        writer.print(innerPrefix); writer.print("mPendingInputEventCount=");
-                writer.println(mPendingInputEventCount);
-        writer.print(innerPrefix); writer.print("mProcessInputEventsScheduled=");
-                writer.println(mProcessInputEventsScheduled);
-        writer.print(innerPrefix); writer.print("mTraversalScheduled=");
-                writer.print(mTraversalScheduled);
-        writer.print(innerPrefix); writer.print("mIsAmbientMode=");
-                writer.print(mIsAmbientMode);
-        writer.print(innerPrefix); writer.print("mUnbufferedInputSource=");
-        writer.print(Integer.toHexString(mUnbufferedInputSource));
-
+        writer.println(prefix + "ViewRoot:");
+        writer.println(innerPrefix + "mAdded=" + mAdded);
+        writer.println(innerPrefix + "mRemoved=" + mRemoved);
+        writer.println(innerPrefix + "mStopped=" + mStopped);
+        writer.println(innerPrefix + "mConsumeBatchedInputScheduled="
+                + mConsumeBatchedInputScheduled);
+        writer.println(innerPrefix + "mConsumeBatchedInputImmediatelyScheduled="
+                + mConsumeBatchedInputImmediatelyScheduled);
+        writer.println(innerPrefix + "mPendingInputEventCount=" + mPendingInputEventCount);
+        writer.println(innerPrefix + "mProcessInputEventsScheduled="
+                + mProcessInputEventsScheduled);
+        writer.println(innerPrefix + "mTraversalScheduled=" + mTraversalScheduled);
         if (mTraversalScheduled) {
-            writer.print(" (barrier="); writer.print(mTraversalBarrier); writer.println(")");
-        } else {
-            writer.println();
+            writer.println(innerPrefix + " (barrier=" + mTraversalBarrier + ")");
         }
+        writer.println(innerPrefix + "mIsAmbientMode="  + mIsAmbientMode);
+        writer.println(innerPrefix + "mUnbufferedInputSource="
+                + Integer.toHexString(mUnbufferedInputSource));
+
         mFirstInputStage.dump(innerPrefix, writer);
+
+        if (mInputEventReceiver != null) {
+            mInputEventReceiver.dump(innerPrefix, writer);
+        }
 
         mChoreographer.dump(prefix, writer);
 
         mInsetsController.dump(prefix, writer);
 
-        writer.print(prefix); writer.println("View Hierarchy:");
+        writer.println(prefix + "View Hierarchy:");
         dumpViewHierarchy(innerPrefix, writer, mView);
     }
 
@@ -7767,15 +7876,13 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    @UnsupportedAppUsage
-    private void dispatchResized(Rect frame, Rect contentInsets,
-            Rect visibleInsets, Rect stableInsets, boolean reportDraw,
-            MergedConfiguration mergedConfiguration, Rect backDropFrame, boolean forceLayout,
-            boolean alwaysConsumeSystemBars, int displayId,
-            DisplayCutout.ParcelableWrapper displayCutout) {
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    private void dispatchResized(ClientWindowFrames frames, boolean reportDraw,
+            MergedConfiguration mergedConfiguration, boolean forceLayout,
+            boolean alwaysConsumeSystemBars, int displayId) {
+        final Rect frame = frames.frame;
+        final Rect backDropFrame = frames.backdropFrame;
         if (DEBUG_LAYOUT) Log.v(mTag, "Resizing " + this + ": frame=" + frame.toShortString()
-                + " contentInsets=" + contentInsets.toShortString()
-                + " visibleInsets=" + visibleInsets.toShortString()
                 + " reportDraw=" + reportDraw
                 + " backDropFrame=" + backDropFrame);
 
@@ -7786,7 +7893,7 @@ public final class ViewRootImpl implements ViewParent,
             synchronized (mWindowCallbacks) {
                 for (int i = mWindowCallbacks.size() - 1; i >= 0; i--) {
                     mWindowCallbacks.get(i).onWindowSizeIsChanging(backDropFrame, fullscreen,
-                            visibleInsets, stableInsets);
+                            mVisibleInsetsCache, mStableInsetsCache);
                 }
             }
         }
@@ -7794,19 +7901,12 @@ public final class ViewRootImpl implements ViewParent,
         Message msg = mHandler.obtainMessage(reportDraw ? MSG_RESIZED_REPORT : MSG_RESIZED);
         if (mTranslator != null) {
             mTranslator.translateRectInScreenToAppWindow(frame);
-            mTranslator.translateRectInScreenToAppWindow(contentInsets);
-            mTranslator.translateRectInScreenToAppWindow(visibleInsets);
         }
         SomeArgs args = SomeArgs.obtain();
         final boolean sameProcessCall = (Binder.getCallingPid() == android.os.Process.myPid());
-        args.arg1 = sameProcessCall ? new Rect(frame) : frame;
-        args.arg2 = sameProcessCall ? new Rect(contentInsets) : contentInsets;
-        args.arg3 = sameProcessCall ? new Rect(visibleInsets) : visibleInsets;
-        args.arg4 = sameProcessCall && mergedConfiguration != null
+        args.arg1 = sameProcessCall ? new ClientWindowFrames(frames) : frames;
+        args.arg2 = sameProcessCall && mergedConfiguration != null
                 ? new MergedConfiguration(mergedConfiguration) : mergedConfiguration;
-        args.arg6 = sameProcessCall ? new Rect(stableInsets) : stableInsets;
-        args.arg8 = sameProcessCall ? new Rect(backDropFrame) : backDropFrame;
-        args.arg9 = displayCutout.get(); // DisplayCutout is immutable.
         args.argi1 = forceLayout ? 1 : 0;
         args.argi2 = alwaysConsumeSystemBars ? 1 : 0;
         args.argi3 = displayId;
@@ -7817,6 +7917,9 @@ public final class ViewRootImpl implements ViewParent,
     private void dispatchInsetsChanged(InsetsState insetsState) {
         if (Binder.getCallingPid() == android.os.Process.myPid()) {
             insetsState = new InsetsState(insetsState, true /* copySource */);
+        }
+        if (mTranslator != null) {
+            mTranslator.translateInsetsStateInScreenToAppWindow(insetsState);
         }
         mHandler.obtainMessage(MSG_INSETS_CHANGED, insetsState).sendToTarget();
     }
@@ -7830,6 +7933,9 @@ public final class ViewRootImpl implements ViewParent,
                     activeControls[i] = new InsetsSourceControl(activeControls[i]);
                 }
             }
+        }
+        if (mTranslator != null) {
+            mTranslator.translateInsetsStateInScreenToAppWindow(insetsState);
         }
         SomeArgs args = SomeArgs.obtain();
         args.arg1 = insetsState;
@@ -7961,7 +8067,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     void enqueueInputEvent(InputEvent event) {
         enqueueInputEvent(event, null, 0, false);
     }
@@ -8220,11 +8326,8 @@ public final class ViewRootImpl implements ViewParent,
 
         @Override
         public void onBatchedInputEventPending(int source) {
-            // mStopped: There will be no more choreographer callbacks if we are stopped,
-            // so we must consume all input immediately to prevent ANR
             final boolean unbuffered = mUnbufferedInputDispatch
-                    || (source & mUnbufferedInputSource) != SOURCE_CLASS_NONE
-                    || mStopped;
+                    || (source & mUnbufferedInputSource) != SOURCE_CLASS_NONE;
             if (unbuffered) {
                 if (mConsumeBatchedInputScheduled) {
                     unscheduleConsumeBatchedInput();
@@ -8381,7 +8484,7 @@ public final class ViewRootImpl implements ViewParent,
         mInvalidateOnAnimationRunnable.addViewRect(info);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void cancelInvalidate(View view) {
         mHandler.removeMessages(MSG_INVALIDATE, view);
         // fixme: might leak the AttachInfo.InvalidateInfo objects instead of returning
@@ -8390,12 +8493,12 @@ public final class ViewRootImpl implements ViewParent,
         mInvalidateOnAnimationRunnable.removeView(view);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void dispatchInputEvent(InputEvent event) {
         dispatchInputEvent(event, null);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void dispatchInputEvent(InputEvent event, InputEventReceiver receiver) {
         SomeArgs args = SomeArgs.obtain();
         args.arg1 = event;
@@ -8502,17 +8605,6 @@ public final class ViewRootImpl implements ViewParent,
                 0, now, MotionEvent.ACTION_HOVER_MOVE, x, y, 0);
         Message msg = mHandler.obtainMessage(what, event);
         mHandler.sendMessage(msg);
-    }
-
-    // TODO(118118435): Remove this after migration
-    public void dispatchSystemUiVisibilityChanged(int seq, int globalVisibility,
-            int localValue, int localChanges) {
-        SystemUiVisibilityInfo args = new SystemUiVisibilityInfo();
-        args.seq = seq;
-        args.globalVisibility = globalVisibility;
-        args.localValue = localValue;
-        args.localChanges = localChanges;
-        mHandler.sendMessage(mHandler.obtainMessage(MSG_DISPATCH_SYSTEM_UI_VISIBILITY, args));
     }
 
     public void dispatchCheckFocus() {
@@ -8909,10 +9001,10 @@ public final class ViewRootImpl implements ViewParent,
     /**
      * Dispatches a scroll capture request to the view hierarchy on the ui thread.
      *
-     * @param controller the controller to receive replies
+     * @param callbacks for replies
      */
-    public void dispatchScrollCaptureRequest(@NonNull IScrollCaptureController controller) {
-        mHandler.obtainMessage(MSG_REQUEST_SCROLL_CAPTURE, controller).sendToTarget();
+    public void dispatchScrollCaptureRequest(@NonNull IScrollCaptureCallbacks callbacks) {
+        mHandler.obtainMessage(MSG_REQUEST_SCROLL_CAPTURE, callbacks).sendToTarget();
     }
 
     /**
@@ -8922,6 +9014,9 @@ public final class ViewRootImpl implements ViewParent,
      * @param targets the search queue for targets
      */
     private void collectRootScrollCaptureTargets(Queue<ScrollCaptureTarget> targets) {
+        if (mRootScrollCaptureCallbacks == null) {
+            return;
+        }
         for (ScrollCaptureCallback cb : mRootScrollCaptureCallbacks) {
             // Add to the list for consideration
             Point offset = new Point(mView.getLeft(), mView.getTop());
@@ -8934,14 +9029,14 @@ public final class ViewRootImpl implements ViewParent,
      * Handles an inbound request for scroll capture from the system. If a client is not already
      * active, a search will be dispatched through the view tree to locate scrolling content.
      * <p>
-     * Either {@link IScrollCaptureController#onClientConnected(IScrollCaptureClient, Rect,
-     * Point)} or {@link IScrollCaptureController#onClientUnavailable()} will be returned
+     * Either {@link IScrollCaptureCallbacks#onClientConnected(IScrollCaptureConnection, Rect,
+     * Point)} or {@link IScrollCaptureCallbacks#onUnavailable()} will be returned
      * depending on the results of the search.
      *
-     * @param controller the interface to the system controller
+     * @param callbacks to receive responses
      * @see ScrollCaptureTargetResolver
      */
-    private void handleScrollCaptureRequest(@NonNull IScrollCaptureController controller) {
+    private void handleScrollCaptureRequest(@NonNull IScrollCaptureCallbacks callbacks) {
         LinkedList<ScrollCaptureTarget> targetList = new LinkedList<>();
 
         // Window (root) level callbacks
@@ -8956,7 +9051,7 @@ public final class ViewRootImpl implements ViewParent,
 
         // No-op path. Scroll capture not offered for this window.
         if (targetList.isEmpty()) {
-            dispatchScrollCaptureSearchResult(controller, null);
+            dispatchScrollCaptureSearchResult(callbacks, null);
             return;
         }
 
@@ -8964,12 +9059,12 @@ public final class ViewRootImpl implements ViewParent,
         // Continues with the consumer once all responses are consumed, or the timeout expires.
         ScrollCaptureTargetResolver resolver = new ScrollCaptureTargetResolver(targetList);
         resolver.start(mHandler, 1000,
-                (selected) -> dispatchScrollCaptureSearchResult(controller, selected));
+                (selected) -> dispatchScrollCaptureSearchResult(callbacks, selected));
     }
 
     /** Called by {@link #handleScrollCaptureRequest} when a result is returned */
     private void dispatchScrollCaptureSearchResult(
-            @NonNull IScrollCaptureController controller,
+            @NonNull IScrollCaptureCallbacks callbacks,
             @Nullable ScrollCaptureTarget selectedTarget) {
 
         // If timeout or no eligible targets found.
@@ -8978,31 +9073,31 @@ public final class ViewRootImpl implements ViewParent,
                 if (DEBUG_SCROLL_CAPTURE) {
                     Log.d(TAG, "scrollCaptureSearch returned no targets available.");
                 }
-                controller.onClientUnavailable();
+                callbacks.onUnavailable();
             } catch (RemoteException e) {
                 if (DEBUG_SCROLL_CAPTURE) {
-                    Log.w(TAG, "Failed to notify controller of scroll capture search result.", e);
+                    Log.w(TAG, "Failed to send scroll capture search result.", e);
                 }
             }
             return;
         }
 
         // Create a client instance and return it to the caller
-        mScrollCaptureClient = new ScrollCaptureClient(selectedTarget, controller);
+        mScrollCaptureConnection = new ScrollCaptureConnection(selectedTarget, callbacks);
         try {
             if (DEBUG_SCROLL_CAPTURE) {
-                Log.d(TAG, "scrollCaptureSearch returning client: " + getScrollCaptureClient());
+                Log.d(TAG, "scrollCaptureSearch returning client: " + getScrollCaptureConnection());
             }
-            controller.onClientConnected(
-                    mScrollCaptureClient,
+            callbacks.onConnected(
+                    mScrollCaptureConnection,
                     selectedTarget.getScrollBounds(),
                     selectedTarget.getPositionInWindow());
         } catch (RemoteException e) {
             if (DEBUG_SCROLL_CAPTURE) {
-                Log.w(TAG, "Failed to notify controller of scroll capture search result.", e);
+                Log.w(TAG, "Failed to send scroll capture search result.", e);
             }
-            mScrollCaptureClient.disconnect();
-            mScrollCaptureClient = null;
+            mScrollCaptureConnection.disconnect();
+            mScrollCaptureConnection = null;
         }
     }
 
@@ -9098,17 +9193,13 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void resized(Rect frame, Rect contentInsets,
-                Rect visibleInsets, Rect stableInsets, boolean reportDraw,
-                MergedConfiguration mergedConfiguration, Rect backDropFrame, boolean forceLayout,
-                boolean alwaysConsumeSystemBars, int displayId,
-                DisplayCutout.ParcelableWrapper displayCutout) {
+        public void resized(ClientWindowFrames frames, boolean reportDraw,
+                MergedConfiguration mergedConfiguration, boolean forceLayout,
+                boolean alwaysConsumeSystemBars, int displayId) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
-                viewAncestor.dispatchResized(frame, contentInsets,
-                        visibleInsets, stableInsets, reportDraw, mergedConfiguration,
-                        backDropFrame, forceLayout, alwaysConsumeSystemBars, displayId,
-                        displayCutout);
+                viewAncestor.dispatchResized(frames, reportDraw, mergedConfiguration, forceLayout,
+                        alwaysConsumeSystemBars, displayId);
             }
         }
 
@@ -9139,6 +9230,9 @@ public final class ViewRootImpl implements ViewParent,
 
         @Override
         public void showInsets(@InsetsType int types, boolean fromIme) {
+            if (fromIme) {
+                ImeTracing.getInstance().triggerDump();
+            }
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
                 viewAncestor.showInsets(types, fromIme);
@@ -9147,6 +9241,9 @@ public final class ViewRootImpl implements ViewParent,
 
         @Override
         public void hideInsets(@InsetsType int types, boolean fromIme) {
+            if (fromIme) {
+                ImeTracing.getInstance().triggerDump();
+            }
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
                 viewAncestor.hideInsets(types, fromIme);
@@ -9274,16 +9371,6 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void dispatchSystemUiVisibilityChanged(int seq, int globalVisibility,
-                int localValue, int localChanges) {
-            final ViewRootImpl viewAncestor = mViewAncestor.get();
-            if (viewAncestor != null) {
-                viewAncestor.dispatchSystemUiVisibilityChanged(seq, globalVisibility,
-                        localValue, localChanges);
-            }
-        }
-
-        @Override
         public void dispatchWindowShown() {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
@@ -9308,10 +9395,10 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void requestScrollCapture(IScrollCaptureController controller) {
+        public void requestScrollCapture(IScrollCaptureCallbacks callbacks) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
-                viewAncestor.dispatchScrollCaptureRequest(controller);
+                viewAncestor.dispatchScrollCaptureRequest(callbacks);
             }
         }
     }
@@ -9820,32 +9907,75 @@ public final class ViewRootImpl implements ViewParent,
         mNextDrawUseBLASTSyncTransaction = true;
     }
 
-    private void finishBLASTSync(boolean apply) {
+    /**
+     * This should only be called from the render thread.
+     */
+    private void finishBLASTSyncOnRT(boolean apply, Transaction t) {
+        // This is safe to modify on the render thread since the only other place it's modified
+        // is on the UI thread when the render thread is paused.
         mSendNextFrameToWm = false;
-        if (mNextReportConsumeBLAST) {
-            mNextReportConsumeBLAST = false;
+        if (mRtNextFrameReportedConsumeWithBlast) {
+            mRtNextFrameReportedConsumeWithBlast = false;
 
+            // We don't need to synchronize mRtBLASTSyncTransaction here we're guaranteed that this
+            // is called after all onFrameDraw and after callbacks to PositionUpdateListener.
+            // Therefore, no one should be modifying this object until the next vsync.
             if (apply) {
                 mRtBLASTSyncTransaction.apply();
             } else {
-                mSurfaceChangedTransaction.merge(mRtBLASTSyncTransaction);
+                t.merge(mRtBLASTSyncTransaction);
+            }
+
+            // There's potential for the frame callback to get called even if nothing was drawn.
+            // When that occurs, we remove the transaction sent to BBQ since the draw we were
+            // waiting on will not happen. We can apply the transaction here but it will not contain
+            // a buffer since nothing new was drawn.
+            //
+            // This is mainly for the case when the SurfaceView has changed and wants to synchronize
+            // with the main window. If the main window doesn't need to draw anything, we can just
+            // apply the transaction without the new buffer from the main window.
+            if (mBlastBufferQueue != null) {
+                mBlastBufferQueue.setNextTransaction(null);
             }
         }
+    }
+
+    /**
+     * Sends a list of blur regions to SurfaceFlinger, tagged with a frame.
+     *
+     * @param regionCopy List of regions
+     * @param frameNumber Frame where it should be applied (or current when using BLAST)
+     */
+    public void dispatchBlurRegions(float[][] regionCopy, long frameNumber) {
+        final SurfaceControl surfaceControl = getSurfaceControl();
+        if (!surfaceControl.isValid()) {
+            return;
+        }
+        if (useBLAST()) {
+            synchronized (getBlastTransactionLock()) {
+                getBLASTSyncTransaction().setBlurRegions(surfaceControl, regionCopy);
+            }
+        } else {
+            SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
+            transaction.setBlurRegions(surfaceControl, regionCopy);
+            transaction.deferTransactionUntil(surfaceControl, getSurfaceControl(), frameNumber);
+            transaction.apply();
+        }
+    }
+
+    /**
+     * Creates a background blur drawable for the backing {@link Surface}.
+     */
+    public BackgroundBlurDrawable createBackgroundBlurDrawable() {
+        return mBlurRegionAggregator.createBackgroundBlurDrawable(mContext);
     }
 
     SurfaceControl.Transaction getBLASTSyncTransaction() {
         return mRtBLASTSyncTransaction;
     }
 
-    /**
-     * @hide
-     */
-    public SurfaceControl getRenderSurfaceControl() {
-        if (useBLAST()) {
-            return mBlastSurfaceControl;
-        } else {
-            return mSurfaceControl;
-        }
+    Object getBlastTransactionLock() {
+        return mRtBLASTSyncTransaction;
     }
 
     @Override
@@ -9865,11 +9995,7 @@ public final class ViewRootImpl implements ViewParent,
         return mUseBLASTAdapter && !mForceDisableBLAST;
     }
 
-    /**
-     * Returns true if we are about to or currently processing a draw directed
-     * in to a BLAST transaction.
-     */
-    boolean isDrawingToBLASTTransaction() {
-        return mNextReportConsumeBLAST;
+    int getSurfaceSequenceId() {
+        return mSurfaceSequenceId;
     }
 }

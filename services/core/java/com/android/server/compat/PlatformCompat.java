@@ -59,8 +59,8 @@ public class PlatformCompat extends IPlatformCompat.Stub {
     private final ChangeReporter mChangeReporter;
     private final CompatConfig mCompatConfig;
 
-    private static int sMinTargetSdk = Build.VERSION_CODES.P;
-    private static int sMaxTargetSdk = Build.VERSION_CODES.Q;
+    private static int sMinTargetSdk = Build.VERSION_CODES.Q;
+    private static int sMaxTargetSdk = Build.VERSION_CODES.R;
 
     public PlatformCompat(Context context) {
         mContext = context;
@@ -107,17 +107,23 @@ public class PlatformCompat extends IPlatformCompat.Stub {
     }
 
     /**
-     * Internal version of the above method. Does not perform costly permission check.
+     * Internal version of the above method, without logging. Does not perform costly permission
+     * check.
+     * TODO(b/167551701): Remove this method and add 'loggability' as a changeid property.
+     */
+    public boolean isChangeEnabledInternalNoLogging(long changeId, ApplicationInfo appInfo) {
+        return mCompatConfig.isChangeEnabled(changeId, appInfo);
+    }
+
+    /**
+     * Internal version of {@link #isChangeEnabled(long, ApplicationInfo)}. Does not perform costly
+     * permission check.
      */
     public boolean isChangeEnabledInternal(long changeId, ApplicationInfo appInfo) {
-        if (mCompatConfig.isChangeEnabled(changeId, appInfo)) {
-            reportChange(changeId, appInfo.uid,
-                    ChangeReporter.STATE_ENABLED);
-            return true;
-        }
+        boolean value = isChangeEnabledInternalNoLogging(changeId, appInfo);
         reportChange(changeId, appInfo.uid,
-                ChangeReporter.STATE_DISABLED);
-        return false;
+                value ? ChangeReporter.STATE_ENABLED : ChangeReporter.STATE_DISABLED);
+        return value;
     }
 
     @Override
@@ -375,9 +381,12 @@ public class PlatformCompat extends IPlatformCompat.Stub {
         if (change.getLoggingOnly()) {
             return false;
         }
-        if (change.getEnableAfterTargetSdk() > 0) {
-            if (change.getEnableAfterTargetSdk() < sMinTargetSdk
-                    || change.getEnableAfterTargetSdk() > sMaxTargetSdk) {
+        if (change.getId() == CompatChange.CTS_SYSTEM_API_CHANGEID) {
+            return false;
+        }
+        if (change.getEnableSinceTargetSdk() > 0) {
+            if (change.getEnableSinceTargetSdk() < sMinTargetSdk
+                    || change.getEnableSinceTargetSdk() > sMaxTargetSdk) {
                 return false;
             }
         }

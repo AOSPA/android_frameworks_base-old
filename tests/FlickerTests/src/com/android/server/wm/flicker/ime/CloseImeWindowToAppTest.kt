@@ -16,16 +16,27 @@
 
 package com.android.server.wm.flicker.ime
 
-import androidx.test.filters.FlakyTest
-import androidx.test.filters.LargeTest
-import com.android.server.wm.flicker.CommonTransitions
-import com.android.server.wm.flicker.LayersTraceSubject
-import com.android.server.wm.flicker.NonRotationTestBase
-import com.android.server.wm.flicker.TransitionRunner
-import com.android.server.wm.flicker.WmTraceSubject
+import android.platform.test.annotations.Presubmit
+import android.view.Surface
+import androidx.test.filters.RequiresDevice
+import androidx.test.platform.app.InstrumentationRegistry
+import com.android.server.wm.flicker.Flicker
+import com.android.server.wm.flicker.FlickerTestRunner
+import com.android.server.wm.flicker.FlickerTestRunnerFactory
 import com.android.server.wm.flicker.helpers.ImeAppHelper
+import com.android.server.wm.flicker.helpers.buildTestTag
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerRotatesAndScales
+import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.noUncoveredRegions
+import com.android.server.wm.flicker.repetitions
+import com.android.server.wm.flicker.startRotation
+import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -34,53 +45,61 @@ import org.junit.runners.Parameterized
  * Test IME window closing back to app window transitions.
  * To run this test: `atest FlickerTests:CloseImeWindowToAppTest`
  */
-@LargeTest
+@Presubmit
+@RequiresDevice
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-open class CloseImeWindowToAppTest(
-    beginRotationName: String,
-    beginRotation: Int
-) : NonRotationTestBase(beginRotationName, beginRotation) {
-    init {
-        testApp = ImeAppHelper(instrumentation)
-    }
-
-    override val transitionToRun: TransitionRunner
-        get() = CommonTransitions.editTextLoseFocusToApp(testApp as ImeAppHelper,
-                instrumentation, uiDevice, beginRotation)
-                .includeJankyRuns().build()
-
-    @FlakyTest
-    @Test
-    open fun checkVisibility_imeLayerBecomesInvisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .showsLayer(IME_WINDOW_TITLE)
-                    .then()
-                    .hidesLayer(IME_WINDOW_TITLE)
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    open fun checkVisibility_imeAppLayerIsAlwaysVisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .showsLayer(testApp.getPackage())
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    open fun checkVisibility_imeAppWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAppWindowOnTop(testApp.getPackage())
-                    .forAllEntries()
-        }
-    }
+class CloseImeWindowToAppTest(
+    testName: String,
+    flickerSpec: Flicker
+) : FlickerTestRunner(testName, flickerSpec) {
 
     companion object {
-        const val IME_WINDOW_TITLE = "InputMethod"
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): List<Array<Any>> {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val testApp = ImeAppHelper(instrumentation)
+            return FlickerTestRunnerFactory(instrumentation)
+                .buildTest { configuration ->
+                    withTestName { buildTestTag("imeToApp", testApp, configuration) }
+                    repeat { configuration.repetitions }
+                    setup {
+                        eachRun {
+                            device.wakeUpAndGoToHomeScreen()
+                            this.setRotation(configuration.startRotation)
+                            testApp.open()
+                            testApp.openIME(device)
+                        }
+                    }
+                    teardown {
+                        eachRun {
+                            testApp.exit()
+                            this.setRotation(Surface.ROTATION_0)
+                        }
+                    }
+                    transitions {
+                        device.pressBack()
+                        device.waitForIdle()
+                    }
+                    assertions {
+                        windowManagerTrace {
+                            navBarWindowIsAlwaysVisible()
+                            statusBarWindowIsAlwaysVisible()
+                            imeAppWindowIsAlwaysVisible(testApp)
+                        }
+
+                        layersTrace {
+                            navBarLayerIsAlwaysVisible()
+                            statusBarLayerIsAlwaysVisible()
+                            noUncoveredRegions(configuration.startRotation)
+                            navBarLayerRotatesAndScales(configuration.startRotation)
+                            statusBarLayerRotatesScales(configuration.startRotation)
+                            imeLayerBecomesInvisible(enabled = false)
+                            imeAppLayerIsAlwaysVisible(testApp)
+                        }
+                    }
+                }
+        }
     }
 }

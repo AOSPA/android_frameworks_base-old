@@ -18,8 +18,10 @@ package android.app.servertransaction;
 
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.app.ActivityThread.ActivityClientRecord;
 import android.app.ClientTransactionHandler;
-import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Trace;
 
@@ -32,10 +34,10 @@ public class StartActivityItem extends ActivityLifecycleItem {
     private static final String TAG = "StartActivityItem";
 
     @Override
-    public void execute(ClientTransactionHandler client, IBinder token,
+    public void execute(ClientTransactionHandler client, ActivityClientRecord r,
             PendingTransactionActions pendingActions) {
         Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "startActivityItem");
-        client.handleStartActivity(token, pendingActions);
+        client.handleStartActivity(r, pendingActions);
         Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
     }
 
@@ -79,7 +81,7 @@ public class StartActivityItem extends ActivityLifecycleItem {
         // Empty
     }
 
-    public static final @android.annotation.NonNull Creator<StartActivityItem> CREATOR =
+    public static final @NonNull Creator<StartActivityItem> CREATOR =
             new Creator<StartActivityItem>() {
                 public StartActivityItem createFromParcel(Parcel in) {
                     return new StartActivityItem(in);
@@ -91,7 +93,7 @@ public class StartActivityItem extends ActivityLifecycleItem {
             };
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) {
             return true;
         }

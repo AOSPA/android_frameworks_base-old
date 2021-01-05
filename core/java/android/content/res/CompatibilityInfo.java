@@ -16,6 +16,7 @@
 
 package android.content.res;
 
+import android.annotation.Nullable;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Canvas;
@@ -27,6 +28,7 @@ import android.os.Build.VERSION_CODES;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.DisplayMetrics;
+import android.view.InsetsState;
 import android.view.MotionEvent;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
@@ -349,15 +351,7 @@ public class CompatibilityInfo implements Parcelable {
         }
 
         /**
-         * Translate the screen rect to the application frame.
-         */
-        @UnsupportedAppUsage
-        public void translateRectInScreenToAppWinFrame(Rect rect) {
-            rect.scale(applicationInvertedScale);
-        }
-
-        /**
-         * Translate the region in window to screen. 
+         * Translate the region in window to screen.
          */
         @UnsupportedAppUsage
         public void translateRegionInWindowToScreen(Region transparentRegion) {
@@ -407,7 +401,14 @@ public class CompatibilityInfo implements Parcelable {
         public void translateWindowLayout(WindowManager.LayoutParams params) {
             params.scale(applicationScale);
         }
-        
+
+        /**
+         * Translate a length in application's window to screen.
+         */
+        public float translateLengthInAppWindowToScreen(float length) {
+            return length * applicationScale;
+        }
+
         /**
          * Translate a Rect in application's window to screen.
          */
@@ -415,13 +416,20 @@ public class CompatibilityInfo implements Parcelable {
         public void translateRectInAppWindowToScreen(Rect rect) {
             rect.scale(applicationScale);
         }
- 
+
         /**
          * Translate a Rect in screen coordinates into the app window's coordinates.
          */
         @UnsupportedAppUsage
         public void translateRectInScreenToAppWindow(Rect rect) {
             rect.scale(applicationInvertedScale);
+        }
+
+        /**
+         * Translate an InsetsState in screen coordinates into the app window's coordinates.
+         */
+        public void translateInsetsStateInScreenToAppWindow(InsetsState state) {
+            state.scale(applicationInvertedScale);
         }
 
         /**
@@ -526,7 +534,7 @@ public class CompatibilityInfo implements Parcelable {
      * @param outDm If non-null the width and height will be set to their scaled values.
      * @return Returns the scaling factor for the window.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static float computeCompatibleScaling(DisplayMetrics dm, DisplayMetrics outDm) {
         final int width = dm.noncompatWidthPixels;
         final int height = dm.noncompatHeightPixels;
@@ -569,7 +577,7 @@ public class CompatibilityInfo implements Parcelable {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) {
             return true;
         }

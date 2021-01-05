@@ -16,10 +16,8 @@
 
 package com.android.server.location;
 
-import static com.android.internal.util.function.pooled.PooledLambda.obtainRunnable;
-
 import android.annotation.Nullable;
-import android.location.Location;
+import android.location.LocationResult;
 import android.location.util.identity.CallerIdentity;
 import android.os.Binder;
 import android.os.Bundle;
@@ -29,8 +27,6 @@ import com.android.internal.location.ProviderRequest;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
@@ -58,13 +54,7 @@ public abstract class AbstractLocationProvider {
          * Called when a provider has a new location available. May be invoked from any thread. Will
          * be invoked with a cleared binder identity.
          */
-        void onReportLocation(Location location);
-
-        /**
-         * Called when a provider has a new location available. May be invoked from any thread. Will
-         * be invoked with a cleared binder identity.
-         */
-        void onReportLocation(List<Location> locations);
+        void onReportLocation(LocationResult locationResult);
     }
 
     /**
@@ -224,7 +214,7 @@ public abstract class AbstractLocationProvider {
         // we know that we only updated the state, so the listener for the old state is the same as
         // the listener for the new state.
         if (oldInternalState.listener != null) {
-            long identity = Binder.clearCallingIdentity();
+            final long identity = Binder.clearCallingIdentity();
             try {
                 oldInternalState.listener.onStateChanged(oldInternalState.state, newState);
             } finally {
@@ -248,7 +238,7 @@ public abstract class AbstractLocationProvider {
         // we know that we only updated the state, so the listener for the old state is the same as
         // the listener for the new state.
         if (oldInternalState.listener != null) {
-            long identity = Binder.clearCallingIdentity();
+            final long identity = Binder.clearCallingIdentity();
             try {
                 oldInternalState.listener.onStateChanged(oldInternalState.state, newState);
             } finally {
@@ -304,33 +294,12 @@ public abstract class AbstractLocationProvider {
     /**
      * Call this method to report a new location.
      */
-    protected void reportLocation(Location location) {
+    protected void reportLocation(LocationResult locationResult) {
         Listener listener = mInternalState.get().listener;
         if (listener != null) {
-            long identity = Binder.clearCallingIdentity();
+            final long identity = Binder.clearCallingIdentity();
             try {
-                // copy location so if provider makes further changes they do not propagate
-                listener.onReportLocation(new Location(location));
-            } finally {
-                Binder.restoreCallingIdentity(identity);
-            }
-        }
-    }
-
-    /**
-     * Call this method to report a new location.
-     */
-    protected void reportLocation(List<Location> locations) {
-        Listener listener = mInternalState.get().listener;
-        if (listener != null) {
-            long identity = Binder.clearCallingIdentity();
-            try {
-                // copy location so if provider makes further changes they do not propagate
-                ArrayList<Location> copy = new ArrayList<>(locations.size());
-                for (Location location : locations) {
-                    copy.add(new Location(location));
-                }
-                listener.onReportLocation(copy);
+                listener.onReportLocation(Objects.requireNonNull(locationResult));
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -341,9 +310,9 @@ public abstract class AbstractLocationProvider {
      * Sets a new request and worksource for the provider.
      */
     public final void setRequest(ProviderRequest request) {
+        // TODO: do we want to hold a wakelock until onSetRequest is run?
         // all calls into the provider must be moved onto the provider thread to prevent deadlock
-        mExecutor.execute(obtainRunnable(AbstractLocationProvider::onSetRequest, this, request)
-                .recycleOnUse());
+        mExecutor.execute(() -> onSetRequest(request));
     }
 
     /**
@@ -352,17 +321,28 @@ public abstract class AbstractLocationProvider {
     protected abstract void onSetRequest(ProviderRequest request);
 
     /**
+     * Requests that any applicable locations are flushed. Normally only relevant for batched
+     * locations.
+     */
+    public final void flush(Runnable listener) {
+        // all calls into the provider must be moved onto the provider thread to prevent deadlock
+        mExecutor.execute(() -> onFlush(listener));
+    }
+
+    /**
+     * Always invoked on the provider executor. The callback must always be invoked exactly once
+     * for every invocation, and should only be invoked after
+     * {@link #reportLocation(LocationResult)} has been called for every flushed location. If no
+     * locations are flushed, the callback may be invoked immediately.
+     */
+    protected abstract void onFlush(Runnable callback);
+
+    /**
      * Sends an extra command to the provider for it to interpret as it likes.
      */
     public final void sendExtraCommand(int uid, int pid, String command, Bundle extras) {
         // all calls into the provider must be moved onto the provider thread to prevent deadlock
-
-        // the integer boxing done here likely cancels out any gains from removing lambda
-        // allocation, but since this an infrequently used api with no real performance needs, we
-        // we use pooled lambdas anyways for consistency.
-        mExecutor.execute(
-                obtainRunnable(AbstractLocationProvider::onExtraCommand, this, uid, pid, command,
-                        extras).recycleOnUse());
+        mExecutor.execute(() -> onExtraCommand(uid, pid, command, extras));
     }
 
     /**

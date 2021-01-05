@@ -16,13 +16,14 @@
 
 package com.android.systemui;
 
+import static com.android.systemui.classifier.Classifier.NOTIFICATION_DISMISS;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.NonNull;
-import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.RectF;
 import android.os.Handler;
@@ -36,8 +37,8 @@ import android.view.accessibility.AccessibilityEvent;
 
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
-import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.wm.shell.animation.FlingAnimationUtils;
 
 public class SwipeHelper implements Gefingerpoken {
     static final String TAG = "com.android.systemui.SwipeHelper";
@@ -115,24 +116,24 @@ public class SwipeHelper implements Gefingerpoken {
     private final ArrayMap<View, Animator> mDismissPendingMap = new ArrayMap<>();
 
     public SwipeHelper(
-            int swipeDirection, Callback callback, Context context, FalsingManager falsingManager) {
+            int swipeDirection, Callback callback, Resources resources,
+            ViewConfiguration viewConfiguration, FalsingManager falsingManager) {
         mCallback = callback;
         mHandler = new Handler();
         mSwipeDirection = swipeDirection;
         mVelocityTracker = VelocityTracker.obtain();
-        final ViewConfiguration configuration = ViewConfiguration.get(context);
-        mPagingTouchSlop = configuration.getScaledPagingTouchSlop();
-        mSlopMultiplier = configuration.getScaledAmbiguousGestureMultiplier();
+        mPagingTouchSlop = viewConfiguration.getScaledPagingTouchSlop();
+        mSlopMultiplier = viewConfiguration.getScaledAmbiguousGestureMultiplier();
 
         // Extra long-press!
         mLongPressTimeout = (long) (ViewConfiguration.getLongPressTimeout() * 1.5f);
 
-        Resources res = context.getResources();
-        mDensityScale =  res.getDisplayMetrics().density;
-        mFalsingThreshold = res.getDimensionPixelSize(R.dimen.swipe_helper_falsing_threshold);
-        mFadeDependingOnAmountSwiped = res.getBoolean(R.bool.config_fadeDependingOnAmountSwiped);
+        mDensityScale =  resources.getDisplayMetrics().density;
+        mFalsingThreshold = resources.getDimensionPixelSize(R.dimen.swipe_helper_falsing_threshold);
+        mFadeDependingOnAmountSwiped = resources.getBoolean(
+                R.bool.config_fadeDependingOnAmountSwiped);
         mFalsingManager = falsingManager;
-        mFlingAnimationUtils = new FlingAnimationUtils(res.getDisplayMetrics(),
+        mFlingAnimationUtils = new FlingAnimationUtils(resources.getDisplayMetrics(),
                 getMaxEscapeAnimDuration() / 1000f);
     }
 
@@ -697,14 +698,15 @@ public class SwipeHelper implements Gefingerpoken {
         float translation = getTranslation(mCurrView);
         return ev.getActionMasked() == MotionEvent.ACTION_UP
                 && !mFalsingManager.isUnlockingDisabled()
-                && !isFalseGesture(ev) && (swipedFastEnough() || swipedFarEnough())
+                && !isFalseGesture() && (swipedFastEnough() || swipedFarEnough())
                 && mCallback.canChildBeDismissedInDirection(mCurrView, translation > 0);
     }
 
-    public boolean isFalseGesture(MotionEvent ev) {
+    /** Returns true if the gesture should be rejected. */
+    public boolean isFalseGesture() {
         boolean falsingDetected = mCallback.isAntiFalsingNeeded();
         if (mFalsingManager.isClassifierEnabled()) {
-            falsingDetected = falsingDetected && mFalsingManager.isFalseTouch();
+            falsingDetected = falsingDetected && mFalsingManager.isFalseTouch(NOTIFICATION_DISMISS);
         } else {
             falsingDetected = falsingDetected && !mTouchAboveFalsingThreshold;
         }

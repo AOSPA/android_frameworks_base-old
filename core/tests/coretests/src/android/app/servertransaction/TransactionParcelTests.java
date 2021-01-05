@@ -24,6 +24,7 @@ import static android.app.servertransaction.TestUtils.resultInfoList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import android.app.ContentProviderHolder;
 import android.app.IApplicationThread;
 import android.app.IInstrumentationWatcher;
 import android.app.IUiAutomationConnection;
@@ -191,7 +192,7 @@ public class TransactionParcelTests {
         PersistableBundle persistableBundle = new PersistableBundle();
         persistableBundle.putInt("k", 4);
         FixedRotationAdjustments fixedRotationAdjustments = new FixedRotationAdjustments(
-                Surface.ROTATION_90, DisplayCutout.NO_CUTOUT);
+                Surface.ROTATION_90, 1920, 1080, DisplayCutout.NO_CUTOUT);
 
         LaunchActivityItem item = LaunchActivityItem.obtain(intent, ident, activityInfo,
                 config(), overrideConfig, compat, referrer, null /* voiceInteractor */,
@@ -351,7 +352,8 @@ public class TransactionParcelTests {
         ClientTransaction transaction = ClientTransaction.obtain(new StubAppThread(),
                 null /* activityToken */);
         transaction.addCallback(FixedRotationAdjustmentsItem.obtain(new Binder(),
-                new FixedRotationAdjustments(Surface.ROTATION_270, DisplayCutout.NO_CUTOUT)));
+                new FixedRotationAdjustments(Surface.ROTATION_270, 1920, 1080,
+                        DisplayCutout.NO_CUTOUT)));
 
         writeAndPrepareForReading(transaction);
 
@@ -494,7 +496,8 @@ public class TransactionParcelTests {
 
         @Override
         public void scheduleCreateBackupAgent(ApplicationInfo applicationInfo,
-                CompatibilityInfo compatibilityInfo, int i, int userId) throws RemoteException {
+                CompatibilityInfo compatibilityInfo, int i, int userId, int operatioType)
+                throws RemoteException {
         }
 
         @Override
@@ -663,6 +666,17 @@ public class TransactionParcelTests {
         @Override
         public void performDirectAction(IBinder activityToken, String actionId, Bundle arguments,
                 RemoteCallback cancellationCallback, RemoteCallback resultCallback) {
+        }
+
+        @Override
+        public void notifyContentProviderPublishStatus(ContentProviderHolder holder, String auth,
+                int userId, boolean published) {
+        }
+
+        @Override
+        public void instrumentWithoutRestart(ComponentName instrumentationName,
+                Bundle instrumentationArgs, IInstrumentationWatcher instrumentationWatcher,
+                IUiAutomationConnection instrumentationUiConnection, ApplicationInfo targetInfo) {
         }
     }
 }

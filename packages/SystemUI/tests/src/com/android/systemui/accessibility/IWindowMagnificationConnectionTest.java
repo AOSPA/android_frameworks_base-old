@@ -18,6 +18,7 @@ package com.android.systemui.accessibility;
 
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 
@@ -25,14 +26,17 @@ import android.content.Context;
 import android.os.RemoteException;
 import android.provider.Settings;
 import android.testing.AndroidTestingRunner;
+import android.testing.TestableLooper;
 import android.view.Display;
 import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.IRemoteMagnificationAnimationCallback;
 import android.view.accessibility.IWindowMagnificationConnection;
 import android.view.accessibility.IWindowMagnificationConnectionCallback;
 
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.statusbar.CommandQueue;
 
 import org.junit.Before;
@@ -47,6 +51,7 @@ import org.mockito.MockitoAnnotations;
  */
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
+@TestableLooper.RunWithLooper
 public class IWindowMagnificationConnectionTest extends SysuiTestCase {
 
     private static final int TEST_DISPLAY = Display.DEFAULT_DISPLAY;
@@ -57,9 +62,13 @@ public class IWindowMagnificationConnectionTest extends SysuiTestCase {
     @Mock
     private IWindowMagnificationConnectionCallback mConnectionCallback;
     @Mock
-    private WindowMagnificationController mWindowMagnificationController;
+    private WindowMagnificationAnimationController mWindowMagnificationAnimationController;
     @Mock
     private ModeSwitchesController mModeSwitchesController;
+    @Mock
+    private NavigationModeController mNavigationModeController;
+    @Mock
+    private IRemoteMagnificationAnimationCallback mAnimationCallback;
     private IWindowMagnificationConnection mIWindowMagnificationConnection;
     private WindowMagnification mWindowMagnification;
 
@@ -73,33 +82,33 @@ public class IWindowMagnificationConnectionTest extends SysuiTestCase {
         }).when(mAccessibilityManager).setWindowMagnificationConnection(
                 any(IWindowMagnificationConnection.class));
         mWindowMagnification = new WindowMagnification(getContext(),
-                getContext().getMainThreadHandler(), mCommandQueue, mModeSwitchesController);
-        mWindowMagnification.mWindowMagnificationController = mWindowMagnificationController;
+                getContext().getMainThreadHandler(), mCommandQueue, mModeSwitchesController,
+                mNavigationModeController);
+        mWindowMagnification.mWindowMagnificationAnimationController =
+                mWindowMagnificationAnimationController;
         mWindowMagnification.requestWindowMagnificationConnection(true);
         assertNotNull(mIWindowMagnificationConnection);
         mIWindowMagnificationConnection.setConnectionCallback(mConnectionCallback);
     }
 
     @Test
-    public void enableWindowMagnification() throws RemoteException {
+    public void enableWindowMagnification_passThrough() throws RemoteException {
         mIWindowMagnificationConnection.enableWindowMagnification(TEST_DISPLAY, 3.0f, Float.NaN,
-                Float.NaN);
+                Float.NaN, mAnimationCallback);
         waitForIdleSync();
 
-        verify(mWindowMagnificationController).enableWindowMagnification(3.0f, Float.NaN,
-                Float.NaN);
+        verify(mWindowMagnificationAnimationController).enableWindowMagnification(eq(3.0f),
+                eq(Float.NaN), eq(Float.NaN), eq(mAnimationCallback));
     }
 
     @Test
     public void disableWindowMagnification_deleteWindowMagnification() throws RemoteException {
-        mIWindowMagnificationConnection.enableWindowMagnification(TEST_DISPLAY, 3.0f, Float.NaN,
-                Float.NaN);
+        mIWindowMagnificationConnection.disableWindowMagnification(TEST_DISPLAY,
+                mAnimationCallback);
         waitForIdleSync();
 
-        mIWindowMagnificationConnection.disableWindowMagnification(TEST_DISPLAY);
-        waitForIdleSync();
-
-        verify(mWindowMagnificationController).deleteWindowMagnification();
+        verify(mWindowMagnificationAnimationController).deleteWindowMagnification(
+                mAnimationCallback);
     }
 
     @Test
@@ -107,7 +116,7 @@ public class IWindowMagnificationConnectionTest extends SysuiTestCase {
         mIWindowMagnificationConnection.setScale(TEST_DISPLAY, 3.0f);
         waitForIdleSync();
 
-        verify(mWindowMagnificationController).setScale(3.0f);
+        verify(mWindowMagnificationAnimationController).setScale(3.0f);
     }
 
     @Test
@@ -115,7 +124,7 @@ public class IWindowMagnificationConnectionTest extends SysuiTestCase {
         mIWindowMagnificationConnection.moveWindowMagnifier(TEST_DISPLAY, 100f, 200f);
         waitForIdleSync();
 
-        verify(mWindowMagnificationController).moveWindowMagnifier(100f, 200f);
+        verify(mWindowMagnificationAnimationController).moveWindowMagnifier(100f, 200f);
     }
 
     @Test

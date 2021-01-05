@@ -177,7 +177,7 @@ public class CertificateMonitor {
 
         int parentUserId = userHandle.getIdentifier();
 
-        if (mService.getProfileOwner(userHandle.getIdentifier()) != null) {
+        if (mService.getProfileOwnerAsUser(userHandle.getIdentifier()) != null) {
             contentText = resources.getString(R.string.ssl_ca_cert_noti_managed,
                     mService.getProfileOwnerName(userHandle.getIdentifier()));
             smallIconId = R.drawable.stat_sys_certificate_info;
@@ -205,9 +205,10 @@ public class CertificateMonitor {
             dialogIntent.setComponent(targetInfo.getComponentName());
         }
 
+        // Simple notification clicks are immutable
         PendingIntent notifyIntent = mInjector.pendingIntentGetActivityAsUser(userContext, 0,
-                dialogIntent, PendingIntent.FLAG_UPDATE_CURRENT, null,
-                UserHandle.of(parentUserId));
+                dialogIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE,
+                null, UserHandle.of(parentUserId));
 
         return new Notification.Builder(userContext, SystemNotificationChannels.SECURITY)
                 .setSmallIcon(smallIconId)

@@ -16,6 +16,7 @@
 
 package com.android.server.accessibility.gestures;
 
+import static android.view.MotionEvent.ACTION_CANCEL;
 import static android.view.MotionEvent.ACTION_DOWN;
 import static android.view.MotionEvent.ACTION_HOVER_ENTER;
 import static android.view.MotionEvent.ACTION_HOVER_EXIT;
@@ -33,7 +34,7 @@ import static com.android.server.accessibility.gestures.TouchState.STATE_GESTURE
 import static com.android.server.accessibility.gestures.TouchState.STATE_TOUCH_EXPLORING;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.mock;
+import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.graphics.PointF;
@@ -42,6 +43,7 @@ import android.os.SystemClock;
 import android.testing.DexmakerShareClassLoaderRule;
 import android.view.InputDevice;
 import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
 
 import androidx.test.InstrumentationRegistry;
@@ -87,6 +89,8 @@ public class TouchExplorerTest {
     private MotionEvent mLastEvent;
     private TestHandler mHandler;
     private TouchExplorer mTouchExplorer;
+    private Context mContext;
+    private int mTouchSlop;
     private long mLastDownTime = Integer.MIN_VALUE;
 
     // mock package-private GestureManifold class
@@ -121,12 +125,12 @@ public class TouchExplorerTest {
         if (Looper.myLooper() == null) {
             Looper.prepare();
         }
-        Context context = InstrumentationRegistry.getContext();
-        AccessibilityManagerService ams = new AccessibilityManagerService(context);
-        GestureManifold detector = mock(GestureManifold.class);
+        mContext = InstrumentationRegistry.getContext();
+        mTouchSlop = ViewConfiguration.get(mContext).getScaledTouchSlop();
+        AccessibilityManagerService ams = new AccessibilityManagerService(mContext);
         mCaptor = new EventCaptor();
         mHandler = new TestHandler();
-        mTouchExplorer = new TouchExplorer(context, ams, detector, mHandler);
+        mTouchExplorer = new TouchExplorer(mContext, ams, null, mHandler);
         mTouchExplorer.setNext(mCaptor);
     }
 
@@ -170,6 +174,42 @@ public class TouchExplorerTest {
     }
 
     /**
+     * Test the case where the event location is correct when clicking after the following
+     * situation happened: entering the delegate state through doubleTapAndHold gesture and
+     * receiving a cancel event to return the clear state.
+     */
+    @Test
+    public void testClick_afterCanceledDoubleTapAndHold_eventLocationIsCorrect() {
+        // Generates the click position by this click operation, otherwise the offset used
+        // while delegating could not be set.
+        send(downEvent(DEFAULT_X + 10, DEFAULT_Y + 10));
+        // Waits for transition to touch exploring state.
+        mHandler.fastForward(2 * USER_INTENT_TIMEOUT);
+        send(upEvent());
+
+        // Simulates detecting the doubleTapAndHold gesture and enters the delegate state.
+        final MotionEvent sendEvent =
+                fromTouchscreen(downEvent(DEFAULT_X + 100, DEFAULT_Y + 100));
+        mTouchExplorer.onDoubleTapAndHold(sendEvent, sendEvent, 0);
+        assertState(STATE_DELEGATING);
+
+        send(cancelEvent());
+
+        // Generates the click operation, and checks the event location of the ACTION_HOVER_ENTER
+        // event is correct.
+        send(downEvent());
+        // Waits for transition to touch exploring state.
+        mHandler.fastForward(2 * USER_INTENT_TIMEOUT);
+        send(upEvent());
+
+        final List<MotionEvent> events = getCapturedEvents();
+        assertTrue(events.stream().anyMatch(
+                motionEvent -> motionEvent.getActionMasked() == ACTION_HOVER_ENTER
+                        && motionEvent.getX() == DEFAULT_X
+                        && motionEvent.getY() == DEFAULT_Y));
+    }
+
+    /**
      * Test the case where ACTION_POINTER_DOWN is followed by a number of ACTION_MOVE events that do
      * not change the coordinates.
      */
@@ -183,7 +223,7 @@ public class TouchExplorerTest {
         moveEachPointers(mLastEvent, p(10, 10), p(10, 10));
         send(mLastEvent);
         goToStateClearFrom(STATE_DRAGGING_2FINGERS);
-        assertCapturedEvents(ACTION_DOWN, ACTION_MOVE, ACTION_MOVE, ACTION_UP);
+        assertCapturedEvents(ACTION_DOWN, ACTION_MOVE, ACTION_MOVE, ACTION_MOVE, ACTION_UP);
     }
 
     @Test
@@ -230,8 +270,8 @@ public class TouchExplorerTest {
         // Wait for the views responding to hover enter/move events.
         mHandler.fastForward(oneThirdUserIntentTimeout);
         // Simulate receiving the a11y exit event sent by the first view.
-        AccessibilityEvent a11yExitEvent = AccessibilityEvent.obtain(
-                AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
+        AccessibilityEvent a11yExitEvent =
+                AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
         mTouchExplorer.onAccessibilityEvent(a11yExitEvent);
 
         // Wait for running the hover exit event runnable. After it, touch-exploration end event
@@ -284,7 +324,7 @@ public class TouchExplorerTest {
         assertState(STATE_DRAGGING);
         goToStateClearFrom(STATE_DRAGGING_2FINGERS);
         assertState(STATE_CLEAR);
-        assertCapturedEvents(ACTION_DOWN, ACTION_UP);
+        assertCapturedEvents(ACTION_DOWN, ACTION_MOVE, ACTION_UP);
         assertCapturedEventsNoHistory();
     }
 
@@ -297,6 +337,7 @@ public class TouchExplorerTest {
         assertState(STATE_CLEAR);
         assertCapturedEvents(
                 /* goto dragging state */ ACTION_DOWN,
+                ACTION_MOVE,
                 /* leave dragging state */ ACTION_UP,
                 ACTION_DOWN,
                 ACTION_POINTER_DOWN,
@@ -319,6 +360,39 @@ public class TouchExplorerTest {
                 ACTION_POINTER_UP,
                 ACTION_UP);
         assertCapturedEventsNoHistory();
+    }
+
+    @Test
+    public void testCanceledGesture_shouldDoNothing() {
+        mTouchExplorer.setMultiFingerGesturesEnabled(true);
+        mTouchExplorer.setTwoFingerPassthroughEnabled(true);
+        // Start a three-finger swipe.
+        send(downEvent());
+        send(pointerDownEvent());
+        send(thirdPointerDownEvent());
+        moveEachPointers(mLastEvent, p(0, 200), p(0, 200), p(0, 200));
+        send(mLastEvent);
+        assertState(STATE_GESTURE_DETECTING);
+        mHandler.fastForward(2 * (int) Swipe.MAX_TIME_TO_CONTINUE_SWIPE_MS);
+        // Lift the third finger but keep the other two going.
+        send(thirdPointerUpEvent());
+        // Manually construct the next move event. Using moveEachPointers() will batch the move
+        // event onto the pointer up event which will mean that the move event still has a pointer
+        // count of 3.
+        // Todo: refactor to avoid using batching as there is no special reason to do it that way.
+        float[] x = new float[2];
+        float[] y = new float[2];
+        x[0] = mLastEvent.getX(0) + 100;
+        x[1] = mLastEvent.getX(1) + 100;
+        y[0] = mLastEvent.getY(0) + 100;
+        y[1] = mLastEvent.getY(1) + 100;
+        send(manyPointerEvent(ACTION_MOVE, x, y));
+        // Ensure that no two-finger passthrough is being executed.
+        assertState(STATE_GESTURE_DETECTING);
+        assertNoCapturedEvents();
+        send(pointerUpEvent());
+        send(upEvent());
+        mTouchExplorer.setMultiFingerGesturesEnabled(false);
     }
 
     private static MotionEvent fromTouchscreen(MotionEvent ev) {
@@ -354,12 +428,12 @@ public class TouchExplorerTest {
                     break;
                 case STATE_DRAGGING_2FINGERS:
                     goFromStateClearTo(STATE_TOUCH_EXPLORING_2FINGER);
-                    moveEachPointers(mLastEvent, p(10, 0), p(10, 0));
+                    moveEachPointers(mLastEvent, p(mTouchSlop, 0), p(mTouchSlop, 0));
                     send(mLastEvent);
                     break;
                 case STATE_PINCH_2FINGERS:
                     goFromStateClearTo(STATE_DRAGGING_2FINGERS);
-                    moveEachPointers(mLastEvent, p(10, 0), p(-10, 1));
+                    moveEachPointers(mLastEvent, p(mTouchSlop, 0), p(-mTouchSlop, 1));
                     send(mLastEvent);
                     break;
                 case STATE_MOVING_3FINGERS:
@@ -371,8 +445,7 @@ public class TouchExplorerTest {
                     throw new IllegalArgumentException("Illegal state: " + state);
             }
         } catch (Throwable t) {
-            throw new RuntimeException(
-                    "Failed to go to state " + stateToString(state), t);
+            throw new RuntimeException("Failed to go to state " + stateToString(state), t);
         }
     }
 
@@ -422,6 +495,10 @@ public class TouchExplorerTest {
                 TouchState.getStateSymbolicName(mTouchExplorer.getState().getState()));
     }
 
+    private void assertNoCapturedEvents() {
+        assertEquals(0, getCapturedEvents().size());
+    }
+
     private void assertCapturedEvents(int... actionsInOrder) {
         final int eventCount = actionsInOrder.length;
         assertEquals(eventCount, getCapturedEvents().size());
@@ -442,6 +519,19 @@ public class TouchExplorerTest {
 
     private List<MotionEvent> getCapturedEvents() {
         return ((EventCaptor) mCaptor).mEvents;
+    }
+
+    private MotionEvent cancelEvent() {
+        mLastDownTime = SystemClock.uptimeMillis();
+        return fromTouchscreen(
+                MotionEvent.obtain(mLastDownTime, mLastDownTime, ACTION_CANCEL,
+                        DEFAULT_X, DEFAULT_Y, 0));
+    }
+
+    private MotionEvent downEvent(float x, float y) {
+        mLastDownTime = SystemClock.uptimeMillis();
+        return fromTouchscreen(
+                MotionEvent.obtain(mLastDownTime, mLastDownTime, ACTION_DOWN, x, y, 0));
     }
 
     private MotionEvent downEvent() {
@@ -567,8 +657,8 @@ public class TouchExplorerTest {
     }
 
     /**
-     * A {@link android.os.Handler} that doesn't process messages until {@link
-     * #fastForward(int)} is invoked.
+     * A {@link android.os.Handler} that doesn't process messages until {@link #fastForward(int)} is
+     * invoked.
      *
      * @see com.android.server.testutils.TestHandler
      */

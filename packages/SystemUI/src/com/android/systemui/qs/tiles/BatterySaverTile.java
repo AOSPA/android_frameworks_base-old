@@ -36,6 +36,7 @@ import com.android.systemui.qs.SecureSetting;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.statusbar.policy.BatteryController;
+import com.android.systemui.util.settings.SecureSettings;
 
 import javax.inject.Inject;
 
@@ -62,15 +63,20 @@ public class BatterySaverTile extends QSTileImpl<BooleanState> implements
             StatusBarStateController statusBarStateController,
             ActivityStarter activityStarter,
             QSLogger qsLogger,
-            BatteryController batteryController
+            BatteryController batteryController,
+            SecureSettings secureSettings
     ) {
         super(host, backgroundLooper, mainHandler, metricsLogger, statusBarStateController,
                 activityStarter, qsLogger);
         mBatteryController = batteryController;
         mBatteryController.observe(getLifecycle(), this);
         int currentUser = host.getUserContext().getUserId();
-        mSetting = new SecureSetting(mContext, mHandler, Secure.LOW_POWER_WARNING_ACKNOWLEDGED,
-                currentUser) {
+        mSetting = new SecureSetting(
+                secureSettings,
+                mHandler,
+                Secure.LOW_POWER_WARNING_ACKNOWLEDGED,
+                currentUser
+        ) {
             @Override
             protected void handleValueChanged(int value, boolean observedChange) {
                 // mHandler is the background handler so calling this is OK
@@ -130,6 +136,7 @@ public class BatterySaverTile extends QSTileImpl<BooleanState> implements
                 : mPowerSave ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.icon = mIcon;
         state.label = mContext.getString(R.string.battery_detail_switch_title);
+        state.secondaryLabel = "";
         state.contentDescription = state.label;
         state.value = mPowerSave;
         state.expandedAccessibilityClassName = Switch.class.getName();

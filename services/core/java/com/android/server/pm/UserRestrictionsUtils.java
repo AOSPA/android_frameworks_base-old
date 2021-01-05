@@ -41,8 +41,11 @@ import android.telephony.SubscriptionManager;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.XmlUtils;
 import com.android.server.LocalServices;
 
 import com.google.android.collect.Sets;
@@ -138,6 +141,11 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_PRINTING,
             UserManager.DISALLOW_CONFIG_PRIVATE_DNS
     });
+
+    public static final Set<String> DEPRECATED_USER_RESTRICTIONS = Sets.newArraySet(
+            UserManager.DISALLOW_ADD_MANAGED_PROFILE,
+            UserManager.DISALLOW_REMOVE_MANAGED_PROFILE
+    );
 
     /**
      * Set of user restriction which we don't want to persist.
@@ -322,6 +330,11 @@ public class UserRestrictionsUtils {
 
     public static void writeRestrictions(@NonNull XmlSerializer serializer,
             @Nullable Bundle restrictions, @NonNull String tag) throws IOException {
+        writeRestrictions(XmlUtils.makeTyped(serializer), restrictions, tag);
+    }
+
+    public static void writeRestrictions(@NonNull TypedXmlSerializer serializer,
+            @Nullable Bundle restrictions, @NonNull String tag) throws IOException {
         if (restrictions == null) {
             return;
         }
@@ -343,6 +356,10 @@ public class UserRestrictionsUtils {
     }
 
     public static void readRestrictions(XmlPullParser parser, Bundle restrictions) {
+        readRestrictions(XmlUtils.makeTyped(parser), restrictions);
+    }
+
+    public static void readRestrictions(TypedXmlPullParser parser, Bundle restrictions) {
         restrictions.clear();
         for (String key : USER_RESTRICTIONS) {
             final String value = parser.getAttributeValue(null, key);
@@ -353,6 +370,10 @@ public class UserRestrictionsUtils {
     }
 
     public static Bundle readRestrictions(XmlPullParser parser) {
+        return readRestrictions(XmlUtils.makeTyped(parser));
+    }
+
+    public static Bundle readRestrictions(TypedXmlPullParser parser) {
         final Bundle result = new Bundle();
         readRestrictions(parser, result);
         return result;
@@ -721,7 +742,7 @@ public class UserRestrictionsUtils {
             case android.provider.Settings.Secure.ALWAYS_ON_VPN_APP:
             case android.provider.Settings.Secure.ALWAYS_ON_VPN_LOCKDOWN:
             case android.provider.Settings.Secure.ALWAYS_ON_VPN_LOCKDOWN_WHITELIST:
-                // Whitelist system uid (ConnectivityService) and root uid to change always-on vpn
+                // Allowlist system uid (ConnectivityService) and root uid to change always-on vpn
                 final int appId = UserHandle.getAppId(callingUid);
                 if (appId == Process.SYSTEM_UID || appId == Process.ROOT_UID) {
                     return false;

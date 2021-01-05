@@ -14,7 +14,7 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
-<FrameLayout
+<com.android.systemui.screenshot.ScreenshotView
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/global_screenshot_frame"
     android:layout_width="match_parent"
@@ -26,14 +26,6 @@
         android:layout_gravity="bottom"
         android:alpha="0.0"
         android:src="@drawable/screenshot_actions_background_protection"/>
-    <ImageView
-        android:id="@+id/global_screenshot_animated_view"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:visibility="gone"
-        android:elevation="@dimen/screenshot_preview_elevation"
-        android:background="@drawable/screenshot_rounded_corners" />
     <ImageView
         android:id="@+id/global_screenshot_flash"
         android:layout_width="match_parent"
@@ -54,7 +46,7 @@
         android:layout_height="@dimen/screenshot_dismiss_button_tappable_size"
         android:elevation="7dp"
         android:visibility="gone"
-        android:contentDescription="@string/screenshot_dismiss_ui_description">
+        android:contentDescription="@string/screenshot_dismiss_description">
         <ImageView
             android:id="@+id/global_screenshot_dismiss_image"
             android:layout_width="match_parent"
@@ -62,4 +54,4 @@
             android:layout_margin="@dimen/screenshot_dismiss_button_margin"
             android:src="@drawable/screenshot_cancel"/>
     </FrameLayout>
-</FrameLayout>
+</com.android.systemui.screenshot.ScreenshotView>

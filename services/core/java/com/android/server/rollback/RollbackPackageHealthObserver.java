@@ -27,7 +27,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManagerInternal;
 import android.content.pm.VersionedPackage;
 import android.content.rollback.PackageRollbackInfo;
 import android.content.rollback.RollbackInfo;
@@ -44,13 +43,11 @@ import android.util.SparseArray;
 
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.Preconditions;
-import com.android.server.LocalServices;
 import com.android.server.PackageWatchdog;
 import com.android.server.PackageWatchdog.FailureReasons;
 import com.android.server.PackageWatchdog.PackageHealthObserver;
 import com.android.server.PackageWatchdog.PackageHealthObserverImpact;
 import com.android.server.pm.ApexManager;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -95,7 +92,7 @@ final class RollbackPackageHealthObserver implements PackageHealthObserver {
 
     @Override
     public int onHealthCheckFailed(@Nullable VersionedPackage failedPackage,
-            @FailureReasons int failureReason) {
+            @FailureReasons int failureReason, int mitigationCount) {
         // For native crashes, we will roll back any available rollbacks
         if (failureReason == PackageWatchdog.FAILURE_REASON_NATIVE_CRASH
                 && !mContext.getSystemService(RollbackManager.class)
@@ -113,7 +110,7 @@ final class RollbackPackageHealthObserver implements PackageHealthObserver {
 
     @Override
     public boolean execute(@Nullable VersionedPackage failedPackage,
-            @FailureReasons int rollbackReason) {
+            @FailureReasons int rollbackReason, int mitigationCount) {
         if (rollbackReason == PackageWatchdog.FAILURE_REASON_NATIVE_CRASH) {
             mHandler.post(() -> rollbackAll());
             return true;
@@ -342,14 +339,10 @@ final class RollbackPackageHealthObserver implements PackageHealthObserver {
     private boolean isModule(String packageName) {
         // Check if the package is an APK inside an APEX. If it is, use the parent APEX package when
         // querying PackageManager.
-        PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
-        AndroidPackage apkPackage = pmi.getPackage(packageName);
-        if (apkPackage != null) {
-            String apexPackageName = mApexManager.getActiveApexPackageNameContainingPackage(
-                    apkPackage);
-            if (apexPackageName != null) {
-                packageName = apexPackageName;
-            }
+        String apexPackageName = mApexManager.getActiveApexPackageNameContainingPackage(
+                packageName);
+        if (apexPackageName != null) {
+            packageName = apexPackageName;
         }
 
         PackageManager pm = mContext.getPackageManager();

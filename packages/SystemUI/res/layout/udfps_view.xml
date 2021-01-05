@@ -5,6 +5,4 @@
     android:id="@+id/udfps_view"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    systemui:sensorRadius="140px"
-    systemui:sensorMarginBottom="630px"
     systemui:sensorTouchAreaCoefficient="0.5"/>

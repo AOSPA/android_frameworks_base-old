@@ -129,7 +129,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
     // performance.
     @UnsupportedAppUsage
     private String mAuthority;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private String[] mAuthorities;
     @UnsupportedAppUsage
     private String mReadPermission;
@@ -624,6 +624,20 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
         }
 
         @Override
+        public void uncanonicalizeAsync(String callingPkg, @Nullable String attributionTag, Uri uri,
+                RemoteCallback callback) {
+            final Bundle result = new Bundle();
+            try {
+                result.putParcelable(ContentResolver.REMOTE_CALLBACK_RESULT,
+                        uncanonicalize(callingPkg, attributionTag, uri));
+            } catch (Exception e) {
+                result.putParcelable(ContentResolver.REMOTE_CALLBACK_ERROR,
+                        new ParcelableException(e));
+            }
+            callback.sendResult(result);
+        }
+
+        @Override
         public boolean refresh(String callingPkg, String attributionTag, Uri uri, Bundle extras,
                 ICancellationSignal cancellationSignal) throws RemoteException {
             uri = validateIncomingUri(uri);
@@ -1043,6 +1057,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      *         calling identity by passing it to
      *         {@link #restoreCallingIdentity}.
      */
+    @SuppressWarnings("AndroidFrameworkBinderIdentity")
     public final @NonNull CallingIdentity clearCallingIdentity() {
         return new CallingIdentity(Binder.clearCallingIdentity(), setCallingPackage(null));
     }
@@ -1620,13 +1635,12 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * Implementation when a caller has performed an insert on the content
      * provider, but that call has been rejected for the operation given
      * to {@link #setAppOps(int, int)}.  The default implementation simply
-     * returns a dummy URI that is the base URI with a 0 path element
-     * appended.
+     * returns a URI that is the base URI with a 0 path element appended.
      */
     public Uri rejectInsert(Uri uri, ContentValues values) {
         // If not allowed, we need to return some reasonable URI.  Maybe the
         // content provider should be responsible for this, but for now we
-        // will just return the base URI with a dummy '0' tagged on to it.
+        // will just return the base URI with a '0' tagged on to it.
         // You shouldn't be able to read if you can't write, anyway, so it
         // shouldn't matter much what is returned.
         return uri.buildUpon().appendPath("0").build();
@@ -2342,7 +2356,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * when directly instantiating the provider for testing.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void attachInfoForTesting(Context context, ProviderInfo info) {
         attachInfo(context, info, true);
     }

@@ -35,7 +35,6 @@ java_library {
     libs: [
         "framework_media_annotation",
     ],
-
     static_libs: [
         "exoplayer2-extractor"
     ],
@@ -44,7 +43,6 @@ java_library {
     plugins: ["java_api_finder"],
 
     hostdex: true, // for hiddenapi check
-    visibility: ["//frameworks/av/apex:__subpackages__"],
     apex_available: [
         "com.android.media",
         "test_com.android.media",
@@ -55,9 +53,10 @@ java_library {
 filegroup {
     name: "updatable-media-srcs",
     srcs: [
+        ":media-aidl-srcs",
+        ":mediaparceledlistslice-java-srcs",
         ":mediaparser-srcs",
         ":mediasession2-java-srcs",
-        ":mediasession2-aidl-srcs",
     ],
 }
 
@@ -78,12 +77,21 @@ filegroup {
 }
 
 filegroup {
+    name: "mediaparceledlistslice-java-srcs",
+    srcs: [
+        "java/android/media/MediaParceledListSlice.java",
+        "java/android/media/BaseMediaParceledListSlice.java",
+    ],
+    path: "java",
+}
+
+filegroup {
     name: "mediaparser-srcs",
     srcs: [
         "java/android/media/MediaParser.java"
     ],
     path: "java",
-}	
+}
 
 java_sdk_library {
     name: "framework-media",
@@ -99,21 +107,36 @@ java_sdk_library {
     libs: [
         "framework_media_annotation",
     ],
-
-    // Allow access to the stubs from anywhere.
-    visibility: ["//visibility:public"],
-
-    // Restrict access to implementation library.
-    impl_library_visibility: [
-       "//visibility:override", // Ignore the visibility property.
-       "//frameworks/av/apex:__subpackages__",
-    ],
+    impl_library_visibility: ["//frameworks/av/apex:__subpackages__"],
 }
-
 
 java_library {
     name: "framework_media_annotation",
     srcs: [":framework-media-annotation-srcs"],
     installable: false,
     sdk_version: "core_current",
+}
+
+cc_library_shared {
+    name: "libmediaparser-jni",
+    srcs: [
+        "jni/android_media_MediaParserJNI.cpp",
+    ],
+    header_libs: ["jni_headers"],
+    shared_libs: [
+        "libandroid",
+        "liblog",
+        "libmediametrics",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-Wunreachable-code",
+        "-Wunused",
+    ],
+    apex_available: [
+        "com.android.media",
+    ],
+    min_sdk_version: "29",
 }

@@ -94,6 +94,7 @@ import com.android.internal.view.InlineSuggestionsRequestInfo;
 import com.android.internal.view.InputBindResult;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.wm.WindowManagerInternal;
 
 import java.io.FileDescriptor;
@@ -249,23 +250,26 @@ public final class MultiClientInputMethodManagerService {
 
         @MainThread
         @Override
-        public void onStartUser(@UserIdInt int userId) {
+        public void onUserStarting(@NonNull TargetUser user) {
             mOnWorkerThreadCallback.getHandler().sendMessage(PooledLambda.obtainMessage(
-                    OnWorkerThreadCallback::onStartUser, mOnWorkerThreadCallback, userId));
+                    OnWorkerThreadCallback::onStartUser, mOnWorkerThreadCallback,
+                    user.getUserIdentifier()));
         }
 
         @MainThread
         @Override
-        public void onUnlockUser(@UserIdInt int userId) {
+        public void onUserUnlocking(@NonNull TargetUser user) {
             mOnWorkerThreadCallback.getHandler().sendMessage(PooledLambda.obtainMessage(
-                    OnWorkerThreadCallback::onUnlockUser, mOnWorkerThreadCallback, userId));
+                    OnWorkerThreadCallback::onUnlockUser, mOnWorkerThreadCallback,
+                    user.getUserIdentifier()));
         }
 
         @MainThread
         @Override
-        public void onStopUser(@UserIdInt int userId) {
+        public void onUserStopping(@NonNull TargetUser user) {
             mOnWorkerThreadCallback.getHandler().sendMessage(PooledLambda.obtainMessage(
-                    OnWorkerThreadCallback::onStopUser, mOnWorkerThreadCallback, userId));
+                    OnWorkerThreadCallback::onStopUser, mOnWorkerThreadCallback,
+                    user.getUserIdentifier()));
         }
     }
 
@@ -1659,7 +1663,7 @@ public final class MultiClientInputMethodManagerService {
                 }
 
                 if (editorInfo == null) {
-                    // So-called dummy InputConnection scenario.  For app compatibility, we still
+                    // So-called fallback InputConnection scenario.  For app compatibility, we still
                     // notify this to the IME.
                     switch (clientInfo.mState) {
                         case InputMethodClientState.READY_TO_SEND_FIRST_BIND_RESULT:
@@ -1800,6 +1804,17 @@ public final class MultiClientInputMethodManagerService {
                 ipw.increaseIndent();
                 mUserDataMap.dump(fd, ipw, args);
             }
+        }
+
+        @BinderThread
+        @Override
+        public void startProtoDump(byte[] clientProtoDump) throws RemoteException {
+        }
+
+        @BinderThread
+        @Override
+        public boolean isImeTraceEnabled() throws RemoteException {
+            return false;
         }
     }
 }

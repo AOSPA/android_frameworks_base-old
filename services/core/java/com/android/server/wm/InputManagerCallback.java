@@ -10,6 +10,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.ON_POINTER_DOWN_OUTSIDE_FOCUS;
 
+import android.annotation.Nullable;
 import android.os.Build;
 import android.os.Debug;
 import android.os.IBinder;
@@ -23,6 +24,7 @@ import android.view.InputApplicationHandle;
 import android.view.KeyEvent;
 import android.view.WindowManager;
 
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.input.InputManagerService;
 import com.android.server.wm.EmbeddedWindowController.EmbeddedWindow;
@@ -173,23 +175,23 @@ final class InputManagerCallback implements InputManagerService.WindowManagerCal
      */
     @Override
     public long notifyANR(InputApplicationHandle inputApplicationHandle, IBinder token,
-            String reason) {
+            @Nullable Integer pid, String reason) {
         final long startTime = SystemClock.uptimeMillis();
         try {
-            return notifyANRInner(inputApplicationHandle, token, reason);
+            return notifyANRInner(inputApplicationHandle, token, pid, reason);
         } finally {
             // Log the time because the method is called from InputDispatcher thread. It shouldn't
-            // take too long that may affect input response time.
+            // take too long because it blocks input while executing.
             Slog.d(TAG_WM, "notifyANR took " + (SystemClock.uptimeMillis() - startTime) + "ms");
         }
     }
 
     private long notifyANRInner(InputApplicationHandle inputApplicationHandle, IBinder token,
-            String reason) {
+            @Nullable Integer pid, String reason) {
         ActivityRecord activity = null;
         WindowState windowState = null;
         boolean aboveSystem = false;
-        int windowPid = INVALID_PID;
+        int windowPid = pid != null ? pid : INVALID_PID;
 
         preDumpIfLockTooSlow();
 
@@ -251,25 +253,21 @@ final class InputManagerCallback implements InputManagerService.WindowManagerCal
         // All the calls below need to happen without the WM lock held since they call into AM.
         mService.mAtmInternal.saveANRState(reason);
 
-        if (activity != null && activity.appToken != null) {
+        if (activity != null) {
             // Notify the activity manager about the timeout and let it decide whether
             // to abort dispatching or keep waiting.
             final boolean abort = activity.keyDispatchingTimedOut(reason, windowPid);
             if (!abort) {
                 // The activity manager declined to abort dispatching.
                 // Wait a bit longer and timeout again later.
-                return activity.mInputDispatchingTimeoutNanos;
+                return TimeUnit.MILLISECONDS.toNanos(activity.mInputDispatchingTimeoutMillis);
             }
         } else if (windowState != null || windowPid != INVALID_PID) {
             // Notify the activity manager about the timeout and let it decide whether
             // to abort dispatching or keep waiting.
-            long timeout = mService.mAmInternal.inputDispatchingTimedOut(windowPid, aboveSystem,
-                    reason);
-            if (timeout >= 0) {
-                // The activity manager declined to abort dispatching.
-                // Wait a bit longer and timeout again later.
-                return timeout * 1000000L; // nanoseconds
-            }
+            long timeoutMillis =
+                    mService.mAmInternal.inputDispatchingTimedOut(windowPid, aboveSystem, reason);
+            return TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         }
         return 0; // abort dispatching
     }
@@ -413,6 +411,8 @@ final class InputManagerCallback implements InputManagerService.WindowManagerCal
             requestRefreshConfiguration = dispatchPointerCaptureChanged(focusedWindow, false);
         }
         mFocusedWindow.set(newFocusedWindow);
+        mService.mH.sendMessage(PooledLambda.obtainMessage(mService::reportFocusChanged,
+                oldToken, newToken));
         return requestRefreshConfiguration;
     }
 

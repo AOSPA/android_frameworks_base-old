@@ -16,10 +16,13 @@
 
 package android.media;
 
+import static android.annotation.SystemApi.Client.MODULE_LIBRARIES;
+
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -27,7 +30,10 @@ import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
+import android.os.FileUtils;
 import android.os.IBinder;
+import android.os.SystemProperties;
 import android.text.TextUtils;
 
 import java.io.FileDescriptor;
@@ -45,7 +51,6 @@ import java.util.Map;
  * frame and meta data from an input media file.
  */
 public class MediaMetadataRetriever implements AutoCloseable {
-
     // borrowed from ExoPlayer
     private static final String[] STANDARD_GENRES = new String[] {
             // These are the official ID3v1 genres.
@@ -293,7 +298,17 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * non-negative.
      * @throws IllegalArgumentException if the arguments are invalid
      */
-    public native void setDataSource(FileDescriptor fd, long offset, long length)
+    public void setDataSource(FileDescriptor fd, long offset, long length)
+            throws IllegalArgumentException  {
+        FileDescriptor modernFd = FileUtils.convertToModernFd(fd);
+        if (modernFd == null) {
+            _setDataSource(fd, offset, length);
+        } else {
+            _setDataSource(modernFd, offset, length);
+        }
+    }
+
+    private native void _setDataSource(FileDescriptor fd, long offset, long length)
             throws IllegalArgumentException;
 
     /**
@@ -337,7 +352,12 @@ public class MediaMetadataRetriever implements AutoCloseable {
         try {
             ContentResolver resolver = context.getContentResolver();
             try {
-                fd = resolver.openAssetFileDescriptor(uri, "r");
+                boolean optimize =
+                        SystemProperties.getBoolean("fuse.sys.transcode_retriever_optimize", false);
+                Bundle opts = new Bundle();
+                opts.putBoolean("android.provider.extra.ACCEPT_ORIGINAL_MEDIA_FORMAT", true);
+                fd = optimize ? resolver.openTypedAssetFileDescriptor(uri, "*/*", opts)
+                        : resolver.openAssetFileDescriptor(uri, "r");
             } catch(FileNotFoundException e) {
                 throw new IllegalArgumentException("could not access " + uri);
             }
@@ -1331,7 +1351,6 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see MediaFormat#COLOR_RANGE_FULL
      */
     public static final int METADATA_KEY_COLOR_RANGE    = 37;
-    // Add more here...
 
     /**
      * This key retrieves the sample rate in Hz, if available.
@@ -1344,4 +1363,13 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * This is a signed 32-bit integer formatted as a string in base 10.
      */
     public static final int METADATA_KEY_BITS_PER_SAMPLE = 39;
+
+    /**
+     * This key retrieves the video codec mimetype if available.
+     * @hide
+     */
+    @SystemApi(client = MODULE_LIBRARIES)
+    public static final int METADATA_KEY_VIDEO_CODEC_MIME_TYPE = 40;
+
+    // Add more here...
 }

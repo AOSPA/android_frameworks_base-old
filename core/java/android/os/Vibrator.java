@@ -23,7 +23,6 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
-import android.annotation.TestApi;
 import android.app.ActivityThread;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
@@ -344,8 +343,24 @@ public abstract class Vibrator {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.VIBRATE)
-    public abstract void vibrate(int uid, String opPkg, VibrationEffect vibe,
-            String reason, AudioAttributes attributes);
+    public final void vibrate(int uid, String opPkg, VibrationEffect vibe,
+            String reason, AudioAttributes attributes) {
+        if (attributes == null) {
+            attributes = new AudioAttributes.Builder().build();
+        }
+        VibrationAttributes attr = new VibrationAttributes.Builder(attributes, vibe).build();
+        vibrate(uid, opPkg, vibe, reason, attr);
+    }
+
+    /**
+     * Like {@link #vibrate(int, String, VibrationEffect, String, AudioAttributes)}, but allows the
+     * caller to specify {@link VibrationAttributes} instead of {@link AudioAttributes}.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.VIBRATE)
+    public abstract void vibrate(int uid, String opPkg, @NonNull VibrationEffect vibe,
+            String reason, @NonNull VibrationAttributes attributes);
 
     /**
      * Query whether the vibrator supports the given effects.
@@ -453,7 +468,6 @@ public abstract class Vibrator {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.ACCESS_VIBRATOR_STATE)
     public boolean isVibrating() {
         return false;
@@ -467,7 +481,6 @@ public abstract class Vibrator {
     * @hide
     */
     @SystemApi
-    @TestApi
     public interface OnVibratorStateChangedListener  {
         /**
          * Called when the vibrator state has changed.
@@ -486,7 +499,6 @@ public abstract class Vibrator {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.ACCESS_VIBRATOR_STATE)
     public void addVibratorStateListener(@NonNull OnVibratorStateChangedListener listener) {
     }
@@ -500,7 +512,6 @@ public abstract class Vibrator {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.ACCESS_VIBRATOR_STATE)
     public void addVibratorStateListener(
             @NonNull @CallbackExecutor Executor executor,
@@ -515,7 +526,6 @@ public abstract class Vibrator {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.ACCESS_VIBRATOR_STATE)
     public void removeVibratorStateListener(@NonNull OnVibratorStateChangedListener listener) {
     }

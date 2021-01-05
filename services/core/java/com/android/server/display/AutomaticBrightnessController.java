@@ -17,8 +17,8 @@
 package com.android.server.display;
 
 import android.annotation.Nullable;
-import android.app.ActivityManager.StackInfo;
 import android.app.ActivityTaskManager;
+import android.app.ActivityTaskManager.RootTaskInfo;
 import android.app.IActivityTaskManager;
 import android.app.TaskStackListener;
 import android.content.Context;
@@ -190,7 +190,7 @@ class AutomaticBrightnessController {
 
     // When the short term model is invalidated, we don't necessarily reset it (i.e. clear the
     // user's adjustment) immediately, but wait for a drastic enough change in the ambient light.
-    // The anchor determines what were the light levels when the user has set her preference, and
+    // The anchor determines what were the light levels when the user has set their preference, and
     // we use a relative threshold to determine when to revert to the OEM curve.
     private boolean mShortTermModelValid;
     private float mShortTermModelAnchor;
@@ -208,7 +208,6 @@ class AutomaticBrightnessController {
     private PackageManager mPackageManager;
     private Context mContext;
 
-    private DisplayDeviceConfig mDisplayDeviceConfig;
     private final Injector mInjector;
 
     AutomaticBrightnessController(Callbacks callbacks, Looper looper,
@@ -217,14 +216,13 @@ class AutomaticBrightnessController {
             float dozeScaleFactor, int lightSensorRate, int initialLightSensorRate,
             long brighteningLightDebounceConfig, long darkeningLightDebounceConfig,
             boolean resetAmbientLuxAfterWarmUpConfig, HysteresisLevels ambientBrightnessThresholds,
-            HysteresisLevels screenBrightnessThresholds, Context context, DisplayDeviceConfig
-            displayDeviceConfig) {
+            HysteresisLevels screenBrightnessThresholds, Context context) {
         this(new Injector(), callbacks, looper, sensorManager, lightSensor, mapper,
                 lightSensorWarmUpTime, brightnessMin, brightnessMax, dozeScaleFactor,
                 lightSensorRate, initialLightSensorRate, brighteningLightDebounceConfig,
                 darkeningLightDebounceConfig, resetAmbientLuxAfterWarmUpConfig,
-                ambientBrightnessThresholds, screenBrightnessThresholds, context,
-                displayDeviceConfig);
+                ambientBrightnessThresholds, screenBrightnessThresholds, context
+        );
     }
 
     @VisibleForTesting
@@ -234,8 +232,7 @@ class AutomaticBrightnessController {
             float dozeScaleFactor, int lightSensorRate, int initialLightSensorRate,
             long brighteningLightDebounceConfig, long darkeningLightDebounceConfig,
             boolean resetAmbientLuxAfterWarmUpConfig, HysteresisLevels ambientBrightnessThresholds,
-            HysteresisLevels screenBrightnessThresholds, Context context, DisplayDeviceConfig
-            displayDeviceConfig) {
+            HysteresisLevels screenBrightnessThresholds, Context context) {
         mInjector = injector;
         mContext = context;
         mCallbacks = callbacks;
@@ -257,7 +254,6 @@ class AutomaticBrightnessController {
         mScreenBrightnessThresholds = screenBrightnessThresholds;
         mShortTermModelValid = true;
         mShortTermModelAnchor = -1;
-        mDisplayDeviceConfig = displayDeviceConfig;
         mHandler = new AutomaticBrightnessHandler(looper);
         mAmbientLightRingBuffer =
             new AmbientLightRingBuffer(mNormalLightSensorRate, mAmbientLightHorizon);
@@ -846,7 +842,7 @@ class AutomaticBrightnessController {
             public void run() {
                 try {
                     // The foreground app is the top activity of the focused tasks stack.
-                    final StackInfo info = mActivityTaskManager.getFocusedStackInfo();
+                    final RootTaskInfo info = mActivityTaskManager.getFocusedRootTaskInfo();
                     if (info == null || info.topActivity == null) {
                         return;
                     }
@@ -1055,7 +1051,7 @@ class AutomaticBrightnessController {
 
         @Override
         public String toString() {
-            StringBuffer buf = new StringBuffer();
+            StringBuilder buf = new StringBuilder();
             buf.append('[');
             for (int i = 0; i < mCount; i++) {
                 final long next = i + 1 < mCount ? getTime(i + 1) : SystemClock.uptimeMillis();

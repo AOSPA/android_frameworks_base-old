@@ -22,6 +22,7 @@ import android.content.Context;
 import android.net.wifi.WifiManager;
 import android.os.BatteryStats;
 import android.os.Bundle;
+import android.os.OutcomeReceiver;
 import android.os.Parcelable;
 import android.os.Process;
 import android.os.ServiceManager;
@@ -33,13 +34,13 @@ import android.telephony.ModemActivityInfo;
 import android.telephony.TelephonyManager;
 import android.util.IntArray;
 import android.util.Slog;
-import android.util.TimeUtils;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 
+import java.util.concurrent.ExecutionException;
 import libcore.util.EmptyArray;
 
 import java.util.concurrent.CompletableFuture;
@@ -376,7 +377,8 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
                     for (int uid : uidsToRemove) {
                         FrameworkStatsLog.write(FrameworkStatsLog.ISOLATED_UID_CHANGED, -1, uid,
                                 FrameworkStatsLog.ISOLATED_UID_CHANGED__EVENT__REMOVED);
-                        mStats.removeIsolatedUidLocked(uid);
+                        mStats.removeIsolatedUidLocked(uid, SystemClock.elapsedRealtime(),
+                                SystemClock.uptimeMillis());
                     }
                     mStats.clearPendingRemovedUids();
                 }
@@ -405,7 +407,7 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
         // We will request data from external processes asynchronously, and wait on a timeout.
         SynchronousResultReceiver wifiReceiver = null;
         SynchronousResultReceiver bluetoothReceiver = null;
-        SynchronousResultReceiver modemReceiver = null;
+        CompletableFuture<ModemActivityInfo> modemFuture = CompletableFuture.completedFuture(null);
         boolean railUpdated = false;
 
         if ((updateFlags & BatteryStatsImpl.ExternalStatsSync.UPDATE_WIFI) != 0) {
@@ -460,8 +462,22 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
             }
 
             if (mTelephony != null) {
-                modemReceiver = new SynchronousResultReceiver("telephony");
-                mTelephony.requestModemActivityInfo(modemReceiver);
+                CompletableFuture<ModemActivityInfo> temp = new CompletableFuture<>();
+                mTelephony.requestModemActivityInfo(Runnable::run,
+                        new OutcomeReceiver<ModemActivityInfo,
+                                TelephonyManager.ModemActivityInfoException>() {
+                            @Override
+                            public void onResult(ModemActivityInfo result) {
+                                temp.complete(result);
+                            }
+
+                            @Override
+                            public void onError(TelephonyManager.ModemActivityInfoException e) {
+                                Slog.w(TAG, "error reading modem stats:" + e);
+                                temp.complete(null);
+                            }
+                        });
+                modemFuture = temp;
             }
             if (!railUpdated) {
                 synchronized (mStats) {
@@ -472,12 +488,24 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
 
         final WifiActivityEnergyInfo wifiInfo = awaitControllerInfo(wifiReceiver);
         final BluetoothActivityEnergyInfo bluetoothInfo = awaitControllerInfo(bluetoothReceiver);
-        final ModemActivityInfo modemInfo = awaitControllerInfo(modemReceiver);
+        ModemActivityInfo modemInfo = null;
+        try {
+            modemInfo = modemFuture.get(EXTERNAL_STATS_SYNC_TIMEOUT_MILLIS,
+                    TimeUnit.MILLISECONDS);
+        } catch (TimeoutException | InterruptedException e) {
+            Slog.w(TAG, "timeout or interrupt reading modem stats: " + e);
+        } catch (ExecutionException e) {
+            Slog.w(TAG, "exception reading modem stats: " + e.getCause());
+        }
+        final long elapsedRealtime = SystemClock.elapsedRealtime();
+        final long uptime = SystemClock.uptimeMillis();
+        final long elapsedRealtimeUs = elapsedRealtime * 1000;
+        final long uptimeUs = uptime * 1000;
 
         synchronized (mStats) {
             mStats.addHistoryEventLocked(
-                    SystemClock.elapsedRealtime(),
-                    SystemClock.uptimeMillis(),
+                    elapsedRealtime,
+                    uptime,
                     BatteryStats.HistoryItem.EVENT_COLLECT_EXTERNAL_STATS,
                     reason, 0);
 
@@ -490,17 +518,17 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
             }
 
             if ((updateFlags & UPDATE_ALL) != 0) {
-                mStats.updateKernelWakelocksLocked();
-                mStats.updateKernelMemoryBandwidthLocked();
+                mStats.updateKernelWakelocksLocked(elapsedRealtimeUs);
+                mStats.updateKernelMemoryBandwidthLocked(elapsedRealtimeUs);
             }
 
             if ((updateFlags & UPDATE_RPM) != 0) {
-                mStats.updateRpmStatsLocked();
+                mStats.updateRpmStatsLocked(elapsedRealtimeUs);
             }
 
             if (bluetoothInfo != null) {
                 if (bluetoothInfo.isValid()) {
-                    mStats.updateBluetoothStateLocked(bluetoothInfo);
+                    mStats.updateBluetoothStateLocked(bluetoothInfo, elapsedRealtime, uptime);
                 } else {
                     Slog.w(TAG, "bluetooth info is invalid: " + bluetoothInfo);
                 }
@@ -512,18 +540,14 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
 
         if (wifiInfo != null) {
             if (wifiInfo.isValid()) {
-                mStats.updateWifiState(extractDeltaLocked(wifiInfo));
+                mStats.updateWifiState(extractDeltaLocked(wifiInfo), elapsedRealtime, uptime);
             } else {
                 Slog.w(TAG, "wifi info is invalid: " + wifiInfo);
             }
         }
 
         if (modemInfo != null) {
-            if (modemInfo.isValid()) {
-                mStats.updateMobileRadioState(modemInfo);
-            } else {
-                Slog.w(TAG, "modem info is invalid: " + modemInfo);
-            }
+            mStats.updateMobileRadioState(modemInfo, elapsedRealtime, uptime);
         }
     }
 
@@ -602,49 +626,11 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
             }
             wasReset = true;
         } else {
-            final long totalActiveTimeMs = txTimeMs + rxTimeMs;
-            long maxExpectedIdleTimeMs;
-            if (totalActiveTimeMs > timePeriodMs) {
-                // Cap the max idle time at zero since the active time consumed the whole time
-                maxExpectedIdleTimeMs = 0;
-                if (totalActiveTimeMs > timePeriodMs + MAX_WIFI_STATS_SAMPLE_ERROR_MILLIS) {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("Total Active time ");
-                    TimeUtils.formatDuration(totalActiveTimeMs, sb);
-                    sb.append(" is longer than sample period ");
-                    TimeUtils.formatDuration(timePeriodMs, sb);
-                    sb.append(".\n");
-                    sb.append("Previous WiFi snapshot: ").append("idle=");
-                    TimeUtils.formatDuration(lastIdleMs, sb);
-                    sb.append(" rx=");
-                    TimeUtils.formatDuration(lastRxMs, sb);
-                    sb.append(" tx=");
-                    TimeUtils.formatDuration(lastTxMs, sb);
-                    sb.append(" e=").append(lastEnergy);
-                    sb.append("\n");
-                    sb.append("Current WiFi snapshot: ").append("idle=");
-                    TimeUtils.formatDuration(latest.getControllerIdleDurationMillis(), sb);
-                    sb.append(" rx=");
-                    TimeUtils.formatDuration(latest.getControllerRxDurationMillis(), sb);
-                    sb.append(" tx=");
-                    TimeUtils.formatDuration(latest.getControllerTxDurationMillis(), sb);
-                    sb.append(" e=").append(latest.getControllerEnergyUsedMicroJoules());
-                    Slog.wtf(TAG, sb.toString());
-                }
-            } else {
-                maxExpectedIdleTimeMs = timePeriodMs - totalActiveTimeMs;
-            }
             // These times seem to be the most reliable.
             deltaControllerTxDurationMillis = txTimeMs;
             deltaControllerRxDurationMillis = rxTimeMs;
             deltaControllerScanDurationMillis = scanTimeMs;
-            // WiFi calculates the idle time as a difference from the on time and the various
-            // Rx + Tx times. There seems to be some missing time there because this sometimes
-            // becomes negative. Just cap it at 0 and ensure that it is less than the expected idle
-            // time from the difference in timestamps.
-            // b/21613534
-            deltaControllerIdleDurationMillis =
-                    Math.min(maxExpectedIdleTimeMs, Math.max(0, idleTimeMs));
+            deltaControllerIdleDurationMillis = idleTimeMs;
             deltaControllerEnergyUsedMicroJoules =
                     Math.max(0, latest.getControllerEnergyUsedMicroJoules() - lastEnergy);
             wasReset = false;

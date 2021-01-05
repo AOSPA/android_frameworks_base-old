@@ -53,6 +53,7 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.os.WorkSource;
 import android.os.connectivity.WifiActivityEnergyInfo;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.CloseGuard;
 import android.util.Log;
@@ -61,6 +62,7 @@ import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.modules.utils.build.SdkLevel;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -261,6 +263,44 @@ public class WifiManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface SuggestionConnectionStatusCode {}
+
+    /**
+     * Status code if suggestion approval status is unknown, an App which hasn't made any
+     * suggestions will get this code.
+     */
+    public static final int STATUS_SUGGESTION_APPROVAL_UNKNOWN = 0;
+
+    /**
+     * Status code if the calling app is still pending user approval for suggestions.
+     */
+    public static final int STATUS_SUGGESTION_APPROVAL_PENDING = 1;
+
+    /**
+     * Status code if the calling app got the user approval for suggestions.
+     */
+    public static final int STATUS_SUGGESTION_APPROVAL_APPROVED_BY_USER = 2;
+
+    /**
+     * Status code if the calling app suggestions were rejected by the user.
+     */
+    public static final int STATUS_SUGGESTION_APPROVAL_REJECTED_BY_USER = 3;
+
+    /**
+     * Status code if the calling app was approved by virtue of being a carrier privileged app.
+     * @see TelephonyManager#hasCarrierPrivileges().
+     */
+    public static final int STATUS_SUGGESTION_APPROVAL_APPROVED_BY_CARRIER_PRIVILEGE = 4;
+
+    /** @hide */
+    @IntDef(prefix = {"STATUS_SUGGESTION_APPROVAL_"},
+            value = {STATUS_SUGGESTION_APPROVAL_UNKNOWN,
+                    STATUS_SUGGESTION_APPROVAL_PENDING,
+                    STATUS_SUGGESTION_APPROVAL_APPROVED_BY_USER,
+                    STATUS_SUGGESTION_APPROVAL_REJECTED_BY_USER,
+                    STATUS_SUGGESTION_APPROVAL_APPROVED_BY_CARRIER_PRIVILEGE
+            })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SuggestionUserApprovalStatus {}
 
     /**
      * Broadcast intent action indicating whether Wi-Fi scanning is currently available.
@@ -981,9 +1021,11 @@ public class WifiManager {
      * This can be as a result of adding/updating/deleting a network.
      * <br />
      * {@link #EXTRA_CHANGE_REASON} contains whether the configuration was added/changed/removed.
-     * {@link #EXTRA_WIFI_CONFIGURATION} is never set starting in Android 11.
+     * {@link #EXTRA_WIFI_CONFIGURATION} is never set beginning in
+     * {@link android.os.Build.VERSION_CODES#R}.
      * {@link #EXTRA_MULTIPLE_NETWORKS_CHANGED} is set for backwards compatibility reasons, but
-     * its value is always true, even if only a single network changed.
+     * its value is always true beginning in {@link android.os.Build.VERSION_CODES#R}, even if only
+     * a single network changed.
      * <br />
      * The {@link android.Manifest.permission#ACCESS_WIFI_STATE ACCESS_WIFI_STATE} permission is
      * required to receive this broadcast.
@@ -997,17 +1039,22 @@ public class WifiManager {
      * The lookup key for a {@link android.net.wifi.WifiConfiguration} object representing
      * the changed Wi-Fi configuration when the {@link #CONFIGURED_NETWORKS_CHANGED_ACTION}
      * broadcast is sent.
-     * Note: this extra is never set starting in Android 11.
+     * @deprecated This extra is never set beginning in {@link android.os.Build.VERSION_CODES#R},
+     * regardless of the target SDK version. Use {@link #getConfiguredNetworks} to get the full list
+     * of configured networks.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String EXTRA_WIFI_CONFIGURATION = "wifiConfiguration";
     /**
      * Multiple network configurations have changed.
      * @see #CONFIGURED_NETWORKS_CHANGED_ACTION
-     * Note: this extra is always true starting in Android 11.
+     * @deprecated This extra's value is always true beginning in
+     * {@link android.os.Build.VERSION_CODES#R}, regardless of the target SDK version.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String EXTRA_MULTIPLE_NETWORKS_CHANGED = "multipleChanges";
     /**
@@ -1097,15 +1144,12 @@ public class WifiManager {
      * @see #ACTION_LINK_CONFIGURATION_CHANGED
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final String LINK_CONFIGURATION_CHANGED_ACTION =
             "android.net.wifi.LINK_CONFIGURATION_CHANGED";
 
     /**
      * Broadcast intent action indicating that the link configuration changed on wifi.
-     * <br />Included Extras:
-     * <br />{@link #EXTRA_LINK_PROPERTIES}: {@link android.net.LinkProperties} object associated
-     * with the Wi-Fi network.
      * <br /> No permissions are required to listen to this broadcast.
      * @hide
      */
@@ -1121,8 +1165,12 @@ public class WifiManager {
      * Included in the {@link #ACTION_LINK_CONFIGURATION_CHANGED} broadcast.
      *
      * Retrieve with {@link android.content.Intent#getParcelableExtra(String)}.
+     *
+     * @deprecated this extra is no longer populated.
+     *
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String EXTRA_LINK_PROPERTIES = "android.net.wifi.extra.LINK_PROPERTIES";
 
@@ -1345,7 +1393,7 @@ public class WifiManager {
      * change is significant enough to change the RSSI signal level.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int RSSI_LEVELS = 5;
 
     //TODO (b/146346676): This needs to be removed, not used in the code.
@@ -2150,6 +2198,26 @@ public class WifiManager {
     }
 
     /**
+     * Get the Suggestion approval status of the calling app. When an app makes suggestions using
+     * the {@link #addNetworkSuggestions(List)} API they may trigger a user approval flow. This API
+     * provides the current approval status.
+     *
+     * @return Status code for the user approval. One of the STATUS_SUGGESTION_APPROVAL_ values.
+     * @throws {@link SecurityException} if the caller is missing required permissions.
+     */
+    @RequiresPermission(ACCESS_WIFI_STATE)
+    public @SuggestionUserApprovalStatus int getNetworkSuggestionUserApprovalStatus() {
+        if (!SdkLevel.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mService.getNetworkSuggestionUserApprovalStatus(mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
      * Add or update a Passpoint configuration.  The configuration provides a credential
      * for connecting to Passpoint networks that are operated by the Passpoint
      * service provider specified in the configuration.
@@ -2556,12 +2624,17 @@ public class WifiManager {
     public static final long WIFI_FEATURE_OCE              = 0x1000000000L; // OCE Support
     /** @hide */
     public static final long WIFI_FEATURE_WAPI             = 0x2000000000L; // WAPI
+    /** @hide */
+    public static final long WIFI_FEATURE_INFRA_60G        = 0x4000000000L; // 60 GHz Band Support
 
     /** @hide */
     public static final long WIFI_FEATURE_FILS_SHA256     = 0x4000000000L; // FILS-SHA256
 
     /** @hide */
     public static final long WIFI_FEATURE_FILS_SHA384     = 0x8000000000L; // FILS-SHA384
+
+    /** @hide */
+    public static final long WIFI_FEATURE_SAE_PK          = 0x10000000000L; // SAE-PK
 
     private long getSupportedFeatures() {
         try {
@@ -2626,6 +2699,18 @@ public class WifiManager {
     }
 
     /**
+     * Query whether the device supports 2 or more concurrent stations (STA) or not.
+     *
+     * @return true if this device supports multiple STA concurrency, false otherwise.
+     */
+    public boolean isMultiStaConcurrencySupported() {
+        if (!SdkLevel.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        return isFeatureSupported(WIFI_FEATURE_ADDITIONAL_STA);
+    }
+
+    /**
      * @deprecated Please use {@link android.content.pm.PackageManager#hasSystemFeature(String)}
      * with {@link android.content.pm.PackageManager#FEATURE_WIFI_RTT} and
      * {@link android.content.pm.PackageManager#FEATURE_WIFI_AWARE}.
@@ -2655,14 +2740,6 @@ public class WifiManager {
      */
     public boolean isPreferredNetworkOffloadSupported() {
         return isFeatureSupported(WIFI_FEATURE_PNO);
-    }
-
-    /**
-     * @return true if this adapter supports multiple simultaneous connections
-     * @hide
-     */
-    public boolean isAdditionalStaSupported() {
-        return isFeatureSupported(WIFI_FEATURE_ADDITIONAL_STA);
     }
 
     /**
@@ -2712,6 +2789,21 @@ public class WifiManager {
     public boolean is5GHzBandSupported() {
         try {
             return mService.is5GHzBandSupported();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Check if the chipset supports the 60GHz frequency band.
+     *
+     * @return {@code true} if supported, {@code false} otherwise.
+     * @hide
+     */
+    @SystemApi
+    public boolean is60GHzBandSupported() {
+        try {
+            return mService.is60GHzBandSupported();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2951,7 +3043,7 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
     public void setScanAlwaysAvailable(boolean isAvailable) {
         try {
-            mService.setScanAlwaysAvailable(isAvailable);
+            mService.setScanAlwaysAvailable(isAvailable, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3184,7 +3276,7 @@ public class WifiManager {
     })
     public boolean startSoftAp(@Nullable WifiConfiguration wifiConfig) {
         try {
-            return mService.startSoftAp(wifiConfig);
+            return mService.startSoftAp(wifiConfig, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3208,7 +3300,7 @@ public class WifiManager {
     })
     public boolean startTetheredHotspot(@Nullable SoftApConfiguration softApConfig) {
         try {
-            return mService.startTetheredHotspot(softApConfig);
+            return mService.startTetheredHotspot(softApConfig, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5631,6 +5723,13 @@ public class WifiManager {
      */
     public boolean isWapiSupported() {
         return isFeatureSupported(WIFI_FEATURE_WAPI);
+    }
+
+    /**
+     * @return true if this device supports WPA3 AP validation.
+     */
+    public boolean isWpa3ApValidationSupported() {
+        return isFeatureSupported(WIFI_FEATURE_SAE_PK);
     }
 
     /**

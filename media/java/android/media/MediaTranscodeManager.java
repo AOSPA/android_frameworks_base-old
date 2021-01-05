@@ -18,8 +18,10 @@ package android.media;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
@@ -36,7 +38,10 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.FileNotFoundException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -65,24 +70,24 @@ import java.util.concurrent.Executors;
  To transcode a media file, first create a {@link TranscodingRequest} through its builder class
  {@link TranscodingRequest.Builder}. Transcode requests are then enqueue to the manager through
  {@link MediaTranscodeManager#enqueueRequest(
-         TranscodingRequest, Executor,OnTranscodingFinishedListener)}
+         TranscodingRequest, Executor, OnTranscodingFinishedListener)}
  TranscodeRequest are processed based on client process's priority and request priority. When a
  transcode operation is completed the caller is notified via its
  {@link OnTranscodingFinishedListener}.
- In the meantime the caller may use the returned TranscodingJob object to cancel or check the status
- of a specific transcode operation.
+ In the meantime the caller may use the returned TranscodingSession object to cancel or check the
+ status of a specific transcode operation.
  <p>
  Here is an example where <code>Builder</code> is used to specify all parameters
 
  <pre class=prettyprint>
  TranscodingRequest request =
-     new TranscodingRequest.Builder()
-         .setSourceUri(srcUri)
-         .setDestinationUri(dstUri)
-         .setType(MediaTranscodeManager.TRANSCODING_TYPE_VIDEO)
-         .setPriority(REALTIME)
-         .setVideoTrackFormat(videoFormat)
-         .build();
+    new TranscodingRequest.Builder()
+        .setSourceUri(srcUri)
+        .setDestinationUri(dstUri)
+        .setType(MediaTranscodeManager.TRANSCODING_TYPE_VIDEO)
+        .setPriority(REALTIME)
+        .setVideoTrackFormat(videoFormat)
+        .build();
  }</pre>
 
  TODO(hkuang): Add architecture diagram showing the transcoding service and api.
@@ -94,10 +99,17 @@ import java.util.concurrent.Executors;
  TODO(hkuang): Clarify whether supports framerate conversion.
  @hide
  */
+@SystemApi
 public final class MediaTranscodeManager {
     private static final String TAG = "MediaTranscodeManager";
 
     private static final String MEDIA_TRANSCODING_SERVICE = "media.transcoding";
+
+    /** Maximum number of retry to connect to the service. */
+    private static final int CONNECT_SERVICE_RETRY_COUNT = 100;
+
+    /** Interval between trying to reconnect to the service. */
+    private static final int INTERVAL_CONNECT_SERVICE_RETRY_MS = 40;
 
     /**
      * Default transcoding type.
@@ -132,10 +144,11 @@ public final class MediaTranscodeManager {
      */
     public static final int PRIORITY_UNKNOWN = 0;
     /**
-     * PRIORITY_REALTIME indicates that the transcoding request is time-critical and that the client
-     * wants the transcoding result as soon as possible.
+     * PRIORITY_REALTIME indicates that the transcoding request is time-critical and that the
+     * client wants the transcoding result as soon as possible.
      * <p> Set PRIORITY_REALTIME only if the transcoding is time-critical as it will involve
-     * performance penalty due to resource reallocation to prioritize the jobs with higher priority.
+     * performance penalty due to resource reallocation to prioritize the sessions with higher
+     * priority.
      * TODO(hkuang): Add more description of this when priority is finalized.
      */
     public static final int PRIORITY_REALTIME = 1;
@@ -143,9 +156,10 @@ public final class MediaTranscodeManager {
     /**
      * PRIORITY_OFFLINE indicates the transcoding is not time-critical and the client does not need
      * the transcoding result as soon as possible.
-     * <p>Jobs with PRIORITY_OFFLINE will be scheduled behind PRIORITY_REALTIME. Always set to
+     * <p>Sessions with PRIORITY_OFFLINE will be scheduled behind PRIORITY_REALTIME. Always set to
      * PRIORITY_OFFLINE if client does not need the result as soon as possible and could accept
      * delay of the transcoding result.
+     * @hide
      * TODO(hkuang): Add more description of this when priority is finalized.
      */
     public static final int PRIORITY_OFFLINE = 2;
@@ -168,12 +182,12 @@ public final class MediaTranscodeManager {
     public interface OnTranscodingFinishedListener {
         /**
          * Called when the transcoding operation has finished. The receiver may use the
-         * TranscodingJob to check the result, i.e. whether the operation succeeded, was canceled or
-         * if an error occurred.
+         * TranscodingSession to check the result, i.e. whether the operation succeeded, was
+         * canceled or if an error occurred.
          *
-         * @param transcodingJob The TranscodingJob instance for the finished transcoding operation.
+         * @param session The TranscodingSession instance for the finished transcoding operation.
          */
-        void onTranscodingFinished(@NonNull TranscodingJob transcodingJob);
+        void onTranscodingFinished(@NonNull TranscodingSession session);
     }
 
     private final Context mContext;
@@ -181,54 +195,198 @@ public final class MediaTranscodeManager {
     private final String mPackageName;
     private final int mPid;
     private final int mUid;
-    private final ExecutorService mCallbackExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
+    private final HashMap<Integer, TranscodingSession> mPendingTranscodingSessions = new HashMap();
+    private final Object mLock = new Object();
+    @GuardedBy("mLock")
+    @NonNull private ITranscodingClient mTranscodingClient = null;
     private static MediaTranscodeManager sMediaTranscodeManager;
-    private final HashMap<Integer, TranscodingJob> mPendingTranscodingJobs = new HashMap();
-    @NonNull private ITranscodingClient mTranscodingClient;
 
-    private void handleTranscodingFinished(int jobId, TranscodingResultParcel result) {
-        synchronized (mPendingTranscodingJobs) {
-            // Gets the job associated with the jobId and removes it from
-            // mPendingTranscodingJobs.
-            final TranscodingJob job = mPendingTranscodingJobs.remove(jobId);
+    private void handleTranscodingFinished(int sessionId, TranscodingResultParcel result) {
+        synchronized (mPendingTranscodingSessions) {
+            // Gets the session associated with the sessionId and removes it from
+            // mPendingTranscodingSessions.
+            final TranscodingSession session = mPendingTranscodingSessions.remove(sessionId);
 
-            if (job == null) {
+            if (session == null) {
                 // This should not happen in reality.
-                Log.e(TAG, "Job " + jobId + " is not in PendingJobs");
+                Log.e(TAG, "Session " + sessionId + " is not in Pendingsessions");
                 return;
             }
 
-            // Updates the job status and result.
-            job.updateStatusAndResult(TranscodingJob.STATUS_FINISHED,
-                    TranscodingJob.RESULT_SUCCESS);
+            // Updates the session status and result.
+            session.updateStatusAndResult(TranscodingSession.STATUS_FINISHED,
+                    TranscodingSession.RESULT_SUCCESS);
 
-            // Notifies client the job is done.
-            if (job.mListener != null && job.mListenerExecutor != null) {
-                job.mListenerExecutor.execute(() -> job.mListener.onTranscodingFinished(job));
+            // Notifies client the session is done.
+            if (session.mListener != null && session.mListenerExecutor != null) {
+                session.mListenerExecutor.execute(
+                        () -> session.mListener.onTranscodingFinished(session));
             }
         }
     }
 
-    private void handleTranscodingFailed(int jobId, int errorCodec) {
-        synchronized (mPendingTranscodingJobs) {
-            // Gets the job associated with the jobId and removes it from
-            // mPendingTranscodingJobs.
-            final TranscodingJob job = mPendingTranscodingJobs.remove(jobId);
+    private void handleTranscodingFailed(int sessionId, int errorCode) {
+        synchronized (mPendingTranscodingSessions) {
+            // Gets the session associated with the sessionId and removes it from
+            // mPendingTranscodingSessions.
+            final TranscodingSession session = mPendingTranscodingSessions.remove(sessionId);
 
-            if (job == null) {
+            if (session == null) {
                 // This should not happen in reality.
-                Log.e(TAG, "Job " + jobId + " is not in PendingJobs");
+                Log.e(TAG, "Session " + sessionId + " is not in Pendingsessions");
                 return;
             }
 
-            // Updates the job status and result.
-            job.updateStatusAndResult(TranscodingJob.STATUS_FINISHED,
-                    TranscodingJob.RESULT_ERROR);
+            // Updates the session status and result.
+            session.updateStatusAndResult(TranscodingSession.STATUS_FINISHED,
+                    TranscodingSession.RESULT_ERROR);
 
-            // Notifies client the job is done.
-            if (job.mListener != null && job.mListenerExecutor != null) {
-                job.mListenerExecutor.execute(() -> job.mListener.onTranscodingFinished(job));
+            // Notifies client the session failed.
+            if (session.mListener != null && session.mListenerExecutor != null) {
+                session.mListenerExecutor.execute(
+                        () -> session.mListener.onTranscodingFinished(session));
             }
+        }
+    }
+
+    private void handleTranscodingProgressUpdate(int sessionId, int newProgress) {
+        synchronized (mPendingTranscodingSessions) {
+            // Gets the session associated with the sessionId.
+            final TranscodingSession session = mPendingTranscodingSessions.get(sessionId);
+
+            if (session == null) {
+                // This should not happen in reality.
+                Log.e(TAG, "Session " + sessionId + " is not in Pendingsessions");
+                return;
+            }
+
+            // Updates the session progress.
+            session.updateProgress(newProgress);
+
+            // Notifies client the progress update.
+            if (session.mProgressUpdateExecutor != null
+                    && session.mProgressUpdateListener != null) {
+                session.mProgressUpdateExecutor.execute(
+                        () -> session.mProgressUpdateListener.onProgressUpdate(session,
+                                newProgress));
+            }
+        }
+    }
+
+    private static IMediaTranscodingService getService(boolean retry) {
+        int retryCount = !retry ? 1 :  CONNECT_SERVICE_RETRY_COUNT;
+        Log.i(TAG, "get service with retry " + retryCount);
+        for (int count = 1;  count <= retryCount; count++) {
+            Log.d(TAG, "Trying to connect to service. Try count: " + count);
+            IMediaTranscodingService service = IMediaTranscodingService.Stub.asInterface(
+                    ServiceManager.getService(MEDIA_TRANSCODING_SERVICE));
+            if (service != null) {
+                return service;
+            }
+            try {
+                // Sleep a bit before retry.
+                Thread.sleep(INTERVAL_CONNECT_SERVICE_RETRY_MS);
+            } catch (InterruptedException ie) {
+                /* ignore */
+            }
+        }
+
+        throw new UnsupportedOperationException("Failed to connect to MediaTranscoding service");
+    }
+
+    /*
+     * Handle client binder died event.
+     * Upon receiving a binder died event of the client, we will do the following:
+     * 1) For the session that is running, notify the client that the session is failed with
+     *    error code,  so client could choose to retry the session or not.
+     *    TODO(hkuang): Add a new error code to signal service died error.
+     * 2) For the sessions that is still pending or paused, we will resubmit the session
+     *    once we successfully reconnect to the service and register a new client.
+     * 3) When trying to connect to the service and register a new client. The service may need time
+     *    to reboot or never boot up again. So we will retry for a number of times. If we still
+     *    could not connect, we will notify client session failure for the pending and paused
+     *    sessions.
+     */
+    private void onClientDied() {
+        synchronized (mLock) {
+            mTranscodingClient = null;
+        }
+
+        // Delegates the session notification and retry to the executor as it may take some time.
+        mExecutor.execute(() -> {
+            // List to track the sessions that we want to retry.
+            List<TranscodingSession> retrySessions = new ArrayList<TranscodingSession>();
+
+            // First notify the client of session failure for all the running sessions.
+            synchronized (mPendingTranscodingSessions) {
+                for (Map.Entry<Integer, TranscodingSession> entry :
+                        mPendingTranscodingSessions.entrySet()) {
+                    TranscodingSession session = entry.getValue();
+
+                    if (session.getStatus() == TranscodingSession.STATUS_RUNNING) {
+                        session.updateStatusAndResult(TranscodingSession.STATUS_FINISHED,
+                                TranscodingSession.RESULT_ERROR);
+
+                        // Remove the session from pending sessions.
+                        mPendingTranscodingSessions.remove(entry.getKey());
+
+                        if (session.mListener != null && session.mListenerExecutor != null) {
+                            Log.i(TAG, "Notify client session failed");
+                            session.mListenerExecutor.execute(
+                                    () -> session.mListener.onTranscodingFinished(session));
+                        }
+                    } else if (session.getStatus() == TranscodingSession.STATUS_PENDING
+                            || session.getStatus() == TranscodingSession.STATUS_PAUSED) {
+                        // Add the session to retrySessions to handle them later.
+                        retrySessions.add(session);
+                    }
+                }
+            }
+
+            // Try to register with the service once it boots up.
+            IMediaTranscodingService service = getService(true /*retry*/);
+            boolean haveTranscodingClient = false;
+            if (service != null) {
+                synchronized (mLock) {
+                    mTranscodingClient = registerClient(service);
+                    if (mTranscodingClient != null) {
+                        haveTranscodingClient = true;
+                    }
+                }
+            }
+
+            for (TranscodingSession session : retrySessions) {
+                // Notify the session failure if we fails to connect to the service or fail
+                // to retry the session.
+                if (!haveTranscodingClient) {
+                    // TODO(hkuang): Return correct error code to the client.
+                    handleTranscodingFailed(session.getSessionId(), 0 /*unused */);
+                }
+
+                try {
+                    // Do not set hasRetried for retry initiated by MediaTranscodeManager.
+                    session.retryInternal(false /*setHasRetried*/);
+                } catch (Exception re) {
+                    // TODO(hkuang): Return correct error code to the client.
+                    handleTranscodingFailed(session.getSessionId(), 0 /*unused */);
+                }
+            }
+        });
+    }
+
+    private void updateStatus(int sessionId, int status) {
+        synchronized (mPendingTranscodingSessions) {
+            final TranscodingSession session = mPendingTranscodingSessions.get(sessionId);
+
+            if (session == null) {
+                // This should not happen in reality.
+                Log.e(TAG, "Session " + sessionId + " is not in Pendingsessions");
+                return;
+            }
+
+            // Updates the session status.
+            session.updateStatus(status);
         }
     }
 
@@ -262,66 +420,79 @@ public final class MediaTranscodeManager {
                 }
 
                 @Override
-                public void onTranscodingStarted(int jobId) throws RemoteException {
-
+                public void onTranscodingStarted(int sessionId) throws RemoteException {
+                    updateStatus(sessionId, TranscodingSession.STATUS_RUNNING);
                 }
 
                 @Override
-                public void onTranscodingPaused(int jobId) throws RemoteException {
-
+                public void onTranscodingPaused(int sessionId) throws RemoteException {
+                    updateStatus(sessionId, TranscodingSession.STATUS_PAUSED);
                 }
 
                 @Override
-                public void onTranscodingResumed(int jobId) throws RemoteException {
-
+                public void onTranscodingResumed(int sessionId) throws RemoteException {
+                    updateStatus(sessionId, TranscodingSession.STATUS_RUNNING);
                 }
 
                 @Override
-                public void onTranscodingFinished(int jobId, TranscodingResultParcel result)
+                public void onTranscodingFinished(int sessionId, TranscodingResultParcel result)
                         throws RemoteException {
-                    handleTranscodingFinished(jobId, result);
+                    handleTranscodingFinished(sessionId, result);
                 }
 
                 @Override
-                public void onTranscodingFailed(int jobId, int errorCode) throws RemoteException {
-                    handleTranscodingFailed(jobId, errorCode);
+                public void onTranscodingFailed(int sessionId, int errorCode)
+                        throws RemoteException {
+                    handleTranscodingFailed(sessionId, errorCode);
                 }
 
                 @Override
-                public void onAwaitNumberOfJobsChanged(int jobId, int oldAwaitNumber,
+                public void onAwaitNumberOfSessionsChanged(int sessionId, int oldAwaitNumber,
                         int newAwaitNumber) throws RemoteException {
                     //TODO(hkuang): Implement this.
                 }
 
                 @Override
-                public void onProgressUpdate(int jobId, int progress) throws RemoteException {
-                    //TODO(hkuang): Implement this.
+                public void onProgressUpdate(int sessionId, int newProgress)
+                        throws RemoteException {
+                    handleTranscodingProgressUpdate(sessionId, newProgress);
                 }
             };
 
-    /* Private constructor. */
-    private MediaTranscodeManager(@NonNull Context context,
-            IMediaTranscodingService transcodingService) {
+    private ITranscodingClient registerClient(IMediaTranscodingService service)
+            throws UnsupportedOperationException {
+        synchronized (mLock) {
+            try {
+                // Registers the client with MediaTranscoding service.
+                mTranscodingClient = service.registerClient(
+                        mTranscodingClientCallback,
+                        mPackageName,
+                        mPackageName);
+
+                if (mTranscodingClient != null) {
+                    mTranscodingClient.asBinder().linkToDeath(() -> onClientDied(), /* flags */ 0);
+                }
+                return mTranscodingClient;
+            } catch (RemoteException re) {
+                Log.e(TAG, "Failed to register new client due to exception " + re);
+                mTranscodingClient = null;
+            }
+        }
+        throw new UnsupportedOperationException("Failed to register new client");
+    }
+
+    /**
+     * @hide
+     */
+    public MediaTranscodeManager(@NonNull Context context) {
         mContext = context;
         mContentResolver = mContext.getContentResolver();
         mPackageName = mContext.getPackageName();
-        mPid = Os.getuid();
-        mUid = Os.getpid();
-
-        try {
-            // Registers the client with MediaTranscoding service.
-            mTranscodingClient = transcodingService.registerClient(
-                    mTranscodingClientCallback,
-                    mPackageName,
-                    mPackageName,
-                    IMediaTranscodingService.USE_CALLING_UID,
-                    IMediaTranscodingService.USE_CALLING_PID);
-        } catch (RemoteException re) {
-            Log.e(TAG, "Failed to register new client due to exception " + re);
-            throw new UnsupportedOperationException("Failed to register new client");
-        }
+        mUid = Os.getuid();
+        mPid = Os.getpid();
+        IMediaTranscodingService service = getService(false /*retry*/);
+        mTranscodingClient = registerClient(service);
     }
-
 
     public static final class TranscodingRequest {
         /** Uri of the source media file. */
@@ -329,6 +500,20 @@ public final class MediaTranscodeManager {
 
         /** Uri of the destination media file. */
         private @NonNull Uri mDestinationUri;
+
+        /**
+         *  The UID of the client that the TranscodingRequest is for. Only privileged caller could
+         *  set this Uid as only they could do the transcoding on behalf of the client.
+         *  -1 means not available.
+         */
+        private int mClientUid = -1;
+
+        /**
+         *  The Pid of the client that the TranscodingRequest is for. Only privileged caller could
+         *  set this Uid as only they could do the transcoding on behalf of the client.
+         *  -1 means not available.
+         */
+        private int mClientPid = -1;
 
         /** Type of the transcoding. */
         private @TranscodingType int mType = TRANSCODING_TYPE_UNKNOWN;
@@ -366,6 +551,8 @@ public final class MediaTranscodeManager {
         private TranscodingRequest(Builder b) {
             mSourceUri = b.mSourceUri;
             mDestinationUri = b.mDestinationUri;
+            mClientUid = b.mClientUid;
+            mClientPid = b.mClientPid;
             mPriority = b.mPriority;
             mType = b.mType;
             mVideoTrackFormat = b.mVideoTrackFormat;
@@ -376,25 +563,35 @@ public final class MediaTranscodeManager {
 
         /** Return the type of the transcoding. */
         @TranscodingType
-        int getType() {
+        public int getType() {
             return mType;
         }
 
         /** Return source uri of the transcoding. */
         @NonNull
-        Uri getSourceUri() {
+        public Uri getSourceUri() {
             return mSourceUri;
+        }
+
+        /** Return the UID of the client that this request is for. -1 means not available. */
+        public int getClientUid() {
+            return mClientUid;
+        }
+
+        /** Return the PID of the client that this request is for. -1 means not available. */
+        public int getClientPid() {
+            return mClientPid;
         }
 
         /** Return destination uri of the transcoding. */
         @NonNull
-        Uri getDestinationUri() {
+        public Uri getDestinationUri() {
             return mDestinationUri;
         }
 
         /** Return priority of the transcoding. */
         @TranscodingPriority
-        int getPriority() {
+        public int getPriority() {
             return mPriority;
         }
 
@@ -402,18 +599,32 @@ public final class MediaTranscodeManager {
          * Return the video track format of the transcoding.
          * This will be null is the transcoding is not for video transcoding.
          */
-        MediaFormat getVideoTrackFormat() {
+        @Nullable
+        public MediaFormat getVideoTrackFormat() {
             return mVideoTrackFormat;
         }
 
+        /**
+         * Return TestConfig of the transcoding.
+         * @hide
+         */
+        @Nullable
+        public TranscodingTestConfig getTestConfig() {
+            return mTestConfig;
+        }
+
         /* Writes the TranscodingRequest to a parcel. */
-        private TranscodingRequestParcel writeToParcel() {
+        private TranscodingRequestParcel writeToParcel(@NonNull Context context) {
             TranscodingRequestParcel parcel = new TranscodingRequestParcel();
             // TODO(hkuang): Implement all the fields here to pass to service.
             parcel.priority = mPriority;
             parcel.transcodingType = mType;
             parcel.sourceFilePath = mSourceUri.toString();
             parcel.destinationFilePath = mDestinationUri.toString();
+            parcel.clientUid = mClientUid;
+            parcel.clientPid = mClientPid;
+            parcel.clientPackageName = mClientUid < 0 ? context.getPackageName() :
+                context.getPackageManager().getNameForUid(mClientUid);
             parcel.requestedVideoTrackFormat = convertToVideoTrackFormat(mVideoTrackFormat);
             if (mTestConfig != null) {
                 parcel.isForTesting = true;
@@ -486,9 +697,11 @@ public final class MediaTranscodeManager {
          * Builder class for {@link TranscodingRequest} objects.
          * Use this class to configure and create a <code>TranscodingRequest</code> instance.
          */
-        public static class Builder {
+        public static final class Builder {
             private @NonNull Uri mSourceUri;
             private @NonNull Uri mDestinationUri;
+            private int mClientUid = -1;
+            private int mClientPid = -1;
             private @TranscodingType int mType = TRANSCODING_TYPE_UNKNOWN;
             private @TranscodingPriority int mPriority = PRIORITY_UNKNOWN;
             private @Nullable MediaFormat mVideoTrackFormat;
@@ -505,7 +718,7 @@ public final class MediaTranscodeManager {
              */
             // TODO(hkuang): Add documentation on how the app could generate the correct Uri.
             @NonNull
-            public Builder setSourceUri(@NonNull Uri sourceUri) throws IllegalArgumentException {
+            public Builder setSourceUri(@NonNull Uri sourceUri) {
                 if (sourceUri == null || Uri.EMPTY.equals(sourceUri)) {
                     throw new IllegalArgumentException(
                             "You must specify a non-empty source Uri.");
@@ -522,13 +735,44 @@ public final class MediaTranscodeManager {
              * @throws IllegalArgumentException if Uri is null or empty.
              */
             @NonNull
-            public Builder setDestinationUri(@NonNull Uri destinationUri)
-                    throws IllegalArgumentException {
+            public Builder setDestinationUri(@NonNull Uri destinationUri) {
                 if (destinationUri == null || Uri.EMPTY.equals(destinationUri)) {
                     throw new IllegalArgumentException(
                             "You must specify a non-empty destination Uri.");
                 }
                 mDestinationUri = destinationUri;
+                return this;
+            }
+
+            /**
+             * Specify the UID of the client that this request is for.
+             * @param uid client Uid.
+             * @return The same builder instance.
+             * @throws IllegalArgumentException if uid is invalid.
+             * TODO(hkuang): Check the permission if it is allowed.
+             */
+            @NonNull
+            public Builder setClientUid(int uid) {
+                if (uid <= 0) {
+                    throw new IllegalArgumentException("Invalid Uid");
+                }
+                mClientUid = uid;
+                return this;
+            }
+
+            /**
+             * Specify the PID of the client that this request is for.
+             * @param pid client Pid.
+             * @return The same builder instance.
+             * @throws IllegalArgumentException if pid is invalid.
+             * TODO(hkuang): Check the permission if it is allowed.
+             */
+            @NonNull
+            public Builder setClientPid(int pid) {
+                if (pid <= 0) {
+                    throw new IllegalArgumentException("Invalid pid");
+                }
+                mClientPid = pid;
                 return this;
             }
 
@@ -540,8 +784,7 @@ public final class MediaTranscodeManager {
              * @throws IllegalArgumentException if flags is invalid.
              */
             @NonNull
-            public Builder setPriority(@TranscodingPriority int priority)
-                    throws IllegalArgumentException {
+            public Builder setPriority(@TranscodingPriority int priority) {
                 if (priority != PRIORITY_OFFLINE && priority != PRIORITY_REALTIME) {
                     throw new IllegalArgumentException("Invalid priority: " + priority);
                 }
@@ -559,8 +802,7 @@ public final class MediaTranscodeManager {
              * @throws IllegalArgumentException if flags is invalid.
              */
             @NonNull
-            public Builder setType(@TranscodingType int type)
-                    throws IllegalArgumentException {
+            public Builder setType(@TranscodingType int type) {
                 if (type != TRANSCODING_TYPE_VIDEO && type != TRANSCODING_TYPE_IMAGE) {
                     throw new IllegalArgumentException("Invalid transcoding type");
                 }
@@ -584,8 +826,7 @@ public final class MediaTranscodeManager {
              * @throws IllegalArgumentException if videoFormat is invalid.
              */
             @NonNull
-            public Builder setVideoTrackFormat(@NonNull MediaFormat videoFormat)
-                    throws IllegalArgumentException {
+            public Builder setVideoTrackFormat(@NonNull MediaFormat videoFormat) {
                 if (videoFormat == null) {
                     throw new IllegalArgumentException("videoFormat must not be null");
                 }
@@ -605,9 +846,11 @@ public final class MediaTranscodeManager {
              * Sets the delay in processing this request.
              * @param config test config.
              * @return The same builder instance.
+             * @hide
              */
             @VisibleForTesting
-            public Builder setTestConfig(TranscodingTestConfig config) {
+            @NonNull
+            public Builder setTestConfig(@NonNull TranscodingTestConfig config) {
                 mTestConfig = config;
                 return this;
             }
@@ -620,7 +863,7 @@ public final class MediaTranscodeManager {
              *         device.
              */
             @NonNull
-            public TranscodingRequest build() throws UnsupportedOperationException {
+            public TranscodingRequest build() {
                 if (mSourceUri == null) {
                     throw new UnsupportedOperationException("Source URI must not be null");
                 }
@@ -647,6 +890,135 @@ public final class MediaTranscodeManager {
                 return new TranscodingRequest(this);
             }
         }
+
+        /**
+         * Helper class for deciding if transcoding is needed, and if so, the track
+         * formats to use.
+         */
+        public static class MediaFormatResolver {
+            private static final int BIT_RATE = 20000000;            // 20Mbps
+
+            private MediaFormat mSrcVideoFormatHint;
+            private MediaFormat mSrcAudioFormatHint;
+            private ApplicationMediaCapabilities mClientCaps;
+
+            /**
+             * Sets the abilities of the client consuming the media. Must be called
+             * before {@link #shouldTranscode()} or {@link #resolveVideoFormat()}.
+             *
+             * @param clientCaps An ApplicationMediaCapabilities object containing the client's
+             *                   capabilities.
+             * @return the same VideoFormatResolver instance.
+             */
+            @NonNull
+            public MediaFormatResolver setClientCapabilities(
+                    @NonNull ApplicationMediaCapabilities clientCaps) {
+                mClientCaps = clientCaps;
+                return this;
+            }
+
+            /**
+             * Sets the video format hint about the source. Must be called before
+             * {@link #shouldTranscode()} or {@link #resolveVideoFormat()}.
+             *
+             * @param format A MediaFormat object containing information about the source's
+             *               video track format that could affect the transcoding decision.
+             *               Such information could include video codec types, color spaces,
+             *               whether special format info (eg. slow-motion markers) are present,
+             *               etc.. If a particular information is not present, it will not be
+             *               used to make the decision.
+             * @return the same MediaFormatResolver instance.
+             */
+            @NonNull
+            public MediaFormatResolver setSourceVideoFormatHint(@NonNull MediaFormat format) {
+                mSrcVideoFormatHint = format;
+                return this;
+            }
+
+            /**
+             * Sets the audio format hint about the source.
+             *
+             * @param format A MediaFormat object containing information about the source's
+             *               audio track format that could affect the transcoding decision.
+             * @return the same MediaFormatResolver instance.
+             * @hide
+             */
+            @NonNull
+            public MediaFormatResolver setSourceAudioFormatHint(@NonNull MediaFormat format) {
+                mSrcAudioFormatHint = format;
+                return this;
+            }
+
+            /**
+             * Returns whether the source content should be transcoded.
+             *
+             * @return true if the source should be transcoded.
+             * @throws UnsupportedOperationException
+             *         if {@link #setClientCapabilities(ApplicationMediaCapabilities)}
+             *         or {@link #setSourceVideoFormatHint(MediaFormat)} was not called.
+             */
+            public boolean shouldTranscode() {
+                if (mClientCaps == null) {
+                    throw new UnsupportedOperationException(
+                            "Client caps must be set!");
+                }
+                // Video src hint must be provided, audio src hint is not used right now.
+                if (mSrcVideoFormatHint == null) {
+                    throw new UnsupportedOperationException(
+                            "Source video format hint must be set!");
+                }
+                boolean supportHevc = mClientCaps.isVideoMimeTypeSupported(
+                        MediaFormat.MIMETYPE_VIDEO_HEVC);
+                if (!supportHevc && MediaFormat.MIMETYPE_VIDEO_HEVC.equals(
+                        mSrcVideoFormatHint.getString(MediaFormat.KEY_MIME))) {
+                    return true;
+                }
+                // TODO: add more checks as needed below.
+                return false;
+            }
+
+            /**
+             * Retrieves the video track format to be used on
+             * {@link Builder#setVideoTrackFormat(MediaFormat)} for this configuration.
+             *
+             * @return the video track format to be used if transcoding should be performed,
+             *         and null otherwise.
+             * @throws UnsupportedOperationException
+             *         if {@link #setClientCapabilities(ApplicationMediaCapabilities)}
+             *         or {@link #setSourceVideoFormatHint(MediaFormat)} was not called.
+             */
+            @Nullable
+            public MediaFormat resolveVideoFormat() {
+                if (!shouldTranscode()) {
+                    return null;
+                }
+                // TODO(hkuang): Only modified the video codec type, and use fixed bitrate for now.
+                // May switch to transcoding profile when it's available.
+                MediaFormat videoTrackFormat = new MediaFormat(mSrcVideoFormatHint);
+                videoTrackFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_VIDEO_AVC);
+                videoTrackFormat.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
+                return videoTrackFormat;
+            }
+
+            /**
+             * Retrieves the audio track format to be used for transcoding.
+             *
+             * @return the audio track format to be used if transcoding should be performed, and
+             *         null otherwise.
+             * @throws UnsupportedOperationException
+             *         if {@link #setClientCapabilities(ApplicationMediaCapabilities)}
+             *         or {@link #setSourceVideoFormatHint(MediaFormat)} was not called.
+             * @hide
+             */
+            @Nullable
+            public MediaFormat resolveAudioFormat() {
+                if (!shouldTranscode()) {
+                    return null;
+                }
+                // Audio transcoding is not supported yet, always return null.
+                return null;
+            }
+        }
     }
 
     /**
@@ -654,31 +1026,36 @@ public final class MediaTranscodeManager {
      * enqueued transcoding operation. The caller can use that instance to query the status or
      * progress, and to get the result once the operation has completed.
      */
-    public static final class TranscodingJob {
-        /** The job is enqueued but not yet running. */
+    public static final class TranscodingSession {
+        /** The session is enqueued but not yet running. */
         public static final int STATUS_PENDING = 1;
-        /** The job is currently running. */
+        /** The session is currently running. */
         public static final int STATUS_RUNNING = 2;
-        /** The job is finished. */
+        /** The session is finished. */
         public static final int STATUS_FINISHED = 3;
+        /** The session is paused. */
+        public static final int STATUS_PAUSED = 4;
 
+        /** @hide */
         @IntDef(prefix = { "STATUS_" }, value = {
                 STATUS_PENDING,
                 STATUS_RUNNING,
                 STATUS_FINISHED,
+                STATUS_PAUSED,
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface Status {}
 
-        /** The job does not have a result yet. */
+        /** The session does not have a result yet. */
         public static final int RESULT_NONE = 1;
-        /** The job completed successfully. */
+        /** The session completed successfully. */
         public static final int RESULT_SUCCESS = 2;
-        /** The job encountered an error while running. */
+        /** The session encountered an error while running. */
         public static final int RESULT_ERROR = 3;
-        /** The job was canceled by the caller. */
+        /** The session was canceled by the caller. */
         public static final int RESULT_CANCELED = 4;
 
+        /** @hide */
         @IntDef(prefix = { "RESULT_" }, value = {
                 RESULT_NONE,
                 RESULT_SUCCESS,
@@ -693,42 +1070,53 @@ public final class MediaTranscodeManager {
         public interface OnProgressUpdateListener {
             /**
              * Called when the progress changes. The progress is in percentage between 0 and 1,
-             * where 0 means that the job has not yet started and 100 means that it has finished.
+             * where 0 means the session has not yet started and 100 means that it has finished.
+             *
+             * @param session      The session associated with the progress.
              * @param progress The new progress ranging from 0 ~ 100 inclusive.
              */
-            void onProgressUpdate(int progress);
+            void onProgressUpdate(@NonNull TranscodingSession session,
+                    @IntRange(from = 0, to = 100) int progress);
         }
 
-        private final ITranscodingClient mJobOwner;
-        private final Executor mListenerExecutor;
-        private final OnTranscodingFinishedListener mListener;
-        private int mJobId = -1;
-        @GuardedBy("this")
+        private final MediaTranscodeManager mManager;
+        private Executor mListenerExecutor;
+        private OnTranscodingFinishedListener mListener;
+        private int mSessionId = -1;
+        // Lock for internal state.
+        private final Object mLock = new Object();
+        @GuardedBy("mLock")
         private Executor mProgressUpdateExecutor = null;
-        @GuardedBy("this")
+        @GuardedBy("mLock")
         private OnProgressUpdateListener mProgressUpdateListener = null;
-        @GuardedBy("this")
+        @GuardedBy("mLock")
         private int mProgress = 0;
-        @GuardedBy("this")
+        @GuardedBy("mLock")
         private int mProgressUpdateInterval = 0;
-        @GuardedBy("this")
+        @GuardedBy("mLock")
         private @Status int mStatus = STATUS_PENDING;
-        @GuardedBy("this")
+        @GuardedBy("mLock")
         private @Result int mResult = RESULT_NONE;
+        @GuardedBy("mLock")
+        private boolean mHasRetried = false;
+        // The original request that associated with this session.
+        private final TranscodingRequest mRequest;
 
-        private TranscodingJob(
-                @NonNull ITranscodingClient jobOwner,
-                @NonNull TranscodingJobParcel parcel,
+        private TranscodingSession(
+                @NonNull MediaTranscodeManager manager,
+                @NonNull TranscodingRequest request,
+                @NonNull TranscodingSessionParcel parcel,
                 @NonNull @CallbackExecutor Executor executor,
                 @NonNull OnTranscodingFinishedListener listener) {
-            Objects.requireNonNull(jobOwner, "JobOwner must not be null");
-            Objects.requireNonNull(parcel, "TranscodingJobParcel must not be null");
+            Objects.requireNonNull(manager, "manager must not be null");
+            Objects.requireNonNull(parcel, "parcel must not be null");
             Objects.requireNonNull(executor, "listenerExecutor must not be null");
             Objects.requireNonNull(listener, "listener must not be null");
-            mJobOwner = jobOwner;
-            mJobId = parcel.jobId;
+            mManager = manager;
+            mSessionId = parcel.sessionId;
             mListenerExecutor = executor;
             mListener = listener;
+            mRequest = request;
         }
 
         /**
@@ -750,167 +1138,284 @@ public final class MediaTranscodeManager {
          * @param executor The executor on which listener will be invoked.
          * @param listener The progress listener.
          */
-        public synchronized void setOnProgressUpdateListener(
+        public void setOnProgressUpdateListener(
                 int minProgressUpdateInterval,
                 @NonNull @CallbackExecutor Executor executor,
                 @Nullable OnProgressUpdateListener listener) {
-            Objects.requireNonNull(executor, "listenerExecutor must not be null");
-            Objects.requireNonNull(listener, "listener must not be null");
-            mProgressUpdateExecutor = executor;
-            mProgressUpdateListener = listener;
+            synchronized (mLock) {
+                Objects.requireNonNull(executor, "listenerExecutor must not be null");
+                Objects.requireNonNull(listener, "listener must not be null");
+                mProgressUpdateExecutor = executor;
+                mProgressUpdateListener = listener;
+            }
         }
 
-        private synchronized void updateStatusAndResult(@Status int jobStatus,
-                @Result int jobResult) {
-            mStatus = jobStatus;
-            mResult = jobResult;
-        }
-
-        /**
-         * Cancels the transcoding job and notify the listener.
-         * If the job happened to finish before being canceled this call is effectively a no-op and
-         * will not update the result in that case.
-         */
-        public synchronized void cancel() {
-            // Check if the job is finished already.
-            if (mStatus != STATUS_FINISHED) {
-                try {
-                    mJobOwner.cancelJob(mJobId);
-                } catch (RemoteException re) {
-                    //TODO(hkuang): Find out what to do if failing to cancel the job.
-                    Log.e(TAG, "Failed to cancel the job due to exception:  " + re);
-                }
-                mStatus = STATUS_FINISHED;
-                mResult = RESULT_CANCELED;
-
-                // Notifies client the job is canceled.
-                mListenerExecutor.execute(() -> mListener.onTranscodingFinished(this));
+        private void updateStatusAndResult(@Status int sessionStatus,
+                @Result int sessionResult) {
+            synchronized (mLock) {
+                mStatus = sessionStatus;
+                mResult = sessionResult;
             }
         }
 
         /**
-         * Gets the progress of the transcoding job. The progress is between 0 and 1, where 0 means
-         * that the job has not yet started and 1 means that it is finished.
+         * Resubmit the transcoding session to the service.
+         * Note that only the session that fails or gets cancelled could be retried and each session
+         * could be retried only once. After that, Client need to enqueue a new request if they want
+         * to try again.
+         *
+         * @throws MediaTranscodingException.ServiceNotAvailableException if the service
+         *         is temporarily unavailable due to internal service rebooting. Client could retry
+         *         again after receiving this exception.
+         * @throws UnsupportedOperationException if the retry could not be fulfilled.
+         * @hide
+         */
+        public void retry() throws MediaTranscodingException.ServiceNotAvailableException {
+            retryInternal(true /*setHasRetried*/);
+        }
+
+        // TODO(hkuang): Add more test for it.
+        private void retryInternal(boolean setHasRetried)
+                throws MediaTranscodingException.ServiceNotAvailableException {
+            synchronized (mLock) {
+                if (mStatus == STATUS_PENDING || mStatus == STATUS_RUNNING) {
+                    throw new UnsupportedOperationException(
+                            "Failed to retry as session is in processing");
+                }
+
+                if (mHasRetried) {
+                    throw new UnsupportedOperationException("Session has been retried already");
+                }
+
+                // Get the client interface.
+                ITranscodingClient client = mManager.getTranscodingClient();
+                if (client == null) {
+                    throw new MediaTranscodingException.ServiceNotAvailableException(
+                            "Service rebooting. Try again later");
+                }
+
+                synchronized (mManager.mPendingTranscodingSessions) {
+                    try {
+                        // Submits the request to MediaTranscoding service.
+                        TranscodingSessionParcel sessionParcel = new TranscodingSessionParcel();
+                        if (!client.submitRequest(mRequest.writeToParcel(mManager.mContext),
+                                                  sessionParcel)) {
+                            mHasRetried = true;
+                            throw new UnsupportedOperationException("Failed to enqueue request");
+                        }
+
+                        // Replace the old session id wit the new one.
+                        mSessionId = sessionParcel.sessionId;
+                        // Adds the new session back into pending sessions.
+                        mManager.mPendingTranscodingSessions.put(mSessionId, this);
+                    } catch (RemoteException re) {
+                        throw new MediaTranscodingException.ServiceNotAvailableException(
+                                "Failed to resubmit request to Transcoding service");
+                    }
+                    mStatus = STATUS_PENDING;
+                    mHasRetried = setHasRetried ? true : false;
+                }
+            }
+        }
+
+        /**
+         * Cancels the transcoding session and notify the listener.
+         * If the session happened to finish before being canceled this call is effectively a no-op
+         * and will not update the result in that case.
+         */
+        public void cancel() {
+            synchronized (mLock) {
+                // Check if the session is finished already.
+                if (mStatus != STATUS_FINISHED) {
+                    try {
+                        ITranscodingClient client = mManager.getTranscodingClient();
+                        // The client may be gone.
+                        if (client != null) {
+                            client.cancelSession(mSessionId);
+                        }
+                    } catch (RemoteException re) {
+                        //TODO(hkuang): Find out what to do if failing to cancel the session.
+                        Log.e(TAG, "Failed to cancel the session due to exception:  " + re);
+                    }
+                    mStatus = STATUS_FINISHED;
+                    mResult = RESULT_CANCELED;
+
+                    // Notifies client the session is canceled.
+                    mListenerExecutor.execute(() -> mListener.onTranscodingFinished(this));
+                }
+            }
+        }
+
+        /**
+         * Gets the progress of the transcoding session. The progress is between 0 and 100, where 0
+         * means that the session has not yet started and 100 means that it is finished. For the
+         * cancelled session, the progress will be the last updated progress before it is cancelled.
          * @return The progress.
          */
-        public synchronized int getProgress() {
-            return mProgress;
+        @IntRange(from = 0, to = 100)
+        public int getProgress() {
+            synchronized (mLock) {
+                return mProgress;
+            }
         }
 
         /**
-         * Gets the status of the transcoding job.
+         * Gets the status of the transcoding session.
          * @return The status.
          */
-        public synchronized @Status int getStatus() {
-            return mStatus;
+        public @Status int getStatus() {
+            synchronized (mLock) {
+                return mStatus;
+            }
         }
 
         /**
-         * Gets jobId of the transcoding job.
-         * @return job id.
+         * Gets sessionId of the transcoding session.
+         * @return session id.
          */
-        public int getJobId() {
-            return mJobId;
+        public int getSessionId() {
+            return mSessionId;
         }
 
         /**
-         * Gets the result of the transcoding job.
+         * Gets the result of the transcoding session.
          * @return The result.
          */
-        public synchronized @Result int getResult() {
-            return mResult;
+        public @Result int getResult() {
+            synchronized (mLock) {
+                return mResult;
+            }
         }
 
-        private void setJobProgress(int newProgress) {
-            synchronized (this) {
+        @Override
+        public String toString() {
+            String result;
+            String status;
+
+            switch (mResult) {
+                case RESULT_NONE:
+                    result = "RESULT_NONE";
+                    break;
+                case RESULT_SUCCESS:
+                    result = "RESULT_SUCCESS";
+                    break;
+                case RESULT_ERROR:
+                    result = "RESULT_ERROR";
+                    break;
+                case RESULT_CANCELED:
+                    result = "RESULT_CANCELED";
+                    break;
+                default:
+                    result = String.valueOf(mResult);
+                    break;
+            }
+
+            switch (mStatus) {
+                case STATUS_PENDING:
+                    status = "STATUS_PENDING";
+                    break;
+                case STATUS_PAUSED:
+                    status = "STATUS_PAUSED";
+                    break;
+                case STATUS_RUNNING:
+                    status = "STATUS_RUNNING";
+                    break;
+                case STATUS_FINISHED:
+                    status = "STATUS_FINISHED";
+                    break;
+                default:
+                    status = String.valueOf(mStatus);
+                    break;
+            }
+            return String.format(" session: {id: %d, status: %s, result: %s, progress: %d}",
+                    mSessionId, status, result, mProgress);
+        }
+
+        private void updateProgress(int newProgress) {
+            synchronized (mLock) {
                 mProgress = newProgress;
             }
+        }
 
-            // Notify listener.
-            OnProgressUpdateListener onProgressUpdateListener = mProgressUpdateListener;
-            if (mProgressUpdateListener != null) {
-                mProgressUpdateExecutor.execute(
-                        () -> onProgressUpdateListener.onProgressUpdate(mProgress));
+        private void updateStatus(int newStatus) {
+            synchronized (mLock) {
+                mStatus = newStatus;
             }
         }
     }
 
-    /**
-     * Gets the MediaTranscodeManager singleton instance.
-     *
-     * @param context The application context.
-     * @return the {@link MediaTranscodeManager} singleton instance.
-     * @throws UnsupportedOperationException if failing to acquire the MediaTranscodeManager.
-     */
-    public static MediaTranscodeManager getInstance(@NonNull Context context) {
-        // Acquires the MediaTranscoding service.
-        IMediaTranscodingService service = IMediaTranscodingService.Stub.asInterface(
-                ServiceManager.getService(MEDIA_TRANSCODING_SERVICE));
-
-        return getInstance(context, service);
-    }
-
-    /** Similar as above, but allow injecting transcodingService for testing. */
-    @VisibleForTesting
-    public static MediaTranscodeManager getInstance(@NonNull Context context,
-            IMediaTranscodingService transcodingService) {
-        Objects.requireNonNull(context, "context must not be null");
-
-        synchronized (MediaTranscodeManager.class) {
-            if (sMediaTranscodeManager == null) {
-                sMediaTranscodeManager = new MediaTranscodeManager(context.getApplicationContext(),
-                        transcodingService);
-            }
-            return sMediaTranscodeManager;
+    private ITranscodingClient getTranscodingClient() {
+        synchronized (mLock) {
+            return mTranscodingClient;
         }
     }
 
     /**
      * Enqueues a TranscodingRequest for execution.
      * <p> Upon successfully accepting the request, MediaTranscodeManager will return a
-     * {@link TranscodingJob} to the client. Client should use {@link TranscodingJob} to track the
-     * progress and get the result.
+     * {@link TranscodingSession} to the client. Client should use {@link TranscodingSession} to
+     * track the progress and get the result.
      *
      * @param transcodingRequest The TranscodingRequest to enqueue.
      * @param listenerExecutor   Executor on which the listener is notified.
-     * @param listener           Listener to get notified when the transcoding job is finished.
-     * @return A TranscodingJob for this operation.
+     * @param listener           Listener to get notified when the transcoding session is finished.
+     * @return A TranscodingSession for this operation.
      * @throws FileNotFoundException if the source Uri or destination Uri could not be opened.
      * @throws UnsupportedOperationException if the request could not be fulfilled.
+     * @throws MediaTranscodingException.ServiceNotAvailableException if the service
+     *         is temporarily unavailable due to internal service rebooting. Client could retry
+     *         again after receiving this exception.
      */
     @NonNull
-    public TranscodingJob enqueueRequest(
+    public TranscodingSession enqueueRequest(
             @NonNull TranscodingRequest transcodingRequest,
             @NonNull @CallbackExecutor Executor listenerExecutor,
             @NonNull OnTranscodingFinishedListener listener)
-            throws UnsupportedOperationException, FileNotFoundException {
+            throws FileNotFoundException,
+            MediaTranscodingException.ServiceNotAvailableException {
         Log.i(TAG, "enqueueRequest called.");
         Objects.requireNonNull(transcodingRequest, "transcodingRequest must not be null");
         Objects.requireNonNull(listenerExecutor, "listenerExecutor must not be null");
         Objects.requireNonNull(listener, "listener must not be null");
 
         // Converts the request to TranscodingRequestParcel.
-        TranscodingRequestParcel requestParcel = transcodingRequest.writeToParcel();
+        TranscodingRequestParcel requestParcel = transcodingRequest.writeToParcel(mContext);
+
+        Log.i(TAG, "Getting transcoding request " + transcodingRequest.getSourceUri());
 
         // Submits the request to MediaTranscoding service.
         try {
-            TranscodingJobParcel jobParcel = new TranscodingJobParcel();
-            // Synchronizes the access to mPendingTranscodingJobs to make sure the job Id is
-            // inserted in the mPendingTranscodingJobs in the callback handler.
-            synchronized (mPendingTranscodingJobs) {
-                if (!mTranscodingClient.submitRequest(requestParcel, jobParcel)) {
-                    throw new UnsupportedOperationException("Failed to enqueue request");
+            TranscodingSessionParcel sessionParcel = new TranscodingSessionParcel();
+            // Synchronizes the access to mPendingTranscodingSessions to make sure the session Id is
+            // inserted in the mPendingTranscodingSessions in the callback handler.
+            synchronized (mPendingTranscodingSessions) {
+                synchronized (mLock) {
+                    if (mTranscodingClient == null) {
+                        // Try to register with the service again.
+                        IMediaTranscodingService service = getService(false /*retry*/);
+                        mTranscodingClient = registerClient(service);
+                        // If still fails, throws an exception to tell client to try later.
+                        if (mTranscodingClient == null) {
+                            throw new MediaTranscodingException.ServiceNotAvailableException(
+                                    "Service rebooting. Try again later");
+                        }
+                    }
+
+                    if (!mTranscodingClient.submitRequest(requestParcel, sessionParcel)) {
+                        throw new UnsupportedOperationException("Failed to enqueue request");
+                    }
                 }
 
-                // Wraps the TranscodingJobParcel into a TranscodingJob and returns it to client for
-                // tracking.
-                TranscodingJob job = new TranscodingJob(mTranscodingClient, jobParcel,
+                // Wraps the TranscodingSessionParcel into a TranscodingSession and returns it to
+                // client for tracking.
+                TranscodingSession session = new TranscodingSession(this, transcodingRequest,
+                        sessionParcel,
                         listenerExecutor,
                         listener);
 
-                // Adds the new job into pending jobs.
-                mPendingTranscodingJobs.put(job.getJobId(), job);
-                return job;
+                // Adds the new session into pending sessions.
+                mPendingTranscodingSessions.put(session.getSessionId(), session);
+                return session;
             }
         } catch (RemoteException re) {
             throw new UnsupportedOperationException(

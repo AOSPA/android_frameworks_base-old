@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.view.Display.INVALID_DISPLAY;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
@@ -68,14 +69,14 @@ import java.util.Map;
 @MediumTest
 @Presubmit
 @RunWith(WindowTestRunner.class)
-public class LaunchParamsControllerTests extends ActivityTestsBase {
+public class LaunchParamsControllerTests extends WindowTestsBase {
     private LaunchParamsController mController;
     private TestLaunchParamsPersister mPersister;
 
     @Before
     public void setUp() throws Exception {
         mPersister = new TestLaunchParamsPersister();
-        mController = new LaunchParamsController(mService, mPersister);
+        mController = new LaunchParamsController(mAtm, mPersister);
     }
 
     /**
@@ -87,8 +88,8 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
                 positioner = mock(LaunchParamsModifier.class);
         mController.registerModifier(positioner);
 
-        final ActivityRecord record = new ActivityBuilder(mService).build();
-        final ActivityRecord source = new ActivityBuilder(mService).build();
+        final ActivityRecord record = new ActivityBuilder(mAtm).build();
+        final ActivityRecord source = new ActivityBuilder(mAtm).build();
         final WindowLayout layout = new WindowLayout(0, 0, 0, 0, 0, 0, 0);
         final ActivityOptions options = mock(ActivityOptions.class);
 
@@ -108,7 +109,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
 
         final ComponentName name = new ComponentName("com.android.foo", ".BarActivity");
         final int userId = 0;
-        final ActivityRecord activity = new ActivityBuilder(mService).setComponent(name)
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setComponent(name)
                 .setUid(userId).build();
         final LaunchParams expected = new LaunchParams();
         expected.mPreferredTaskDisplayArea = mock(TaskDisplayArea.class);
@@ -228,10 +229,10 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
     @Test
     public void testVrPreferredDisplay() {
         final TestDisplayContent vrDisplay = createNewDisplayContent();
-        mService.mVr2dDisplayId = vrDisplay.mDisplayId;
+        mAtm.mVr2dDisplayId = vrDisplay.mDisplayId;
 
         final LaunchParams result = new LaunchParams();
-        final ActivityRecord vrActivity = new ActivityBuilder(mService).build();
+        final ActivityRecord vrActivity = new ActivityBuilder(mAtm).build();
         vrActivity.requestedVrComponent = vrActivity.mActivityComponent;
 
         // VR activities should always land on default display.
@@ -241,7 +242,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
                 result.mPreferredTaskDisplayArea);
 
         // Otherwise, always lands on VR 2D display.
-        final ActivityRecord vr2dActivity = new ActivityBuilder(mService).build();
+        final ActivityRecord vr2dActivity = new ActivityBuilder(mAtm).build();
         mController.calculate(null /*task*/, null /*layout*/, vr2dActivity /*activity*/,
                 null /*source*/, null /*options*/, PHASE_BOUNDS, result);
         assertEquals(vrDisplay.getDefaultTaskDisplayArea(), result.mPreferredTaskDisplayArea);
@@ -249,7 +250,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
                 null /*options*/, PHASE_BOUNDS, result);
         assertEquals(vrDisplay.getDefaultTaskDisplayArea(), result.mPreferredTaskDisplayArea);
 
-        mService.mVr2dDisplayId = INVALID_DISPLAY;
+        mAtm.mVr2dDisplayId = INVALID_DISPLAY;
     }
 
 
@@ -262,8 +263,8 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         final LaunchParamsModifier positioner = mock(LaunchParamsModifier.class);
         mController.registerModifier(positioner);
 
-        final ActivityRecord record = new ActivityBuilder(mService).build();
-        final ActivityRecord source = new ActivityBuilder(mService).build();
+        final ActivityRecord record = new ActivityBuilder(mAtm).build();
+        final ActivityRecord source = new ActivityBuilder(mAtm).build();
         final WindowLayout layout = new WindowLayout(0, 0, 0, 0, 0, 0, 0);
         final ActivityOptions options = mock(ActivityOptions.class);
 
@@ -284,7 +285,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         final TaskDisplayArea preferredTaskDisplayArea = display.getDefaultTaskDisplayArea();
         params.mPreferredTaskDisplayArea = preferredTaskDisplayArea;
         final InstrumentedPositioner positioner = new InstrumentedPositioner(RESULT_DONE, params);
-        final Task task = new TaskBuilder(mService.mStackSupervisor).build();
+        final Task task = new TaskBuilder(mAtm.mStackSupervisor).build();
 
         mController.registerModifier(positioner);
 
@@ -305,7 +306,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         final int windowingMode = WINDOWING_MODE_FREEFORM;
         params.mWindowingMode = windowingMode;
         final InstrumentedPositioner positioner = new InstrumentedPositioner(RESULT_DONE, params);
-        final Task task = new TaskBuilder(mService.mStackSupervisor).build();
+        final Task task = new TaskBuilder(mAtm.mStackSupervisor).build();
 
         mController.registerModifier(positioner);
 
@@ -316,6 +317,29 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
 
         final int afterWindowMode = task.getRootTask().getWindowingMode();
         assertEquals(windowingMode, afterWindowMode);
+    }
+
+    /**
+     * Ensures that {@link LaunchParamsModifier} doesn't alter non-root tasks' windowingMode.
+     */
+    @Test
+    public void testLayoutNonRootTaskWindowingModeChange() {
+        final LaunchParams params = new LaunchParams();
+        final int windowingMode = WINDOWING_MODE_FREEFORM;
+        params.mWindowingMode = windowingMode;
+        final InstrumentedPositioner positioner = new InstrumentedPositioner(RESULT_DONE, params);
+        final Task task = new TaskBuilder(mAtm.mStackSupervisor).setCreateParentTask(true).build();
+        task.getRootTask().setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
+
+        mController.registerModifier(positioner);
+
+        final int beforeWindowMode = task.getWindowingMode();
+        assertNotEquals(windowingMode, beforeWindowMode);
+
+        mController.layoutTask(task, null /* windowLayout */);
+
+        final int afterWindowMode = task.getWindowingMode();
+        assertEquals(afterWindowMode, beforeWindowMode);
     }
 
     /**
@@ -330,7 +354,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         params.mWindowingMode = WINDOWING_MODE_FREEFORM;
         params.mBounds.set(expected);
         final InstrumentedPositioner positioner = new InstrumentedPositioner(RESULT_DONE, params);
-        final Task task = new TaskBuilder(mService.mStackSupervisor).build();
+        final Task task = new TaskBuilder(mAtm.mStackSupervisor).build();
 
         mController.registerModifier(positioner);
 
@@ -355,7 +379,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         params.mWindowingMode = WINDOWING_MODE_FULLSCREEN;
         params.mBounds.set(expected);
         final InstrumentedPositioner positioner = new InstrumentedPositioner(RESULT_DONE, params);
-        final Task task = new TaskBuilder(mService.mStackSupervisor).build();
+        final Task task = new TaskBuilder(mAtm.mStackSupervisor).build();
 
         mController.registerModifier(positioner);
 

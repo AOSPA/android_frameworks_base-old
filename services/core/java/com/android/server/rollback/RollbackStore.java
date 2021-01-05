@@ -25,6 +25,7 @@ import android.content.rollback.PackageRollbackInfo;
 import android.content.rollback.PackageRollbackInfo.RestoreInfo;
 import android.content.rollback.RollbackInfo;
 import android.os.UserHandle;
+import android.util.AtomicFile;
 import android.util.Slog;
 import android.util.SparseIntArray;
 
@@ -37,6 +38,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
@@ -66,8 +68,6 @@ class RollbackStore {
     //
     // * XXX, YYY are the rollbackIds for the corresponding rollbacks.
     // * rollback.json contains all relevant metadata for the rollback.
-    //
-    // TODO: Use AtomicFile for all the .json files?
     private final File mRollbackDataDir;
 
     RollbackStore(File rollbackDataDir) {
@@ -259,24 +259,30 @@ class RollbackStore {
      * Saves the given rollback to persistent storage.
      */
     static void saveRollback(Rollback rollback) {
+        FileOutputStream fos = null;
+        AtomicFile file = new AtomicFile(new File(rollback.getBackupDir(), "rollback.json"));
         try {
             JSONObject dataJson = new JSONObject();
             dataJson.put("info", rollbackInfoToJson(rollback.info));
             dataJson.put("timestamp", rollback.getTimestamp().toString());
             dataJson.put("stagedSessionId", rollback.getStagedSessionId());
             dataJson.put("state", rollback.getStateAsString());
-            dataJson.put("apkSessionId", rollback.getApkSessionId());
             dataJson.put("restoreUserDataInProgress", rollback.isRestoreUserDataInProgress());
             dataJson.put("userId", rollback.getUserId());
             dataJson.putOpt("installerPackageName", rollback.getInstallerPackageName());
             dataJson.putOpt(
                     "extensionVersions", extensionVersionsToJson(rollback.getExtensionVersions()));
 
-            PrintWriter pw = new PrintWriter(new File(rollback.getBackupDir(), "rollback.json"));
+            fos = file.startWrite();
+            PrintWriter pw = new PrintWriter(fos);
             pw.println(dataJson.toString());
             pw.close();
+            file.finishWrite(fos);
         } catch (JSONException | IOException e) {
             Slog.e(TAG, "Unable to save rollback for: " + rollback.info.getRollbackId(), e);
+            if (fos != null) {
+                file.failWrite(fos);
+            }
         }
     }
 
@@ -312,7 +318,6 @@ class RollbackStore {
                 Instant.parse(dataJson.getString("timestamp")),
                 dataJson.getInt("stagedSessionId"),
                 rollbackStateFromString(dataJson.getString("state")),
-                dataJson.getInt("apkSessionId"),
                 dataJson.getBoolean("restoreUserDataInProgress"),
                 dataJson.optInt("userId", UserHandle.SYSTEM.getIdentifier()),
                 dataJson.optString("installerPackageName", ""),

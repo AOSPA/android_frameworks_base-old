@@ -24,8 +24,10 @@ import com.android.systemui.statusbar.notification.NotificationActivityStarter
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer
 import com.android.systemui.statusbar.phone.StatusBar
+import com.android.wm.shell.bubbles.Bubbles
 import java.io.FileDescriptor
 import java.io.PrintWriter
+import java.util.Optional
 import javax.inject.Inject
 
 /**
@@ -37,6 +39,7 @@ class NotificationsControllerStub @Inject constructor(
 
     override fun initialize(
         statusBar: StatusBar,
+        bubblesOptional: Optional<Bubbles>,
         presenter: NotificationPresenter,
         listContainer: NotificationListContainer,
         notificationActivityStarter: NotificationActivityStarter,

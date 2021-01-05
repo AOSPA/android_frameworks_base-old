@@ -40,7 +40,7 @@ import android.app.PropertyInvalidatedCache;
 import android.app.admin.DevicePolicyManager;
 import android.app.usage.StorageStatsManager;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.EnabledAfter;
+import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
@@ -63,6 +63,7 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -81,6 +82,8 @@ import dalvik.system.VMRuntime;
 import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -118,7 +121,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public interface OnPermissionsChangedListener {
 
         /**
@@ -300,7 +302,10 @@ public abstract class PackageManager {
     /**
      * {@link PackageInfo} flag: return information about the
      * intent filters supported by the activity.
+     *
+     * @deprecated The platform does not support getting {@link IntentFilter}s for the package.
      */
+    @Deprecated
     public static final int GET_INTENT_FILTERS          = 0x00000020;
 
     /**
@@ -477,7 +482,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int MATCH_FACTORY_ONLY = 0x00200000;
 
     /**
@@ -563,9 +567,11 @@ public abstract class PackageManager {
     public static final int MATCH_DEBUG_TRIAGED_MISSING = MATCH_DIRECT_BOOT_AUTO;
 
     /**
-     * Internal {@link PackageInfo} flag used to indicate that a package is a hidden system app.
+     * {@link PackageInfo} flag: include system apps that are in the uninstalled state and have
+     * been set to be hidden until installed via {@link #setSystemAppState}.
      * @hide
      */
+    @SystemApi
     public static final int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS =  0x20000000;
 
     /**
@@ -609,7 +615,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int MODULE_APEX_NAME = 0x00000001;
 
     /** @hide */
@@ -785,7 +790,6 @@ public abstract class PackageManager {
             INSTALL_ENABLE_ROLLBACK,
             INSTALL_ALLOW_DOWNGRADE,
             INSTALL_STAGED,
-            INSTALL_DRY_RUN,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallFlags {}
@@ -863,6 +867,12 @@ public abstract class PackageManager {
      * permissions should be whitelisted. If {@link #INSTALL_ALL_USERS}
      * is set the restricted permissions will be whitelisted for all users, otherwise
      * only to the owner.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      *
      * @hide
      */
@@ -962,14 +972,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_STAGED = 0x00200000;
-
-    /**
-     * Flag parameter for {@link #installPackage} to indicate that package should only be verified
-     * but not installed.
-     *
-     * @hide
-     */
-    public static final int INSTALL_DRY_RUN = 0x00800000;
 
     /** @hide */
     @IntDef(flag = true, value = {
@@ -1161,7 +1163,8 @@ public abstract class PackageManager {
 
     /**
      * Installation return code: this is passed in the {@link PackageInstaller#EXTRA_LEGACY_STATUS}
-     * if the new package uses a shared library that is not available.
+     * when the package being replaced is a system app and the caller didn't provide the
+     * {@link #DELETE_SYSTEM_APP} flag.
      *
      * @hide
      */
@@ -1577,6 +1580,26 @@ public abstract class PackageManager {
      */
     public static final int INSTALL_PARSE_FAILED_SKIPPED = -125;
 
+    /**
+     * Installation failed return code: this is passed in the
+     * {@link PackageInstaller#EXTRA_LEGACY_STATUS} if the system failed to install the package
+     * because it is attempting to define a permission group that is already defined by some
+     * existing package.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_DUPLICATE_PERMISSION_GROUP = -126;
+
+    /**
+     * Installation failed return code: this is passed in the
+     * {@link PackageInstaller#EXTRA_LEGACY_STATUS} if the system failed to install the package
+     * because it is attempting to define a permission in a group that does not exists or that is
+     * defined by an packages with an incompatible certificate.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_BAD_PERMISSION_GROUP = -127;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
             DELETE_KEEP_DATA,
@@ -1689,6 +1712,15 @@ public abstract class PackageManager {
     public static final int DELETE_FAILED_USED_SHARED_LIBRARY = -6;
 
     /**
+     * Deletion failed return code: this is passed to the
+     * {@link IPackageDeleteObserver} if the system failed to delete the package
+     * because there is an app pinned.
+     *
+     * @hide
+     */
+    public static final int DELETE_FAILED_APP_PINNED = -7;
+
+    /**
      * Return code that is passed to the {@link IPackageMoveObserver} when the
      * package has been successfully moved by the system.
      *
@@ -1771,7 +1803,7 @@ public abstract class PackageManager {
      * @hide
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int MOVE_INTERNAL = 0x00000001;
 
     /**
@@ -1780,7 +1812,7 @@ public abstract class PackageManager {
      * @hide
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int MOVE_EXTERNAL_MEDIA = 0x00000002;
 
     /** {@hide} */
@@ -3305,6 +3337,13 @@ public abstract class PackageManager {
     public static final String EXTRA_FAILURE_EXISTING_PERMISSION
             = "android.content.pm.extra.FAILURE_EXISTING_PERMISSION";
 
+    /**
+     * Extra field name for the ID of a package pending verification. Passed to
+     * a package verifier and is used to call back to
+     * @see #requestChecksums
+     */
+    public static final String EXTRA_CHECKSUMS = "android.content.pm.extra.CHECKSUMS";
+
    /**
     * Permission flag: The permission is set in its current state
     * by the user and apps can still request it at runtime.
@@ -3312,7 +3351,6 @@ public abstract class PackageManager {
     * @hide
     */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_USER_SET = 1 << 0;
 
     /**
@@ -3323,7 +3361,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_USER_FIXED =  1 << 1;
 
     /**
@@ -3334,7 +3371,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_POLICY_FIXED =  1 << 2;
 
     /**
@@ -3351,7 +3387,6 @@ public abstract class PackageManager {
      */
     @Deprecated
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_REVOKE_ON_UPGRADE =  1 << 3;
 
     /**
@@ -3361,7 +3396,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_SYSTEM_FIXED =  1 << 4;
 
     /**
@@ -3382,7 +3416,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_REVIEW_REQUIRED =  1 << 6;
 
     /**
@@ -3420,7 +3453,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT =  1 << 11;
 
@@ -3432,7 +3464,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT =  1 << 12;
 
@@ -3445,7 +3476,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT =  1 << 13;
 
@@ -3458,7 +3488,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int FLAG_PERMISSION_APPLY_RESTRICTION =  1 << 14;
 
@@ -3468,7 +3497,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_GRANTED_BY_ROLE =  1 << 15;
 
     /**
@@ -3480,7 +3508,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_REVOKED_COMPAT =  FLAG_PERMISSION_REVOKE_ON_UPGRADE;
 
     /**
@@ -3490,7 +3517,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static final int FLAG_PERMISSION_ONE_TIME = 1 << 16;
 
     /**
@@ -3500,6 +3526,16 @@ public abstract class PackageManager {
      */
     @SystemApi
     public static final int FLAG_PERMISSION_AUTO_REVOKED = 1 << 17;
+
+    /**
+     * Permission flag: The permission is restricted but the app is exempt
+     * from the restriction and is allowed to hold this permission in its
+     * full form and the exemption is provided by the held roles.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT =  1 << 18;
 
     /**
      * Permission flags: Reserved for use by the permission controller. The platform and any
@@ -3519,7 +3555,8 @@ public abstract class PackageManager {
     public static final int FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT =
             FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT
                     | FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT
-                    | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
+                    | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT
+                    | FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
 
     /**
      * Mask for all permission flags.
@@ -3565,13 +3602,27 @@ public abstract class PackageManager {
 
     /**
      * Permission whitelist flag: permissions whitelisted by the system.
-     * Permissions can also be whitelisted by the installer or on upgrade.
+     * Permissions can also be whitelisted by the installer, on upgrade, or on
+     * role grant.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      */
     public static final int FLAG_PERMISSION_WHITELIST_SYSTEM = 1 << 0;
 
     /**
      * Permission whitelist flag: permissions whitelisted by the installer.
-     * Permissions can also be whitelisted by the system or on upgrade.
+     * Permissions can also be whitelisted by the system, on upgrade, or on role
+     * grant.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      */
     public static final int FLAG_PERMISSION_WHITELIST_INSTALLER = 1 << 1;
 
@@ -3579,15 +3630,31 @@ public abstract class PackageManager {
      * Permission whitelist flag: permissions whitelisted by the system
      * when upgrading from an OS version where the permission was not
      * restricted to an OS version where the permission is restricted.
-     * Permissions can also be whitelisted by the installer or the system.
+     * Permissions can also be whitelisted by the installer, the system, or on
+     * role grant.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      */
     public static final int FLAG_PERMISSION_WHITELIST_UPGRADE = 1 << 2;
+
+    /**
+     * Permission allowlist flag: permissions exempted by the system
+     * when being granted a role.
+     * Permissions can also be exempted by the installer, the system, or on
+     * upgrade.
+     */
+    public static final int FLAG_PERMISSION_ALLOWLIST_ROLE = 1 << 3;
 
     /** @hide */
     @IntDef(flag = true, prefix = {"FLAG_PERMISSION_WHITELIST_"}, value = {
             FLAG_PERMISSION_WHITELIST_SYSTEM,
             FLAG_PERMISSION_WHITELIST_INSTALLER,
-            FLAG_PERMISSION_WHITELIST_UPGRADE
+            FLAG_PERMISSION_WHITELIST_UPGRADE,
+            FLAG_PERMISSION_ALLOWLIST_ROLE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PermissionWhitelistFlags {}
@@ -3605,7 +3672,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final String SYSTEM_SHARED_LIBRARY_SERVICES = "android.ext.services";
 
@@ -3618,7 +3685,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static final String SYSTEM_SHARED_LIBRARY_SHARED = "android.ext.shared";
 
@@ -3698,7 +3765,7 @@ public abstract class PackageManager {
      * @hide
      */
     @ChangeId
-    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.R)
     public static final long FILTER_APPLICATION_QUERY = 135549675L;
 
     /** {@hide} */
@@ -3712,28 +3779,68 @@ public abstract class PackageManager {
     public @interface SystemAppState {}
 
     /**
-     * Constant for noting system app state as hidden before installation
+     * Constant for use with {@link #setSystemAppState} to mark a system app as hidden until
+     * installation.
      * @hide
      */
+    @SystemApi
     public static final int SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN = 0;
 
     /**
-     * Constant for noting system app state as visible before installation
+     * Constant for use with {@link #setSystemAppState} to mark a system app as not hidden until
+     * installation.
      * @hide
      */
+    @SystemApi
     public static final int SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_VISIBLE = 1;
 
     /**
-     * Constant for noting system app state as installed
+     * Constant for use with {@link #setSystemAppState} to change a system app's state to installed.
      * @hide
      */
+    @SystemApi
     public static final int SYSTEM_APP_STATE_INSTALLED = 2;
 
     /**
-     * Constant for noting system app state as not installed
+     * Constant for use with {@link #setSystemAppState} to change a system app's state to
+     * uninstalled.
      * @hide
      */
+    @SystemApi
     public static final int SYSTEM_APP_STATE_UNINSTALLED = 3;
+
+    /**
+     * Reasons for why a package is unstartable.
+     * @hide
+     */
+    @IntDef({UNSTARTABLE_REASON_UNKNOWN,
+            UNSTARTABLE_REASON_CONNECTION_ERROR,
+            UNSTARTABLE_REASON_INSUFFICIENT_STORAGE
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface UnstartableReason {}
+
+    /**
+     * Unstartable state with no root cause specified. E.g., data loader seeing missing pages but
+     * unclear about the cause. This corresponds to a generic alert window shown to the user when
+     * the user attempts to launch the app.
+     * @hide
+     */
+    public static final int UNSTARTABLE_REASON_UNKNOWN = 0;
+
+    /**
+     * Unstartable state due to connection issues that interrupt package loading.
+     * This corresponds to an alert window shown to the user indicating connection errors.
+     * @hide
+     */
+    public static final int UNSTARTABLE_REASON_CONNECTION_ERROR = 1;
+
+    /**
+     * Unstartable state after encountering storage limitations.
+     * This corresponds to an alert window indicating limited storage.
+     * @hide
+     */
+    public static final int UNSTARTABLE_REASON_INSUFFICIENT_STORAGE = 2;
 
     /** {@hide} */
     public int getUserId() {
@@ -3812,6 +3919,7 @@ public abstract class PackageManager {
      *             found on the system.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
     @UnsupportedAppUsage
     public abstract PackageInfo getPackageInfoAsUser(@NonNull String packageName,
@@ -3878,6 +3986,7 @@ public abstract class PackageManager {
      *         does not contain such an activity.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract @Nullable Intent getCarLaunchIntentForPackage(@NonNull String packageName);
 
     /**
@@ -3943,6 +4052,7 @@ public abstract class PackageManager {
      *             found on the system.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract int getPackageUidAsUser(@NonNull String packageName, @UserIdInt int userId)
             throws NameNotFoundException;
@@ -3961,6 +4071,7 @@ public abstract class PackageManager {
      *             found on the system.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract int getPackageUidAsUser(@NonNull String packageName,
             @PackageInfoFlags int flags, @UserIdInt int userId) throws NameNotFoundException;
@@ -4003,7 +4114,8 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi @SystemApi
+    @SuppressWarnings("HiddenAbstractMethod")
+    @SystemApi
     public abstract boolean arePermissionsIndividuallyControlled();
 
     /**
@@ -4011,6 +4123,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract boolean isWirelessConsentModeEnabled();
 
     /**
@@ -4063,6 +4176,7 @@ public abstract class PackageManager {
             @ApplicationInfoFlags int flags) throws NameNotFoundException;
 
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract ApplicationInfo getApplicationInfoAsUser(@NonNull String packageName,
@@ -4093,6 +4207,15 @@ public abstract class PackageManager {
             @ApplicationInfoFlags int flags, @NonNull UserHandle user)
             throws NameNotFoundException {
         return getApplicationInfoAsUser(packageName, flags, user.getIdentifier());
+    }
+
+    /**
+     * @return The target SDK version for the given package name.
+     * @throws NameNotFoundException if a package with the given name cannot be found on the system.
+     */
+    @IntRange(from = 0)
+    public int getTargetSdkVersion(@NonNull String packageName) throws NameNotFoundException {
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -4244,8 +4367,8 @@ public abstract class PackageManager {
      *         deleted with {@code DELETE_KEEP_DATA} flag set).
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public abstract List<PackageInfo> getInstalledPackagesAsUser(@PackageInfoFlags int flags,
@@ -4293,6 +4416,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     @NonNull
     @TestApi
@@ -4406,7 +4530,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS)
     public abstract void grantRuntimePermission(@NonNull String packageName,
@@ -4433,7 +4557,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS)
     public abstract void revokeRuntimePermission(@NonNull String packageName,
@@ -4461,7 +4585,6 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS)
     public void revokeRuntimePermission(@NonNull String packageName,
@@ -4479,8 +4602,8 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS,
             android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS,
@@ -4502,8 +4625,8 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
-    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS,
             android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS
@@ -4524,7 +4647,7 @@ public abstract class PackageManager {
      * allows for the to hold that permission and whitelisting a soft restricted
      * permission allows the app to hold the permission in its full, unrestricted form.
      *
-     * <p><ol>There are three whitelists:
+     * <p><ol>There are four allowlists:
      *
      * <li>one for cases where the system permission policy whitelists a permission
      * This list corresponds to the{@link #FLAG_PERMISSION_WHITELIST_SYSTEM} flag.
@@ -4541,6 +4664,17 @@ public abstract class PackageManager {
      * Can be accessed by pre-installed holders of a dedicated permission or the
      * installer on record.
      *
+     * <li>one for cases where the system exempts the permission when granting a role.
+     * This list corresponds to the {@link #FLAG_PERMISSION_ALLOWLIST_ROLE} flag. Can
+     * be accessed by pre-installed holders of a dedicated permission.
+     * </ol>
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
+     *
      * @param packageName The app for which to get whitelisted permissions.
      * @param whitelistFlag The flag to determine which whitelist to query. Only one flag
      * can be passed.s
@@ -4551,6 +4685,7 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
+     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to access a whitelist that you have no access to.
      */
@@ -4572,7 +4707,7 @@ public abstract class PackageManager {
      * allows for the to hold that permission and whitelisting a soft restricted
      * permission allows the app to hold the permission in its full, unrestricted form.
      *
-     * <p><ol>There are three whitelists:
+     * <p><ol>There are four whitelists:
      *
      * <li>one for cases where the system permission policy whitelists a permission
      * This list corresponds to the {@link #FLAG_PERMISSION_WHITELIST_SYSTEM} flag.
@@ -4590,9 +4725,20 @@ public abstract class PackageManager {
      * Can be modified by pre-installed holders of a dedicated permission or the installer
      * on record.
      *
+     * <li>one for cases where the system exempts the permission when permission when
+     * granting a role. This list corresponds to the {@link #FLAG_PERMISSION_ALLOWLIST_ROLE}
+     * flag. Can be modified by pre-installed holders of a dedicated permission.
+     * </ol>
+     *
      * <p>You need to specify the whitelists for which to set the whitelisted permissions
      * which will clear the previous whitelisted permissions and replace them with the
      * provided ones.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      *
      * @param packageName The app for which to get whitelisted permissions.
      * @param permName The whitelisted permission to add.
@@ -4605,6 +4751,7 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
+     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to modify a whitelist that you have no access to.
      */
@@ -4626,7 +4773,7 @@ public abstract class PackageManager {
      * allows for the to hold that permission and whitelisting a soft restricted
      * permission allows the app to hold the permission in its full, unrestricted form.
      *
-     * <p><ol>There are three whitelists:
+     * <p><ol>There are four whitelists:
      *
      * <li>one for cases where the system permission policy whitelists a permission
      * This list corresponds to the {@link #FLAG_PERMISSION_WHITELIST_SYSTEM} flag.
@@ -4644,9 +4791,23 @@ public abstract class PackageManager {
      * Can be modified by pre-installed holders of a dedicated permission or the installer
      * on record.
      *
+     * <li>one for cases where the system exempts the permission when upgrading
+     * from an OS version in which the permission was not restricted to an OS version
+     * in which the permission is restricted. This list corresponds to the {@link
+     * #FLAG_PERMISSION_WHITELIST_UPGRADE} flag. Can be modified by pre-installed
+     * holders of a dedicated permission. The installer on record can only remove
+     * permissions from this allowlist.
+     * </ol>
+     *
      * <p>You need to specify the whitelists for which to set the whitelisted permissions
      * which will clear the previous whitelisted permissions and replace them with the
      * provided ones.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      *
      * @param packageName The app for which to get whitelisted permissions.
      * @param permName The whitelisted permission to remove.
@@ -4659,6 +4820,7 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
+     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to modify a whitelist that you have no access to.
      */
@@ -4678,6 +4840,12 @@ public abstract class PackageManager {
      * Packages start in whitelisted state, and it is the installer's responsibility to
      * un-whitelist the packages it installs, unless auto-revoking permissions from that package
      * would cause breakages beyond having to re-request the permission(s).
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
      *
      * @param packageName The app for which to set exemption.
      * @param whitelisted Whether the app should be whitelisted.
@@ -4700,6 +4868,13 @@ public abstract class PackageManager {
      *
      * Only the installer on record that installed the given package, or a holder of
      * {@code WHITELIST_AUTO_REVOKE_PERMISSIONS} is allowed to call this.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
+     *
      * @param packageName The app for which to set exemption.
      *
      * @return Whether the app is whitelisted.
@@ -4726,6 +4901,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean shouldShowRequestPermissionRationale(@NonNull String permName);
 
@@ -4841,6 +5017,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @TestApi
     public abstract @Nullable String[] getNamesForUids(int[] uids);
 
@@ -4857,6 +5034,7 @@ public abstract class PackageManager {
      *             found on the system.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract int getUidForSharedUser(@NonNull String sharedUserName)
             throws NameNotFoundException;
@@ -4900,6 +5078,7 @@ public abstract class PackageManager {
      *         deleted with {@code DELETE_KEEP_DATA} flag set).
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @TestApi
     public abstract List<ApplicationInfo> getInstalledApplicationsAsUser(
@@ -4912,6 +5091,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(Manifest.permission.ACCESS_INSTANT_APPS)
     public abstract @NonNull List<InstantAppInfo> getInstantApps();
@@ -4923,6 +5103,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(Manifest.permission.ACCESS_INSTANT_APPS)
     public abstract @Nullable Drawable getInstantAppIcon(String packageName);
@@ -4971,6 +5152,7 @@ public abstract class PackageManager {
      * deprecated
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract int getInstantAppCookieMaxSize();
 
     /**
@@ -5028,6 +5210,7 @@ public abstract class PackageManager {
     /**
      * @removed
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract boolean setInstantAppCookie(@Nullable byte[] cookie);
 
     /**
@@ -5066,6 +5249,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract @NonNull List<SharedLibraryInfo> getSharedLibrariesAsUser(
             @InstallFlags int flags, @UserIdInt int userId);
 
@@ -5078,6 +5262,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @RequiresPermission(Manifest.permission.ACCESS_SHARED_LIBRARIES)
     @SystemApi
@@ -5097,6 +5282,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     @TestApi
     public abstract @NonNull String getServicesSystemSharedLibraryPackageName();
@@ -5108,6 +5294,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     @TestApi
     public abstract @NonNull String getSharedSystemSharedLibraryPackageName();
@@ -5214,6 +5401,7 @@ public abstract class PackageManager {
      *         containing something else, such as the activity resolver.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     @UnsupportedAppUsage
     public abstract ResolveInfo resolveActivityAsUser(@NonNull Intent intent,
@@ -5255,6 +5443,7 @@ public abstract class PackageManager {
      *         empty list is returned.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract List<ResolveInfo> queryIntentActivitiesAsUser(@NonNull Intent intent,
@@ -5278,6 +5467,7 @@ public abstract class PackageManager {
      *         empty list is returned.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
     @SystemApi
@@ -5340,6 +5530,7 @@ public abstract class PackageManager {
      *         no matching receivers, an empty list or null is returned.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @SystemApi
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
@@ -5351,6 +5542,7 @@ public abstract class PackageManager {
     /**
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract List<ResolveInfo> queryBroadcastReceiversAsUser(@NonNull Intent intent,
@@ -5389,6 +5581,7 @@ public abstract class PackageManager {
     /**
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     public abstract ResolveInfo resolveServiceAsUser(@NonNull Intent intent,
             @ResolveInfoFlags int flags, @UserIdInt int userId);
@@ -5421,6 +5614,7 @@ public abstract class PackageManager {
      *         empty list or null is returned.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract List<ResolveInfo> queryIntentServicesAsUser(@NonNull Intent intent,
@@ -5459,6 +5653,7 @@ public abstract class PackageManager {
      *         no matching services, an empty list or null is returned.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract List<ResolveInfo> queryIntentContentProvidersAsUser(
@@ -5526,6 +5721,7 @@ public abstract class PackageManager {
      *         provider. If a provider was not found, returns null.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     @UnsupportedAppUsage
     public abstract ProviderInfo resolveContentProviderAsUser(@NonNull String providerName,
@@ -5910,6 +6106,7 @@ public abstract class PackageManager {
      * @return the drawable or null if no drawable is required.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     @UnsupportedAppUsage
     public abstract Drawable getUserBadgeForDensity(@NonNull UserHandle user, int density);
@@ -5928,6 +6125,7 @@ public abstract class PackageManager {
      * @return the drawable or null if no drawable is required.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     @UnsupportedAppUsage
     public abstract Drawable getUserBadgeForDensityNoBackground(@NonNull UserHandle user,
@@ -6051,9 +6249,31 @@ public abstract class PackageManager {
     public abstract Resources getResourcesForApplication(@NonNull String packageName)
             throws NameNotFoundException;
 
-    /** @hide */
+    /**
+     * Please don't use this function because it is no longer supported.
+     *
+     * @deprecated Instead of using this function, please use
+     *             {@link Context#createContextAsUser(UserHandle, int)} to create the specified user
+     *             context, {@link Context#getPackageManager()} to get PackageManager instance for
+     *             the specified user, and then
+     *             {@link PackageManager#getResourcesForApplication(String)} to get the same
+     *             Resources instance.
+     * @see {@link Context#createContextAsUser(android.os.UserHandle, int)}
+     * @see {@link Context#getPackageManager()}
+     * @see {@link android.content.pm.PackageManager#getResourcesForApplication(java.lang.String)}
+     * TODO(b/170852794): mark maxTargetSdk as {@code Build.VERSION_CODES.S}
+     * @hide
+     */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170928809,
+            publicAlternatives = "Use {@code Context#createContextAsUser(UserHandle, int)}"
+                    + " to create the relevant user context,"
+                    + " {@link android.content.Context#getPackageManager()} and"
+                    + " {@link android.content.pm.PackageManager#getResourcesForApplication("
+                    + "java.lang.String)}"
+                    + " instead.")
+    @Deprecated
     public abstract Resources getResourcesForApplicationAsUser(@NonNull String packageName,
             @UserIdInt int userId) throws NameNotFoundException;
 
@@ -6097,6 +6317,7 @@ public abstract class PackageManager {
      *
      * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Deprecated
     @SystemApi
     public abstract int installExistingPackage(@NonNull String packageName)
@@ -6109,6 +6330,7 @@ public abstract class PackageManager {
      *
      * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Deprecated
     @SystemApi
     public abstract int installExistingPackage(@NonNull String packageName,
@@ -6121,6 +6343,7 @@ public abstract class PackageManager {
      *
      * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Deprecated
     @RequiresPermission(anyOf = {
             Manifest.permission.INSTALL_EXISTING_PACKAGES,
@@ -6201,6 +6424,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(android.Manifest.permission.INTENT_FILTER_VERIFICATION_AGENT)
     public abstract void verifyIntentFilter(int verificationId, int verificationCode,
@@ -6226,6 +6450,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public abstract int getIntentVerificationStatusAsUser(@NonNull String packageName,
@@ -6251,6 +6476,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(android.Manifest.permission.SET_PREFERRED_APPLICATIONS)
     public abstract boolean updateIntentVerificationStatusAsUser(@NonNull String packageName,
@@ -6268,6 +6494,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @SystemApi
     public abstract List<IntentFilterVerificationInfo> getIntentFilterVerifications(
@@ -6284,6 +6511,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @SystemApi
     public abstract List<IntentFilter> getAllIntentFilters(@NonNull String packageName);
@@ -6298,8 +6526,8 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
-    @TestApi
     @SystemApi
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public abstract String getDefaultBrowserPackageNameAsUser(@UserIdInt int userId);
@@ -6316,6 +6544,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(allOf = {
             Manifest.permission.SET_PREFERRED_APPLICATIONS,
@@ -6342,6 +6571,7 @@ public abstract class PackageManager {
             @Nullable String installerPackageName);
 
     /** @hide */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
     public abstract void setUpdateAvailable(@NonNull String packageName, boolean updateAvaialble);
@@ -6362,6 +6592,7 @@ public abstract class PackageManager {
      *            indicate that no callback is desired.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @RequiresPermission(Manifest.permission.DELETE_PACKAGES)
     @UnsupportedAppUsage
     public abstract void deletePackage(@NonNull String packageName,
@@ -6382,6 +6613,7 @@ public abstract class PackageManager {
      * @param userId The user Id
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @RequiresPermission(anyOf = {
             Manifest.permission.DELETE_PACKAGES,
             Manifest.permission.INTERACT_ACROSS_USERS_FULL})
@@ -6399,6 +6631,7 @@ public abstract class PackageManager {
      *
      * @deprecated use {@link #getInstallSourceInfo(String)} instead
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Deprecated
     @Nullable
     public abstract String getInstallerPackageName(@NonNull String packageName);
@@ -6438,6 +6671,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void clearApplicationUserData(@NonNull String packageName,
             @Nullable IPackageDataObserver observer);
@@ -6457,6 +6691,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void deleteApplicationCacheFiles(@NonNull String packageName,
             @Nullable IPackageDataObserver observer);
@@ -6479,6 +6714,7 @@ public abstract class PackageManager {
      *            callback is desired.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void deleteApplicationCacheFilesAsUser(@NonNull String packageName,
             @UserIdInt int userId, @Nullable IPackageDataObserver observer);
@@ -6512,6 +6748,7 @@ public abstract class PackageManager {
     }
 
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void freeStorageAndNotify(@Nullable String volumeUuid, long freeStorageSize,
             @Nullable IPackageDataObserver observer);
@@ -6545,6 +6782,7 @@ public abstract class PackageManager {
     }
 
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void freeStorage(@Nullable String volumeUuid, long freeStorageSize,
             @Nullable IntentSender pi);
@@ -6568,6 +6806,7 @@ public abstract class PackageManager {
      * @deprecated use {@link StorageStatsManager} instead.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Deprecated
     @UnsupportedAppUsage
     public abstract void getPackageSizeInfoAsUser(@NonNull String packageName,
@@ -6699,6 +6938,7 @@ public abstract class PackageManager {
      * an app to be responsible for a particular role and to check current role
      * holders, see {@link android.app.role.RoleManager}.
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Deprecated
     @UnsupportedAppUsage
     public abstract void replacePreferredActivity(@NonNull IntentFilter filter, int match,
@@ -6806,6 +7046,7 @@ public abstract class PackageManager {
      * default, if any.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     @UnsupportedAppUsage
     public abstract ComponentName getHomeActivities(@NonNull List<ResolveInfo> outActivities);
@@ -6907,6 +7148,7 @@ public abstract class PackageManager {
      * @param userId Ther userId of the user whose restrictions are to be flushed.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void flushPackageRestrictionsAsUser(@UserIdInt int userId);
 
@@ -6917,6 +7159,7 @@ public abstract class PackageManager {
      * or by installing it, such as with {@link #installExistingPackage(String)}
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean setApplicationHiddenSettingAsUser(@NonNull String packageName,
             boolean hidden, @NonNull UserHandle userHandle);
@@ -6926,16 +7169,24 @@ public abstract class PackageManager {
      * @see #setApplicationHiddenSettingAsUser(String, boolean, UserHandle)
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean getApplicationHiddenSettingAsUser(@NonNull String packageName,
             @NonNull UserHandle userHandle);
 
     /**
-     * Sets system app state
+     * Sets the state of a system app.
+     *
+     * This method can be used to change a system app's hidden-until-installed state (via
+     * {@link #SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN} and
+     * {@link #SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_VISIBLE} or its installation state (via
+     * {@link #SYSTEM_APP_STATE_INSTALLED} and {@link #SYSTEM_APP_STATE_UNINSTALLED}.
+     *
      * @param packageName Package name of the app.
      * @param state State of the app.
      * @hide
      */
+    @SystemApi
     public void setSystemAppState(@NonNull String packageName, @SystemAppState int state) {
         throw new RuntimeException("Not implemented. Must override in a subclass");
     }
@@ -6952,8 +7203,8 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS)
     public abstract void addOnPermissionsChangeListener(
             @NonNull OnPermissionsChangedListener listener);
@@ -6965,8 +7216,8 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS)
     public abstract void removeOnPermissionsChangeListener(
             @NonNull OnPermissionsChangedListener listener);
@@ -6979,6 +7230,7 @@ public abstract class PackageManager {
      *        application's AndroidManifest.xml.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract KeySet getKeySetByAlias(@NonNull String packageName, @NonNull String alias);
@@ -6986,6 +7238,7 @@ public abstract class PackageManager {
     /** Return the signing {@link KeySet} for this application.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract KeySet getSigningKeySet(@NonNull String packageName);
@@ -6997,6 +7250,7 @@ public abstract class PackageManager {
      * Compare to {@link #isSignedByExactly(String packageName, KeySet ks)}.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean isSignedBy(@NonNull String packageName, @NonNull KeySet ks);
 
@@ -7006,6 +7260,7 @@ public abstract class PackageManager {
      * {@link #isSignedBy(String packageName, KeySet ks)}.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean isSignedByExactly(@NonNull String packageName, @NonNull KeySet ks);
 
@@ -7223,6 +7478,7 @@ public abstract class PackageManager {
      * @throws IllegalArgumentException if the package was not found.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean isPackageSuspendedForUser(@NonNull String packageName, int userId);
 
@@ -7298,6 +7554,7 @@ public abstract class PackageManager {
      * @param packageName the package to change the category hint for.
      * @param categoryHint the category hint to set.
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract void setApplicationCategoryHint(@NonNull String packageName,
             @ApplicationInfo.Category int categoryHint);
 
@@ -7313,34 +7570,43 @@ public abstract class PackageManager {
     }
 
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract int getMoveStatus(int moveId);
 
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void registerMoveCallback(@NonNull MoveCallback callback,
             @NonNull Handler handler);
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void unregisterMoveCallback(@NonNull MoveCallback callback);
 
     /** {@hide} */
-    @UnsupportedAppUsage
+    @SuppressWarnings("HiddenAbstractMethod")
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public abstract int movePackage(@NonNull String packageName, @NonNull VolumeInfo vol);
     /** {@hide} */
-    @UnsupportedAppUsage
+    @SuppressWarnings("HiddenAbstractMethod")
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public abstract @Nullable VolumeInfo getPackageCurrentVolume(@NonNull ApplicationInfo app);
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public abstract List<VolumeInfo> getPackageCandidateVolumes(
             @NonNull ApplicationInfo app);
 
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract int movePrimaryStorage(@NonNull VolumeInfo vol);
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract @Nullable VolumeInfo getPrimaryStorageCurrentVolume();
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     public abstract @NonNull List<VolumeInfo> getPrimaryStorageCandidateVolumes();
 
     /**
@@ -7350,6 +7616,7 @@ public abstract class PackageManager {
      * @return identity that uniquely identifies current device
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     public abstract VerifierDeviceIdentity getVerifierDeviceIdentity();
 
@@ -7358,6 +7625,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean isUpgrade();
 
@@ -7387,6 +7655,7 @@ public abstract class PackageManager {
      *            {@link #ONLY_IF_NO_MATCH_FOUND}.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void addCrossProfileIntentFilter(@NonNull IntentFilter filter,
             @UserIdInt int sourceUserId, @UserIdInt int targetUserId, int flags);
@@ -7398,12 +7667,14 @@ public abstract class PackageManager {
      * @param sourceUserId The source user id.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract void clearCrossProfileIntentFilters(@UserIdInt int sourceUserId);
 
     /**
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract Drawable loadItemIcon(@NonNull PackageItemInfo itemInfo,
@@ -7412,18 +7683,20 @@ public abstract class PackageManager {
     /**
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @NonNull
     @UnsupportedAppUsage
     public abstract Drawable loadUnbadgedItemIcon(@NonNull PackageItemInfo itemInfo,
             @Nullable ApplicationInfo appInfo);
 
     /** {@hide} */
+    @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean isPackageAvailable(@NonNull String packageName);
 
     /** {@hide} */
     @NonNull
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static String installStatusToString(int status, @Nullable String msg) {
         final String str = installStatusToString(status);
         if (msg != null) {
@@ -7564,6 +7837,7 @@ public abstract class PackageManager {
             case DELETE_FAILED_OWNER_BLOCKED: return "DELETE_FAILED_OWNER_BLOCKED";
             case DELETE_FAILED_ABORTED: return "DELETE_FAILED_ABORTED";
             case DELETE_FAILED_USED_SHARED_LIBRARY: return "DELETE_FAILED_USED_SHARED_LIBRARY";
+            case DELETE_FAILED_APP_PINNED: return "DELETE_FAILED_APP_PINNED";
             default: return Integer.toString(status);
         }
     }
@@ -7578,6 +7852,7 @@ public abstract class PackageManager {
             case DELETE_FAILED_OWNER_BLOCKED: return PackageInstaller.STATUS_FAILURE_BLOCKED;
             case DELETE_FAILED_ABORTED: return PackageInstaller.STATUS_FAILURE_ABORTED;
             case DELETE_FAILED_USED_SHARED_LIBRARY: return PackageInstaller.STATUS_FAILURE_CONFLICT;
+            case DELETE_FAILED_APP_PINNED: return PackageInstaller.STATUS_FAILURE_BLOCKED;
             default: return PackageInstaller.STATUS_FAILURE;
         }
     }
@@ -7636,6 +7911,7 @@ public abstract class PackageManager {
      *         user, {@code INSTALL_REASON_UNKNOWN} is returned.
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @TestApi
     @InstallReason
     public abstract int getInstallReason(@NonNull String packageName, @NonNull UserHandle user);
@@ -7664,6 +7940,7 @@ public abstract class PackageManager {
      * @see {@link android.content.Intent#ACTION_INSTANT_APP_RESOLVER_SETTINGS}
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     @SystemApi
     public abstract ComponentName getInstantAppResolverSettingsComponent();
@@ -7675,6 +7952,7 @@ public abstract class PackageManager {
      * @see {@link android.content.Intent#ACTION_INSTALL_INSTANT_APP_PACKAGE}
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     @SystemApi
     public abstract ComponentName getInstantAppInstallerComponent();
@@ -7685,6 +7963,7 @@ public abstract class PackageManager {
      * @see {@link android.provider.Settings.Secure#ANDROID_ID}
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @Nullable
     public abstract String getInstantAppAndroidId(@NonNull String packageName,
             @NonNull UserHandle user);
@@ -7729,6 +8008,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     public abstract void registerDexModule(@NonNull String dexModulePath,
             @Nullable DexModuleRegisterCallback callback);
@@ -7841,6 +8121,53 @@ public abstract class PackageManager {
     }
 
     /**
+     * Trust any Installer to provide checksums for the package.
+     * @see #requestChecksums
+     */
+    public static final @Nullable List<Certificate> TRUST_ALL = Collections.singletonList(null);
+
+    /**
+     * Don't trust any Installer to provide checksums for the package.
+     * This effectively disables optimized Installer-enforced checksums.
+     * @see #requestChecksums
+     */
+    public static final @NonNull List<Certificate> TRUST_NONE = Collections.singletonList(null);
+
+    /**
+     * Requesting the checksums for APKs within a package.
+     * The checksums will be returned asynchronously via statusReceiver.
+     *
+     * By default returns all readily available checksums:
+     * - enforced by platform,
+     * - enforced by installer.
+     * If caller needs a specific checksum kind, they can specify it as required.
+     *
+     * <b>Caution: Android can not verify installer-provided checksums. Make sure you specify
+     * trusted installers.</b>
+     *
+     * @param packageName whose checksums to return.
+     * @param includeSplits whether to include checksums for non-base splits.
+     * @param required explicitly request the checksum types. May incur significant
+     *                 CPU/memory/disk usage.
+     * @param trustedInstallers for checksums enforced by installer, which installers are to be
+     *                          trusted.
+     *                          {@link #TRUST_ALL} will return checksums from any installer,
+     *                          {@link #TRUST_NONE} disables optimized installer-enforced checksums,
+     *                          otherwise the list has to be non-empty list of certificates.
+     * @param statusReceiver called once when the results are available as
+     *                       {@link #EXTRA_CHECKSUMS} of type {@link ApkChecksum}[].
+     * @throws CertificateEncodingException if an encoding error occurs for trustedInstallers.
+     * @throws IllegalArgumentException if the list of trusted installer certificates is empty.
+     * @throws NameNotFoundException if a package with the given name cannot be found on the system.
+     */
+    public void requestChecksums(@NonNull String packageName, boolean includeSplits,
+            @Checksum.Type int required, @NonNull List<Certificate> trustedInstallers,
+            @NonNull IntentSender statusReceiver)
+            throws CertificateEncodingException, NameNotFoundException {
+        throw new UnsupportedOperationException("requestChecksums not implemented in subclass");
+    }
+
+    /**
      * @return the default text classifier package name, or null if there's none.
      *
      * @hide
@@ -7938,7 +8265,6 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @Nullable
     public String getIncidentReportApproverPackageName() {
         throw new UnsupportedOperationException(
@@ -7971,6 +8297,12 @@ public abstract class PackageManager {
     }
 
     /**
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
+     *
      * @return whether this package is whitelisted from having its runtime permission be
      *         auto-revoked if unused for an extended period of time.
      */
@@ -8030,6 +8362,20 @@ public abstract class PackageManager {
                 "getMimeGroup not implemented in subclass");
     }
 
+    /**
+     * Grants implicit visibility of the package that provides an authority to a querying UID.
+     *
+     * @throws SecurityException when called by a package other than the contacts provider
+     * @hide
+     */
+    public void grantImplicitAccess(int queryingUid, String visibleAuthority) {
+        try {
+            ActivityThread.getPackageManager().grantImplicitAccess(queryingUid, visibleAuthority);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     // Some of the flags don't affect the query result, but let's be conservative and cache
     // each combination of flags separately.
 
@@ -8060,7 +8406,7 @@ public abstract class PackageManager {
         }
 
         @Override
-        public boolean equals(Object rval) {
+        public boolean equals(@Nullable Object rval) {
             if (rval == null) {
                 return false;
             }
@@ -8089,7 +8435,8 @@ public abstract class PackageManager {
     private static final PropertyInvalidatedCache<ApplicationInfoQuery, ApplicationInfo>
             sApplicationInfoCache =
             new PropertyInvalidatedCache<ApplicationInfoQuery, ApplicationInfo>(
-                    16, PermissionManager.CACHE_KEY_PACKAGE_INFO) {
+                    16, PermissionManager.CACHE_KEY_PACKAGE_INFO,
+                    "getApplicationInfo") {
                 @Override
                 protected ApplicationInfo recompute(ApplicationInfoQuery query) {
                     return getApplicationInfoAsUserUncached(
@@ -8162,7 +8509,7 @@ public abstract class PackageManager {
         }
 
         @Override
-        public boolean equals(Object rval) {
+        public boolean equals(@Nullable Object rval) {
             if (rval == null) {
                 return false;
             }
@@ -8190,7 +8537,8 @@ public abstract class PackageManager {
     private static final PropertyInvalidatedCache<PackageInfoQuery, PackageInfo>
             sPackageInfoCache =
             new PropertyInvalidatedCache<PackageInfoQuery, PackageInfo>(
-                    32, PermissionManager.CACHE_KEY_PACKAGE_INFO) {
+                    32, PermissionManager.CACHE_KEY_PACKAGE_INFO,
+                    "getPackageInfo") {
                 @Override
                 protected PackageInfo recompute(PackageInfoQuery query) {
                     return getPackageInfoAsUserUncached(
@@ -8233,5 +8581,35 @@ public abstract class PackageManager {
      * @hide */
     public static void uncorkPackageInfoCache() {
         PropertyInvalidatedCache.uncorkInvalidations(PermissionManager.CACHE_KEY_PACKAGE_INFO);
+    }
+
+    /**
+     * Returns the token to be used by the subsequent calls to holdLock().
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.INJECT_EVENTS)
+    @TestApi
+    public IBinder getHoldLockToken() {
+        try {
+            return ActivityThread.getPackageManager().getHoldLockToken();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Holds the PM lock for the specified amount of milliseconds.
+     * Intended for use by the tests that need to imitate lock contention.
+     * The token should be obtained by
+     * {@link android.content.pm.PackageManager#getHoldLockToken()}.
+     * @hide
+     */
+    @TestApi
+    public void holdLock(IBinder token, int durationMs) {
+        try {
+            ActivityThread.getPackageManager().holdLock(token, durationMs);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 }

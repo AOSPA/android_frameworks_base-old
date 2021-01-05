@@ -3,7 +3,6 @@ package android.app.assist;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
-import android.annotation.TestApi;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
@@ -35,8 +34,6 @@ import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillValue;
-
-import com.android.internal.util.Preconditions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -724,7 +721,6 @@ public class AssistStructure implements Parcelable {
         // COntent Capture.
         /** @hide */
         @SystemApi
-        @TestApi
         public ViewNode() {
         }
 
@@ -1676,8 +1672,9 @@ public class AssistStructure implements Parcelable {
         }
 
         /**
-         * Returns the maximum length of the text associated with this node node, or {@code -1}
-         * if not supported by the node or not set.
+         * Returns the maximum length of the text associated with this node, or {@code -1} if not
+         * supported by the node or not set. System may set a default value if the text length is
+         * not set.
          *
          * <p>It's only relevant when the {@link AssistStructure} is used for autofill purposes,
          * not for assist purposes.

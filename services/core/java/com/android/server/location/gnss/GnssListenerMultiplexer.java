@@ -16,17 +16,23 @@
 
 package com.android.server.location.gnss;
 
+import static android.location.LocationManager.GPS_PROVIDER;
+
 import static com.android.server.location.LocationPermissions.PERMISSION_FINE;
 import static com.android.server.location.gnss.GnssManagerService.TAG;
 
 import android.annotation.Nullable;
 import android.location.LocationManagerInternal;
+import android.location.LocationManagerInternal.ProviderEnabledListener;
 import android.location.util.identity.CallerIdentity;
+import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.IInterface;
 import android.os.Process;
 import android.util.ArraySet;
 
+import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.location.listeners.BinderListenerRegistration;
 import com.android.server.location.listeners.ListenerMultiplexer;
@@ -37,7 +43,7 @@ import com.android.server.location.util.SettingsHelper;
 import com.android.server.location.util.UserInfoHelper;
 import com.android.server.location.util.UserInfoHelper.UserListener;
 
-import java.io.PrintWriter;
+import java.util.Collection;
 import java.util.Objects;
 
 /**
@@ -47,19 +53,20 @@ import java.util.Objects;
  * Listeners must be registered with the associated IBinder as the key, if the IBinder dies, the
  * registration will automatically be removed.
  *
- * @param <TRequest>       request type
- * @param <TListener>      listener type
- * @param <TMergedRequest> merged request type
+ * @param <TRequest>            request type
+ * @param <TListener>           listener type
+ * @param <TMergedRegistration> merged registration type
  */
 public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInterface,
-        TMergedRequest> extends
-        ListenerMultiplexer<IBinder, TRequest, TListener, GnssListenerMultiplexer<TRequest,
-                        TListener, TMergedRequest>.GnssListenerRegistration, TMergedRequest> {
+        TMergedRegistration> extends
+        ListenerMultiplexer<IBinder, TListener,
+                GnssListenerMultiplexer<TRequest, TListener, TMergedRegistration>
+                        .GnssListenerRegistration, TMergedRegistration> {
 
     /**
      * Registration object for GNSS listeners.
      */
-    protected final class GnssListenerRegistration extends
+    protected class GnssListenerRegistration extends
             BinderListenerRegistration<TRequest, TListener> {
 
         // we store these values because we don't trust the listeners not to give us dupes, not to
@@ -69,11 +76,11 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
 
         protected GnssListenerRegistration(@Nullable TRequest request,
                 CallerIdentity callerIdentity, TListener listener) {
-            super(TAG, request, callerIdentity, listener);
+            super(request, callerIdentity, listener);
         }
 
         @Override
-        protected GnssListenerMultiplexer<TRequest, TListener, TMergedRequest> getOwner() {
+        protected GnssListenerMultiplexer<TRequest, TListener, TMergedRegistration> getOwner() {
             return GnssListenerMultiplexer.this;
         }
 
@@ -161,8 +168,8 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
     protected final LocationManagerInternal mLocationManagerInternal;
 
     private final UserListener mUserChangedListener = this::onUserChanged;
-    private final SettingsHelper.UserSettingChangedListener mLocationEnabledChangedListener =
-            this::onLocationEnabledChanged;
+    private final ProviderEnabledListener mProviderEnabledChangedListener =
+            this::onProviderEnabledChanged;
     private final SettingsHelper.GlobalSettingChangedListener
             mBackgroundThrottlePackageWhitelistChangedListener =
             this::onBackgroundThrottlePackageWhitelistChanged;
@@ -194,6 +201,11 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
                 LocalServices.getService(LocationManagerInternal.class));
     }
 
+    @Override
+    public String getTag() {
+        return TAG;
+    }
+
     /**
      * May be overridden by subclasses to return whether the service is supported or not. This value
      * should never change for the lifetime of the multiplexer. If the service is unsupported, all
@@ -214,16 +226,35 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
     /**
      * Adds a listener with the given identity and request.
      */
-    protected void addListener(TRequest request, CallerIdentity identity, TListener listener) {
-        addRegistration(listener.asBinder(),
-                new GnssListenerRegistration(request, identity, listener));
+    protected void addListener(TRequest request, CallerIdentity callerIdentity,
+            TListener listener) {
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            putRegistration(listener.asBinder(),
+                    createRegistration(request, callerIdentity, listener));
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * May be overridden by subclasses to change the registration type.
+     */
+    protected GnssListenerRegistration createRegistration(TRequest request,
+            CallerIdentity callerIdentity, TListener listener) {
+        return new GnssListenerRegistration(request, callerIdentity, listener);
     }
 
     /**
      * Removes the given listener.
      */
     public void removeListener(TListener listener) {
-        removeRegistration(listener.asBinder());
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            removeRegistration(listener.asBinder());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     @Override
@@ -233,12 +264,11 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
         }
 
         CallerIdentity identity = registration.getIdentity();
-        // TODO: this should be checking if the gps provider is enabled, not if location is enabled,
-        //  but this is the same for now.
         return registration.isPermitted()
                 && (registration.isForeground() || isBackgroundRestrictionExempt(identity))
-                && mUserInfoHelper.isCurrentUserId(identity.getUserId())
-                && mSettingsHelper.isLocationEnabled(identity.getUserId())
+                && (identity.isSystem() || mUserInfoHelper.isCurrentUserId(identity.getUserId()))
+                && mLocationManagerInternal.isProviderEnabledForUser(GPS_PROVIDER,
+                identity.getUserId())
                 && !mSettingsHelper.isLocationPackageBlacklisted(identity.getUserId(),
                 identity.getPackageName());
     }
@@ -256,6 +286,21 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
         return mLocationManagerInternal.isProvider(null, identity);
     }
 
+    // this provides a default implementation for all further subclasses which assumes that there is
+    // never an associated request object, and thus nothing interesting to merge. the majority of
+    // gnss listener multiplexers do not current have associated requests, and the ones that do can
+    // override this implementation.
+    protected TMergedRegistration mergeRegistrations(
+            Collection<GnssListenerRegistration> gnssListenerRegistrations) {
+        if (Build.IS_DEBUGGABLE) {
+            for (GnssListenerRegistration registration : gnssListenerRegistrations) {
+                Preconditions.checkState(registration.getRequest() == null);
+            }
+        }
+
+        return null;
+    }
+
     @Override
     protected void onRegister() {
         if (!isServiceSupported()) {
@@ -263,7 +308,8 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
         }
 
         mUserInfoHelper.addListener(mUserChangedListener);
-        mSettingsHelper.addOnLocationEnabledChangedListener(mLocationEnabledChangedListener);
+        mLocationManagerInternal.addProviderEnabledListener(GPS_PROVIDER,
+                mProviderEnabledChangedListener);
         mSettingsHelper.addOnBackgroundThrottlePackageWhitelistChangedListener(
                 mBackgroundThrottlePackageWhitelistChangedListener);
         mSettingsHelper.addOnLocationPackageBlacklistChangedListener(
@@ -279,7 +325,8 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
         }
 
         mUserInfoHelper.removeListener(mUserChangedListener);
-        mSettingsHelper.removeOnLocationEnabledChangedListener(mLocationEnabledChangedListener);
+        mLocationManagerInternal.removeProviderEnabledListener(GPS_PROVIDER,
+                mProviderEnabledChangedListener);
         mSettingsHelper.removeOnBackgroundThrottlePackageWhitelistChangedListener(
                 mBackgroundThrottlePackageWhitelistChangedListener);
         mSettingsHelper.removeOnLocationPackageBlacklistChangedListener(
@@ -294,7 +341,8 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
         }
     }
 
-    private void onLocationEnabledChanged(int userId) {
+    private void onProviderEnabledChanged(String provider, int userId, boolean enabled) {
+        Preconditions.checkState(GPS_PROVIDER.equals(provider));
         updateRegistrations(registration -> registration.getIdentity().getUserId() == userId);
     }
 
@@ -319,11 +367,11 @@ public abstract class GnssListenerMultiplexer<TRequest, TListener extends IInter
     }
 
     @Override
-    protected void dumpServiceState(PrintWriter pw) {
+    protected String getServiceState() {
         if (!isServiceSupported()) {
-            pw.print("unsupported");
+            return "unsupported";
         } else {
-            super.dumpServiceState(pw);
+            return super.getServiceState();
         }
     }
 }

@@ -19,28 +19,39 @@ package com.android.server.wm.flicker.splitscreen
 import android.graphics.Region
 import android.util.Rational
 import android.view.Surface
-import androidx.test.InstrumentationRegistry
 import androidx.test.filters.FlakyTest
-import androidx.test.filters.LargeTest
-import androidx.test.runner.AndroidJUnit4
-import androidx.test.uiautomator.UiDevice
-import com.android.server.wm.flicker.CommonTransitions
-import com.android.server.wm.flicker.FlickerTestBase
-import com.android.server.wm.flicker.LayersTrace
-import com.android.server.wm.flicker.LayersTraceSubject
-import com.android.server.wm.flicker.StandardAppHelper
-import com.android.server.wm.flicker.TransitionRunner
-import com.android.server.wm.flicker.TransitionResult
-import com.android.server.wm.flicker.WindowUtils
-import com.android.server.wm.flicker.WmTraceSubject
-import com.android.server.wm.flicker.helpers.AutomationUtils
+import androidx.test.filters.RequiresDevice
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import com.android.server.wm.flicker.DOCKED_STACK_DIVIDER
+import com.android.server.wm.flicker.Flicker
+import com.android.server.wm.flicker.FlickerTestRunner
+import com.android.server.wm.flicker.FlickerTestRunnerFactory
+import com.android.server.wm.flicker.endRotation
+import com.android.server.wm.flicker.helpers.StandardAppHelper
+import com.android.server.wm.flicker.focusDoesNotChange
 import com.android.server.wm.flicker.helpers.ImeAppHelper
-import com.google.common.truth.Truth
-import org.junit.AfterClass
+import com.android.server.wm.flicker.helpers.WindowUtils
+import com.android.server.wm.flicker.helpers.buildTestTag
+import com.android.server.wm.flicker.helpers.exitSplitScreen
+import com.android.server.wm.flicker.helpers.isInSplitScreen
+import com.android.server.wm.flicker.helpers.launchSplitScreen
+import com.android.server.wm.flicker.helpers.resizeSplitScreen
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerRotatesAndScales
+import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.noUncoveredRegions
+import com.android.server.wm.flicker.repetitions
+import com.android.server.wm.flicker.startRotation
+import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
+import org.junit.runners.Parameterized
 
 /**
  * Test split screen resizing window transitions.
@@ -48,151 +59,150 @@ import org.junit.runners.MethodSorters
  *
  * Currently it runs only in 0 degrees because of b/156100803
  */
-@LargeTest
-@RunWith(AndroidJUnit4::class)
+@RequiresDevice
+@RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @FlakyTest(bugId = 159096424)
-class ResizeSplitScreenTest : FlickerTestBase() {
-    init {
-        testApp = StandardAppHelper(instrumentation,
-                "com.android.server.wm.flicker.testapp", "SimpleApp")
-    }
-
-    override val transitionToRun: TransitionRunner
-        get() {
-            val bottomApp = ImeAppHelper(instrumentation)
-            return CommonTransitions.resizeSplitScreen(testApp, bottomApp, instrumentation,
-                    uiDevice, Surface.ROTATION_0,
-                    Rational(1, 3), Rational(2, 3))
-                    .includeJankyRuns().build()
-        }
-
-    @Test
-    fun checkVisibility_topAppLayerIsAlwaysVisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .showsLayer(sSimpleActivity)
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    fun checkVisibility_bottomAppLayerIsAlwaysVisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .showsLayer(sImeActivity)
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    fun checkVisibility_dividerLayerIsAlwaysVisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .showsLayer(DOCKED_STACK_DIVIDER)
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    @FlakyTest
-    fun checkPosition_appsStartingBounds() {
-        val displayBounds = WindowUtils.getDisplayBounds()
-        checkResults { result: TransitionResult ->
-            val entries = LayersTrace.parseFrom(result.layersTrace,
-                    result.layersTracePath, result.layersTraceChecksum)
-            Truth.assertThat(entries.entries).isNotEmpty()
-            val startingDividerBounds = entries.entries[0].getVisibleBounds(
-                    DOCKED_STACK_DIVIDER).bounds
-            val startingTopAppBounds = Region(0, 0, startingDividerBounds.right,
-                    startingDividerBounds.top + WindowUtils.getDockedStackDividerInset())
-            val startingBottomAppBounds = Region(0,
-                    startingDividerBounds.bottom - WindowUtils.getDockedStackDividerInset(),
-                    displayBounds.right,
-                    displayBounds.bottom - WindowUtils.getNavigationBarHeight())
-            LayersTraceSubject.assertThat(result)
-                    .hasVisibleRegion("SimpleActivity", startingTopAppBounds)
-                    .inTheBeginning()
-            LayersTraceSubject.assertThat(result)
-                    .hasVisibleRegion("ImeActivity", startingBottomAppBounds)
-                    .inTheBeginning()
-        }
-    }
-
-    @Test
-    @FlakyTest
-    fun checkPosition_appsEndingBounds() {
-        val displayBounds = WindowUtils.getDisplayBounds()
-        checkResults { result: TransitionResult ->
-            val entries = LayersTrace.parseFrom(result.layersTrace,
-                    result.layersTracePath, result.layersTraceChecksum)
-            Truth.assertThat(entries.entries).isNotEmpty()
-            val endingDividerBounds = entries.entries[entries.entries.size - 1].getVisibleBounds(
-                    DOCKED_STACK_DIVIDER).bounds
-            val startingTopAppBounds = Region(0, 0, endingDividerBounds.right,
-                    endingDividerBounds.top + WindowUtils.getDockedStackDividerInset())
-            val startingBottomAppBounds = Region(0,
-                    endingDividerBounds.bottom - WindowUtils.getDockedStackDividerInset(),
-                    displayBounds.right,
-                    displayBounds.bottom - WindowUtils.getNavigationBarHeight())
-            LayersTraceSubject.assertThat(result)
-                    .hasVisibleRegion(sSimpleActivity, startingTopAppBounds)
-                    .atTheEnd()
-            LayersTraceSubject.assertThat(result)
-                    .hasVisibleRegion(sImeActivity, startingBottomAppBounds)
-                    .atTheEnd()
-        }
-    }
-
-    @Test
-    fun checkVisibility_navBarWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAboveAppWindow(NAVIGATION_BAR_WINDOW_TITLE)
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    fun checkVisibility_statusBarWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAboveAppWindow(STATUS_BAR_WINDOW_TITLE)
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    @FlakyTest(bugId = 156223549)
-    fun checkVisibility_topAppWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAppWindow(sSimpleActivity)
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    @FlakyTest(bugId = 156223549)
-    fun checkVisibility_bottomAppWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAppWindow(sImeActivity)
-                    .forAllEntries()
-        }
-    }
-
+class ResizeSplitScreenTest(
+    testName: String,
+    flickerSpec: Flicker
+) : FlickerTestRunner(testName, flickerSpec) {
     companion object {
         private const val sSimpleActivity = "SimpleActivity"
         private const val sImeActivity = "ImeActivity"
+        private val startRatio = Rational(1, 3)
+        private val stopRatio = Rational(2, 3)
 
-        @AfterClass
+        @Parameterized.Parameters(name = "{0}")
         @JvmStatic
-        fun teardown() {
-            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            if (AutomationUtils.isInSplitScreen(device)) {
-                AutomationUtils.exitSplitScreen(device)
-            }
+        fun getParams(): Collection<Array<Any>> {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val testAppTop = StandardAppHelper(instrumentation,
+                "com.android.server.wm.flicker.testapp", "SimpleApp")
+            val testAppBottom = ImeAppHelper(instrumentation)
+
+            return FlickerTestRunnerFactory(instrumentation, listOf(Surface.ROTATION_0))
+                .buildTest { configuration ->
+                    withTestName {
+                        val description = (startRatio.toString().replace("/", "-") + "_to_" +
+                            stopRatio.toString().replace("/", "-"))
+                        buildTestTag("resizeSplitScreen", testAppTop.launcherName,
+                            configuration.startRotation, configuration.endRotation,
+                            testAppBottom.launcherName, description)
+                    }
+                    repeat { configuration.repetitions }
+                    setup {
+                        eachRun {
+                            device.wakeUpAndGoToHomeScreen()
+                            this.setRotation(configuration.startRotation)
+                            this.launcherStrategy.clearRecentAppsFromOverview()
+                            testAppBottom.open()
+                            device.pressHome()
+                            testAppTop.open()
+                            device.waitForIdle()
+                            device.launchSplitScreen()
+                            val snapshot =
+                                device.findObject(By.res(device.launcherPackageName, "snapshot"))
+                            snapshot.click()
+                            testAppBottom.openIME(device)
+                            device.pressBack()
+                            device.resizeSplitScreen(startRatio)
+                        }
+                    }
+                    teardown {
+                        eachRun {
+                            if (device.isInSplitScreen()) {
+                                device.exitSplitScreen()
+                            }
+                            device.pressHome()
+                            testAppTop.exit()
+                            testAppBottom.exit()
+                        }
+                        test {
+                            if (device.isInSplitScreen()) {
+                                device.exitSplitScreen()
+                            }
+                        }
+                    }
+                    transitions {
+                        device.resizeSplitScreen(stopRatio)
+                    }
+                    assertions {
+                        windowManagerTrace {
+                            navBarWindowIsAlwaysVisible()
+                            statusBarWindowIsAlwaysVisible()
+
+                            all("topAppWindowIsAlwaysVisible", bugId = 156223549) {
+                                this.showsAppWindow(sSimpleActivity)
+                            }
+
+                            all("bottomAppWindowIsAlwaysVisible", bugId = 156223549) {
+                                this.showsAppWindow(sImeActivity)
+                            }
+                        }
+
+                        layersTrace {
+                            navBarLayerIsAlwaysVisible()
+                            statusBarLayerIsAlwaysVisible()
+                            noUncoveredRegions(configuration.endRotation)
+                            navBarLayerRotatesAndScales(configuration.endRotation)
+                            statusBarLayerRotatesScales(configuration.endRotation)
+
+                            all("topAppLayerIsAlwaysVisible") {
+                                this.showsLayer(sSimpleActivity)
+                            }
+
+                            all("bottomAppLayerIsAlwaysVisible") {
+                                this.showsLayer(sImeActivity)
+                            }
+
+                            all("dividerLayerIsAlwaysVisible") {
+                                this.showsLayer(DOCKED_STACK_DIVIDER)
+                            }
+
+                            start("appsStartingBounds", enabled = false) {
+                                val displayBounds = WindowUtils.displayBounds
+                                val entry = this.trace.entries.firstOrNull()
+                                    ?: throw IllegalStateException("Trace is empty")
+                                val dividerBounds =
+                                    entry.getVisibleBounds(DOCKED_STACK_DIVIDER).bounds
+
+                                val topAppBounds = Region(0, 0, dividerBounds.right,
+                                    dividerBounds.top + WindowUtils.dockedStackDividerInset)
+                                val bottomAppBounds = Region(0,
+                                    dividerBounds.bottom - WindowUtils.dockedStackDividerInset,
+                                    displayBounds.right,
+                                    displayBounds.bottom - WindowUtils.navigationBarHeight)
+                                this.hasVisibleRegion("SimpleActivity", topAppBounds)
+                                    .and()
+                                    .hasVisibleRegion("ImeActivity", bottomAppBounds)
+                            }
+
+                            end("appsEndingBounds", enabled = false) {
+                                val displayBounds = WindowUtils.displayBounds
+                                val entry = this.trace.entries.lastOrNull()
+                                    ?: throw IllegalStateException("Trace is empty")
+                                val dividerBounds =
+                                    entry.getVisibleBounds(DOCKED_STACK_DIVIDER).bounds
+
+                                val topAppBounds = Region(0, 0, dividerBounds.right,
+                                    dividerBounds.top + WindowUtils.dockedStackDividerInset)
+                                val bottomAppBounds = Region(0,
+                                    dividerBounds.bottom - WindowUtils.dockedStackDividerInset,
+                                    displayBounds.right,
+                                    displayBounds.bottom - WindowUtils.navigationBarHeight)
+
+                                this.hasVisibleRegion(sSimpleActivity, topAppBounds)
+                                    .and()
+                                    .hasVisibleRegion(sImeActivity, bottomAppBounds)
+                            }
+                        }
+
+                        eventLog {
+                            focusDoesNotChange()
+                        }
+                    }
+                }
         }
     }
 }

@@ -41,17 +41,17 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.systemui.shared.system.ActivityManagerWrapper;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.shared.system.TaskStackChangeListener;
+import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.statusbar.CommandQueue;
 
 import java.lang.ref.WeakReference;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /** Shows a restart-activity button when the foreground activity is in size compatibility mode. */
-@Singleton
+@SysUISingleton
 public class SizeCompatModeActivityController extends SystemUI implements CommandQueue.Callbacks {
     private static final String TAG = "SizeCompatMode";
 
@@ -66,11 +66,11 @@ public class SizeCompatModeActivityController extends SystemUI implements Comman
 
     @VisibleForTesting
     @Inject
-    SizeCompatModeActivityController(Context context, ActivityManagerWrapper am,
+    SizeCompatModeActivityController(Context context, TaskStackChangeListeners listeners,
             CommandQueue commandQueue) {
         super(context);
         mCommandQueue = commandQueue;
-        am.registerTaskStackListener(new TaskStackChangeListener() {
+        listeners.registerTaskStackListener(new TaskStackChangeListener() {
             @Override
             public void onSizeCompatModeActivityChanged(int displayId, IBinder activityToken) {
                 // Note the callback already runs on main thread.

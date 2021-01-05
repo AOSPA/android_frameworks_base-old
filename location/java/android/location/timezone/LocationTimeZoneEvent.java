@@ -22,6 +22,8 @@ import android.annotation.Nullable;
 import android.os.Parcel;
 import android.os.Parcelable;
 
+import com.android.internal.util.Preconditions;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -34,27 +36,29 @@ import java.util.Objects;
  */
 public final class LocationTimeZoneEvent implements Parcelable {
 
-    @IntDef({ EVENT_TYPE_UNKNOWN, EVENT_TYPE_SUCCESS, EVENT_TYPE_SUCCESS })
-    @interface EventType {}
+    @IntDef({ EVENT_TYPE_UNKNOWN, EVENT_TYPE_PERMANENT_FAILURE, EVENT_TYPE_SUCCESS,
+            EVENT_TYPE_UNCERTAIN })
+    public @interface EventType {}
 
-    /** Uninitialized value for {@link #mEventType} */
+    /** Uninitialized value for {@link #mEventType} - must not be used for real events. */
     private static final int EVENT_TYPE_UNKNOWN = 0;
 
     /**
      * Indicates there was a permanent failure. This is not generally expected, and probably means a
-     * required backend service is no longer supported / available.
+     * required backend service has been turned down, or the client is unreasonably old.
      */
     public static final int EVENT_TYPE_PERMANENT_FAILURE = 1;
 
     /**
-     * Indicates a successful geolocation time zone detection event. {@link #mTimeZoneIds} will be
-     * non-null but can legitimately be empty, e.g. for disputed areas, oceans.
+     * Indicates a successful geolocation time zone detection event. {@link #getTimeZoneIds()} will
+     * be non-null but can legitimately be empty, e.g. for disputed areas, oceans.
      */
     public static final int EVENT_TYPE_SUCCESS = 2;
 
     /**
-     * Indicates the time zone is not known because there was a (temporary) error, e.g. when
-     * detecting location, or when resolving the location to a time zone.
+     * Indicates the time zone is not known because of an expected runtime state or error, e.g. when
+     * the provider is unable to detect location, or there was a problem when resolving the location
+     * to a time zone.
      */
     public static final int EVENT_TYPE_UNCERTAIN = 3;
 
@@ -74,10 +78,7 @@ public final class LocationTimeZoneEvent implements Parcelable {
         mTimeZoneIds = immutableList(timeZoneIds);
 
         boolean emptyTimeZoneIdListExpected = eventType != EVENT_TYPE_SUCCESS;
-        if (emptyTimeZoneIdListExpected && !timeZoneIds.isEmpty()) {
-            throw new IllegalStateException(
-                    "timeZoneIds must only have values when eventType is success");
-        }
+        Preconditions.checkState(!emptyTimeZoneIdListExpected || timeZoneIds.isEmpty());
 
         mElapsedRealtimeNanos = elapsedRealtimeNanos;
     }
@@ -87,9 +88,7 @@ public final class LocationTimeZoneEvent implements Parcelable {
      *
      * <p>This value can be reliably compared to {@link
      * android.os.SystemClock#elapsedRealtimeNanos}, to calculate the age of a fix and to compare
-     * {@link LocationTimeZoneEvent} fixes. This is reliable because elapsed real-time is guaranteed
-     * monotonic for each system boot and continues to increment even when the system is in deep
-     * sleep.
+     * {@link LocationTimeZoneEvent} instances.
      *
      * @return elapsed real-time of fix, in nanoseconds since system boot.
      */
@@ -192,7 +191,7 @@ public final class LocationTimeZoneEvent implements Parcelable {
         }
 
         /**
-         * Set the time zone ID of this fix.
+         * Set the time zone ID of this event.
          */
         public Builder setEventType(@EventType int eventType) {
             checkValidEventType(eventType);
@@ -201,7 +200,7 @@ public final class LocationTimeZoneEvent implements Parcelable {
         }
 
         /**
-         * Sets the time zone IDs of this fix.
+         * Sets the time zone IDs of this event.
          */
         public Builder setTimeZoneIds(@NonNull List<String> timeZoneIds) {
             mTimeZoneIds = Objects.requireNonNull(timeZoneIds);
@@ -209,9 +208,7 @@ public final class LocationTimeZoneEvent implements Parcelable {
         }
 
         /**
-         * Sets the time of this fix, in elapsed real-time since system boot.
-         *
-         * @param time elapsed real-time of fix, in nanoseconds since system boot.
+         * Sets the time of this event, in elapsed real-time since system boot.
          */
         public Builder setElapsedRealtimeNanos(long time) {
             mElapsedRealtimeNanos = time;
@@ -222,8 +219,7 @@ public final class LocationTimeZoneEvent implements Parcelable {
          * Builds a {@link LocationTimeZoneEvent} instance.
          */
         public LocationTimeZoneEvent build() {
-            return new LocationTimeZoneEvent(this.mEventType, this.mTimeZoneIds,
-                    this.mElapsedRealtimeNanos);
+            return new LocationTimeZoneEvent(mEventType, mTimeZoneIds, mElapsedRealtimeNanos);
         }
     }
 

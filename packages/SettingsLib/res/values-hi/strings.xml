@@ -257,7 +257,6 @@
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"बिना नाम वाले ब्लूटूथ डिवाइस दिखाएं"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="1452342324349203434">"ब्लूटूथ से आवाज़ के नियंत्रण की सुविधा रोकें"</string>
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"Gabeldorsche चालू करें"</string>
-    <string name="enhanced_connectivity" msgid="7201127377781666804">"कनेक्टिविटी बेहतर बनाएं"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="1710571610177659127">"ब्लूटूथ एवीआरसीपी वर्शन"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7846922290083709633">"ब्लूटूथ AVRCP वर्शन चुनें"</string>
     <string name="bluetooth_select_map_version_string" msgid="526308145174175327">"ब्लूटूथ का MAP वर्शन"</string>
@@ -400,6 +399,9 @@
     <string name="inactive_app_inactive_summary" msgid="3161222402614236260">"बंद है. टॉगल करने के लिए टैप करें."</string>
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"सक्रिय. टॉगल करने के लिए टैप करें."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"ऐप्लिकेशन स्टैंडबाय की स्थिति:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <string name="transcode_settings_title" msgid="6700974145733932357">"मीडिया फ़ाइलों को ट्रांसकोड करने से जुड़ी सेटिंग"</string>
+    <string name="transcode_enable_all" msgid="4719796495995795404">"सभी ऐप्लिकेशन के लिए ट्रांसकोडिंग चालू करें"</string>
+    <string name="transcode_skip_apps" msgid="5680997722349545778">"ऐप्लिकेशन के लिए ट्रांसकोडिंग बंद करें"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"चल रही सेवाएं"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"इस समय चल रही सेवाओं को देखें और नियंत्रित करें"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"वेबव्यू लागू करें"</string>
@@ -488,7 +490,7 @@
     <string name="status_unavailable" msgid="5279036186589861608">"मौजूद नहीं है"</string>
     <string name="wifi_status_mac_randomized" msgid="466382542497832189">"एमएसी पता रैंडम पर सेट है"</string>
     <plurals name="wifi_tether_connected_summary" formatted="false" msgid="6317236306047306139">
-      <item quantity="one">%1$d डिवाइस जुड़े हैं</item>
+      <item quantity="one">%1$d डिवाइस जुड़ा है</item>
       <item quantity="other">%1$d डिवाइस जुड़े हैं</item>
     </plurals>
     <string name="accessibility_manual_zen_more_time" msgid="5141801092071134235">"ज़्यादा समय."</string>
@@ -546,12 +548,19 @@
     <string name="user_need_lock_message" msgid="4311424336209509301">"इससे पहले कि आप कोई प्रतिबंधित प्रोफ़ाइल बनाएं, आपको अपने ऐप्लिकेशन  और व्यक्तिगत डेटा की सुरक्षा करने के लिए एक स्क्रीन लॉक सेट करना होगा."</string>
     <string name="user_set_lock_button" msgid="1427128184982594856">"लॉक सेट करें"</string>
     <string name="user_switch_to_user" msgid="6975428297154968543">"<xliff:g id="USER_NAME">%s</xliff:g> पर जाएं"</string>
+    <string name="creating_new_user_dialog_message" msgid="7232880257538970375">"नया उपयोगकर्ता बनाया जा रहा है…"</string>
+    <string name="user_nickname" msgid="262624187455825083">"प्रचलित नाम"</string>
     <string name="guest_new_guest" msgid="3482026122932643557">"मेहमान जोड़ें"</string>
     <string name="guest_exit_guest" msgid="5908239569510734136">"मेहमान हटाएं"</string>
     <string name="guest_nickname" msgid="6332276931583337261">"मेहमान"</string>
+    <string name="user_image_take_photo" msgid="467512954561638530">"फ़ोटो खींचें"</string>
+    <string name="user_image_choose_photo" msgid="1363820919146782908">"कोई इमेज चुनें"</string>
+    <string name="user_image_photo_selector" msgid="433658323306627093">"फ़ोटो चुनें"</string>
     <string name="cached_apps_freezer_device_default" msgid="2616594131750144342">"डिवाइस की डिफ़ॉल्ट सेटिंग"</string>
     <string name="cached_apps_freezer_disabled" msgid="4816382260660472042">"बंद है"</string>
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"चालू है"</string>
     <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"बदली गई सेटिंग को लागू करने के लिए, डिवाइस को रीस्टार्ट करना होगा. अपने डिवाइस को रीस्टार्ट करें या रद्द करें."</string>
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"वायर वाला हेडफ़ोन"</string>
+    <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"चालू है"</string>
+    <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"बंद है"</string>
 </resources>

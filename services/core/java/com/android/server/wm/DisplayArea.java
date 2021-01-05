@@ -19,27 +19,29 @@ package com.android.server.wm;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManagerPolicyConstants.APPLICATION_LAYER;
 import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
 import static android.window.DisplayAreaOrganizer.FEATURE_WINDOW_TOKENS;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.internal.util.Preconditions.checkState;
+import static com.android.server.wm.DisplayAreaProto.IS_TASK_DISPLAY_AREA;
 import static com.android.server.wm.DisplayAreaProto.NAME;
 import static com.android.server.wm.DisplayAreaProto.WINDOW_CONTAINER;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.WindowContainerChildProto.DISPLAY_AREA;
 
 import android.annotation.Nullable;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.os.IBinder;
 import android.util.proto.ProtoOutputStream;
 import android.window.DisplayAreaInfo;
 import android.window.IDisplayAreaOrganizer;
 
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.server.policy.WindowManagerPolicy;
-import com.android.server.protolog.common.ProtoLog;
 
+import java.io.PrintWriter;
 import java.util.Comparator;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -69,6 +71,13 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
     private final DisplayAreaOrganizerController mOrganizerController;
     IDisplayAreaOrganizer mOrganizer;
     private final Configuration mTmpConfiguration = new Configuration();
+
+    /**
+     * Whether this {@link DisplayArea} should ignore fixed-orientation request. If {@code true}, it
+     * can never specify orientation, but shows the fixed-orientation apps below it in the
+     * letterbox; otherwise, it rotates based on the fixed-orientation request.
+     */
+    protected boolean mIgnoreOrientationRequest;
 
     DisplayArea(WindowManagerService wms, Type type, String name) {
         this(wms, type, name, FEATURE_UNDEFINED);
@@ -124,6 +133,70 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
                 && (position == POSITION_TOP || position == POSITION_BOTTOM)) {
             parent.positionChildAt(position, this /* child */, true /* includingParents */);
         }
+    }
+
+    @Override
+    int getOrientation(int candidate) {
+        mLastOrientationSource = null;
+        if (mIgnoreOrientationRequest) {
+            return SCREEN_ORIENTATION_UNSET;
+        }
+
+        return super.getOrientation(candidate);
+    }
+
+    @Override
+    boolean handlesOrientationChangeFromDescendant() {
+        return !mIgnoreOrientationRequest && super.handlesOrientationChangeFromDescendant();
+    }
+
+    @Override
+    boolean onDescendantOrientationChanged(IBinder freezeDisplayToken,
+            WindowContainer requestingContainer) {
+        // If this is set to ignore the orientation request, we don't propagate descendant
+        // orientation request.
+        return !mIgnoreOrientationRequest
+                && super.onDescendantOrientationChanged(freezeDisplayToken, requestingContainer);
+    }
+
+    /**
+     * Sets whether this {@link DisplayArea} should ignore fixed-orientation request from apps and
+     * windows below it.
+     *
+     * @return Whether the display orientation changed after calling this method.
+     */
+    boolean setIgnoreOrientationRequest(boolean ignoreOrientationRequest) {
+        if (mIgnoreOrientationRequest == ignoreOrientationRequest) {
+            return false;
+        }
+        mIgnoreOrientationRequest = ignoreOrientationRequest;
+
+        // Check whether we should notify Display to update orientation.
+        if (mDisplayContent == null) {
+            return false;
+        }
+
+        // The orientation request from this DA may now be respected.
+        if (!ignoreOrientationRequest) {
+            return mDisplayContent.updateOrientation();
+        }
+
+        final int lastOrientation = mDisplayContent.getLastOrientation();
+        final WindowContainer lastOrientationSource = mDisplayContent.getLastOrientationSource();
+        if (lastOrientation == SCREEN_ORIENTATION_UNSET
+                || lastOrientation == SCREEN_ORIENTATION_UNSPECIFIED) {
+            // Orientation won't be changed.
+            return false;
+        }
+        if (lastOrientationSource == null || lastOrientationSource.isDescendantOf(this)) {
+            // Try update if the orientation may be affected.
+            return mDisplayContent.updateOrientation();
+        }
+        return false;
+    }
+
+    boolean getIgnoreOrientationRequest() {
+        return mIgnoreOrientationRequest;
     }
 
     /**
@@ -194,7 +267,36 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         final long token = proto.start(fieldId);
         super.dumpDebug(proto, WINDOW_CONTAINER, logLevel);
         proto.write(NAME, mName);
+        proto.write(IS_TASK_DISPLAY_AREA, isTaskDisplayArea());
         proto.end(token);
+    }
+
+    @Override
+    void dump(PrintWriter pw, String prefix, boolean dumpAll) {
+        super.dump(pw, prefix, dumpAll);
+        if (mIgnoreOrientationRequest) {
+            pw.println(prefix + "mIgnoreOrientationRequest=true");
+        }
+        if (hasRequestedOverrideConfiguration()) {
+            pw.println(prefix + "overrideConfig=" + getRequestedOverrideConfiguration());
+        }
+    }
+
+    void dumpChildDisplayArea(PrintWriter pw, String prefix, boolean dumpAll) {
+        final String doublePrefix = prefix + "  ";
+        for (int i = getChildCount() - 1; i >= 0; i--) {
+            final DisplayArea<?> childArea = getChildAt(i).asDisplayArea();
+            if (childArea == null) {
+                continue;
+            }
+            pw.println(prefix + "* " + childArea.getName());
+            if (childArea.isTaskDisplayArea()) {
+                // TaskDisplayArea can only contain task. And it is already printed by display.
+                continue;
+            }
+            childArea.dump(pw, doublePrefix, dumpAll);
+            childArea.dumpChildDisplayArea(pw, doublePrefix, dumpAll);
+        }
     }
 
     @Override
@@ -305,6 +407,10 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
     }
 
     void setOrganizer(IDisplayAreaOrganizer organizer) {
+        setOrganizer(organizer, false /* skipDisplayAreaAppeared */);
+    }
+
+    void setOrganizer(IDisplayAreaOrganizer organizer, boolean skipDisplayAreaAppeared) {
         if (mOrganizer == organizer) return;
         IDisplayAreaOrganizer lastOrganizer = mOrganizer;
         // Update the new display area organizer before calling sendDisplayAreaVanished since it
@@ -312,7 +418,9 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         // about it.
         mOrganizer = organizer;
         sendDisplayAreaVanished(lastOrganizer);
-        sendDisplayAreaAppeared();
+        if (!skipDisplayAreaAppeared) {
+            sendDisplayAreaAppeared();
+        }
     }
 
     void sendDisplayAreaAppeared() {
@@ -349,6 +457,15 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         return info;
     }
 
+    @Override
+    public boolean providesMaxBounds() {
+        return true;
+    }
+
+    protected boolean isTaskDisplayArea() {
+        return false;
+    }
+
     /**
      * DisplayArea that contains WindowTokens, and orders them according to their type.
      */
@@ -359,6 +476,9 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
                 Comparator.comparingInt(WindowToken::getWindowLayerFromType);
 
         private final Predicate<WindowState> mGetOrientingWindow = w -> {
+            if (!w.isVisible() || !w.mLegacyPolicyVisibilityAfterAnim) {
+                return false;
+            }
             final WindowManagerPolicy policy = mWmService.mPolicy;
             if (policy.isKeyguardHostWindow(w.mAttrs)) {
                 if (mWmService.mKeyguardGoingAway) {
@@ -367,8 +487,7 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
                 // Consider unoccluding only when all unknown visibilities have been
                 // resolved, as otherwise we just may be starting another occluding activity.
                 final boolean isUnoccluding =
-                        mDisplayContent.mAppTransition.getAppTransition()
-                                == TRANSIT_KEYGUARD_UNOCCLUDE
+                        mDisplayContent.mAppTransition.isUnoccluding()
                                 && mDisplayContent.mUnknownAppVisibilityController.allResolved();
                 // If keyguard is showing, or we're unoccluding, force the keyguard's orientation,
                 // even if SystemUI hasn't updated the attrs yet.
@@ -394,6 +513,11 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
 
         @Override
         int getOrientation(int candidate) {
+            mLastOrientationSource = null;
+            if (mIgnoreOrientationRequest) {
+                return SCREEN_ORIENTATION_UNSET;
+            }
+
             // Find a window requesting orientation.
             final WindowState win = getWindow(mGetOrientingWindow);
 

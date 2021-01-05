@@ -83,7 +83,7 @@ public class AuthServiceTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
-        // Dummy test config
+        // Placeholder test config
         final String[] config = {
                 "0:2:15", // ID0:Fingerprint:Strong
                 "1:4:15", // ID1:Iris:Strong
@@ -123,8 +123,7 @@ public class AuthServiceTest {
 
         final String[] config = {
                 "0:2:15", // ID0:Fingerprint:Strong
-                "1:4:255", // ID1:Iris:Weak
-                "2:8:4095", // ID2:Face:Convenience
+                "1:8:4095", // ID2:Face:Convenience
         };
 
         when(mInjector.getConfiguration(any())).thenReturn(config);
@@ -133,12 +132,14 @@ public class AuthServiceTest {
         mAuthService.onStart();
 
         final int fingerprintId = 0;
-        final int irisId = 1;
-        final int faceId = 2;
+        final int faceId = 1;
 
-        verify(mFingerprintService).initializeConfiguration(eq(fingerprintId));
-        verify(mIrisService).initializeConfiguration(eq(irisId));
-        verify(mFaceService).initializeConfiguration(eq(faceId));
+        final int fingerprintStrength = 15;
+        final int faceStrength = 4095;
+
+        verify(mFingerprintService).initializeConfiguration(eq(fingerprintId),
+                eq(fingerprintStrength));
+        verify(mFaceService).initializeConfiguration(eq(faceId), eq(faceStrength));
     }
 
 
@@ -267,21 +268,6 @@ public class AuthServiceTest {
         waitForIdle();
         verify(mBiometricService).registerEnabledOnKeyguardCallback(
                 eq(callback), eq(UserHandle.getCallingUserId()));
-    }
-
-    @Test
-    public void testResetLockout_callsBiometricServiceResetLockout() throws
-            Exception {
-        mAuthService = new AuthService(mContext, mInjector);
-        mAuthService.onStart();
-
-        final int userId = 100;
-        final byte[] token = new byte[0];
-
-        mAuthService.mImpl.resetLockout(userId, token);
-
-        waitForIdle();
-        verify(mBiometricService).resetLockout(eq(userId), AdditionalMatchers.aryEq(token));
     }
 
     private static void waitForIdle() {

@@ -98,7 +98,7 @@ public class NetworkUtils {
      * this socket will go directly to the underlying network, so its traffic will not be
      * forwarded through the VPN.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static boolean protectFromVpn(FileDescriptor fd) {
         return protectFromVpn(fd.getInt$());
     }
@@ -223,7 +223,7 @@ public class NetworkUtils {
      * @hide
      * @deprecated use {@link Inet4AddressUtils#netmaskToPrefixLength(Inet4Address)}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @Deprecated
     public static int netmaskToPrefixLength(Inet4Address netmask) {
         // This is only here because some apps seem to be using it (@UnsupportedAppUsage).
@@ -290,7 +290,7 @@ public class NetworkUtils {
     /**
      * Returns the implicit netmask of an IPv4 address, as was the custom before 1993.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static int getImplicitNetmask(Inet4Address address) {
         // Only here because it seems to be used by apps
         return Inet4AddressUtils.getImplicitNetmask(address);
@@ -476,5 +476,36 @@ public class NetworkUtils {
         }
 
         return true;
+    }
+
+    /**
+     * Safely multiple a value by a rational.
+     * <p>
+     * Internally it uses integer-based math whenever possible, but switches
+     * over to double-based math if values would overflow.
+     * @hide
+     */
+    public static long multiplySafeByRational(long value, long num, long den) {
+        if (den == 0) {
+            throw new ArithmeticException("Invalid Denominator");
+        }
+        long x = value;
+        long y = num;
+
+        // Logic shamelessly borrowed from Math.multiplyExact()
+        long r = x * y;
+        long ax = Math.abs(x);
+        long ay = Math.abs(y);
+        if (((ax | ay) >>> 31 != 0)) {
+            // Some bits greater than 2^31 that might cause overflow
+            // Check the result using the divide operator
+            // and check for the special case of Long.MIN_VALUE * -1
+            if (((y != 0) && (r / y != x)) ||
+                    (x == Long.MIN_VALUE && y == -1)) {
+                // Use double math to avoid overflowing
+                return (long) (((double) num / den) * value);
+            }
+        }
+        return r / den;
     }
 }

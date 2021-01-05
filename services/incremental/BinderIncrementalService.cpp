@@ -200,16 +200,24 @@ static std::tuple<int, incfs::FileId, incfs::NewFileParams> toMakeFileParams(
     return {0, id, nfp};
 }
 
+static std::span<const uint8_t> toSpan(const ::std::optional<::std::vector<uint8_t>>& content) {
+    if (!content) {
+        return {};
+    }
+    return {content->data(), (int)content->size()};
+}
+
 binder::Status BinderIncrementalService::makeFile(
         int32_t storageId, const std::string& path,
-        const ::android::os::incremental::IncrementalNewFileParams& params, int32_t* _aidl_return) {
+        const ::android::os::incremental::IncrementalNewFileParams& params,
+        const ::std::optional<::std::vector<uint8_t>>& content, int32_t* _aidl_return) {
     auto [err, fileId, nfp] = toMakeFileParams(params);
     if (err) {
         *_aidl_return = err;
         return ok();
     }
 
-    *_aidl_return = mImpl.makeFile(storageId, path, 0777, fileId, nfp);
+    *_aidl_return = mImpl.makeFile(storageId, path, 0777, fileId, nfp, toSpan(content));
     return ok();
 }
 binder::Status BinderIncrementalService::makeFileFromRange(int32_t storageId,
@@ -237,11 +245,16 @@ binder::Status BinderIncrementalService::unlink(int32_t storageId, const std::st
     return ok();
 }
 
-binder::Status BinderIncrementalService::isFileRangeLoaded(int32_t storageId,
-                                                           const std::string& path, int64_t start,
-                                                           int64_t end, bool* _aidl_return) {
-    // TODO: implement
-    *_aidl_return = false;
+binder::Status BinderIncrementalService::isFileFullyLoaded(int32_t storageId,
+                                                           const std::string& path,
+                                                           int32_t* _aidl_return) {
+    *_aidl_return = mImpl.isFileFullyLoaded(storageId, path);
+    return ok();
+}
+
+binder::Status BinderIncrementalService::getLoadingProgress(int32_t storageId,
+                                                            float* _aidl_return) {
+    *_aidl_return = mImpl.getLoadingProgress(storageId);
     return ok();
 }
 
@@ -293,6 +306,36 @@ binder::Status BinderIncrementalService::configureNativeBinaries(
 binder::Status BinderIncrementalService::waitForNativeBinariesExtraction(int storageId,
                                                                          bool* _aidl_return) {
     *_aidl_return = mImpl.waitForNativeBinariesExtraction(storageId);
+    return ok();
+}
+
+binder::Status BinderIncrementalService::registerLoadingProgressListener(
+        int32_t storageId,
+        const ::android::sp<::android::os::incremental::IStorageLoadingProgressListener>&
+                progressListener,
+        bool* _aidl_return) {
+    *_aidl_return = mImpl.registerLoadingProgressListener(storageId, progressListener);
+    return ok();
+}
+binder::Status BinderIncrementalService::unregisterLoadingProgressListener(int32_t storageId,
+                                                                           bool* _aidl_return) {
+    *_aidl_return = mImpl.unregisterLoadingProgressListener(storageId);
+    return ok();
+}
+
+binder::Status BinderIncrementalService::registerStorageHealthListener(
+        int32_t storageId,
+        const ::android::os::incremental::StorageHealthCheckParams& healthCheckParams,
+        const ::android::sp<IStorageHealthListener>& healthListener, bool* _aidl_return) {
+    *_aidl_return = mImpl.registerStorageHealthListener(storageId,
+                                                        const_cast<StorageHealthCheckParams&&>(
+                                                                healthCheckParams),
+                                                        healthListener);
+    return ok();
+}
+
+binder::Status BinderIncrementalService::unregisterStorageHealthListener(int32_t storageId) {
+    mImpl.unregisterStorageHealthListener(storageId);
     return ok();
 }
 

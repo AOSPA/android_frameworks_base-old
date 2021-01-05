@@ -21,8 +21,11 @@ package android.hardware.fingerprint;
  */
 oneway interface IUdfpsOverlayController {
     // Shows the overlay.
-    void showUdfpsOverlay();
+    void showUdfpsOverlay(int sensorId);
 
     // Hides the overlay.
-    void hideUdfpsOverlay();
+    void hideUdfpsOverlay(int sensorId);
+
+    // Shows debug messages on the UDFPS overlay.
+    void setDebugMessage(int sensorId, String message);
 }

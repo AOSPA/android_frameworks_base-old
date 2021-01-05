@@ -20,6 +20,7 @@ import android.annotation.Nullable;
 import android.app.ITransientNotificationCallback;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.ParcelFileDescriptor;
 import android.view.InsetsState.InternalInsetsType;
 import android.view.WindowInsetsController.Appearance;
 
@@ -85,6 +86,13 @@ public interface StatusBarManagerInternal {
     void toggleSplitScreen();
     void appTransitionFinished(int displayId);
 
+    /**
+     * Notifies the status bar that a Emergency Action launch gesture has been detected.
+     *
+     * TODO (b/169175022) Update method name and docs when feature name is locked.
+     */
+    void onEmergencyActionLaunchGestureDetected();
+
     void toggleRecentApps();
 
     void setCurrentUser(int newUserId);
@@ -143,4 +151,9 @@ public interface StatusBarManagerInternal {
      * request)
      */
     void requestWindowMagnificationConnection(boolean request);
+
+    /**
+     * Handles a logging command from the WM shell command.
+     */
+    void handleWindowManagerLoggingCommand(String[] args, ParcelFileDescriptor outFd);
 }

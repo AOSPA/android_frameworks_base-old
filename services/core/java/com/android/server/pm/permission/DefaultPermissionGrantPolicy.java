@@ -60,6 +60,7 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.TypedXmlPullParser;
 import android.util.Xml;
 
 import com.android.internal.util.ArrayUtils;
@@ -414,17 +415,14 @@ public final class DefaultPermissionGrantPolicy {
             if (pkg == null
                     || !doesPackageSupportRuntimePermissions(pkg)
                     || ArrayUtils.isEmpty(pkg.requestedPermissions)
-                    || !pkg.applicationInfo.isPrivilegedApp()) {
+                    || !pm.isGranted(Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
+                            pkg, UserHandle.of(userId))) {
                 continue;
             }
-            for (String permission : pkg.requestedPermissions) {
-                if (Manifest.permission.READ_PRIVILEGED_PHONE_STATE.equals(permission)) {
-                    grantRuntimePermissions(pm, pkg,
-                            Collections.singleton(Manifest.permission.READ_PHONE_STATE),
-                            true, // systemFixed
-                            userId);
-                }
-            }
+            grantRuntimePermissions(pm, pkg,
+                    Collections.singleton(Manifest.permission.READ_PHONE_STATE),
+                    true, // systemFixed
+                    userId);
         }
 
     }
@@ -823,7 +821,7 @@ public final class DefaultPermissionGrantPolicy {
                     CONTACTS_PERMISSIONS, STORAGE_PERMISSIONS);
         }
 
-        // Atthention Service
+        // Attention Service
         String attentionServicePackageName =
                 mContext.getPackageManager().getAttentionServicePackageName();
         if (!TextUtils.isEmpty(attentionServicePackageName)) {
@@ -1271,11 +1269,16 @@ public final class DefaultPermissionGrantPolicy {
                         continue;
                     }
 
-                    // Preserve whitelisting flags.
+                    // Preserve allowlisting flags.
                     newFlags |= (flags & PackageManager.FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT);
 
-                    // If we are whitelisting the permission, update the exempt flag before grant.
-                    if (whitelistRestrictedPermissions && pm.isPermissionRestricted(permission)) {
+                    // If we are allowlisting the permission, update the exempt flag before grant.
+                    // If the permission can't be allowlisted by an installer, skip it here because
+                    // this is where the platform takes the role of the installer for exempting
+                    // preinstalled apps.
+                    if (whitelistRestrictedPermissions && pm.isPermissionRestricted(permission)
+                            && !pm.getPermissionInfo(permission).isInstallerExemptIgnored()) {
+
                         pm.updatePermissionFlags(permission, pkg,
                                 PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT,
                                 PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT, user);
@@ -1408,7 +1411,7 @@ public final class DefaultPermissionGrantPolicy {
             try (
                 InputStream str = new BufferedInputStream(new FileInputStream(file))
             ) {
-                XmlPullParser parser = Xml.newPullParser();
+                TypedXmlPullParser parser = Xml.newFastPullParser();
                 parser.setInput(str, null);
                 parse(pm, parser, grantExceptions);
             } catch (XmlPullParserException | IOException e) {
@@ -1419,7 +1422,7 @@ public final class DefaultPermissionGrantPolicy {
         return grantExceptions;
     }
 
-    private void parse(PackageManagerWrapper pm, XmlPullParser parser,
+    private void parse(PackageManagerWrapper pm, TypedXmlPullParser parser,
             Map<String, List<DefaultPermissionGrant>> outGrantExceptions)
             throws IOException, XmlPullParserException {
         final int outerDepth = parser.getDepth();
@@ -1437,7 +1440,7 @@ public final class DefaultPermissionGrantPolicy {
         }
     }
 
-    private void parseExceptions(PackageManagerWrapper pm, XmlPullParser parser,
+    private void parseExceptions(PackageManagerWrapper pm, TypedXmlPullParser parser,
             Map<String, List<DefaultPermissionGrant>> outGrantExceptions)
             throws IOException, XmlPullParserException {
         final int outerDepth = parser.getDepth();
@@ -1486,7 +1489,7 @@ public final class DefaultPermissionGrantPolicy {
         }
     }
 
-    private void parsePermission(XmlPullParser parser, List<DefaultPermissionGrant>
+    private void parsePermission(TypedXmlPullParser parser, List<DefaultPermissionGrant>
             outPackageExceptions) throws IOException, XmlPullParserException {
         final int outerDepth = parser.getDepth();
         int type;

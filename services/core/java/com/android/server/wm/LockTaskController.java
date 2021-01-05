@@ -24,20 +24,17 @@ import static android.content.Context.DEVICE_POLICY_SERVICE;
 import static android.content.Context.STATUS_BAR_SERVICE;
 import static android.content.Intent.ACTION_CALL_EMERGENCY;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_ALWAYS;
+import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_DEFAULT;
+import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_IF_ALLOWLISTED;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_NEVER;
 import static android.os.UserHandle.USER_ALL;
 import static android.os.UserHandle.USER_CURRENT;
 import static android.telecom.TelecomManager.EMERGENCY_DIALER_COMPONENT;
 
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_LOCKTASK;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_LOCKTASK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_LOCKTASK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_DONT_LOCK;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_LAUNCHABLE;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_LAUNCHABLE_PRIV;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_PINNABLE;
-import static com.android.server.wm.Task.LOCK_TASK_AUTH_WHITELISTED;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -65,6 +62,7 @@ import android.util.SparseIntArray;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.IKeyguardDismissCallback;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.server.LocalServices;
@@ -127,6 +125,18 @@ public class LockTaskController {
 
     /** Tag used for disabling of keyguard */
     private static final String LOCK_TASK_TAG = "Lock-to-App";
+
+    /** Can't be put in lockTask mode. */
+    static final int LOCK_TASK_AUTH_DONT_LOCK = 0;
+    /** Can enter app pinning with user approval. Can never start over existing lockTask task. */
+    static final int LOCK_TASK_AUTH_PINNABLE = 1;
+    /** Starts in LOCK_TASK_MODE_LOCKED automatically. Can start over existing lockTask task. */
+    static final int LOCK_TASK_AUTH_LAUNCHABLE = 2;
+    /** Can enter lockTask without user approval. Can start over existing lockTask task. */
+    static final int LOCK_TASK_AUTH_ALLOWLISTED = 3;
+    /** Priv-app that starts in LOCK_TASK_MODE_LOCKED automatically. Can start over existing
+     * lockTask task. */
+    static final int LOCK_TASK_AUTH_LAUNCHABLE_PRIV = 4;
 
     private final IBinder mToken = new LockTaskToken();
     private final ActivityStackSupervisor mSupervisor;
@@ -264,12 +274,11 @@ public class LockTaskController {
     }
 
     /**
-     * @return whether the requested task is allowed to be locked (either whitelisted, or declares
-     * lockTaskMode="always" in the manifest).
+     * @return whether the requested task auth is allowed to be locked.
      */
-    boolean isTaskWhitelisted(Task task) {
-        switch(task.mLockTaskAuth) {
-            case LOCK_TASK_AUTH_WHITELISTED:
+    static boolean isTaskAuthAllowlisted(int lockTaskAuth) {
+        switch(lockTaskAuth) {
+            case LOCK_TASK_AUTH_ALLOWLISTED:
             case LOCK_TASK_AUTH_LAUNCHABLE:
             case LOCK_TASK_AUTH_LAUNCHABLE_PRIV:
                 return true;
@@ -292,7 +301,30 @@ public class LockTaskController {
      * @return whether the requested task is disallowed to be launched.
      */
     boolean isLockTaskModeViolation(Task task, boolean isNewClearTask) {
-        if (isLockTaskModeViolationInternal(task, isNewClearTask)) {
+        // TODO: Double check what's going on here. If the task is already in lock task mode, it's
+        // likely allowlisted, so will return false below.
+        if (isTaskLocked(task) && !isNewClearTask) {
+            // If the task is already at the top and won't be cleared, then allow the operation
+        } else if (isLockTaskModeViolationInternal(task, task.mUserId, task.intent,
+                task.mLockTaskAuth)) {
+            showLockTaskToast();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * @param activity an activity that is going to be started in a new task as the root activity.
+     * @return whether the given activity is allowed to be launched.
+     */
+    boolean isNewTaskLockTaskModeViolation(ActivityRecord activity) {
+        // Use the belong task (if any) to perform the lock task checks
+        if (activity.getTask() != null) {
+            return isLockTaskModeViolation(activity.getTask());
+        }
+
+        int auth = getLockTaskAuth(activity, null /* task */);
+        if (isLockTaskModeViolationInternal(activity, activity.mUserId, activity.intent, auth)) {
             showLockTaskToast();
             return true;
         }
@@ -309,25 +341,19 @@ public class LockTaskController {
         return mLockTaskModeTasks.get(0);
     }
 
-    private boolean isLockTaskModeViolationInternal(Task task, boolean isNewClearTask) {
-        // TODO: Double check what's going on here. If the task is already in lock task mode, it's
-        // likely whitelisted, so will return false below.
-        if (isTaskLocked(task) && !isNewClearTask) {
-            // If the task is already at the top and won't be cleared, then allow the operation
-            return false;
-        }
-
+    private boolean isLockTaskModeViolationInternal(WindowContainer wc, int userId,
+            Intent intent, int taskAuth) {
         // Allow recents activity if enabled by policy
-        if (task.isActivityTypeRecents() && isRecentsAllowed(task.mUserId)) {
+        if (wc.isActivityTypeRecents() && isRecentsAllowed(userId)) {
             return false;
         }
 
         // Allow emergency calling when the device is protected by a locked keyguard
-        if (isKeyguardAllowed(task.mUserId) && isEmergencyCallTask(task)) {
+        if (isKeyguardAllowed(userId) && isEmergencyCallIntent(intent)) {
             return false;
         }
 
-        return !(isTaskWhitelisted(task) || mLockTaskModeTasks.isEmpty());
+        return !(isTaskAuthAllowlisted(taskAuth) || mLockTaskModeTasks.isEmpty());
     }
 
     private boolean isRecentsAllowed(int userId) {
@@ -356,11 +382,10 @@ public class LockTaskController {
                 return false;
             default:
         }
-        return isPackageWhitelisted(userId, packageName);
+        return isPackageAllowlisted(userId, packageName);
     }
 
-    private boolean isEmergencyCallTask(Task task) {
-        final Intent intent = task.intent;
+    private boolean isEmergencyCallIntent(Intent intent) {
         if (intent == null) {
             return false;
         }
@@ -429,7 +454,7 @@ public class LockTaskController {
             // instead of the app calling startLockTaskMode. In this case
             // {@link Task.mLockTaskUid} will be 0, so we compare the callingUid to the
             // {@link Task.effectiveUid} instead. Also caller with
-            // {@link MANAGE_ACTIVITY_STACKS} can stop any lock task.
+            // {@link MANAGE_ACTIVITY_TASKS} can stop any lock task.
             if (callingUid != task.mLockTaskUid
                     && (task.mLockTaskUid != 0 || callingUid != task.effectiveUid)) {
                 throw new SecurityException("Invalid uid, expected " + task.mLockTaskUid
@@ -448,7 +473,7 @@ public class LockTaskController {
      * unlike {@link #stopLockTaskMode(Task, boolean, int)}, it doesn't perform the checks.
      */
     void clearLockedTasks(String reason) {
-        if (DEBUG_LOCKTASK) Slog.i(TAG_LOCKTASK, "clearLockedTasks: " + reason);
+        ProtoLog.i(WM_DEBUG_LOCKTASK, "clearLockedTasks: %s", reason);
         if (!mLockTaskModeTasks.isEmpty()) {
             clearLockedTask(mLockTaskModeTasks.get(0));
         }
@@ -490,10 +515,10 @@ public class LockTaskController {
         if (!mLockTaskModeTasks.remove(task)) {
             return;
         }
-        if (DEBUG_LOCKTASK) Slog.d(TAG_LOCKTASK, "removeLockedTask: removed " + task);
+        ProtoLog.d(WM_DEBUG_LOCKTASK, "removeLockedTask: removed %s", task);
         if (mLockTaskModeTasks.isEmpty()) {
-            if (DEBUG_LOCKTASK) Slog.d(TAG_LOCKTASK, "removeLockedTask: task=" + task +
-                    " last task, reverting locktask mode. Callers=" + Debug.getCallers(3));
+            ProtoLog.d(WM_DEBUG_LOCKTASK, "removeLockedTask: task=%s last task, "
+                    + "reverting locktask mode. Callers=%s", task, Debug.getCallers(3));
             mHandler.post(() -> performStopLockTask(task.mUserId));
         }
     }
@@ -556,9 +581,9 @@ public class LockTaskController {
         if (!isSystemCaller) {
             task.mLockTaskUid = callingUid;
             if (task.mLockTaskAuth == LOCK_TASK_AUTH_PINNABLE) {
-                // startLockTask() called by app, but app is not part of lock task whitelist. Show
+                // startLockTask() called by app, but app is not part of lock task allowlist. Show
                 // app pinning request. We will come back here with isSystemCaller true.
-                if (DEBUG_LOCKTASK) Slog.w(TAG_LOCKTASK, "Mode default, asking user");
+                ProtoLog.w(WM_DEBUG_LOCKTASK, "Mode default, asking user");
                 StatusBarManagerInternal statusBarManager = LocalServices.getService(
                         StatusBarManagerInternal.class);
                 if (statusBarManager != null) {
@@ -569,8 +594,7 @@ public class LockTaskController {
         }
 
         // System can only initiate screen pinning, not full lock task mode
-        if (DEBUG_LOCKTASK) Slog.w(TAG_LOCKTASK,
-                isSystemCaller ? "Locking pinned" : "Locking fully");
+        ProtoLog.w(WM_DEBUG_LOCKTASK, "%s", isSystemCaller ? "Locking pinned" : "Locking fully");
         setLockTaskMode(task, isSystemCaller ? LOCK_TASK_MODE_PINNED : LOCK_TASK_MODE_LOCKED,
                 "startLockTask", true);
     }
@@ -584,7 +608,7 @@ public class LockTaskController {
                                  String reason, boolean andResume) {
         // Should have already been checked, but do it again.
         if (task.mLockTaskAuth == LOCK_TASK_AUTH_DONT_LOCK) {
-            if (DEBUG_LOCKTASK) Slog.w(TAG_LOCKTASK,
+            ProtoLog.w(WM_DEBUG_LOCKTASK,
                     "setLockTaskMode: Can't lock due to auth");
             return;
         }
@@ -602,8 +626,8 @@ public class LockTaskController {
                     task.mUserId,
                     lockTaskModeState));
         }
-        if (DEBUG_LOCKTASK) Slog.w(TAG_LOCKTASK, "setLockTaskMode: Locking to " + task +
-                " Callers=" + Debug.getCallers(4));
+        ProtoLog.w(WM_DEBUG_LOCKTASK, "setLockTaskMode: Locking to %s Callers=%s",
+                task, Debug.getCallers(4));
 
         if (!mLockTaskModeTasks.contains(task)) {
             mLockTaskModeTasks.add(task);
@@ -619,7 +643,7 @@ public class LockTaskController {
             mSupervisor.mRootWindowContainer.resumeFocusedStacksTopActivities();
             final Task rootTask = task.getRootTask();
             if (rootTask != null) {
-                rootTask.getDisplay().mDisplayContent.executeAppTransition();
+                rootTask.mDisplayContent.executeAppTransition();
             }
         } else if (lockTaskModeState != LOCK_TASK_MODE_NONE) {
             mSupervisor.handleNonResizableTaskIfNeeded(task, WINDOWING_MODE_UNDEFINED,
@@ -649,8 +673,8 @@ public class LockTaskController {
 
     /**
      * Update packages that are allowed to be launched in lock task mode.
-     * @param userId Which user this whitelist is associated with
-     * @param packages The whitelist of packages allowed in lock task mode
+     * @param userId Which user this allowlist is associated with
+     * @param packages The allowlist of packages allowed in lock task mode
      * @see #mLockTaskPackages
      */
     void updateLockTaskPackages(int userId, String[] packages) {
@@ -659,21 +683,21 @@ public class LockTaskController {
         boolean taskChanged = false;
         for (int taskNdx = mLockTaskModeTasks.size() - 1; taskNdx >= 0; --taskNdx) {
             final Task lockedTask = mLockTaskModeTasks.get(taskNdx);
-            final boolean wasWhitelisted = lockedTask.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE
-                    || lockedTask.mLockTaskAuth == LOCK_TASK_AUTH_WHITELISTED;
+            final boolean wasAllowlisted = lockedTask.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE
+                    || lockedTask.mLockTaskAuth == LOCK_TASK_AUTH_ALLOWLISTED;
             lockedTask.setLockTaskAuth();
-            final boolean isWhitelisted = lockedTask.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE
-                    || lockedTask.mLockTaskAuth == LOCK_TASK_AUTH_WHITELISTED;
+            final boolean isAllowlisted = lockedTask.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE
+                    || lockedTask.mLockTaskAuth == LOCK_TASK_AUTH_ALLOWLISTED;
 
             if (mLockTaskModeState != LOCK_TASK_MODE_LOCKED
                     || lockedTask.mUserId != userId
-                    || !wasWhitelisted || isWhitelisted) {
+                    || !wasAllowlisted || isAllowlisted) {
                 continue;
             }
 
-            // Terminate locked tasks that have recently lost whitelist authorization.
-            if (DEBUG_LOCKTASK) Slog.d(TAG_LOCKTASK, "onLockTaskPackagesUpdated: removing " +
-                    lockedTask + " mLockTaskAuth()=" + lockedTask.lockTaskAuthToString());
+            // Terminate locked tasks that have recently lost allowlist authorization.
+            ProtoLog.d(WM_DEBUG_LOCKTASK, "onLockTaskPackagesUpdated: removing %s"
+                    + " mLockTaskAuth()=%s", lockedTask, lockedTask.lockTaskAuthToString());
             removeLockedTask(lockedTask);
             lockedTask.performClearTaskLocked();
             taskChanged = true;
@@ -686,8 +710,8 @@ public class LockTaskController {
         if (mLockTaskModeTasks.isEmpty() && task!= null
                 && task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE) {
             // This task must have just been authorized.
-            if (DEBUG_LOCKTASK) Slog.d(TAG_LOCKTASK,
-                    "onLockTaskPackagesUpdated: starting new locktask task=" + task);
+            ProtoLog.d(WM_DEBUG_LOCKTASK, "onLockTaskPackagesUpdated: starting new "
+                    + "locktask task=%s", task);
             setLockTaskMode(task, LOCK_TASK_MODE_LOCKED, "package updated", false);
             taskChanged = true;
         }
@@ -697,17 +721,51 @@ public class LockTaskController {
         }
     }
 
-    boolean isPackageWhitelisted(int userId, String pkg) {
+    int getLockTaskAuth(@Nullable ActivityRecord rootActivity, @Nullable Task task) {
+        if (rootActivity == null && task == null) {
+            return LOCK_TASK_AUTH_DONT_LOCK;
+        }
+        if (rootActivity == null) {
+            return LOCK_TASK_AUTH_PINNABLE;
+        }
+
+        final String pkg = (task == null || task.realActivity == null) ? null
+                : task.realActivity.getPackageName();
+        final int userId = task != null ? task.mUserId : rootActivity.mUserId;
+        int lockTaskAuth = LOCK_TASK_AUTH_DONT_LOCK;
+        switch (rootActivity.lockTaskLaunchMode) {
+            case LOCK_TASK_LAUNCH_MODE_DEFAULT:
+                lockTaskAuth = isPackageAllowlisted(userId, pkg)
+                        ? LOCK_TASK_AUTH_ALLOWLISTED : LOCK_TASK_AUTH_PINNABLE;
+                break;
+
+            case LOCK_TASK_LAUNCH_MODE_NEVER:
+                lockTaskAuth = LOCK_TASK_AUTH_DONT_LOCK;
+                break;
+
+            case LOCK_TASK_LAUNCH_MODE_ALWAYS:
+                lockTaskAuth = LOCK_TASK_AUTH_LAUNCHABLE_PRIV;
+                break;
+
+            case LOCK_TASK_LAUNCH_MODE_IF_ALLOWLISTED:
+                lockTaskAuth = isPackageAllowlisted(userId, pkg)
+                        ? LOCK_TASK_AUTH_LAUNCHABLE : LOCK_TASK_AUTH_PINNABLE;
+                break;
+        }
+        return lockTaskAuth;
+    }
+
+    boolean isPackageAllowlisted(int userId, String pkg) {
         if (pkg == null) {
             return false;
         }
-        String[] whitelist;
-        whitelist = mLockTaskPackages.get(userId);
-        if (whitelist == null) {
+        String[] allowlist;
+        allowlist = mLockTaskPackages.get(userId);
+        if (allowlist == null) {
             return false;
         }
-        for (String whitelistedPkg : whitelist) {
-            if (pkg.equals(whitelistedPkg)) {
+        for (String allowlistedPkg : allowlist) {
+            if (pkg.equals(allowlistedPkg)) {
                 return true;
             }
         }
@@ -868,6 +926,21 @@ public class LockTaskController {
         // Some flags are not used for LockTask purposes, so we mask them
         flags1 &= STATUS_BAR_MASK_LOCKED;
         return new Pair<>(flags1, flags2);
+    }
+
+    /**
+     * @param packageName The package to check
+     * @return Whether the package is the base of any locked task
+     */
+    boolean isBaseOfLockedTask(String packageName) {
+        for (int i = 0; i < mLockTaskModeTasks.size(); i++) {
+            final Intent bi = mLockTaskModeTasks.get(i).getBaseIntent();
+            if (bi != null && packageName.equals(bi.getComponent()
+                    .getPackageName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

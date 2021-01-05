@@ -31,6 +31,7 @@ import android.compat.Compatibility;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -52,6 +53,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.LongSparseArray;
@@ -81,8 +83,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -115,8 +115,8 @@ import java.util.function.Supplier;
  *     <dt>{@link #MODE_ALLOWED}
  *     <dd>Allow the access
  *     <dt>{@link #MODE_IGNORED}
- *     <dd>Don't allow the access, i.e. don't perform the requested action or return no or dummy
- *     data
+ *     <dd>Don't allow the access, i.e. don't perform the requested action or return no or
+ *     placeholder data
  *     <dt>{@link #MODE_ERRORED}
  *     <dd>Throw a {@link SecurityException} on access. This can be suppressed by using a
  *     {@code ...noThrow} method to check the mode
@@ -135,7 +135,7 @@ import java.util.function.Supplier;
  * <p>Each platform defined runtime permission (beside background modifiers) has an associated app
  * op which is used for tracking but also to allow for silent failures. I.e. if the runtime
  * permission is denied the caller gets a {@link SecurityException}, but if the permission is
- * granted and the app-op is {@link #MODE_IGNORED} then the callers gets dummy behavior, e.g.
+ * granted and the app-op is {@link #MODE_IGNORED} then the callers gets placeholder behavior, e.g.
  * location callbacks would not happen.
  *
  * <h3>App-op permissions</h3>
@@ -463,7 +463,6 @@ public class AppOpsManager {
      * state the more important the UID is for the user.
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int UID_STATE_PERSISTENT = 100;
 
@@ -472,7 +471,6 @@ public class AppOpsManager {
      * state the more important the UID is for the user.
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int UID_STATE_TOP = 200;
 
@@ -484,7 +482,6 @@ public class AppOpsManager {
      * @hide
      * @deprecated
      */
-    @TestApi
     @SystemApi
     @Deprecated
     public static final int UID_STATE_FOREGROUND_SERVICE_LOCATION = 300;
@@ -494,7 +491,6 @@ public class AppOpsManager {
      * state the more important the UID is for the user.
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int UID_STATE_FOREGROUND_SERVICE = 400;
 
@@ -503,7 +499,6 @@ public class AppOpsManager {
      * state the more important the UID is for the user.
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int UID_STATE_FOREGROUND = 500;
 
@@ -519,7 +514,6 @@ public class AppOpsManager {
      * state the more important the UID is for the user.
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int UID_STATE_BACKGROUND = 600;
 
@@ -528,7 +522,6 @@ public class AppOpsManager {
      * state the more important the UID is for the user.
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int UID_STATE_CACHED = 700;
 
@@ -606,7 +599,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int OP_FLAG_SELF = 0x1;
 
@@ -617,7 +609,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int OP_FLAG_TRUSTED_PROXY = 0x2;
 
@@ -628,7 +619,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int OP_FLAG_UNTRUSTED_PROXY = 0x4;
 
@@ -639,7 +629,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int OP_FLAG_TRUSTED_PROXIED = 0x8;
 
@@ -650,7 +639,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int OP_FLAG_UNTRUSTED_PROXIED = 0x10;
 
@@ -662,7 +650,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final int OP_FLAGS_ALL =
             OP_FLAG_SELF
@@ -812,7 +799,7 @@ public class AppOpsManager {
     //  - add the op to the appropriate template in AppOpsState.OpsTemplate (settings app)
 
     /** @hide No operation specified. */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final int OP_NONE = AppProtoEnums.APP_OP_NONE;
     /** @hide Access to coarse location information. */
     @UnsupportedAppUsage
@@ -879,6 +866,8 @@ public class AppOpsManager {
     /** @hide */
     @UnsupportedAppUsage
     public static final int OP_SEND_SMS = AppProtoEnums.APP_OP_SEND_SMS;
+    /** @hide */
+    public static final int OP_MANAGE_ONGOING_CALLS = AppProtoEnums.APP_OP_MANAGE_ONGOING_CALLS;
     /** @hide */
     @UnsupportedAppUsage
     public static final int OP_READ_ICC_SMS = AppProtoEnums.APP_OP_READ_ICC_SMS;
@@ -1145,9 +1134,32 @@ public class AppOpsManager {
     /** @hide */
     public static final int OP_NO_ISOLATED_STORAGE = AppProtoEnums.APP_OP_NO_ISOLATED_STORAGE;
 
+    /**
+     * Phone call is using microphone
+     *
+     * @hide
+     */
+    // TODO: Add as AppProtoEnums
+    public static final int OP_PHONE_CALL_MICROPHONE = 100;
+    /**
+     * Phone call is using camera
+     *
+     * @hide
+     */
+    // TODO: Add as AppProtoEnums
+    public static final int OP_PHONE_CALL_CAMERA = 101;
+
+    /**
+     * Audio is being recorded for hotword detection.
+     *
+     * @hide
+     */
+    // TODO: Add as AppProtoEnums
+    public static final int OP_RECORD_AUDIO_HOTWORD = 102;
+
     /** @hide */
-    @UnsupportedAppUsage
-    public static final int _NUM_OP = 100;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int _NUM_OP = 104;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1164,7 +1176,7 @@ public class AppOpsManager {
     public static final String OPSTR_GET_USAGE_STATS
             = "android:get_usage_stats";
     /** Activate a VPN connection without user intervention. @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_ACTIVATE_VPN
             = "android:activate_vpn";
     /** Allows an application to read the user's contacts data. */
@@ -1246,7 +1258,7 @@ public class AppOpsManager {
     public static final String OPSTR_WRITE_SETTINGS
             = "android:write_settings";
     /** @hide Get device accounts. */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_GET_ACCOUNTS
             = "android:get_accounts";
     public static final String OPSTR_READ_PHONE_NUMBERS
@@ -1255,7 +1267,7 @@ public class AppOpsManager {
     public static final String OPSTR_PICTURE_IN_PICTURE
             = "android:picture_in_picture";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_INSTANT_APP_START_FOREGROUND
             = "android:instant_app_start_foreground";
     /** Answer incoming phone calls */
@@ -1265,129 +1277,129 @@ public class AppOpsManager {
      * Accept call handover
      * @hide
      */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_ACCEPT_HANDOVER
             = "android:accept_handover";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_GPS = "android:gps";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_VIBRATE = "android:vibrate";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WIFI_SCAN = "android:wifi_scan";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_POST_NOTIFICATION = "android:post_notification";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_NEIGHBORING_CELLS = "android:neighboring_cells";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WRITE_SMS = "android:write_sms";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_RECEIVE_EMERGENCY_BROADCAST =
             "android:receive_emergency_broadcast";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_READ_ICC_SMS = "android:read_icc_sms";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WRITE_ICC_SMS = "android:write_icc_sms";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_ACCESS_NOTIFICATIONS = "android:access_notifications";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_PLAY_AUDIO = "android:play_audio";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_READ_CLIPBOARD = "android:read_clipboard";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WRITE_CLIPBOARD = "android:write_clipboard";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_TAKE_MEDIA_BUTTONS = "android:take_media_buttons";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_TAKE_AUDIO_FOCUS = "android:take_audio_focus";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_AUDIO_MASTER_VOLUME = "android:audio_master_volume";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_AUDIO_VOICE_VOLUME = "android:audio_voice_volume";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_AUDIO_RING_VOLUME = "android:audio_ring_volume";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_AUDIO_MEDIA_VOLUME = "android:audio_media_volume";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_AUDIO_ALARM_VOLUME = "android:audio_alarm_volume";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_AUDIO_NOTIFICATION_VOLUME =
             "android:audio_notification_volume";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_AUDIO_BLUETOOTH_VOLUME = "android:audio_bluetooth_volume";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WAKE_LOCK = "android:wake_lock";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_MUTE_MICROPHONE = "android:mute_microphone";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_TOAST_WINDOW = "android:toast_window";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_PROJECT_MEDIA = "android:project_media";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WRITE_WALLPAPER = "android:write_wallpaper";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_ASSIST_STRUCTURE = "android:assist_structure";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_ASSIST_SCREENSHOT = "android:assist_screenshot";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_TURN_SCREEN_ON = "android:turn_screen_on";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_RUN_IN_BACKGROUND = "android:run_in_background";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_AUDIO_ACCESSIBILITY_VOLUME =
             "android:audio_accessibility_volume";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_REQUEST_INSTALL_PACKAGES = "android:request_install_packages";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_RUN_ANY_IN_BACKGROUND = "android:run_any_in_background";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_CHANGE_WIFI_STATE = "android:change_wifi_state";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_REQUEST_DELETE_PACKAGES = "android:request_delete_packages";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_BIND_ACCESSIBILITY_SERVICE =
             "android:bind_accessibility_service";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_MANAGE_IPSEC_TUNNELS = "android:manage_ipsec_tunnels";
     /** @hide */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_START_FOREGROUND = "android:start_foreground";
     /** @hide */
     public static final String OPSTR_BLUETOOTH_SCAN = "android:bluetooth_scan";
@@ -1403,25 +1415,25 @@ public class AppOpsManager {
             "android:sms_financial_transactions";
 
     /** @hide Read media of audio type. */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_READ_MEDIA_AUDIO = "android:read_media_audio";
     /** @hide Write media of audio type. */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WRITE_MEDIA_AUDIO = "android:write_media_audio";
     /** @hide Read media of video type. */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_READ_MEDIA_VIDEO = "android:read_media_video";
     /** @hide Write media of video type. */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WRITE_MEDIA_VIDEO = "android:write_media_video";
     /** @hide Read media of image type. */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_READ_MEDIA_IMAGES = "android:read_media_images";
     /** @hide Write media of image type. */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_WRITE_MEDIA_IMAGES = "android:write_media_images";
     /** @hide Has a legacy (non-isolated) view of storage. */
-    @SystemApi @TestApi
+    @SystemApi
     public static final String OPSTR_LEGACY_STORAGE = "android:legacy_storage";
     /** @hide Read location metadata from media */
     public static final String OPSTR_ACCESS_MEDIA_LOCATION = "android:access_media_location";
@@ -1435,7 +1447,6 @@ public class AppOpsManager {
     public static final String OPSTR_QUERY_ALL_PACKAGES = "android:query_all_packages";
     /** @hide Access all external storage */
     @SystemApi
-    @TestApi
     public static final String OPSTR_MANAGE_EXTERNAL_STORAGE =
             "android:manage_external_storage";
 
@@ -1453,10 +1464,20 @@ public class AppOpsManager {
     @SystemApi
     public static final String OPSTR_INTERACT_ACROSS_PROFILES = "android:interact_across_profiles";
     /** @hide Start Platform VPN without user intervention */
+    @SystemApi
     public static final String OPSTR_ACTIVATE_PLATFORM_VPN = "android:activate_platform_vpn";
     /** @hide */
     @SystemApi
     public static final String OPSTR_LOADER_USAGE_STATS = "android:loader_usage_stats";
+
+    /**
+     * Grants an app access to the {@link android.telecom.InCallService} API to see
+     * information about ongoing calls and to enable control of calls.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final String OPSTR_MANAGE_ONGOING_CALLS = "android:manage_ongoing_calls";
 
     /**
      * AppOp granted to apps that we are started via {@code am instrument -e --no-isolated-storage}
@@ -1468,6 +1489,26 @@ public class AppOpsManager {
      */
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final String OPSTR_NO_ISOLATED_STORAGE = "android:no_isolated_storage";
+
+    /**
+     * Phone call is using microphone
+     *
+     * @hide
+     */
+    public static final String OPSTR_PHONE_CALL_MICROPHONE = "android:phone_call_microphone";
+    /**
+     * Phone call is using camera
+     *
+     * @hide
+     */
+    public static final String OPSTR_PHONE_CALL_CAMERA = "android:phone_call_camera";
+
+    /**
+     * Audio is being recorded for hotword detection.
+     *
+     * @hide
+     */
+    public static final String OPSTR_RECORD_AUDIO_HOTWORD = "android:record_audio_hotword";
 
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
@@ -1547,6 +1588,7 @@ public class AppOpsManager {
             OP_MANAGE_EXTERNAL_STORAGE,
             OP_INTERACT_ACROSS_PROFILES,
             OP_LOADER_USAGE_STATS,
+            OP_MANAGE_ONGOING_CALLS,
     };
 
     /**
@@ -1658,6 +1700,10 @@ public class AppOpsManager {
             OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED, //AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             OP_AUTO_REVOKE_MANAGED_BY_INSTALLER, //OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
             OP_NO_ISOLATED_STORAGE,             // NO_ISOLATED_STORAGE
+            OP_PHONE_CALL_MICROPHONE,           // OP_PHONE_CALL_MICROPHONE
+            OP_PHONE_CALL_CAMERA,               // OP_PHONE_CALL_CAMERA
+            OP_RECORD_AUDIO_HOTWORD,            // RECORD_AUDIO_HOTWORD
+            OP_MANAGE_ONGOING_CALLS,            // MANAGE_ONGOING_CALLS
     };
 
     /**
@@ -1764,6 +1810,10 @@ public class AppOpsManager {
             OPSTR_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
             OPSTR_AUTO_REVOKE_MANAGED_BY_INSTALLER,
             OPSTR_NO_ISOLATED_STORAGE,
+            OPSTR_PHONE_CALL_MICROPHONE,
+            OPSTR_PHONE_CALL_CAMERA,
+            OPSTR_RECORD_AUDIO_HOTWORD,
+            OPSTR_MANAGE_ONGOING_CALLS,
     };
 
     /**
@@ -1871,6 +1921,10 @@ public class AppOpsManager {
             "AUTO_REVOKE_PERMISSIONS_IF_UNUSED",
             "AUTO_REVOKE_MANAGED_BY_INSTALLER",
             "NO_ISOLATED_STORAGE",
+            "PHONE_CALL_MICROPHONE",
+            "PHONE_CALL_CAMERA",
+            "RECORD_AUDIO_HOTWORD",
+            "MANAGE_ONGOING_CALLS",
     };
 
     /**
@@ -1912,7 +1966,7 @@ public class AppOpsManager {
             null, // no permission for writing clipboard
             null, // no permission for taking media buttons
             null, // no permission for taking audio focus
-            null, // no permission for changing master volume
+            null, // no permission for changing global volume
             null, // no permission for changing voice volume
             null, // no permission for changing ring volume
             null, // no permission for changing media volume
@@ -1979,6 +2033,10 @@ public class AppOpsManager {
             null, // no permission for OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // no permission for OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
             null, // no permission for OP_NO_ISOLATED_STORAGE
+            null, // no permission for OP_PHONE_CALL_MICROPHONE
+            null, // no permission for OP_PHONE_CALL_CAMERA
+            null, // no permission for OP_RECORD_AUDIO_HOTWORD
+            Manifest.permission.MANAGE_ONGOING_CALLS,
     };
 
     /**
@@ -2087,6 +2145,10 @@ public class AppOpsManager {
             null, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // AUTO_REVOKE_MANAGED_BY_INSTALLER
             null, // NO_ISOLATED_STORAGE
+            null, // PHONE_CALL_MICROPHONE
+            null, // PHONE_CALL_MICROPHONE
+            null, // RECORD_AUDIO_HOTWORD
+            null, // MANAGE_ONGOING_CALLS
     };
 
     /**
@@ -2194,6 +2256,10 @@ public class AppOpsManager {
             null, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // AUTO_REVOKE_MANAGED_BY_INSTALLER
             null, // NO_ISOLATED_STORAGE
+            null, // PHONE_CALL_MICROPHONE
+            null, // PHONE_CALL_CAMERA
+            null, // RECORD_AUDIO_HOTWORD
+            null, // MANAGE_ONGOING_CALLS
     };
 
     /**
@@ -2300,6 +2366,10 @@ public class AppOpsManager {
             AppOpsManager.MODE_DEFAULT, // OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             AppOpsManager.MODE_ALLOWED, // OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
             AppOpsManager.MODE_ERRORED, // OP_NO_ISOLATED_STORAGE
+            AppOpsManager.MODE_ALLOWED, // PHONE_CALL_MICROPHONE
+            AppOpsManager.MODE_ALLOWED, // PHONE_CALL_CAMERA
+            AppOpsManager.MODE_ALLOWED, // OP_RECORD_AUDIO_HOTWORD
+            AppOpsManager.MODE_DEFAULT, // MANAGE_ONGOING_CALLS
     };
 
     /**
@@ -2410,6 +2480,10 @@ public class AppOpsManager {
             false, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             false, // AUTO_REVOKE_MANAGED_BY_INSTALLER
             true, // NO_ISOLATED_STORAGE
+            false, // PHONE_CALL_MICROPHONE
+            false, // PHONE_CALL_CAMERA
+            false, // RECORD_AUDIO_HOTWORD
+            true, // MANAGE_ONGOING_CALLS
     };
 
     /**
@@ -2521,7 +2595,7 @@ public class AppOpsManager {
      * Retrieve a non-localized name for the operation, for debugging output.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static String opToName(int op) {
         if (op == OP_NONE) return "NONE";
         return op < sOpNames.length ? sOpNames[op] : ("Unknown(" + op + ")");
@@ -2552,7 +2626,7 @@ public class AppOpsManager {
      * Retrieve the permission associated with an operation, or null if there is not one.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @TestApi
     public static String opToPermission(int op) {
         return sOpPerms[op];
@@ -2618,7 +2692,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static int opToDefaultMode(@NonNull String appOp) {
         return opToDefaultMode(strOpToOp(appOp));
@@ -2657,8 +2730,10 @@ public class AppOpsManager {
      * @hide
      */
     // TODO: this should probably be @SystemApi as well
-    public static @NonNull String toReceiverId(@NonNull Object obj) {
-        if (obj instanceof PendingIntent) {
+    public static @NonNull String toReceiverId(@Nullable Object obj) {
+        if (obj == null) {
+            return "null";
+        } else if (obj instanceof PendingIntent) {
             return toReceiverId((PendingIntent) obj);
         } else {
             return obj.getClass().getName() + "@" + System.identityHashCode(obj);
@@ -2708,7 +2783,6 @@ public class AppOpsManager {
      * Class holding all of the operation information associated with an app.
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final class PackageOps implements Parcelable {
         private final String mPackageName;
@@ -2787,7 +2861,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     // @DataClass(genHiddenConstructor = true, genHiddenCopyConstructor = true)
     // genHiddenCopyConstructor does not work for @hide @SystemApi classes
@@ -3155,7 +3228,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @Immutable
     // @DataClass(genHiddenConstructor = true) codegen verifier is broken
@@ -3729,7 +3801,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @Immutable
     @SystemApi
     // @DataClass(genHiddenConstructor = true) codegen verifier is broken
@@ -4407,7 +4478,6 @@ public class AppOpsManager {
      * @hide
      */
     @Immutable
-    @TestApi
     @SystemApi
     public static final class HistoricalOpsRequest {
         private final int mUid;
@@ -4438,7 +4508,6 @@ public class AppOpsManager {
          *
          * @hide
          */
-        @TestApi
         @SystemApi
         public static final class Builder {
             private int mUid = Process.INVALID_UID;
@@ -4576,7 +4645,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final class HistoricalOps implements Parcelable {
         private long mBeginTimeMillis;
@@ -4952,8 +5020,7 @@ public class AppOpsManager {
          * @hide
          */
         public static double round(double value) {
-            final BigDecimal decimalScale = new BigDecimal(value);
-            return decimalScale.setScale(0, RoundingMode.HALF_UP).doubleValue();
+            return Math.floor(value + 0.5);
         }
 
         @Override
@@ -5013,7 +5080,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final class HistoricalUidOps implements Parcelable {
         private final int mUid;
@@ -5267,7 +5333,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final class HistoricalPackageOps implements Parcelable {
         private final @NonNull String mPackageName;
@@ -5598,7 +5663,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     /* codegen verifier cannot deal with nested class parameters
     @DataClass(genHiddenConstructor = true,
@@ -5909,7 +5973,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     public static final class HistoricalOp implements Parcelable {
         private final int mOp;
@@ -6456,7 +6519,7 @@ public class AppOpsManager {
      * Retrieve current operation state for all applications.
      *
      * The mode of the ops returned are set for the package but may not reflect their effective
-     * state due to UID policy or because it's controlled by a different master op.
+     * state due to UID policy or because it's controlled by a different global op.
      *
      * Use {@link #unsafeCheckOp(String, int, String)}} or
      * {@link #noteOp(String, int, String, String, String)} if the effective mode is needed.
@@ -6480,7 +6543,7 @@ public class AppOpsManager {
      * Retrieve current operation state for all applications.
      *
      * The mode of the ops returned are set for the package but may not reflect their effective
-     * state due to UID policy or because it's controlled by a different master op.
+     * state due to UID policy or because it's controlled by a different global op.
      *
      * Use {@link #unsafeCheckOp(String, int, String)}} or
      * {@link #noteOp(String, int, String, String, String)} if the effective mode is needed.
@@ -6502,7 +6565,7 @@ public class AppOpsManager {
      * Retrieve current operation state for one application.
      *
      * The mode of the ops returned are set for the package but may not reflect their effective
-     * state due to UID policy or because it's controlled by a different master op.
+     * state due to UID policy or because it's controlled by a different global op.
      *
      * Use {@link #unsafeCheckOp(String, int, String)}} or
      * {@link #noteOp(String, int, String, String, String)} if the effective mode is needed.
@@ -6535,7 +6598,7 @@ public class AppOpsManager {
      * package must match.
      *
      * The mode of the ops returned are set for the package but may not reflect their effective
-     * state due to UID policy or because it's controlled by a different master op.
+     * state due to UID policy or because it's controlled by a different global op.
      *
      * Use {@link #unsafeCheckOp(String, int, String)}} or
      * {@link #noteOp(String, int, String, String, String)} if the effective mode is needed.
@@ -6546,7 +6609,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
     public @NonNull List<AppOpsManager.PackageOps> getOpsForPackage(int uid,
@@ -6581,7 +6643,6 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
     public void getHistoricalOps(@NonNull HistoricalOpsRequest request,
@@ -6690,7 +6751,6 @@ public class AppOpsManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setUidMode(@NonNull String appOp, int uid, @Mode int mode) {
         try {
@@ -6744,7 +6804,6 @@ public class AppOpsManager {
      * be changed.
      * @hide
      */
-    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setMode(@NonNull String op, int uid, @Nullable String packageName,
@@ -6781,7 +6840,7 @@ public class AppOpsManager {
 
     /** @hide */
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void resetAllModes() {
         try {
             mService.resetAllModes(mContext.getUserId(), null);
@@ -7271,21 +7330,48 @@ public class AppOpsManager {
     }
 
     /**
-     * Make note of an application performing an operation.  Note that you must pass
-     * in both the uid and name of the application to be checked; this function will verify
-     * that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
-     * succeeds, the last execution time of the operation for this app will be updated to
-     * the current time.
+     * Make note of an application performing an operation and check if the application is allowed
+     * to perform it.
      *
      * <p>If this is a check that is not preceding the protected operation, use
      * {@link #unsafeCheckOp} instead.
      *
+     * <p>The identity of the package the app-op is noted for is specified by the
+     * {@code uid} and {@code packageName} parameters. If this is noted for a regular app both
+     * should be set and the package needs to be part of the uid. In the very rare case that an
+     * app-op is noted for an entity that does not have a package name, the package can be
+     * {@code null}. As it is possible that a single process contains more than one package the
+     * {@code packageName} should be {@link Context#getPackageName() read} from the context of the
+     * caller of the API (in the app process) that eventually triggers this check. If this op is
+     * not noted for a running process the {@code packageName} cannot be read from the context, but
+     * it should be clear which package the note is for.
+     *
+     * <p>If the  {@code uid} and {@code packageName} do not match this return
+     * {@link #MODE_IGNORED}.
+     *
+     * <p>Beside the access check this method also records the access. While the access check is
+     * based on {@code uid} and/or {@code packageName} the access recording is done based on the
+     * {@code packageName} and {@code attributionTag}. The {@code attributionTag} should be
+     * {@link Context#getAttributionTag() read} from the same context the package name is read from.
+     * In the case the check is not related to an API call, the  {@code attributionTag} should be
+     * {@code null}. Please note that e.g. registering a callback for later is still an API call and
+     * the code should store the attribution tag along the package name for being used in this
+     * method later.
+     *
+     * <p>The {@code message} parameter only needs to be set when this method is <ul>not</ul>
+     * called in a two-way binder call from the client. In this case the message is a free form text
+     * that is meant help the app developer determine what part of the app's code triggered the
+     * note. This message is passed back to the app in the
+     * {@link OnOpNotedCallback#onAsyncNoted(AsyncNotedAppOp)} callback. A good example of a useful
+     * message is including the {@link System#identityHashCode(Object)} of the listener that will
+     * receive data or the name of the manifest-receiver.
+     *
      * @param op The operation to note.  One of the OPSTR_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
+     * @param uid The uid of the application attempting to perform the operation.
      * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or {@code
-     * null} for default attribution
-     * @param message A message describing the reason the op was noted
+     * @param attributionTag The {@link Context#createAttributionContext attribution tag} of the
+     *                       calling context or {@code null} for default attribution
+     * @param message A message describing why the op was noted
      *
      * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
      * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
@@ -7293,33 +7379,16 @@ public class AppOpsManager {
      *
      * @throws SecurityException If the app has been configured to crash on this op.
      */
+    // For platform callers of this method, please read the package name parameter from
+    // Context#getOpPackageName.
+    // When noting a callback, the message can be computed using the #toReceiverId method.
     public int noteOp(@NonNull String op, int uid, @Nullable String packageName,
             @Nullable String attributionTag, @Nullable String message) {
         return noteOp(strOpToOp(op), uid, packageName, attributionTag, message);
     }
 
     /**
-     * Make note of an application performing an operation.  Note that you must pass
-     * in both the uid and name of the application to be checked; this function will verify
-     * that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
-     * succeeds, the last execution time of the operation for this app will be updated to
-     * the current time.
-     *
-     * <p>If this is a check that is not preceding the protected operation, use
-     * {@link #unsafeCheckOp} instead.
-     *
-     * @param op The operation to note.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or {@code
-     * null} for default attribution
-     * @param message A message describing the reason the op was noted
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     *
-     * @throws SecurityException If the app has been configured to crash on this op.
+     * @see #noteOp(String, int, String, String, String
      *
      * @hide
      */
@@ -7357,16 +7426,7 @@ public class AppOpsManager {
      * Like {@link #noteOp(String, int, String, String, String)} but instead of throwing a
      * {@link SecurityException} it returns {@link #MODE_ERRORED}.
      *
-     * @param op The operation to note.  One of the OPSTR_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or {@code
-     * null} for default attribution
-     * @param message A message describing the reason the op was noted
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
+     * @see #noteOp(String, int, String, String, String)
      */
     public int noteOpNoThrow(@NonNull String op, int uid, @NonNull String packageName,
             @Nullable String attributionTag, @Nullable String message) {
@@ -7374,19 +7434,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Like {@link #noteOp(String, int, String, String, String)} but instead of throwing a
-     * {@link SecurityException} it returns {@link #MODE_ERRORED}.
-     *
-     * @param op The operation to note.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or {@code
-     * null} for default attribution
-     * @param message A message describing the reason the op was noted
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
+     * @see #noteOpNoThrow(String, int, String, String, String)
      *
      * @hide
      */
@@ -7443,23 +7491,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Make note of an application performing an operation on behalf of another application when
-     * handling an IPC. This function will verify that the calling uid and proxied package name
-     * match, and if not, return {@link #MODE_IGNORED}. If this call succeeds, the last execution
-     * time of the operation for the proxied app and your app will be updated to the current time.
-     *
-     * @param op The operation to note. One of the OP_* constants.
-     * @param proxiedPackageName The name of the application calling into the proxy application.
-     * @param proxiedUid The uid of the proxied application
-     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
-     * attribution tag} or {@code null} for default attribution
-     * @param message A message describing the reason the op was noted
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or {@link #MODE_IGNORED}
-     * if it is not allowed and should be silently ignored (without causing the app to crash).
-     *
-     * @throws SecurityException If the proxy or proxied app has been configured to crash on this
-     * op.
+     * @see #noteProxyOp(String, String, int, String, String)
      *
      * @hide
      */
@@ -7521,15 +7553,7 @@ public class AppOpsManager {
      * Like {@link #noteProxyOp(String, String, int, String, String)} but instead
      * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
      *
-     * <p>This API requires package with the {@code proxiedPackageName} to belong to
-     * {@code proxiedUid}.
-     *
-     * @param op The op to note
-     * @param proxiedPackageName The package to note the op for
-     * @param proxiedUid The uid the package belongs to
-     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
-     * attribution tag} or {@code null} for default attribution
-     * @param message A message describing the reason the op was noted
+     * @see #noteOpNoThrow(String, int, String, String, String)
      */
     public int noteProxyOpNoThrow(@NonNull String op, @Nullable String proxiedPackageName,
             int proxiedUid, @Nullable String proxiedAttributionTag, @Nullable String message) {
@@ -7538,16 +7562,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Like {@link #noteProxyOp(int, String, int, String, String)} but instead
-     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
-     *
-     * @param op The op to note
-     * @param proxiedPackageName The package to note the op for or {@code null} if the op should be
-     *                           noted for the "android" package
-     * @param proxiedUid The uid the package belongs to
-     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
-     * attribution tag} or {@code null} for default attribution
-     * @param message A message describing the reason the op was noted
+     * @see #noteProxyOpNoThrow(String, String, int, String, String)
      *
      * @hide
      */
@@ -7578,8 +7593,9 @@ public class AppOpsManager {
                     collectNotedOpForSelf(op, proxiedAttributionTag);
                 } else if (collectionMode == COLLECT_SYNC
                         // Only collect app-ops when the proxy is trusted
-                        && mContext.checkPermission(Manifest.permission.UPDATE_APP_OPS_STATS, -1,
-                        myUid) == PackageManager.PERMISSION_GRANTED) {
+                        && (mContext.checkPermission(Manifest.permission.UPDATE_APP_OPS_STATS, -1,
+                        myUid) == PackageManager.PERMISSION_GRANTED
+                        || isTrustedVoiceServiceProxy(mContext.getOpPackageName(), op))) {
                     collectNotedOpSync(op, proxiedAttributionTag);
                 }
             }
@@ -7588,6 +7604,30 @@ public class AppOpsManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    private boolean isTrustedVoiceServiceProxy(String packageName, int code) {
+        // This is a workaround for R QPR, new API change is not allowed. We only allow the current
+        // voice recognizer is also the voice interactor to noteproxy op.
+        if (code != OP_RECORD_AUDIO) {
+            return false;
+        }
+        final String voiceRecognitionComponent = Settings.Secure.getString(
+                mContext.getContentResolver(), Settings.Secure.VOICE_RECOGNITION_SERVICE);
+        final String voiceInteractionComponent = Settings.Secure.getString(
+                mContext.getContentResolver(), Settings.Secure.VOICE_INTERACTION_SERVICE);
+
+        final String voiceRecognitionServicePackageName =
+                getComponentPackageNameFromString(voiceRecognitionComponent);
+        final String voiceInteractionServicePackageName =
+                getComponentPackageNameFromString(voiceInteractionComponent);
+        return Objects.equals(packageName, voiceRecognitionServicePackageName) && Objects.equals(
+                voiceRecognitionServicePackageName, voiceInteractionServicePackageName);
+    }
+
+    private String getComponentPackageNameFromString(String from) {
+        ComponentName componentName = from != null ? ComponentName.unflattenFromString(from) : null;
+        return componentName != null ? componentName.getPackageName() : "";
     }
 
     /**
@@ -7635,6 +7675,9 @@ public class AppOpsManager {
     /**
      * Like {@link #checkOp} but instead of throwing a {@link SecurityException} it
      * returns {@link #MODE_ERRORED}.
+     *
+     * @see #checkOp(int, int, String)
+     *
      * @hide
      */
     @UnsupportedAppUsage
@@ -7766,6 +7809,10 @@ public class AppOpsManager {
     /**
      * Report that an application has started executing a long-running operation.
      *
+     * <p>For more details how to determine the {@code callingPackageName},
+     * {@code callingAttributionTag}, and {@code message}, please check the description in
+     * {@link #noteOp(String, int, String, String, String)}
+     *
      * @param op The operation to start.  One of the OPSTR_* constants.
      * @param uid The user id of the application attempting to perform the operation.
      * @param packageName The name of the application attempting to perform the operation.
@@ -7786,22 +7833,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Report that an application has started executing a long-running operation.
-     *
-     * @param op The operation to start.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or
-     * {@code null} for default attribution
-     * @param startIfModeDefault Whether to start if mode is {@link #MODE_DEFAULT}.
-     * @param message Description why op was started
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     *
-     * @throws SecurityException If the app has been configured to crash on this op or
-     * the package is not in the passed in UID.
+     * @see #startOp(String, int, String, String, String)
      *
      * @hide
      */
@@ -7847,16 +7879,7 @@ public class AppOpsManager {
      * Like {@link #startOp(String, int, String, String, String)} but instead of throwing a
      * {@link SecurityException} it returns {@link #MODE_ERRORED}.
      *
-     * @param op The operation to start.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or
-     * {@code null} for default attribution
-     * @param message Description why op was started
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
+     * @see #startOp(String, int, String, String, String)
      */
     public int startOpNoThrow(@NonNull String op, int uid, @NonNull String packageName,
             @NonNull String attributionTag, @Nullable String message) {
@@ -7864,20 +7887,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Like {@link #startOp(int, int, String, boolean, String, String)} but instead of throwing a
-     * {@link SecurityException} it returns {@link #MODE_ERRORED}.
-     *
-     * @param op The operation to start.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @param attributionTag The {@link Context#createAttributionContext attribution tag} or
-     * {@code null} for default attribution
-     * @param startIfModeDefault Whether to start if mode is {@link #MODE_DEFAULT}.
-     * @param message Description why op was started
-     *
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
+     * @see #startOpNoThrow(String, int, String, String, String)
      *
      * @hide
      */
@@ -7904,6 +7914,81 @@ public class AppOpsManager {
                     collectNotedOpForSelf(op, attributionTag);
                 } else if (collectionMode == COLLECT_SYNC) {
                     collectNotedOpSync(op, attributionTag);
+                }
+            }
+
+            return mode;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+    /**
+     * Report that an application has started executing a long-running operation on behalf of
+     * another application when handling an IPC. This function will verify that the calling uid and
+     * proxied package name match, and if not, return {@link #MODE_IGNORED}.
+     *
+     * @param op The op to note
+     * @param proxiedUid The uid to note the op for {@code null}
+     * @param proxiedPackageName The package name the uid belongs to
+     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
+     * attribution tag} or {@code null} for default attribution
+     * @param message A message describing the reason the op was noted
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or {@link #MODE_IGNORED}
+     * if it is not allowed and should be silently ignored (without causing the app to crash).
+     *
+     * @throws SecurityException If the proxy or proxied app has been configured to crash on this
+     * op.
+     */
+    public int startProxyOp(@NonNull String op, int proxiedUid, @NonNull String proxiedPackageName,
+            @Nullable String proxiedAttributionTag, @Nullable String message) {
+        final int mode = startProxyOpNoThrow(op, proxiedUid, proxiedPackageName,
+                proxiedAttributionTag, message);
+        if (mode == MODE_ERRORED) {
+            throw new SecurityException("Proxy package " + mContext.getOpPackageName()
+                    + " from uid " + Process.myUid() + " or calling package " + proxiedPackageName
+                    + " from uid " + proxiedUid + " not allowed to perform "
+                    + sOpNames[strOpToOp(op)]);
+        }
+        return mode;
+    }
+
+    /**
+     *Like {@link #startProxyOp(String, int, String, String, String)} but instead
+     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * @see #startProxyOp(String, int, String, String, String)
+     */
+    public int startProxyOpNoThrow(@NonNull String op, int proxiedUid,
+            @NonNull String proxiedPackageName, @Nullable String proxiedAttributionTag,
+            @Nullable String message) {
+        try {
+            int opInt = strOpToOp(op);
+
+            collectNoteOpCallsForValidation(opInt);
+            int collectionMode = getNotedOpCollectionMode(proxiedUid, proxiedPackageName, opInt);
+            boolean shouldCollectMessage = Process.myUid() == Process.SYSTEM_UID;
+            if (collectionMode == COLLECT_ASYNC) {
+                if (message == null) {
+                    // Set stack trace as default message
+                    message = getFormattedStackTrace();
+                    shouldCollectMessage = true;
+                }
+            }
+
+            int mode = mService.startProxyOperation(getClientId(), opInt, proxiedUid,
+                    proxiedPackageName, proxiedAttributionTag, Process.myUid(),
+                    mContext.getOpPackageName(), mContext.getAttributionTag(), false,
+                    collectionMode == COLLECT_ASYNC, message, shouldCollectMessage);
+
+            if (mode == MODE_ALLOWED) {
+                if (collectionMode == COLLECT_SELF) {
+                    collectNotedOpForSelf(opInt, proxiedAttributionTag);
+                } else if (collectionMode == COLLECT_SYNC
+                        // Only collect app-ops when the proxy is trusted
+                        && mContext.checkPermission(Manifest.permission.UPDATE_APP_OPS_STATS, -1,
+                        Process.myUid()) == PackageManager.PERMISSION_GRANTED) {
+                    collectNotedOpSync(opInt, proxiedAttributionTag);
                 }
             }
 
@@ -7951,10 +8036,7 @@ public class AppOpsManager {
     }
 
     /**
-     * Report that an application is no longer performing an operation that had previously
-     * been started with {@link #startOp(int, int, String, boolean, String, String)}. There is no
-     * validation of input or result; the parameters supplied here must be the exact same ones
-     * previously passed in when starting the operation.
+     * @see #finishOp(String, int, String, String)
      *
      * @hide
      */
@@ -7962,6 +8044,28 @@ public class AppOpsManager {
             @Nullable String attributionTag) {
         try {
             mService.finishOperation(getClientId(), op, uid, packageName, attributionTag);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     *  Report that an application is no longer performing an operation that had previously
+     * been started with {@link #startProxyOp(String, int, String, String, String)}. There is no
+     * validation of input or result; the parameters supplied here must be the exact same ones
+     * previously passed in when starting the operation.
+     * @param op The operation which was started
+     * @param proxiedUid The uid the op was started on behalf of
+     * @param proxiedPackageName The package the op was started on behalf of
+     * @param proxiedAttributionTag The proxied {@link Context#createAttributionContext
+     * attribution tag} or {@code null} for default attribution
+     */
+    public void finishProxyOp(@NonNull String op, int proxiedUid,
+            @NonNull String proxiedPackageName, @Nullable String proxiedAttributionTag) {
+        try {
+            mService.finishProxyOperation(getClientId(), strOpToOp(op), proxiedUid,
+                    proxiedPackageName, proxiedAttributionTag, Process.myUid(),
+                    mContext.getOpPackageName(), mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -8411,7 +8515,7 @@ public class AppOpsManager {
             public void opNoted(AsyncNotedAppOp op) {
                 Objects.requireNonNull(op);
 
-                long token = Binder.clearCallingIdentity();
+                final long token = Binder.clearCallingIdentity();
                 try {
                     getAsyncNotedExecutor().execute(() -> onAsyncNoted(op));
                 } finally {
@@ -8687,7 +8791,6 @@ public class AppOpsManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     @RequiresPermission(Manifest.permission.GET_APP_OPS_STATS)
     public @Nullable RuntimeAppOpAccessMessage collectRuntimeAppOpAccessMessage() {
         try {
@@ -8702,7 +8805,6 @@ public class AppOpsManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public static String[] getOpStrs() {
         return Arrays.copyOf(sOpToString, sOpToString.length);
     }

@@ -18,6 +18,7 @@ package android.view;
 
 import android.annotation.IntDef;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.os.Build;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -189,6 +190,7 @@ public final class FrameMetrics {
      */
     @IntDef ({
             Index.FLAGS,
+            Index.FRAME_TIMELINE_VSYNC_ID,
             Index.INTENDED_VSYNC,
             Index.VSYNC,
             Index.OLDEST_INPUT_EVENT,
@@ -197,6 +199,7 @@ public final class FrameMetrics {
             Index.ANIMATION_START,
             Index.PERFORM_TRAVERSALS_START,
             Index.DRAW_START,
+            Index.FRAME_DEADLINE,
             Index.SYNC_QUEUED,
             Index.SYNC_START,
             Index.ISSUE_DRAW_COMMANDS_START,
@@ -206,21 +209,24 @@ public final class FrameMetrics {
     @Retention(RetentionPolicy.SOURCE)
     private @interface Index {
         int FLAGS = 0;
-        int INTENDED_VSYNC = 1;
-        int VSYNC = 2;
-        int OLDEST_INPUT_EVENT = 3;
-        int NEWEST_INPUT_EVENT = 4;
-        int HANDLE_INPUT_START = 5;
-        int ANIMATION_START = 6;
-        int PERFORM_TRAVERSALS_START = 7;
-        int DRAW_START = 8;
-        int SYNC_QUEUED = 9;
-        int SYNC_START = 10;
-        int ISSUE_DRAW_COMMANDS_START = 11;
-        int SWAP_BUFFERS = 12;
-        int FRAME_COMPLETED = 13;
+        int FRAME_TIMELINE_VSYNC_ID = 1;
+        int INTENDED_VSYNC = 2;
+        int VSYNC = 3;
+        int OLDEST_INPUT_EVENT = 4;
+        int NEWEST_INPUT_EVENT = 5;
+        int HANDLE_INPUT_START = 6;
+        int ANIMATION_START = 7;
+        int PERFORM_TRAVERSALS_START = 8;
+        int DRAW_START = 9;
+        int FRAME_DEADLINE = 10;
+        int SYNC_QUEUED = 11;
+        int SYNC_START = 12;
+        int ISSUE_DRAW_COMMANDS_START = 13;
+        int SWAP_BUFFERS = 14;
+        int FRAME_COMPLETED = 15;
 
-        int FRAME_STATS_COUNT = 17; // must always be last
+        int FRAME_STATS_COUNT = 19; // must always be last and in sync with
+                                    // FrameInfoIndex::NumIndexes in libs/hwui/FrameInfo.h
     }
 
     /*
@@ -250,8 +256,11 @@ public final class FrameMetrics {
         Index.INTENDED_VSYNC, Index.FRAME_COMPLETED,
     };
 
-    @UnsupportedAppUsage
-    /* package */ final long[] mTimingData;
+    /**
+     * @hide
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public final long[] mTimingData;
 
     /**
      * Constructs a FrameMetrics object as a copy.
@@ -270,7 +279,7 @@ public final class FrameMetrics {
     /**
      * @hide
      */
-    FrameMetrics() {
+    public FrameMetrics() {
         mTimingData = new long[Index.FRAME_STATS_COUNT];
     }
 

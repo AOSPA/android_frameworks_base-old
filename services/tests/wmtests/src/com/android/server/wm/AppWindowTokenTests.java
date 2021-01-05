@@ -32,7 +32,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
-import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
+import static android.view.WindowManager.TRANSIT_OLD_ACTIVITY_OPEN;
 
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
@@ -92,7 +92,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
     public void setUp() throws Exception {
         mStack = createTaskStackOnDisplay(mDisplayContent);
         mTask = createTaskInStack(mStack, 0 /* userId */);
-        mActivity = WindowTestUtils.createTestActivityRecord(mDisplayContent);
+        mActivity = createNonAttachedActivityRecord(mDisplayContent);
 
         mTask.addChild(mActivity, 0);
     }
@@ -165,7 +165,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
         final WindowManager.LayoutParams attrs = new WindowManager.LayoutParams(
                 TYPE_BASE_APPLICATION);
         attrs.setTitle("AppWindow");
-        final WindowTestUtils.TestWindowState appWindow = createWindowState(attrs, mActivity);
+        final TestWindowState appWindow = createWindowState(attrs, mActivity);
         mActivity.addWindow(appWindow);
 
         // Set initial orientation and update.
@@ -198,7 +198,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
         final WindowManager.LayoutParams attrs = new WindowManager.LayoutParams(
                 TYPE_BASE_APPLICATION);
         attrs.setTitle("RotationByPolicy");
-        final WindowTestUtils.TestWindowState appWindow = createWindowState(attrs, mActivity);
+        final TestWindowState appWindow = createWindowState(attrs, mActivity);
         mActivity.addWindow(appWindow);
 
         // Set initial orientation and update.
@@ -244,7 +244,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
                 TYPE_BASE_APPLICATION);
         attrs.flags |= FLAG_SHOW_WHEN_LOCKED | FLAG_DISMISS_KEYGUARD;
         attrs.setTitle("AppWindow");
-        final WindowTestUtils.TestWindowState appWindow = createWindowState(attrs, mActivity);
+        final TestWindowState appWindow = createWindowState(attrs, mActivity);
 
         // Add window with show when locked flag
         mActivity.addWindow(appWindow);
@@ -307,7 +307,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
         assertEquals(Configuration.ORIENTATION_PORTRAIT, displayConfig.orientation);
         assertEquals(Configuration.ORIENTATION_PORTRAIT, activityConfig.orientation);
 
-        final ActivityRecord topActivity = WindowTestUtils.createTestActivityRecord(mStack);
+        final ActivityRecord topActivity = createActivityRecord(mTask);
         topActivity.setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
 
         assertEquals(Configuration.ORIENTATION_LANDSCAPE, displayConfig.orientation);
@@ -414,7 +414,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
         sources.add(activity2);
         doReturn(true).when(activity2).okToAnimate();
         doReturn(true).when(activity2).isAnimating();
-        assertTrue(activity2.applyAnimation(null, TRANSIT_ACTIVITY_OPEN, true, false, sources));
+        assertTrue(activity2.applyAnimation(null, TRANSIT_OLD_ACTIVITY_OPEN, true, false, sources));
     }
 
     @Test
@@ -431,16 +431,16 @@ public class AppWindowTokenTests extends WindowTestsBase {
         doCallRealMethod().when(mStack).startActivityLocked(
                 any(), any(), anyBoolean(), anyBoolean(), any());
         // Make mVisibleSetFromTransferredStartingWindow true.
-        final ActivityRecord middle = new ActivityTestsBase.ActivityBuilder(mWm.mAtmService)
+        final ActivityRecord middle = new ActivityBuilder(mWm.mAtmService)
                 .setTask(mTask).build();
         mStack.startActivityLocked(middle, null /* focusedTopActivity */,
                 false /* newTask */, false /* keepCurTransition */, null /* options */);
         middle.makeFinishingLocked();
 
-        assertNull(mActivity.startingWindow);
+        assertNull(mActivity.mStartingWindow);
         assertHasStartingWindow(middle);
 
-        final ActivityRecord top = new ActivityTestsBase.ActivityBuilder(mWm.mAtmService)
+        final ActivityRecord top = new ActivityBuilder(mWm.mAtmService)
                 .setTask(mTask).build();
         // Expect the visibility should be updated to true when transferring starting window from
         // a visible activity.
@@ -449,7 +449,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
         mStack.startActivityLocked(top, null /* focusedTopActivity */,
                 false /* newTask */, false /* keepCurTransition */, null /* options */);
 
-        assertNull(middle.startingWindow);
+        assertNull(middle.mStartingWindow);
         assertHasStartingWindow(top);
         assertTrue(top.isVisible());
         // The activity was visible by mVisibleSetFromTransferredStartingWindow, so after its
@@ -490,8 +490,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
     }
 
     private ActivityRecord createTestActivityRecordForGivenTask(Task task) {
-        final ActivityRecord activity =
-                WindowTestUtils.createTestActivityRecord(mDisplayContent);
+        final ActivityRecord activity = createNonAttachedActivityRecord(mDisplayContent);
         task.addChild(activity, 0);
         waitUntilHandlersIdle();
         return activity;
@@ -562,7 +561,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
     public void testHasStartingWindow() {
         final WindowManager.LayoutParams attrs =
                 new WindowManager.LayoutParams(TYPE_APPLICATION_STARTING);
-        final WindowTestUtils.TestWindowState startingWindow = createWindowState(attrs, mActivity);
+        final TestWindowState startingWindow = createWindowState(attrs, mActivity);
         mActivity.startingDisplayed = true;
         mActivity.addWindow(startingWindow);
         assertTrue("Starting window should be present", mActivity.hasStartingWindow());
@@ -574,14 +573,14 @@ public class AppWindowTokenTests extends WindowTestsBase {
     }
 
     private void assertHasStartingWindow(ActivityRecord atoken) {
-        assertNotNull(atoken.startingSurface);
+        assertNotNull(atoken.mStartingSurface);
         assertNotNull(atoken.mStartingData);
-        assertNotNull(atoken.startingWindow);
+        assertNotNull(atoken.mStartingWindow);
     }
 
     private void assertNoStartingWindow(ActivityRecord atoken) {
-        assertNull(atoken.startingSurface);
-        assertNull(atoken.startingWindow);
+        assertNull(atoken.mStartingSurface);
+        assertNull(atoken.mStartingWindow);
         assertNull(atoken.mStartingData);
         atoken.forAllWindows(windowState -> {
             assertFalse(windowState.getBaseType() == TYPE_APPLICATION_STARTING);

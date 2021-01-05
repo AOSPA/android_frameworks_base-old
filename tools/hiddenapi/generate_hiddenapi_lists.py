@@ -13,38 +13,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Generate API lists for non-SDK API enforcement.
-"""
+"""Generate API lists for non-SDK API enforcement."""
 import argparse
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import functools
 import os
 import re
 import sys
 
 # Names of flags recognized by the `hiddenapi` tool.
-FLAG_WHITELIST = "whitelist"
-FLAG_GREYLIST = "greylist"
-FLAG_BLACKLIST = "blacklist"
-FLAG_GREYLIST_MAX_O = "greylist-max-o"
-FLAG_GREYLIST_MAX_P = "greylist-max-p"
-FLAG_GREYLIST_MAX_Q = "greylist-max-q"
-FLAG_GREYLIST_MAX_R = "greylist-max-r"
-FLAG_CORE_PLATFORM_API = "core-platform-api"
-FLAG_PUBLIC_API = "public-api"
-FLAG_SYSTEM_API = "system-api"
-FLAG_TEST_API = "test-api"
+FLAG_SDK = 'sdk'
+FLAG_UNSUPPORTED = 'unsupported'
+FLAG_BLOCKED = 'blocked'
+FLAG_MAX_TARGET_O = 'max-target-o'
+FLAG_MAX_TARGET_P = 'max-target-p'
+FLAG_MAX_TARGET_Q = 'max-target-q'
+FLAG_MAX_TARGET_R = 'max-target-r'
+FLAG_CORE_PLATFORM_API = 'core-platform-api'
+FLAG_PUBLIC_API = 'public-api'
+FLAG_SYSTEM_API = 'system-api'
+FLAG_TEST_API = 'test-api'
 
 # List of all known flags.
 FLAGS_API_LIST = [
-    FLAG_WHITELIST,
-    FLAG_GREYLIST,
-    FLAG_BLACKLIST,
-    FLAG_GREYLIST_MAX_O,
-    FLAG_GREYLIST_MAX_P,
-    FLAG_GREYLIST_MAX_Q,
-    FLAG_GREYLIST_MAX_R,
+    FLAG_SDK,
+    FLAG_UNSUPPORTED,
+    FLAG_BLOCKED,
+    FLAG_MAX_TARGET_O,
+    FLAG_MAX_TARGET_P,
+    FLAG_MAX_TARGET_Q,
+    FLAG_MAX_TARGET_R,
 ]
 ALL_FLAGS = FLAGS_API_LIST + [
     FLAG_CORE_PLATFORM_API,
@@ -56,16 +54,21 @@ ALL_FLAGS = FLAGS_API_LIST + [
 FLAGS_API_LIST_SET = set(FLAGS_API_LIST)
 ALL_FLAGS_SET = set(ALL_FLAGS)
 
-# Suffix used in command line args to express that only known and
-# otherwise unassigned entries should be assign the given flag.
-# For example, the P dark greylist is checked in as it was in P,
+# Option specified after one of FLAGS_API_LIST to indicate that
+# only known and otherwise unassigned entries should be assign the
+# given flag.
+# For example, the max-target-P list is checked in as it was in P,
 # but signatures have changes since then. The flag instructs this
 # script to skip any entries which do not exist any more.
-FLAG_IGNORE_CONFLICTS_SUFFIX = "-ignore-conflicts"
+FLAG_IGNORE_CONFLICTS = "ignore-conflicts"
 
-# Suffix used in command line args to express that all apis within a given set
-# of packages should be assign the given flag.
-FLAG_PACKAGES_SUFFIX = "-packages"
+# Option specified after one of FLAGS_API_LIST to express that all
+# apis within a given set of packages should be assign the given flag.
+FLAG_PACKAGES = "packages"
+
+# Option specified after one of FLAGS_API_LIST to indicate an extra
+# tag that should be added to the matching APIs.
+FLAG_TAG = "tag"
 
 # Regex patterns of fields/methods used in serialization. These are
 # considered public API despite being hidden.
@@ -87,6 +90,18 @@ SERIALIZATION_REGEX = re.compile(r'.*->(' + '|'.join(SERIALIZATION_PATTERNS) + r
 HAS_NO_API_LIST_ASSIGNED = lambda api, flags: not FLAGS_API_LIST_SET.intersection(flags)
 IS_SERIALIZATION = lambda api, flags: SERIALIZATION_REGEX.match(api)
 
+
+class StoreOrderedOptions(argparse.Action):
+    """An argparse action that stores a number of option arguments in the order that
+    they were specified.
+    """
+    def __call__(self, parser, args, values, option_string = None):
+        items = getattr(args, self.dest, None)
+        if items is None:
+            items = []
+        items.append([option_string.lstrip('-'), values])
+        setattr(args, self.dest, items)
+
 def get_args():
     """Parses command line arguments.
 
@@ -99,19 +114,22 @@ def get_args():
         help='CSV files to be merged into output')
 
     for flag in ALL_FLAGS:
-        ignore_conflicts_flag = flag + FLAG_IGNORE_CONFLICTS_SUFFIX
-        packages_flag = flag + FLAG_PACKAGES_SUFFIX
-        parser.add_argument('--' + flag, dest=flag, nargs='*', default=[], metavar='TXT_FILE',
-            help='lists of entries with flag "' + flag + '"')
-        parser.add_argument('--' + ignore_conflicts_flag, dest=ignore_conflicts_flag, nargs='*',
-            default=[], metavar='TXT_FILE',
-            help='lists of entries with flag "' + flag +
-                 '". skip entry if missing or flag conflict.')
-        parser.add_argument('--' + packages_flag, dest=packages_flag, nargs='*',
-            default=[], metavar='TXT_FILE',
-            help='lists of packages to be added to ' + flag + ' list')
+        parser.add_argument('--' + flag, dest='ordered_flags', metavar='TXT_FILE',
+            action=StoreOrderedOptions, help='lists of entries with flag "' + flag + '"')
+    parser.add_argument('--' + FLAG_IGNORE_CONFLICTS, dest='ordered_flags', nargs=0,
+        action=StoreOrderedOptions, help='Indicates that only known and otherwise unassigned '
+        'entries should be assign the given flag. Must follow a list of entries and applies '
+        'to the preceding such list.')
+    parser.add_argument('--' + FLAG_PACKAGES, dest='ordered_flags', nargs=0,
+        action=StoreOrderedOptions, help='Indicates that the previous list of entries '
+        'is a list of packages. All members in those packages will be given the flag. '
+        'Must follow a list of entries and applies to the preceding such list.')
+    parser.add_argument('--' + FLAG_TAG, dest='ordered_flags', nargs=1,
+        action=StoreOrderedOptions, help='Adds an extra tag to the previous list of entries. '
+        'Must follow a list of entries and applies to the preceding such list.')
 
     return parser.parse_args()
+
 
 def read_lines(filename):
     """Reads entire file and return it as a list of lines.
@@ -130,8 +148,9 @@ def read_lines(filename):
     lines = map(lambda line: line.strip(), lines)
     return set(lines)
 
+
 def write_lines(filename, lines):
-    """Writes list of lines into a file, overwriting the file it it exists.
+    """Writes list of lines into a file, overwriting the file if it exists.
 
     Args:
         filename (string): Path to the file to be writting into.
@@ -140,6 +159,7 @@ def write_lines(filename, lines):
     lines = map(lambda line: line + '\n', lines)
     with open(filename, 'w') as f:
         f.writelines(lines)
+
 
 def extract_package(signature):
     """Extracts the package from a signature.
@@ -159,6 +179,7 @@ def extract_package(signature):
     package_name = full_class_name.rpartition("/")[0]
     return package_name.replace('/', '.')
 
+
 class FlagsDict:
     def __init__(self):
         self._dict_keyset = set()
@@ -167,11 +188,10 @@ class FlagsDict:
     def _check_entries_set(self, keys_subset, source):
         assert isinstance(keys_subset, set)
         assert keys_subset.issubset(self._dict_keyset), (
-            "Error processing: {}\n"
-            "The following entries were unexpected:\n"
+            "Error: {} specifies signatures not present in code:\n"
             "{}"
             "Please visit go/hiddenapi for more information.").format(
-                source, "".join(map(lambda x: "  " + str(x), keys_subset - self._dict_keyset)))
+                source, "".join(map(lambda x: "  " + str(x) + "\n", keys_subset - self._dict_keyset)))
 
     def _check_flags_set(self, flags_subset, source):
         assert isinstance(flags_subset, set)
@@ -212,10 +232,16 @@ class FlagsDict:
     def generate_csv(self):
         """Constructs CSV entries from a dictionary.
 
+        Old versions of flags are used to generate the file.
+
         Returns:
             List of lines comprising a CSV file. See "parse_and_merge_csv" for format description.
         """
-        return sorted(map(lambda api: ",".join([api] + sorted(self._dict[api])), self._dict))
+        lines = []
+        for api in self._dict:
+          flags = sorted(self._dict[api])
+          lines.append(",".join([api] + flags))
+        return sorted(lines)
 
     def parse_and_merge_csv(self, csv_lines, source = "<unknown>"):
         """Parses CSV entries and merges them into a given dictionary.
@@ -237,20 +263,19 @@ class FlagsDict:
         self._dict_keyset.update([ csv[0] for csv in csv_values ])
 
         # Check that all flags are known.
-        csv_flags = set(functools.reduce(
-            lambda x, y: set(x).union(y),
-            [ csv[1:] for csv in csv_values ],
-            []))
+        csv_flags = set()
+        for csv in csv_values:
+          csv_flags.update(csv[1:])
         self._check_flags_set(csv_flags, source)
 
         # Iterate over all CSV lines, find entry in dict and append flags to it.
         for csv in csv_values:
             flags = csv[1:]
             if (FLAG_PUBLIC_API in flags) or (FLAG_SYSTEM_API in flags):
-                flags.append(FLAG_WHITELIST)
+                flags.append(FLAG_SDK)
             self._dict[csv[0]].update(flags)
 
-    def assign_flag(self, flag, apis, source="<unknown>"):
+    def assign_flag(self, flag, apis, source="<unknown>", tag = None):
         """Assigns a flag to given subset of entries.
 
         Args:
@@ -270,10 +295,44 @@ class FlagsDict:
         # Iterate over the API subset, find each entry in dict and assign the flag to it.
         for api in apis:
             self._dict[api].add(flag)
+            if tag:
+                self._dict[api].add(tag)
+
+
+FlagFile = namedtuple('FlagFile', ('flag', 'file', 'ignore_conflicts', 'packages', 'tag'))
+
+def parse_ordered_flags(ordered_flags):
+    r = []
+    currentflag, file, ignore_conflicts, packages, tag = None, None, False, False, None
+    for flag_value in ordered_flags:
+        flag, value = flag_value[0], flag_value[1]
+        if flag in ALL_FLAGS_SET:
+            if currentflag:
+                r.append(FlagFile(currentflag, file, ignore_conflicts, packages, tag))
+                ignore_conflicts, packages, tag = False, False, None
+            currentflag = flag
+            file = value
+        else:
+            if currentflag is None:
+                raise argparse.ArgumentError('--%s is only allowed after one of %s' % (
+                    flag, ' '.join(['--%s' % f for f in ALL_FLAGS_SET])))
+            if flag == FLAG_IGNORE_CONFLICTS:
+                ignore_conflicts = True
+            elif flag == FLAG_PACKAGES:
+                packages = True
+            elif flag == FLAG_TAG:
+                tag = value[0]
+
+
+    if currentflag:
+        r.append(FlagFile(currentflag, file, ignore_conflicts, packages, tag))
+    return r
+
 
 def main(argv):
     # Parse arguments.
     args = vars(get_args())
+    flagfiles = parse_ordered_flags(args['ordered_flags'])
 
     # Initialize API->flags dictionary.
     flags = FlagsDict()
@@ -287,35 +346,35 @@ def main(argv):
         flags.parse_and_merge_csv(read_lines(filename), filename)
 
     # Combine inputs which do not require any particular order.
-    # (1) Assign serialization API to whitelist.
-    flags.assign_flag(FLAG_WHITELIST, flags.filter_apis(IS_SERIALIZATION))
+    # (1) Assign serialization API to SDK.
+    flags.assign_flag(FLAG_SDK, flags.filter_apis(IS_SERIALIZATION))
 
     # (2) Merge text files with a known flag into the dictionary.
-    for flag in ALL_FLAGS:
-        for filename in args[flag]:
-            flags.assign_flag(flag, read_lines(filename), filename)
+    for info in flagfiles:
+        if (not info.ignore_conflicts) and (not info.packages):
+            flags.assign_flag(info.flag, read_lines(info.file), info.file, info.tag)
 
     # Merge text files where conflicts should be ignored.
     # This will only assign the given flag if:
     # (a) the entry exists, and
     # (b) it has not been assigned any other flag.
     # Because of (b), this must run after all strict assignments have been performed.
-    for flag in ALL_FLAGS:
-        for filename in args[flag + FLAG_IGNORE_CONFLICTS_SUFFIX]:
-            valid_entries = flags.get_valid_subset_of_unassigned_apis(read_lines(filename))
-            flags.assign_flag(flag, valid_entries, filename)
+    for info in flagfiles:
+        if info.ignore_conflicts:
+            valid_entries = flags.get_valid_subset_of_unassigned_apis(read_lines(info.file))
+            flags.assign_flag(info.flag, valid_entries, filename, info.tag)
 
     # All members in the specified packages will be assigned the appropriate flag.
-    for flag in ALL_FLAGS:
-        for filename in args[flag + FLAG_PACKAGES_SUFFIX]:
-            packages_needing_list = set(read_lines(filename))
+    for info in flagfiles:
+        if info.packages:
+            packages_needing_list = set(read_lines(info.file))
             should_add_signature_to_list = lambda sig,lists: extract_package(
                 sig) in packages_needing_list and not lists
             valid_entries = flags.filter_apis(should_add_signature_to_list)
-            flags.assign_flag(flag, valid_entries)
+            flags.assign_flag(info.flag, valid_entries, info.file, info.tag)
 
-    # Assign all remaining entries to the blacklist.
-    flags.assign_flag(FLAG_BLACKLIST, flags.filter_apis(HAS_NO_API_LIST_ASSIGNED))
+    # Mark all remaining entries as blocked.
+    flags.assign_flag(FLAG_BLOCKED, flags.filter_apis(HAS_NO_API_LIST_ASSIGNED))
 
     # Write output.
     write_lines(args["output"], flags.generate_csv())

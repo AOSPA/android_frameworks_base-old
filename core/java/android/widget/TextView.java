@@ -17,12 +17,15 @@
 package android.widget;
 
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
+import static android.view.OnReceiveContentListener.Payload.FLAG_CONVERT_TO_PLAIN_TEXT;
+import static android.view.OnReceiveContentListener.Payload.SOURCE_AUTOFILL;
+import static android.view.OnReceiveContentListener.Payload.SOURCE_CLIPBOARD;
+import static android.view.OnReceiveContentListener.Payload.SOURCE_PROCESS_TEXT;
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_RENDERING_INFO_KEY;
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_LENGTH;
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX;
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY;
 import static android.view.inputmethod.CursorAnchorInfo.FLAG_HAS_VISIBLE_REGION;
-import static android.widget.RichContentReceiver.SOURCE_PROCESS_TEXT;
 
 import android.R;
 import android.annotation.CallSuper;
@@ -39,6 +42,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.Size;
 import android.annotation.StringRes;
 import android.annotation.StyleRes;
+import android.annotation.TestApi;
 import android.annotation.XmlRes;
 import android.app.Activity;
 import android.app.PendingIntent;
@@ -76,6 +80,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -149,6 +154,7 @@ import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.OnReceiveContentListener.Payload;
 import android.view.PointerIcon;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -426,7 +432,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     /**
      * @hide
      */
-    static final int PROCESS_TEXT_REQUEST_CODE = 100;
+    @TestApi
+    public static final int PROCESS_TEXT_REQUEST_CODE = 100;
 
     /**
      *  Return code of {@link #doKeyDown}.
@@ -735,6 +742,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private boolean mLocalesChanged = false;
     private int mTextSizeUnit = -1;
 
+    // True if force bold text feature is enabled. This feature makes all text bolder.
+    private boolean mForceBoldTextEnabled;
+    private Typeface mOriginalTypeface;
+
     // True if setKeyListener() has been explicitly called
     private boolean mListenerChanged = false;
     // True if internationalized input should be used for numbers and date and time.
@@ -879,15 +890,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @UnsupportedAppUsage
     private Editor mEditor;
-
-    /**
-     * The default content insertion callback used by {@link TextView}. See
-     * {@link #setRichContentReceiver} for more info.
-     */
-    public static final @NonNull RichContentReceiver<TextView> DEFAULT_RICH_CONTENT_RECEIVER =
-            TextViewRichContentReceiver.INSTANCE;
-
-    private RichContentReceiver<TextView> mRichContentReceiver = DEFAULT_RICH_CONTENT_RECEIVER;
 
     private static final int DEVICE_PROVISIONED_UNKNOWN = 0;
     private static final int DEVICE_PROVISIONED_NO = 1;
@@ -1645,6 +1647,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             attributes.mTypefaceIndex = MONOSPACE;
         }
 
+        mForceBoldTextEnabled = getContext().getResources().getConfiguration().forceBoldText
+                == Configuration.FORCE_BOLD_TEXT_YES;
         applyTextAppearance(attributes);
 
         if (isPassword) {
@@ -2138,15 +2142,17 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     /**
      * @hide
      */
+    @TestApi
     @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         if (requestCode == PROCESS_TEXT_REQUEST_CODE) {
             if (resultCode == Activity.RESULT_OK && data != null) {
                 CharSequence result = data.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
                 if (result != null) {
                     if (isTextEditable()) {
                         ClipData clip = ClipData.newPlainText("", result);
-                        mRichContentReceiver.onReceive(this, clip, SOURCE_PROCESS_TEXT, 0);
+                        Payload payload = new Payload.Builder(clip, SOURCE_PROCESS_TEXT).build();
+                        onReceiveContent(payload);
                         if (mEditor != null) {
                             mEditor.refreshTextActionMode();
                         }
@@ -4267,6 +4273,14 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 invalidate();
             }
         }
+        if (newConfig.forceBoldText == Configuration.FORCE_BOLD_TEXT_YES) {
+            mForceBoldTextEnabled = true;
+            setTypeface(getTypeface());
+        } else  if (newConfig.forceBoldText == Configuration.FORCE_BOLD_TEXT_NO
+                || newConfig.forceBoldText == Configuration.FORCE_BOLD_TEXT_UNDEFINED) {
+            mForceBoldTextEnabled = false;
+            setTypeface(getTypeface());
+        }
     }
 
     /**
@@ -4347,7 +4361,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 shouldRequestLayout);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private void setRawTextSize(float size, boolean shouldRequestLayout) {
         if (size != mTextPaint.getTextSize()) {
             mTextPaint.setTextSize(size);
@@ -4418,6 +4432,14 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @attr ref android.R.styleable#TextView_textStyle
      */
     public void setTypeface(@Nullable Typeface tf) {
+        mOriginalTypeface = tf;
+        if (mForceBoldTextEnabled) {
+            int newWeight = tf != null ? tf.getWeight() + 300 : 400;
+            newWeight = Math.min(newWeight, 1000);
+            int typefaceStyle = tf != null ? tf.getStyle() : 0;
+            boolean italic = (typefaceStyle & Typeface.ITALIC) != 0;
+            tf = Typeface.create(tf, newWeight, italic);
+        }
         if (mTextPaint.getTypeface() != tf) {
             mTextPaint.setTypeface(tf);
 
@@ -4441,7 +4463,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @InspectableProperty
     public Typeface getTypeface() {
-        return mTextPaint.getTypeface();
+        return mOriginalTypeface;
     }
 
     /**
@@ -7851,7 +7873,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return drawableState;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private Path getUpdatedHighlightPath() {
         Path highlight = null;
         Paint highlightPaint = mHighlightPaint;
@@ -8722,11 +8744,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 outAttrs.initialSelEnd = getSelectionEnd();
                 outAttrs.initialCapsMode = ic.getCursorCapsMode(getInputType());
                 outAttrs.setInitialSurroundingText(mText);
-                int targetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
-                if (targetSdkVersion > Build.VERSION_CODES.R) {
-                    outAttrs.contentMimeTypes = mRichContentReceiver.getSupportedMimeTypes()
-                            .toArray(new String[0]);
-                }
+                outAttrs.contentMimeTypes = getOnReceiveContentMimeTypes();
                 return ic;
             }
         }
@@ -11025,12 +11043,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     MotionEvent.actionToString(event.getActionMasked()),
                     event.getX(), event.getY());
         }
-        if (!isFromPrimePointer(event, false)) {
-            return true;
-        }
-
         final int action = event.getActionMasked();
         if (mEditor != null) {
+            if (!isFromPrimePointer(event, false)) {
+                return true;
+            }
+
             mEditor.onTouchEvent(event);
 
             if (mEditor.mInsertionPointCursorController != null
@@ -11827,7 +11845,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             Log.w(LOG_TAG, "cannot autofill non-editable TextView: " + this);
             return;
         }
-        ClipData clip;
+        final ClipData clip;
         if (value.isRichContent()) {
             clip = value.getRichContentValue();
         } else if (value.isText()) {
@@ -11837,22 +11855,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     + " cannot be autofilled into " + this);
             return;
         }
-        mRichContentReceiver.onReceive(this, clip, RichContentReceiver.SOURCE_AUTOFILL, 0);
+        final Payload payload = new Payload.Builder(clip, SOURCE_AUTOFILL).build();
+        onReceiveContent(payload);
     }
 
     @Override
     public @AutofillType int getAutofillType() {
-        if (!isTextEditable()) {
-            return AUTOFILL_TYPE_NONE;
-        }
-        final int targetSdkVersion = getContext().getApplicationInfo().targetSdkVersion;
-        if (targetSdkVersion <= Build.VERSION_CODES.R) {
-            return AUTOFILL_TYPE_TEXT;
-        }
-        // TODO(b/147301047): Update autofill framework code to check the target SDK of the autofill
-        //  provider and force the type AUTOFILL_TYPE_TEXT for providers that target older SDKs.
-        return mRichContentReceiver.supportsNonTextContent() ? AUTOFILL_TYPE_RICH_CONTENT
-                : AUTOFILL_TYPE_TEXT;
+        return isTextEditable() ? AUTOFILL_TYPE_TEXT : AUTOFILL_TYPE_NONE;
     }
 
     /**
@@ -12341,7 +12350,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *         be {@code null} if no text is set
      */
     @Nullable
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private CharSequence getTextForAccessibility() {
         // If the text is empty, we must be showing the hint text.
         if (TextUtils.isEmpty(mText)) {
@@ -12483,7 +12492,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return false;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     CharSequence getTransformedText(int start, int end) {
         return removeSuggestionSpans(mTransformed.subSequence(start, end));
     }
@@ -12913,8 +12922,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (clip == null) {
             return;
         }
-        int flags = withFormatting ? 0 : RichContentReceiver.FLAG_CONVERT_TO_PLAIN_TEXT;
-        mRichContentReceiver.onReceive(this, clip, RichContentReceiver.SOURCE_CLIPBOARD, flags);
+        final Payload payload = new Payload.Builder(clip, SOURCE_CLIPBOARD)
+                .setFlags(withFormatting ? 0 : FLAG_CONVERT_TO_PLAIN_TEXT)
+                .build();
+        onReceiveContent(payload);
         sLastCutCopyOrTextChangedTime = 0;
     }
 
@@ -12968,7 +12979,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return x;
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     int getLineAtCoordinate(float y) {
         y -= getTotalPaddingTop();
         // Clamp the position to inside of the view.
@@ -13157,7 +13168,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Deletes the range of text [start, end[.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     protected void deleteText_internal(int start, int end) {
         ((Editable) mText).delete(start, end);
     }
@@ -13209,7 +13220,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @hide
      */
     @Override
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public CharSequence getIterableTextForAccessibility() {
         return mText;
     }
@@ -13696,44 +13707,49 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
-    /**
-     * Returns the callback that handles insertion of content into this view (e.g. pasting from
-     * the clipboard). See {@link #setRichContentReceiver} for more info.
-     *
-     * @return The callback that this view is using to handle insertion of content. Returns
-     * {@link #DEFAULT_RICH_CONTENT_RECEIVER} if no custom callback has been
-     * {@link #setRichContentReceiver set}.
-     */
-    @NonNull
-    public RichContentReceiver<TextView> getRichContentReceiver() {
-        return mRichContentReceiver;
+    /** @hide */
+    @Override
+    public void onInputConnectionOpenedInternal(@NonNull InputConnection ic,
+            @NonNull EditorInfo editorInfo, @Nullable Handler handler) {
+        if (mEditor != null) {
+            mEditor.getDefaultOnReceiveContentListener().setInputConnectionInfo(this, ic,
+                    editorInfo);
+        }
+    }
+
+    /** @hide */
+    @Override
+    public void onInputConnectionClosedInternal() {
+        if (mEditor != null) {
+            mEditor.getDefaultOnReceiveContentListener().clearInputConnectionInfo();
+        }
     }
 
     /**
-     * Sets the callback to handle insertion of content into this view.
+     * Receives the given content. Clients wishing to provide custom behavior should configure a
+     * listener via {@link #setOnReceiveContentListener}.
      *
-     * <p>"Content" and "rich content" here refers to both text and non-text: plain text, styled
-     * text, HTML, images, videos, audio files, etc.
+     * <p>If a listener is set, invokes the listener. If the listener returns a non-null result,
+     * executes the default platform handling for the portion of the content returned by the
+     * listener.
      *
-     * <p>The callback configured here should typically wrap {@link #DEFAULT_RICH_CONTENT_RECEIVER}
-     * to provide consistent behavior for text content.
+     * <p>If no listener is set, executes the default platform behavior. For non-editable TextViews
+     * the default behavior is a no-op (returns the passed-in content without acting on it). For
+     * editable TextViews the default behavior coerces all content to text and inserts into the
+     * view.
      *
-     * <p>This callback will be invoked for the following scenarios:
-     * <ol>
-     *     <li>Paste from the clipboard (e.g. "Paste" or "Paste as plain text" action in the
-     *     insertion/selection menu)
-     *     <li>Content insertion from the keyboard ({@link InputConnection#commitContent})
-     *     <li>Drag and drop ({@link View#onDragEvent})
-     *     <li>Autofill, when the type for the field is
-     *     {@link android.view.View.AutofillType#AUTOFILL_TYPE_RICH_CONTENT}
-     * </ol>
+     * @param payload The content to insert and related metadata.
      *
-     * @param receiver The callback to use. This can be {@link #DEFAULT_RICH_CONTENT_RECEIVER} to
-     * reset to the default behavior.
+     * @return The portion of the passed-in content that was not handled (may be all, some, or none
+     * of the passed-in content).
      */
-    public void setRichContentReceiver(@NonNull RichContentReceiver<TextView> receiver) {
-        mRichContentReceiver = Objects.requireNonNull(receiver,
-                "RichContentReceiver should not be null.");
+    @Override
+    public @Nullable Payload onReceiveContent(@NonNull Payload payload) {
+        Payload remaining = super.onReceiveContent(payload);
+        if (remaining != null && mEditor != null) {
+            return mEditor.getDefaultOnReceiveContentListener().onReceiveContent(this, remaining);
+        }
+        return remaining;
     }
 
     private static void logCursor(String location, @Nullable String msgFormat, Object ... msgArgs) {

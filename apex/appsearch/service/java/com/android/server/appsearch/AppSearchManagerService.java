@@ -18,32 +18,33 @@ package com.android.server.appsearch;
 import android.annotation.NonNull;
 import android.app.appsearch.AppSearchBatchResult;
 import android.app.appsearch.AppSearchResult;
+import android.app.appsearch.AppSearchSchema;
+import android.app.appsearch.GenericDocument;
 import android.app.appsearch.IAppSearchManager;
+import android.app.appsearch.SearchResultPage;
+import android.app.appsearch.SearchSpec;
+import android.app.appsearch.exceptions.AppSearchException;
 import android.content.Context;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.UserHandle;
+import android.util.ArraySet;
 
 import com.android.internal.infra.AndroidFuture;
 import com.android.internal.util.Preconditions;
 import com.android.server.SystemService;
-import com.android.server.appsearch.impl.AppSearchImpl;
-import com.android.server.appsearch.impl.ImplInstanceManager;
-
-import com.google.android.icing.proto.DocumentProto;
-import com.google.android.icing.proto.ResultSpecProto;
-import com.google.android.icing.proto.SchemaProto;
-import com.google.android.icing.proto.ScoringSpecProto;
-import com.google.android.icing.proto.SearchResultProto;
-import com.google.android.icing.proto.SearchSpecProto;
-import com.google.android.icing.proto.StatusProto;
+import com.android.server.appsearch.external.localstorage.AppSearchImpl;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 /**
  * TODO(b/142567528): add comments when implement this class
  */
 public class AppSearchManagerService extends SystemService {
+    private static final String TAG = "AppSearchManagerService";
+    private static final char CALLING_NAME_DATABASE_DELIMITER = '$';
 
     public AppSearchManagerService(Context context) {
         super(context);
@@ -57,19 +58,25 @@ public class AppSearchManagerService extends SystemService {
     private class Stub extends IAppSearchManager.Stub {
         @Override
         public void setSchema(
-                @NonNull byte[] schemaBytes,
+                @NonNull String databaseName,
+                @NonNull List<Bundle> schemaBundles,
                 boolean forceOverride,
                 @NonNull AndroidFuture<AppSearchResult> callback) {
-            Preconditions.checkNotNull(schemaBytes);
+            Preconditions.checkNotNull(databaseName);
+            Preconditions.checkNotNull(schemaBundles);
             Preconditions.checkNotNull(callback);
             int callingUid = Binder.getCallingUidOrThrow();
             int callingUserId = UserHandle.getUserId(callingUid);
-            long callingIdentity = Binder.clearCallingIdentity();
+            final long callingIdentity = Binder.clearCallingIdentity();
             try {
-                SchemaProto schema = SchemaProto.parseFrom(schemaBytes);
+                Set<AppSearchSchema> schemas = new ArraySet<>(schemaBundles.size());
+                for (int i = 0; i < schemaBundles.size(); i++) {
+                    schemas.add(new AppSearchSchema(schemaBundles.get(i)));
+                }
                 AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
-                impl.setSchema(callingUid, schema, forceOverride);
-                callback.complete(AppSearchResult.newSuccessfulResult(/*value=*/ null));
+                databaseName = rewriteDatabaseNameWithUid(databaseName, callingUid);
+                impl.setSchema(databaseName, schemas, forceOverride);
+                callback.complete(AppSearchResult.newSuccessfulResult(/*result=*/ null));
             } catch (Throwable t) {
                 callback.complete(throwableToFailedResult(t));
             } finally {
@@ -79,23 +86,25 @@ public class AppSearchManagerService extends SystemService {
 
         @Override
         public void putDocuments(
-                @NonNull List documentsBytes,
+                @NonNull String databaseName,
+                @NonNull List<Bundle> documentBundles,
                 @NonNull AndroidFuture<AppSearchBatchResult> callback) {
-            Preconditions.checkNotNull(documentsBytes);
+            Preconditions.checkNotNull(databaseName);
+            Preconditions.checkNotNull(documentBundles);
             Preconditions.checkNotNull(callback);
             int callingUid = Binder.getCallingUidOrThrow();
             int callingUserId = UserHandle.getUserId(callingUid);
-            long callingIdentity = Binder.clearCallingIdentity();
+            final long callingIdentity = Binder.clearCallingIdentity();
             try {
                 AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
+                databaseName = rewriteDatabaseNameWithUid(databaseName, callingUid);
                 AppSearchBatchResult.Builder<String, Void> resultBuilder =
                         new AppSearchBatchResult.Builder<>();
-                for (int i = 0; i < documentsBytes.size(); i++) {
-                    byte[] documentBytes = (byte[]) documentsBytes.get(i);
-                    DocumentProto document = DocumentProto.parseFrom(documentBytes);
+                for (int i = 0; i < documentBundles.size(); i++) {
+                    GenericDocument document = new GenericDocument(documentBundles.get(i));
                     try {
-                        impl.putDocument(callingUid, document);
-                        resultBuilder.setSuccess(document.getUri(), /*value=*/ null);
+                        impl.putDocument(databaseName, document);
+                        resultBuilder.setSuccess(document.getUri(), /*result=*/ null);
                     } catch (Throwable t) {
                         resultBuilder.setResult(document.getUri(), throwableToFailedResult(t));
                     }
@@ -109,27 +118,25 @@ public class AppSearchManagerService extends SystemService {
         }
 
         @Override
-        public void getDocuments(
+        public void getDocuments(@NonNull String databaseName, @NonNull String namespace,
                 @NonNull List<String> uris, @NonNull AndroidFuture<AppSearchBatchResult> callback) {
+            Preconditions.checkNotNull(databaseName);
+            Preconditions.checkNotNull(namespace);
             Preconditions.checkNotNull(uris);
             Preconditions.checkNotNull(callback);
             int callingUid = Binder.getCallingUidOrThrow();
             int callingUserId = UserHandle.getUserId(callingUid);
-            long callingIdentity = Binder.clearCallingIdentity();
+            final long callingIdentity = Binder.clearCallingIdentity();
             try {
                 AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
-                AppSearchBatchResult.Builder<String, byte[]> resultBuilder =
+                databaseName = rewriteDatabaseNameWithUid(databaseName, callingUid);
+                AppSearchBatchResult.Builder<String, Bundle> resultBuilder =
                         new AppSearchBatchResult.Builder<>();
                 for (int i = 0; i < uris.size(); i++) {
                     String uri = uris.get(i);
                     try {
-                        DocumentProto document = impl.getDocument(callingUid, uri);
-                        if (document == null) {
-                            resultBuilder.setFailure(
-                                    uri, AppSearchResult.RESULT_NOT_FOUND, /*errorMessage=*/ null);
-                        } else {
-                            resultBuilder.setSuccess(uri, document.toByteArray());
-                        }
+                        GenericDocument document = impl.getDocument(databaseName, namespace, uri);
+                        resultBuilder.setSuccess(uri, document.getBundle());
                     } catch (Throwable t) {
                         resultBuilder.setResult(uri, throwableToFailedResult(t));
                     }
@@ -143,37 +150,29 @@ public class AppSearchManagerService extends SystemService {
         }
 
         // TODO(sidchhabra): Do this in a threadpool.
+        // TODO(b/162450968) handle pagination after getNextPage and SearchResults is ready.
         @Override
         public void query(
-                @NonNull byte[] searchSpecBytes,
-                @NonNull byte[] resultSpecBytes,
-                @NonNull byte[] scoringSpecBytes,
+                @NonNull String databaseName,
+                @NonNull String queryExpression,
+                @NonNull Bundle searchSpecBundle,
                 @NonNull AndroidFuture<AppSearchResult> callback) {
-            Preconditions.checkNotNull(searchSpecBytes);
-            Preconditions.checkNotNull(resultSpecBytes);
-            Preconditions.checkNotNull(scoringSpecBytes);
+            Preconditions.checkNotNull(databaseName);
+            Preconditions.checkNotNull(queryExpression);
+            Preconditions.checkNotNull(searchSpecBundle);
             Preconditions.checkNotNull(callback);
             int callingUid = Binder.getCallingUidOrThrow();
             int callingUserId = UserHandle.getUserId(callingUid);
-            long callingIdentity = Binder.clearCallingIdentity();
+            final long callingIdentity = Binder.clearCallingIdentity();
             try {
-                SearchSpecProto searchSpecProto = SearchSpecProto.parseFrom(searchSpecBytes);
-                ResultSpecProto resultSpecProto = ResultSpecProto.parseFrom(resultSpecBytes);
-                ScoringSpecProto scoringSpecProto = ScoringSpecProto.parseFrom(scoringSpecBytes);
                 AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
-                SearchResultProto searchResultProto =
-                        impl.query(callingUid, searchSpecProto, resultSpecProto, scoringSpecProto);
-                // TODO(sidchhabra): Translate SearchResultProto errors into error codes. This might
-                //     better be done in AppSearchImpl by throwing an AppSearchException.
-                if (searchResultProto.getStatus().getCode() != StatusProto.Code.OK) {
-                    callback.complete(
-                            AppSearchResult.newFailedResult(
-                                    AppSearchResult.RESULT_INTERNAL_ERROR,
-                                    searchResultProto.getStatus().getMessage()));
-                } else {
-                    callback.complete(
-                            AppSearchResult.newSuccessfulResult(searchResultProto.toByteArray()));
-                }
+                databaseName = rewriteDatabaseNameWithUid(databaseName, callingUid);
+                SearchResultPage searchResultPage = impl.query(
+                        databaseName,
+                        queryExpression,
+                        new SearchSpec(searchSpecBundle));
+                callback.complete(
+                        AppSearchResult.newSuccessfulResult(searchResultPage.getBundle()));
             } catch (Throwable t) {
                 callback.complete(throwableToFailedResult(t));
             } finally {
@@ -182,25 +181,25 @@ public class AppSearchManagerService extends SystemService {
         }
 
         @Override
-        public void delete(List<String> uris, AndroidFuture<AppSearchBatchResult> callback) {
+        public void removeByUri(@NonNull String databaseName, @NonNull String namespace,
+                List<String> uris, AndroidFuture<AppSearchBatchResult> callback) {
+            Preconditions.checkNotNull(databaseName);
+            Preconditions.checkNotNull(namespace);
             Preconditions.checkNotNull(uris);
             Preconditions.checkNotNull(callback);
             int callingUid = Binder.getCallingUidOrThrow();
             int callingUserId = UserHandle.getUserId(callingUid);
-            long callingIdentity = Binder.clearCallingIdentity();
+            final long callingIdentity = Binder.clearCallingIdentity();
             try {
                 AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
+                databaseName = rewriteDatabaseNameWithUid(databaseName, callingUid);
                 AppSearchBatchResult.Builder<String, Void> resultBuilder =
                         new AppSearchBatchResult.Builder<>();
                 for (int i = 0; i < uris.size(); i++) {
                     String uri = uris.get(i);
                     try {
-                        if (!impl.delete(callingUid, uri)) {
-                            resultBuilder.setFailure(
-                                    uri, AppSearchResult.RESULT_NOT_FOUND, /*errorMessage=*/ null);
-                        } else {
-                            resultBuilder.setSuccess(uri, /*value= */null);
-                        }
+                        impl.remove(databaseName, namespace, uri);
+                        resultBuilder.setSuccess(uri, /*result= */null);
                     } catch (Throwable t) {
                         resultBuilder.setResult(uri, throwableToFailedResult(t));
                     }
@@ -214,55 +213,47 @@ public class AppSearchManagerService extends SystemService {
         }
 
         @Override
-        public void deleteByTypes(
-                List<String> schemaTypes, AndroidFuture<AppSearchBatchResult> callback) {
-            Preconditions.checkNotNull(schemaTypes);
+        public void removeByQuery(
+                @NonNull String databaseName,
+                @NonNull String queryExpression,
+                @NonNull Bundle searchSpecBundle,
+                @NonNull AndroidFuture<AppSearchResult> callback) {
+            Preconditions.checkNotNull(databaseName);
+            Preconditions.checkNotNull(queryExpression);
+            Preconditions.checkNotNull(searchSpecBundle);
             Preconditions.checkNotNull(callback);
             int callingUid = Binder.getCallingUidOrThrow();
             int callingUserId = UserHandle.getUserId(callingUid);
-            long callingIdentity = Binder.clearCallingIdentity();
+            final long callingIdentity = Binder.clearCallingIdentity();
             try {
                 AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
-                AppSearchBatchResult.Builder<String, Void> resultBuilder =
-                        new AppSearchBatchResult.Builder<>();
-                for (int i = 0; i < schemaTypes.size(); i++) {
-                    String schemaType = schemaTypes.get(i);
-                    try {
-                        if (!impl.deleteByType(callingUid, schemaType)) {
-                            resultBuilder.setFailure(
-                                    schemaType,
-                                    AppSearchResult.RESULT_NOT_FOUND,
-                                    /*errorMessage=*/ null);
-                        } else {
-                            resultBuilder.setSuccess(schemaType, /*value=*/ null);
-                        }
-                    } catch (Throwable t) {
-                        resultBuilder.setResult(schemaType, throwableToFailedResult(t));
-                    }
-                }
-                callback.complete(resultBuilder.build());
-            } catch (Throwable t) {
-                callback.completeExceptionally(t);
-            } finally {
-                Binder.restoreCallingIdentity(callingIdentity);
-            }
-        }
-
-        @Override
-        public void deleteAll(@NonNull AndroidFuture<AppSearchResult> callback) {
-            Preconditions.checkNotNull(callback);
-            int callingUid = Binder.getCallingUidOrThrow();
-            int callingUserId = UserHandle.getUserId(callingUid);
-            long callingIdentity = Binder.clearCallingIdentity();
-            try {
-                AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
-                impl.deleteAll(callingUid);
-                callback.complete(AppSearchResult.newSuccessfulResult(null));
+                databaseName = rewriteDatabaseNameWithUid(databaseName, callingUid);
+                impl.removeByQuery(databaseName, queryExpression, new SearchSpec(searchSpecBundle));
+                callback.complete(AppSearchResult.newSuccessfulResult(/*result= */null));
             } catch (Throwable t) {
                 callback.complete(throwableToFailedResult(t));
             } finally {
                 Binder.restoreCallingIdentity(callingIdentity);
             }
+        }
+
+        /**
+         * Rewrites the database name by adding a prefix of unique name for the given uid.
+         *
+         * <p>The current implementation returns the package name of the app with this uid in a
+         * format like {@code com.example.package} or {@code com.example.sharedname:5678}.
+         */
+        @NonNull
+        private String rewriteDatabaseNameWithUid(String databaseName, int callingUid) {
+            // For regular apps, this call will return the package name. If callingUid is an
+            // android:sharedUserId, this value may be another type of name and have a :uid suffix.
+            String callingUidName = getContext().getPackageManager().getNameForUid(callingUid);
+            if (callingUidName == null) {
+                // Not sure how this is possible --- maybe app was uninstalled?
+                throw new IllegalStateException(
+                        "Failed to look up package name for uid " + callingUid);
+            }
+            return callingUidName + CALLING_NAME_DATABASE_DELIMITER + databaseName;
         }
 
         private <ValueType> AppSearchResult<ValueType> throwableToFailedResult(

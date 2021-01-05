@@ -86,20 +86,18 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
-import com.android.systemui.SystemUIFactory;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
+import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
-import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.util.DeviceConfigProxy;
-import com.android.systemui.util.InjectionInflationController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -347,7 +345,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     /**
      * For managing external displays
      */
-    private KeyguardDisplayManager mKeyguardDisplayManager;
+    private final KeyguardDisplayManager mKeyguardDisplayManager;
 
     private final ArrayList<IKeyguardStateCallback> mKeyguardStateCallbacks = new ArrayList<>();
 
@@ -738,7 +736,8 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             @UiBackground Executor uiBgExecutor, PowerManager powerManager,
             TrustManager trustManager,
             DeviceConfigProxy deviceConfig,
-            NavigationModeController navigationModeController) {
+            NavigationModeController navigationModeController,
+            KeyguardDisplayManager keyguardDisplayManager) {
         super(context);
         mFalsingManager = falsingManager;
         mLockPatternUtils = lockPatternUtils;
@@ -749,6 +748,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         mUpdateMonitor = keyguardUpdateMonitor;
         mPM = powerManager;
         mTrustManager = trustManager;
+        mKeyguardDisplayManager = keyguardDisplayManager;
         dumpManager.registerDumpable(getClass().getName(), this);
         mDeviceConfig = deviceConfig;
         mShowHomeOverLockscreen = mDeviceConfig.getBoolean(
@@ -787,11 +787,6 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         delayedActionFilter.addAction(DELAYED_LOCK_PROFILE_ACTION);
         mContext.registerReceiver(mDelayedLockBroadcastReceiver, delayedActionFilter,
                 SYSTEMUI_PERMISSION, null /* scheduler */);
-
-        InjectionInflationController injectionInflationController =
-                new InjectionInflationController(SystemUIFactory.getInstance().getRootComponent());
-        mKeyguardDisplayManager = new KeyguardDisplayManager(mContext,
-                injectionInflationController);
 
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
 
@@ -1027,7 +1022,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         intent.putExtra("seq", mDelayedShowingSequence);
         intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         PendingIntent sender = PendingIntent.getBroadcast(mContext,
-                0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+                0, intent, PendingIntent.FLAG_CANCEL_CURRENT |  PendingIntent.FLAG_IMMUTABLE);
         mAlarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, when, sender);
         if (DEBUG) Log.d(TAG, "setting alarm to turn off keyguard, seq = "
                          + mDelayedShowingSequence);
@@ -2208,8 +2203,8 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             BiometricUnlockController biometricUnlockController, ViewGroup lockIconContainer,
             View notificationContainer, KeyguardBypassController bypassController) {
         mKeyguardViewControllerLazy.get().registerStatusBar(statusBar, container, panelView,
-                biometricUnlockController, mDismissCallbackRegistry, lockIconContainer,
-                notificationContainer, bypassController, mFalsingManager);
+                biometricUnlockController, lockIconContainer,
+                notificationContainer, bypassController);
         return mKeyguardViewControllerLazy.get();
     }
 

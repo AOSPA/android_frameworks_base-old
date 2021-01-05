@@ -19,6 +19,7 @@ package android.view.autofill;
 import static android.service.autofill.FillRequest.FLAG_MANUAL_REQUEST;
 import static android.service.autofill.FillRequest.FLAG_PASSWORD_INPUT_TYPE;
 import static android.service.autofill.FillRequest.FLAG_VIEW_NOT_FOCUSED;
+import static android.view.OnReceiveContentListener.Payload.SOURCE_AUTOFILL;
 import static android.view.autofill.Helper.sDebug;
 import static android.view.autofill.Helper.sVerbose;
 import static android.view.autofill.Helper.toList;
@@ -32,6 +33,7 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.content.AutofillOptions;
+import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -60,6 +62,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Choreographer;
 import android.view.KeyEvent;
+import android.view.OnReceiveContentListener.Payload;
 import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
@@ -509,7 +512,7 @@ public final class AutofillManager {
 
     /**
      * Views that were otherwised not important for autofill but triggered a session because the
-     * context is whitelisted for augmented autofill.
+     * context is allowlisted for augmented autofill.
      */
     @GuardedBy("mLock")
     @Nullable private Set<AutofillId> mEnteredForAugmentedAutofillIds;
@@ -2060,7 +2063,7 @@ public final class AutofillManager {
     /**
      * Explicitly limits augmented autofill to the given packages and activities.
      *
-     * <p>To reset the whitelist, call it passing {@code null} to both arguments.
+     * <p>To reset the allowlist, call it passing {@code null} to both arguments.
      *
      * <p>Useful when the service wants to restrict augmented autofill to a category of apps, like
      * apps that uses addresses. For example, if the service wants to support augmented autofill on
@@ -2076,7 +2079,6 @@ public final class AutofillManager {
      * @hide
      */
     @SystemApi
-    @TestApi
     public void setAugmentedAutofillWhitelist(@Nullable Set<String> packages,
             @Nullable Set<ComponentName> activities) {
         if (!hasAutofillFeature()) {
@@ -2107,7 +2109,7 @@ public final class AutofillManager {
     }
 
     /**
-     * Notifies that a non-autofillable view was entered because the activity is whitelisted for
+     * Notifies that a non-autofillable view was entered because the activity is allowlisted for
      * augmented autofill.
      *
      * <p>This method is necessary to set the right flag on start, so the server-side session
@@ -2351,6 +2353,47 @@ public final class AutofillManager {
         }
     }
 
+    private void autofillContent(int sessionId, AutofillId id, ClipData clip) {
+        synchronized (mLock) {
+            if (sessionId != mSessionId) {
+                return;
+            }
+            final AutofillClient client = getClient();
+            if (client == null) {
+                return;
+            }
+            final View view = client.autofillClientFindViewByAutofillIdTraversal(id);
+            if (view == null) {
+                // Most likely view has been removed after the initial request was sent to the
+                // the service; this is fine, but we need to update the view status in the
+                // server side so it can be triggered again.
+                Log.d(TAG, "autofillContent(): no view with id " + id);
+                reportAutofillContentFailure(id);
+                return;
+            }
+            Payload payload = new Payload.Builder(clip, SOURCE_AUTOFILL).build();
+            Payload result = view.onReceiveContent(payload);
+            if (result != null) {
+                Log.w(TAG, "autofillContent(): receiver could not insert content: id=" + id
+                        + ", view=" + view + ", clip=" + clip);
+                reportAutofillContentFailure(id);
+                return;
+            }
+            mMetricsLogger.write(newLog(MetricsEvent.AUTOFILL_DATASET_APPLIED)
+                    .addTaggedData(MetricsEvent.FIELD_AUTOFILL_NUM_VALUES, 1)
+                    .addTaggedData(MetricsEvent.FIELD_AUTOFILL_NUM_VIEWS_FILLED, 1));
+        }
+    }
+
+    private void reportAutofillContentFailure(AutofillId id) {
+        try {
+            mService.setAutofillFailure(mSessionId, Collections.singletonList(id),
+                    mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     private LogMaker newLog(int category) {
         final LogMaker log = new LogMaker(category)
                 .addTaggedData(MetricsEvent.FIELD_AUTOFILL_SESSION_ID, mSessionId);
@@ -2465,8 +2508,7 @@ public final class AutofillManager {
      *  {@link #STATE_UNKNOWN_COMPAT_MODE} (beucase the session was finished when the URL bar
      *  changed on compat mode), {@link #STATE_UNKNOWN_FAILED} (because the session was finished
      *  when the service failed to fullfil the request, or {@link #STATE_DISABLED_BY_SERVICE}
-     *  (because the autofill service or {@link #STATE_DISABLED_BY_SERVICE} (because the autofill
-     *  service disabled further autofill requests for the activity).
+     *  (because the autofill service disabled further autofill requests for the activity).
      * @param autofillableIds list of ids that could trigger autofill, use to not handle a new
      *  session when they're entered.
      */
@@ -3389,6 +3431,14 @@ public final class AutofillManager {
             final AutofillManager afm = mAfm.get();
             if (afm != null) {
                 afm.post(() -> afm.autofill(sessionId, ids, values, hideHighlight));
+            }
+        }
+
+        @Override
+        public void autofillContent(int sessionId, AutofillId id, ClipData content) {
+            final AutofillManager afm = mAfm.get();
+            if (afm != null) {
+                afm.post(() -> afm.autofillContent(sessionId, id, content));
             }
         }
 

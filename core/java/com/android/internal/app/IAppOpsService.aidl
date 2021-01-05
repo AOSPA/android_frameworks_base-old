@@ -56,6 +56,13 @@ interface IAppOpsService {
             String proxiedAttributionTag, int proxyUid, String proxyPackageName,
             String proxyAttributionTag, boolean shouldCollectAsyncNotedOp, String message,
             boolean shouldCollectMessage);
+    int startProxyOperation(IBinder clientId, int code, int proxiedUid, String proxiedPackageName,
+            @nullable String proxiedAttributionTag, int proxyUid, String proxyPackageName,
+            @nullable String proxyAttributionTag, boolean startIfModeDefault,
+            boolean shouldCollectAsyncNotedOp, String message, boolean shouldCollectMessage);
+    void finishProxyOperation(IBinder clientId, int code, int proxiedUid, String proxiedPackageName,
+            @nullable String proxiedAttributionTag, int proxyUid, String proxyPackageName,
+            @nullable String proxyAttributionTag);
 
     // Remaining methods are only used in Java.
     int checkPackage(int uid, String packageName);
@@ -82,7 +89,7 @@ interface IAppOpsService {
     void setUidMode(int code, int uid, int mode);
     @UnsupportedAppUsage
     void setMode(int code, int uid, String packageName, int mode);
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void resetAllModes(int reqUserId, String reqPackageName);
     void setAudioRestriction(int code, int usage, int uid, int mode, in String[] exceptionPackages);
 

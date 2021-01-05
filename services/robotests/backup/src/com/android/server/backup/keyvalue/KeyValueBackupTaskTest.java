@@ -41,6 +41,7 @@ import static com.android.server.backup.testing.Utils.oneTimeIterable;
 import static com.android.server.backup.testing.Utils.transferStreamedData;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -794,7 +795,7 @@ public class KeyValueBackupTaskTest  {
         setUpAgent(PACKAGE_1);
         doThrow(SecurityException.class)
                 .when(mBackupManagerService)
-                .bindToAgentSynchronous(argThat(applicationInfo(PACKAGE_1)), anyInt());
+                .bindToAgentSynchronous(argThat(applicationInfo(PACKAGE_1)), anyInt(), anyInt());
         KeyValueBackupTask task = createKeyValueBackupTask(transportMock, PACKAGE_1);
 
         runTask(task);
@@ -812,7 +813,7 @@ public class KeyValueBackupTaskTest  {
         setUpAgent(PACKAGE_1);
         doThrow(SecurityException.class)
                 .when(mBackupManagerService)
-                .bindToAgentSynchronous(argThat(applicationInfo(PACKAGE_1)), anyInt());
+                .bindToAgentSynchronous(argThat(applicationInfo(PACKAGE_1)), anyInt(), anyInt());
         KeyValueBackupTask task = createKeyValueBackupTask(transportMock, true, PACKAGE_1);
 
         runTask(task);
@@ -2593,11 +2594,13 @@ public class KeyValueBackupTaskTest  {
             if (packageData.available) {
                 doReturn(backupAgentBinder)
                         .when(mBackupManagerService)
-                        .bindToAgentSynchronous(argThat(applicationInfo(packageData)), anyInt());
+                        .bindToAgentSynchronous(argThat(applicationInfo(packageData)), anyInt(),
+                                anyInt());
             } else {
                 doReturn(null)
                         .when(mBackupManagerService)
-                        .bindToAgentSynchronous(argThat(applicationInfo(packageData)), anyInt());
+                        .bindToAgentSynchronous(argThat(applicationInfo(packageData)), anyInt(),
+                                anyInt());
             }
             return new AgentMock(backupAgentBinder, backupAgent);
         } catch (RemoteException e) {
@@ -2878,8 +2881,8 @@ public class KeyValueBackupTaskTest  {
     }
 
     private static IterableSubject assertDirectory(Path directory) throws IOException {
-        return assertThat(oneTimeIterable(Files.newDirectoryStream(directory).iterator()))
-                .named("directory " + directory);
+        return assertWithMessage("directory " + directory).that(
+                oneTimeIterable(Files.newDirectoryStream(directory).iterator()));
     }
 
     private static void assertJournalDoesNotContain(

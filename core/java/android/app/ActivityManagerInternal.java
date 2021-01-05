@@ -103,6 +103,11 @@ public abstract class ActivityManagerInternal {
             IBinder whitelistToken, long duration);
 
     /**
+     * Returns the flags set for a {@link PendingIntent}.
+     */
+    public abstract int getPendingIntentFlags(IIntentSender target);
+
+    /**
      * Allows a {@link PendingIntent} to start activities from background.
      */
     public abstract void setPendingIntentAllowBgActivityStarts(
@@ -318,12 +323,14 @@ public abstract class ActivityManagerInternal {
             int uid, int realCallingUid, int realCallingPid, Intent intent, String resolvedType,
             IIntentReceiver resultTo, int resultCode, String resultData, Bundle resultExtras,
             String requiredPermission, Bundle bOptions, boolean serialized, boolean sticky,
-            @UserIdInt int userId, boolean allowBackgroundActivityStarts);
+            @UserIdInt int userId, boolean allowBackgroundActivityStarts,
+            @Nullable IBinder backgroundActivityStartsToken);
 
     public abstract ComponentName startServiceInPackage(int uid, Intent service,
             String resolvedType, boolean fgRequired, String callingPackage,
             @Nullable String callingFeatureId, @UserIdInt int userId,
-            boolean allowBackgroundActivityStarts) throws TransactionTooLargeException;
+            boolean allowBackgroundActivityStarts,
+            @Nullable IBinder backgroundActivityStartsToken) throws TransactionTooLargeException;
 
     public abstract void disconnectActivityFromServices(Object connectionHolder);
     public abstract void cleanUpServices(@UserIdInt int userId, ComponentName component,
@@ -339,7 +346,8 @@ public abstract class ActivityManagerInternal {
     /** @see com.android.server.am.ActivityManagerService#monitor */
     public abstract void monitor();
 
-    /** Input dispatch timeout to a window, start the ANR process. */
+    /** Input dispatch timeout to a window, start the ANR process. Return the timeout extension,
+     * in milliseconds, or 0 to abort dispatch. */
     public abstract long inputDispatchingTimedOut(int pid, boolean aboveSystem, String reason);
     public abstract boolean inputDispatchingTimedOut(Object proc, String activityShortComponentName,
             ApplicationInfo aInfo, String parentShortComponentName, Object parentProc,
@@ -446,7 +454,7 @@ public abstract class ActivityManagerInternal {
     public abstract int broadcastIntent(Intent intent,
             IIntentReceiver resultTo,
             String[] requiredPermissions, boolean serialized,
-            int userId, int[] appIdWhitelist);
+            int userId, int[] appIdAllowList);
 
     /**
      * Add uid to the ActivityManagerService PendingStartActivityUids list.
@@ -467,6 +475,12 @@ public abstract class ActivityManagerInternal {
      * @return true if exists, false otherwise.
      */
     public abstract boolean isPendingTopUid(int uid);
+
+    /**
+     * @return the intent for the given intent sender.
+     */
+    @Nullable
+    public abstract Intent getIntentForIntentSender(IIntentSender sender);
 
     // Starts a process as empty.
     public abstract int startActivityAsUserEmpty(Bundle options);

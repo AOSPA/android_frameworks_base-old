@@ -16,13 +16,20 @@
 
 package com.android.server.wm;
 
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_IME;
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_IME;
+import static com.android.server.wm.ImeInsetsSourceProviderProto.IME_TARGET_FROM_IME;
+import static com.android.server.wm.ImeInsetsSourceProviderProto.INSETS_SOURCE_PROVIDER;
+import static com.android.server.wm.ImeInsetsSourceProviderProto.IS_IME_LAYOUT_DRAWN;
+
+import android.os.Trace;
+import android.util.proto.ProtoOutputStream;
 import android.view.InsetsSource;
 import android.view.WindowInsets;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.server.protolog.common.ProtoLog;
+import com.android.internal.protolog.common.ProtoLog;
 
 import java.io.PrintWriter;
 
@@ -75,6 +82,7 @@ class ImeInsetsSourceProvider extends InsetsSourceProvider {
                 ProtoLog.i(WM_DEBUG_IME, "call showInsets(ime) on %s",
                         target.getWindow() != null ? target.getWindow().getName() : "");
                 target.showInsets(WindowInsets.Type.ime(), true /* fromIme */);
+                Trace.asyncTraceEnd(TRACE_TAG_WINDOW_MANAGER, "WMS.showImePostLayout", 0);
                 if (target != mImeTargetFromIme && mImeTargetFromIme != null) {
                     ProtoLog.w(WM_DEBUG_IME,
                             "showInsets(ime) was requested by different window: %s ",
@@ -93,7 +101,7 @@ class ImeInsetsSourceProvider extends InsetsSourceProvider {
                 || (mImeTargetFromIme != null
                 && isImeTargetFromDisplayContentAndImeSame()
                 && mWin != null
-                && mWin.isDrawnLw()
+                && mWin.isDrawn()
                 && !mWin.mGivenInsetsPending)) {
             mIsImeLayoutDrawn = true;
             // show IME if InputMethodService requested it to be shown.
@@ -138,8 +146,9 @@ class ImeInsetsSourceProvider extends InsetsSourceProvider {
                         && dcTarget.getParentWindow() == mImeTargetFromIme
                         && dcTarget.mSubLayer > mImeTargetFromIme.getWindow().mSubLayer)
                 || mImeTargetFromIme == mDisplayContent.getImeFallback()
+                || mImeTargetFromIme == mDisplayContent.mInputMethodInputTarget
                 || controlTarget == mImeTargetFromIme
-                        && (mImeTargetFromIme.getWindow() == null 
+                        && (mImeTargetFromIme.getWindow() == null
                                 || !mImeTargetFromIme.getWindow().isClosing());
     }
 
@@ -152,5 +161,16 @@ class ImeInsetsSourceProvider extends InsetsSourceProvider {
             pw.print(mImeTargetFromIme);
             pw.println();
         }
+    }
+
+    @Override
+    void dumpDebug(ProtoOutputStream proto, long fieldId, @WindowTraceLogLevel int logLevel) {
+        final long token = proto.start(fieldId);
+        super.dumpDebug(proto, INSETS_SOURCE_PROVIDER, logLevel);
+        if (mImeTargetFromIme != null) {
+            mImeTargetFromIme.getWindow().dumpDebug(proto, IME_TARGET_FROM_IME, logLevel);
+        }
+        proto.write(IS_IME_LAYOUT_DRAWN, mIsImeLayoutDrawn);
+        proto.end(token);
     }
 }

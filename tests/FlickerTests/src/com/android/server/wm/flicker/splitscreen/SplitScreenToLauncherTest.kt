@@ -16,96 +16,119 @@
 
 package com.android.server.wm.flicker.splitscreen
 
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
-import androidx.test.InstrumentationRegistry
-import androidx.test.filters.LargeTest
-import androidx.test.runner.AndroidJUnit4
-import androidx.test.uiautomator.UiDevice
-import com.android.server.wm.flicker.CommonTransitions
-import com.android.server.wm.flicker.FlickerTestBase
-import com.android.server.wm.flicker.LayersTraceSubject
-import com.android.server.wm.flicker.StandardAppHelper
-import com.android.server.wm.flicker.TransitionRunner
-import com.android.server.wm.flicker.WindowUtils
-import com.android.server.wm.flicker.WmTraceSubject
-import com.android.server.wm.flicker.helpers.AutomationUtils
-import org.junit.AfterClass
+import androidx.test.filters.RequiresDevice
+import androidx.test.platform.app.InstrumentationRegistry
+import com.android.server.wm.flicker.DOCKED_STACK_DIVIDER
+import com.android.server.wm.flicker.Flicker
+import com.android.server.wm.flicker.FlickerTestRunner
+import com.android.server.wm.flicker.FlickerTestRunnerFactory
+import com.android.server.wm.flicker.helpers.StandardAppHelper
+import com.android.server.wm.flicker.endRotation
+import com.android.server.wm.flicker.focusDoesNotChange
+import com.android.server.wm.flicker.helpers.buildTestTag
+import com.android.server.wm.flicker.helpers.exitSplitScreen
+import com.android.server.wm.flicker.helpers.isInSplitScreen
+import com.android.server.wm.flicker.helpers.launchSplitScreen
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerRotatesAndScales
+import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.noUncoveredRegions
+import com.android.server.wm.flicker.repetitions
+import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
+import org.junit.runners.Parameterized
 
 /**
  * Test open app to split screen.
  * To run this test: `atest FlickerTests:SplitScreenToLauncherTest`
  */
-@LargeTest
-@RunWith(AndroidJUnit4::class)
+@Presubmit
+@RequiresDevice
+@RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class SplitScreenToLauncherTest : FlickerTestBase() {
-    init {
-        testApp = StandardAppHelper(InstrumentationRegistry.getInstrumentation(),
-                "com.android.server.wm.flicker.testapp", "SimpleApp")
-    }
-
-    override val transitionToRun: TransitionRunner
-        get() = CommonTransitions.splitScreenToLauncher(testApp, instrumentation, uiDevice,
-                Surface.ROTATION_0).includeJankyRuns().build()
-
-    @Test
-    fun checkCoveredRegion_noUncoveredRegions() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .coversRegion(WindowUtils.getDisplayBounds()).forAllEntries()
-        }
-    }
-
-    @Test
-    fun checkVisibility_dividerLayerBecomesInVisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .showsLayer(DOCKED_STACK_DIVIDER)
-                    .then()
-                    .hidesLayer(DOCKED_STACK_DIVIDER)
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    fun checkVisibility_appLayerBecomesInVisible() {
-        checkResults {
-            LayersTraceSubject.assertThat(it)
-                    .showsLayer(testApp.getPackage())
-                    .then()
-                    .hidesLayer(testApp.getPackage())
-                    .forAllEntries()
-        }
-    }
-
-    @Test
-    fun checkVisibility_navBarWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAboveAppWindow(NAVIGATION_BAR_WINDOW_TITLE).forAllEntries()
-        }
-    }
-
-    @Test
-    fun checkVisibility_statusBarWindowIsAlwaysVisible() {
-        checkResults {
-            WmTraceSubject.assertThat(it)
-                    .showsAboveAppWindow(STATUS_BAR_WINDOW_TITLE).forAllEntries()
-        }
-    }
-
+class SplitScreenToLauncherTest(
+    testName: String,
+    flickerSpec: Flicker
+) : FlickerTestRunner(testName, flickerSpec) {
     companion object {
-        @AfterClass
+        @Parameterized.Parameters(name = "{0}")
         @JvmStatic
-        fun teardown() {
-            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            if (AutomationUtils.isInSplitScreen(device)) {
-                AutomationUtils.exitSplitScreen(device)
-            }
+        fun getParams(): Collection<Array<Any>> {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val testApp = StandardAppHelper(instrumentation,
+                "com.android.server.wm.flicker.testapp", "SimpleApp")
+
+            // b/161435597 causes the test not to work on 90 degrees
+            return FlickerTestRunnerFactory(instrumentation, listOf(Surface.ROTATION_0))
+                .buildTest { configuration ->
+                    withTestName {
+                        buildTestTag("splitScreenToLauncher", testApp, configuration)
+                    }
+                    repeat { configuration.repetitions }
+                    setup {
+                        test {
+                            device.wakeUpAndGoToHomeScreen()
+                        }
+                        eachRun {
+                            testApp.open()
+                            this.setRotation(configuration.endRotation)
+                            device.launchSplitScreen()
+                            device.waitForIdle()
+                        }
+                    }
+                    teardown {
+                        eachRun {
+                            testApp.exit()
+                        }
+                        test {
+                            if (device.isInSplitScreen()) {
+                                device.exitSplitScreen()
+                            }
+                        }
+                    }
+                    transitions {
+                        device.exitSplitScreen()
+                    }
+                    assertions {
+                        windowManagerTrace {
+                            navBarWindowIsAlwaysVisible()
+                            statusBarWindowIsAlwaysVisible()
+                        }
+
+                        layersTrace {
+                            navBarLayerIsAlwaysVisible()
+                            statusBarLayerIsAlwaysVisible()
+                            noUncoveredRegions(configuration.endRotation)
+                            navBarLayerRotatesAndScales(configuration.endRotation)
+                            statusBarLayerRotatesScales(configuration.endRotation)
+
+                            // b/161435597 causes the test not to work on 90 degrees
+                            all("dividerLayerBecomesInvisible") {
+                                this.showsLayer(DOCKED_STACK_DIVIDER)
+                                    .then()
+                                    .hidesLayer(DOCKED_STACK_DIVIDER)
+                            }
+
+                            all("appLayerBecomesInvisible") {
+                                this.showsLayer(testApp.getPackage())
+                                    .then()
+                                    .hidesLayer(testApp.getPackage())
+                            }
+                        }
+
+                        eventLog {
+                            focusDoesNotChange(bugId = 151179149)
+                        }
+                    }
+                }
         }
     }
 }

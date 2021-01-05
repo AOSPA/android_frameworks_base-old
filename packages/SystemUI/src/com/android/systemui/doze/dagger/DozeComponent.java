@@ -31,7 +31,7 @@ public interface DozeComponent {
     /** Simple Builder for {@link DozeComponent}. */
     @Subcomponent.Factory
     interface Builder {
-        DozeComponent build(@BindsInstance  DozeService dozeService);
+        DozeComponent build(@BindsInstance DozeMachine.Service dozeMachineService);
     }
 
     /** Supply a {@link DozeMachine}. */

@@ -22,8 +22,7 @@ import android.hardware.display.DisplayManager;
 import android.view.Display;
 
 import com.android.internal.annotations.VisibleForTesting;
-
-import javax.inject.Singleton;
+import com.android.systemui.dagger.SysUISingleton;
 
 /**
  * A class to control {@link MagnificationModeSwitch}. It should show the button UI with following
@@ -33,10 +32,10 @@ import javax.inject.Singleton;
  *   <li> The magnification scale is changed by a user.</li>
  * <ol>
  */
-@Singleton
+@SysUISingleton
 public class ModeSwitchesController {
 
-    private final SwitchSupplier mSwitchSupplier;
+    private final DisplayIdIndexSupplier<MagnificationModeSwitch> mSwitchSupplier;
 
     public ModeSwitchesController(Context context) {
         mSwitchSupplier = new SwitchSupplier(context,
@@ -44,7 +43,7 @@ public class ModeSwitchesController {
     }
 
     @VisibleForTesting
-    ModeSwitchesController(SwitchSupplier switchSupplier) {
+    ModeSwitchesController(DisplayIdIndexSupplier<MagnificationModeSwitch> switchSupplier) {
         mSwitchSupplier = switchSupplier;
     }
 
@@ -81,8 +80,22 @@ public class ModeSwitchesController {
         magnificationModeSwitch.removeButton();
     }
 
-    @VisibleForTesting
-    static class SwitchSupplier extends DisplayIdIndexSupplier<MagnificationModeSwitch> {
+    /**
+     * Called when the configuration has changed, and it updates magnification button UI.
+     *
+     * @param configDiff a bit mask of the differences between the configurations
+     */
+    @MainThread
+    void onConfigurationChanged(int configDiff) {
+        for (int i = 0; i < mSwitchSupplier.getSize(); i++) {
+            final MagnificationModeSwitch magnificationModeSwitch = mSwitchSupplier.valueAt(i);
+            if (magnificationModeSwitch != null) {
+                magnificationModeSwitch.onConfigurationChanged(configDiff);
+            }
+        }
+    }
+
+    private static class SwitchSupplier extends DisplayIdIndexSupplier<MagnificationModeSwitch> {
 
         private final Context mContext;
 

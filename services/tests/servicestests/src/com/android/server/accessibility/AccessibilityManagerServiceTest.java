@@ -49,6 +49,7 @@ import androidx.test.InstrumentationRegistry;
 
 import com.android.server.LocalServices;
 import com.android.server.accessibility.AccessibilityManagerService.AccessibilityDisplayListener;
+import com.android.server.accessibility.magnification.MagnificationController;
 import com.android.server.accessibility.magnification.WindowMagnificationManager;
 import com.android.server.accessibility.test.MessageCapturingHandler;
 import com.android.server.wm.ActivityTaskManagerInternal;
@@ -94,6 +95,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
     @Mock private IBinder mMockBinder;
     @Mock private IAccessibilityServiceClient mMockServiceClient;
     @Mock private WindowMagnificationManager mMockWindowMagnificationMgr;
+    @Mock private MagnificationController mMockMagnificationController;
     private AccessibilityUserState mUserState;
 
     private MessageCapturingHandler mHandler = new MessageCapturingHandler(null);
@@ -110,6 +112,8 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         LocalServices.addService(
                 ActivityTaskManagerInternal.class, mMockActivityTaskManagerInternal);
 
+        when(mMockMagnificationController.getWindowMagnificationMgr()).thenReturn(
+                mMockWindowMagnificationMgr);
         mA11yms = new AccessibilityManagerService(
             InstrumentationRegistry.getContext(),
             mMockPackageManager,
@@ -117,7 +121,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
             mMockSystemActionPerformer,
             mMockA11yWindowManager,
             mMockA11yDisplayListener,
-            mMockWindowMagnificationMgr);
+            mMockMagnificationController);
 
         final AccessibilityUserState userState = new AccessibilityUserState(
                 mA11yms.getCurrentUserIdLocked(), mMockContext, mA11yms);
@@ -229,5 +233,20 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
 
         verify(mMockWindowMagnificationMgr, never()).showMagnificationButton(anyInt(),
                 anyInt());
+    }
+
+    @SmallTest
+    public void testOnMagnificationTransitionFailed_capabilitiesIsAll_fallBackToPreviousMode() {
+        final AccessibilityUserState userState = mA11yms.mUserStates.get(
+                mA11yms.getCurrentUserIdLocked());
+        userState.setMagnificationCapabilitiesLocked(
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_ALL);
+        userState.setMagnificationModeLocked(
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN);
+
+        mA11yms.onMagnificationTransitionEndedLocked(false);
+
+        assertEquals(Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW,
+                userState.getMagnificationModeLocked());
     }
 }

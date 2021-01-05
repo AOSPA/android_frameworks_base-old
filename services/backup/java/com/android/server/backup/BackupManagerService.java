@@ -19,6 +19,7 @@ package com.android.server.backup;
 import static java.util.Collections.emptySet;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
@@ -31,6 +32,7 @@ import android.app.backup.IBackupObserver;
 import android.app.backup.IFullBackupRestoreObserver;
 import android.app.backup.IRestoreSession;
 import android.app.backup.ISelectBackupTransportCallback;
+import android.app.compat.CompatChanges;
 import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
 import android.app.job.JobService;
@@ -476,7 +478,7 @@ public class BackupManagerService extends IBackupManager.Stub {
                 if (getUserManager().isUserUnlocked(userId)) {
                     // Clear calling identity as initialization enforces the system identity but we
                     // can be coming from shell.
-                    long oldId = Binder.clearCallingIdentity();
+                    final long oldId = Binder.clearCallingIdentity();
                     try {
                         startServiceForUser(userId);
                     } finally {
@@ -507,6 +509,12 @@ public class BackupManagerService extends IBackupManager.Stub {
      */
     @Override
     public boolean isBackupServiceActive(int userId) {
+        int callingUid = Binder.getCallingUid();
+        if (CompatChanges.isChangeEnabled(
+                BackupManager.IS_BACKUP_SERVICE_ACTIVE_ENFORCE_PERMISSION_IN_SERVICE, callingUid)) {
+            mContext.enforceCallingPermission(android.Manifest.permission.BACKUP,
+                    "isBackupServiceActive");
+        }
         synchronized (mStateLock) {
             return !mGlobalDisable && isBackupActivatedForUser(userId);
         }
@@ -1237,9 +1245,10 @@ public class BackupManagerService extends IBackupManager.Stub {
 
     @Override
     public IRestoreSession beginRestoreSessionForUser(
-            int userId, String packageName, String transportID) throws RemoteException {
+            int userId, String packageName, String transportID,
+            @OperationType int operationType) throws RemoteException {
         return isUserReadyForBackup(userId)
-                ? beginRestoreSession(userId, packageName, transportID) : null;
+                ? beginRestoreSession(userId, packageName, transportID, operationType) : null;
     }
 
     /**
@@ -1248,13 +1257,15 @@ public class BackupManagerService extends IBackupManager.Stub {
      */
     @Nullable
     public IRestoreSession beginRestoreSession(
-            @UserIdInt int userId, String packageName, String transportName) {
+            @UserIdInt int userId, String packageName, String transportName,
+            @OperationType int operationType) {
         UserBackupManagerService userBackupManagerService =
                 getServiceForUserIfCallerHasPermission(userId, "beginRestoreSession()");
 
         return userBackupManagerService == null
                 ? null
-                : userBackupManagerService.beginRestoreSession(packageName, transportName);
+                : userBackupManagerService.beginRestoreSession(packageName, transportName,
+                        operationType);
     }
 
     @Override
@@ -1407,8 +1418,8 @@ public class BackupManagerService extends IBackupManager.Stub {
             return null;
         }
         int callingUserId = Binder.getCallingUserHandle().getIdentifier();
-        long oldId = Binder.clearCallingIdentity();
         final int[] userIds;
+        final long oldId = Binder.clearCallingIdentity();
         try {
             userIds = getUserManager().getProfileIds(callingUserId, false);
         } finally {
@@ -1605,13 +1616,13 @@ public class BackupManagerService extends IBackupManager.Stub {
         }
 
         @Override
-        public void onUnlockUser(int userId) {
-            sInstance.onUnlockUser(userId);
+        public void onUserUnlocking(@NonNull TargetUser user) {
+            sInstance.onUnlockUser(user.getUserIdentifier());
         }
 
         @Override
-        public void onStopUser(int userId) {
-            sInstance.onStopUser(userId);
+        public void onUserStopping(@NonNull TargetUser user) {
+            sInstance.onStopUser(user.getUserIdentifier());
         }
 
         @VisibleForTesting

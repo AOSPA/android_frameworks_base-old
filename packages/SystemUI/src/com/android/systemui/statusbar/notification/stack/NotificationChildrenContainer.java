@@ -22,7 +22,6 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.drawable.ColorDrawable;
 import android.service.notification.StatusBarNotification;
-import android.util.ArraySet;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.NotificationHeaderView;
@@ -32,11 +31,12 @@ import android.widget.RemoteViews;
 import android.widget.TextView;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.widget.CachingIconView;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.NotificationHeaderUtil;
 import com.android.systemui.statusbar.notification.NotificationUtils;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.HybridGroupManager;
 import com.android.systemui.statusbar.notification.row.HybridNotificationView;
@@ -319,9 +319,8 @@ public class NotificationChildrenContainer extends ViewGroup {
         RemoteViews header = builder.makeNotificationHeader();
         if (mNotificationHeader == null) {
             mNotificationHeader = (NotificationHeaderView) header.apply(getContext(), this);
-            final View expandButton = mNotificationHeader.findViewById(
-                    com.android.internal.R.id.expand_button);
-            expandButton.setVisibility(VISIBLE);
+            mNotificationHeader.findViewById(com.android.internal.R.id.expand_button)
+                    .setVisibility(VISIBLE);
             mNotificationHeader.setOnClickListener(mHeaderClickListener);
             mNotificationHeaderWrapper = NotificationViewWrapper.wrap(getContext(),
                     mNotificationHeader, mContainingNotification);
@@ -362,9 +361,8 @@ public class NotificationChildrenContainer extends ViewGroup {
             if (mNotificationHeaderLowPriority == null) {
                 mNotificationHeaderLowPriority = (NotificationHeaderView) header.apply(getContext(),
                         this);
-                final View expandButton = mNotificationHeaderLowPriority.findViewById(
-                        com.android.internal.R.id.expand_button);
-                expandButton.setVisibility(VISIBLE);
+                mNotificationHeaderLowPriority.findViewById(com.android.internal.R.id.expand_button)
+                        .setVisibility(VISIBLE);
                 mNotificationHeaderLowPriority.setOnClickListener(mHeaderClickListener);
                 mNotificationHeaderWrapperLowPriority = NotificationViewWrapper.wrap(getContext(),
                         mNotificationHeaderLowPriority, mContainingNotification);
@@ -447,7 +445,7 @@ public class NotificationChildrenContainer extends ViewGroup {
      * @param callback
      * @return whether the list order has changed
      */
-    public boolean applyChildOrder(List<? extends NotificationListItem> childOrder,
+    public boolean applyChildOrder(List<ExpandableNotificationRow> childOrder,
             VisualStabilityManager visualStabilityManager,
             VisualStabilityManager.Callback callback) {
         if (childOrder == null) {
@@ -456,7 +454,7 @@ public class NotificationChildrenContainer extends ViewGroup {
         boolean result = false;
         for (int i = 0; i < mAttachedChildren.size() && i < childOrder.size(); i++) {
             ExpandableNotificationRow child = mAttachedChildren.get(i);
-            ExpandableNotificationRow desiredChild = (ExpandableNotificationRow) childOrder.get(i);
+            ExpandableNotificationRow desiredChild = childOrder.get(i);
             if (child != desiredChild) {
                 if (visualStabilityManager.canReorderNotification(desiredChild)) {
                     mAttachedChildren.remove(desiredChild);
@@ -850,8 +848,8 @@ public class NotificationChildrenContainer extends ViewGroup {
     public void setChildrenExpanded(boolean childrenExpanded) {
         mChildrenExpanded = childrenExpanded;
         updateExpansionStates();
-        if (mNotificationHeader != null) {
-            mNotificationHeader.setExpanded(childrenExpanded);
+        if (mNotificationHeaderWrapper != null) {
+            mNotificationHeaderWrapper.setExpanded(childrenExpanded);
         }
         final int count = mAttachedChildren.size();
         for (int childIdx = 0; childIdx < count; childIdx++) {
@@ -870,12 +868,12 @@ public class NotificationChildrenContainer extends ViewGroup {
         return mContainingNotification;
     }
 
-    public NotificationHeaderView getHeaderView() {
-        return mNotificationHeader;
+    public NotificationViewWrapper getNotificationViewWrapper() {
+        return mNotificationHeaderWrapper;
     }
 
-    public NotificationHeaderView getLowPriorityHeaderView() {
-        return mNotificationHeaderLowPriority;
+    public NotificationViewWrapper getLowPriorityViewWrapper() {
+        return mNotificationHeaderWrapperLowPriority;
     }
 
     @VisibleForTesting
@@ -1225,16 +1223,15 @@ public class NotificationChildrenContainer extends ViewGroup {
 
     public void setShelfIconVisible(boolean iconVisible) {
         if (mNotificationHeaderWrapper != null) {
-            NotificationHeaderView header = mNotificationHeaderWrapper.getNotificationHeader();
-            if (header != null) {
-                header.getIcon().setForceHidden(iconVisible);
+            CachingIconView icon = mNotificationHeaderWrapper.getIcon();
+            if (icon != null) {
+                icon.setForceHidden(iconVisible);
             }
         }
         if (mNotificationHeaderWrapperLowPriority != null) {
-            NotificationHeaderView header
-                    = mNotificationHeaderWrapperLowPriority.getNotificationHeader();
-            if (header != null) {
-                header.getIcon().setForceHidden(iconVisible);
+            CachingIconView icon = mNotificationHeaderWrapperLowPriority.getIcon();
+            if (icon != null) {
+                icon.setForceHidden(iconVisible);
             }
         }
     }
@@ -1255,12 +1252,14 @@ public class NotificationChildrenContainer extends ViewGroup {
         }
     }
 
-    public NotificationHeaderView getVisibleHeader() {
-        NotificationHeaderView header = mNotificationHeader;
+    /**
+     * @return the view wrapper for the currently showing priority.
+     */
+    public NotificationViewWrapper getVisibleWrapper() {
         if (showingAsLowPriority()) {
-            header = mNotificationHeaderLowPriority;
+            return mNotificationHeaderWrapperLowPriority;
         }
-        return header;
+        return mNotificationHeaderWrapper;
     }
 
     public void onExpansionChanged() {
@@ -1270,13 +1269,6 @@ public class NotificationChildrenContainer extends ViewGroup {
             }
             updateHeaderVisibility(true /* animate */);
         }
-    }
-
-    public float getIncreasedPaddingAmount() {
-        if (showingAsLowPriority()) {
-            return 0.0f;
-        }
-        return getGroupExpandFraction();
     }
 
     @VisibleForTesting
@@ -1300,20 +1292,6 @@ public class NotificationChildrenContainer extends ViewGroup {
     public void setHeaderVisibleAmount(float headerVisibleAmount) {
         mHeaderVisibleAmount = headerVisibleAmount;
         mCurrentHeaderTranslation = (int) ((1.0f - headerVisibleAmount) * mTranslationForHeader);
-    }
-
-    /**
-     * Show a set of app opp icons in the layout.
-     *
-     * @param appOps which app ops to show
-     */
-    public void showAppOpsIcons(ArraySet<Integer> appOps) {
-        if (mNotificationHeaderWrapper != null) {
-            mNotificationHeaderWrapper.showAppOpsIcons(appOps);
-        }
-        if (mNotificationHeaderWrapperLowPriority != null) {
-            mNotificationHeaderWrapperLowPriority.showAppOpsIcons(appOps);
-        }
     }
 
     /**

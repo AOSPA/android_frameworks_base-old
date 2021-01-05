@@ -671,9 +671,6 @@
     <!-- Setting Checkbox title for enabling Bluetooth Gabeldorsche. [CHAR LIMIT=40] -->
     <string name="bluetooth_enable_gabeldorsche">Enable Gabeldorsche</string>
 
-    <!-- Setting Checkbox title for enabling Enhanced Connectivity [CHAR LIMIT=80] -->
-    <string name="enhanced_connectivity">Enhanced Connectivity</string>
-
     <!-- UI debug setting: Select Bluetooth AVRCP Version -->
     <string name="bluetooth_select_avrcp_version_string">Bluetooth AVRCP Version</string>
     <!-- UI debug setting: Select Bluetooth AVRCP Version -->
@@ -1009,6 +1006,15 @@
     <!-- Settings item summary for standby bucket value of an app. [CHAR LIMIT=100] -->
     <string name="standby_bucket_summary">App standby
         state:<xliff:g id="bucket"> %s</xliff:g></string>
+
+    <!-- Settings item title for transcode settings for apps. [CHAR LIMIT=85] -->
+    <string name="transcode_settings_title">Media transcode settings</string>
+
+    <!-- Settings item title to enable or disable transcoding for all apps. [CHAR LIMIT=85] -->
+    <string name="transcode_enable_all">Enable transcoding for all apps</string>
+
+    <!-- Settings category title for selecting apps to be skipped from transcoding. [CHAR LIMIT=85] -->
+    <string name="transcode_skip_apps">Disable transcoding for apps</string>
 
     <!-- Services settings screen, setting option name for the user to go to the screen to view running services -->
     <string name="runningservices_settings_title">Running services</string>
@@ -1372,6 +1378,11 @@
     <string name="user_set_lock_button">Set lock</string>
     <!-- Label for switching to other user in the user switcher [CHAR LIMIT=35] -->
     <string name="user_switch_to_user">Switch to <xliff:g id="user_name" example="John Doe">%s</xliff:g></string>
+    <!-- Dialog message when creating a new user [CHAR LIMIT=40] -->
+    <string name="creating_new_user_dialog_message">Creating new user…</string>
+
+    <!-- Title for the preference to enter the nickname of the user to display in the user switcher [CHAR LIMIT=25]-->
+    <string name="user_nickname">Nickname</string>
 
     <!-- Label for adding a new guest in the user switcher [CHAR LIMIT=35] -->
     <string name="guest_new_guest">Add guest</string>
@@ -1379,6 +1390,13 @@
     <string name="guest_exit_guest">Remove guest</string>
     <!-- Name for the guest user [CHAR LIMIT=35] -->
     <string name="guest_nickname">Guest</string>
+
+    <!-- An option in a photo selection dialog to take a new photo [CHAR LIMIT=50] -->
+    <string name="user_image_take_photo">Take a photo</string>
+    <!-- An option in a photo selection dialog to choose a pre-existing image [CHAR LIMIT=50] -->
+    <string name="user_image_choose_photo">Choose an image</string>
+    <!-- Accessibility message for the photo selector which is a button/popup with the current photo [CHAR LIMIT=50] -->
+    <string name="user_image_photo_selector">Select photo</string>
 
     <!-- List entry in developer settings to choose default device/system behavior for the app freezer [CHAR LIMIT=30]-->
     <string name="cached_apps_freezer_device_default">Device default</string>
@@ -1391,4 +1409,9 @@
 
     <!-- Name of the 3.5mm and usb audio device. [CHAR LIMIT=50] -->
     <string name="media_transfer_wired_usb_device_name">Wired headphone</string>
+
+    <!-- Label for Wifi hotspot switch on. Toggles hotspot on [CHAR LIMIT=30] -->
+    <string name="wifi_hotspot_switch_on_text">On</string>
+    <!-- Label for Wifi hotspot switch off. Toggles hotspot off [CHAR LIMIT=30] -->
+    <string name="wifi_hotspot_switch_off_text">Off</string>
 </resources>

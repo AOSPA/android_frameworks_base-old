@@ -122,6 +122,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 
+// TODO(b/172376923) - add CarDevicePolicyManager examples below (or remove reference to it).
 /**
  * Public interface for managing policies enforced on a device. Most clients of this class must be
  * registered with the system as a <a href="{@docRoot}guide/topics/admin/device-admin.html">device
@@ -130,6 +131,13 @@ import java.util.concurrent.Executor;
  * for that method specifies that it is restricted to either device or profile owners. Any
  * application calling an api may only pass as an argument a device administrator component it
  * owns. Otherwise, a {@link SecurityException} will be thrown.
+ *
+ * <p><b>Note: </b>on
+ * {@link android.content.pm.PackageManager#FEATURE_AUTOMOTIVE automotive builds}, some methods can
+ * throw an {@link UnsafeStateException} exception (for example, if the vehicle is moving), so
+ * callers running on automotive builds should wrap every method call under the methods provided by
+ * {@code android.car.admin.CarDevicePolicyManager}.
+ *
  * <div class="special reference">
  * <h3>Developer Guides</h3>
  * <p>
@@ -1396,7 +1404,7 @@ public class DevicePolicyManager {
      * sent to the parent user.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final String ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED
             = "android.app.action.DEVICE_POLICY_MANAGER_STATE_CHANGED";
 
@@ -1465,7 +1473,7 @@ public class DevicePolicyManager {
      * @see #createAdminSupportIntent(String)
      * @hide
      */
-    @TestApi @SystemApi
+    @SystemApi
     public static final String EXTRA_RESTRICTION = "android.app.extra.RESTRICTION";
 
     /**
@@ -1830,6 +1838,15 @@ public class DevicePolicyManager {
     public static final int STATE_USER_PROFILE_COMPLETE = 4;
 
     /**
+     * Management setup on a managed profile.
+     * <p>This is used as an intermediate state after {@link #STATE_USER_PROFILE_COMPLETE} once the
+     * work profile has been created.
+     * @hide
+     */
+    @SystemApi
+    public static final int STATE_USER_PROFILE_FINALIZED = 5;
+
+    /**
      * @hide
      */
     @IntDef(prefix = { "STATE_USER_" }, value = {
@@ -1837,7 +1854,8 @@ public class DevicePolicyManager {
             STATE_USER_SETUP_INCOMPLETE,
             STATE_USER_SETUP_COMPLETE,
             STATE_USER_SETUP_FINALIZED,
-            STATE_USER_PROFILE_COMPLETE
+            STATE_USER_PROFILE_COMPLETE,
+            STATE_USER_PROFILE_FINALIZED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UserProvisioningState {}
@@ -1962,6 +1980,7 @@ public class DevicePolicyManager {
     public static final int CODE_CANNOT_ADD_MANAGED_PROFILE = 11;
 
     /**
+     * TODO (b/137101239): clean up split system user codes
      * Result code for {@link #checkProvisioningPreCondition}.
      *
      * <p>Returned for {@link #ACTION_PROVISION_MANAGED_USER} and
@@ -1985,6 +2004,7 @@ public class DevicePolicyManager {
     public static final int CODE_DEVICE_ADMIN_NOT_SUPPORTED = 13;
 
     /**
+     * TODO (b/137101239): clean up split system user codes
      * Result code for {@link #checkProvisioningPreCondition}.
      *
      * <p>Returned for {@link #ACTION_PROVISION_MANAGED_PROFILE} when the device the user is a
@@ -2051,7 +2071,7 @@ public class DevicePolicyManager {
      * Enable the Home button during LockTask mode. Note that if a custom launcher is used, it has
      * to be registered as the default launcher with
      * {@link #addPersistentPreferredActivity(ComponentName, IntentFilter, ComponentName)}, and its
-     * package needs to be whitelisted for LockTask with
+     * package needs to be allowlisted for LockTask with
      * {@link #setLockTaskPackages(ComponentName, String[])}.
      *
      * @see #setLockTaskFeatures(ComponentName, int)
@@ -2092,7 +2112,7 @@ public class DevicePolicyManager {
     public static final int LOCK_TASK_FEATURE_KEYGUARD = 1 << 5;
 
     /**
-     * Enable blocking of non-whitelisted activities from being started into a locked task.
+     * Enable blocking of non-allowlisted activities from being started into a locked task.
      *
      * @see #setLockTaskFeatures(ComponentName, int)
      */
@@ -2433,6 +2453,19 @@ public class DevicePolicyManager {
     @Retention(RetentionPolicy.SOURCE)
     public @interface PersonalAppsSuspensionReason {}
 
+    /** @hide */
+    @TestApi
+    public static final int OPERATION_LOCK_NOW = 1;
+
+    // TODO(b/172376923) - add all operations
+    /** @hide */
+    @IntDef(prefix = "OPERATION_", value = {
+            OPERATION_LOCK_NOW,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public static @interface DevicePolicyOperation {
+    }
+
     /**
      * Return true if the given administrator component is currently active (enabled) in the system.
      *
@@ -2688,13 +2721,11 @@ public class DevicePolicyManager {
      * </ul>
      */
     @SystemApi
-    @TestApi
     public static final String ACCOUNT_FEATURE_DEVICE_OR_PROFILE_OWNER_ALLOWED =
             "android.account.DEVICE_OR_PROFILE_OWNER_ALLOWED";
 
     /** @hide See {@link #ACCOUNT_FEATURE_DEVICE_OR_PROFILE_OWNER_ALLOWED} */
     @SystemApi
-    @TestApi
     public static final String ACCOUNT_FEATURE_DEVICE_OR_PROFILE_OWNER_DISALLOWED =
             "android.account.DEVICE_OR_PROFILE_OWNER_DISALLOWED";
 
@@ -2720,6 +2751,9 @@ public class DevicePolicyManager {
      * This method can be called on the {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
+     *
+     * <p><strong>Note:</strong> Specifying password requirements using this method clears the
+     * password complexity requirements set using {@link #setRequiredPasswordComplexity(int)}.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param quality The new desired quality. One of {@link #PASSWORD_QUALITY_UNSPECIFIED},
@@ -3599,13 +3633,18 @@ public class DevicePolicyManager {
      * <p>Note that when called from a profile which uses an unified challenge with its parent, the
      * screen lock complexity of the parent will be returned.
      *
+     * <p>Apps need the {@link permission#REQUEST_PASSWORD_COMPLEXITY} permission to call this
+     * method. On Android {@link android.os.Build.VERSION_CODES#S} and above, the calling
+     * application does not need this permission if it is a device owner or a profile owner.
+     *
      * <p>This method can be called on the {@link DevicePolicyManager} instance
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
      * @throws IllegalStateException if the user is not unlocked.
      * @throws SecurityException     if the calling application does not have the permission
-     *                               {@link permission#REQUEST_PASSWORD_COMPLEXITY}
+     *                               {@link permission#REQUEST_PASSWORD_COMPLEXITY}, and is not a
+     *                               device owner or a profile owner.
      */
     @PasswordComplexity
     @RequiresPermission(android.Manifest.permission.REQUEST_PASSWORD_COMPLEXITY)
@@ -3616,6 +3655,66 @@ public class DevicePolicyManager {
 
         try {
             return mService.getPasswordComplexity(mParentInstance);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets a password complexity requirement for the user's screen lock.
+     * The complexity level is one of the pre-defined levels.
+     *
+     * <p>Note that when called on a profile which uses an unified challenge with its parent, the
+     * complexity would apply to the unified challenge.
+     *
+     * <p>This method can be called on the {@link DevicePolicyManager} instance
+     * returned by {@link #getParentProfileInstance(ComponentName)} in order to set
+     * restrictions on the parent profile.
+     *
+     * <p><strong>Note:</strong> Specifying password requirements using this method clears any
+     * password requirements set using the obsolete {@link #setPasswordQuality(ComponentName, int)}
+     * and any of its associated methods.
+     *
+     * @throws SecurityException if the calling application is not a device owner or a profile
+     * owner.
+     * @throws IllegalArgumentException if the complexity level is not one of the four above.
+     */
+    public void setRequiredPasswordComplexity(@PasswordComplexity int passwordComplexity) {
+        if (mService == null) {
+            return;
+        }
+
+        try {
+            mService.setRequiredPasswordComplexity(passwordComplexity, mParentInstance);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+
+    /**
+     * Gets the password complexity requirement set by {@link #setRequiredPasswordComplexity(int)},
+     * for the current user.
+     *
+     * <p>The difference between this method and {@link #getPasswordComplexity()} is that this
+     * method simply returns the value set by {@link #setRequiredPasswordComplexity(int)} while
+     * {@link #getPasswordComplexity()} returns the complexity of the actual password.
+     *
+     * <p>This method can be called on the {@link DevicePolicyManager} instance
+     * returned by {@link #getParentProfileInstance(ComponentName)} in order to get
+     * restrictions on the parent profile.
+     *
+     * @throws SecurityException if the calling application is not a device owner or a profile
+     * owner.
+     */
+    @PasswordComplexity
+    public int getRequiredPasswordComplexity() {
+        if (mService == null) {
+            return PASSWORD_COMPLEXITY_NONE;
+        }
+
+        try {
+            return mService.getRequiredPasswordComplexity(mParentInstance);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4124,7 +4223,7 @@ public class DevicePolicyManager {
     }
 
     /** @hide per-user version */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public long getMaximumTimeToLock(@Nullable ComponentName admin, int userHandle) {
         if (mService != null) {
             try {
@@ -4206,7 +4305,7 @@ public class DevicePolicyManager {
     }
 
     /** @hide per-user version */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @RequiresFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN)
     public long getRequiredStrongAuthTimeout(@Nullable ComponentName admin, @UserIdInt int userId) {
         if (mService != null) {
@@ -4263,6 +4362,9 @@ public class DevicePolicyManager {
      * This method can be called on the {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to lock the parent profile.
      * <p>
+     * NOTE: on {@link android.content.pm.PackageManager#FEATURE_AUTOMOTIVE automotive builds}, this
+     * method doesn't turn off the screen as it would be a driving safety distraction.
+     * <p>
      * Equivalent to calling {@link #lockNow(int)} with no flags.
      *
      * @throws SecurityException if the calling application does not own an active administrator
@@ -4306,6 +4408,9 @@ public class DevicePolicyManager {
      * Calling the method twice in this order ensures that all users are locked and does not
      * stop the device admin on the managed profile from issuing a second call to lock its own
      * profile.
+     * <p>
+     * NOTE: on {@link android.content.pm.PackageManager#FEATURE_AUTOMOTIVE automotive builds}, this
+     * method doesn't turn off the screen as it would be a driving safety distraction.
      *
      * @param flags May be 0 or {@link #FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY}.
      * @throws SecurityException if the calling application does not own an active administrator
@@ -4508,7 +4613,7 @@ public class DevicePolicyManager {
      *            of the device admin that sets the proxy.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public @Nullable ComponentName setGlobalProxy(@NonNull ComponentName admin, Proxy proxySpec,
             List<String> exclusionList ) {
         throwIfParentInstance("setGlobalProxy");
@@ -4713,7 +4818,7 @@ public class DevicePolicyManager {
     /**
      * Disable trust agents on secure keyguard screens (e.g. PIN/Pattern/Password).
      * By setting this flag alone, all trust agents are disabled. If the admin then wants to
-     * whitelist specific features of some trust agent, {@link #setTrustAgentConfiguration} can be
+     * allowlist specific features of some trust agent, {@link #setTrustAgentConfiguration} can be
      * used in conjuction to set trust-agent-specific configurations.
      */
     public static final int KEYGUARD_DISABLE_TRUST_AGENTS = 1 << 4;
@@ -5694,7 +5799,7 @@ public class DevicePolicyManager {
      * The call will fail if called with the package name of an unsupported VPN app.
      * <p> Enabling lockdown via {@code lockdownEnabled} argument carries the risk that any failure
      * of the VPN provider could break networking for all apps. This method clears any lockdown
-     * whitelist set by {@link #setAlwaysOnVpnPackage(ComponentName, String, boolean, Set)}.
+     * allowlist set by {@link #setAlwaysOnVpnPackage(ComponentName, String, boolean, Set)}.
      *
      * @param vpnPackage The package name for an installed VPN app on the device, or {@code null} to
      *        remove an existing always-on VPN configuration.
@@ -5716,36 +5821,36 @@ public class DevicePolicyManager {
      * admin to specify a set of apps that should be able to access the network directly when VPN
      * is not connected. When VPN connects these apps switch over to VPN if allowed to use that VPN.
      * System apps can always bypass VPN.
-     * <p> Note that the system doesn't update the whitelist when packages are installed or
+     * <p> Note that the system doesn't update the allowlist when packages are installed or
      * uninstalled, the admin app must call this method to keep the list up to date.
-     * <p> When {@code lockdownEnabled} is false {@code lockdownWhitelist} is ignored . When
-     * {@code lockdownEnabled} is {@code true} and {@code lockdownWhitelist} is {@code null} or
+     * <p> When {@code lockdownEnabled} is false {@code lockdownAllowlist} is ignored . When
+     * {@code lockdownEnabled} is {@code true} and {@code lockdownAllowlist} is {@code null} or
      * empty, only system apps can bypass VPN.
      * <p> Setting always-on VPN package to {@code null} or using
-     * {@link #setAlwaysOnVpnPackage(ComponentName, String, boolean)} clears lockdown whitelist.
+     * {@link #setAlwaysOnVpnPackage(ComponentName, String, boolean)} clears lockdown allowlist.
      *
      * @param vpnPackage package name for an installed VPN app on the device, or {@code null}
      *         to remove an existing always-on VPN configuration
      * @param lockdownEnabled {@code true} to disallow networking when the VPN is not connected or
      *         {@code false} otherwise. This has no effect when clearing.
-     * @param lockdownWhitelist Packages that will be able to access the network directly when VPN
+     * @param lockdownAllowlist Packages that will be able to access the network directly when VPN
      *         is in lockdown mode but not connected. Has no effect when clearing.
      * @throws SecurityException if {@code admin} is not a device or a profile
      *         owner.
      * @throws NameNotFoundException if {@code vpnPackage} or one of
-     *         {@code lockdownWhitelist} is not installed.
+     *         {@code lockdownAllowlist} is not installed.
      * @throws UnsupportedOperationException if {@code vpnPackage} exists but does
      *         not support being set as always-on, or if always-on VPN is not
      *         available.
      */
     public void setAlwaysOnVpnPackage(@NonNull ComponentName admin, @Nullable String vpnPackage,
-            boolean lockdownEnabled, @Nullable Set<String> lockdownWhitelist)
+            boolean lockdownEnabled, @Nullable Set<String> lockdownAllowlist)
             throws NameNotFoundException {
         throwIfParentInstance("setAlwaysOnVpnPackage");
         if (mService != null) {
             try {
                 mService.setAlwaysOnVpnPackage(admin, vpnPackage, lockdownEnabled,
-                        lockdownWhitelist == null ? null : new ArrayList<>(lockdownWhitelist));
+                        lockdownAllowlist == null ? null : new ArrayList<>(lockdownAllowlist));
             } catch (ServiceSpecificException e) {
                 switch (e.errorCode) {
                     case ERROR_VPN_PACKAGE_NOT_FOUND:
@@ -5820,9 +5925,9 @@ public class DevicePolicyManager {
         throwIfParentInstance("getAlwaysOnVpnLockdownWhitelist");
         if (mService != null) {
             try {
-                final List<String> whitelist =
-                        mService.getAlwaysOnVpnLockdownWhitelist(admin);
-                return whitelist == null ? null : new HashSet<>(whitelist);
+                final List<String> allowlist =
+                        mService.getAlwaysOnVpnLockdownAllowlist(admin);
+                return allowlist == null ? null : new HashSet<>(allowlist);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6310,7 +6415,7 @@ public class DevicePolicyManager {
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void setActiveAdmin(@NonNull ComponentName policyReceiver, boolean refreshing,
             int userHandle) {
         if (mService != null) {
@@ -6671,8 +6776,7 @@ public class DevicePolicyManager {
      * @hide
      */
     @SystemApi
-    @TestApi
-    @SuppressLint("Doclava125")
+    @SuppressLint("RequiresPermission")
     public boolean isDeviceManaged() {
         try {
             return mService.hasDeviceOwner();
@@ -6983,7 +7087,7 @@ public class DevicePolicyManager {
         throwIfParentInstance("isProfileOwnerApp");
         if (mService != null) {
             try {
-                ComponentName profileOwner = mService.getProfileOwner(myUserId());
+                ComponentName profileOwner = mService.getProfileOwnerAsUser(myUserId());
                 return profileOwner != null
                         && profileOwner.getPackageName().equals(packageName);
             } catch (RemoteException re) {
@@ -7025,7 +7129,7 @@ public class DevicePolicyManager {
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public @Nullable ComponentName getProfileOwnerAsUser(final int userId) {
         if (mService != null) {
             try {
@@ -7440,7 +7544,7 @@ public class DevicePolicyManager {
     }
 
     /** @hide per-user version */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @RequiresFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN)
     public @Nullable List<PersistableBundle> getTrustAgentConfiguration(
             @Nullable ComponentName admin, @NonNull ComponentName agent, int userHandle) {
@@ -7955,7 +8059,7 @@ public class DevicePolicyManager {
      * {@link #setApplicationHidden(ComponentName, String, boolean)})
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param packageList List of package names to whitelist
+     * @param packageList List of package names to allowlist
      * @return true if setting the restriction succeeded. It will fail if called outside a managed
      * profile
      * @throws SecurityException if {@code admin} is not a profile owner.
@@ -9056,7 +9160,7 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owners to set the user's master location setting.
+     * Called by device owners to set the user's global location setting.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with
      * @param locationEnabled whether location should be enabled or disabled
@@ -9155,11 +9259,11 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by profile or device owners to set the master volume mute on or off.
+     * Called by profile or device owners to set the global volume mute on or off.
      * This has no effect when set on a managed profile.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param on {@code true} to mute master volume, {@code false} to turn mute off.
+     * @param on {@code true} to mute global volume, {@code false} to turn mute off.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
     public void setMasterVolumeMuted(@NonNull ComponentName admin, boolean on) {
@@ -9174,10 +9278,10 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by profile or device owners to check whether the master volume mute is on or off.
+     * Called by profile or device owners to check whether the global volume mute is on or off.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @return {@code true} if master volume is muted, {@code false} if it's not.
+     * @return {@code true} if global volume is muted, {@code false} if it's not.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
     public boolean isMasterVolumeMuted(@NonNull ComponentName admin) {
@@ -9248,14 +9352,14 @@ public class DevicePolicyManager {
     /**
      * Called by the profile owner of a managed profile to enable widget providers from a given
      * package to be available in the parent profile. As a result the user will be able to add
-     * widgets from the white-listed package running under the profile to a widget host which runs
+     * widgets from the allowlisted package running under the profile to a widget host which runs
      * under the parent profile, for example the home screen. Note that a package may have zero or
      * more provider components, where each component provides a different widget type.
      * <p>
-     * <strong>Note:</strong> By default no widget provider package is white-listed.
+     * <strong>Note:</strong> By default no widget provider package is allowlisted.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param packageName The package from which widget providers are white-listed.
+     * @param packageName The package from which widget providers are allowlisted.
      * @return Whether the package was added.
      * @throws SecurityException if {@code admin} is not a profile owner.
      * @see #removeCrossProfileWidgetProvider(android.content.ComponentName, String)
@@ -9279,10 +9383,10 @@ public class DevicePolicyManager {
      * should have been added via
      * {@link #addCrossProfileWidgetProvider( android.content.ComponentName, String)}.
      * <p>
-     * <strong>Note:</strong> By default no widget provider package is white-listed.
+     * <strong>Note:</strong> By default no widget provider package is allowlisted.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param packageName The package from which widget providers are no longer white-listed.
+     * @param packageName The package from which widget providers are no longer allowlisted.
      * @return Whether the package was removed.
      * @throws SecurityException if {@code admin} is not a profile owner.
      * @see #addCrossProfileWidgetProvider(android.content.ComponentName, String)
@@ -9306,7 +9410,7 @@ public class DevicePolicyManager {
      * available in the parent profile.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @return The white-listed package list.
+     * @return The allowlisted package list.
      * @see #addCrossProfileWidgetProvider(android.content.ComponentName, String)
      * @see #removeCrossProfileWidgetProvider(android.content.ComponentName, String)
      * @throws SecurityException if {@code admin} is not a profile owner.
@@ -9751,21 +9855,6 @@ public class DevicePolicyManager {
     }
 
     /**
-     * @hide
-     * Return if this user is a system-only user. An admin can manage a device from a system only
-     * user by calling {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE}.
-     * @param admin Which device owner this request is associated with.
-     * @return if this user is a system-only user.
-     */
-    public boolean isSystemOnlyUser(@NonNull ComponentName admin) {
-        try {
-            return mService.isSystemOnlyUser(admin);
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
-        }
-    }
-
-    /**
      * Called by device owner, or profile owner on organization-owned device, to get the MAC
      * address of the Wi-Fi device.
      *
@@ -9989,6 +10078,8 @@ public class DevicePolicyManager {
      * <li>{@link #getRequiredStrongAuthTimeout}</li>
      * <li>{@link #setRequiredStrongAuthTimeout}</li>
      * <li>{@link #getAccountTypesWithManagementDisabled}</li>
+     * <li>{@link #setRequiredPasswordComplexity(int)} </li>
+     * <li>{@link #getRequiredPasswordComplexity()}</li>
      * </ul>
      * <p>
      * The following methods are supported for the parent instance but can only be called by the
@@ -10396,8 +10487,7 @@ public class DevicePolicyManager {
      * @hide
      */
     @SystemApi
-    @TestApi
-    @SuppressLint("Doclava125")
+    @SuppressLint("RequiresPermission")
     public @Nullable CharSequence getDeviceOwnerOrganizationName() {
         try {
             return mService.getDeviceOwnerOrganizationName();
@@ -10642,7 +10732,7 @@ public class DevicePolicyManager {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private void throwIfParentInstance(String functionName) {
         if (mParentInstance) {
             throw new SecurityException(functionName + " cannot be called on the parent instance");
@@ -11642,7 +11732,7 @@ public class DevicePolicyManager {
      * called, no package is allowed to access cross-profile calendar APIs by default.
      *
      * @param admin which {@link DeviceAdminReceiver} this request is associated with
-     * @param packageNames set of packages to be whitelisted
+     * @param packageNames set of packages to be allowlisted
      * @throws SecurityException if {@code admin} is not a profile owner
      *
      * @see #getCrossProfileCalendarPackages(ComponentName)
@@ -11749,7 +11839,7 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Sets the set of admin-whitelisted package names that are allowed to request user consent for
+     * Sets the set of admin-allowlisted package names that are allowed to request user consent for
      * cross-profile communication.
      *
      * <p>Assumes that the caller is a profile owner and is the given {@code admin}.
@@ -11757,11 +11847,11 @@ public class DevicePolicyManager {
      * <p>Previous calls are overridden by each subsequent call to this method.
      *
      * <p>Note that other apps may be able to request user consent for cross-profile communication
-     * if they have been explicitly whitelisted by the OEM.
+     * if they have been explicitly allowlisted by the OEM.
      *
      * <p>When previously-set cross-profile packages are missing from {@code packageNames}, the
      * app-op for {@code INTERACT_ACROSS_PROFILES} will be reset for those packages. This will not
-     * occur for packages that are whitelisted by the OEM.
+     * occur for packages that are allowlisted by the OEM.
      *
      * @param admin the {@link DeviceAdminReceiver} this request is associated with
      * @param packageNames the new cross-profile package names
@@ -11786,7 +11876,7 @@ public class DevicePolicyManager {
      * <p>Assumes that the caller is a profile owner and is the given {@code admin}.
      *
      * <p>Note that other apps not included in the returned set may be able to request user consent
-     * for cross-profile communication if they have been explicitly whitelisted by the OEM.
+     * for cross-profile communication if they have been explicitly allowlisted by the OEM.
      *
      * @param admin the {@link DeviceAdminReceiver} this request is associated with
      * @return the set of package names the admin has previously set as allowed to request user
@@ -11817,7 +11907,7 @@ public class DevicePolicyManager {
      * #vendor_cross_profile_apps}.</li>
      * </ul>
      *
-     * @return the combined set of whitelisted package names set via
+     * @return the combined set of allowlisted package names set via
      * {@link #setCrossProfilePackages(ComponentName, Set)}, {@link com.android.internal.R.array
      * #cross_profile_apps}, and {@link com.android.internal.R.array#vendor_cross_profile_apps}.
      *
@@ -12006,6 +12096,9 @@ public class DevicePolicyManager {
      * <li> WiFi configuration store is additionally integrity-protected with AES-GCM. </li>
      * </ul>
      * Common Criteria mode is disabled by default.
+     *
+     * <p><em>Note:</em> if Common Critera mode is turned off after being enabled previously,
+     * all existing WiFi configurations will be lost.
      *
      * @param admin which {@link DeviceAdminReceiver} this request is associated with.
      * @param enabled whether Common Criteria mode should be enabled or not.

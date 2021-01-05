@@ -25,9 +25,16 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
 
+import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_CRITICAL;
+import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_LOW;
+import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_MODERATE;
+import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_NORMAL;
+import static com.android.server.am.LowMemDetector.ADJ_MEM_FACTOR_NOTHING;
+
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
+import android.app.ActivityTaskManager.RootTaskInfo;
 import android.app.AppGlobals;
 import android.app.BroadcastOptions;
 import android.app.IActivityController;
@@ -91,6 +98,7 @@ import android.view.Display;
 import com.android.internal.compat.CompatibilityChangeConfig;
 import com.android.internal.util.HexDump;
 import com.android.internal.util.MemInfoReader;
+import com.android.server.am.LowMemDetector.MemFactor;
 import com.android.server.compat.PlatformCompat;
 
 import java.io.BufferedReader;
@@ -308,6 +316,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runCompat(pw);
                 case "refresh-settings-cache":
                     return runRefreshSettingsCache();
+                case "memory-factor":
+                    return runMemoryFactor(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -2581,16 +2591,14 @@ final class ActivityManagerShellCommand extends ShellCommand {
         switch (op) {
             case "move-task":
                 return runStackMoveTask(pw);
-            case "positiontask":
-                return runStackPositionTask(pw);
             case "list":
                 return runStackList(pw);
             case "info":
-                return runStackInfo(pw);
+                return runRootTaskInfo(pw);
             case "move-top-activity-to-pinned-stack":
-                return runMoveTopActivityToPinnedStack(pw);
+                return runMoveTopActivityToPinnedRootTask(pw);
             case "remove":
-                return runStackRemove(pw);
+                return runRootTaskRemove(pw);
             default:
                 getErrPrintWriter().println("Error: unknown command '" + op + "'");
                 return -1;
@@ -2627,19 +2635,19 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     int runDisplayMoveStack(PrintWriter pw) throws RemoteException {
-        String stackIdStr = getNextArgRequired();
-        int stackId = Integer.parseInt(stackIdStr);
+        String rootTaskIdStr = getNextArgRequired();
+        int rootTaskId = Integer.parseInt(rootTaskIdStr);
         String displayIdStr = getNextArgRequired();
         int displayId = Integer.parseInt(displayIdStr);
-        mTaskInterface.moveStackToDisplay(stackId, displayId);
+        mTaskInterface.moveRootTaskToDisplay(rootTaskId, displayId);
         return 0;
     }
 
     int runStackMoveTask(PrintWriter pw) throws RemoteException {
         String taskIdStr = getNextArgRequired();
         int taskId = Integer.parseInt(taskIdStr);
-        String stackIdStr = getNextArgRequired();
-        int stackId = Integer.parseInt(stackIdStr);
+        String rootTaskIdStr = getNextArgRequired();
+        int rootTaskId = Integer.parseInt(rootTaskIdStr);
         String toTopStr = getNextArgRequired();
         final boolean toTop;
         if ("true".equals(toTopStr)) {
@@ -2651,54 +2659,42 @@ final class ActivityManagerShellCommand extends ShellCommand {
             return -1;
         }
 
-        mTaskInterface.moveTaskToStack(taskId, stackId, toTop);
-        return 0;
-    }
-
-    int runStackPositionTask(PrintWriter pw) throws RemoteException {
-        String taskIdStr = getNextArgRequired();
-        int taskId = Integer.parseInt(taskIdStr);
-        String stackIdStr = getNextArgRequired();
-        int stackId = Integer.parseInt(stackIdStr);
-        String positionStr = getNextArgRequired();
-        int position = Integer.parseInt(positionStr);
-
-        mTaskInterface.positionTaskInStack(taskId, stackId, position);
+        mTaskInterface.moveTaskToRootTask(taskId, rootTaskId, toTop);
         return 0;
     }
 
     int runStackList(PrintWriter pw) throws RemoteException {
-        List<ActivityManager.StackInfo> stacks = mTaskInterface.getAllStackInfos();
-        for (ActivityManager.StackInfo info : stacks) {
+        List<RootTaskInfo> tasks = mTaskInterface.getAllRootTaskInfos();
+        for (RootTaskInfo info : tasks) {
             pw.println(info);
         }
         return 0;
     }
 
-    int runStackInfo(PrintWriter pw) throws RemoteException {
+    int runRootTaskInfo(PrintWriter pw) throws RemoteException {
         int windowingMode = Integer.parseInt(getNextArgRequired());
         int activityType = Integer.parseInt(getNextArgRequired());
-        ActivityManager.StackInfo info = mTaskInterface.getStackInfo(windowingMode, activityType);
+        RootTaskInfo info = mTaskInterface.getRootTaskInfo(windowingMode, activityType);
         pw.println(info);
         return 0;
     }
 
-    int runStackRemove(PrintWriter pw) throws RemoteException {
-        String stackIdStr = getNextArgRequired();
-        int stackId = Integer.parseInt(stackIdStr);
-        mTaskInterface.removeStack(stackId);
+    int runRootTaskRemove(PrintWriter pw) throws RemoteException {
+        String taskIdStr = getNextArgRequired();
+        int taskId = Integer.parseInt(taskIdStr);
+        mTaskInterface.removeTask(taskId);
         return 0;
     }
 
-    int runMoveTopActivityToPinnedStack(PrintWriter pw) throws RemoteException {
-        int stackId = Integer.parseInt(getNextArgRequired());
+    int runMoveTopActivityToPinnedRootTask(PrintWriter pw) throws RemoteException {
+        int rootTaskId = Integer.parseInt(getNextArgRequired());
         final Rect bounds = getBounds();
         if (bounds == null) {
             getErrPrintWriter().println("Error: invalid input bounds");
             return -1;
         }
 
-        if (!mTaskInterface.moveTopActivityToPinnedStack(stackId, bounds)) {
+        if (!mTaskInterface.moveTopActivityToPinnedRootTask(rootTaskId, bounds)) {
             getErrPrintWriter().println("Didn't move top activity to pinned stack.");
             return -1;
         }
@@ -3027,6 +3023,81 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return -1;
     }
 
+    private int runSetMemoryFactor(PrintWriter pw) throws RemoteException {
+        final String levelArg = getNextArgRequired();
+        @MemFactor int level = ADJ_MEM_FACTOR_NOTHING;
+        switch (levelArg) {
+            case "NORMAL":
+                level = ADJ_MEM_FACTOR_NORMAL;
+                break;
+            case "MODERATE":
+                level = ADJ_MEM_FACTOR_MODERATE;
+                break;
+            case "LOW":
+                level = ADJ_MEM_FACTOR_LOW;
+                break;
+            case "CRITICAL":
+                level = ADJ_MEM_FACTOR_CRITICAL;
+                break;
+            default:
+                try {
+                    level = Integer.parseInt(levelArg);
+                } catch (NumberFormatException e) {
+                }
+                if (level < ADJ_MEM_FACTOR_NORMAL || level > ADJ_MEM_FACTOR_CRITICAL) {
+                    getErrPrintWriter().println("Error: Unknown level option: " + levelArg);
+                    return -1;
+                }
+        }
+        mInternal.setMemFactorOverride(level);
+        return 0;
+    }
+
+    private int runShowMemoryFactor(PrintWriter pw) throws RemoteException {
+        final @MemFactor int level = mInternal.getMemoryTrimLevel();
+        switch (level) {
+            case ADJ_MEM_FACTOR_NOTHING:
+                pw.println("<UNKNOWN>");
+                break;
+            case ADJ_MEM_FACTOR_NORMAL:
+                pw.println("NORMAL");
+                break;
+            case ADJ_MEM_FACTOR_MODERATE:
+                pw.println("MODERATE");
+                break;
+            case ADJ_MEM_FACTOR_LOW:
+                pw.println("LOW");
+                break;
+            case ADJ_MEM_FACTOR_CRITICAL:
+                pw.println("CRITICAL");
+                break;
+        }
+        pw.flush();
+        return 0;
+    }
+
+    private int runResetMemoryFactor(PrintWriter pw) throws RemoteException {
+        mInternal.setMemFactorOverride(ADJ_MEM_FACTOR_NOTHING);
+        return 0;
+    }
+
+    private int runMemoryFactor(PrintWriter pw) throws RemoteException {
+        mInternal.enforceCallingPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS,
+                "runMemoryFactor()");
+
+        final String op = getNextArgRequired();
+        switch (op) {
+            case "set":
+                return runSetMemoryFactor(pw);
+            case "show":
+                return runShowMemoryFactor(pw);
+            case "reset":
+                return runResetMemoryFactor(pw);
+            default:
+                getErrPrintWriter().println("Error: unknown command '" + op + "'");
+                return -1;
+        }
+    }
 
     private Resources getResources(PrintWriter pw) throws RemoteException {
         // system resources does not contain all the device configuration, construct it manually.
@@ -3347,6 +3418,13 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("            Removes all existing overrides for all changes for ");
             pw.println("            <PACKAGE_NAME> (back to default behaviour).");
             pw.println("            It kills <PACKAGE_NAME> (to allow the toggle to take effect).");
+            pw.println("  memory-factor [command] [...]: sub-commands for overriding memory pressure factor");
+            pw.println("         set <NORMAL|MODERATE|LOW|CRITICAL>");
+            pw.println("            Overrides memory pressure factor. May also supply a raw int level");
+            pw.println("         show");
+            pw.println("            Shows the existing memory pressure factor");
+            pw.println("         reset");
+            pw.println("            Removes existing override for memory pressure factor");
             pw.println();
             Intent.printIntentArgsHelp(pw, "");
         }

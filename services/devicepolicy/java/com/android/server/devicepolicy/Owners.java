@@ -33,16 +33,18 @@ import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.util.ArrayMap;
 import android.util.AtomicFile;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.FastXmlSerializer;
-import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
@@ -169,7 +171,7 @@ class Owners {
             // First, try to read from the legacy file.
             final File legacy = getLegacyConfigFile();
 
-            final List<UserInfo> users = mUserManager.getUsers(true);
+            final List<UserInfo> users = mUserManager.getAliveUsers();
 
             if (readLegacyOwnerFileLocked(legacy)) {
                 if (DEBUG) {
@@ -735,8 +737,7 @@ class Owners {
             FileOutputStream outputStream = null;
             try {
                 outputStream = f.startWrite();
-                final XmlSerializer out = new FastXmlSerializer();
-                out.setOutput(outputStream, StandardCharsets.UTF_8.name());
+                final TypedXmlSerializer out = Xml.resolveSerializer(outputStream);
 
                 // Root tag
                 out.startDocument(null, true);
@@ -776,8 +777,7 @@ class Owners {
             InputStream input = null;
             try {
                 input = f.openRead();
-                final XmlPullParser parser = Xml.newPullParser();
-                parser.setInput(input, StandardCharsets.UTF_8.name());
+                final TypedXmlPullParser parser = Xml.resolvePullParser(input);
 
                 int type;
                 int depth = 0;

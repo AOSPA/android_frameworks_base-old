@@ -22,8 +22,13 @@ import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_OPEN;
-import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
+import static com.android.server.wm.DisplayRotationProto.FIXED_TO_USER_ROTATION_MODE;
+import static com.android.server.wm.DisplayRotationProto.FROZEN_TO_USER_ROTATION;
+import static com.android.server.wm.DisplayRotationProto.LAST_ORIENTATION;
+import static com.android.server.wm.DisplayRotationProto.ROTATION;
+import static com.android.server.wm.DisplayRotationProto.USER_ROTATION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
@@ -53,6 +58,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.proto.ProtoOutputStream;
 import android.view.IDisplayWindowRotationCallback;
 import android.view.IWindowManager;
 import android.view.Surface;
@@ -60,12 +66,12 @@ import android.window.WindowContainerTransaction;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.UiThread;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.policy.WindowOrientationListener;
-import com.android.server.protolog.common.ProtoLog;
 import com.android.server.statusbar.StatusBarManagerInternal;
 
 import java.io.PrintWriter;
@@ -391,10 +397,8 @@ public class DisplayRotation {
         // It's also not likely to rotate a TV screen.
         final boolean isTv = mContext.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_LEANBACK);
-        final boolean forceDesktopMode =
-                mService.mForceDesktopModeOnExternalDisplays && !isDefaultDisplay;
         mDefaultFixedToUserRotation =
-                (isCar || isTv || mService.mIsPc || forceDesktopMode)
+                (isCar || isTv || mService.mIsPc || mDisplayContent.forceDesktopMode())
                 // For debug purposes the next line turns this feature off with:
                 // $ adb shell setprop config.override_forced_orient true
                 // $ adb shell wm size reset
@@ -910,13 +914,8 @@ public class DisplayRotation {
         }
     }
 
-    /**
-     * Returns {@code true} if this display rotation takes app requested orientation into
-     * consideration; {@code false} otherwise. For the time being the only case where this is {@code
-     * false} is when {@link #isFixedToUserRotation()} is {@code true}.
-     */
-    boolean respectAppRequestedOrientation() {
-        return !isFixedToUserRotation();
+    int getFixedToUserRotationMode() {
+        return mFixedToUserRotation;
     }
 
     public int getLandscapeRotation() {
@@ -1517,6 +1516,16 @@ public class DisplayRotation {
         pw.println(" mUndockedHdmiRotation=" + Surface.rotationToString(mUndockedHdmiRotation));
         pw.println(prefix + "  mLidOpenRotation=" + Surface.rotationToString(mLidOpenRotation));
         pw.println(prefix + "  mFixedToUserRotation=" + isFixedToUserRotation());
+    }
+
+    void dumpDebug(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(ROTATION, getRotation());
+        proto.write(FROZEN_TO_USER_ROTATION, isRotationFrozen());
+        proto.write(USER_ROTATION, getUserRotation());
+        proto.write(FIXED_TO_USER_ROTATION_MODE, mFixedToUserRotation);
+        proto.write(LAST_ORIENTATION, mLastOrientation);
+        proto.end(token);
     }
 
     private class OrientationListener extends WindowOrientationListener {

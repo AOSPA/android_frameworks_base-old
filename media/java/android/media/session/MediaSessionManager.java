@@ -20,6 +20,7 @@ import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -27,10 +28,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ParceledListSlice;
 import android.media.AudioManager;
-import android.media.IRemoteVolumeController;
+import android.media.IRemoteVolumeControllerCallback;
 import android.media.MediaFrameworkInitializer;
 import android.media.MediaSession2;
 import android.media.Session2Token;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
@@ -68,22 +70,27 @@ public final class MediaSessionManager {
     private static final String TAG = "SessionManager";
 
     /**
-     * Used by IOnMediaKeyListener to indicate that the media key event isn't handled.
+     * Used to indicate that the media key event isn't handled.
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final int RESULT_MEDIA_KEY_NOT_HANDLED = 0;
 
     /**
-     * Used by IOnMediaKeyListener to indicate that the media key event is handled.
+     * Used to indicate that the media key event is handled.
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final int RESULT_MEDIA_KEY_HANDLED = 1;
+
     private final ISessionManager mService;
     private final OnMediaKeyEventDispatchedListenerStub mOnMediaKeyEventDispatchedListenerStub =
             new OnMediaKeyEventDispatchedListenerStub();
     private final OnMediaKeyEventSessionChangedListenerStub
             mOnMediaKeyEventSessionChangedListenerStub =
             new OnMediaKeyEventSessionChangedListenerStub();
+    private final RemoteVolumeControllerCallbackStub mRemoteVolumeControllerCallbackStub =
+            new RemoteVolumeControllerCallbackStub();
 
     private final Object mLock = new Object();
     @GuardedBy("mLock")
@@ -102,6 +109,9 @@ public final class MediaSessionManager {
     private String mCurMediaKeyEventSessionPackage;
     @GuardedBy("mLock")
     private MediaSession.Token mCurMediaKeyEventSession;
+    @GuardedBy("mLock")
+    private final Map<RemoteVolumeControllerCallback, Executor>
+            mRemoteVolumeControllerCallbacks = new ArrayMap<>();
 
     private Context mContext;
     private OnVolumeKeyLongPressListenerImpl mOnVolumeKeyLongPressListener;
@@ -200,7 +210,10 @@ public final class MediaSessionManager {
      * @return A list of controllers for ongoing sessions.
      * @hide
      */
-    @UnsupportedAppUsage
+    // TODO: Remove @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, publicAlternatives = "Should only be"
+            + " used by system apps, since non-system apps cannot get other users' sessions."
+            + " Use {@link #getActiveSessions} instead.")
     public @NonNull List<MediaController> getActiveSessionsForUser(
             @Nullable ComponentName notificationListener, int userId) {
         ArrayList<MediaController> controllers = new ArrayList<MediaController>();
@@ -259,18 +272,14 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Add a listener to be notified when the list of active sessions
-     * changes.This requires the
-     * android.Manifest.permission.MEDIA_CONTENT_CONTROL permission be held by
-     * the calling app. You may also retrieve this list if your app is an
-     * enabled notification listener using the
-     * {@link NotificationListenerService} APIs, in which case you must pass the
-     * {@link ComponentName} of your enabled listener. Updates will be posted to
-     * the thread that registered the listener.
+     * Add a listener to be notified when the list of active sessions changes. This requires the
+     * {@link android.Manifest.permission#MEDIA_CONTENT_CONTROL} permission be held by the calling
+     * app. You may also retrieve this list if your app is an enabled notification listener using
+     * the {@link NotificationListenerService} APIs, in which case you must pass the
+     * {@link ComponentName} of your enabled listener.
      *
      * @param sessionListener The listener to add.
-     * @param notificationListener The enabled notification listener component.
-     *            May be null.
+     * @param notificationListener The enabled notification listener component. May be null.
      */
     public void addOnActiveSessionsChangedListener(
             @NonNull OnActiveSessionsChangedListener sessionListener,
@@ -279,18 +288,15 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Add a listener to be notified when the list of active sessions
-     * changes.This requires the
-     * android.Manifest.permission.MEDIA_CONTENT_CONTROL permission be held by
-     * the calling app. You may also retrieve this list if your app is an
-     * enabled notification listener using the
-     * {@link NotificationListenerService} APIs, in which case you must pass the
-     * {@link ComponentName} of your enabled listener. Updates will be posted to
-     * the handler specified or to the caller's thread if the handler is null.
+     * Add a listener to be notified when the list of active sessions changes. This requires the
+     * {@link android.Manifest.permission#MEDIA_CONTENT_CONTROL} permission be held by the calling
+     * app. You may also retrieve this list if your app is an enabled notification listener using
+     * the {@link NotificationListenerService} APIs, in which case you must pass the
+     * {@link ComponentName} of your enabled listener. Updates will be posted to the handler
+     * specified or to the caller's thread if the handler is null.
      *
      * @param sessionListener The listener to add.
-     * @param notificationListener The enabled notification listener component.
-     *            May be null.
+     * @param notificationListener The enabled notification listener component. May be null.
      * @param handler The handler to post events to.
      */
     public void addOnActiveSessionsChangedListener(
@@ -301,21 +307,24 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Add a listener to be notified when the list of active sessions
-     * changes.This requires the
-     * android.Manifest.permission.MEDIA_CONTENT_CONTROL permission be held by
-     * the calling app. You may also retrieve this list if your app is an
-     * enabled notification listener using the
-     * {@link NotificationListenerService} APIs, in which case you must pass the
-     * {@link ComponentName} of your enabled listener.
+     * Add a listener to be notified when the list of active sessions changes for the given user.
+     * The calling app must have the {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL}
+     * permission if it wants to call this method for a user that is not running the app.
+     * <p>
+     * This requires the {@link android.Manifest.permission#MEDIA_CONTENT_CONTROL} permission be
+     * held by the calling app. You may also retrieve this list if your app is an enabled
+     * notification listener using the {@link NotificationListenerService} APIs, in which case you
+     * must pass the {@link ComponentName} of your enabled listener. Updates will be posted to the
+     * handler specified or to the caller's thread if the handler is null.
      *
      * @param sessionListener The listener to add.
-     * @param notificationListener The enabled notification listener component.
-     *            May be null.
+     * @param notificationListener The enabled notification listener component. May be null.
      * @param userId The userId to listen for changes on.
      * @param handler The handler to post updates on.
      * @hide
      */
+    @SuppressLint({"ExecutorRegistration", "SamShouldBeLast"})
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public void addOnActiveSessionsChangedListener(
             @NonNull OnActiveSessionsChangedListener sessionListener,
             @Nullable ComponentName notificationListener, int userId, @Nullable Handler handler) {
@@ -462,73 +471,106 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Set the remote volume controller to receive volume updates on.
+     * Set the remote volume controller callback to receive volume updates on.
      * Only for use by System UI and Settings application.
      *
-     * @param rvc The volume controller to receive updates on.
+     * @param callback The volume controller callback to receive updates on.
      * @hide
      */
-    public void registerRemoteVolumeController(IRemoteVolumeController rvc) {
-        try {
-            mService.registerRemoteVolumeController(rvc);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error in registerRemoteVolumeController.", e);
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public void registerRemoteVolumeControllerCallback(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull RemoteVolumeControllerCallback callback) {
+        Objects.requireNonNull(executor, "executor shouldn't be null");
+        Objects.requireNonNull(callback, "callback shouldn't be null");
+        boolean shouldRegisterCallback = false;
+        synchronized (mLock) {
+            int prevCallbackCount = mRemoteVolumeControllerCallbacks.size();
+            mRemoteVolumeControllerCallbacks.put(callback, executor);
+            if (prevCallbackCount == 0 && mRemoteVolumeControllerCallbacks.size() == 1) {
+                shouldRegisterCallback = true;
+            }
+        }
+        if (shouldRegisterCallback) {
+            try {
+                mService.registerRemoteVolumeControllerCallback(
+                        mRemoteVolumeControllerCallbackStub);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to register remote volume controller callback", e);
+            }
         }
     }
 
     /**
-     * Unregisters the remote volume controller which was previously registered with
-     * {@link #registerRemoteVolumeController(IRemoteVolumeController)}.
+     * Unregisters the remote volume controller callback which was previously registered with
+     * {@link #registerRemoteVolumeControllerCallback(Executor, RemoteVolumeControllerCallback)}.
      * Only for use by System UI and Settings application.
      *
-     * @param rvc The volume controller which was registered.
+     * @param callback The volume controller callback to receive updates on.
      * @hide
      */
-    public void unregisterRemoteVolumeController(IRemoteVolumeController rvc) {
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public void unregisterRemoteVolumeControllerCallback(
+            @NonNull RemoteVolumeControllerCallback callback) {
+        Objects.requireNonNull(callback, "callback shouldn't be null");
+        boolean shouldUnregisterCallback = false;
+        synchronized (mLock) {
+            if (mRemoteVolumeControllerCallbacks.remove(callback) != null
+                    && mRemoteVolumeControllerCallbacks.size() == 0) {
+                shouldUnregisterCallback = true;
+            }
+        }
         try {
-            mService.unregisterRemoteVolumeController(rvc);
+            if (shouldUnregisterCallback) {
+                mService.unregisterRemoteVolumeControllerCallback(
+                        mRemoteVolumeControllerCallbackStub);
+            }
         } catch (RemoteException e) {
-            Log.e(TAG, "Error in unregisterRemoteVolumeController.", e);
+            Log.e(TAG, "Failed to unregister remote volume controller callback", e);
         }
     }
 
     /**
-     * Send a media key event. The receiver will be selected automatically.
+     * Sends a media key event. The receiver will be selected automatically.
      *
-     * @param keyEvent The KeyEvent to send.
+     * @param keyEvent the key event to send
      * @hide
      */
     public void dispatchMediaKeyEvent(@NonNull KeyEvent keyEvent) {
-        dispatchMediaKeyEvent(keyEvent, false);
+        dispatchMediaKeyEventInternal(keyEvent, /*asSystemService=*/false, /*needWakeLock=*/false);
     }
 
     /**
-     * Send a media key event. The receiver will be selected automatically.
+     * Sends a media key event. The receiver will be selected automatically.
      *
-     * @param keyEvent The KeyEvent to send.
-     * @param needWakeLock True if a wake lock should be held while sending the key.
+     * @param keyEvent the key event to send
+     * @param needWakeLock true if a wake lock should be held while sending the key
      * @hide
      */
     public void dispatchMediaKeyEvent(@NonNull KeyEvent keyEvent, boolean needWakeLock) {
-        dispatchMediaKeyEventInternal(false, keyEvent, needWakeLock);
+        dispatchMediaKeyEventInternal(keyEvent, /*asSystemService=*/false, needWakeLock);
     }
 
     /**
-     * Send a media key event as system component. The receiver will be selected automatically.
+     * Sends a media key event as system service. The receiver will be selected automatically.
      * <p>
      * Should be only called by the {@link com.android.internal.policy.PhoneWindow} or
      * {@link android.view.FallbackEventHandler} when the foreground activity didn't consume the key
      * from the hardware devices.
      *
-     * @param keyEvent The KeyEvent to send.
+     * @param keyEvent the key event to send
      * @hide
      */
-    public void dispatchMediaKeyEventAsSystemService(KeyEvent keyEvent) {
-        dispatchMediaKeyEventInternal(true, keyEvent, false);
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public void dispatchMediaKeyEventAsSystemService(@NonNull KeyEvent keyEvent) {
+        dispatchMediaKeyEventInternal(keyEvent, /*asSystemService=*/true, /*needWakeLock=*/false);
     }
 
-    private void dispatchMediaKeyEventInternal(boolean asSystemService, @NonNull KeyEvent keyEvent,
+    private void dispatchMediaKeyEventInternal(KeyEvent keyEvent, boolean asSystemService,
             boolean needWakeLock) {
+        if (keyEvent == null) {
+            throw new NullPointerException("keyEvent shouldn't be null");
+        }
         try {
             mService.dispatchMediaKeyEvent(mContext.getPackageName(), asSystemService, keyEvent,
                     needWakeLock);
@@ -538,30 +580,31 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Dispatches the media button event as system service to the session.
+     * Sends a media key event as system service to the given session.
      * <p>
      * Should be only called by the {@link com.android.internal.policy.PhoneWindow} when the
      * foreground activity didn't consume the key from the hardware devices.
      *
-     * @param sessionToken session token
-     * @param keyEvent media key event
+     * @param keyEvent the key event to send
+     * @param sessionToken the session token to which the key event should be dispatched
      * @return {@code true} if the event was sent to the session, {@code false} otherwise
      * @hide
      */
-    public boolean dispatchMediaKeyEventAsSystemService(@NonNull MediaSession.Token sessionToken,
-            @NonNull KeyEvent keyEvent) {
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public boolean dispatchMediaKeyEventToSessionAsSystemService(@NonNull KeyEvent keyEvent,
+            @NonNull MediaSession.Token sessionToken) {
         if (sessionToken == null) {
-            throw new IllegalArgumentException("sessionToken shouldn't be null");
+            throw new NullPointerException("sessionToken shouldn't be null");
         }
         if (keyEvent == null) {
-            throw new IllegalArgumentException("keyEvent shouldn't be null");
+            throw new NullPointerException("keyEvent shouldn't be null");
         }
         if (!KeyEvent.isMediaSessionKey(keyEvent.getKeyCode())) {
             return false;
         }
         try {
-            return mService.dispatchMediaKeyEventToSessionAsSystemService(mContext.getPackageName(),
-                    sessionToken, keyEvent);
+            return mService.dispatchMediaKeyEventToSessionAsSystemService(
+                    mContext.getPackageName(), keyEvent, sessionToken);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send key event.", e);
         }
@@ -569,13 +612,16 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Send a volume key event. The receiver will be selected automatically.
+     * Sends a volume key event. The receiver will be selected automatically.
      *
-     * @param keyEvent The volume KeyEvent to send.
+     * @param keyEvent the volume key event to send
+     * @param streamType type of stream
+     * @param musicOnly true if key event should only be sent to music stream
      * @hide
      */
-    public void dispatchVolumeKeyEvent(@NonNull KeyEvent keyEvent, int stream, boolean musicOnly) {
-        dispatchVolumeKeyEventInternal(false, keyEvent, stream, musicOnly);
+    public void dispatchVolumeKeyEvent(@NonNull KeyEvent keyEvent, int streamType,
+            boolean musicOnly) {
+        dispatchVolumeKeyEventInternal(keyEvent, streamType, musicOnly, /*asSystemService=*/false);
     }
 
     /**
@@ -586,16 +632,25 @@ public final class MediaSessionManager {
      * Should be only called by the {@link com.android.internal.policy.PhoneWindow} or
      * {@link android.view.FallbackEventHandler} when the foreground activity didn't consume the key
      * from the hardware devices.
+     * <p>
+     * Valid stream types include {@link AudioManager.PublicStreamTypes} and
+     * {@link AudioManager#USE_DEFAULT_STREAM_TYPE}.
      *
-     * @param keyEvent The KeyEvent to send.
+     * @param keyEvent the volume key event to send
+     * @param streamType type of stream
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public void dispatchVolumeKeyEventAsSystemService(@NonNull KeyEvent keyEvent, int streamType) {
-        dispatchVolumeKeyEventInternal(true, keyEvent, streamType, false);
+        dispatchVolumeKeyEventInternal(keyEvent, streamType, /*musicOnly=*/false,
+                /*asSystemService=*/true);
     }
 
-    private void dispatchVolumeKeyEventInternal(boolean asSystemService, @NonNull KeyEvent keyEvent,
-            int stream, boolean musicOnly) {
+    private void dispatchVolumeKeyEventInternal(@NonNull KeyEvent keyEvent, int stream,
+            boolean musicOnly, boolean asSystemService) {
+        if (keyEvent == null) {
+            throw new NullPointerException("keyEvent shouldn't be null");
+        }
         try {
             mService.dispatchVolumeKeyEvent(mContext.getPackageName(), mContext.getOpPackageName(),
                     asSystemService, keyEvent, stream, musicOnly);
@@ -610,21 +665,22 @@ public final class MediaSessionManager {
      * Should be only called by the {@link com.android.internal.policy.PhoneWindow} when the
      * foreground activity didn't consume the key from the hardware devices.
      *
-     * @param sessionToken sessionToken
-     * @param keyEvent volume key event
+     * @param keyEvent the volume key event to send
+     * @param sessionToken the session token to which the key event should be dispatched
      * @hide
      */
-    public void dispatchVolumeKeyEventAsSystemService(@NonNull MediaSession.Token sessionToken,
-            @NonNull KeyEvent keyEvent) {
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public void dispatchVolumeKeyEventToSessionAsSystemService(@NonNull KeyEvent keyEvent,
+            @NonNull MediaSession.Token sessionToken) {
         if (sessionToken == null) {
-            throw new IllegalArgumentException("sessionToken shouldn't be null");
+            throw new NullPointerException("sessionToken shouldn't be null");
         }
         if (keyEvent == null) {
-            throw new IllegalArgumentException("keyEvent shouldn't be null");
+            throw new NullPointerException("keyEvent shouldn't be null");
         }
         try {
             mService.dispatchVolumeKeyEventToSessionAsSystemService(mContext.getPackageName(),
-                    mContext.getOpPackageName(), sessionToken, keyEvent);
+                    mContext.getOpPackageName(), keyEvent, sessionToken);
         } catch (RemoteException e) {
             Log.wtf(TAG, "Error calling dispatchVolumeKeyEventAsSystemService", e);
         }
@@ -1030,14 +1086,38 @@ public final class MediaSessionManager {
          * has specified the target.
          * <p>
          * The session token can be {@link null} if the media button session is unset. In that case,
-         * framework would dispatch to the last sessions's media button receiver. If the media
-         * button receive isn't set as well, then it
+         * packageName will return the package name of the last session's media button receiver, or
+         * an empty string if the last session didn't set a media button receiver.
          *
-         * @param packageName The package name who would receive the media key event. Can be empty.
+         * @param packageName The package name of the component that will receive the media key
+         *                    event. Can be empty.
          * @param sessionToken The media session's token. Can be {@code null}.
          */
         void onMediaKeyEventSessionChanged(@NonNull String packageName,
                 @Nullable MediaSession.Token sessionToken);
+    }
+
+    /**
+     * Callback to receive changes in the remote volume controller.
+     *
+     * @hide
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public interface RemoteVolumeControllerCallback {
+        /**
+         * Called when the volume is changed.
+         *
+         * @param sessionToken the remote media session token
+         * @param flags any of the flags from {@link AudioManager}
+         */
+        void onVolumeChanged(@NonNull MediaSession.Token sessionToken, int flags);
+
+        /**
+         * Called when the session for the default remote controller is changed.
+         *
+         * @param sessionToken the remote media session token
+         */
+        void onSessionChanged(@Nullable MediaSession.Token sessionToken);
     }
 
     /**
@@ -1269,6 +1349,31 @@ public final class MediaSessionManager {
                     e.getValue().execute(() -> e.getKey().onMediaKeyEventSessionChanged(packageName,
                             sessionToken));
                 }
+            }
+        }
+    }
+
+    private final class RemoteVolumeControllerCallbackStub
+            extends IRemoteVolumeControllerCallback.Stub {
+        @Override
+        public void onVolumeChanged(MediaSession.Token sessionToken, int flags) {
+            Map<RemoteVolumeControllerCallback, Executor> callbacks = new ArrayMap<>();
+            synchronized (mLock) {
+                callbacks.putAll(mRemoteVolumeControllerCallbacks);
+            }
+            for (Map.Entry<RemoteVolumeControllerCallback, Executor> e : callbacks.entrySet()) {
+                e.getValue().execute(() -> e.getKey().onVolumeChanged(sessionToken, flags));
+            }
+        }
+
+        @Override
+        public void onSessionChanged(MediaSession.Token sessionToken) {
+            Map<RemoteVolumeControllerCallback, Executor> callbacks = new ArrayMap<>();
+            synchronized (mLock) {
+                callbacks.putAll(mRemoteVolumeControllerCallbacks);
+            }
+            for (Map.Entry<RemoteVolumeControllerCallback, Executor> e : callbacks.entrySet()) {
+                e.getValue().execute(() -> e.getKey().onSessionChanged(sessionToken));
             }
         }
     }

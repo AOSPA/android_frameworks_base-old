@@ -423,7 +423,7 @@ class UserController implements Handler.Callback {
         for (Integer userId : mUserLru) {
             UserState uss = mStartedUsers.get(userId);
             if (uss == null) {
-                // Shouldn't happen, but be sane if it does.
+                // Shouldn't happen, but recover if it does.
                 continue;
             }
             if (uss.state == UserState.STATE_STOPPING
@@ -712,8 +712,6 @@ class UserController implements Handler.Callback {
             Slog.i(TAG, "Stopping pre-created user " + userInfo.toFullString());
             // Pre-created user was started right after creation so services could properly
             // intialize it; it should be stopped right away as it's not really a "real" user.
-            // TODO(b/143092698): in the long-term, it might be better to add a onCreateUser()
-            // callback on SystemService instead.
             stopUser(userInfo.id, /* force= */ true, /* allowDelayedLocking= */ false,
                     /* stopUserCallback= */ null, /* keyEvictedCallback= */ null);
             return;
@@ -954,7 +952,7 @@ class UserController implements Handler.Callback {
         mInjector.batteryStatsServiceNoteEvent(
                 BatteryStats.HistoryItem.EVENT_USER_RUNNING_FINISH,
                 Integer.toString(userId), userId);
-        mInjector.getSystemServiceManager().stopUser(userId);
+        mInjector.getSystemServiceManager().onUserStopping(userId);
 
         Runnable finishUserStoppedAsync = () ->
                 mHandler.post(() -> finishUserStopped(uss, allowDelayedLocking));
@@ -988,6 +986,8 @@ class UserController implements Handler.Callback {
         final ArrayList<IStopUserCallback> stopCallbacks;
         final ArrayList<KeyEvictedCallback> keyEvictedCallbacks;
         int userIdToLock = userId;
+        // Must get a reference to UserInfo before it's removed
+        final UserInfo userInfo = getUserInfo(userId);
         synchronized (mLock) {
             stopCallbacks = new ArrayList<>(uss.mStopCallbacks);
             keyEvictedCallbacks = new ArrayList<>(uss.mKeyEvictedCallbacks);
@@ -1028,10 +1028,10 @@ class UserController implements Handler.Callback {
         }
 
         if (stopped) {
-            mInjector.systemServiceManagerCleanupUser(userId);
+            mInjector.systemServiceManagerOnUserStopped(userId);
             mInjector.stackSupervisorRemoveUser(userId);
+
             // Remove the user if it is ephemeral.
-            UserInfo userInfo = getUserInfo(userId);
             if (userInfo.isEphemeral() && !userInfo.preCreated) {
                 mInjector.getUserManager().removeUserEvenWhenDisallowed(userId);
             }
@@ -1307,7 +1307,7 @@ class UserController implements Handler.Callback {
                 Slog.w(TAG, "No user info for user #" + userId);
                 return false;
             }
-            if (foreground && userInfo.isManagedProfile()) {
+            if (foreground && userInfo.isProfile()) {
                 Slog.w(TAG, "Cannot switch to User #" + userId + ": not a full user");
                 return false;
             }
@@ -1612,7 +1612,7 @@ class UserController implements Handler.Callback {
             Slog.w(TAG, "Cannot switch to User #" + targetUserId + ": not supported");
             return false;
         }
-        if (targetUserInfo.isManagedProfile()) {
+        if (targetUserInfo.isProfile()) {
             Slog.w(TAG, "Cannot switch to User #" + targetUserId + ": not a full user");
             return false;
         }
@@ -1630,7 +1630,7 @@ class UserController implements Handler.Callback {
             UserInfo currentUserInfo = getUserInfo(currentUserId);
             Pair<UserInfo, UserInfo> userNames = new Pair<>(currentUserInfo, targetUserInfo);
             mUiHandler.removeMessages(START_USER_SWITCH_UI_MSG);
-            mUiHandler.sendMessage(mHandler.obtainMessage(
+            mUiHandler.sendMessage(mUiHandler.obtainMessage(
                     START_USER_SWITCH_UI_MSG, userNames));
         } else {
             mHandler.removeMessages(START_USER_SWITCH_FG_MSG);
@@ -1814,7 +1814,7 @@ class UserController implements Handler.Callback {
     void sendUserSwitchBroadcasts(int oldUserId, int newUserId) {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
             Intent intent;
             if (oldUserId >= 0) {
@@ -1891,8 +1891,7 @@ class UserController implements Handler.Callback {
         if (callingUid != 0 && callingUid != SYSTEM_UID) {
             final boolean allow;
             final boolean isSameProfileGroup = isSameProfileGroup(callingUserId, targetUserId);
-            if (mInjector.isCallerRecents(callingUid)
-                    && isSameProfileGroup(callingUserId, targetUserId)) {
+            if (mInjector.isCallerRecents(callingUid) && isSameProfileGroup) {
                 // If the caller is Recents and the caller has ownership of the profile group,
                 // we then allow it to access its profiles.
                 allow = true;
@@ -2495,8 +2494,8 @@ class UserController implements Handler.Callback {
                 logUserLifecycleEvent(msg.arg1, USER_LIFECYCLE_EVENT_START_USER,
                         USER_LIFECYCLE_EVENT_STATE_BEGIN);
 
-                mInjector.getSystemServiceManager().startUser(TimingsTraceAndSlog.newAsyncLog(),
-                        msg.arg1);
+                mInjector.getSystemServiceManager().onUserStarting(
+                        TimingsTraceAndSlog.newAsyncLog(), msg.arg1);
 
                 logUserLifecycleEvent(msg.arg1, USER_LIFECYCLE_EVENT_START_USER,
                         USER_LIFECYCLE_EVENT_STATE_FINISH);
@@ -2504,7 +2503,7 @@ class UserController implements Handler.Callback {
                 break;
             case USER_UNLOCK_MSG:
                 final int userId = msg.arg1;
-                mInjector.getSystemServiceManager().unlockUser(userId);
+                mInjector.getSystemServiceManager().onUserUnlocking(userId);
                 // Loads recents on a worker thread that allows disk I/O
                 FgThread.getHandler().post(() -> {
                     mInjector.loadUserRecents(userId);
@@ -2529,7 +2528,7 @@ class UserController implements Handler.Callback {
                         BatteryStats.HistoryItem.EVENT_USER_FOREGROUND_START,
                         Integer.toString(msg.arg1), msg.arg1);
 
-                mInjector.getSystemServiceManager().switchUser(msg.arg2, msg.arg1);
+                mInjector.getSystemServiceManager().onUserSwitching(msg.arg2, msg.arg1);
                 break;
             case FOREGROUND_PROFILE_CHANGED_MSG:
                 dispatchForegroundProfileChanged(msg.arg1);
@@ -2782,8 +2781,8 @@ class UserController implements Handler.Callback {
             LocalServices.getService(ActivityTaskManagerInternal.class).onUserStopped(userId);
         }
 
-        void systemServiceManagerCleanupUser(@UserIdInt int userId) {
-            mService.mSystemServiceManager.cleanupUser(userId);
+        void systemServiceManagerOnUserStopped(@UserIdInt int userId) {
+            mService.mSystemServiceManager.onUserStopped(userId);
         }
 
         protected UserManagerService getUserManager() {
@@ -2883,18 +2882,23 @@ class UserController implements Handler.Callback {
         }
 
         void installEncryptionUnawareProviders(@UserIdInt int userId) {
-            mService.installEncryptionUnawareProviders(userId);
+            mService.mCpHelper.installEncryptionUnawareProviders(userId);
         }
 
         void showUserSwitchingDialog(UserInfo fromUser, UserInfo toUser,
                 String switchingFromSystemUserMessage, String switchingToSystemUserMessage) {
-            if (!mService.mContext.getPackageManager()
+            if (mService.mContext.getPackageManager()
                     .hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
-                final Dialog d = new UserSwitchingDialog(mService, mService.mContext, fromUser,
-                        toUser, true /* above system */, switchingFromSystemUserMessage,
-                        switchingToSystemUserMessage);
-                d.show();
+                // config_customUserSwitchUi is set to true on Automotive as CarSystemUI is
+                // responsible to show the UI; OEMs should not change that, but if they do, we
+                // should at least warn the user...
+                Slog.w(TAG, "Showing user switch dialog on UserController, it could cause a race "
+                        + "condition if it's shown by CarSystemUI as well");
             }
+            final Dialog d = new UserSwitchingDialog(mService, mService.mContext, fromUser,
+                    toUser, true /* above system */, switchingFromSystemUserMessage,
+                    switchingToSystemUserMessage);
+            d.show();
         }
 
         void reportGlobalUsageEventLocked(int event) {

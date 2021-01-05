@@ -36,6 +36,7 @@ import com.android.systemui.statusbar.policy.DataSaverController.Listener;
 import com.android.systemui.statusbar.policy.HotspotController;
 import com.android.systemui.statusbar.policy.HotspotController.Callback;
 import com.android.systemui.util.UserAwareController;
+import com.android.systemui.util.settings.SecureSettings;
 
 import java.util.ArrayList;
 import java.util.Objects;
@@ -52,6 +53,7 @@ public class AutoTileManager implements UserAwareController {
     public static final String WORK = "work";
     public static final String NIGHT = "night";
     public static final String CAST = "cast";
+    public static final String BRIGHTNESS = "reduce_brightness";
     static final String SETTING_SEPARATOR = ":";
 
     private UserHandle mCurrentUser;
@@ -60,6 +62,7 @@ public class AutoTileManager implements UserAwareController {
     protected final Context mContext;
     protected final QSTileHost mHost;
     protected final Handler mHandler;
+    protected final SecureSettings mSecureSettings;
     protected final AutoAddTracker mAutoTracker;
     private final HotspotController mHotspotController;
     private final DataSaverController mDataSaverController;
@@ -71,6 +74,7 @@ public class AutoTileManager implements UserAwareController {
     public AutoTileManager(Context context, AutoAddTracker.Builder autoAddTrackerBuilder,
             QSTileHost host,
             @Background Handler handler,
+            SecureSettings secureSettings,
             HotspotController hotspotController,
             DataSaverController dataSaverController,
             ManagedProfileController managedProfileController,
@@ -78,6 +82,7 @@ public class AutoTileManager implements UserAwareController {
             CastController castController) {
         mContext = context;
         mHost = host;
+        mSecureSettings = secureSettings;
         mCurrentUser = mHost.getUserContext().getUser();
         mAutoTracker = autoAddTrackerBuilder.setUserId(mCurrentUser.getIdentifier()).build();
         mHandler = handler;
@@ -119,6 +124,9 @@ public class AutoTileManager implements UserAwareController {
         if (!mAutoTracker.isAdded(CAST)) {
             mCastController.addCallback(mCastCallback);
         }
+
+        // TODO(b/170970675): Set a listener/controller and callback for Reduce Bright Colors
+        // state changes. Call into ColorDisplayService to get availability/config status
 
         int settingsN = mAutoAddSettingList.size();
         for (int i = 0; i < settingsN; i++) {
@@ -169,7 +177,8 @@ public class AutoTileManager implements UserAwareController {
                 String setting = split[0];
                 String spec = split[1];
                 // Populate all the settings. As they may not have been added in other users
-                AutoAddSetting s = new AutoAddSetting(mContext, mHandler, setting, spec);
+                AutoAddSetting s = new AutoAddSetting(
+                        mSecureSettings, mHandler, setting, mCurrentUser.getIdentifier(), spec);
                 mAutoAddSettingList.add(s);
             } else {
                 Log.w(TAG, "Malformed item in array: " + tile);
@@ -319,8 +328,14 @@ public class AutoTileManager implements UserAwareController {
     private class AutoAddSetting extends SecureSetting {
         private final String mSpec;
 
-        AutoAddSetting(Context context, Handler handler, String setting, String tileSpec) {
-            super(context, handler, setting);
+        AutoAddSetting(
+                SecureSettings secureSettings,
+                Handler handler,
+                String setting,
+                int userId,
+                String tileSpec
+        ) {
+            super(secureSettings, handler, setting, userId);
             mSpec = tileSpec;
         }
 

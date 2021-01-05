@@ -83,28 +83,33 @@ import androidx.annotation.VisibleForTesting;
 import com.android.internal.util.Preconditions;
 import com.android.systemui.RegionInterceptingFrameLayout.RegionInterceptableView;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.qs.SecureSetting;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
+import com.android.systemui.util.settings.SecureSettings;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * An overlay that draws screen decorations in software (e.g for rounded corners or display cutout)
  * for antialiasing and emulation purposes.
  */
-@Singleton
+@SysUISingleton
 public class ScreenDecorations extends SystemUI implements Tunable {
     private static final boolean DEBUG = false;
     private static final String TAG = "ScreenDecorations";
 
     public static final String SIZE = "sysui_rounded_size";
     public static final String PADDING = "sysui_rounded_content_padding";
+    // Provide a way for factory to disable ScreenDecorations to run the Display tests.
+    private static final boolean DEBUG_DISABLE_SCREEN_DECORATIONS =
+            SystemProperties.getBoolean("debug.disable_screen_decorations", false);
     private static final boolean DEBUG_SCREENSHOT_ROUNDED_CORNERS =
             SystemProperties.getBoolean("debug.screenshot_rounded_corners", false);
 
@@ -120,8 +125,10 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private final BroadcastDispatcher mBroadcastDispatcher;
     private final Handler mMainHandler;
     private final TunerService mTunerService;
+    private final SecureSettings mSecureSettings;
     private DisplayManager.DisplayListener mDisplayListener;
     private CameraAvailabilityListener mCameraListener;
+    private final UserTracker mUserTracker;
 
     //TODO: These are piecemeal being updated to Points for now to support non-square rounded
     // corners. for now it is only supposed when reading the intrinsic size from the drawables with
@@ -198,16 +205,24 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     @Inject
     public ScreenDecorations(Context context,
             @Main Handler handler,
+            SecureSettings secureSettings,
             BroadcastDispatcher broadcastDispatcher,
-            TunerService tunerService) {
+            TunerService tunerService,
+            UserTracker userTracker) {
         super(context);
         mMainHandler = handler;
+        mSecureSettings = secureSettings;
         mBroadcastDispatcher = broadcastDispatcher;
         mTunerService = tunerService;
+        mUserTracker = userTracker;
     }
 
     @Override
     public void start() {
+        if (DEBUG_DISABLE_SCREEN_DECORATIONS) {
+            Log.i(TAG, "ScreenDecorations is disabled");
+            return;
+        }
         mHandler = startHandlerThread();
         mHandler.post(this::startOnScreenDecorationsThread);
     }
@@ -302,17 +317,17 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
             // Watch color inversion and invert the overlay as needed.
             if (mColorInversionSetting == null) {
-                mColorInversionSetting = new SecureSetting(mContext, mHandler,
-                        Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED) {
+                mColorInversionSetting = new SecureSetting(mSecureSettings, mHandler,
+                        Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED,
+                        mUserTracker.getUserId()) {
                     @Override
                     protected void handleValueChanged(int value, boolean observedChange) {
                         updateColorInversion(value);
                     }
                 };
-
-                mColorInversionSetting.setListening(true);
-                mColorInversionSetting.onChange(false);
             }
+            mColorInversionSetting.setListening(true);
+            mColorInversionSetting.onChange(false);
 
             IntentFilter filter = new IntentFilter();
             filter.addAction(Intent.ACTION_USER_SWITCHED);
@@ -574,6 +589,10 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
+        if (DEBUG_DISABLE_SCREEN_DECORATIONS) {
+            Log.i(TAG, "ScreenDecorations is disabled");
+            return;
+        }
         mHandler.post(() -> {
             int oldRotation = mRotation;
             mPendingRotationChange = false;
@@ -631,8 +650,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 com.android.internal.R.dimen.rounded_corner_radius_bottom);
 
         final boolean changed = mRoundedDefault.x != newRoundedDefault
-                        || mRoundedDefaultTop.x != newRoundedDefault
-                        || mRoundedDefaultBottom.x != newRoundedDefault;
+                        || mRoundedDefaultTop.x != newRoundedDefaultTop
+                        || mRoundedDefaultBottom.x != newRoundedDefaultBottom;
 
         if (changed) {
             // If config_roundedCornerMultipleRadius set as true, ScreenDecorations respect the
@@ -765,6 +784,10 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
     @Override
     public void onTuningChanged(String key, String newValue) {
+        if (DEBUG_DISABLE_SCREEN_DECORATIONS) {
+            Log.i(TAG, "ScreenDecorations is disabled");
+            return;
+        }
         mHandler.post(() -> {
             if (mOverlays == null) return;
             if (SIZE.equals(key)) {

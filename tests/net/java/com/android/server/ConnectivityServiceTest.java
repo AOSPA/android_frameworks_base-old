@@ -78,16 +78,16 @@ import static android.net.RouteInfo.RTN_UNREACHABLE;
 import static android.os.Process.INVALID_UID;
 import static android.system.OsConstants.IPPROTO_TCP;
 
-import static com.android.server.ConnectivityServiceTestUtilsKt.transportToLegacyType;
-import static com.android.testutils.ConcurrentUtilsKt.await;
-import static com.android.testutils.ConcurrentUtilsKt.durationOf;
+import static com.android.server.ConnectivityServiceTestUtils.transportToLegacyType;
+import static com.android.testutils.ConcurrentUtils.await;
+import static com.android.testutils.ConcurrentUtils.durationOf;
 import static com.android.testutils.ExceptionUtils.ignoreExceptions;
-import static com.android.testutils.HandlerUtilsKt.waitForIdleSerialExecutor;
-import static com.android.testutils.MiscAssertsKt.assertContainsExactly;
-import static com.android.testutils.MiscAssertsKt.assertEmpty;
-import static com.android.testutils.MiscAssertsKt.assertLength;
-import static com.android.testutils.MiscAssertsKt.assertRunsInAtMost;
-import static com.android.testutils.MiscAssertsKt.assertThrows;
+import static com.android.testutils.HandlerUtils.waitForIdleSerialExecutor;
+import static com.android.testutils.MiscAsserts.assertContainsExactly;
+import static com.android.testutils.MiscAsserts.assertEmpty;
+import static com.android.testutils.MiscAsserts.assertLength;
+import static com.android.testutils.MiscAsserts.assertRunsInAtMost;
+import static com.android.testutils.MiscAsserts.assertThrows;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -147,6 +147,7 @@ import android.net.ConnectivityManager.PacketKeepaliveCallback;
 import android.net.ConnectivityManager.TooManyRequestsException;
 import android.net.ConnectivityThread;
 import android.net.DataStallReportParcelable;
+import android.net.EthernetManager;
 import android.net.IConnectivityDiagnosticsCallback;
 import android.net.IDnsResolver;
 import android.net.IIpConnectivityMetrics;
@@ -218,7 +219,6 @@ import android.util.Log;
 import android.util.SparseArray;
 
 import androidx.test.InstrumentationRegistry;
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
@@ -242,7 +242,7 @@ import com.android.server.connectivity.Vpn;
 import com.android.server.net.NetworkPinner;
 import com.android.server.net.NetworkPolicyManagerInternal;
 import com.android.testutils.ExceptionUtils;
-import com.android.testutils.HandlerUtilsKt;
+import com.android.testutils.HandlerUtils;
 import com.android.testutils.RecorderCallback.CallbackEntry;
 import com.android.testutils.TestableNetworkCallback;
 
@@ -251,6 +251,7 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.AdditionalAnswers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -314,6 +315,8 @@ public class ConnectivityServiceTest {
     private static final long TIMESTAMP = 1234L;
 
     private static final int NET_ID = 110;
+    // Set a non-zero value to verify the flow to set tcp init rwnd value.
+    private static final int TEST_TCP_INIT_RWND = 60;
 
     private static final String CLAT_PREFIX = "v4-";
     private static final String MOBILE_IFNAME = "test_rmnet_data0";
@@ -356,6 +359,8 @@ public class ConnectivityServiceTest {
     @Mock LocationManager mLocationManager;
     @Mock AppOpsManager mAppOpsManager;
     @Mock TelephonyManager mTelephonyManager;
+    @Mock MockableSystemProperties mSystemProperties;
+    @Mock EthernetManager mEthernetManager;
 
     private ArgumentCaptor<ResolverParamsParcel> mResolverParamsParcelCaptor =
             ArgumentCaptor.forClass(ResolverParamsParcel.class);
@@ -443,7 +448,15 @@ public class ConnectivityServiceTest {
             if (Context.LOCATION_SERVICE.equals(name)) return mLocationManager;
             if (Context.APP_OPS_SERVICE.equals(name)) return mAppOpsManager;
             if (Context.TELEPHONY_SERVICE.equals(name)) return mTelephonyManager;
+            if (Context.ETHERNET_SERVICE.equals(name)) return mEthernetManager;
             return super.getSystemService(name);
+        }
+
+        @Override
+        public Context createContextAsUser(UserHandle user, int flags) {
+            final Context asUser = mock(Context.class, AdditionalAnswers.delegatesTo(this));
+            doReturn(user).when(asUser).getUser();
+            return asUser;
         }
 
         @Override
@@ -518,12 +531,12 @@ public class ConnectivityServiceTest {
     }
 
     private void waitForIdle() {
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
         waitForIdle(mCellNetworkAgent, TIMEOUT_MS);
         waitForIdle(mWiFiNetworkAgent, TIMEOUT_MS);
         waitForIdle(mEthernetNetworkAgent, TIMEOUT_MS);
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
-        HandlerUtilsKt.waitForIdle(ConnectivityThread.get(), TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(ConnectivityThread.get(), TIMEOUT_MS);
     }
 
     private void waitForIdle(TestNetworkAgentWrapper agent, long timeoutMs) {
@@ -614,8 +627,8 @@ public class ConnectivityServiceTest {
             // Waits for the NetworkAgent to be registered, which includes the creation of the
             // NetworkMonitor.
             waitForIdle(TIMEOUT_MS);
-            HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
-            HandlerUtilsKt.waitForIdle(ConnectivityThread.get(), TIMEOUT_MS);
+            HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+            HandlerUtils.waitForIdle(ConnectivityThread.get(), TIMEOUT_MS);
         }
 
         @Override
@@ -1199,7 +1212,7 @@ public class ConnectivityServiceTest {
         MockitoAnnotations.initMocks(this);
         when(mMetricsService.defaultNetworkMetrics()).thenReturn(mDefaultNetworkMetrics);
 
-        when(mUserManager.getUsers(eq(true))).thenReturn(
+        when(mUserManager.getAliveUsers()).thenReturn(
                 Arrays.asList(new UserInfo[] {
                         new UserInfo(VPN_USER, "", 0),
                 }));
@@ -1247,7 +1260,7 @@ public class ConnectivityServiceTest {
         // Create local CM before sending system ready so that we can answer
         // getSystemService() correctly.
         mCm = new WrappedConnectivityManager(InstrumentationRegistry.getContext(), mService);
-        mService.systemReady();
+        mService.systemReadyInternal();
         mockVpn(Process.myUid());
         mCm.bindProcessToNetwork(null);
 
@@ -1258,21 +1271,20 @@ public class ConnectivityServiceTest {
     }
 
     private ConnectivityService.Dependencies makeDependencies() {
-        final MockableSystemProperties systemProperties = spy(new MockableSystemProperties());
-        when(systemProperties.getInt("net.tcp.default_init_rwnd", 0)).thenReturn(0);
-        when(systemProperties.getBoolean("ro.radio.noril", false)).thenReturn(false);
-
+        doReturn(TEST_TCP_INIT_RWND).when(mSystemProperties)
+                .getInt("net.tcp.default_init_rwnd", 0);
+        doReturn(false).when(mSystemProperties).getBoolean("ro.radio.noril", false);
+        doNothing().when(mSystemProperties).setTcpInitRwnd(anyInt());
         final ConnectivityService.Dependencies deps = mock(ConnectivityService.Dependencies.class);
         doReturn(mCsHandlerThread).when(deps).makeHandlerThread();
         doReturn(new TestNetIdManager()).when(deps).makeNetIdManager();
         doReturn(mNetworkStack).when(deps).getNetworkStack();
-        doReturn(systemProperties).when(deps).getSystemProperties();
+        doReturn(mSystemProperties).when(deps).getSystemProperties();
         doReturn(mock(ProxyTracker.class)).when(deps).makeProxyTracker(any(), any());
         doReturn(mMetricsService).when(deps).getMetricsLogger();
         doReturn(true).when(deps).queryUserAccess(anyInt(), anyInt());
         doReturn(mIpConnectivityMetrics).when(deps).getIpConnectivityMetrics();
         doReturn(mBatteryStatsService).when(deps).getBatteryStatsService();
-        doReturn(true).when(deps).hasService(Context.ETHERNET_SERVICE);
         doAnswer(inv -> {
             mPolicyTracker = new WrappedMultinetworkPolicyTracker(
                     inv.getArgument(0), inv.getArgument(1), inv.getArgument(2));
@@ -4028,7 +4040,6 @@ public class ConnectivityServiceTest {
     }
 
     @Test
-    @FlakyTest(bugId = 140305589)
     public void testPacketKeepalives() throws Exception {
         InetAddress myIPv4 = InetAddress.getByName("192.0.2.129");
         InetAddress notMyIPv4 = InetAddress.getByName("192.0.2.35");
@@ -4226,7 +4237,7 @@ public class ConnectivityServiceTest {
             callback.expectError(SocketKeepalive.ERROR_INVALID_IP_ADDRESS);
         }
 
-        // Sanity check before testing started keepalive.
+        // Basic check before testing started keepalive.
         try (SocketKeepalive ka = mCm.createSocketKeepalive(
                 myNet, testSocket, myIPv4, dstIPv4, executor, callback)) {
             ka.start(validKaInterval);
@@ -4291,6 +4302,32 @@ public class ConnectivityServiceTest {
         }
 
         // Reconnect.
+        myNet = connectKeepaliveNetwork(lp);
+        mWiFiNetworkAgent.setStartKeepaliveEvent(SocketKeepalive.SUCCESS);
+
+        // Check that a stop followed by network disconnects does not result in crash.
+        try (SocketKeepalive ka = mCm.createSocketKeepalive(
+                myNet, testSocket, myIPv4, dstIPv4, executor, callback)) {
+            ka.start(validKaInterval);
+            callback.expectStarted();
+            // Delay the response of keepalive events in networkAgent long enough to make sure
+            // the follow-up network disconnection will be processed first.
+            mWiFiNetworkAgent.setKeepaliveResponseDelay(3 * TIMEOUT_MS);
+            ka.stop();
+
+            // Make sure the stop has been processed. Wait for executor idle is needed to prevent
+            // flaky since the actual stop call to the service is delegated to executor thread.
+            waitForIdleSerialExecutor(executor, TIMEOUT_MS);
+            waitForIdle();
+
+            mWiFiNetworkAgent.disconnect();
+            mWiFiNetworkAgent.expectDisconnected();
+            callback.expectStopped();
+            callback.assertNoCallback();
+        }
+
+        // Reconnect.
+        waitForIdle();
         myNet = connectKeepaliveNetwork(lp);
         mWiFiNetworkAgent.setStartKeepaliveEvent(SocketKeepalive.SUCCESS);
 
@@ -4963,22 +5000,22 @@ public class ConnectivityServiceTest {
         // simulate that situation and check if ConnectivityService could filter that case.
         mWiFiNetworkAgent.mNetworkMonitor.forceReevaluation(Process.myUid());
         waitForIdle();
-        verify(mNotificationManager, timeout(TIMEOUT_MS).times(1)).notifyAsUser(anyString(),
-                eq(NotificationType.PRIVATE_DNS_BROKEN.eventId), any(), eq(UserHandle.ALL));
+        verify(mNotificationManager, timeout(TIMEOUT_MS).times(1)).notify(anyString(),
+                eq(NotificationType.PRIVATE_DNS_BROKEN.eventId), any());
         // If private DNS resolution successful, the PRIVATE_DNS_BROKEN notification shouldn't be
         // shown.
         mWiFiNetworkAgent.setNetworkValid(true /* isStrictMode */);
         mWiFiNetworkAgent.mNetworkMonitor.forceReevaluation(Process.myUid());
         waitForIdle();
-        verify(mNotificationManager, timeout(TIMEOUT_MS).times(1)).cancelAsUser(anyString(),
-                eq(NotificationType.PRIVATE_DNS_BROKEN.eventId), eq(UserHandle.ALL));
+        verify(mNotificationManager, timeout(TIMEOUT_MS).times(1)).cancel(anyString(),
+                eq(NotificationType.PRIVATE_DNS_BROKEN.eventId));
         // If private DNS resolution failed again, the PRIVATE_DNS_BROKEN notification should be
         // shown again.
         mWiFiNetworkAgent.setNetworkInvalid(true /* isStrictMode */);
         mWiFiNetworkAgent.mNetworkMonitor.forceReevaluation(Process.myUid());
         waitForIdle();
-        verify(mNotificationManager, timeout(TIMEOUT_MS).times(2)).notifyAsUser(anyString(),
-                eq(NotificationType.PRIVATE_DNS_BROKEN.eventId), any(), eq(UserHandle.ALL));
+        verify(mNotificationManager, timeout(TIMEOUT_MS).times(2)).notify(anyString(),
+                eq(NotificationType.PRIVATE_DNS_BROKEN.eventId), any());
     }
 
     @Test
@@ -5994,23 +6031,23 @@ public class ConnectivityServiceTest {
         mCellNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(true);
         trustedCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
-        verify(mNetworkManagementService).setDefaultNetId(eq(mCellNetworkAgent.getNetwork().netId));
-        reset(mNetworkManagementService);
+        verify(mMockNetd).networkSetDefault(eq(mCellNetworkAgent.getNetwork().netId));
+        reset(mMockNetd);
 
         mWiFiNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
         trustedCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
-        verify(mNetworkManagementService).setDefaultNetId(eq(mWiFiNetworkAgent.getNetwork().netId));
-        reset(mNetworkManagementService);
+        verify(mMockNetd).networkSetDefault(eq(mWiFiNetworkAgent.getNetwork().netId));
+        reset(mMockNetd);
 
         mWiFiNetworkAgent.removeCapability(NET_CAPABILITY_TRUSTED);
         trustedCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
-        verify(mNetworkManagementService).setDefaultNetId(eq(mCellNetworkAgent.getNetwork().netId));
-        reset(mNetworkManagementService);
+        verify(mMockNetd).networkSetDefault(eq(mCellNetworkAgent.getNetwork().netId));
+        reset(mMockNetd);
 
         mCellNetworkAgent.removeCapability(NET_CAPABILITY_TRUSTED);
         trustedCallback.expectCallback(CallbackEntry.LOST, mCellNetworkAgent);
-        verify(mNetworkManagementService).clearDefaultNetId();
+        verify(mMockNetd).networkClearDefault();
 
         mCm.unregisterNetworkCallback(trustedCallback);
     }
@@ -6114,6 +6151,7 @@ public class ConnectivityServiceTest {
         verify(mMockNetd, times(1)).networkCreatePhysical(eq(cellNetId), anyInt());
         assertRoutesAdded(cellNetId, ipv6Subnet, defaultRoute);
         verify(mMockDnsResolver, times(1)).createNetworkCache(eq(cellNetId));
+        verify(mMockNetd, times(1)).networkAddInterface(cellNetId, MOBILE_IFNAME);
         verify(mBatteryStatsService).noteNetworkInterfaceType(cellLp.getInterfaceName(),
                 TYPE_MOBILE);
 
@@ -6122,7 +6160,7 @@ public class ConnectivityServiceTest {
 
         // Switching default network updates TCP buffer sizes.
         verifyTcpBufferSizeChange(ConnectivityService.DEFAULT_TCP_BUFFER_SIZES);
-
+        verify(mSystemProperties, times(1)).setTcpInitRwnd(eq(TEST_TCP_INIT_RWND));
         // Add an IPv4 address. Expect prefix discovery to be stopped. Netd doesn't tell us that
         // the NAT64 prefix was removed because one was never discovered.
         cellLp.addLinkAddress(myIpv4);
@@ -6170,7 +6208,7 @@ public class ConnectivityServiceTest {
                 .getStackedLinks();
         assertEquals(makeClatLinkProperties(myIpv4), stackedLps.get(0));
         assertRoutesAdded(cellNetId, stackedDefault);
-
+        verify(mMockNetd, times(1)).networkAddInterface(cellNetId, CLAT_PREFIX + MOBILE_IFNAME);
         // Change trivial linkproperties and see if stacked link is preserved.
         cellLp.addDnsServer(InetAddress.getByName("8.8.8.8"));
         mCellNetworkAgent.sendLinkProperties(cellLp);
@@ -6201,6 +6239,7 @@ public class ConnectivityServiceTest {
                 (lp) -> lp.getStackedLinks().size() == 0);
         verify(mMockNetd, times(1)).clatdStop(MOBILE_IFNAME);
         assertRoutesRemoved(cellNetId, stackedDefault);
+        verify(mMockNetd, times(1)).networkRemoveInterface(cellNetId, CLAT_PREFIX + MOBILE_IFNAME);
 
         verify(mMockNetd, times(1)).clatdStart(MOBILE_IFNAME, kOtherNat64Prefix.toString());
         networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
@@ -6209,6 +6248,7 @@ public class ConnectivityServiceTest {
         networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
                 (lp) -> lp.getStackedLinks().size() == 1);
         assertRoutesAdded(cellNetId, stackedDefault);
+        verify(mMockNetd, times(1)).networkAddInterface(cellNetId, CLAT_PREFIX + MOBILE_IFNAME);
         reset(mMockNetd);
 
         // Add ipv4 address, expect that clatd and prefix discovery are stopped and stacked
@@ -6233,7 +6273,7 @@ public class ConnectivityServiceTest {
         // The interface removed callback happens but has no effect after stop is called.
         clat.interfaceRemoved(CLAT_PREFIX + MOBILE_IFNAME);
         networkCallback.assertNoCallback();
-
+        verify(mMockNetd, times(1)).networkRemoveInterface(cellNetId, CLAT_PREFIX + MOBILE_IFNAME);
         verifyNoMoreInteractions(mMockNetd);
         verifyNoMoreInteractions(mMockDnsResolver);
         reset(mNetworkManagementService);
@@ -6266,6 +6306,7 @@ public class ConnectivityServiceTest {
         networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
                 (lp) -> lp.getStackedLinks().size() == 1 && lp.getNat64Prefix() != null);
         assertRoutesAdded(cellNetId, stackedDefault);
+        verify(mMockNetd, times(1)).networkAddInterface(cellNetId, CLAT_PREFIX + MOBILE_IFNAME);
 
         // NAT64 prefix is removed. Expect that clat is stopped.
         mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, false /* added */,
@@ -6278,8 +6319,8 @@ public class ConnectivityServiceTest {
         verify(mMockNetd, times(1)).clatdStop(MOBILE_IFNAME);
         networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
                 (lp) -> lp.getStackedLinks().size() == 0);
+        verify(mMockNetd, times(1)).networkRemoveInterface(cellNetId, CLAT_PREFIX + MOBILE_IFNAME);
         verifyNoMoreInteractions(mMockNetd);
-
         // Clean up.
         mCellNetworkAgent.disconnect();
         networkCallback.expectCallback(CallbackEntry.LOST, mCellNetworkAgent);
@@ -6559,14 +6600,14 @@ public class ConnectivityServiceTest {
         mCellNetworkAgent.connect(false);
         networkCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
         verifyTcpBufferSizeChange(ConnectivityService.DEFAULT_TCP_BUFFER_SIZES);
-
+        verify(mSystemProperties, times(1)).setTcpInitRwnd(eq(TEST_TCP_INIT_RWND));
         // Change link Properties should have updated tcp buffer size.
         LinkProperties lp = new LinkProperties();
         lp.setTcpBufferSizes(testTcpBufferSizes);
         mCellNetworkAgent.sendLinkProperties(lp);
         networkCallback.expectCallback(CallbackEntry.LINK_PROPERTIES_CHANGED, mCellNetworkAgent);
         verifyTcpBufferSizeChange(testTcpBufferSizes);
-
+        verify(mSystemProperties, times(2)).setTcpInitRwnd(eq(TEST_TCP_INIT_RWND));
         // Clean up.
         mCellNetworkAgent.disconnect();
         networkCallback.expectCallback(CallbackEntry.LOST, mCellNetworkAgent);
@@ -7099,7 +7140,7 @@ public class ConnectivityServiceTest {
                 mConnectivityDiagnosticsCallback, wifiRequest, mContext.getPackageName());
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         verify(mIBinder).linkToDeath(any(ConnectivityDiagnosticsCallbackInfo.class), anyInt());
         verify(mConnectivityDiagnosticsCallback).asBinder();
@@ -7122,7 +7163,7 @@ public class ConnectivityServiceTest {
                 mConnectivityDiagnosticsCallback, wifiRequest, mContext.getPackageName());
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         verify(mIBinder).linkToDeath(any(ConnectivityDiagnosticsCallbackInfo.class), anyInt());
         verify(mConnectivityDiagnosticsCallback).asBinder();
@@ -7133,7 +7174,7 @@ public class ConnectivityServiceTest {
                 mConnectivityDiagnosticsCallback, wifiRequest, mContext.getPackageName());
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         assertTrue(mService.mConnectivityDiagnosticsCallbacks.containsKey(mIBinder));
     }
@@ -7285,7 +7326,7 @@ public class ConnectivityServiceTest {
                 mConnectivityDiagnosticsCallback, request, mContext.getPackageName());
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         verify(mConnectivityDiagnosticsCallback)
                 .onConnectivityReportAvailable(argThat(report -> {
@@ -7305,7 +7346,7 @@ public class ConnectivityServiceTest {
                 mConnectivityDiagnosticsCallback, request, mContext.getPackageName());
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         // Connect the cell agent verify that it notifies TestNetworkCallback that it is available
         final TestNetworkCallback callback = new TestNetworkCallback();
@@ -7322,7 +7363,7 @@ public class ConnectivityServiceTest {
         setUpConnectivityDiagnosticsCallback();
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         // Verify onConnectivityReport fired
         verify(mConnectivityDiagnosticsCallback).onConnectivityReportAvailable(
@@ -7343,7 +7384,7 @@ public class ConnectivityServiceTest {
         mCellNetworkAgent.notifyDataStallSuspected();
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         // Verify onDataStallSuspected fired
         verify(mConnectivityDiagnosticsCallback).onDataStallSuspected(
@@ -7364,7 +7405,7 @@ public class ConnectivityServiceTest {
         mService.reportNetworkConnectivity(n, hasConnectivity);
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         // Verify onNetworkConnectivityReported fired
         verify(mConnectivityDiagnosticsCallback)
@@ -7374,7 +7415,7 @@ public class ConnectivityServiceTest {
         mService.reportNetworkConnectivity(n, noConnectivity);
 
         // Block until all other events are done processing.
-        HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
+        HandlerUtils.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         // Wait for onNetworkConnectivityReported to fire
         verify(mConnectivityDiagnosticsCallback)

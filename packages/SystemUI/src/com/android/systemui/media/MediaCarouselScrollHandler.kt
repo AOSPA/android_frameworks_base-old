@@ -30,8 +30,9 @@ import com.android.settingslib.Utils
 import com.android.systemui.Gefingerpoken
 import com.android.systemui.qs.PageIndicator
 import com.android.systemui.R
+import com.android.systemui.classifier.Classifier.NOTIFICATION_DISMISS
 import com.android.systemui.plugins.FalsingManager
-import com.android.systemui.util.animation.PhysicsAnimator
+import com.android.wm.shell.animation.PhysicsAnimator
 import com.android.systemui.util.concurrency.DelayableExecutor
 
 private const val FLING_SLOP = 1000000
@@ -56,6 +57,7 @@ class MediaCarouselScrollHandler(
     private val mainExecutor: DelayableExecutor,
     private val dismissCallback: () -> Unit,
     private var translationChangedListener: () -> Unit,
+    private val closeGuts: () -> Unit,
     private val falsingManager: FalsingManager
 ) {
     /**
@@ -280,10 +282,12 @@ class MediaCarouselScrollHandler(
                 scrollXAmount = -1 * relativePos
             }
             if (scrollXAmount != 0) {
+                val dx = if (isRtl) -scrollXAmount else scrollXAmount
+                val newScrollX = scrollView.relativeScrollX + dx
                 // Delay the scrolling since scrollView calls springback which cancels
                 // the animation again..
                 mainExecutor.execute {
-                    scrollView.smoothScrollBy(if (isRtl) -scrollXAmount else scrollXAmount, 0)
+                    scrollView.smoothScrollTo(newScrollX, scrollView.scrollY)
                 }
             }
             val currentTranslation = scrollView.getContentTranslation()
@@ -314,7 +318,8 @@ class MediaCarouselScrollHandler(
         return false
     }
 
-    private fun isFalseTouch() = falsingProtectionNeeded && falsingManager.isFalseTouch
+    private fun isFalseTouch() = falsingProtectionNeeded &&
+            falsingManager.isFalseTouch(NOTIFICATION_DISMISS)
 
     private fun getMaxTranslation() = if (showsSettingsButton) {
             settingsButton.width
@@ -452,6 +457,7 @@ class MediaCarouselScrollHandler(
         val nowScrolledIn = scrollIntoCurrentMedia != 0
         if (newIndex != activeMediaIndex || wasScrolledIn != nowScrolledIn) {
             activeMediaIndex = newIndex
+            closeGuts()
             updatePlayerVisibilities()
         }
         val relativeLocation = activeMediaIndex.toFloat() + if (playerWidthPlusPadding > 0)

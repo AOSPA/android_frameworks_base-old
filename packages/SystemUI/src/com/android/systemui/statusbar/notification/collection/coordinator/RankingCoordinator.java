@@ -16,16 +16,21 @@
 
 package com.android.systemui.statusbar.notification.collection.coordinator;
 
+import android.annotation.Nullable;
+
+import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.collection.ListEntry;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter;
-import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifSection;
+import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifSectioner;
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
+import com.android.systemui.statusbar.notification.collection.render.NodeController;
+import com.android.systemui.statusbar.notification.dagger.AlertingHeader;
+import com.android.systemui.statusbar.notification.dagger.SilentHeader;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 /**
  * Filters out NotificationEntries based on its Ranking and dozing state.
@@ -34,19 +39,23 @@ import javax.inject.Singleton;
  *  - whether the notification's app is suspended or hiding its notifications
  *  - whether DND settings are hiding notifications from ambient display or the notification list
  */
-@Singleton
+@SysUISingleton
 public class RankingCoordinator implements Coordinator {
-    private static final String TAG = "RankingNotificationCoordinator";
-
     private final StatusBarStateController mStatusBarStateController;
     private final HighPriorityProvider mHighPriorityProvider;
+    private final NodeController mSilentHeaderController;
+    private final NodeController mAlertingHeaderController;
 
     @Inject
     public RankingCoordinator(
             StatusBarStateController statusBarStateController,
-            HighPriorityProvider highPriorityProvider) {
+            HighPriorityProvider highPriorityProvider,
+            @AlertingHeader NodeController alertingHeaderController,
+            @SilentHeader NodeController silentHeaderController) {
         mStatusBarStateController = statusBarStateController;
         mHighPriorityProvider = highPriorityProvider;
+        mAlertingHeaderController = alertingHeaderController;
+        mSilentHeaderController = silentHeaderController;
     }
 
     @Override
@@ -54,28 +63,40 @@ public class RankingCoordinator implements Coordinator {
         mStatusBarStateController.addCallback(mStatusBarStateCallback);
 
         pipeline.addPreGroupFilter(mSuspendedFilter);
-        pipeline.addPreGroupFilter(mDozingFilter);
+        pipeline.addPreGroupFilter(mDndVisualEffectsFilter);
     }
 
-    public NotifSection getAlertingSection() {
-        return mAlertingNotifSection;
+    public NotifSectioner getAlertingSectioner() {
+        return mAlertingNotifSectioner;
     }
 
-    public NotifSection getSilentSection() {
-        return mSilentNotifSection;
+    public NotifSectioner getSilentSectioner() {
+        return mSilentNotifSectioner;
     }
 
-    private final NotifSection mAlertingNotifSection = new NotifSection("Alerting") {
+    private final NotifSectioner mAlertingNotifSectioner = new NotifSectioner("Alerting") {
         @Override
         public boolean isInSection(ListEntry entry) {
             return mHighPriorityProvider.isHighPriority(entry);
         }
+
+        @Nullable
+        @Override
+        public NodeController getHeaderNodeController() {
+            return mAlertingHeaderController;
+        }
     };
 
-    private final NotifSection mSilentNotifSection = new NotifSection("Silent") {
+    private final NotifSectioner mSilentNotifSectioner = new NotifSectioner("Silent") {
         @Override
         public boolean isInSection(ListEntry entry) {
             return !mHighPriorityProvider.isHighPriority(entry);
+        }
+
+        @Nullable
+        @Override
+        public NodeController getHeaderNodeController() {
+            return mSilentHeaderController;
         }
     };
 
@@ -91,10 +112,10 @@ public class RankingCoordinator implements Coordinator {
         }
     };
 
-    private final NotifFilter mDozingFilter = new NotifFilter("IsDozingFilter") {
+    private final NotifFilter mDndVisualEffectsFilter = new NotifFilter(
+            "DndSuppressingVisualEffects") {
         @Override
         public boolean shouldFilterOut(NotificationEntry entry, long now) {
-            // Dozing + DND Settings from Ranking object
             if (mStatusBarStateController.isDozing() && entry.shouldSuppressAmbient()) {
                 return true;
             }
@@ -107,7 +128,7 @@ public class RankingCoordinator implements Coordinator {
             new StatusBarStateController.StateListener() {
                 @Override
                 public void onDozingChanged(boolean isDozing) {
-                    mDozingFilter.invalidateList();
+                    mDndVisualEffectsFilter.invalidateList();
                 }
             };
 }

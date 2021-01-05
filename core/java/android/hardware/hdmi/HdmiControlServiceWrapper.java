@@ -20,6 +20,7 @@ import android.annotation.BinderThread;
 import android.annotation.NonNull;
 import android.annotation.TestApi;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -293,6 +294,41 @@ public final class HdmiControlServiceWrapper {
                 IHdmiCecVolumeControlFeatureListener listener) {
             HdmiControlServiceWrapper.this.removeHdmiCecVolumeControlFeatureListener(listener);
         }
+
+        @Override
+        public List<String> getUserCecSettings() {
+            return HdmiControlServiceWrapper.this.getUserCecSettings();
+        }
+
+        @Override
+        public List<String> getAllowedCecSettingStringValues(String name) {
+            return HdmiControlServiceWrapper.this.getAllowedCecSettingStringValues(name);
+        }
+
+        @Override
+        public int[] getAllowedCecSettingIntValues(String name) {
+            return HdmiControlServiceWrapper.this.getAllowedCecSettingIntValues(name);
+        }
+
+        @Override
+        public String getCecSettingStringValue(String name) {
+            return HdmiControlServiceWrapper.this.getCecSettingStringValue(name);
+        }
+
+        @Override
+        public void setCecSettingStringValue(String name, String value) {
+            HdmiControlServiceWrapper.this.setCecSettingStringValue(name, value);
+        }
+
+        @Override
+        public int getCecSettingIntValue(String name) {
+            return HdmiControlServiceWrapper.this.getCecSettingIntValue(name);
+        }
+
+        @Override
+        public void setCecSettingIntValue(String name, int value) {
+            HdmiControlServiceWrapper.this.setCecSettingIntValue(name, value);
+        }
     };
 
     @BinderThread
@@ -466,4 +502,37 @@ public final class HdmiControlServiceWrapper {
     /** @hide */
     public void removeHdmiCecVolumeControlFeatureListener(
             IHdmiCecVolumeControlFeatureListener listener) {}
+
+    /** @hide */
+    public List<String> getUserCecSettings() {
+        return new ArrayList<>();
+    }
+
+    /** @hide */
+    public List<String> getAllowedCecSettingStringValues(String name) {
+        return new ArrayList<>();
+    }
+
+    /** @hide */
+    public int[] getAllowedCecSettingIntValues(String name) {
+        return new int[0];
+    }
+
+    /** @hide */
+    public String getCecSettingStringValue(String name) {
+        return "";
+    }
+
+    /** @hide */
+    public void setCecSettingStringValue(String name, String value) {
+    }
+
+    /** @hide */
+    public int getCecSettingIntValue(String name) {
+        return 0;
+    }
+
+    /** @hide */
+    public void setCecSettingIntValue(String name, int value) {
+    }
 }
