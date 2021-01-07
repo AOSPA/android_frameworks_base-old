@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "324650a3_d3043359",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-07T05:22:38Z",
+      "side": 1,
+      "message": "p404 is not the original upstream for this commit. also this commit is not merged yet in los",
+      "revId": "79e497f950b3983505cfba20e94075d4f57c2b86",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
