@@ -33,6 +33,24 @@
       "message": "Hikari wrote a more extensive patch for it\n\nog: https://github.com/Hikari-no-Tenshi/android_frameworks_base/commit/55dd418fdec5662f52a6586673bfbcdee8821871 ( also has fod animation part )\n\naosip gerrit: https://review.aosip.dev/c/AOSIP/platform_frameworks_base/+/16047 (this doesn\u0027t have the fod animation part )",
       "revId": "79e497f950b3983505cfba20e94075d4f57c2b86",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a7b49687_d81a5566",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2021-01-07T09:13:27Z",
+      "side": 1,
+      "message": "makes sense, thanks. :)",
+      "parentUuid": "ad9d504f_5158f23a",
+      "revId": "79e497f950b3983505cfba20e94075d4f57c2b86",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
