@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "9a335deb_8dc184c4",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 358,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-08T22:58:26Z",
+      "side": 1,
+      "message": "can you fix the incorrect spellings of down like this one?",
+      "revId": "3ae369f2e02a7b2faeb97ffb25016c3846cbcbc9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "5f627534_634470a8",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 3896,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-08T22:58:26Z",
+      "side": 1,
+      "message": "kill this line, we don\u0027t do this elsewhere and shouldn\u0027t here.",
+      "revId": "3ae369f2e02a7b2faeb97ffb25016c3846cbcbc9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
