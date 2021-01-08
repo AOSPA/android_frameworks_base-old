@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "946bdb17_08eafb44",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 1047,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-08T21:56:57Z",
+      "side": 1,
+      "message": "double tap and gestures are called twice.",
+      "revId": "4c92f53a5398f87ebe8925281cdb317a602a0e66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "62804493_067312ab",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 1325,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-08T21:56:57Z",
+      "side": 1,
+      "message": "shouldn\u0027t we restore the original double tap to wake name as I did in the earlier patch set to avoid conflicting with AOSP?",
+      "revId": "4c92f53a5398f87ebe8925281cdb317a602a0e66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
