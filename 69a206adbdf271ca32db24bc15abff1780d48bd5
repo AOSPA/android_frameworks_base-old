@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "02cf31d3_2108dcd5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-08T16:07:05Z",
+      "side": 1,
+      "message": "Alex mentioned it to me and I agree, this should be an overlay in vendor/pa",
+      "revId": "69a206adbdf271ca32db24bc15abff1780d48bd5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
