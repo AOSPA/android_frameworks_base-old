@@ -18,6 +18,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "e8d2409b_3a15648f",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 1047,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-08T22:47:21Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "946bdb17_08eafb44",
+      "revId": "4c92f53a5398f87ebe8925281cdb317a602a0e66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "62804493_067312ab",
@@ -31,6 +49,24 @@
       "writtenOn": "2021-01-08T21:56:57Z",
       "side": 1,
       "message": "shouldn\u0027t we restore the original double tap to wake name as I did in the earlier patch set to avoid conflicting with AOSP?",
+      "revId": "4c92f53a5398f87ebe8925281cdb317a602a0e66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ed775a49_a3d39891",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 1325,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-08T22:47:21Z",
+      "side": 1,
+      "message": "Im fine with letting it exist to avoid merge conflicts but it isn\u0027t worth to use it as we have to set the keycode anyway, which isn\u0027t possible with AOSPs config.",
+      "parentUuid": "62804493_067312ab",
       "revId": "4c92f53a5398f87ebe8925281cdb317a602a0e66",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
