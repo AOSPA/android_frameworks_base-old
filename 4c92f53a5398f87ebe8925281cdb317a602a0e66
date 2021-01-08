@@ -69,6 +69,24 @@
       "parentUuid": "62804493_067312ab",
       "revId": "4c92f53a5398f87ebe8925281cdb317a602a0e66",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "342b81d1_2fee5579",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 1325,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-08T22:59:44Z",
+      "side": 1,
+      "message": "ok, I remember some people had issues in Q with the rename.  Do you remember any of them?  I know we broke some custom powerhals which isn\u0027t really a concern but just want to know what the impact is of renaming before I agree to it.",
+      "parentUuid": "ed775a49_a3d39891",
+      "revId": "4c92f53a5398f87ebe8925281cdb317a602a0e66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
