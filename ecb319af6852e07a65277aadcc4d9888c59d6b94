@@ -1,0 +1,72 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "75d3306d_399a5921",
+        "filename": "core/res/res/values/pa_symbols.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 55,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-10T14:17:56Z",
+      "side": 1,
+      "message": "Maybe add a blank line here like it was before",
+      "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "4e5080a6_16795664",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 189,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-10T14:17:56Z",
+      "side": 1,
+      "message": "This can be final",
+      "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "989b04b6_3415f609",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 276,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-10T14:17:56Z",
+      "side": 1,
+      "message": "Don\u0027t name it mObserver as it isn\u0027t a direct member of this class.",
+      "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "8e289471_fa9fbb71",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 281,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-10T14:17:56Z",
+      "side": 1,
+      "message": "synchronize this on mLock instead of the instance itself",
+      "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
