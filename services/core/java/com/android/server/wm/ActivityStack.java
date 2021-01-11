@@ -2723,7 +2723,8 @@ public class ActivityStack extends ConfigurationContainer {
         mStackSupervisor.mStoppingActivities.remove(next);
         mStackSupervisor.mGoingToSleepActivities.remove(next);
         next.sleeping = false;
-        next.launching = true;
+        if (!next.translucentWindowLaunch)
+            next.launching = true;
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 

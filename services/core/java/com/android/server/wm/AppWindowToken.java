@@ -2137,9 +2137,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                         + " ShowWallpaper=" + windowShowWallpaper);
             }
             if (windowIsTranslucent) {
+                mActivityRecord.translucentWindowLaunch = true;
                 return false;
             }
             if (windowIsFloating || windowDisableStarting) {
+                mActivityRecord.translucentWindowLaunch = true;
                 return false;
             }
             if (windowShowWallpaper) {

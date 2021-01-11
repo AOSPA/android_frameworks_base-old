@@ -347,6 +347,7 @@ public final class ActivityRecord extends ConfigurationContainer {
                                         // process that it is hidden.
     boolean sleeping;       // have we told the activity to sleep?
     public boolean launching;      // is activity launch in progress?
+    public boolean translucentWindowLaunch; // a translucent window launch?
     boolean nowVisible;     // is this activity's window visible?
     boolean mDrawn;          // is this activity's window drawn?
     boolean mClientVisibilityDeferred;// was the visibility change message to client deferred?
@@ -981,6 +982,8 @@ public final class ActivityRecord extends ConfigurationContainer {
         mDrawn = false;
         idle = false;
         hasBeenLaunched = false;
+        launching = false;
+        translucentWindowLaunch = false;
         mStackSupervisor = supervisor;
 
         // This starts out true, since the initial state of an activity is that we have everything,
