@@ -1266,7 +1266,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         fetchActiveDevices();
     }
 
-    public int getSetId(){
+    public int getGroupId(){
         return mGroupId;
     }
 
