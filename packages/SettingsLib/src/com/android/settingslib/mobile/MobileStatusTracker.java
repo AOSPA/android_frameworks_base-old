@@ -26,6 +26,8 @@ import android.telephony.TelephonyDisplayInfo;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
+import com.android.settingslib.Utils;
+
 /**
  * Tracks the mobile signal status for the SysUI and Settings.
  *
@@ -36,6 +38,7 @@ import android.util.Log;
  */
 public class MobileStatusTracker {
     private static final String TAG = "MobileStatusTracker";
+
     private final TelephonyManager mPhone;
     private final SubscriptionInfo mSubscriptionInfo;
     private final Callback mCallback;
@@ -190,6 +193,16 @@ public class MobileStatusTracker {
             mCallback.onMobileStatusChanged(
                     /* updateTelephony= */ true, new MobileStatus(mMobileStatus));
         }
+
+        @Override
+        public void onCallStateChanged(int state, String phoneNumber) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "onCallStateChanged: state=" + state);
+            }
+            // TODO(b/177344083) re-implement as necessary.
+            // updateTelephony();
+        }
+
     }
 
     /**
