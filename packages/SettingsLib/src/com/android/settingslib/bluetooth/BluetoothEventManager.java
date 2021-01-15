@@ -597,10 +597,10 @@ public class BluetoothEventManager {
         boolean isGroup = cachedDevice.isGroupDevice();
         Log.d(TAG, "updateCacheDeviceInfo groupId " + groupId
                 + ", cachedDevice :" + cachedDevice + ", name :" + cachedDevice.getName()
-                +" isGroup :" + isGroup + " groupId " + cachedDevice.getSetId());
+                +" isGroup :" + isGroup + " groupId " + cachedDevice.getGroupId());
         if (isGroup) {
-            if (groupId !=  cachedDevice.getSetId()) {
-                Log.d(TAG, "groupId mismatch ignore" + cachedDevice.getSetId());
+            if (groupId !=  cachedDevice.getGroupId()) {
+                Log.d(TAG, "groupId mismatch ignore" + cachedDevice.getGroupId());
                 return;
             }
             Log.d(TAG, "updateCacheDeviceInfo update ignored ");
