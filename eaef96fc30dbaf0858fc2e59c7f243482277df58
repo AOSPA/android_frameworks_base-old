@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5ce26152_d17377f2",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000447
+      },
+      "writtenOn": "2021-01-15T05:11:31Z",
+      "side": 1,
+      "message": "Fixes tethering on Op*/T for AT\u0026T.",
+      "revId": "eaef96fc30dbaf0858fc2e59c7f243482277df58",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
