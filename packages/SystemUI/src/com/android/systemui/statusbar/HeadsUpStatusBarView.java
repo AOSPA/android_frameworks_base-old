@@ -47,6 +47,7 @@ public class HeadsUpStatusBarView extends AlphaOptimizedLinearLayout {
     private static final String VISIBILITY = "visibility";
     private static final String ALPHA = "alpha";
     private int mAbsoluteStartPadding;
+    private int mHeadsUpStartPadding;
     private int mEndMargin;
     private View mIconPlaceholder;
     private TextView mTextView;
@@ -79,11 +80,14 @@ public class HeadsUpStatusBarView extends AlphaOptimizedLinearLayout {
             int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
         Resources res = getResources();
-        mAbsoluteStartPadding = res.getDimensionPixelSize(R.dimen.notification_side_paddings)
-            + res.getDimensionPixelSize(
-                    com.android.internal.R.dimen.notification_content_margin_start)
-            + res.getDimensionPixelSize(
-                    R.dimen.heads_up_status_bar_padding_start);
+        int mHeadsUpStartPadding = getResources().getDimensionPixelSize(R.dimen.heads_up_status_bar_padding_start);
+        if (mHeadsUpStartPadding > 0) {
+            mAbsoluteStartPadding = res.getDimensionPixelSize(R.dimen.heads_up_status_bar_padding_start);
+        } else {
+            mAbsoluteStartPadding = res.getDimensionPixelSize(R.dimen.notification_side_paddings)
+                + res.getDimensionPixelSize(
+                        com.android.internal.R.dimen.notification_content_margin_start);
+        }
         mEndMargin = res.getDimensionPixelSize(
                 com.android.internal.R.dimen.notification_content_margin_end);
         setPaddingRelative(mAbsoluteStartPadding, 0, mEndMargin, 0);
