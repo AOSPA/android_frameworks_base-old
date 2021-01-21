@@ -159,8 +159,6 @@ interface IActivityTaskManager {
             int userId);
     boolean isTopActivityImmersive();
     ActivityManager.TaskDescription getTaskDescription(int taskId);
-    int getLaunchedFromUid(in IBinder activityToken);
-    String getLaunchedFromPackage(in IBinder activityToken);
     void reportAssistContextExtras(in IBinder assistToken, in Bundle extras,
             in AssistStructure structure, in AssistContent content, in Uri referrer);
 
@@ -193,7 +191,7 @@ interface IActivityTaskManager {
      */
     IBinder requestStartActivityPermissionToken(in IBinder delegatorToken);
 
-    void releaseSomeActivities(in IApplicationThread app);
+    oneway void releaseSomeActivities(in IApplicationThread app);
     Bitmap getTaskDescriptionIcon(in String filename, int userId);
     void registerTaskStackListener(in ITaskStackListener listener);
     void unregisterTaskStackListener(in ITaskStackListener listener);
@@ -257,12 +255,9 @@ interface IActivityTaskManager {
      *              etc.
      */
     void keyguardGoingAway(int flags);
-    ComponentName getActivityClassForToken(in IBinder token);
-    String getPackageForToken(in IBinder token);
 
     void suppressResizeConfigChanges(boolean suppress);
     boolean moveTopActivityToPinnedRootTask(int rootTaskId, in Rect bounds);
-    void requestPictureInPictureMode(in IBinder token);
 
     /**
      * Resizes the docked stack, and all other stacks as the result of the dock stack bounds change.
@@ -312,7 +307,7 @@ interface IActivityTaskManager {
      *                          a reduced resolution of it, which is much faster
      * @return a graphic buffer representing a screenshot of a task
      */
-    ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution);
+    android.window.TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution);
 
     /**
      * It should only be called from home activity to remove its outdated snapshot. The home

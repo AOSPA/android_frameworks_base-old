@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS სერვისი"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"სენსორის შეტყობინების სერვისი"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Twilight სერვისი"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"სასაათო სარტყლის დეტექტორი (კავშირის გარეშე)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"თქვენი მოწყობილობა წაიშლება"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"ადმინისტრატორის აპის გამოყენება ვერ მოხერხდება. თქვენი მოწყობილობა ახლა ამოიშლება.\n\nთუ შეკითხვები გაქვთ, დაუკავშირდით თქვენი ორგანიზაციის ადმინისტრატორს."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"ბეჭდვა გათიშულია <xliff:g id="OWNER_APP">%s</xliff:g>-ის მიერ."</string>
@@ -352,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"აპს შეეძლება MMS შეტყობინებების მიღება და დამუშავება. ეს ნიშნავს, რომ აპს შეეძლება შეტყობინებების მონიტორინგი და მათი წაშლა თქვენთვის ჩვენების გარეშე."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"Cell broadcast შეტყობინებების გადამისამართება"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"საშუალებას აძლევს აპს, დაუკავშირდეს cell broadcast მოდულს იმისთვის, რომ გადაამისამართოს cell broadcast შეტყობინებები მათი მიღებისთანავე. Cell broadcast გაფრთხილებები მიეწოდება ზოგიერთ მდებარეობაზე საგანგებო სიტუაციების შესახებ გაფრთხილების მიზნით. საგანგებო cell broadcast-ის მიღების დროს, მავნე აპებმა შეიძლება ხელი შეუშალონ თქვენი მოწყობილობის ფუნქციონირებას ან ოპერაციებს."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"მიმდინარე ზარების მართვა"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"საშუალებას აძლევს აპს, ნახოს თქვენს მოწყობილობაზე მიმდინარე ზარების დეტალები და აკონტროლოს ეს ზარები."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"მასიური დაგზავნის შეტყობინებების წაკითხვა"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"აპს შეეძლება, წაიკითხოს თქვენს მოწყობილობაზე გამოგზავნილი ქსელის სამაუწყებლო შეტყობინებები. სამაუწყებლო გაფრთხილებები მოგეწოდებათ ზოგიერთ ადგილზე ექსტრემალური სიტუაციების შესახებ გასაფრთხილებლად. ქსელის გადაუდებელი შეტყონიბენის მიღების დროს მავნე აპებმა შეიძლება ხელი შეუშალონ თქვენი მოწყობილობის ფუნქციონირებას ან ოპერაციებს."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"გამოწერილი არხების წაკითხვა"</string>
@@ -2006,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"მიკროფონი"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"სხვა აპების გადაფარვით ჩანს თქვენს ეკრანზე"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"გამოხმაურება"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"ეს შეტყობინება დაწინაურდა და გახდა „ნაგულისხმევი“. შეეხეთ გამოხმაურების მოსაწოდებლად."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"ეს შეტყობინება ჩამოქვეითდა და გახდა „ჩუმი“. შეეხეთ გამოხმაურების მოსაწოდებლად."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"ეს შეტყობინება დაწინაურდა. შეეხეთ გამოხმაურების მოსაწოდებლად."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"ეს შეტყობინება ჩამოქვეითდა. შეეხეთ გამოხმაურების მოსაწოდებლად."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"რუტინის რეჟიმის საინფორმაციო შეტყობინება"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"ბატარეა შეიძლება დაჯდეს დატენის ჩვეულ დრომდე"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"ბატარეის დამზოგი გააქტიურდა ბატარეის მუშაობის გასახანგრძლივლებლად"</string>

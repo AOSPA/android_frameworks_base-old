@@ -361,7 +361,7 @@ public class NotificationListenerServiceTest extends UiServiceTestCase {
                     getContext(),
                     index /*requestCode*/,
                     new Intent("ACTION_" + key),
-                    0 /*flags*/);
+                    PendingIntent.FLAG_IMMUTABLE /*flags*/);
             actions.add(new Notification.Action.Builder(null /*icon*/, key, intent).build());
         }
         return actions;

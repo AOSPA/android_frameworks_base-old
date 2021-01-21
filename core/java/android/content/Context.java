@@ -4529,6 +4529,18 @@ public abstract class Context {
     public static final String APP_PREDICTION_SERVICE = "app_prediction";
 
     /**
+     * Official published name of the search ui service.
+     *
+     * <p><b>NOTE: </b> this service is optional; callers of
+     * {@code Context.getSystemServiceName(SEARCH_UI_SERVICE)} should check for {@code null}.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    @SystemApi
+    public static final String SEARCH_UI_SERVICE = "search_ui";
+
+    /**
      * Use with {@link #getSystemService(String)} to access the
      * {@link com.android.server.voiceinteraction.SoundTriggerService}.
      *
@@ -4552,6 +4564,7 @@ public abstract class Context {
      * @hide
      * @see #getSystemService(String)
      */
+    @SystemApi
     public static final String MUSIC_RECOGNITION_SERVICE = "music_recognition";
 
     /**
@@ -4562,6 +4575,15 @@ public abstract class Context {
      */
     @SystemApi
     public static final String PERMISSION_SERVICE = "permission";
+
+    /**
+     * Official published name of the legacy (internal) permission service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    //@SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public static final String LEGACY_PERMISSION_SERVICE = "legacy_permission";
 
     /**
      * Official published name of the (internal) permission controller service.
@@ -5216,7 +5238,6 @@ public abstract class Context {
      * indexing and querying app data managed by the system.
      *
      * @see #getSystemService(String)
-     * @hide
      */
     public static final String APP_SEARCH_SERVICE = "app_search";
 
@@ -5968,27 +5989,53 @@ public abstract class Context {
      * Creating a window context is an expensive operation. Misuse of this API may lead to a huge
      * performance drop. The best practice is to use the same window context when possible.
      * An approach is to create one window context with specific window type and display and
-     * use it everywhere it's needed..
+     * use it everywhere it's needed.
      * </p>
      *
      * @param type Window type in {@link WindowManager.LayoutParams}
-     * @param options Bundle used to pass window-related options.
-     * @return A {@link Context} that can be used to create windows.
-     * @throws UnsupportedOperationException if this is called on a non-UI context, such as
-     *         {@link android.app.Application Application} or {@link android.app.Service Service}.
+     * @param options A bundle used to pass window-related options
+     * @return A {@link Context} that can be used to create
+     *         non-{@link android.app.Activity activity} windows.
      *
      * @see #getSystemService(String)
      * @see #getSystemService(Class)
      * @see #WINDOW_SERVICE
      * @see #LAYOUT_INFLATER_SERVICE
      * @see #WALLPAPER_SERVICE
-     * @throws UnsupportedOperationException if this {@link Context} does not attach to a display or
-     * the current number of window contexts without adding any view by
+     * @throws UnsupportedOperationException if this {@link Context} does not attach to a display,
+     * such as {@link android.app.Application Application} or {@link android.app.Service Service},
+     * or the current number of window contexts without adding any view by
      * {@link WindowManager#addView} <b>exceeds five</b>.
      */
     @UiContext
     @NonNull
     public Context createWindowContext(@WindowType int type, @Nullable Bundle options)  {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * A special version of {@link #createWindowContext(int, Bundle)} which also takes
+     * {@link Display}. The only difference between this API and
+     * {@link #createWindowContext(int, Bundle)} is that this API can create window context from
+     * any context even if the context which is not associated to a {@link Display} instance.
+     *
+     * @param display The {@link Display} to associate with
+     * @param type Window type in {@link WindowManager.LayoutParams}
+     * @param options A bundle used to pass window-related options.
+     * @return A {@link Context} that can be used to create
+     *         non-{@link android.app.Activity activity} windows.
+     * @throws IllegalArgumentException if the {@link Display} is {@code null}.
+     *
+     * @see #getSystemService(String)
+     * @see #getSystemService(Class)
+     * @see #WINDOW_SERVICE
+     * @see #LAYOUT_INFLATER_SERVICE
+     * @see #WALLPAPER_SERVICE
+     */
+    @UiContext
+    @NonNull
+    public Context createWindowContext(@NonNull Display display, @WindowType int type,
+            @Nullable Bundle options) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 

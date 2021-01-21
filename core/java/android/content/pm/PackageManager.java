@@ -1323,6 +1323,60 @@ public abstract class PackageManager {
     public static final int INSTALL_REASON_ROLLBACK = 5;
 
     /** @hide */
+    @IntDef(prefix = { "INSTALL_SCENARIO_" }, value = {
+            INSTALL_SCENARIO_DEFAULT,
+            INSTALL_SCENARIO_FAST,
+            INSTALL_SCENARIO_BULK,
+            INSTALL_SCENARIO_BULK_SECONDARY,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface InstallScenario {}
+
+    /**
+     * A value to indicate the lack of CUJ information, disabling all installation scenario logic.
+     *
+     * @hide
+     */
+    public static final int INSTALL_SCENARIO_DEFAULT = 0;
+
+    /**
+     * Installation scenario providing the fastest “install button to launch" experience possible.
+     *
+     * @hide
+     */
+    public static final int INSTALL_SCENARIO_FAST = 1;
+
+    /**
+     * Installation scenario indicating a bulk operation with the desired result of a fully
+     * optimized application.  If the system is busy or resources are scarce the system will
+     * perform less work to avoid impacting system health.
+     *
+     * Examples of bulk installation scenarios might include device restore, background updates of
+     * multiple applications, or user-triggered updates for all applications.
+     *
+     * The decision to use BULK or BULK_SECONDARY should be based on the desired user experience.
+     * BULK_SECONDARY operations may take less time to complete but, when they do, will produce
+     * less optimized applications.  The device state (e.g. memory usage or battery status) should
+     * not be considered when making this decision as those factors are taken into account by the
+     * Package Manager when acting on the installation scenario.
+     *
+     * @hide
+     */
+    public static final int INSTALL_SCENARIO_BULK = 2;
+
+    /**
+     * Installation scenario indicating a bulk operation that prioritizes minimal system health
+     * impact over application optimization.  The application may undergo additional optimization
+     * if the system is idle and system resources are abundant.  The more elements of a bulk
+     * operation that are marked BULK_SECONDARY, the faster the entire bulk operation will be.
+     *
+     * See the comments for INSTALL_SCENARIO_BULK for more information.
+     *
+     * @hide
+     */
+    public static final int INSTALL_SCENARIO_BULK_SECONDARY = 3;
+
+    /** @hide */
     @IntDef(prefix = { "UNINSTALL_REASON_" }, value = {
             UNINSTALL_REASON_UNKNOWN,
             UNINSTALL_REASON_USER_TYPE,
@@ -2625,6 +2679,23 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_VULKAN_DEQP_LEVEL = "android.software.vulkan.deqp.level";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the feature version
+     * specifies a date such that the device is known to pass the OpenGLES dEQP test suite
+     * associated with that date.  The date is encoded as follows:
+     * <ul>
+     * <li>Year in bits 31-16</li>
+     * <li>Month in bits 15-8</li>
+     * <li>Day in bits 7-0</li>
+     * </ul>
+     * <p>
+     * Example: 2021-03-01 is encoded as 0x07E50301, and would indicate that the device passes the
+     * OpenGL ES dEQP test suite version that was current on 2021-03-01.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_OPENGLES_DEQP_LEVEL = "android.software.opengles.deqp.level";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
@@ -4131,6 +4202,14 @@ public abstract class PackageManager {
      */
     public static final int UNSTARTABLE_REASON_INSUFFICIENT_STORAGE = 2;
 
+    /**
+     * A manifest property to control app's participation in {@code adb backup}. Should only
+     * be used by system / privileged apps.
+     *
+     * @hide
+     */
+    public static final String PROPERTY_ALLOW_ADB_BACKUP = "android.backup.ALLOW_ADB_BACKUP";
+
     /** {@hide} */
     public int getUserId() {
         return UserHandle.myUserId();
@@ -4376,6 +4455,7 @@ public abstract class PackageManager {
      * @throws NameNotFoundException if a package with the given name cannot be
      *             found on the system.
      */
+    //@Deprecated
     public abstract PermissionInfo getPermissionInfo(@NonNull String permName,
             @PermissionInfoFlags int flags) throws NameNotFoundException;
 
@@ -4388,9 +4468,10 @@ public abstract class PackageManager {
      * @param flags Additional option flags to modify the data returned.
      * @return Returns a list of {@link PermissionInfo} containing information
      *         about all of the permissions in the given group.
-     * @throws NameNotFoundException if a package with the given name cannot be
+     * @throws NameNotFoundException if a group with the given name cannot be
      *             found on the system.
      */
+    //@Deprecated
     @NonNull
     public abstract List<PermissionInfo> queryPermissionsByGroup(@NonNull String permissionGroup,
             @PermissionInfoFlags int flags) throws NameNotFoundException;
@@ -4419,7 +4500,7 @@ public abstract class PackageManager {
      * Retrieve all of the information we know about a particular group of
      * permissions.
      *
-     * @param permName The fully qualified name (i.e.
+     * @param groupName The fully qualified name (i.e.
      *            com.google.permission_group.APPS) of the permission you are
      *            interested in.
      * @param flags Additional option flags to modify the data returned.
@@ -4428,8 +4509,9 @@ public abstract class PackageManager {
      * @throws NameNotFoundException if a package with the given name cannot be
      *             found on the system.
      */
+    //@Deprecated
     @NonNull
-    public abstract PermissionGroupInfo getPermissionGroupInfo(@NonNull String permName,
+    public abstract PermissionGroupInfo getPermissionGroupInfo(@NonNull String groupName,
             @PermissionGroupInfoFlags int flags) throws NameNotFoundException;
 
     /**
@@ -4439,6 +4521,7 @@ public abstract class PackageManager {
      * @return Returns a list of {@link PermissionGroupInfo} containing
      *         information about all of the known permission groups.
      */
+    //@Deprecated
     @NonNull
     public abstract List<PermissionGroupInfo> getAllPermissionGroups(
             @PermissionGroupInfoFlags int flags);
@@ -4695,6 +4778,7 @@ public abstract class PackageManager {
      * @return Whether the permission is restricted by policy.
      */
     @CheckResult
+    //@Deprecated
     public abstract boolean isPermissionRevokedByPolicy(@NonNull String permName,
             @NonNull String packageName);
 
@@ -4743,6 +4827,7 @@ public abstract class PackageManager {
      *
      * @see #removePermission(String)
      */
+    //@Deprecated
     public abstract boolean addPermission(@NonNull PermissionInfo info);
 
     /**
@@ -4752,6 +4837,7 @@ public abstract class PackageManager {
      * expense of no guarantee the added permission will be retained if
      * the device is rebooted before it is written.
      */
+    //@Deprecated
     public abstract boolean addPermissionAsync(@NonNull PermissionInfo info);
 
     /**
@@ -4767,6 +4853,7 @@ public abstract class PackageManager {
      *
      * @see #addPermission(PermissionInfo)
      */
+    //@Deprecated
     public abstract void removePermission(@NonNull String permName);
 
     /**
@@ -4819,6 +4906,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    //@Deprecated
     @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS)
@@ -4846,6 +4934,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    //@Deprecated
     @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS)
@@ -4874,6 +4963,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    //@Deprecated
     @SystemApi
     @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS)
     public void revokeRuntimePermission(@NonNull String packageName,
@@ -4891,6 +4981,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    //@Deprecated
     @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(anyOf = {
@@ -4914,6 +5005,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    //@Deprecated
     @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(anyOf = {
@@ -4978,6 +5070,7 @@ public abstract class PackageManager {
      *
      * @throws SecurityException if you try to access a whitelist that you have no access to.
      */
+    //@Deprecated
     @RequiresPermission(value = Manifest.permission.WHITELIST_RESTRICTED_PERMISSIONS,
             conditional = true)
     public @NonNull Set<String> getWhitelistedRestrictedPermissions(
@@ -5044,6 +5137,7 @@ public abstract class PackageManager {
      *
      * @throws SecurityException if you try to modify a whitelist that you have no access to.
      */
+    //@Deprecated
     @RequiresPermission(value = Manifest.permission.WHITELIST_RESTRICTED_PERMISSIONS,
             conditional = true)
     public boolean addWhitelistedRestrictedPermission(@NonNull String packageName,
@@ -5113,6 +5207,7 @@ public abstract class PackageManager {
      *
      * @throws SecurityException if you try to modify a whitelist that you have no access to.
      */
+    //@Deprecated
     @RequiresPermission(value = Manifest.permission.WHITELIST_RESTRICTED_PERMISSIONS,
         conditional = true)
     public boolean removeWhitelistedRestrictedPermission(@NonNull String packageName,
@@ -5145,6 +5240,7 @@ public abstract class PackageManager {
      *
      * @throws SecurityException if you you have no access to modify this.
      */
+    //@Deprecated
     @RequiresPermission(value = Manifest.permission.WHITELIST_AUTO_REVOKE_PERMISSIONS,
             conditional = true)
     public boolean setAutoRevokeWhitelisted(@NonNull String packageName, boolean whitelisted) {
@@ -5172,6 +5268,7 @@ public abstract class PackageManager {
      *
      * @throws SecurityException if you you have no access to this.
      */
+    //@Deprecated
     @RequiresPermission(value = Manifest.permission.WHITELIST_AUTO_REVOKE_PERMISSIONS,
             conditional = true)
     public boolean isAutoRevokeWhitelisted(@NonNull String packageName) {
@@ -5190,6 +5287,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    //@Deprecated
     @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
     public abstract boolean shouldShowRequestPermissionRationale(@NonNull String permName);
@@ -7492,6 +7590,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    //@Deprecated
     @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS)
@@ -7505,6 +7604,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    //@Deprecated
     @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     @RequiresPermission(Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS)

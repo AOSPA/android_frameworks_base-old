@@ -159,9 +159,14 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.inputmethod.CallbackUtils;
+import com.android.internal.inputmethod.IBooleanResultCallback;
 import com.android.internal.inputmethod.IInputBindResultResultCallback;
 import com.android.internal.inputmethod.IInputContentUriToken;
+import com.android.internal.inputmethod.IInputMethodInfoListResultCallback;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
+import com.android.internal.inputmethod.IInputMethodSubtypeListResultCallback;
+import com.android.internal.inputmethod.IInputMethodSubtypeResultCallback;
+import com.android.internal.inputmethod.IIntResultCallback;
 import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.inputmethod.StartInputFlags;
@@ -1969,43 +1974,51 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public List<InputMethodInfo> getInputMethodList(@UserIdInt int userId) {
-        if (UserHandle.getCallingUserId() != userId) {
-            mContext.enforceCallingPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
-        }
-        synchronized (mMethodMap) {
-            final int[] resolvedUserIds = InputMethodUtils.resolveUserId(userId,
-                    mSettings.getCurrentUserId(), null);
-            if (resolvedUserIds.length != 1) {
-                return Collections.emptyList();
+    public void getInputMethodList(@UserIdInt int userId,
+            IInputMethodInfoListResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            if (UserHandle.getCallingUserId() != userId) {
+                mContext.enforceCallingPermission(
+                        Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
             }
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                return getInputMethodListLocked(resolvedUserIds[0]);
-            } finally {
-                Binder.restoreCallingIdentity(ident);
+            synchronized (mMethodMap) {
+                final int[] resolvedUserIds = InputMethodUtils.resolveUserId(userId,
+                        mSettings.getCurrentUserId(), null);
+                if (resolvedUserIds.length != 1) {
+                    return Collections.emptyList();
+                }
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    return getInputMethodListLocked(resolvedUserIds[0]);
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                }
             }
-        }
+        });
     }
 
     @Override
-    public List<InputMethodInfo> getEnabledInputMethodList(@UserIdInt int userId) {
-        if (UserHandle.getCallingUserId() != userId) {
-            mContext.enforceCallingPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
-        }
-        synchronized (mMethodMap) {
-            final int[] resolvedUserIds = InputMethodUtils.resolveUserId(userId,
-                    mSettings.getCurrentUserId(), null);
-            if (resolvedUserIds.length != 1) {
-                return Collections.emptyList();
+    public void getEnabledInputMethodList(@UserIdInt int userId,
+            IInputMethodInfoListResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            if (UserHandle.getCallingUserId() != userId) {
+                mContext.enforceCallingPermission(
+                        Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
             }
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                return getEnabledInputMethodListLocked(resolvedUserIds[0]);
-            } finally {
-                Binder.restoreCallingIdentity(ident);
+            synchronized (mMethodMap) {
+                final int[] resolvedUserIds = InputMethodUtils.resolveUserId(userId,
+                        mSettings.getCurrentUserId(), null);
+                if (resolvedUserIds.length != 1) {
+                    return Collections.emptyList();
+                }
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    return getEnabledInputMethodListLocked(resolvedUserIds[0]);
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                }
             }
-        }
+        });
     }
 
     @GuardedBy("mMethodMap")
@@ -2158,27 +2171,34 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     /**
-     * @param imiId if null, returns enabled subtypes for the current imi
-     * @return enabled subtypes of the specified imi
+     * Gets enabled subtypes of the specified {@link InputMethodInfo}.
+     *
+     * @param imiId if null, returns enabled subtypes for the current {@link InputMethodInfo}.
+     * @param allowsImplicitlySelectedSubtypes {@code true} to return the implicitly selected
+     *                                         subtypes.
+     * @param resultCallback to callback the result.
      */
     @Override
-    public List<InputMethodSubtype> getEnabledInputMethodSubtypeList(String imiId,
-            boolean allowsImplicitlySelectedSubtypes) {
-        final int callingUserId = UserHandle.getCallingUserId();
-        synchronized (mMethodMap) {
-            final int[] resolvedUserIds = InputMethodUtils.resolveUserId(callingUserId,
-                    mSettings.getCurrentUserId(), null);
-            if (resolvedUserIds.length != 1) {
-                return Collections.emptyList();
+    public void getEnabledInputMethodSubtypeList(String imiId,
+            boolean allowsImplicitlySelectedSubtypes,
+            IInputMethodSubtypeListResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            final int callingUserId = UserHandle.getCallingUserId();
+            synchronized (mMethodMap) {
+                final int[] resolvedUserIds = InputMethodUtils.resolveUserId(callingUserId,
+                        mSettings.getCurrentUserId(), null);
+                if (resolvedUserIds.length != 1) {
+                    return Collections.emptyList();
+                }
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    return getEnabledInputMethodSubtypeListLocked(imiId,
+                            allowsImplicitlySelectedSubtypes, resolvedUserIds[0]);
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                }
             }
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                return getEnabledInputMethodSubtypeListLocked(imiId,
-                        allowsImplicitlySelectedSubtypes, resolvedUserIds[0]);
-            } finally {
-                Binder.restoreCallingIdentity(ident);
-            }
-        }
+        });
     }
 
     @GuardedBy("mMethodMap")
@@ -3150,41 +3170,44 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public boolean showSoftInput(IInputMethodClient client, IBinder windowToken, int flags,
-            ResultReceiver resultReceiver) {
-        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.showSoftInput");
-        int uid = Binder.getCallingUid();
-        ImeTracing.getInstance().triggerManagerServiceDump(
-                "InputMethodManagerService#showSoftInput");
-        synchronized (mMethodMap) {
-            if (!calledFromValidUserLocked()) {
-                return false;
-            }
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                if (mCurClient == null || client == null
-                        || mCurClient.client.asBinder() != client.asBinder()) {
-                    // We need to check if this is the current client with
-                    // focus in the window manager, to allow this call to
-                    // be made before input is started in it.
-                    final ClientState cs = mClients.get(client.asBinder());
-                    if (cs == null) {
-                        throw new IllegalArgumentException("unknown client " + client.asBinder());
-                    }
-                    if (!mWindowManagerInternal.isInputMethodClientFocus(cs.uid, cs.pid,
-                            cs.selfReportedDisplayId)) {
-                        Slog.w(TAG, "Ignoring showSoftInput of uid " + uid + ": " + client);
-                        return false;
-                    }
+    public void showSoftInput(IInputMethodClient client, IBinder windowToken, int flags,
+            ResultReceiver resultReceiver, IBooleanResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.showSoftInput");
+            int uid = Binder.getCallingUid();
+            ImeTracing.getInstance().triggerManagerServiceDump(
+                    "InputMethodManagerService#showSoftInput");
+            synchronized (mMethodMap) {
+                if (!calledFromValidUserLocked()) {
+                    return false;
                 }
-                if (DEBUG) Slog.v(TAG, "Client requesting input be shown");
-                return showCurrentInputLocked(windowToken, flags, resultReceiver,
-                        SoftInputShowHideReason.SHOW_SOFT_INPUT);
-            } finally {
-                Binder.restoreCallingIdentity(ident);
-                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    if (mCurClient == null || client == null
+                            || mCurClient.client.asBinder() != client.asBinder()) {
+                        // We need to check if this is the current client with
+                        // focus in the window manager, to allow this call to
+                        // be made before input is started in it.
+                        final ClientState cs = mClients.get(client.asBinder());
+                        if (cs == null) {
+                            throw new IllegalArgumentException(
+                                    "unknown client " + client.asBinder());
+                        }
+                        if (!mWindowManagerInternal.isInputMethodClientFocus(cs.uid, cs.pid,
+                                cs.selfReportedDisplayId)) {
+                            Slog.w(TAG, "Ignoring showSoftInput of uid " + uid + ": " + client);
+                            return false;
+                        }
+                    }
+                    if (DEBUG) Slog.v(TAG, "Client requesting input be shown");
+                    return showCurrentInputLocked(windowToken, flags, resultReceiver,
+                                    SoftInputShowHideReason.SHOW_SOFT_INPUT);
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                    Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+                }
             }
-        }
+        });
     }
 
     @BinderThread
@@ -3266,44 +3289,49 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public boolean hideSoftInput(IInputMethodClient client, IBinder windowToken, int flags,
-            ResultReceiver resultReceiver) {
-        int uid = Binder.getCallingUid();
-        ImeTracing.getInstance().triggerManagerServiceDump(
-                "InputMethodManagerService#hideSoftInput");
-        synchronized (mMethodMap) {
-            if (!calledFromValidUserLocked()) {
-                return false;
-            }
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.hideSoftInput");
-                if (mCurClient == null || client == null
-                        || mCurClient.client.asBinder() != client.asBinder()) {
-                    // We need to check if this is the current client with
-                    // focus in the window manager, to allow this call to
-                    // be made before input is started in it.
-                    final ClientState cs = mClients.get(client.asBinder());
-                    if (cs == null) {
-                        throw new IllegalArgumentException("unknown client " + client.asBinder());
-                    }
-                    if (!mWindowManagerInternal.isInputMethodClientFocus(cs.uid, cs.pid,
-                            cs.selfReportedDisplayId)) {
-                        if (DEBUG) {
-                            Slog.w(TAG, "Ignoring hideSoftInput of uid " + uid + ": " + client);
-                        }
-                        return false;
-                    }
+    public void hideSoftInput(IInputMethodClient client, IBinder windowToken, int flags,
+            ResultReceiver resultReceiver, IBooleanResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            int uid = Binder.getCallingUid();
+            ImeTracing.getInstance().triggerManagerServiceDump(
+                    "InputMethodManagerService#hideSoftInput");
+            synchronized (mMethodMap) {
+                if (!InputMethodManagerService.this.calledFromValidUserLocked()) {
+                    return false;
                 }
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.hideSoftInput");
+                    if (mCurClient == null || client == null
+                            || mCurClient.client.asBinder() != client.asBinder()) {
+                        // We need to check if this is the current client with
+                        // focus in the window manager, to allow this call to
+                        // be made before input is started in it.
+                        final ClientState cs = mClients.get(client.asBinder());
+                        if (cs == null) {
+                            throw new IllegalArgumentException(
+                                    "unknown client " + client.asBinder());
+                        }
+                        if (!mWindowManagerInternal.isInputMethodClientFocus(cs.uid, cs.pid,
+                                cs.selfReportedDisplayId)) {
+                            if (DEBUG) {
+                                Slog.w(TAG,
+                                        "Ignoring hideSoftInput of uid " + uid + ": " + client);
+                            }
+                            return false;
+                        }
+                    }
 
-                if (DEBUG) Slog.v(TAG, "Client requesting input be hidden");
-                return hideCurrentInputLocked(windowToken, flags, resultReceiver,
-                        SoftInputShowHideReason.HIDE_SOFT_INPUT);
-            } finally {
-                Binder.restoreCallingIdentity(ident);
-                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+                    if (DEBUG) Slog.v(TAG, "Client requesting input be hidden");
+                    return InputMethodManagerService.this.hideCurrentInputLocked(windowToken,
+                            flags, resultReceiver,
+                            SoftInputShowHideReason.HIDE_SOFT_INPUT);
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                    Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+                }
             }
-        }
+        });
     }
 
     boolean hideCurrentInputLocked(IBinder windowToken, int flags, ResultReceiver resultReceiver,
@@ -3726,9 +3754,15 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 MSG_SHOW_IM_SUBTYPE_PICKER, auxiliarySubtypeMode, displayId));
     }
 
-    public boolean isInputMethodPickerShownForTest() {
+    /**
+     * A test API for CTS to make sure that the input method menu is showing.
+     *
+     * @param resultCallback {@code true} while the input method menu is showing UI.
+     */
+    public void isInputMethodPickerShownForTest(IBooleanResultCallback resultCallback) {
         synchronized(mMethodMap) {
-            return mMenuController.isisInputMethodPickerShownForTestLocked();
+            CallbackUtils.onResult(
+                    resultCallback, mMenuController::isisInputMethodPickerShownForTestLocked);
         }
     }
 
@@ -3877,29 +3911,31 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public InputMethodSubtype getLastInputMethodSubtype() {
-        synchronized (mMethodMap) {
-            if (!calledFromValidUserLocked()) {
-                return null;
-            }
-            final Pair<String, String> lastIme = mSettings.getLastInputMethodAndSubtypeLocked();
-            // TODO: Handle the case of the last IME with no subtypes
-            if (lastIme == null || TextUtils.isEmpty(lastIme.first)
-                    || TextUtils.isEmpty(lastIme.second)) return null;
-            final InputMethodInfo lastImi = mMethodMap.get(lastIme.first);
-            if (lastImi == null) return null;
-            try {
-                final int lastSubtypeHash = Integer.parseInt(lastIme.second);
-                final int lastSubtypeId =
-                        InputMethodUtils.getSubtypeIdFromHashCode(lastImi, lastSubtypeHash);
-                if (lastSubtypeId < 0 || lastSubtypeId >= lastImi.getSubtypeCount()) {
+    public void getLastInputMethodSubtype(IInputMethodSubtypeResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            synchronized (mMethodMap) {
+                if (!calledFromValidUserLocked()) {
                     return null;
                 }
-                return lastImi.getSubtypeAt(lastSubtypeId);
-            } catch (NumberFormatException e) {
-                return null;
+                final Pair<String, String> lastIme = mSettings.getLastInputMethodAndSubtypeLocked();
+                // TODO: Handle the case of the last IME with no subtypes
+                if (lastIme == null || TextUtils.isEmpty(lastIme.first)
+                        || TextUtils.isEmpty(lastIme.second)) return null;
+                final InputMethodInfo lastImi = mMethodMap.get(lastIme.first);
+                if (lastImi == null) return null;
+                try {
+                    final int lastSubtypeHash = Integer.parseInt(lastIme.second);
+                    final int lastSubtypeId =
+                            InputMethodUtils.getSubtypeIdFromHashCode(lastImi, lastSubtypeHash);
+                    if (lastSubtypeId < 0 || lastSubtypeId >= lastImi.getSubtypeCount()) {
+                        return null;
+                    }
+                    return lastImi.getSubtypeAt(lastSubtypeId);
+                } catch (NumberFormatException e) {
+                    return null;
+                }
             }
-        }
+        });
     }
 
     @Override
@@ -3966,9 +4002,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
      * @return {@link WindowManagerInternal#getInputMethodWindowVisibleHeight(int)}
      */
     @Override
-    public int getInputMethodWindowVisibleHeight() {
-        // TODO(yukawa): Should we verify the display ID?
-        return mWindowManagerInternal.getInputMethodWindowVisibleHeight(mCurTokenDisplayId);
+    public void getInputMethodWindowVisibleHeight(IIntResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            // TODO(yukawa): Should we verify the display ID?
+            return mWindowManagerInternal.getInputMethodWindowVisibleHeight(mCurTokenDisplayId);
+        });
     }
 
     @Override
@@ -4120,8 +4158,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     @BinderThread
     @Override
-    public boolean isImeTraceEnabled() {
-        return ImeTracing.getInstance().isEnabled();
+    public void isImeTraceEnabled(IBooleanResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> ImeTracing.getInstance().isEnabled());
     }
 
     @BinderThread
@@ -4935,17 +4973,21 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     /**
-     * @return Return the current subtype of this input method.
+     * Gets the current subtype of this input method.
+     *
+     * @param resultCallback to callback the result.
      */
     @Override
-    public InputMethodSubtype getCurrentInputMethodSubtype() {
-        synchronized (mMethodMap) {
-            // TODO: Make this work even for non-current users?
-            if (!calledFromValidUserLocked()) {
-                return null;
+    public void getCurrentInputMethodSubtype(IInputMethodSubtypeResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            synchronized (mMethodMap) {
+                // TODO: Make this work even for non-current users?
+                if (!calledFromValidUserLocked()) {
+                    return null;
+                }
+                return getCurrentInputMethodSubtypeLocked();
             }
-            return getCurrentInputMethodSubtypeLocked();
-        }
+        });
     }
 
     InputMethodSubtype getCurrentInputMethodSubtypeLocked() {

@@ -20,7 +20,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import android.app.ActivityManager;
-import android.app.ActivityManager.TaskSnapshot;
+import android.window.TaskSnapshot;
 import android.content.ComponentName;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
@@ -197,7 +197,7 @@ class TaskSnapshotLoader {
                     hwBitmap.getColorSpace(), proto.orientation, proto.rotation, taskSize,
                     new Rect(proto.insetLeft, proto.insetTop, proto.insetRight, proto.insetBottom),
                     loadLowResolutionBitmap, proto.isRealSnapshot, proto.windowingMode,
-                    proto.appearance, proto.isTranslucent);
+                    proto.appearance, proto.isTranslucent, false /* hasImeSurface */);
         } catch (IOException e) {
             Slog.w(TAG, "Unable to load task snapshot data for taskId=" + taskId);
             return null;

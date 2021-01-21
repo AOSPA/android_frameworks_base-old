@@ -212,9 +212,9 @@
     <string name="adb_wireless_settings" msgid="2295017847215680229">"ניפוי באגים אלחוטי"</string>
     <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"כדי להציג את המכשירים הזמינים ולהשתמש בהם, יש להפעיל ניפוי באגים אלחוטי"</string>
     <string name="adb_pair_method_qrcode_title" msgid="6982904096137468634">"‏התאמת מכשיר באמצעות קוד QR"</string>
-    <string name="adb_pair_method_qrcode_summary" msgid="7130694277228970888">"‏התאמת מכשירים חדשים באמצעות סורק של קודי QR"</string>
+    <string name="adb_pair_method_qrcode_summary" msgid="7130694277228970888">"‏התאמת מכשירים חדשים באמצעות סורק קודי QR"</string>
     <string name="adb_pair_method_code_title" msgid="1122590300445142904">"התאמת מכשיר באמצעות קוד התאמה"</string>
-    <string name="adb_pair_method_code_summary" msgid="6370414511333685185">"התאמת מכשירים חדשים באמצעות קוד בן שש ספרות"</string>
+    <string name="adb_pair_method_code_summary" msgid="6370414511333685185">"התאמת מכשירים חדשים באמצעות קוד בן 6 ספרות"</string>
     <string name="adb_paired_devices_title" msgid="5268997341526217362">"מכשירים מותאמים"</string>
     <string name="adb_wireless_device_connected_summary" msgid="3039660790249148713">"מחובר עכשיו"</string>
     <string name="adb_wireless_device_details_title" msgid="7129369670526565786">"פרטי מכשיר"</string>
@@ -226,12 +226,12 @@
     <string name="adb_pairing_device_dialog_pairing_code_label" msgid="3639239786669722731">"‏קוד התאמה של Wi-Fi"</string>
     <string name="adb_pairing_device_dialog_failed_title" msgid="3426758947882091735">"ההתאמה נכשלה"</string>
     <string name="adb_pairing_device_dialog_failed_msg" msgid="6611097519661997148">"יש לוודא שהמכשיר מחובר לאותה רשת."</string>
-    <string name="adb_wireless_qrcode_summary" msgid="8051414549011801917">"‏יש לסרוק קוד QR כדי להתאים מכשיר באמצעות Wi‑Fi"</string>
+    <string name="adb_wireless_qrcode_summary" msgid="8051414549011801917">"‏כדי להתאים מכשיר דרך Wi‑Fi, יש לסרוק קוד QR"</string>
     <string name="adb_wireless_verifying_qrcode_text" msgid="6123192424916029207">"המכשיר בתהליך התאמה…"</string>
     <string name="adb_qrcode_pairing_device_failed_msg" msgid="6936292092592914132">"‏התאמת המכשיר נכשלה. קוד ה-QR היה שגוי או שהמכשיר לא מחובר לאותה רשת."</string>
     <string name="adb_wireless_ip_addr_preference_title" msgid="8335132107715311730">"‏יציאה וכתובת IP"</string>
     <string name="adb_wireless_qrcode_pairing_title" msgid="1906409667944674707">"‏סריקת קוד QR"</string>
-    <string name="adb_wireless_qrcode_pairing_description" msgid="6014121407143607851">"‏יש לסרוק קוד QR כדי להתאים מכשיר באמצעות Wi‑Fi"</string>
+    <string name="adb_wireless_qrcode_pairing_description" msgid="6014121407143607851">"‏כדי להתאים מכשיר דרך Wi‑Fi, יש לסרוק קוד QR"</string>
     <string name="adb_wireless_no_network_msg" msgid="2365795244718494658">"‏יש להתחבר לרשת Wi-Fi"</string>
     <string name="keywords_adb_wireless" msgid="6507505581882171240">"‏adb, ניפוי באגים, פיתוח"</string>
     <string name="bugreport_in_power" msgid="8664089072534638709">"קיצור של דוח באגים"</string>
@@ -400,8 +400,9 @@
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"אפליקציה פעילה. הקש כדי להחליף מצב."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"אפליקציה במצב המתנה:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
     <string name="transcode_settings_title" msgid="2581975870429850549">"הגדרות של המרת קידוד למדיה"</string>
-    <string name="transcode_enable_all" msgid="9102460144086871903">"השבתה של המרת קידוד"</string>
-    <string name="transcode_skip_apps" msgid="8249721984597390142">"הפעלה של המרת קידוד לאפליקציות"</string>
+    <string name="transcode_user_control" msgid="6176368544817731314">"ביטול ברירות המחדל של המרת קידוד"</string>
+    <string name="transcode_enable_all" msgid="2411165920039166710">"הפעלת המרת קידוד"</string>
+    <string name="transcode_default" msgid="3784803084573509491">"הנחת העבודה היא שאפליקציות תומכות בפורמטים מודרניים"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"שירותים פועלים"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"הצגת השירותים הפועלים כעת ושליטה בהם"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"‏יישום WebView"</string>
@@ -449,7 +450,7 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g>‏ - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="7415639699283965818">"נשארו <xliff:g id="TIME">%1$s</xliff:g> עד הטעינה"</string>
     <string name="power_charging_duration" msgid="5005740040558984057">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> עד הטעינה"</string>
-    <string name="power_charging_limited" msgid="5902301801611726210">"<xliff:g id="LEVEL">%1$s</xliff:g> - הסוללה מוגבלת באופן זמני"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> ﹣ מופעל מיטוב לשמירה על תקינות הסוללה"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"לא ידוע"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"בטעינה"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"הסוללה נטענת מהר"</string>
@@ -566,4 +567,29 @@
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"אוזניות חוטיות"</string>
     <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"פועלת"</string>
     <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"כבויה"</string>
+    <string name="carrier_network_change_mode" msgid="4257621815706644026">"רשת ספק משתנה"</string>
+    <string name="data_connection_3g" msgid="931852552688157407">"3G"</string>
+    <string name="data_connection_edge" msgid="4625509456544797637">"EDGE"</string>
+    <string name="data_connection_cdma" msgid="9098161966701934334">"1X"</string>
+    <string name="data_connection_gprs" msgid="1251945769006770189">"GPRS"</string>
+    <string name="data_connection_3_5g" msgid="4298721462047921400">"H"</string>
+    <string name="data_connection_3_5g_plus" msgid="6683055858295918170">"+H"</string>
+    <string name="data_connection_4g" msgid="2581705503356752044">"4G"</string>
+    <string name="data_connection_4g_plus" msgid="5194902328408751020">"+4G"</string>
+    <string name="data_connection_lte" msgid="7675461204366364124">"LTE"</string>
+    <string name="data_connection_lte_plus" msgid="6643158654804916653">"+LTE"</string>
+    <string name="cell_data_off_content_description" msgid="2280700839891636498">"חבילת הגלישה כבויה"</string>
+    <string name="not_default_data_content_description" msgid="6517068332106592887">"לא מוגדרת לשימוש בנתונים"</string>
+    <string name="accessibility_no_phone" msgid="2687419663127582503">"אין טלפון."</string>
+    <string name="accessibility_phone_one_bar" msgid="5719721147018970063">"פס אחד של טלפון."</string>
+    <string name="accessibility_phone_two_bars" msgid="2531458337458953263">"שני פסים של טלפון."</string>
+    <string name="accessibility_phone_three_bars" msgid="1523967995996696619">"שלושה פסים של טלפון."</string>
+    <string name="accessibility_phone_signal_full" msgid="4302338883816077134">"אות הטלפון מלא."</string>
+    <string name="accessibility_no_data" msgid="4563181886936931008">"אין נתונים."</string>
+    <string name="accessibility_data_one_bar" msgid="6892888138070752480">"פס אחד של נתונים."</string>
+    <string name="accessibility_data_two_bars" msgid="9202641507241802499">"שני פסים של נתונים."</string>
+    <string name="accessibility_data_three_bars" msgid="2813876214466722413">"שלושה פסים של נתונים."</string>
+    <string name="accessibility_data_signal_full" msgid="1808301899314382337">"אות הנתונים מלא."</string>
+    <string name="accessibility_ethernet_disconnected" msgid="2832501530856497489">"אתרנט מנותק."</string>
+    <string name="accessibility_ethernet_connected" msgid="2093872142317190618">"אתרנט מחובר."</string>
 </resources>

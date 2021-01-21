@@ -292,6 +292,7 @@ public class NotificationPanelViewController extends PanelViewController {
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private final KeyguardStatusViewComponent.Factory mKeyguardStatusViewComponentFactory;
     private final QSDetailDisplayer mQSDetailDisplayer;
+    private final ScrimController mScrimController;
     // Maximum # notifications to show on Keyguard; extras will be collapsed in an overflow card.
     // If there are exactly 1 + mMaxKeyguardNotifications, then still shows all notifications
     private final int mMaxKeyguardNotifications;
@@ -549,6 +550,7 @@ public class NotificationPanelViewController extends PanelViewController {
             NotificationIconAreaController notificationIconAreaController,
             AuthController authController,
             QSDetailDisplayer qsDetailDisplayer,
+            ScrimController scrimController,
             MediaDataManager mediaDataManager) {
         super(view, falsingManager, dozeLog, keyguardStateController,
                 (SysuiStatusBarStateController) statusBarStateController, vibratorHelper,
@@ -579,6 +581,7 @@ public class NotificationPanelViewController extends PanelViewController {
         mPulseExpansionHandler = pulseExpansionHandler;
         mDozeParameters = dozeParameters;
         mBiometricUnlockController = biometricUnlockController;
+        mScrimController = scrimController;
         mMediaDataManager = mediaDataManager;
         pulseExpansionHandler.setPulseExpandAbortListener(() -> {
             if (mQs != null) {
@@ -909,7 +912,8 @@ public class NotificationPanelViewController extends PanelViewController {
                     clockPreferredY, hasCustomClock(),
                     hasVisibleNotifications, mInterpolatedDarkAmount, mEmptyDragAmount,
                     bypassEnabled, getUnlockedStackScrollerPadding(),
-                    mUpdateMonitor.isUdfpsEnrolled());
+                    mUpdateMonitor.shouldShowLockIcon(),
+                    getQsExpansionFraction());
             mClockPositionAlgorithm.run(mClockPositionResult);
             mKeyguardStatusViewController.updatePosition(
                     mClockPositionResult.clockX, mClockPositionResult.clockY,
@@ -1137,6 +1141,7 @@ public class NotificationPanelViewController extends PanelViewController {
         if (isFullyCollapsed()) {
             expand(true /* animate */);
         } else {
+            traceQsJank(true /* startTracing */, false /* wasCancelled */);
             flingSettings(0 /* velocity */, FLING_EXPAND);
         }
     }
@@ -1756,6 +1761,7 @@ public class NotificationPanelViewController extends PanelViewController {
         updateHeaderKeyguardAlpha();
         if (mBarState == StatusBarState.SHADE_LOCKED || mBarState == KEYGUARD) {
             updateKeyguardBottomAreaAlpha();
+            positionClockAndNotifications();
             updateBigClockAlpha();
         }
 
@@ -1782,6 +1788,7 @@ public class NotificationPanelViewController extends PanelViewController {
         float qsExpansionFraction = getQsExpansionFraction();
         mQs.setQsExpansion(qsExpansionFraction, getHeaderTranslation());
         mMediaHierarchyManager.setQsExpansion(qsExpansionFraction);
+        mScrimController.setQsExpansion(qsExpansionFraction);
         mNotificationStackScrollLayoutController.setQsExpansionFraction(qsExpansionFraction);
     }
 

@@ -31,13 +31,12 @@ import android.util.Size;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.util.function.TriConsumer;
 import com.android.wm.shell.ShellTestCase;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import java.util.function.BiConsumer;
 
 /**
  * Tests for {@link PipBoundsState}.
@@ -47,7 +46,7 @@ import java.util.function.BiConsumer;
 @SmallTest
 public class PipBoundsStateTest extends ShellTestCase {
 
-    private static final Rect DEFAULT_BOUNDS = new Rect(0, 0, 10, 10);
+    private static final Size DEFAULT_SIZE = new Size(10, 10);
     private static final float DEFAULT_SNAP_FRACTION = 1.0f;
 
     private PipBoundsState mPipBoundsState;
@@ -71,22 +70,22 @@ public class PipBoundsStateTest extends ShellTestCase {
 
     @Test
     public void testSetReentryState() {
-        final Rect bounds = new Rect(0, 0, 100, 100);
+        final Size size = new Size(100, 100);
         final float snapFraction = 0.5f;
 
-        mPipBoundsState.saveReentryState(bounds, snapFraction);
+        mPipBoundsState.saveReentryState(size, snapFraction);
 
         final PipBoundsState.PipReentryState state = mPipBoundsState.getReentryState();
-        assertEquals(new Size(100, 100), state.getSize());
+        assertEquals(size, state.getSize());
         assertEquals(snapFraction, state.getSnapFraction(), 0.01);
     }
 
     @Test
     public void testClearReentryState() {
-        final Rect bounds = new Rect(0, 0, 100, 100);
+        final Size size = new Size(100, 100);
         final float snapFraction = 0.5f;
 
-        mPipBoundsState.saveReentryState(bounds, snapFraction);
+        mPipBoundsState.saveReentryState(size, snapFraction);
         mPipBoundsState.clearReentryState();
 
         assertNull(mPipBoundsState.getReentryState());
@@ -95,20 +94,20 @@ public class PipBoundsStateTest extends ShellTestCase {
     @Test
     public void testSetLastPipComponentName_notChanged_doesNotClearReentryState() {
         mPipBoundsState.setLastPipComponentName(mTestComponentName1);
-        mPipBoundsState.saveReentryState(DEFAULT_BOUNDS, DEFAULT_SNAP_FRACTION);
+        mPipBoundsState.saveReentryState(DEFAULT_SIZE, DEFAULT_SNAP_FRACTION);
 
         mPipBoundsState.setLastPipComponentName(mTestComponentName1);
 
         final PipBoundsState.PipReentryState state = mPipBoundsState.getReentryState();
         assertNotNull(state);
-        assertEquals(new Size(DEFAULT_BOUNDS.width(), DEFAULT_BOUNDS.height()), state.getSize());
+        assertEquals(DEFAULT_SIZE, state.getSize());
         assertEquals(DEFAULT_SNAP_FRACTION, state.getSnapFraction(), 0.01);
     }
 
     @Test
     public void testSetLastPipComponentName_changed_clearReentryState() {
         mPipBoundsState.setLastPipComponentName(mTestComponentName1);
-        mPipBoundsState.saveReentryState(DEFAULT_BOUNDS, DEFAULT_SNAP_FRACTION);
+        mPipBoundsState.saveReentryState(DEFAULT_SIZE, DEFAULT_SNAP_FRACTION);
 
         mPipBoundsState.setLastPipComponentName(mTestComponentName2);
 
@@ -117,23 +116,33 @@ public class PipBoundsStateTest extends ShellTestCase {
 
     @Test
     public void testSetShelfVisibility_changed_callbackInvoked() {
-        final BiConsumer<Boolean, Integer> callback = mock(BiConsumer.class);
+        final TriConsumer<Boolean, Integer, Boolean> callback = mock(TriConsumer.class);
         mPipBoundsState.setOnShelfVisibilityChangeCallback(callback);
 
         mPipBoundsState.setShelfVisibility(true, 100);
 
-        verify(callback).accept(true, 100);
+        verify(callback).accept(true, 100, true);
+    }
+
+    @Test
+    public void testSetShelfVisibility_changedWithoutUpdateMovBounds_callbackInvoked() {
+        final TriConsumer<Boolean, Integer, Boolean> callback = mock(TriConsumer.class);
+        mPipBoundsState.setOnShelfVisibilityChangeCallback(callback);
+
+        mPipBoundsState.setShelfVisibility(true, 100, false);
+
+        verify(callback).accept(true, 100, false);
     }
 
     @Test
     public void testSetShelfVisibility_notChanged_callbackNotInvoked() {
-        final BiConsumer<Boolean, Integer> callback = mock(BiConsumer.class);
+        final TriConsumer<Boolean, Integer, Boolean> callback = mock(TriConsumer.class);
         mPipBoundsState.setShelfVisibility(true, 100);
         mPipBoundsState.setOnShelfVisibilityChangeCallback(callback);
 
         mPipBoundsState.setShelfVisibility(true, 100);
 
-        verify(callback, never()).accept(true, 100);
+        verify(callback, never()).accept(true, 100, true);
     }
 
     @Test

@@ -30,7 +30,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -40,7 +39,6 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PersistableBundle;
 import android.os.SystemProperties;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
@@ -61,6 +59,9 @@ import androidx.annotation.NonNull;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.TelephonyIntents;
+import com.android.settingslib.mobile.MobileMappings.Config;
+import com.android.settingslib.mobile.MobileStatusTracker.SubscriptionDefaults;
+import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.net.DataUsageController;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
@@ -398,7 +399,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 }
             }
         });
-
         updateMobileControllers();
 
         // Initial setup of emergency information. Handled as if we had received a sticky broadcast
@@ -1211,82 +1211,4 @@ public class NetworkControllerImpl extends BroadcastReceiver
             registerListeners();
         }
     };
-
-    public static class SubscriptionDefaults {
-        public int getDefaultVoiceSubId() {
-            return SubscriptionManager.getDefaultVoiceSubscriptionId();
-        }
-
-        public int getDefaultDataSubId() {
-            return SubscriptionManager.getDefaultDataSubscriptionId();
-        }
-
-        public int getActiveDataSubId() {
-            return SubscriptionManager.getActiveDataSubscriptionId();
-        }
-    }
-
-    @VisibleForTesting
-    static class Config {
-        boolean showAtLeast3G = false;
-        boolean show4gFor3g = false;
-        boolean alwaysShowCdmaRssi = false;
-        boolean show4gForLte = false;
-        boolean hideLtePlus = false;
-        boolean hspaDataDistinguishable;
-        boolean alwaysShowDataRatIcon = false;
-
-        boolean showRsrpSignalLevelforLTE = false;
-        boolean hideNoInternetState = false;
-        boolean showVolteIcon = false;
-        boolean alwaysShowNetworkTypeIcon = false;
-        boolean enableRatIconEnhancement = false;
-        boolean showVowifiIcon = false;
-        boolean enableDdsRatIconEnhancement = false;
-
-        static Config readConfig(Context context) {
-            Config config = new Config();
-            Resources res = context.getResources();
-
-            config.showAtLeast3G = res.getBoolean(R.bool.config_showMin3G);
-            config.alwaysShowCdmaRssi =
-                    res.getBoolean(com.android.internal.R.bool.config_alwaysUseCdmaRssi);
-            config.hspaDataDistinguishable =
-                    res.getBoolean(R.bool.config_hspa_data_distinguishable);
-
-            config.alwaysShowNetworkTypeIcon =
-                    context.getResources().getBoolean(R.bool.config_alwaysShowTypeIcon);
-            config.showRsrpSignalLevelforLTE =
-                    res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
-            config.hideNoInternetState = res.getBoolean(R.bool.config_hideNoInternetState);
-            config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
-
-            CarrierConfigManager configMgr = (CarrierConfigManager)
-                    context.getSystemService(Context.CARRIER_CONFIG_SERVICE);
-            // Handle specific carrier config values for the default data SIM
-            int defaultDataSubId = SubscriptionManager.from(context)
-                    .getDefaultDataSubscriptionId();
-            PersistableBundle b = configMgr.getConfigForSubId(defaultDataSubId);
-            if (b != null) {
-                config.alwaysShowDataRatIcon = b.getBoolean(
-                        CarrierConfigManager.KEY_ALWAYS_SHOW_DATA_RAT_ICON_BOOL);
-                config.show4gForLte = b.getBoolean(
-                        CarrierConfigManager.KEY_SHOW_4G_FOR_LTE_DATA_ICON_BOOL);
-                config.show4gFor3g = b.getBoolean(
-                        CarrierConfigManager.KEY_SHOW_4G_FOR_3G_DATA_ICON_BOOL);
-                config.hideLtePlus = b.getBoolean(
-                        CarrierConfigManager.KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL);
-            }
-
-            config.enableRatIconEnhancement =
-                    SystemProperties.getBoolean("persist.sysui.rat_icon_enhancement", false);
-            config.showVowifiIcon = res.getBoolean(R.bool.config_display_vowifi);
-            config.enableDdsRatIconEnhancement =
-                    SystemProperties.getBoolean("persist.sysui.dds_rat_icon_enhancement", false);
-            if ( config.alwaysShowNetworkTypeIcon ) {
-                config.hideLtePlus = false;
-            }
-            return config;
-        }
-    }
 }

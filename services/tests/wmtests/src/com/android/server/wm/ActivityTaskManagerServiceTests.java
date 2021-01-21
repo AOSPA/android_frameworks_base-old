@@ -98,7 +98,7 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         doReturn(mockLifecycleManager).when(mAtm).getLifecycleManager();
         doReturn(true).when(activity).checkEnterPictureInPictureState(anyString(), anyBoolean());
 
-        mAtm.requestPictureInPictureMode(activity.token);
+        mAtm.mActivityClientController.requestPictureInPictureMode(activity);
 
         verify(mockLifecycleManager).scheduleTransaction(mClientTransactionCaptor.capture());
         final ClientTransaction transaction = mClientTransactionCaptor.getValue();
@@ -117,7 +117,7 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         doReturn(false).when(activity).inPinnedWindowingMode();
         doReturn(false).when(activity).checkEnterPictureInPictureState(anyString(), anyBoolean());
 
-        mAtm.requestPictureInPictureMode(activity.token);
+        mAtm.mActivityClientController.requestPictureInPictureMode(activity);
 
         // Check enter no transactions with enter pip requests are made.
         verify(lifecycleManager, times(0)).scheduleTransaction(any());
@@ -130,7 +130,7 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         ClientLifecycleManager lifecycleManager = mAtm.getLifecycleManager();
         doReturn(true).when(activity).inPinnedWindowingMode();
 
-        mAtm.requestPictureInPictureMode(activity.token);
+        mAtm.mActivityClientController.requestPictureInPictureMode(activity);
 
         // Check that no transactions with enter pip requests are made.
         verify(lifecycleManager, times(0)).scheduleTransaction(any());
@@ -219,7 +219,7 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         //mock other operations
         doReturn(true).when(record)
                 .checkEnterPictureInPictureState("enterPictureInPictureMode", false);
-        doReturn(false).when(mAtm).isInPictureInPictureMode(any());
+        doReturn(false).when(record).inPinnedWindowingMode();
         doReturn(false).when(mAtm).isKeyguardLocked();
 
         //to simulate NPE
@@ -247,7 +247,7 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         activity.finishing = true;
         activity.mVisibleRequested = false;
         activity.setVisible(false);
-        activity.getRootTask().mPausingActivity = activity;
+        activity.getTask().setPausingActivity(activity);
         homeActivity.setState(Task.ActivityState.PAUSED, "test");
 
         // Even the visibility states are invisible, the next activity should be resumed because
@@ -262,8 +262,8 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
     public void testUpdateSleep() {
         doCallRealMethod().when(mWm.mRoot).hasAwakeDisplay();
         mSupervisor.mGoingToSleepWakeLock = mock(PowerManager.WakeLock.class);
-        final ActivityRecord homeActivity = new ActivityBuilder(mAtm)
-                .setTask(mWm.mRoot.getDefaultTaskDisplayArea().getOrCreateRootHomeTask()).build();
+        final Task rootHomeTask = mWm.mRoot.getDefaultTaskDisplayArea().getOrCreateRootHomeTask();
+        final ActivityRecord homeActivity = new ActivityBuilder(mAtm).setTask(rootHomeTask).build();
         final ActivityRecord topActivity = new ActivityBuilder(mAtm).setCreateTask(true).build();
         topActivity.setState(Task.ActivityState.RESUMED, "test");
 
@@ -277,6 +277,9 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         // Sleep all displays.
         mWm.mRoot.forAllDisplays(display -> doReturn(true).when(display).shouldSleep());
         mAtm.updateSleepIfNeededLocked();
+        // Simulate holding sleep wake lock if it is acquired.
+        verify(mSupervisor.mGoingToSleepWakeLock).acquire();
+        doReturn(true).when(mSupervisor.mGoingToSleepWakeLock).isHeld();
 
         assertEquals(Task.ActivityState.PAUSING, topActivity.getState());
         assertTrue(mAtm.mInternal.isSleeping());
@@ -285,8 +288,17 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         // The top app should not change while sleeping.
         assertEquals(topActivity.app, mAtm.mInternal.getTopApp());
 
+        // If all activities are stopped, the sleep wake lock must be released.
+        final Task topRootTask = topActivity.getRootTask();
+        doReturn(true).when(rootHomeTask).goToSleepIfPossible(anyBoolean());
+        doReturn(true).when(topRootTask).goToSleepIfPossible(anyBoolean());
+        topActivity.setState(Task.ActivityState.STOPPING, "test");
+        topActivity.activityStopped(null /* newIcicle */, null /* newPersistentState */,
+                null /* description */);
+        verify(mSupervisor.mGoingToSleepWakeLock).release();
+
         // Move the current top to back, the top app should update to the next activity.
-        topActivity.getRootTask().moveToBack("test", null /* self */);
+        topRootTask.moveToBack("test", null /* self */);
         assertEquals(homeActivity.app, mAtm.mInternal.getTopApp());
 
         // Wake all displays.

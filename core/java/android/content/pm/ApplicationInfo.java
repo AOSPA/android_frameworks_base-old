@@ -2122,7 +2122,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     }
 
     /** @hide */
-    @SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    @SystemApi
     public boolean isOem() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_OEM) != 0;
     }
@@ -2170,13 +2170,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     }
 
     /** @hide */
-    @SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    @SystemApi
     public boolean isVendor() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_VENDOR) != 0;
     }
 
     /** @hide */
-    @SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    @SystemApi
     public boolean isProduct() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_PRODUCT) != 0;
     }

@@ -54,8 +54,6 @@ public interface PermissionManagerServiceInternal extends PermissionManagerInter
     void removeOnRuntimePermissionStateChangedListener(
             @NonNull OnRuntimePermissionStateChangedListener listener);
 
-    void systemReady();
-
     /**
      * Get whether permission review is required for a package.
      *
@@ -92,14 +90,6 @@ public interface PermissionManagerServiceInternal extends PermissionManagerInter
     //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
     void resetRuntimePermissions(@NonNull AndroidPackage pkg,
             @UserIdInt int userId);
-
-    /**
-     * Reset the runtime permission state changes for all packages.
-     *
-     * @param userId the user ID
-     */
-    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
-    void resetAllRuntimePermissions(@UserIdInt int userId);
 
     /**
      * Read legacy permission state from package settings.
@@ -184,12 +174,6 @@ public interface PermissionManagerServiceInternal extends PermissionManagerInter
     void stopShellPermissionIdentityDelegation();
 
     /**
-     * Removes invalid permissions which are not {@link PermissionInfo#FLAG_HARD_RESTRICTED} or
-     * {@link PermissionInfo#FLAG_SOFT_RESTRICTED} from the input.
-     */
-    void retainHardAndSoftRestrictedPermissions(@NonNull List<String> permissionNames);
-
-    /**
      * Read legacy permissions from legacy permission settings.
      *
      * TODO(zhanghai): This is a temporary method because we should not expose
@@ -205,6 +189,12 @@ public interface PermissionManagerServiceInternal extends PermissionManagerInter
      * for permission.
      */
     void writeLegacyPermissionsTEMP(@NonNull LegacyPermissionSettings legacyPermissionSettings);
+
+    /**
+     * Callback when the system is ready.
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    void onSystemReady();
 
     /**
      * Callback when a user has been created.
@@ -269,14 +259,6 @@ public interface PermissionManagerServiceInternal extends PermissionManagerInter
     //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
     void onPackageUninstalled(@NonNull String packageName, int appId, @Nullable AndroidPackage pkg,
             @NonNull List<AndroidPackage> sharedUserPkgs, @UserIdInt int userId);
-
-    /**
-     * Check whether a permission can be propagated to instant app.
-     *
-     * @param permissionName the name of the permission
-     * @return whether the permission can be propagated
-     */
-    boolean canPropagatePermissionToInstantApp(@NonNull String permissionName);
 
     /**
      * Listener for package permission state (permissions or flags) changes.

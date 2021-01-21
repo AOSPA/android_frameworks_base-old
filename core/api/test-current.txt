@@ -94,6 +94,8 @@ package android.app {
     method public static void resumeAppSwitches() throws android.os.RemoteException;
     method @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION) public void scheduleApplicationInfoChanged(java.util.List<java.lang.String>, int);
     method @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION) public boolean updateMccMncConfiguration(@NonNull String, @NonNull String);
+    field public static final long DROP_CLOSE_SYSTEM_DIALOGS = 174664120L; // 0xa6929b8L
+    field public static final long LOCK_DOWN_CLOSE_SYSTEM_DIALOGS = 174664365L; // 0xa692aadL
     field public static final int PROCESS_CAPABILITY_ALL = 7; // 0x7
     field public static final int PROCESS_CAPABILITY_ALL_EXPLICIT = 1; // 0x1
     field public static final int PROCESS_CAPABILITY_ALL_IMPLICIT = 6; // 0x6
@@ -139,7 +141,6 @@ package android.app {
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public boolean moveTopActivityToPinnedRootTask(int, @NonNull android.graphics.Rect);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void removeRootTasksInWindowingModes(@NonNull int[]);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void removeRootTasksWithActivityTypes(@NonNull int[]);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void requestPictureInPictureMode(@NonNull android.os.IBinder);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void resizePrimarySplitScreen(@NonNull android.graphics.Rect, @NonNull android.graphics.Rect);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void resizeTask(int, android.graphics.Rect);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public boolean setTaskWindowingMode(int, int, boolean) throws java.lang.SecurityException;
@@ -216,6 +217,7 @@ package android.app {
     field public static final String KEY_FG_SERVICE_STATE_SETTLE_TIME = "fg_service_state_settle_time";
     field public static final String KEY_TOP_STATE_SETTLE_TIME = "top_state_settle_time";
     field public static final String OPSTR_MANAGE_ONGOING_CALLS = "android:manage_ongoing_calls";
+    field public static final String OPSTR_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER = "android:use_icc_auth_with_device_identifier";
     field public static final int OP_COARSE_LOCATION = 0; // 0x0
     field public static final int OP_RECORD_AUDIO = 27; // 0x1b
     field public static final int OP_START_FOREGROUND = 76; // 0x4c
@@ -272,6 +274,7 @@ package android.app {
     method public void allowAssistantAdjustment(String);
     method public void disallowAssistantAdjustment(String);
     method public android.content.ComponentName getEffectsSuppressor();
+    method public boolean isNotificationPolicyAccessGrantedForPackage(@NonNull String);
     method public boolean matchesCallFilter(android.os.Bundle);
     method @RequiresPermission(android.Manifest.permission.MANAGE_NOTIFICATION_LISTENERS) public void setNotificationListenerAccessGranted(@NonNull android.content.ComponentName, boolean, boolean);
     method public void updateNotificationChannel(@NonNull String, int, @NonNull android.app.NotificationChannel);
@@ -281,6 +284,7 @@ package android.app {
     method public java.util.List<android.app.RemoteAction> getActions();
     method public float getAspectRatio();
     method public android.graphics.Rect getSourceRectHint();
+    method public boolean isSeamlessResizeEnabled();
   }
 
   public class StatusBarManager {
@@ -372,8 +376,19 @@ package android.app.admin {
     method public java.util.List<java.lang.String> getOwnerInstalledCaCerts(@NonNull android.os.UserHandle);
     method public boolean isCurrentInputMethodSetByOwner();
     method public boolean isFactoryResetProtectionPolicySupported();
+    method @NonNull public static String operationToString(int);
+    method @RequiresPermission("android.permission.MANAGE_DEVICE_ADMINS") public void setNextOperationSafety(int, boolean);
     field public static final String ACTION_DATA_SHARING_RESTRICTION_APPLIED = "android.app.action.DATA_SHARING_RESTRICTION_APPLIED";
+    field public static final int OPERATION_CREATE_AND_MANAGE_USER = 5; // 0x5
     field public static final int OPERATION_LOCK_NOW = 1; // 0x1
+    field public static final int OPERATION_LOGOUT_USER = 9; // 0x9
+    field public static final int OPERATION_REBOOT = 7; // 0x7
+    field public static final int OPERATION_REMOVE_USER = 6; // 0x6
+    field public static final int OPERATION_SET_USER_RESTRICTION = 10; // 0xa
+    field public static final int OPERATION_START_USER_IN_BACKGROUND = 3; // 0x3
+    field public static final int OPERATION_STOP_USER = 4; // 0x4
+    field public static final int OPERATION_SWITCH_USER = 2; // 0x2
+    field public static final int OPERATION_WIPE_DATA = 8; // 0x8
   }
 
   public static final class SecurityLog.SecurityEvent implements android.os.Parcelable {
@@ -732,6 +747,11 @@ package android.hardware.camera2 {
     method public String[] getCameraIdListNoLazy() throws android.hardware.camera2.CameraAccessException;
   }
 
+  public abstract static class CameraManager.AvailabilityCallback {
+    method @RequiresPermission(android.Manifest.permission.CAMERA_OPEN_CLOSE_LISTENER) public void onCameraClosed(@NonNull String);
+    method @RequiresPermission(android.Manifest.permission.CAMERA_OPEN_CLOSE_LISTENER) public void onCameraOpened(@NonNull String, @NonNull String);
+  }
+
 }
 
 package android.hardware.display {
@@ -945,7 +965,6 @@ package android.location {
     method @NonNull public String[] getBackgroundThrottlingWhitelist();
     method @NonNull public String[] getIgnoreSettingsWhitelist();
     method @Deprecated @Nullable @RequiresPermission(android.Manifest.permission.READ_DEVICE_CONFIG) public java.util.List<java.lang.String> getProviderPackages(@NonNull String);
-    field public static final String FUSED_PROVIDER = "fused";
   }
 
 }
@@ -969,6 +988,7 @@ package android.media {
   }
 
   public class AudioManager {
+    method @Nullable public static android.media.AudioDeviceInfo getDeviceInfoFromType(int);
     method public boolean hasRegisteredDynamicPolicy();
   }
 
@@ -993,6 +1013,8 @@ package android.media {
     field public static final int DEVICE_ROLE_DISABLED = 2; // 0x2
     field public static final int DEVICE_ROLE_NONE = 0; // 0x0
     field public static final int DEVICE_ROLE_PREFERRED = 1; // 0x1
+    field public static final int OFFLOAD_GAPLESS_SUPPORTED = 2; // 0x2
+    field public static final int OFFLOAD_SUPPORTED = 1; // 0x1
     field public static final int STREAM_DEFAULT = -1; // 0xffffffff
   }
 
@@ -1998,6 +2020,10 @@ package android.view {
     field public static final int CALLBACK_ANIMATION = 1; // 0x1
   }
 
+  public final class ContentInfo {
+    method @NonNull public android.util.Pair<android.view.ContentInfo,android.view.ContentInfo> partition(@NonNull java.util.function.Predicate<android.content.ClipData.Item>);
+  }
+
   public final class Display {
     method @NonNull public android.graphics.ColorSpace[] getSupportedWideColorGamut();
     method public int getType();
@@ -2421,7 +2447,6 @@ package android.window {
   }
 
   public class DisplayAreaOrganizer extends android.window.WindowOrganizer {
-    ctor public DisplayAreaOrganizer();
     method public void onDisplayAreaAppeared(@NonNull android.window.DisplayAreaInfo, @NonNull android.view.SurfaceControl);
     method public void onDisplayAreaVanished(@NonNull android.window.DisplayAreaInfo);
     method @CallSuper @NonNull @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public java.util.List<android.window.DisplayAreaAppearedInfo> registerOrganizer(int);
@@ -2436,6 +2461,13 @@ package android.window {
     field public static final int FEATURE_WINDOW_TOKENS = 2; // 0x2
   }
 
+  public final class StartingWindowInfo implements android.os.Parcelable {
+    ctor public StartingWindowInfo();
+    method public int describeContents();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.window.StartingWindowInfo> CREATOR;
+  }
+
   public final class TaskAppearedInfo implements android.os.Parcelable {
     ctor public TaskAppearedInfo(@NonNull android.app.ActivityManager.RunningTaskInfo, @NonNull android.view.SurfaceControl);
     method public int describeContents();
@@ -2447,7 +2479,7 @@ package android.window {
 
   public class TaskOrganizer extends android.window.WindowOrganizer {
     ctor public TaskOrganizer();
-    method @BinderThread public void addStartingWindow(@NonNull android.app.ActivityManager.RunningTaskInfo, @NonNull android.os.IBinder);
+    method @BinderThread public void addStartingWindow(@NonNull android.window.StartingWindowInfo, @NonNull android.os.IBinder);
     method @Nullable @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void createRootTask(int, int, @Nullable android.os.IBinder);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public boolean deleteRootTask(@NonNull android.window.WindowContainerToken);
     method @Nullable @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public java.util.List<android.app.ActivityManager.RunningTaskInfo> getChildTasks(@NonNull android.window.WindowContainerToken, @NonNull int[]);
@@ -2458,7 +2490,7 @@ package android.window {
     method @BinderThread public void onTaskInfoChanged(@NonNull android.app.ActivityManager.RunningTaskInfo);
     method @BinderThread public void onTaskVanished(@NonNull android.app.ActivityManager.RunningTaskInfo);
     method @CallSuper @NonNull @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public java.util.List<android.window.TaskAppearedInfo> registerOrganizer();
-    method @BinderThread public void removeStartingWindow(@NonNull android.app.ActivityManager.RunningTaskInfo);
+    method @BinderThread public void removeStartingWindow(int);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void setInterceptBackPressedOnTaskRoot(@NonNull android.window.WindowContainerToken, boolean);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void setLaunchRoot(int, @NonNull android.window.WindowContainerToken);
     method @CallSuper @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void unregisterOrganizer();

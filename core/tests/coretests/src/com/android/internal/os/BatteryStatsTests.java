@@ -38,7 +38,9 @@ import org.junit.runners.Suite;
         BatteryStatsTimeBaseTest.class,
         BatteryStatsTimerTest.class,
         BatteryStatsUidTest.class,
+        BatteryUsageStatsTest.class,
         BatteryStatsUserLifecycleTests.class,
+        BluetoothPowerCalculatorTest.class,
         BstatsCpuTimesValidationTest.class,
         KernelCpuProcStringReaderTest.class,
         KernelCpuUidActiveTimeReaderTest.class,
@@ -52,7 +54,9 @@ import org.junit.runners.Suite;
         LongSamplingCounterTest.class,
         LongSamplingCounterArrayTest.class,
         PowerCalculatorTest.class,
-        PowerProfileTest.class
+        PowerProfileTest.class,
+
+        com.android.internal.power.MeasuredEnergyStatsTest.class
     })
 public class BatteryStatsTests {
 }

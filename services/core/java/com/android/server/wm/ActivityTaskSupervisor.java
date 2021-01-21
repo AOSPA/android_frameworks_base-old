@@ -89,6 +89,7 @@ import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
 import android.app.AppOpsManager;
+import android.app.IActivityClientController;
 import android.app.ProfilerInfo;
 import android.app.ResultInfo;
 import android.app.WaitResult;
@@ -840,6 +841,11 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                                 + " old=" + r.app + " new=" + proc);
             }
 
+            // Send the controller to client if the process is the first time to launch activity.
+            // So the client can save binder transactions of getting the controller from activity
+            // task manager service.
+            final IActivityClientController activityClientController =
+                    proc.hasEverLaunchedActivity() ? null : mService.mActivityClientController;
             r.launchCount++;
             r.lastLaunchTime = SystemClock.uptimeMillis();
             proc.setLastActivityLaunchTime(r.lastLaunchTime);
@@ -908,7 +914,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         r.launchedFromPackage, task.voiceInteractor, proc.getReportedProcState(),
                         r.getSavedState(), r.getPersistentSavedState(), results, newIntents,
                         dc.isNextTransitionForward(), proc.createProfilerInfoIfNeeded(),
-                        r.assistToken, r.createFixedRotationAdjustmentsIfNeeded()));
+                        r.assistToken, activityClientController,
+                        r.createFixedRotationAdjustmentsIfNeeded()));
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
@@ -1446,7 +1453,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 // task.reparent() should already placed the task on top,
                 // still need moveTaskToFrontLocked() below for any transition settings.
             }
-            if (stack.shouldResizeStackWithLaunchBounds()) {
+            if (stack.shouldResizeRootTaskWithLaunchBounds()) {
                 stack.resize(bounds, !PRESERVE_WINDOWS, !DEFER_RESUME);
             } else {
                 // WM resizeTask must be done after the task is moved to the correct stack,
@@ -2162,7 +2169,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     void updateTopResumedActivityIfNeeded() {
         final ActivityRecord prevTopActivity = mTopResumedActivity;
         final Task topStack = mRootWindowContainer.getTopDisplayFocusedRootTask();
-        if (topStack == null || topStack.mResumedActivity == prevTopActivity) {
+        if (topStack == null || topStack.getResumedActivity() == prevTopActivity) {
             if (mService.isSleepingLocked()) {
                 // There won't be a next resumed activity. The top process should still be updated
                 // according to the current top focused activity.
@@ -2184,7 +2191,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
 
         // Update the current top activity.
-        mTopResumedActivity = topStack.mResumedActivity;
+        mTopResumedActivity = topStack.getResumedActivity();
         scheduleTopResumedActivityStateIfNeeded();
 
         mService.updateTopApp(mTopResumedActivity);
@@ -2333,13 +2340,13 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     void activityRelaunchedLocked(IBinder token) {
-        final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+        final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
         if (r != null) {
             r.finishRelaunching();
             if (r.getRootTask().shouldSleepOrShutDownActivities()) {
                 // Activity is always relaunched to either resumed or paused state. If it was
                 // relaunched while hidden (by keyguard or smth else), it should be stopped.
-                r.getStack().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                r.getRootTask().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
                         false /* preserveWindows */);
             }
         }

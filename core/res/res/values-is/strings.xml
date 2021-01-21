@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS-þjónusta"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Tilkynningaþjónusta nema"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Ljósaskiptaþjónusta"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"Tímabeltisgreinir (engin tenging)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Tækið verður hreinsað"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Ekki er hægt að nota stjórnunarforritið. Tækinu verður eytt.\n\nEf spurningar vakna skaltu hafa samband við kerfisstjóra fyrirtækisins."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g> lokaði á prentun."</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB-tenging"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"Forrit er í gangi"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"Forrit sem nota rafhlöðuorku"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"Stækkun"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> notar rafhlöðuorku"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> forrit nota rafhlöðuorku"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"Ýttu til að fá upplýsingar um rafhlöðu- og gagnanotkun"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"Leyfir forriti að taka á móti og vinna úr MMS-skilaboðum. Þetta þýðir að forritið getur fylgst með eða eytt skilaboðum sem send eru í tækið án þess að birta þér þau."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"Framsenda skilaboð frá endurvarpa"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"Heimilar forritinu að bindast endurvarpseiningunni til að framsenda skilaboð frá endurvarpa þegar þau berast. Viðvaranir frá endurvarpa berast á tilteknum stöðum til að vara þig við neyðarástandi. Spilliforrit geta truflað afköst eða virkni tækisins þegar neyðarboð berast frá endurvarpa."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"Stjórna símtölum sem eru í gangi"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"Leyfir forriti að sjá upplýsingar um og stjórna símtölum sem eru í gangi í tækinu þínu."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"lesa skilaboð frá endurvarpa"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"Leyfir forriti að lesa skilaboð frá endurvarpa sem tækið móttekur. Viðvaranir frá endurvarpa berast á tilteknum stöðum til að vara þig við neyðarástandi. Spilliforrit geta truflað afköst eða virkni tækisins þegar neyðarboð berast frá endurvarpa."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"lesa strauma í áskrift"</string>
@@ -1801,7 +1803,7 @@
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Kerfisstjóri eyddi"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Í lagi"</string>
     <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Til að auka rafhlöðuendingu gerir rafhlöðusparnaður eftirfarandi:\n\n•·Kveikir á dökku þema\n•·Slekkur á eða takmarkar bakgrunnsvirkni, tilteknar myndbrellur og aðra eiginleika eins og „Ok Google“\n\n"<annotation id="url">"Frekari upplýsingar"</annotation></string>
-    <string name="battery_saver_description" msgid="6794188153647295212">"Til að auka rafhlöðuendingu gerir rafhlöðusparnaður eftirfarandi:\n\n•·Kveikir á dökku þema\n•·Slekkur á eða takmarkar bakgrunnsvirkni, tilteknar myndbrellur og aðra eiginleika eins og „Ok Google“"</string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Til að auka rafhlöðuendingu gerir rafhlöðusparnaður eftirfarandi:\n\n• Kveikir á dökku þema\n• Slekkur á eða takmarkar bakgrunnsvirkni, tilteknar myndbrellur og aðra eiginleika eins og „Ok Google“"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Gagnasparnaður getur hjálpað til við að draga úr gagnanotkun með því að hindra forrit í að senda eða sækja gögn í bakgrunni. Forrit sem er í notkun getur náð í gögn, en gerir það kannski sjaldnar. Niðurstaðan getur verið, svo dæmi sé tekið, að myndir eru ekki birtar fyrr en þú ýtir á þær."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Kveikja á gagnasparnaði?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Kveikja"</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Hljóðnemi"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"birt yfir öðrum forritum á skjánum"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"Senda ábendingar"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"Stig þessarar tilkynningar var hækkað í sjálfgefið. Ýttu til að senda ábendingu."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Þessi tilkynning var gerð þögul. Ýttu til að senda ábendingu."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Þessi tilkynning fékk hærri stöðu. Ýttu til að senda ábendingu."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Þessi tilkynning fékk lægri stöðu. Ýttu til að senda ábendingu."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Upplýsingatilkynning aðgerðastillingar"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Rafhlaðan kann að tæmast áður en hún kemst í hleðslu"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Kveikt á rafhlöðusparnaði til að lengja endingu rafhlöðunnar"</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"Nýtt: Gluggastækkun"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"Nú geturðu stækkað allan skjáinn eða hluta hans"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"Kveikja á í stillingum"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"Hunsa"</string>
 </resources>

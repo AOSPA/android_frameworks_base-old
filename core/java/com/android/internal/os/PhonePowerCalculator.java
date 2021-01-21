@@ -16,7 +16,11 @@
 
 package com.android.internal.os;
 
+import android.os.BatteryConsumer;
 import android.os.BatteryStats;
+import android.os.BatteryUsageStats;
+import android.os.BatteryUsageStatsQuery;
+import android.os.SystemBatteryConsumer;
 import android.os.UserHandle;
 import android.util.SparseArray;
 
@@ -30,6 +34,21 @@ public class PhonePowerCalculator extends PowerCalculator {
 
     public PhonePowerCalculator(PowerProfile powerProfile) {
         mPowerProfile = powerProfile;
+    }
+
+    @Override
+    public void calculate(BatteryUsageStats.Builder builder, BatteryStats batteryStats,
+            long rawRealtimeUs, long rawUptimeUs, BatteryUsageStatsQuery query,
+            SparseArray<UserHandle> asUsers) {
+        long phoneOnTimeMs = batteryStats.getPhoneOnTime(rawRealtimeUs,
+                BatteryStats.STATS_SINCE_CHARGED) / 1000;
+        double phoneOnPower = mPowerProfile.getAveragePower(PowerProfile.POWER_RADIO_ACTIVE)
+                * phoneOnTimeMs / (60 * 60 * 1000);
+        if (phoneOnPower != 0) {
+            builder.getOrCreateSystemBatteryConsumerBuilder(SystemBatteryConsumer.DRAIN_TYPE_PHONE)
+                    .setConsumedPower(BatteryConsumer.POWER_COMPONENT_USAGE, phoneOnPower)
+                    .setUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_USAGE, phoneOnTimeMs);
+        }
     }
 
     @Override

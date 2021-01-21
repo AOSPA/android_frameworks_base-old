@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"Serviço de GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Serviço de notificações do sensor"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Serviço de crepúsculo"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"Detector de fuso horário (sem conectividade)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Seu dispositivo será limpo"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Não é possível usar o aplicativo para administrador. Seu dispositivo passará por uma limpeza agora.\n\nEm caso de dúvidas, entre em contato com o administrador da sua organização."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"Impressão desativada por <xliff:g id="OWNER_APP">%s</xliff:g>."</string>
@@ -352,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"Permite que o app receba e processe mensagens MMS. Isso significa que o app pode monitorar ou excluir as mensagens enviadas para o dispositivo sem mostrá-las para você."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"Encaminhar mensagens de transmissão celular"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"Permite que o app se vincule ao módulo de transmissão celular para encaminhar mensagens de transmissão celular assim que elas forem recebidas. Alertas de transmissão celular são recebidos em alguns locais para avisar sobre situações de emergência. Apps maliciosos podem interferir no desempenho ou funcionamento do dispositivo quando uma transmissão celular de emergência é recebida."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"Gerenciar chamadas em andamento"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"Permite que um app veja detalhes sobre chamadas em andamento no seu dispositivo e as controle."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"ler mensagens de difusão celular"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"Permite que o app leia mensagens de difusão celular recebidas por seu dispositivo. Alertas de difusão celular são recebidos em alguns locais para avisar você de situações de emergência. Apps maliciosos podem interferir no desempenho ou funcionamento de seu dispositivo quando uma difusão celular de emergência é recebida."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"ler feeds inscritos"</string>
@@ -2006,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Microfone"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"exibindo sobre outros apps na sua tela"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"Enviar feedback"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"Esta notificação foi promovida a Padrão. Toque para enviar seu feedback."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Esta notificação foi rebaixada a Silenciosa. Toque para enviar seu feedback."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Esta notificação foi classificada com maior prioridade. Toque para enviar seu feedback."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Esta notificação foi classificada com menor prioridade. Toque para enviar seu feedback."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Notificação de informação do modo rotina"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"A bateria pode acabar antes da recarga normal"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"A Economia de bateria foi ativada para aumentar a duração da carga"</string>

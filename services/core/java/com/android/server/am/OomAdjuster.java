@@ -522,7 +522,7 @@ public final class OomAdjuster {
                 ActiveUids uids = mTmpUidRecords;
                 uids.clear();
                 uids.put(uidRec.uid, uidRec);
-                updateUidsLocked(uids, now);
+                updateUidsLocked(uids, SystemClock.elapsedRealtime());
                 mProcessList.incrementProcStateSeqAndNotifyAppsLocked(uids);
             }
         }
@@ -1407,7 +1407,7 @@ public final class OomAdjuster {
         app.setCached(false);
         app.shouldNotFreeze = false;
 
-        app.mAllowStartFgsState = PROCESS_STATE_NONEXISTENT;
+        app.resetAllowStartFgs();
 
         final int appUid = app.info.uid;
         final int logUid = mService.mCurOomAdjUid;
@@ -1429,7 +1429,6 @@ public final class OomAdjuster {
             app.setCurrentSchedulingGroup(ProcessList.SCHED_GROUP_DEFAULT);
             app.curCapability = PROCESS_CAPABILITY_ALL;
             app.setCurProcState(ActivityManager.PROCESS_STATE_PERSISTENT);
-            app.bumpAllowStartFgsState(PROCESS_STATE_PERSISTENT);
             // System processes can do UI, and when they do we want to have
             // them trim their memory after the user leaves the UI.  To
             // facilitate this, here we need to determine whether or not it
@@ -1460,6 +1459,8 @@ public final class OomAdjuster {
             app.setCurRawProcState(app.getCurProcState());
             app.curAdj = app.maxAdj;
             app.completedAdjSeq = app.adjSeq;
+            app.bumpAllowStartFgsState(app.getCurProcState());
+            app.setAllowStartFgs();
             // if curAdj is less than prevAppAdj, then this process was promoted
             return app.curAdj < prevAppAdj || app.getCurProcState() < prevProcState;
         }
@@ -1869,6 +1870,11 @@ public final class OomAdjuster {
 
                     int clientAdj = client.getCurRawAdj();
                     int clientProcState = client.getCurRawProcState();
+
+                    // pass client's mAllowStartFgs to the app if client is not persistent process.
+                    if (client.mAllowStartFgs && client.maxAdj >= ProcessList.FOREGROUND_APP_ADJ) {
+                        app.mAllowStartFgs = true;
+                    }
 
                     if ((cr.flags & Context.BIND_WAIVE_PRIORITY) == 0) {
                         if (shouldSkipDueToCycle(app, client, procState, adj, cycleReEval)) {
@@ -2333,7 +2339,7 @@ public final class OomAdjuster {
         app.setCurRawProcState(procState);
         app.setHasForegroundActivities(foregroundActivities);
         app.completedAdjSeq = mAdjSeq;
-
+        app.setAllowStartFgs();
         // if curAdj or curProcState improved, then this process was promoted
         return app.curAdj < prevAppAdj || app.getCurProcState() < prevProcState
                 || app.curCapability != prevCapability ;

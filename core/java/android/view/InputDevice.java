@@ -17,10 +17,12 @@
 package android.view;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
+import android.hardware.SensorManager;
 import android.hardware.input.InputDeviceIdentifier;
 import android.hardware.input.InputManager;
 import android.os.Build;
@@ -28,7 +30,9 @@ import android.os.NullVibrator;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Vibrator;
+import android.os.VibratorManager;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.annotation.Retention;
@@ -68,9 +72,17 @@ public final class InputDevice implements Parcelable {
     private final boolean mHasVibrator;
     private final boolean mHasMicrophone;
     private final boolean mHasButtonUnderPad;
+    private final boolean mHasSensor;
     private final ArrayList<MotionRange> mMotionRanges = new ArrayList<MotionRange>();
 
+    @GuardedBy("mMotionRanges")
     private Vibrator mVibrator; // guarded by mMotionRanges during initialization
+
+    @GuardedBy("mMotionRanges")
+    private VibratorManager mVibratorManager;
+
+    @GuardedBy("mMotionRanges")
+    private SensorManager mSensorManager;
 
     /**
      * A mask for input source classes.
@@ -415,6 +427,8 @@ public final class InputDevice implements Parcelable {
 
     private static final int MAX_RANGES = 1000;
 
+    private static final int VIBRATOR_ID_ALL = -1;
+
     public static final @android.annotation.NonNull Parcelable.Creator<InputDevice> CREATOR =
             new Parcelable.Creator<InputDevice>() {
         public InputDevice createFromParcel(Parcel in) {
@@ -434,7 +448,7 @@ public final class InputDevice implements Parcelable {
     public InputDevice(int id, int generation, int controllerNumber, String name, int vendorId,
             int productId, String descriptor, boolean isExternal, int sources, int keyboardType,
             KeyCharacterMap keyCharacterMap, boolean hasVibrator, boolean hasMicrophone,
-            boolean hasButtonUnderPad) {
+            boolean hasButtonUnderPad, boolean hasSensor) {
         mId = id;
         mGeneration = generation;
         mControllerNumber = controllerNumber;
@@ -449,10 +463,12 @@ public final class InputDevice implements Parcelable {
         mHasVibrator = hasVibrator;
         mHasMicrophone = hasMicrophone;
         mHasButtonUnderPad = hasButtonUnderPad;
+        mHasSensor = hasSensor;
         mIdentifier = new InputDeviceIdentifier(descriptor, vendorId, productId);
     }
 
     private InputDevice(Parcel in) {
+        mKeyCharacterMap = KeyCharacterMap.CREATOR.createFromParcel(in);
         mId = in.readInt();
         mGeneration = in.readInt();
         mControllerNumber = in.readInt();
@@ -463,10 +479,10 @@ public final class InputDevice implements Parcelable {
         mIsExternal = in.readInt() != 0;
         mSources = in.readInt();
         mKeyboardType = in.readInt();
-        mKeyCharacterMap = KeyCharacterMap.CREATOR.createFromParcel(in);
         mHasVibrator = in.readInt() != 0;
         mHasMicrophone = in.readInt() != 0;
         mHasButtonUnderPad = in.readInt() != 0;
+        mHasSensor = in.readInt() != 0;
         mIdentifier = new InputDeviceIdentifier(mDescriptor, mVendorId, mProductId);
 
         int numRanges = in.readInt();
@@ -785,13 +801,52 @@ public final class InputDevice implements Parcelable {
         synchronized (mMotionRanges) {
             if (mVibrator == null) {
                 if (mHasVibrator) {
-                    mVibrator = InputManager.getInstance().getInputDeviceVibrator(mId);
+                    mVibrator = InputManager.getInstance().getInputDeviceVibrator(mId,
+                            VIBRATOR_ID_ALL);
                 } else {
                     mVibrator = NullVibrator.getInstance();
                 }
             }
             return mVibrator;
         }
+    }
+
+    /**
+     * Gets the vibrator manager associated with the device.
+     * Even if the device does not have a vibrator manager, the result is never null.
+     * Use {@link VibratorManager#getVibratorIds} to determine whether any vibrator is
+     * present.
+     *
+     * @return The vibrator manager associated with the device, never null.
+     */
+    @NonNull
+    public VibratorManager getVibratorManager() {
+        synchronized (mMotionRanges) {
+            if (mVibratorManager == null) {
+                mVibratorManager = InputManager.getInstance().getInputDeviceVibratorManager(mId);
+            }
+        }
+        return mVibratorManager;
+    }
+
+    /**
+     * Gets the sensor manager service associated with the input device.
+     * Even if the device does not have a sensor, the result is never null.
+     * Use {@link SensorManager#getSensorList} to get a full list of all supported sensors.
+     *
+     * Note that the sensors associated with the device may be different from
+     * the system sensors, as typically they are builtin sensors physically attached to
+     * input devices.
+     *
+     * @return The sensor manager service associated with the device, never null.
+     */
+    public @NonNull SensorManager getSensorManager() {
+        synchronized (mMotionRanges) {
+            if (mSensorManager == null) {
+                mSensorManager = InputManager.getInstance().getInputDeviceSensorManager(mId);
+            }
+        }
+        return mSensorManager;
     }
 
     /**
@@ -839,6 +894,15 @@ public final class InputDevice implements Parcelable {
      */
     public boolean hasButtonUnderPad() {
         return mHasButtonUnderPad;
+    }
+
+    /**
+     * Reports whether the device has a sensor.
+     * @return Whether the device has a sensor.
+     * @hide
+     */
+    public boolean hasSensor() {
+        return mHasSensor;
     }
 
     /**
@@ -972,6 +1036,7 @@ public final class InputDevice implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel out, int flags) {
+        mKeyCharacterMap.writeToParcel(out, flags);
         out.writeInt(mId);
         out.writeInt(mGeneration);
         out.writeInt(mControllerNumber);
@@ -982,10 +1047,10 @@ public final class InputDevice implements Parcelable {
         out.writeInt(mIsExternal ? 1 : 0);
         out.writeInt(mSources);
         out.writeInt(mKeyboardType);
-        mKeyCharacterMap.writeToParcel(out, flags);
         out.writeInt(mHasVibrator ? 1 : 0);
         out.writeInt(mHasMicrophone ? 1 : 0);
         out.writeInt(mHasButtonUnderPad ? 1 : 0);
+        out.writeInt(mHasSensor ? 1 : 0);
 
         final int numRanges = mMotionRanges.size();
         out.writeInt(numRanges);
@@ -1029,6 +1094,8 @@ public final class InputDevice implements Parcelable {
         description.append("\n");
 
         description.append("  Has Vibrator: ").append(mHasVibrator).append("\n");
+
+        description.append("  Has Sensor: ").append(mHasSensor).append("\n");
 
         description.append("  Has mic: ").append(mHasMicrophone).append("\n");
 

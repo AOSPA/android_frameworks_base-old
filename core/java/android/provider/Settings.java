@@ -1848,7 +1848,7 @@ public final class Settings {
 
     /**
      * Activity Action: Show notification bubble settings for a single app.
-     * See {@link NotificationManager#areBubblesAllowed()}.
+     * See {@link NotificationManager#getBubblePreference()}.
      * <p>
      *     Input: {@link #EXTRA_APP_PACKAGE}, the package to display.
      * <p>
@@ -3060,6 +3060,7 @@ public final class Settings {
         // com.android.providers.settings.SettingsProtoDumpUtil#dumpProtoSystemSettingsLocked.
 
         private static final float DEFAULT_FONT_SCALE = 1.0f;
+        private static final int DEFAULT_FONT_WEIGHT = 0;
 
         /**
          * The content:// style URL for this table
@@ -3583,9 +3584,7 @@ public final class Settings {
                 outConfig.fontScale = DEFAULT_FONT_SCALE;
             }
             outConfig.fontWeightAdjustment = Settings.Secure.getIntForUser(
-                    cr, Settings.Secure.FONT_WEIGHT_ADJUSTMENT,
-                    Configuration.FONT_WEIGHT_ADJUSTMENT_UNDEFINED,
-                    userHandle);
+                    cr, Settings.Secure.FONT_WEIGHT_ADJUSTMENT, DEFAULT_FONT_WEIGHT, userHandle);
 
             final String localeValue =
                     Settings.System.getStringForUser(cr, SYSTEM_LOCALES, userHandle);
@@ -7772,6 +7771,32 @@ public final class Settings {
                 "minimal_post_processing_allowed";
 
         /**
+         * No mode switching will happen.
+         *
+         * @see #MATCH_CONTENT_FRAME_RATE
+         * @hide
+         */
+        public static final int MATCH_CONTENT_FRAMERATE_NEVER = 0;
+
+        /**
+         * Allow only refresh rate switching between modes in the same configuration group.
+         * This way only switches without visual interruptions for the user will be allowed.
+         *
+         * @see #MATCH_CONTENT_FRAME_RATE
+         * @hide
+         */
+        public static final int MATCH_CONTENT_FRAMERATE_SEAMLESSS_ONLY = 1;
+
+        /**
+         * Allow refresh rate switching between all refresh rates even if the switch will have
+         * visual interruptions for the user.
+         *
+         * @see #MATCH_CONTENT_FRAME_RATE
+         * @hide
+         */
+        public static final int MATCH_CONTENT_FRAMERATE_ALWAYS = 2;
+
+        /**
          * User's preference for refresh rate switching.
          *
          * <p>Values:
@@ -7781,6 +7806,9 @@ public final class Settings {
          *     for the user.
          *
          * @see android.view.Surface#setFrameRate
+         * @see #MATCH_CONTENT_FRAMERATE_NEVER
+         * @see #MATCH_CONTENT_FRAMERATE_SEAMLESSS_ONLY
+         * @see #MATCH_CONTENT_FRAMERATE_ALWAYS
          * @hide
          */
         public static final String MATCH_CONTENT_FRAME_RATE =
@@ -9092,8 +9120,8 @@ public final class Settings {
          * Controls magnification mode when magnification is enabled via a system-wide triple tap
          * gesture or the accessibility shortcut.
          *
-         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN
-         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
+         * @see #ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN
+         * @see #ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
          * @hide
          */
         @TestApi
@@ -9126,9 +9154,9 @@ public final class Settings {
          * Controls magnification capability. Accessibility magnification is capable of at least one
          * of the magnification modes.
          *
-         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN
-         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
-         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_ALL
+         * @see #ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN
+         * @see #ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
+         * @see #ACCESSIBILITY_MAGNIFICATION_MODE_ALL
          * @hide
          */
         @TestApi
@@ -9137,12 +9165,44 @@ public final class Settings {
 
         /**
          *  Whether to show the window magnification prompt dialog when the user uses full-screen
-         *  magnification first time after database is upgraded .
+         *  magnification first time after database is upgraded.
          *
          * @hide
          */
         public static final String ACCESSIBILITY_SHOW_WINDOW_MAGNIFICATION_PROMPT =
                 "accessibility_show_window_magnification_prompt";
+
+        /**
+         * Controls the accessibility button mode. System will force-set the value to {@link
+         * #ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU} if {@link #NAVIGATION_MODE} is fully
+         * gestural.
+         * <ul>
+         *    <li> 0 = button in navigation bar </li>
+         *    <li> 1 = button floating on the display </li>
+         * </ul>
+         *
+         * @see #ACCESSIBILITY_BUTTON_MODE_NAVIGATION_BAR
+         * @see #ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU
+         * @hide
+         */
+        public static final String ACCESSIBILITY_BUTTON_MODE =
+                "accessibility_button_mode";
+
+        /**
+         * Accessibility button mode value that specifying the accessibility service or feature to
+         * be toggled via the button in the navigation bar.
+         *
+         * @hide
+         */
+        public static final int ACCESSIBILITY_BUTTON_MODE_NAVIGATION_BAR = 0x0;
+
+        /**
+         * Accessibility button mode value that specifying the accessibility service or feature to
+         * be toggled via the button floating on the display.
+         *
+         * @hide
+         */
+        public static final int ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU = 0x1;
 
         /**
          * Whether the Adaptive connectivity option is enabled.
@@ -14505,10 +14565,11 @@ public final class Settings {
         public static final String SHOW_PEOPLE_SPACE = "show_people_space";
 
         /**
-         * Which types of conversations to show in People Space.
+         * Which types of conversation(s) to show in People Space.
          * Values are:
-         * 0: All conversations (default)
+         * 0: Single user-selected conversation (default)
          * 1: Priority conversations only
+         * 2: All conversations
          * @hide
          */
         public static final String PEOPLE_SPACE_CONVERSATION_TYPE =
@@ -14531,6 +14592,20 @@ public final class Settings {
          * @hide
          */
         public static final String SHOW_NEW_NOTIF_DISMISS = "show_new_notif_dismiss";
+
+        /**
+         * Whether to enforce the new notification rules (aka rules that are only applied to
+         * notifications from apps targeting S) on all notifications.
+         * - Collapsed custom view notifications will get the new 76dp height instead of 106dp.
+         * - Custom view notifications will be partially decorated.
+         * - Large icons will be given an aspect ratio of up to 16:9.
+         *
+         * Values are:
+         * 0: Disabled (Only apps targeting S will receive the new rules)
+         * 1: Enabled (All apps will receive the new rules)
+         * @hide
+         */
+        public static final String BACKPORT_S_NOTIF_RULES = "backport_s_notif_rules";
 
         /**
          * Block untrusted touches mode.
@@ -14573,6 +14648,17 @@ public final class Settings {
          */
         public static final String MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH =
                 "maximum_obscuring_opacity_for_touch";
+
+        /**
+         * Used to enable / disable the Restricted Networking Mode in which network access is
+         * restricted to apps holding the CONNECTIVITY_USE_RESTRICTED_NETWORKS permission.
+         *
+         * Values are:
+         * 0: disabled
+         * 1: enabled
+         * @hide
+         */
+        public static final String RESTRICTED_NETWORKING_MODE = "restricted_networking_mode";
     }
 
     /**

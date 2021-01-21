@@ -32,6 +32,7 @@ import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.provider.Settings;
 import android.util.Slog;
+import android.view.accessibility.AccessibilityManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -45,6 +46,7 @@ import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.onehanded.OneHandedGestureHandler.OneHandedGestureEventCallback;
 
 import java.io.PrintWriter;
+import java.util.concurrent.Executor;
 
 /**
  * Manages and manipulates the one handed states, transitions, and gesture for phones.
@@ -74,6 +76,7 @@ public class OneHandedController implements OneHanded {
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     private OneHandedDisplayAreaOrganizer mDisplayAreaOrganizer;
+    private final AccessibilityManager mAccessibilityManager;
 
     /**
      * Handle rotation based on OnDisplayChangingListener callback
@@ -163,13 +166,33 @@ public class OneHandedController implements OneHanded {
                 }
             };
 
+    private AccessibilityManager.AccessibilityStateChangeListener
+            mAccessibilityStateChangeListener =
+            new AccessibilityManager.AccessibilityStateChangeListener() {
+                @Override
+                public void onAccessibilityStateChanged(boolean enabled) {
+                    if (enabled) {
+                        final int mOneHandedTimeout = OneHandedSettingsUtil
+                                .getSettingsOneHandedModeTimeout(mContext.getContentResolver());
+                        final int timeout = mAccessibilityManager
+                                .getRecommendedTimeoutMillis(mOneHandedTimeout * 1000
+                                        /* align with A11y timeout millis */,
+                                        AccessibilityManager.FLAG_CONTENT_CONTROLS);
+                        mTimeoutHandler.setTimeout(timeout / 1000);
+                    } else {
+                        mTimeoutHandler.setTimeout(OneHandedSettingsUtil
+                                .getSettingsOneHandedModeTimeout(mContext.getContentResolver()));
+                    }
+                }
+            };
+
     /**
      * Creates {@link OneHandedController}, returns {@code null} if the feature is not supported.
      */
     @Nullable
     public static OneHandedController create(
             Context context, DisplayController displayController,
-            TaskStackListenerImpl taskStackListener) {
+            TaskStackListenerImpl taskStackListener, Executor executor) {
         if (!SystemProperties.getBoolean(SUPPORT_ONE_HANDED_MODE, false)) {
             Slog.w(TAG, "Device doesn't support OneHanded feature");
             return null;
@@ -182,7 +205,7 @@ public class OneHandedController implements OneHanded {
         OneHandedGestureHandler gestureHandler = new OneHandedGestureHandler(
                 context, displayController);
         OneHandedDisplayAreaOrganizer organizer = new OneHandedDisplayAreaOrganizer(
-                context, displayController, animationController, tutorialHandler);
+                context, displayController, animationController, tutorialHandler, executor);
         IOverlayManager overlayManager = IOverlayManager.Stub.asInterface(
                 ServiceManager.getService(Context.OVERLAY_SERVICE));
         return new OneHandedController(context, displayController, organizer, touchHandler,
@@ -238,6 +261,11 @@ public class OneHandedController implements OneHanded {
                         stopOneHanded(OneHandedEvents.EVENT_ONE_HANDED_TRIGGER_APP_TAPS_OUT);
                     }
                 });
+
+        mAccessibilityManager = (AccessibilityManager)
+                context.getSystemService(Context.ACCESSIBILITY_SERVICE);
+        mAccessibilityManager.addAccessibilityStateChangeListener(
+                mAccessibilityStateChangeListener);
     }
 
     /**

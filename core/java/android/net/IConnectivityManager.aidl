@@ -25,18 +25,19 @@ import android.net.Network;
 import android.net.NetworkAgentConfig;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
-import android.net.NetworkQuotaInfo;
 import android.net.NetworkRequest;
 import android.net.NetworkState;
 import android.net.ISocketKeepaliveCallback;
 import android.net.ProxyInfo;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.INetworkActivityListener;
 import android.os.Messenger;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.ResultReceiver;
 
+import com.android.connectivity.aidl.INetworkAgent;
 import com.android.internal.net.LegacyVpnInfo;
 import com.android.internal.net.VpnConfig;
 import com.android.internal.net.VpnInfo;
@@ -76,7 +77,6 @@ interface IConnectivityManager
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     NetworkState[] getAllNetworkState();
 
-    NetworkQuotaInfo getActiveNetworkQuotaInfo();
     boolean isActiveNetworkMetered();
 
     boolean requestRouteToHostAddress(int networkType, in byte[] hostAddress,
@@ -165,7 +165,7 @@ interface IConnectivityManager
 
     void declareNetworkRequestUnfulfillable(in NetworkRequest request);
 
-    Network registerNetworkAgent(in Messenger messenger, in NetworkInfo ni, in LinkProperties lp,
+    Network registerNetworkAgent(in INetworkAgent na, in NetworkInfo ni, in LinkProperties lp,
             in NetworkCapabilities nc, int score, in NetworkAgentConfig config,
             in int factorySerialNumber);
 
@@ -235,4 +235,10 @@ interface IConnectivityManager
                 in PersistableBundle extras);
 
     void systemReady();
+
+    void registerNetworkActivityListener(in INetworkActivityListener l);
+
+    void unregisterNetworkActivityListener(in INetworkActivityListener l);
+
+    boolean isDefaultNetworkActive();
 }

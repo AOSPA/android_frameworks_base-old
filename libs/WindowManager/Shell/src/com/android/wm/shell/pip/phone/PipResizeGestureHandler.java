@@ -93,6 +93,7 @@ public class PipResizeGestureHandler {
 
     private int mDelta;
     private float mTouchSlop;
+
     private boolean mAllowGesture;
     private boolean mIsAttached;
     private boolean mIsEnabled;
@@ -409,6 +410,7 @@ public class PipResizeGestureHandler {
 
                 mPipTaskOrganizer.scheduleUserResizePip(mLastDownBounds, mLastResizeBounds,
                         null);
+                mPipBoundsState.setHasUserResizedPip(true);
             }
         }
     }
@@ -461,6 +463,7 @@ public class PipResizeGestureHandler {
                                 true /* useCurrentSize */);
                         mPipTaskOrganizer.scheduleUserResizePip(mLastDownBounds, mLastResizeBounds,
                                 null);
+                        mPipBoundsState.setHasUserResizedPip(true);
                     }
                     break;
                 case MotionEvent.ACTION_UP:

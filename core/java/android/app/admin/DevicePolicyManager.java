@@ -39,6 +39,7 @@ import android.annotation.WorkerThread;
 import android.app.Activity;
 import android.app.IServiceConnection;
 import android.app.KeyguardManager;
+import android.app.admin.DevicePolicyManager.DevicePolicyOperation;
 import android.app.admin.SecurityLog.SecurityEvent;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
@@ -53,7 +54,6 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.UserInfo;
 import android.graphics.Bitmap;
-import android.net.NetworkUtils;
 import android.net.PrivateDnsConnectivityChecker;
 import android.net.ProxyInfo;
 import android.net.Uri;
@@ -91,6 +91,7 @@ import android.util.DebugUtils;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.net.NetworkUtilsInternal;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.Preconditions;
 import com.android.org.conscrypt.TrustedCertificateStore;
@@ -2055,7 +2056,9 @@ public class DevicePolicyManager {
     /**
      * Result code for {@link #checkProvisioningPreCondition}.
      *
-     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_USER} if the user is a system user.
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_USER} if the user is a system user and
+     * for {@link #ACTION_PROVISION_MANAGED_DEVICE} on devices running headless system user mode
+     * and the user is a system user.
      *
      * @hide
      */
@@ -2591,27 +2594,39 @@ public class DevicePolicyManager {
     @Retention(RetentionPolicy.SOURCE)
     public @interface PersonalAppsSuspensionReason {}
 
-    // TODO(b/172376923) - make all (or none) @TestApi
-
     /** @hide */
     @TestApi
     public static final int OPERATION_LOCK_NOW = 1;
-
     /** @hide */
+    @TestApi
     public static final int OPERATION_SWITCH_USER = 2;
     /** @hide */
+    @TestApi
     public static final int OPERATION_START_USER_IN_BACKGROUND = 3;
     /** @hide */
+    @TestApi
     public static final int OPERATION_STOP_USER = 4;
     /** @hide */
+    @TestApi
     public static final int OPERATION_CREATE_AND_MANAGE_USER = 5;
     /** @hide */
+    @TestApi
     public static final int OPERATION_REMOVE_USER = 6;
+    /** @hide */
+    @TestApi
+    public static final int OPERATION_REBOOT = 7;
+    /** @hide */
+    @TestApi
+    public static final int OPERATION_WIPE_DATA = 8;
+    /** @hide */
+    @TestApi
+    public static final int OPERATION_LOGOUT_USER = 9;
+    /** @hide */
+    @TestApi
+    public static final int OPERATION_SET_USER_RESTRICTION = 10;
 
     private static final String PREFIX_OPERATION = "OPERATION_";
 
-
-    // TODO(b/172376923) - add all operations
     /** @hide */
     @IntDef(prefix = PREFIX_OPERATION, value = {
             OPERATION_LOCK_NOW,
@@ -2619,13 +2634,19 @@ public class DevicePolicyManager {
             OPERATION_START_USER_IN_BACKGROUND,
             OPERATION_STOP_USER,
             OPERATION_CREATE_AND_MANAGE_USER,
-            OPERATION_REMOVE_USER
+            OPERATION_REMOVE_USER,
+            OPERATION_REBOOT,
+            OPERATION_WIPE_DATA,
+            OPERATION_LOGOUT_USER,
+            OPERATION_SET_USER_RESTRICTION
     })
     @Retention(RetentionPolicy.SOURCE)
     public static @interface DevicePolicyOperation {
     }
 
     /** @hide */
+    @TestApi
+    @NonNull
     public static String operationToString(@DevicePolicyOperation int operation) {
         return DebugUtils.constantToString(DevicePolicyManager.class, PREFIX_OPERATION, operation);
     }
@@ -2912,22 +2933,36 @@ public class DevicePolicyManager {
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
      * not, a security exception will be thrown.
      * <p>
-     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     * Apps targeting {@link android.os.Build.VERSION_CODES#R} and below can call this method on the
+     * {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
-     * profile.
+     * profile. Apps targeting {@link android.os.Build.VERSION_CODES#S} and above will get a
+     * {@code IllegalArgumentException} when calling this method on the parent
+     * {@link DevicePolicyManager} instance.
      *
      * <p><strong>Note:</strong> Specifying password requirements using this method clears the
      * password complexity requirements set using {@link #setRequiredPasswordComplexity(int)}.
      *
+     * @deprecated Prefer using {@link #setRequiredPasswordComplexity(int)}, to require a password
+     * that satisfies a complexity level defined by the platform, rather than specifying custom
+     * password requirement.
+     * Setting custom, overly-complicated password requirements leads to passwords that are hard
+     * for users to remember and may not provide any security benefits given as Android uses
+     * hardware-backed throttling to thwart online and offline brute-forcing of the device's
+     * screen lock.
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param quality The new desired quality. One of {@link #PASSWORD_QUALITY_UNSPECIFIED},
      *            {@link #PASSWORD_QUALITY_BIOMETRIC_WEAK},
      *            {@link #PASSWORD_QUALITY_SOMETHING}, {@link #PASSWORD_QUALITY_NUMERIC},
      *            {@link #PASSWORD_QUALITY_NUMERIC_COMPLEX}, {@link #PASSWORD_QUALITY_ALPHABETIC},
      *            {@link #PASSWORD_QUALITY_ALPHANUMERIC} or {@link #PASSWORD_QUALITY_COMPLEX}.
-     * @throws SecurityException if {@code admin} is not an active administrator or if {@code admin}
-     *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws SecurityException if {@code admin} is not an active administrator, if {@code admin}
+     *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} or if the
+     *             calling app is targeting {@link android.os.Build.VERSION_CODES#S} and above,
+     *             and is calling the method the {@link DevicePolicyManager} instance returned by
+     *             {@link #getParentProfileInstance(ComponentName)}.
      */
+    @Deprecated
     public void setPasswordQuality(@NonNull ComponentName admin, int quality) {
         if (mService != null) {
             try {
@@ -2950,9 +2985,12 @@ public class DevicePolicyManager {
      * <p>Note: on devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature,
      * the password is always treated as empty.
      *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
+     *
      * @param admin The name of the admin component to check, or {@code null} to aggregate
      * all admins.
      */
+    @Deprecated
     public int getPasswordQuality(@Nullable ComponentName admin) {
         return getPasswordQuality(admin, myUserId());
     }
@@ -2992,9 +3030,13 @@ public class DevicePolicyManager {
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
      * not, a security exception will be thrown.
      * <p>
-     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     *
+     * Apps targeting {@link android.os.Build.VERSION_CODES#R} and below can call this method on the
+     * {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
+     *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param length The new desired minimum password length. A value of 0 means there is no
@@ -3005,6 +3047,7 @@ public class DevicePolicyManager {
      *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
      *     quality requirement prior to calling this method.
      */
+    @Deprecated
     public void setPasswordMinimumLength(@NonNull ComponentName admin, int length) {
         if (mService != null) {
             try {
@@ -3027,9 +3070,12 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
+     *
      * @param admin The name of the admin component to check, or {@code null} to aggregate
      * all admins.
      */
+    @Deprecated
     public int getPasswordMinimumLength(@Nullable ComponentName admin) {
         return getPasswordMinimumLength(admin, myUserId());
     }
@@ -3067,9 +3113,13 @@ public class DevicePolicyManager {
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
      * not, a security exception will be thrown.
      * <p>
-     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     *
+     * Apps targeting {@link android.os.Build.VERSION_CODES#R} and below can call this method on the
+     * {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
+     *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param length The new desired minimum number of upper case letters required in the password.
@@ -3080,6 +3130,7 @@ public class DevicePolicyManager {
      *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
      *     quality requirement prior to calling this method.
      */
+    @Deprecated
     public void setPasswordMinimumUpperCase(@NonNull ComponentName admin, int length) {
         if (mService != null) {
             try {
@@ -3107,11 +3158,14 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
+     *
      * @param admin The name of the admin component to check, or {@code null} to
      *            aggregate all admins.
      * @return The minimum number of upper case letters required in the
      *         password.
      */
+    @Deprecated
     public int getPasswordMinimumUpperCase(@Nullable ComponentName admin) {
         return getPasswordMinimumUpperCase(admin, myUserId());
     }
@@ -3149,9 +3203,13 @@ public class DevicePolicyManager {
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
      * not, a security exception will be thrown.
      * <p>
-     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     *
+     * Apps targeting {@link android.os.Build.VERSION_CODES#R} and below can call this method on the
+     * {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
+     *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param length The new desired minimum number of lower case letters required in the password.
@@ -3162,6 +3220,7 @@ public class DevicePolicyManager {
      *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
      *     quality requirement prior to calling this method.
      */
+    @Deprecated
     public void setPasswordMinimumLowerCase(@NonNull ComponentName admin, int length) {
         if (mService != null) {
             try {
@@ -3189,11 +3248,14 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
+     *
      * @param admin The name of the admin component to check, or {@code null} to
      *            aggregate all admins.
      * @return The minimum number of lower case letters required in the
      *         password.
      */
+    @Deprecated
     public int getPasswordMinimumLowerCase(@Nullable ComponentName admin) {
         return getPasswordMinimumLowerCase(admin, myUserId());
     }
@@ -3231,9 +3293,13 @@ public class DevicePolicyManager {
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
      * not, a security exception will be thrown.
      * <p>
-     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     *
+     * Apps targeting {@link android.os.Build.VERSION_CODES#R} and below can call this method on the
+     * {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
+     *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param length The new desired minimum number of letters required in the password. A value of
@@ -3244,6 +3310,7 @@ public class DevicePolicyManager {
      *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
      *     quality requirement prior to calling this method.
      */
+    @Deprecated
     public void setPasswordMinimumLetters(@NonNull ComponentName admin, int length) {
         if (mService != null) {
             try {
@@ -3271,10 +3338,13 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
+     *
      * @param admin The name of the admin component to check, or {@code null} to
      *            aggregate all admins.
      * @return The minimum number of letters required in the password.
      */
+    @Deprecated
     public int getPasswordMinimumLetters(@Nullable ComponentName admin) {
         return getPasswordMinimumLetters(admin, myUserId());
     }
@@ -3312,9 +3382,13 @@ public class DevicePolicyManager {
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
      * not, a security exception will be thrown.
      * <p>
-     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     *
+     * Apps targeting {@link android.os.Build.VERSION_CODES#R} and below can call this method on the
+     * {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
+     *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param length The new desired minimum number of numerical digits required in the password. A
@@ -3325,6 +3399,7 @@ public class DevicePolicyManager {
      *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
      *     quality requirement prior to calling this method.
      */
+    @Deprecated
     public void setPasswordMinimumNumeric(@NonNull ComponentName admin, int length) {
         if (mService != null) {
             try {
@@ -3352,10 +3427,13 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
+     *
      * @param admin The name of the admin component to check, or {@code null} to
      *            aggregate all admins.
      * @return The minimum number of numerical digits required in the password.
      */
+    @Deprecated
     public int getPasswordMinimumNumeric(@Nullable ComponentName admin) {
         return getPasswordMinimumNumeric(admin, myUserId());
     }
@@ -3393,9 +3471,13 @@ public class DevicePolicyManager {
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
      * not, a security exception will be thrown.
      * <p>
-     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     *
+     * Apps targeting {@link android.os.Build.VERSION_CODES#R} and below can call this method on the
+     * {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
+     *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param length The new desired minimum number of symbols required in the password. A value of
@@ -3406,6 +3488,7 @@ public class DevicePolicyManager {
      *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
      *     quality requirement prior to calling this method.
      */
+    @Deprecated
     public void setPasswordMinimumSymbols(@NonNull ComponentName admin, int length) {
         if (mService != null) {
             try {
@@ -3432,10 +3515,13 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
+     *
      * @param admin The name of the admin component to check, or {@code null} to
      *            aggregate all admins.
      * @return The minimum number of symbols required in the password.
      */
+    @Deprecated
     public int getPasswordMinimumSymbols(@Nullable ComponentName admin) {
         return getPasswordMinimumSymbols(admin, myUserId());
     }
@@ -3473,9 +3559,13 @@ public class DevicePolicyManager {
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
      * not, a security exception will be thrown.
      * <p>
-     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     *
+     * Apps targeting {@link android.os.Build.VERSION_CODES#R} and below can call this method on the
+     * {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
+     *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param length The new desired minimum number of letters required in the password. A value of
@@ -3486,6 +3576,7 @@ public class DevicePolicyManager {
      *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
      *     quality requirement prior to calling this method.
      */
+    @Deprecated
     public void setPasswordMinimumNonLetter(@NonNull ComponentName admin, int length) {
         if (mService != null) {
             try {
@@ -3513,10 +3604,13 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
+     * @deprecated see {@link #setPasswordQuality(ComponentName, int)} for details.
+     *
      * @param admin The name of the admin component to check, or {@code null} to
      *            aggregate all admins.
      * @return The minimum number of letters required in the password.
      */
+    @Deprecated
     public int getPasswordMinimumNonLetter(@Nullable ComponentName admin) {
         return getPasswordMinimumNonLetter(admin, myUserId());
     }
@@ -3784,6 +3878,51 @@ public class DevicePolicyManager {
         if (mService != null) {
             try {
                 return mService.isActivePasswordSufficient(myUserId(), mParentInstance);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Called by profile owner of a managed profile to determine whether the current device password
+     * meets policy requirements set explicitly device-wide.
+     * <p> This API is similar to {@link #isActivePasswordSufficient()}, with two notable
+     * differences:
+     * <ul>
+     * <li>this API always targets the device password. As a result it should always be called on
+     *   the {@link #getParentProfileInstance(ComponentName)} instance.</li>
+     * <li>password policy requirement set on the managed profile is not taken into consideration
+     *   by this API, even if the device currently does not have a separate work challenge set.</li>
+     * </ul>
+     *
+     * <p>This API is designed to facilite progressive password enrollment flows when the DPC
+     * imposes both device and profile password policies. DPC applies profile password policy by
+     * calling {@link #setPasswordQuality(ComponentName, int)} or
+     * {@link #setRequiredPasswordComplexity} on the regular {@link DevicePolicyManager} instance,
+     * while it applies device-wide policy by calling {@link #setRequiredPasswordComplexity} on the
+     * {@link #getParentProfileInstance(ComponentName)} instance. The DPC can utilize this check to
+     * guide the user to set a device password first taking into consideration the device-wide
+     * policy only, and then prompt the user to either upgrade it to be fully compliant, or enroll a
+     * separate work challenge to satisfy the profile password policy only.
+     *
+     * <p>The device user must be unlocked (@link {@link UserManager#isUserUnlocked(UserHandle)})
+     * to perform this check.
+     *
+     * @return {@code true} if the device password meets explicit requirement set on it,
+     *   {@code false} otherwise.
+     * @throws SecurityException if the calling application is not a profile owner of a managed
+     *   profile, or if this API is not called on the parent DevicePolicyManager instance.
+     * @throws IllegalStateException if the user isn't unlocked
+     */
+    public boolean isActivePasswordSufficientForDeviceRequirement() {
+        if (!mParentInstance) {
+            throw new SecurityException("only callable on the parent instance");
+        }
+        if (mService != null) {
+            try {
+                return mService.isActivePasswordSufficientForDeviceRequirement();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -11891,7 +12030,7 @@ public class DevicePolicyManager {
             return PRIVATE_DNS_SET_ERROR_FAILURE_SETTING;
         }
 
-        if (NetworkUtils.isWeaklyValidatedHostname(privateDnsHost)) {
+        if (NetworkUtilsInternal.isWeaklyValidatedHostname(privateDnsHost)) {
             if (!PrivateDnsConnectivityChecker.canConnectToPrivateDnsServer(privateDnsHost)) {
                 return PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING;
             }
@@ -12577,5 +12716,22 @@ public class DevicePolicyManager {
             }
         }
         return false;
+    }
+
+    /**
+     * Used by CTS to set the result of the next safety operation check.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_DEVICE_ADMINS)
+    public void setNextOperationSafety(@DevicePolicyOperation int operation, boolean safe) {
+        if (mService != null) {
+            try {
+                mService.setNextOperationSafety(operation, safe);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
     }
 }

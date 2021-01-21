@@ -83,8 +83,9 @@
     <string name="screenshot_saved_title" msgid="8893267638659083153">"Gorde da pantaila-argazkia"</string>
     <string name="screenshot_saved_text" msgid="7778833104901642442">"Sakatu pantaila-argazkia ikusteko"</string>
     <string name="screenshot_failed_title" msgid="3259148215671936891">"Ezin izan da gorde pantaila-argazkia"</string>
+    <string name="screenshot_failed_to_save_user_locked_text" msgid="6156607948256936920">"Pantaila-argazkia gordetzeko, gailuak desblokeatuta egon beharko du"</string>
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Saiatu berriro pantaila-argazkia ateratzen"</string>
-    <string name="screenshot_failed_to_save_text" msgid="8344173457344027501">"Ezin da gorde pantaila-argazkia ez delako gelditzen tokirik"</string>
+    <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Ezin da gorde pantaila-argazkia"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Aplikazioak edo erakundeak ez du onartzen pantaila-argazkiak ateratzea"</string>
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Editatu"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Editatu pantaila-argazkia"</string>
@@ -186,16 +187,6 @@
     <string name="accessibility_battery_three_bars" msgid="118341923832368291">"Bateriak hiru barra ditu."</string>
     <string name="accessibility_battery_full" msgid="1480463938961288494">"Bateria beteta dago."</string>
     <string name="accessibility_battery_unknown" msgid="1807789554617976440">"Bateriaren ehunekoa ezezaguna da."</string>
-    <string name="accessibility_no_phone" msgid="8828412144430247025">"Ez dago telefono-zenbakirik."</string>
-    <string name="accessibility_phone_one_bar" msgid="8786055123727785588">"Telefono-seinaleak barra bat du."</string>
-    <string name="accessibility_phone_two_bars" msgid="3316909612598670674">"Telefono-seinaleak bi barra ditu."</string>
-    <string name="accessibility_phone_three_bars" msgid="5670937367300884534">"Telefono-seinaleak hiru barra ditu."</string>
-    <string name="accessibility_phone_signal_full" msgid="1103449569988869971">"Telefono-seinale osoa."</string>
-    <string name="accessibility_no_data" msgid="2124768255213392359">"Ez dago daturik."</string>
-    <string name="accessibility_data_one_bar" msgid="3226985124149387055">"Datu-seinaleak barra bat du."</string>
-    <string name="accessibility_data_two_bars" msgid="4576231688545173059">"Datu-seinaleak bi barra ditu."</string>
-    <string name="accessibility_data_three_bars" msgid="3036562180893930325">"Datu-seinaleak hiru barra ditu."</string>
-    <string name="accessibility_data_signal_full" msgid="283507058258113551">"Datu-seinale osoa."</string>
     <string name="accessibility_wifi_name" msgid="4863440268606851734">"<xliff:g id="WIFI">%s</xliff:g> sarera konektatuta."</string>
     <string name="accessibility_bluetooth_name" msgid="7300973230214067678">"<xliff:g id="BLUETOOTH">%s</xliff:g> gailura konektatuta."</string>
     <string name="accessibility_cast_name" msgid="7344437925388773685">"Hona konektatuta: <xliff:g id="CAST">%s</xliff:g>."</string>
@@ -204,8 +195,6 @@
     <string name="accessibility_wimax_two_bars" msgid="7335485192390018939">"WiMAX sarearen bi barra."</string>
     <string name="accessibility_wimax_three_bars" msgid="2773714362377629938">"WiMAX sarearen hiru barra."</string>
     <string name="accessibility_wimax_signal_full" msgid="3101861561730624315">"WiMAX sarearen seinalea osoa."</string>
-    <string name="accessibility_ethernet_disconnected" msgid="2097190491174968655">"Ethernet bidezko konexioa eten da."</string>
-    <string name="accessibility_ethernet_connected" msgid="3988347636883115213">"Ethernet bidez konektatu da."</string>
     <string name="accessibility_no_signal" msgid="1115622734914921920">"Ez dago seinalerik."</string>
     <string name="accessibility_not_connected" msgid="4061305616351042142">"Konektatu gabe."</string>
     <string name="accessibility_zero_bars" msgid="1364823964848784827">"Barrarik ez."</string>
@@ -217,30 +206,17 @@
     <string name="accessibility_desc_off" msgid="8055389500285421408">"Desaktibatuta."</string>
     <string name="accessibility_desc_connected" msgid="3082590384032624233">"Konektatuta."</string>
     <string name="accessibility_desc_connecting" msgid="8011433412112903614">"Konektatzen."</string>
-    <string name="data_connection_gprs" msgid="2752584037409568435">"GPRS"</string>
     <string name="data_connection_hspa" msgid="6096234094857660873">"HSPA"</string>
-    <string name="data_connection_3g" msgid="1215807817895516914">"3G"</string>
-    <string name="data_connection_3_5g" msgid="4097346596394846450">"H"</string>
-    <string name="data_connection_3_5g_plus" msgid="8938598386721354697">"H+"</string>
-    <string name="data_connection_4g" msgid="5770196771037980730">"4G"</string>
-    <string name="data_connection_4g_plus" msgid="780615287092000279">"4G+"</string>
-    <string name="data_connection_lte" msgid="557021044282539923">"LTE"</string>
-    <string name="data_connection_lte_plus" msgid="4799302403782283178">"LTE+"</string>
-    <string name="data_connection_cdma" msgid="7678457855627313518">"1X"</string>
     <string name="data_connection_roaming" msgid="375650836665414797">"Ibiltaritza"</string>
-    <string name="data_connection_edge" msgid="6316755666481405762">"EDGE"</string>
     <string name="accessibility_data_connection_wifi" msgid="4422160347472742434">"Wifia"</string>
     <string name="accessibility_no_sim" msgid="1140839832913084973">"Ez dago SIM txartelik."</string>
     <string name="accessibility_cell_data" msgid="172950885786007392">"Datu-konexioa"</string>
     <string name="accessibility_cell_data_on" msgid="691666434519443162">"Datu-konexioa aktibatuta"</string>
-    <string name="cell_data_off_content_description" msgid="9165555931499878044">"Desaktibatuta dago datu-konexioa"</string>
-    <string name="not_default_data_content_description" msgid="6757881730711522517">"Ez dago ezarrita datuak erabiltzeko"</string>
     <string name="cell_data_off" msgid="4886198950247099526">"Desaktibatuta"</string>
     <string name="accessibility_bluetooth_tether" msgid="6327291292208790599">"Konexioa partekatzea (Bluetooth)"</string>
     <string name="accessibility_airplane_mode" msgid="1899529214045998505">"Hegaldi-modua"</string>
     <string name="accessibility_vpn_on" msgid="8037549696057288731">"VPN eginbidea aktibatuta."</string>
     <string name="accessibility_no_sims" msgid="5711270400476534667">"Ez dago SIM txartelik."</string>
-    <string name="carrier_network_change_mode" msgid="5174141476991149918">"Operadorearen sarea aldatzen"</string>
     <string name="accessibility_battery_details" msgid="6184390274150865789">"Ireki bateriaren xehetasunak"</string>
     <string name="accessibility_battery_level" msgid="5143715405241138822">"Bateriaren karga: <xliff:g id="NUMBER">%d</xliff:g>."</string>
     <string name="accessibility_battery_level_with_estimate" msgid="4843119982547599452">"Bateriak ehuneko <xliff:g id="PERCENTAGE">%1$s</xliff:g> dauka kargatuta. Zure erabilera kontuan izanda, <xliff:g id="TIME">%2$s</xliff:g> inguru gelditzen zaizkio."</string>
@@ -572,7 +548,7 @@
     <string name="monitoring_description_network_logging" msgid="577305979174002252">"Administratzaileak sare-erregistroak aktibatu ditu; horrela, zure gailuko trafikoa gainbegira dezake.\n\nInformazio gehiago lortzeko, jarri administratzailearekin harremanetan."</string>
     <string name="monitoring_description_vpn" msgid="1685428000684586870">"Aplikazio bati VPN konexio bat konfiguratzeko baimena eman diozu.\n\nAplikazio horrek gailuko eta sareko jarduerak kontrola ditzake, mezu elektronikoak, aplikazioak eta webguneak barne."</string>
     <string name="monitoring_description_vpn_profile_owned" msgid="4964237035412372751">"<xliff:g id="ORGANIZATION">%1$s</xliff:g> erakundeak kudeatzen du zure laneko profila.\n\nAdministratzaileak sareko jarduerak kontrola diezazkizuke, besteak beste, posta elektronikoa, aplikazioak eta webguneak.\n\nInformazio gehiago lortzeko, jarri administratzailearekin harremanetan.\n\nHorrez gain, VPN batera zaude konektatuta, eta hark ere kontrola ditzake zure sareko jarduerak."</string>
-    <string name="monitoring_description_parental_controls" msgid="8184693528917051626">"Zure gurasoak kudeatzen du gailua. Zure gurasoak gailuko informazioa ikus eta kudea dezake; besteak beste, zer aplikazio erabiltzen dituzun, zure kokapena zein den eta pantaila aurrean zenbat eta noiz egoten zaren."</string>
+    <string name="monitoring_description_parental_controls" msgid="8184693528917051626">"Zure gurasoak kudeatzen du gailua. Zure gurasoak gailuko informazioa ikusi eta kudea dezake; besteak beste, zer aplikazio erabiltzen dituzun, zure kokapena zein den eta pantaila aurrean zenbat eta noiz egoten zaren."</string>
     <string name="legacy_vpn_name" msgid="4174223520162559145">"VPN konexioa"</string>
     <string name="monitoring_description_app" msgid="376868879287922929">"<xliff:g id="APPLICATION">%1$s</xliff:g> aplikaziora konektatuta zaude. Aplikazio horrek sarean egiten dituzun jarduerak kontrola ditzake, mezu elektronikoak, aplikazioak eta webguneak barne."</string>
     <string name="monitoring_description_app_personal" msgid="1970094872688265987">"<xliff:g id="APPLICATION">%1$s</xliff:g> aplikaziora konektatuta zaude. Aplikazio horrek sarean egiten dituzun jarduera pertsonalak kontrola ditzake, mezu elektronikoak, aplikazioak eta webguneak barne."</string>
@@ -722,6 +698,10 @@
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Tonua jo edo dar-dar egin dezake, telefonoaren ezarpenen arabera. Modu lehenetsian, <xliff:g id="APP_NAME">%1$s</xliff:g> aplikazioko elkarrizketak burbuila gisa agertzen dira."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Eduki honetarako lasterbide gainerakor bat eskaintzen dizu, arretarik gal ez dezazun."</string>
     <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Ezarri sistemak zehaztu dezala jakinarazpen honek soinua edo dardara egin behar duen ala ez"</string>
+    <string name="notification_channel_summary_automatic_alerted" msgid="954166812246932240">"Lehenetsi gisa ezarri da &lt;b&gt;egoera:&lt;/b&gt;"</string>
+    <string name="notification_channel_summary_automatic_silenced" msgid="7403004439649872047">"Soinurik gabeko modura aldatu da &lt;b&gt;egoera:&lt;/b&gt;"</string>
+    <string name="notification_channel_summary_automatic_promoted" msgid="1301710305149590426">"Mailaz igo da &lt;b&gt;egoera:&lt;/b&gt;"</string>
+    <string name="notification_channel_summary_automatic_demoted" msgid="1831303964660807700">"Mailaz jaitsi da &lt;b&gt;egoera:&lt;/b&gt;"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Burbuila gisa agertzen da elkarrizketen atalaren goialdean, eta profileko argazkia bistaratzen du pantaila blokeatuta dagoenean"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Ezarpenak"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Lehentasuna"</string>
@@ -740,9 +720,10 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Aplikazioa pantailako beste aplikazioen gainean agertzen da, eta mikrofonoa eta kamera erabiltzen ari da."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Ezarpenak"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"Ados"</string>
-    <string name="feedback_silenced" msgid="5382212321253328247">"Sistemak isilarazi egin du jakinarazpen hau."</string>
-    <string name="feedback_promoted" msgid="8075757485407091976">"Sistemak mailaz igo du jakinarazpen hau."</string>
-    <string name="feedback_demoted" msgid="5848066008939031913">"Sistemak mailaz jaitsi du jakinarazpen hau."</string>
+    <string name="feedback_alerted" msgid="5192459808484271208">"Jakinarazpen hau automatikoki &lt;b&gt;ezarri du lehenetsi gisa&lt;/b&gt; sistemak."</string>
+    <string name="feedback_silenced" msgid="9116540317466126457">"Jakinarazpen hau automatikoki &lt;b&gt;aldatu da soinurik gabeko modura&lt;/b&gt; du sistemak."</string>
+    <string name="feedback_promoted" msgid="2125562787759780807">"Jakinarazpen hau automatikoki &lt;b&gt;igo da mailaz&lt;/b&gt;."</string>
+    <string name="feedback_demoted" msgid="951884763467110604">"Jakinarazpen hau automatikoki &lt;b&gt;jaitsi da mailaz&lt;/b&gt;."</string>
     <string name="feedback_prompt" msgid="2278631214125128281">"Zuzena al da hau?"</string>
     <string name="feedback_response" msgid="4671729244976641339">"Mila esker iritzia emateagatik!"</string>
     <string name="feedback_ok" msgid="6481426753298857144">"Ados"</string>

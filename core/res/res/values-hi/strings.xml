@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"जीएनएसएस सेवा"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"सेंसर से जुड़ी सूचना सेवा"</string>
     <string name="twilight_service" msgid="8964898045693187224">"ट्वाइलाइट समय बताने वाली सेवा"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"समय क्षेत्र का पता लगाने वाली सुविधा (ऑफ़लाइन होने पर)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"आपके डिवाइस को मिटा दिया जाएगा"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"एडमिन ऐप्लिकेशन का इस्तेमाल नहीं किया जा सकता. आपके डिवाइस पर मौजूद डेटा अब मिटा दिया जाएगा.\n\nअगर आप कुछ पूछना चाहते हैं तो, अपने संगठन के एडमिन से संपर्क करें."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g> ने प्रिंटिंग सुविधा बंद कर दी है."</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB कनेक्शन"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"ऐप अभी इस्तेमाल हो रहा है"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"बैटरी की खपत करने वाले ऐप"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"ज़ूम करने की सुविधा"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> बैटरी का इस्तेमाल कर रहा है"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> ऐप बैटरी का इस्तेमाल कर रहे हैं"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"बैटरी और डेटा खर्च की जानकारी के लिए छूएं"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"ऐप को मल्टीमीडिया मैसेज (एमएमएस) को पाने और उन पर कार्रवाई करने देता है. इसका मतलब है कि ऐप आपके डिवाइस पर भेजे गए मैसेज की निगरानी आपको दिखाए बिना कर सकता है और उन्‍हें हटा सकता है."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"सेल ब्रॉडकास्ट (CBC) मैसेज दूसरे नंबर पर भेजें"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"सेल ब्रॉडकास्ट (CBC) मैसेज आते ही उसे दूसरे नंबर पर भेजने के लिए, ऐप्लिकेशन को सेल ब्रॉडकास्ट (CBC) मॉड्यूल पर बाइंड करने की अनुमति देता है. कुछ जगहों में सेल ब्रॉडकास्ट (CBC) अलर्ट आपातकालीन स्थितियों के बारे में चेतावनी देने के लिए भेजा जाता है. नुकसान पहुंचाने वाले ऐप्लिकेशन, आपातकाल में सेल ब्रॉडकास्ट (CBC) मैसेज मिलने पर आपके डिवाइस के काम करते समय या इसके परफ़ॉर्मेंस में रुकावट पैदा कर सकते हैं."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"चल रहे कॉल प्रबंधित करें"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"इससे, ऐप्लिकेशन को आपके डिवाइस पर चल रहे कॉल की जानकारी देखने और उन्हें कंट्रोल करने की अनुमति मिलती है."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"सेल ब्रॉडकास्ट (CBC) मैसेज पढ़ें"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"ऐप को, वो सेल ब्रॉडकास्ट (CBC) मैसेज पढ़ने देता है जो आपके डिवाइस को मिले हैं. सेल ब्रॉडकास्ट (CBC) अलर्ट कुछ स्थानों (लोकेशन) पर आपको आपातकालीन स्‍थितियों की चेतावनी देने के लिए दिए जाते हैं. आपातकालीन सेल ब्रॉडकास्ट (CBC) मिलने पर, धोखा देने वाले ऐप आपके डिवाइस के परफ़ॉर्मेंस या कार्यवाही में दखल दे सकते हैं."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"सदस्यता वाली फ़ीड पढ़ें"</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"माइक्रोफ़ोन"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"आपकी स्क्रीन पर, इस्तेमाल हो रहे दूसरे ऐप्लिकेशन के ऊपर दिखाया जा रहा है"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"सुझाव दें या शिकायत करें"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"यह सूचना अब आपको, डिफ़ॉल्ट रूप से आवाज़ या वाइब्रेशन के साथ मिलेगी. सुझाव/शिकायत/राय देने के लिए टैप करें."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"इस सूचना के मिलने पर होने वाली आवाज़ बंद कर दी गई है. सुझाव/शिकायत/राय देने के लिए टैप करें."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"इस सूचना को रैंकिंग में ऊपर किया गया था. सुझाव/शिकायत/राय देने के लिए टैप करें."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"इस सूचना को रैंकिंग में नीचे किया गया था. सुझाव/शिकायत/राय देने के लिए टैप करें."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"रूटीन मोड जानकारी की सूचना"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"बैटरी आम तौर पर जितने समय चलती है, उससे पहले खत्म हो सकती है"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"बैटरी लाइफ़ बढ़ाने के लिए \'बैटरी सेवर\' चालू हो गया है"</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"नई सुविधा: विंडो को ज़ूम करके देखने की सुविधा"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"अब अपनी पूरी स्क्रीन या कुछ हिस्से को ज़ूम करके देख सकते हैं"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"सेटिंग में जाकर, इस सुविधा को चालू करें"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"खारिज करें"</string>
 </resources>

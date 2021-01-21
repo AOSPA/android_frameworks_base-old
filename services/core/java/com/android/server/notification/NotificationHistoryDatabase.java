@@ -293,7 +293,7 @@ public class NotificationHistoryDatabase {
                                 .appendPath(file.getAbsolutePath()).build())
                         .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                         .putExtra(EXTRA_KEY, file.getAbsolutePath()),
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         mAlarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, deletionTime, pi);
     }
 

@@ -24,8 +24,8 @@ import static org.hamcrest.core.AnyOf.anyOf;
 import static org.hamcrest.core.Is.is;
 
 import android.app.ActivityManager;
-import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityTaskManager;
+import android.window.TaskSnapshot;
 import android.app.IActivityTaskManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -96,7 +96,7 @@ public class RecentsAnimationPerfTest extends WindowManagerPerfTestBase
     @BeforeClass
     public static void setUpClass() {
         // Get the permission to invoke startRecentsActivity.
-        sUiAutomation.adoptShellPermissionIdentity();
+        getUiAutomation().adoptShellPermissionIdentity();
 
         final Context context = getInstrumentation().getContext();
         final PackageManager pm = context.getPackageManager();
@@ -129,7 +129,7 @@ public class RecentsAnimationPerfTest extends WindowManagerPerfTestBase
             ActivityManager.resumeAppSwitches();
         } catch (RemoteException ignored) {
         }
-        sUiAutomation.dropShellPermissionIdentity();
+        getUiAutomation().dropShellPermissionIdentity();
     }
 
     @Before
@@ -233,7 +233,7 @@ public class RecentsAnimationPerfTest extends WindowManagerPerfTestBase
 
             // Ensure the animation callback is done.
             Assume.assumeTrue(recentsSemaphore.tryAcquire(
-                    sIsProfilingMethod ? 10 * TIME_5_S_IN_NS : TIME_5_S_IN_NS,
+                    sIsProfilingMethod() ? 10 * TIME_5_S_IN_NS : TIME_5_S_IN_NS,
                     TimeUnit.NANOSECONDS));
         }
     }

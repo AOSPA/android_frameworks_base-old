@@ -463,6 +463,10 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return mUsingWrapper;
     }
 
+    boolean hasEverLaunchedActivity() {
+        return mLastActivityLaunchTime > 0;
+    }
+
     void setLastActivityLaunchTime(long launchTime) {
         if (launchTime <= mLastActivityLaunchTime) {
             if (launchTime < mLastActivityLaunchTime) {
@@ -815,9 +819,9 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         if (canUpdate) {
             // Make sure the previous top activity in the process no longer be resumed.
             if (mPreQTopResumedActivity != null && mPreQTopResumedActivity.isState(RESUMED)) {
-                final Task stack = mPreQTopResumedActivity.getRootTask();
-                if (stack != null) {
-                    stack.startPausingLocked(false /* userLeaving */, false /* uiSleeping */,
+                final Task task = mPreQTopResumedActivity.getTask();
+                if (task != null) {
+                    task.startPausingLocked(false /* userLeaving */, false /* uiSleeping */,
                             activity, "top-resumed-changed");
                 }
             }
@@ -840,7 +844,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         ArrayList<ActivityRecord> activities = new ArrayList<>(mActivities);
         for (int i = 0; i < activities.size(); i++) {
             final ActivityRecord r = activities.get(i);
-            if (!r.finishing && r.isInStackLocked()) {
+            if (!r.finishing && r.isInRootTaskLocked()) {
                 r.finishIfPossible("finish-heavy", true /* oomAdj */);
             }
         }
@@ -1282,12 +1286,12 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 hasVisibleActivities = true;
             }
 
-            final Task rootTask = r.getRootTask();
-            if (rootTask != null) {
+            final Task task = r.getTask();
+            if (task != null) {
                 // There may be a pausing activity that hasn't shown any window and was requested
                 // to be hidden. But pausing is also a visible state, it should be regarded as
                 // visible, so the caller can know the next activity should be resumed.
-                hasVisibleActivities |= rootTask.handleAppDied(this);
+                hasVisibleActivities |= task.handleAppDied(this);
             }
             r.handleAppDied();
         }

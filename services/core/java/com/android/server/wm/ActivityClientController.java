@@ -39,12 +39,15 @@ import static com.android.server.wm.ActivityTaskManagerService.enforceNotIsolate
 import static com.android.server.wm.Task.ActivityState.DESTROYED;
 import static com.android.server.wm.Task.ActivityState.DESTROYING;
 
+import android.annotation.NonNull;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.IActivityClientController;
 import android.app.PictureInPictureParams;
+import android.app.servertransaction.ClientTransaction;
+import android.app.servertransaction.EnterPipRequestedItem;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -169,7 +172,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final ActivityRecord r;
         synchronized (mGlobalLock) {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "activityStopped");
-            r = ActivityRecord.isInStackLocked(token);
+            r = ActivityRecord.isInRootTaskLocked(token);
             if (r != null) {
                 if (r.attachedToProcess() && r.isState(Task.ActivityState.RESTARTING_PROCESS)) {
                     // The activity was requested to restart from
@@ -231,7 +234,7 @@ class ActivityClientController extends IActivityClientController.Stub {
                 token, Arrays.toString(horizontalSizeConfiguration),
                 Arrays.toString(verticalSizeConfigurations));
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
             if (r != null) {
                 r.setSizeConfigurations(horizontalSizeConfiguration, verticalSizeConfigurations,
                         smallestSizeConfigurations);
@@ -267,7 +270,7 @@ class ActivityClientController extends IActivityClientController.Stub {
                 final int taskId = ActivityRecord.getTaskForActivityLocked(token, !nonRoot);
                 final Task task = mService.mRootWindowContainer.anyTaskForId(taskId);
                 if (task != null) {
-                    return ActivityRecord.getStackLocked(token).moveTaskToBack(task);
+                    return ActivityRecord.getRootTask(token).moveTaskToBack(task);
                 }
             }
         } finally {
@@ -292,7 +295,7 @@ class ActivityClientController extends IActivityClientController.Stub {
             Intent resultData) {
         final ActivityRecord r;
         synchronized (mGlobalLock) {
-            r = ActivityRecord.isInStackLocked(token);
+            r = ActivityRecord.isInRootTaskLocked(token);
             if (r == null) {
                 return false;
             }
@@ -313,7 +316,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r == null || !r.isDestroyable()) {
                     return false;
                 }
@@ -344,7 +347,7 @@ class ActivityClientController extends IActivityClientController.Stub {
 
         final ActivityRecord r;
         synchronized (mGlobalLock) {
-            r = ActivityRecord.isInStackLocked(token);
+            r = ActivityRecord.isInRootTaskLocked(token);
             if (r == null) {
                 return true;
             }
@@ -439,7 +442,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r == null) {
                     return false;
                 }
@@ -465,7 +468,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r == null) return;
 
                 // TODO: This should probably only loop over the task since you need to be in the
@@ -484,7 +487,7 @@ class ActivityClientController extends IActivityClientController.Stub {
     @Override
     public boolean isTopOfTask(IBinder token) {
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
             return r != null && r.getTask().getTopNonFinishingActivity() == r;
         }
     }
@@ -492,7 +495,7 @@ class ActivityClientController extends IActivityClientController.Stub {
     @Override
     public boolean willActivityBeVisible(IBinder token) {
         synchronized (mGlobalLock) {
-            final Task rootTask = ActivityRecord.getStackLocked(token);
+            final Task rootTask = ActivityRecord.getRootTask(token);
             return rootTask != null && rootTask.willActivityBeVisible(token);
         }
     }
@@ -500,7 +503,7 @@ class ActivityClientController extends IActivityClientController.Stub {
     @Override
     public int getDisplayId(IBinder activityToken) {
         synchronized (mGlobalLock) {
-            final Task rootTask = ActivityRecord.getStackLocked(activityToken);
+            final Task rootTask = ActivityRecord.getRootTask(activityToken);
             if (rootTask != null) {
                 final int displayId = rootTask.getDisplayId();
                 return displayId != INVALID_DISPLAY ? displayId : DEFAULT_DISPLAY;
@@ -533,8 +536,24 @@ class ActivityClientController extends IActivityClientController.Stub {
     }
 
     private static ActivityRecord getCallingRecord(IBinder token) {
-        final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+        final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
         return r != null ? r.resultTo : null;
+    }
+
+    @Override
+    public int getLaunchedFromUid(IBinder token) {
+        synchronized (mGlobalLock) {
+            final ActivityRecord r = ActivityRecord.forTokenLocked(token);
+            return r != null ? r.launchedFromUid : android.os.Process.INVALID_UID;
+        }
+    }
+
+    @Override
+    public String getLaunchedFromPackage(IBinder token) {
+        synchronized (mGlobalLock) {
+            final ActivityRecord r = ActivityRecord.forTokenLocked(token);
+            return r != null ? r.launchedFromPackage : null;
+        }
     }
 
     @Override
@@ -542,7 +561,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r == null) {
                     return null;
                 }
@@ -559,7 +578,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r != null) {
                     r.setRequestedOrientation(requestedOrientation);
                 }
@@ -572,7 +591,7 @@ class ActivityClientController extends IActivityClientController.Stub {
     @Override
     public int getRequestedOrientation(IBinder token) {
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
             return r != null
                     ? r.getRequestedOrientation() : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         }
@@ -583,7 +602,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 return r != null && r.setOccludesParent(true);
             }
         } finally {
@@ -597,7 +616,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r == null) {
                     return false;
                 }
@@ -615,7 +634,7 @@ class ActivityClientController extends IActivityClientController.Stub {
     @Override
     public boolean isImmersive(IBinder token) {
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
             if (r == null) {
                 throw new IllegalArgumentException();
             }
@@ -626,7 +645,7 @@ class ActivityClientController extends IActivityClientController.Stub {
     @Override
     public void setImmersive(IBinder token, boolean immersive) {
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
             if (r == null) {
                 throw new IllegalArgumentException();
             }
@@ -720,6 +739,38 @@ class ActivityClientController extends IActivityClientController.Stub {
         return r;
     }
 
+    /**
+     * Requests that an activity should enter picture-in-picture mode if possible. This method may
+     * be used by the implementation of non-phone form factors.
+     */
+    void requestPictureInPictureMode(@NonNull ActivityRecord r) {
+        if (r.inPinnedWindowingMode()) {
+            throw new IllegalStateException("Activity is already in PIP mode");
+        }
+
+        final boolean canEnterPictureInPicture = r.checkEnterPictureInPictureState(
+                "requestPictureInPictureMode", /* beforeStopping */ false);
+        if (!canEnterPictureInPicture) {
+            throw new IllegalStateException(
+                    "Requested PIP on an activity that doesn't support it");
+        }
+
+        if (r.pictureInPictureArgs.isAutoEnterEnabled()) {
+            mService.enterPictureInPictureMode(r, r.pictureInPictureArgs);
+            return;
+        }
+
+        try {
+            final ClientTransaction transaction = ClientTransaction.obtain(
+                    r.app.getThread(), r.token);
+            transaction.addCallback(EnterPipRequestedItem.obtain());
+            mService.getLifecycleManager().scheduleTransaction(transaction);
+        } catch (Exception e) {
+            Slog.w(TAG, "Failed to send enter pip requested item: "
+                    + r.intent.getComponent(), e);
+        }
+    }
+
     @Override
     public void toggleFreeformWindowingMode(IBinder token) {
         final long ident = Binder.clearCallingIdentity();
@@ -790,7 +841,7 @@ class ActivityClientController extends IActivityClientController.Stub {
     @Override
     public void setTaskDescription(IBinder token, ActivityManager.TaskDescription td) {
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
             if (r != null) {
                 r.setTaskDescription(td);
             }
@@ -827,7 +878,7 @@ class ActivityClientController extends IActivityClientController.Stub {
     @Override
     public boolean isRootVoiceInteraction(IBinder token) {
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
             return r != null && r.rootVoiceInteraction;
         }
     }
@@ -868,7 +919,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r != null) {
                     r.setShowWhenLocked(showWhenLocked);
                 }
@@ -883,7 +934,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r != null) {
                     r.setInheritShowWhenLocked(inheritShowWhenLocked);
                 }
@@ -898,7 +949,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r != null) {
                     r.setTurnScreenOn(turnScreenOn);
                 }
@@ -913,7 +964,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r != null) {
                     r.reportFullyDrawnLocked(restoredFromBundle);
                 }
@@ -928,7 +979,7 @@ class ActivityClientController extends IActivityClientController.Stub {
             int enterAnim, int exitAnim) {
         final long origId = Binder.clearCallingIdentity();
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
             if (r != null && r.isState(Task.ActivityState.RESUMED, Task.ActivityState.PAUSING)) {
                 r.mDisplayContent.mAppTransition.overridePendingAppTransition(
                         packageName, enterAnim, exitAnim, null, null);
@@ -944,7 +995,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final VrManagerInternal vrService = LocalServices.getService(VrManagerInternal.class);
         final ActivityRecord r;
         synchronized (mGlobalLock) {
-            r = ActivityRecord.isInStackLocked(token);
+            r = ActivityRecord.isInRootTaskLocked(token);
         }
         if (r == null) {
             throw new IllegalArgumentException();
@@ -977,7 +1028,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r != null) {
                     r.setDisablePreviewScreenshots(disable);
                 }
@@ -995,7 +1046,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r != null) {
                     r.registerRemoteAnimations(definition);
                 }
@@ -1012,7 +1063,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r != null) {
                     r.unregisterRemoteAnimations();
                 }
@@ -1027,7 +1078,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
                 if (r == null) {
                     return;
                 }

@@ -28,7 +28,7 @@
     <string name="wifi_disabled_network_failure" msgid="2660396183242399585">"IP manzilini sozlab bo‘lmadi"</string>
     <string name="wifi_disabled_by_recommendation_provider" msgid="1302938248432705534">"Sifatsiz tarmoq sababli ulanib bo‘lmadi"</string>
     <string name="wifi_disabled_wifi_failure" msgid="8819554899148331100">"Wi-Fi ulanishini o‘rnatib bo‘lmadi"</string>
-    <string name="wifi_disabled_password_failure" msgid="6892387079613226738">"Tasdiqdan o‘tishda muammo"</string>
+    <string name="wifi_disabled_password_failure" msgid="6892387079613226738">"Tekshiruvda muammo"</string>
     <string name="wifi_cant_connect" msgid="5718417542623056783">"Tarmoqqa ulanilmadi"</string>
     <string name="wifi_cant_connect_to_ap" msgid="3099667989279700135">"“<xliff:g id="AP_NAME">%1$s</xliff:g>” nomli tarmoqqa ulanilmadi"</string>
     <string name="wifi_check_password_try_again" msgid="8817789642851605628">"Parolni tekshirib, qaytadan urining"</string>
@@ -400,8 +400,9 @@
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"Faol. O‘zgartirish uchun bu yerga bosing."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"Kutish rejimi holati: <xliff:g id="BUCKET"> %s</xliff:g>"</string>
     <string name="transcode_settings_title" msgid="2581975870429850549">"Media transkripsiyasi sozlamalari"</string>
-    <string name="transcode_enable_all" msgid="9102460144086871903">"Transkripsiyani faolsizlantirish"</string>
-    <string name="transcode_skip_apps" msgid="8249721984597390142">"Ilovalar uchun transkripsiyani yoqish"</string>
+    <string name="transcode_user_control" msgid="6176368544817731314">"Transkripsiya parametrlarini almashtirish"</string>
+    <string name="transcode_enable_all" msgid="2411165920039166710">"Transkripsiyasini yoqish"</string>
+    <string name="transcode_default" msgid="3784803084573509491">"Ilovalarda zamonaviy kodlash formatlari ishlaydi deb hisoblash"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"Ishlab turgan ilovalar"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"Ishlab turgan ilovalarni ko‘rish va boshqarish"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"WebView ta’minotchisi"</string>
@@ -426,14 +427,14 @@
     <string name="power_remaining_settings_home_page" msgid="4885165789445462557">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> – <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="8264199158671531431">"Taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi"</string>
     <string name="power_discharging_duration" msgid="1076561255466053220">"Taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_enhanced" msgid="2527842780666073218">"Joriy holatda taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi"</string>
-    <string name="power_discharging_duration_enhanced" msgid="1800465736237672323">"Joriy holatda taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_duration_only_enhanced" msgid="2527842780666073218">"Quvvati tugashiga taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi"</string>
+    <string name="power_discharging_duration_enhanced" msgid="1800465736237672323">"Quvvati tugahsiga taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <!-- no translation found for power_remaining_duration_only_short (7438846066602840588) -->
     <skip />
-    <string name="power_discharge_by_enhanced" msgid="563438403581662942">"Joriy holatda taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha davom etadi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_discharge_by_only_enhanced" msgid="3268796172652988877">"Joriy holatda taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha davom etadi"</string>
-    <string name="power_discharge_by" msgid="4113180890060388350">"Taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha davom etadi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_discharge_by_only" msgid="92545648425937000">"Taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha davom etadi"</string>
+    <string name="power_discharge_by_enhanced" msgid="563438403581662942">"Shunday ishlatishda taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha yetadi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_discharge_by_only_enhanced" msgid="3268796172652988877">"Quvvati tugashiga taxminan <xliff:g id="TIME">%1$s</xliff:g> qoldi"</string>
+    <string name="power_discharge_by" msgid="4113180890060388350">"Taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha yetadi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_discharge_by_only" msgid="92545648425937000">"Taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha yetadi"</string>
     <string name="power_discharge_by_only_short" msgid="5883041507426914446">"<xliff:g id="TIME">%1$s</xliff:g> gacha"</string>
     <string name="power_suggestion_battery_run_out" msgid="6332089307827787087">"Batareya quvvati tugash vaqti: <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration_only" msgid="8956656616031395152">"<xliff:g id="THRESHOLD">%1$s</xliff:g>dan kam qoldi"</string>
@@ -449,7 +450,7 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="7415639699283965818">"<xliff:g id="TIME">%1$s</xliff:g> ichida toʻladi"</string>
     <string name="power_charging_duration" msgid="5005740040558984057">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="TIME">%2$s</xliff:g> ichida toʻladi"</string>
-    <string name="power_charging_limited" msgid="5902301801611726210">"<xliff:g id="LEVEL">%1$s</xliff:g> – Quvvat darajasi vaqtincha cheklangan"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> – Batareya quvvati muvozanatlanmoqda"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Noma’lum"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Quvvat olmoqda"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Tezkor quvvat olmoqda"</string>
@@ -514,7 +515,7 @@
     <string name="media_transfer_this_device_name" msgid="2716555073132169240">"Telefon karnayi"</string>
     <string name="profile_connect_timeout_subtext" msgid="4043408193005851761">"Ulanishda muammo yuz berdi. Qurilmani oʻchiring va yoqing"</string>
     <string name="media_transfer_wired_device_name" msgid="4447880899964056007">"Simli audio qurilma"</string>
-    <string name="help_label" msgid="3528360748637781274">"Yordam va fikr-mulohaza"</string>
+    <string name="help_label" msgid="3528360748637781274">"Yordam/fikr-mulohaza"</string>
     <string name="storage_category" msgid="2287342585424631813">"Xotira"</string>
     <string name="shared_data_title" msgid="1017034836800864953">"Umumiy maʼlumotlar"</string>
     <string name="shared_data_summary" msgid="5516326713822885652">"Umumiy maʼlumotlarni ochish va oʻzgartirish"</string>
@@ -564,4 +565,29 @@
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"Simli quloqlik"</string>
     <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"Yoniq"</string>
     <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"Oʻchiq"</string>
+    <string name="carrier_network_change_mode" msgid="4257621815706644026">"Mobil tarmoqni o‘zgartirish"</string>
+    <string name="data_connection_3g" msgid="931852552688157407">"3G"</string>
+    <string name="data_connection_edge" msgid="4625509456544797637">"EDGE"</string>
+    <string name="data_connection_cdma" msgid="9098161966701934334">"1X"</string>
+    <string name="data_connection_gprs" msgid="1251945769006770189">"GPRS"</string>
+    <string name="data_connection_3_5g" msgid="4298721462047921400">"H"</string>
+    <string name="data_connection_3_5g_plus" msgid="6683055858295918170">"H+"</string>
+    <string name="data_connection_4g" msgid="2581705503356752044">"4G"</string>
+    <string name="data_connection_4g_plus" msgid="5194902328408751020">"4G+"</string>
+    <string name="data_connection_lte" msgid="7675461204366364124">"LTE"</string>
+    <string name="data_connection_lte_plus" msgid="6643158654804916653">"LTE+"</string>
+    <string name="cell_data_off_content_description" msgid="2280700839891636498">"Mobil internet yoqilmagan"</string>
+    <string name="not_default_data_content_description" msgid="6517068332106592887">"Maʼlumotlardan foydalanish uchun sozlanmagan"</string>
+    <string name="accessibility_no_phone" msgid="2687419663127582503">"Signal yo‘q."</string>
+    <string name="accessibility_phone_one_bar" msgid="5719721147018970063">"Telefon bitta panelda."</string>
+    <string name="accessibility_phone_two_bars" msgid="2531458337458953263">"Telefon ikkita panelda."</string>
+    <string name="accessibility_phone_three_bars" msgid="1523967995996696619">"Telefon uchta panelda."</string>
+    <string name="accessibility_phone_signal_full" msgid="4302338883816077134">"Telefon signali to‘liq."</string>
+    <string name="accessibility_no_data" msgid="4563181886936931008">"Ma’lumotlar yo‘q."</string>
+    <string name="accessibility_data_one_bar" msgid="6892888138070752480">"Ma’lumotlar bitta panelda."</string>
+    <string name="accessibility_data_two_bars" msgid="9202641507241802499">"Ma’lumotlar ikkita panelda."</string>
+    <string name="accessibility_data_three_bars" msgid="2813876214466722413">"Ma’lumotlar uchta panelda."</string>
+    <string name="accessibility_data_signal_full" msgid="1808301899314382337">"Internet signali butun."</string>
+    <string name="accessibility_ethernet_disconnected" msgid="2832501530856497489">"Qurilma Ethernet tarmog‘idan uzildi."</string>
+    <string name="accessibility_ethernet_connected" msgid="2093872142317190618">"Qurilma Ethernet tarmog‘iga ulandi."</string>
 </resources>

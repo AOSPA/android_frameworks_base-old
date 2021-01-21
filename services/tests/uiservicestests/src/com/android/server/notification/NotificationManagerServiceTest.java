@@ -111,9 +111,9 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.Context;
-import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.IIntentSender;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
@@ -305,6 +305,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Mock
     StatusBarManagerInternal mStatusBar;
 
+    private NotificationManagerService.WorkerHandler mWorkerHandler;
+
     // Use a Testable subclass so we can simulate calls from the system without failing.
     private static class TestableNotificationManagerService extends NotificationManagerService {
         int countSystemChecks = 0;
@@ -482,14 +484,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         when(mAssistants.isAdjustmentAllowed(anyString())).thenReturn(true);
 
-        mService.init(mService.new WorkerHandler(mTestableLooper.getLooper()),
-                mRankingHandler, mPackageManager, mPackageManagerClient, mockLightsManager,
-                mListeners, mAssistants, mConditionProviders,
-                mCompanionMgr, mSnoozeHelper, mUsageStats, mPolicyFile, mActivityManager,
-                mGroupHelper, mAm, mAtm, mAppUsageStats,
-                mock(DevicePolicyManagerInternal.class), mUgm, mUgmInternal,
-                mAppOpsManager, mUm, mHistoryManager, mStatsManager,
-                mock(TelephonyManager.class), mAmi, mToastRateLimiter);
+        mWorkerHandler = mService.new WorkerHandler(mTestableLooper.getLooper());
+        mService.init(mWorkerHandler, mRankingHandler, mPackageManager, mPackageManagerClient,
+                mockLightsManager, mListeners, mAssistants, mConditionProviders, mCompanionMgr,
+                mSnoozeHelper, mUsageStats, mPolicyFile, mActivityManager, mGroupHelper, mAm, mAtm,
+                mAppUsageStats, mock(DevicePolicyManagerInternal.class), mUgm, mUgmInternal,
+                mAppOpsManager, mUm, mHistoryManager, mStatsManager, mock(TelephonyManager.class),
+                mAmi, mToastRateLimiter);
         mService.onBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY);
 
         mService.setAudioManager(mAudioManager);
@@ -575,6 +576,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         InstrumentationRegistry.getInstrumentation()
                 .getUiAutomation().dropShellPermissionIdentity();
+        // Remove scheduled messages that would be processed when the test is already done, and
+        // could cause issues, for example, messages that remove/cancel shown toasts (this causes
+        // problematic interactions with mocks when they're no longer working as expected).
+        mWorkerHandler.removeCallbacksAndMessages(null);
     }
 
     private void simulatePackageSuspendBroadcast(boolean suspend, String pkg,
@@ -790,7 +795,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 .setName("bubblebot")
                 .build();
         RemoteInput remoteInput = new RemoteInput.Builder("reply_key").setLabel("reply").build();
-        PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(), 0);
+        PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(),
+                PendingIntent.FLAG_MUTABLE);
         Icon icon = Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon);
         Notification.Action replyAction = new Notification.Action.Builder(icon, "Reply",
                 inputIntent).addRemoteInput(remoteInput)
@@ -4977,6 +4983,40 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testCustomToastPostedWhileInForeground_blockedIfAppGoesToBackground()
+            throws Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+        setToastRateIsWithinQuota(true);
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        setAppInForegroundForToasts(mUid, true);
+
+        Binder token1 = new Binder();
+        Binder token2 = new Binder();
+        ITransientNotification callback1 = mock(ITransientNotification.class);
+        ITransientNotification callback2 = mock(ITransientNotification.class);
+        INotificationManager nmService = (INotificationManager) mService.mService;
+
+        nmService.enqueueToast(testPackage, token1, callback1, 2000, 0);
+        nmService.enqueueToast(testPackage, token2, callback2, 2000, 0);
+
+        assertEquals(2, mService.mToastQueue.size()); // Both toasts enqueued.
+        verify(callback1, times(1)).show(any()); // First toast shown.
+
+        setAppInForegroundForToasts(mUid, false);
+
+        mService.cancelToastLocked(0); // Remove the first toast, and show next.
+
+        assertEquals(0, mService.mToastQueue.size()); // Both toasts processed.
+        verify(callback2, never()).show(any()); // Second toast was never shown.
+    }
+
+    @Test
     public void testAllowForegroundTextToasts() throws Exception {
         final String testPackage = "testPackageName";
         assertEquals(0, mService.mToastQueue.size());
@@ -7366,7 +7406,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
         ArrayList<Notification.Action> extraAction = new ArrayList<>();
         RemoteInput remoteInput = new RemoteInput.Builder("reply_key").setLabel("reply").build();
-        PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(), 0);
+        PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(),
+                PendingIntent.FLAG_IMMUTABLE);
         Icon icon = Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon);
         Notification.Action replyAction = new Notification.Action.Builder(icon, "Reply",
                 inputIntent).addRemoteInput(remoteInput)
@@ -7396,7 +7437,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
         ArrayList<Notification.Action> extraAction = new ArrayList<>();
         RemoteInput remoteInput = new RemoteInput.Builder("reply_key").setLabel("reply").build();
-        PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(), 0);
+        PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(),
+                PendingIntent.FLAG_MUTABLE);
         Icon icon = Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon);
         Notification.Action replyAction = new Notification.Action.Builder(icon, "Reply",
                 inputIntent).addRemoteInput(remoteInput)
