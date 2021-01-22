@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b4d370db_2c5e2bf3",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 9043,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2021-01-22T16:17:08Z",
+      "side": 1,
+      "message": "This is the wrong comment text. Should be the text from line 9037-9038 in the original code.",
+      "revId": "193d4c56c9f6c6da87b50f9d14a193b12f81439f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "11d4d5d4_5b86ff27",
+        "filename": "packages/SystemUI/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1984,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2021-01-22T16:17:08Z",
+      "side": 1,
+      "message": "Assign the boolean value directly to the boolean instead of using a branch.",
+      "revId": "193d4c56c9f6c6da87b50f9d14a193b12f81439f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
