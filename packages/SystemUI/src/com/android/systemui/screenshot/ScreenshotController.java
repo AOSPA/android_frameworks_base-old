@@ -34,6 +34,9 @@ import static java.util.Objects.requireNonNull;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.Nullable;
+import android.app.ActivityOptions;
+import android.app.ExitTransitionCoordinator;
+import android.app.ExitTransitionCoordinator.ExitTransitionCallbacks;
 import android.app.Notification;
 import android.content.ComponentName;
 import android.content.Context;
@@ -46,6 +49,7 @@ import android.hardware.display.DisplayManager;
 import android.media.MediaActionSound;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -54,6 +58,7 @@ import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.Pair;
 import android.view.Display;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -67,15 +72,18 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Toast;
 
+import com.android.internal.app.ChooserActivity;
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.policy.PhoneWindow;
 import com.android.settingslib.applications.InterestingConfigChanges;
 import com.android.systemui.R;
+import com.android.systemui.screenshot.ScreenshotController.SavedImageData.ShareTransition;
 import com.android.systemui.util.DeviceConfigProxy;
 
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import javax.inject.Inject;
 
@@ -84,6 +92,7 @@ import javax.inject.Inject;
  */
 public class ScreenshotController {
     private static final String TAG = logTag(ScreenshotController.class);
+
     /**
      * POD used in the AsyncTask which saves an image in the background.
      */
@@ -102,17 +111,26 @@ public class ScreenshotController {
      */
     static class SavedImageData {
         public Uri uri;
-        public Notification.Action shareAction;
+        public Supplier<ShareTransition> shareTransition;
         public Notification.Action editAction;
         public Notification.Action deleteAction;
         public List<Notification.Action> smartActions;
+
+        /**
+         * POD for shared element transition to share sheet.
+         */
+        static class ShareTransition {
+            public Bundle bundle;
+            public Notification.Action shareAction;
+            public Runnable onCancelRunnable;
+        }
 
         /**
          * Used to reset the return data on error
          */
         public void reset() {
             uri = null;
-            shareAction = null;
+            shareTransition = null;
             editAction = null;
             deleteAction = null;
             smartActions = null;
@@ -350,10 +368,20 @@ public class ScreenshotController {
         // Inflate the screenshot layout
         mScreenshotView = (ScreenshotView)
                 LayoutInflater.from(mContext).inflate(R.layout.global_screenshot, null);
-        mScreenshotView.init(mUiEventLogger, this::resetScreenshotView);
+        mScreenshotView.init(mUiEventLogger, new ScreenshotView.ScreenshotViewCallback() {
+            @Override
+            public void onUserInteraction() {
+                resetTimeout();
+            }
+
+            @Override
+            public void onDismiss() {
+                resetScreenshotView();
+            }
+        });
 
         // TODO(159460485): Remove this when focus is handled properly in the system
-        mScreenshotView.setOnTouchListener((v, event) -> {
+        mDecorView.setOnTouchListener((v, event) -> {
             if (event.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
                 if (DEBUG_INPUT) {
                     Log.d(TAG, "onTouch: ACTION_OUTSIDE");
@@ -432,7 +460,7 @@ public class ScreenshotController {
             }
             if (DEBUG_WINDOW) {
                 Log.d(TAG, "saveScreenshot: screenshotView is already attached, resetting. "
-                        + "(dismissing=" + mScreenshotView.isDismissing()  + ")");
+                        + "(dismissing=" + mScreenshotView.isDismissing() + ")");
             }
             mScreenshotView.reset();
         }
@@ -576,15 +604,13 @@ public class ScreenshotController {
             mSaveInBgTask.setActionsReadyListener(this::logSuccessOnActionsReady);
         }
 
-        mSaveInBgTask = new SaveImageInBackgroundTask(mContext, mScreenshotSmartActions, data);
+        mSaveInBgTask = new SaveImageInBackgroundTask(mContext, mScreenshotSmartActions, data,
+                getShareTransitionSupplier());
         mSaveInBgTask.execute();
     }
 
-    /**
-     * Sets up the action shade and its entrance animation, once we get the screenshot URI.
-     */
-    private void showUiOnActionsReady(ScreenshotController.SavedImageData imageData) {
-        logSuccessOnActionsReady(imageData);
+    private void resetTimeout() {
+        mScreenshotHandler.removeMessages(MESSAGE_CORNER_TIMEOUT);
 
         AccessibilityManager accessibilityManager = (AccessibilityManager)
                 mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
@@ -592,12 +618,25 @@ public class ScreenshotController {
                 SCREENSHOT_CORNER_DEFAULT_TIMEOUT_MILLIS,
                 AccessibilityManager.FLAG_CONTENT_CONTROLS);
 
-        if (DEBUG_UI) {
-            Log.d(TAG, "Showing UI actions, dismiss timeout: " + timeoutMs + " ms");
-        }
         mScreenshotHandler.sendMessageDelayed(
                 mScreenshotHandler.obtainMessage(MESSAGE_CORNER_TIMEOUT),
                 timeoutMs);
+        if (DEBUG_UI) {
+            Log.d(TAG, "dismiss timeout: " + timeoutMs + " ms");
+        }
+
+    }
+
+    /**
+     * Sets up the action shade and its entrance animation, once we get the screenshot URI.
+     */
+    private void showUiOnActionsReady(ScreenshotController.SavedImageData imageData) {
+        logSuccessOnActionsReady(imageData);
+        if (DEBUG_UI) {
+            Log.d(TAG, "Showing UI actions");
+        }
+
+        resetTimeout();
 
         if (imageData.uri != null) {
             mScreenshotHandler.post(() -> {
@@ -614,6 +653,35 @@ public class ScreenshotController {
                 }
             });
         }
+    }
+
+    /**
+     * Supplies the necessary bits for the shared element transition to share sheet.
+     * Note that once supplied, the action intent to share must be sent immediately after.
+     */
+    private Supplier<ShareTransition> getShareTransitionSupplier() {
+        return () -> {
+            ExitTransitionCallbacks cb = new ExitTransitionCallbacks() {
+                @Override
+                public boolean isReturnTransitionAllowed() {
+                    return false;
+                }
+
+                @Override
+                public void onFinish() { }
+            };
+
+            Pair<ActivityOptions, ExitTransitionCoordinator> transition =
+                    ActivityOptions.startSharedElementAnimation(mWindow, cb, null,
+                            Pair.create(mScreenshotView.getScreenshotPreview(),
+                                    ChooserActivity.FIRST_IMAGE_PREVIEW_TRANSITION_NAME));
+            transition.second.startExit();
+
+            ShareTransition supply = new ShareTransition();
+            supply.bundle = transition.first.toBundle();
+            supply.onCancelRunnable = () -> ActivityOptions.stopSharedElementAnimation(mWindow);
+            return supply;
+        };
     }
 
     /**

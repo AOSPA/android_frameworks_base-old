@@ -201,6 +201,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS pakalpojums"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Sensoru paziņojumu pakalpojums"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Krēslas noteikšanas pakalpojums"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"Laika joslas noteikšanas rīks (nav savienojuma)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Jūsu ierīces dati tiks dzēsti"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Administratora lietotni nevar izmantot. Ierīcē saglabātie dati tiks dzēsti.\n\nJa jums ir kādi jautājumi, sazinieties ar savas organizācijas administratoru."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"Drukāšanu atspējoja <xliff:g id="OWNER_APP">%s</xliff:g>."</string>
@@ -290,8 +291,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB savienojums"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"Lietotne darbojas"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"Lietotnes, kas patērē akumulatora jaudu"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"Palielinājums"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"Lietotne <xliff:g id="APP_NAME">%1$s</xliff:g> izmanto akumulatoru"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> lietotne(-es) izmanto akumulatoru"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"Pieskarieties, lai skatītu detalizētu informāciju par akumulatora un datu lietojumu"</string>
@@ -356,6 +356,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"Ļauj lietotnei saņemt un apstrādāt multiziņas. Tas nozīmē, ka lietotne var pārraudzīt vai dzēst uz jūsu ierīci nosūtītos ziņojumus, neparādot tos jums."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"Pārsūtīt šūnu apraides ziņojumus"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"Ļauj piesaistīt lietotni šūnu apraides modulim, lai pārsūtītu šūnu apraides ziņojumus, tiklīdz tie tiek saņemti. Šūnu apraides brīdinājumi tiek piegādāti noteiktās atrašanās vietās, lai brīdinātu jūs par ārkārtas situācijām. Ļaunprātīgas lietotnes var traucēt ierīces veiktspēju vai darbības, kad ir saņemts ārkārtas šūnas apraides ziņojums."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"Aktīvo zvanu pārvaldība"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"Ļauj lietotnei skatīt detalizētu informāciju par aktīvajiem zvaniem jūsu ierīcē, kā arī kontrolēt šos zvanus."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"šūnu apraides ziņojumu lasīšana"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"Ļauj lietotnei lasīt ierīcē saņemtos šūnu apraides ziņojumus. Šūnu apraides brīdinājumi tiek piegādāti dažās atrašanās vietās, lai brīdinātu jūs par ārkārtas situācijām. Ļaunprātīgas lietotnes var traucēt ierīces veiktspēju vai darbības, kad ir saņemts ārkārtas šūnas apraides ziņojums."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"lasīt abonētās plūsmas"</string>
@@ -2040,6 +2042,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofons"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"rāda pāri citām lietotnēm jūsu ekrānā"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"Sniegt atsauksmes"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"Šī paziņojuma svarīgums tika paaugstināts līdz noklusējumam. Lai sniegtu atsauksmes, pieskarieties."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Šī paziņojuma svarīgums tika pazemināts, un paziņojums tiks rādīts bez skaņas. Lai sniegtu atsauksmes, pieskarieties."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Šī paziņojuma rangs tika paaugstināts. Lai sniegtu atsauksmes, pieskarieties."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Šī paziņojuma rangs tika pazemināts. Lai sniegtu atsauksmes, pieskarieties."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Informatīvs paziņojums par akumulatoru"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Akumulators var izlādēties pirms parastā uzlādes laika"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Aktivizēts akumulatora enerģijas taupīšanas režīms, lai palielinātu akumulatora darbības ilgumu"</string>
@@ -2224,12 +2230,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"Jaunums: funkcija Window Magnifier"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"Tagad varat palielināt ekrāna daļu vai visu ekrānu"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"Ieslēgt sadaļā Iestatījumi"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"Nerādīt"</string>
 </resources>

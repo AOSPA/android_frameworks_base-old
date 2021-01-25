@@ -16,29 +16,26 @@
 
 package com.android.wm.shell.flicker.apppairs
 
-import android.platform.test.annotations.Presubmit
 import android.os.SystemClock
-import android.util.Log
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
-import com.android.compatibility.common.util.SystemUtil
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.dsl.runWithFlicker
 import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
-import com.android.wm.shell.flicker.helpers.AppPairsHelper
-import com.android.wm.shell.flicker.helpers.AppPairsHelper.Companion.TEST_REPETITIONS
-import com.android.wm.shell.flicker.appPairsDividerIsInvisible
-import com.android.wm.shell.flicker.appPairsDividerIsVisible
+import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
 import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
 import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
 import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
+import com.android.wm.shell.flicker.appPairsDividerIsInvisible
+import com.android.wm.shell.flicker.appPairsDividerIsVisible
+import com.android.wm.shell.flicker.helpers.AppPairsHelper
+import com.android.wm.shell.flicker.helpers.AppPairsHelper.Companion.TEST_REPETITIONS
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
-import java.io.IOException
 
 /**
  * Test AppPairs launch.
@@ -61,19 +58,21 @@ class AppPairsTest(
             setup {
                 eachRun {
                     uiDevice.wakeUpAndGoToHomeScreen()
-                    primaryApp.open()
-                    uiDevice.pressHome()
-                    secondaryApp.open()
-                    uiDevice.pressHome()
-                    updateTaskId()
+                    primaryApp.launchViaIntent()
+                    secondaryApp.launchViaIntent()
+                    nonResizeableApp.launchViaIntent()
+                    updateTasksId()
                 }
             }
             teardown {
                 eachRun {
                     executeShellCommand(composePairsCommand(
                             primaryTaskId, secondaryTaskId, false /* pair */))
+                    executeShellCommand(composePairsCommand(
+                            primaryTaskId, nonResizeableTaskId, false /* pair */))
                     primaryApp.exit()
                     secondaryApp.exit()
+                    nonResizeableApp.exit()
                 }
             }
             assertions {
@@ -90,7 +89,7 @@ class AppPairsTest(
 
     @Test
     fun testAppPairs_pairPrimaryAndSecondaryApps() {
-        val testTag = "testAppPaired_pairPrimaryAndSecondary"
+        val testTag = "testAppPairs_pairPrimaryAndSecondaryApps"
         runWithFlicker(appPairsSetup) {
             withTestName { testTag }
             repeat {
@@ -108,7 +107,7 @@ class AppPairsTest(
                     end("appsEndingBounds", enabled = false) {
                         val entry = this.trace.entries.firstOrNull()
                                 ?: throw IllegalStateException("Trace is empty")
-                        val dividerRegion = entry.getVisibleBounds(APP_PAIRS_DIVIDER)
+                        val dividerRegion = entry.getVisibleBounds(SPLIT_DIVIDER)
                         this.hasVisibleRegion(primaryApp.defaultWindowName,
                                 appPairsHelper.getPrimaryBounds(dividerRegion))
                                 .and()
@@ -152,7 +151,7 @@ class AppPairsTest(
                     start("appsStartingBounds", enabled = false) {
                         val entry = this.trace.entries.firstOrNull()
                                 ?: throw IllegalStateException("Trace is empty")
-                        val dividerRegion = entry.getVisibleBounds(APP_PAIRS_DIVIDER)
+                        val dividerRegion = entry.getVisibleBounds(SPLIT_DIVIDER)
                         this.hasVisibleRegion(primaryApp.defaultWindowName,
                                 appPairsHelper.getPrimaryBounds(dividerRegion))
                                 .and()
@@ -176,45 +175,53 @@ class AppPairsTest(
         }
     }
 
-    private fun composePairsCommand(
-        primaryApp: String,
-        secondaryApp: String,
-        pair: Boolean
-    ): String = buildString {
-        // dumpsys activity service SystemUIService WMShell {pair|unpair} ${TASK_ID_1} ${TASK_ID_2}
-        append("dumpsys activity service SystemUIService WMShell ")
-        if (pair) {
-            append("pair ")
-        } else {
-            append("unpair ")
+    @Test
+    fun testAppPairs_canNotPairNonResizeableApps() {
+        val testTag = "testAppPairs_canNotPairNonResizeableApps"
+        runWithFlicker(appPairsSetup) {
+            withTestName { testTag }
+            repeat {
+                TEST_REPETITIONS
+            }
+            transitions {
+                // TODO pair apps through normal UX flow
+                executeShellCommand(composePairsCommand(
+                    primaryTaskId, nonResizeableTaskId, true /* pair */))
+                SystemClock.sleep(AppPairsHelper.TIMEOUT_MS)
+            }
+
+            assertions {
+                layersTrace {
+                    appPairsDividerIsInvisible()
+                }
+                windowManagerTrace {
+                    end {
+                        showsAppWindow(nonResizeableApp.defaultWindowName)
+                            .and()
+                            .hidesAppWindow(primaryApp.defaultWindowName)
+                    }
+                }
+            }
         }
-        append(primaryApp + " " + secondaryApp)
     }
 
-    private fun executeShellCommand(cmd: String) {
-        try {
-            SystemUtil.runShellCommand(instrumentation, cmd)
-        } catch (e: IOException) {
-            Log.d("AppPairsTest", "executeShellCommand error!" + e)
-        }
-    }
-
-    private fun updateTaskId() {
-        val primaryAppComponent = primaryApp.openAppIntent.component
-        val secondaryAppComponent = secondaryApp.openAppIntent.component
+    fun updateTasksId() {
         if (primaryAppComponent != null) {
-            primaryTaskId = appPairsHelper.getTaskIdForActivity(
+            primaryTaskId = getTaskIdForActivity(
                     primaryAppComponent.packageName, primaryAppComponent.className).toString()
         }
         if (secondaryAppComponent != null) {
-            secondaryTaskId = appPairsHelper.getTaskIdForActivity(
+            secondaryTaskId = getTaskIdForActivity(
                     secondaryAppComponent.packageName, secondaryAppComponent.className).toString()
+        }
+        if (nonResizeableAppComponent != null) {
+            nonResizeableTaskId = getTaskIdForActivity(
+                    nonResizeableAppComponent.packageName,
+                    nonResizeableAppComponent.className).toString()
         }
     }
 
     companion object {
-        var primaryTaskId = ""
-        var secondaryTaskId = ""
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<Array<Any>> {

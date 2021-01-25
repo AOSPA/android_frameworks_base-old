@@ -84,6 +84,7 @@ interface IDevicePolicyManager {
     long getPasswordExpiration(in ComponentName who, int userHandle, boolean parent);
 
     boolean isActivePasswordSufficient(int userHandle, boolean parent);
+    boolean isActivePasswordSufficientForDeviceRequirement();
     boolean isProfileActivePasswordSufficientForParent(int userHandle);
     boolean isPasswordSufficientAfterProfileUnification(int userHandle, int profileUser);
     int getPasswordComplexity(boolean parent);
@@ -485,5 +486,7 @@ interface IDevicePolicyManager {
 
     long getManagedProfileMaximumTimeOff(in ComponentName admin);
     void setManagedProfileMaximumTimeOff(in ComponentName admin, long timeoutMs);
-    boolean canProfileOwnerResetPasswordWhenLocked(in int userId);
+    boolean canProfileOwnerResetPasswordWhenLocked(int userId);
+
+    void setNextOperationSafety(int operation, boolean safe);
 }

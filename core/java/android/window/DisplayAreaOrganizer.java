@@ -24,6 +24,7 @@ import android.os.RemoteException;
 import android.view.SurfaceControl;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
  * Interface for WindowManager to delegate control of display areas.
@@ -113,6 +114,24 @@ public class DisplayAreaOrganizer extends WindowOrganizer {
      */
     public static final int FEATURE_RUNTIME_TASK_CONTAINER_FIRST = FEATURE_VENDOR_LAST + 1;
 
+    // Callbacks WM Core are posted on this executor if it isn't null, otherwise direct calls are
+    // made on the incoming binder call.
+    private final Executor mExecutor;
+
+    /** @hide */
+    public DisplayAreaOrganizer(@NonNull Executor executor) {
+        mExecutor = executor;
+    }
+
+    /**
+     * Gets the executor to run callbacks on.
+     * @hide
+     */
+    @NonNull
+    public Executor getExecutor() {
+        return mExecutor;
+    }
+
     /**
      * Registers a DisplayAreaOrganizer to manage display areas for a given feature. A feature can
      * not be registered by multiple organizers at the same time.
@@ -145,15 +164,19 @@ public class DisplayAreaOrganizer extends WindowOrganizer {
     }
 
     /**
-     * Creates a persistent task display area. It will be added to be the top most task display area
-     * in the root.
+     * Creates a persistent {@link com.android.server.wm.TaskDisplayArea}.
      *
      * The new created TDA is organized by the organizer, and will be deleted on calling
      * {@link #deleteTaskDisplayArea(WindowContainerToken)} or {@link #unregisterOrganizer()}.
      *
-     * @param displayId the display to create the new task display area in.
-     * @param rootFeatureId the root display area to create the new task display area in. Caller can
-     *                      use {@link #FEATURE_ROOT} as the root of the logical display.
+     * @param displayId the display to create the new TDA in.
+     * @param parentFeatureId the parent to create the new TDA in. If it is a
+     *                        {@link com.android.server.wm.RootDisplayArea}, the new TDA will be
+     *                        placed as the topmost TDA. If it is another TDA, the new TDA will be
+     *                        placed as the topmost child.
+     *                        Caller can use {@link #FEATURE_ROOT} as the root of the logical
+     *                        display, or {@link #FEATURE_DEFAULT_TASK_CONTAINER} as the default
+     *                        TDA.
      * @param name the name for the new task display area.
      * @return the new created task display area.
      * @throws IllegalArgumentException if failed to create a new task display area.
@@ -162,11 +185,11 @@ public class DisplayAreaOrganizer extends WindowOrganizer {
     @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     @CallSuper
     @NonNull
-    public DisplayAreaAppearedInfo createTaskDisplayArea(int displayId, int rootFeatureId,
+    public DisplayAreaAppearedInfo createTaskDisplayArea(int displayId, int parentFeatureId,
             @NonNull String name) {
         try {
             return getController().createTaskDisplayArea(
-                    mInterface, displayId, rootFeatureId, name);
+                    mInterface, displayId, parentFeatureId, name);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -208,17 +231,20 @@ public class DisplayAreaOrganizer extends WindowOrganizer {
         @Override
         public void onDisplayAreaAppeared(@NonNull DisplayAreaInfo displayAreaInfo,
                 @NonNull SurfaceControl leash) {
-            DisplayAreaOrganizer.this.onDisplayAreaAppeared(displayAreaInfo, leash);
+            mExecutor.execute(
+                    () -> DisplayAreaOrganizer.this.onDisplayAreaAppeared(displayAreaInfo, leash));
         }
 
         @Override
         public void onDisplayAreaVanished(@NonNull DisplayAreaInfo displayAreaInfo) {
-            DisplayAreaOrganizer.this.onDisplayAreaVanished(displayAreaInfo);
+            mExecutor.execute(
+                    () -> DisplayAreaOrganizer.this.onDisplayAreaVanished(displayAreaInfo));
         }
 
         @Override
         public void onDisplayAreaInfoChanged(@NonNull DisplayAreaInfo displayAreaInfo) {
-            DisplayAreaOrganizer.this.onDisplayAreaInfoChanged(displayAreaInfo);
+            mExecutor.execute(
+                    () -> DisplayAreaOrganizer.this.onDisplayAreaInfoChanged(displayAreaInfo));
         }
     };
 

@@ -72,7 +72,6 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
-import android.permission.IPermissionManager;
 import android.permission.PermissionManager;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -370,10 +369,9 @@ class ContextImpl extends Context {
         }
 
         final IPackageManager pm = ActivityThread.getPackageManager();
-        final IPermissionManager permissionManager = ActivityThread.getPermissionManager();
-        if (pm != null && permissionManager != null) {
+        if (pm != null) {
             // Doesn't matter if we make more than one instance.
-            return (mPackageManager = new ApplicationPackageManager(this, pm, permissionManager));
+            return (mPackageManager = new ApplicationPackageManager(this, pm));
         }
 
         return null;
@@ -2470,8 +2468,9 @@ class ContextImpl extends Context {
         return context;
     }
 
+    @NonNull
     @Override
-    public @NonNull WindowContext createWindowContext(int type, Bundle options) {
+    public WindowContext createWindowContext(int type, @NonNull Bundle options) {
         if (getDisplay() == null) {
             throw new UnsupportedOperationException("WindowContext can only be created from "
                     + "other visual contexts, such as Activity or one created with "
@@ -2480,13 +2479,26 @@ class ContextImpl extends Context {
         return new WindowContext(this, type, options);
     }
 
-    ContextImpl createBaseWindowContext(IBinder token) {
+    @NonNull
+    @Override
+    public WindowContext createWindowContext(@NonNull Display display, int type,
+            @NonNull Bundle options) {
+        if (display == null) {
+            throw new IllegalArgumentException("Display must not be null");
+        }
+        return new WindowContext(this, display, type, options);
+    }
+
+    ContextImpl createBaseWindowContext(IBinder token, Display display) {
         ContextImpl context = new ContextImpl(this, mMainThread, mPackageInfo, mAttributionTag,
                 mSplitName, token, mUser, mFlags, mClassLoader, null);
         // Window contexts receive configurations directly from the server and as such do not
         // need to override their display in ResourcesManager.
         context.mForceDisplayOverrideInResources = false;
         context.mContextType = CONTEXT_TYPE_WINDOW_CONTEXT;
+        if (display != null) {
+            context.mDisplay = display;
+        }
         return context;
     }
 

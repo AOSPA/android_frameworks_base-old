@@ -17,6 +17,7 @@ package android.app.appsearch;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
+import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.content.Context;
 import android.os.Bundle;
@@ -39,8 +40,6 @@ import java.util.function.Consumer;
  *
  * <p>Apps can index structured text documents with AppSearch, which can then be retrieved through
  * the query API.
- *
- * @hide
  */
 // TODO(b/148046169): This class header needs a detailed example/tutorial.
 @SystemService(Context.APP_SEARCH_SERVICE)
@@ -52,9 +51,11 @@ public class AppSearchManager {
     public static final String DEFAULT_DATABASE_NAME = "";
 
     private final IAppSearchManager mService;
+    private final Context mContext;
 
     /** @hide */
-    public AppSearchManager(@NonNull IAppSearchManager service) {
+    public AppSearchManager(@NonNull Context context, @NonNull IAppSearchManager service) {
+        mContext = Objects.requireNonNull(context);
         mService = Objects.requireNonNull(service);
     }
 
@@ -92,7 +93,8 @@ public class AppSearchManager {
              *
              * <p>Database name cannot contain {@code '/'}.
              *
-             * <p>If not specified, defaults to {@link #DEFAULT_DATABASE_NAME}.
+             * <p>If not specified, defaults to the empty string.
+             *
              * @param databaseName The name of the database.
              * @throws IllegalArgumentException if the databaseName contains {@code '/'}.
              */
@@ -137,7 +139,8 @@ public class AppSearchManager {
         Objects.requireNonNull(searchContext);
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
-        AppSearchSession.createSearchSession(searchContext, mService, executor, callback);
+        AppSearchSession.createSearchSession(
+                searchContext, mService, mContext.getUserId(), executor, callback);
     }
 
     /**
@@ -150,13 +153,16 @@ public class AppSearchManager {
      * @param callback      The {@link AppSearchResult}&lt;{@link GlobalSearchSession}&gt; of
      *                      performing this operation. Or a {@link AppSearchResult} with failure
      *                      reason code and error information.
+     * @hide
      */
+    @SystemApi
     public void createGlobalSearchSession(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<GlobalSearchSession>> callback) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
-        GlobalSearchSession.createGlobalSearchSession(mService, executor, callback);
+        GlobalSearchSession.createGlobalSearchSession(
+                mService, mContext.getUserId(), executor, callback);
     }
 
     /**
@@ -224,7 +230,12 @@ public class AppSearchManager {
         }
         AndroidFuture<AppSearchResult> future = new AndroidFuture<>();
         try {
-            mService.setSchema(DEFAULT_DATABASE_NAME, schemaBundles, request.isForceOverride(),
+            mService.setSchema(
+                    DEFAULT_DATABASE_NAME,
+                    schemaBundles,
+                    new ArrayList<>(request.getSchemasNotVisibleToSystemUi()),
+                    request.isForceOverride(),
+                    mContext.getUserId(),
                     new IAppSearchResultCallback.Stub() {
                         public void onResult(AppSearchResult result) {
                             future.complete(result);
@@ -265,7 +276,7 @@ public class AppSearchManager {
         }
         AndroidFuture<AppSearchBatchResult> future = new AndroidFuture<>();
         try {
-            mService.putDocuments(DEFAULT_DATABASE_NAME, documentBundles,
+            mService.putDocuments(DEFAULT_DATABASE_NAME, documentBundles, mContext.getUserId(),
                     new IAppSearchBatchResultCallback.Stub() {
                         public void onResult(AppSearchBatchResult result) {
                             future.complete(result);
@@ -296,6 +307,7 @@ public class AppSearchManager {
      * @throws RuntimeException If an error occurred during the execution.
      *
      * @deprecated use {@link AppSearchSession#getByUri} instead.
+     * @hide
      */
     public AppSearchBatchResult<String, GenericDocument> getByUri(
             @NonNull GetByUriRequest request) {
@@ -305,6 +317,7 @@ public class AppSearchManager {
         AndroidFuture<AppSearchBatchResult> future = new AndroidFuture<>();
         try {
             mService.getDocuments(DEFAULT_DATABASE_NAME, request.getNamespace(), uris,
+                    mContext.getUserId(),
                     new IAppSearchBatchResultCallback.Stub() {
                         public void onResult(AppSearchBatchResult result) {
                             future.complete(result);
@@ -405,6 +418,7 @@ public class AppSearchManager {
         AndroidFuture<AppSearchResult> future = new AndroidFuture<>();
         try {
             mService.query(DEFAULT_DATABASE_NAME, queryExpression, searchSpec.getBundle(),
+                    mContext.getUserId(),
                     new IAppSearchResultCallback.Stub() {
                         public void onResult(AppSearchResult result) {
                             future.complete(result);
@@ -439,12 +453,14 @@ public class AppSearchManager {
      * @throws RuntimeException If an error occurred during the execution.
      *
      * @deprecated use {@link AppSearchSession#removeByUri} instead.
+     * @hide
      */
     public AppSearchBatchResult<String, Void> removeByUri(@NonNull RemoveByUriRequest request) {
         List<String> uris = new ArrayList<>(request.getUris());
         AndroidFuture<AppSearchBatchResult> future = new AndroidFuture<>();
         try {
             mService.removeByUri(DEFAULT_DATABASE_NAME, request.getNamespace(), uris,
+                    mContext.getUserId(),
                     new IAppSearchBatchResultCallback.Stub() {
                         public void onResult(AppSearchBatchResult result) {
                             future.complete(result);

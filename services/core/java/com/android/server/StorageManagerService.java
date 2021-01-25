@@ -178,6 +178,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -206,27 +207,6 @@ class StorageManagerService extends IStorageManager.Stub
     // A system property to control if obb app data isolation is enabled in vold.
     private static final String ANDROID_VOLD_APP_DATA_ISOLATION_ENABLED_PROPERTY =
             "persist.sys.vold_app_data_isolation_enabled";
-
-    // TODO(b/169327180): Will be fetched from the server, but for now, we emulate this in
-    // the system_server since it can write to DeviceConfig and MediaProvider can read it
-    private static final String PROP_TRANSCODE_ENABLED = "transcode_enabled";
-    private static final String PROP_TRANSCODE_DEFAULT = "transcode_default";
-    private static final String PROP_TRANSCODE_COMPAT_MANIFEST = "transcode_compat_manifest";
-    private static final boolean TRANSCODE_ENABLED_VALUE = false;
-    // Determines the default behavior of apps when transcode is enabled, AKA, Option A/Option B.
-    // If true, transcode by default (Option B). If false, don't transcode by default (Option A)
-    // For dogfood, we go with Option B
-    private static final boolean TRANSCODE_DEFAULT_VALUE = true;
-    // Format is <package_name>,<media_capability_bit_mask>,...
-    // media_capability_bit_mask is defined in MediaProvider/../TranscodeHelper.java:
-    // FLAG_HEVC = 1 << 0;
-    // FLAG_SLOW_MOTION = 1 << 1;
-    // FLAG_HDR_10 = 1 << 2;
-    // FLAG_HDR_10_PLUS = 1 << 3;
-    // FLAG_HDR_HLG = 1 << 4;
-    // FLAG_HDR_DOLBY_VISION = 1 << 5;
-    private static final String TRANSCODE_COMPAT_MANIFEST_VALUE =
-            "com.google.android.apps.photos,1";
 
     // How long we wait to reset storage, if we failed to call onMount on the
     // external storage service.
@@ -903,17 +883,7 @@ class StorageManagerService extends IStorageManager.Stub
             ZramWriteback.scheduleZramWriteback(mContext);
         }
 
-        // TODO(b/169327180): Remove after setting up server-side DeviceConfig flags
-        // Set DeviceConfig values for transcoding that will be read by MediaProvider
-        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
-                PROP_TRANSCODE_ENABLED, String.valueOf(TRANSCODE_ENABLED_VALUE),
-                false /* makeDefault */);
-        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
-                PROP_TRANSCODE_DEFAULT, String.valueOf(TRANSCODE_DEFAULT_VALUE),
-                false /* makeDefault */);
-        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
-                PROP_TRANSCODE_COMPAT_MANIFEST, TRANSCODE_COMPAT_MANIFEST_VALUE,
-                false /* makeDefault */);
+        updateTranscodeEnabled();
     }
 
     /**
@@ -943,6 +913,21 @@ class StorageManagerService extends IStorageManager.Stub
                 ZramWriteback.scheduleZramWriteback(mContext);
             }
         }
+    }
+
+    private void updateTranscodeEnabled() {
+        // See MediaProvider TranscodeHelper#getBooleanProperty for more information
+        boolean transcodeEnabled = false;
+        boolean defaultValue = true;
+
+        if (SystemProperties.getBoolean("persist.sys.fuse.transcode_user_control", false)) {
+            transcodeEnabled = SystemProperties.getBoolean("persist.sys.fuse.transcode_enabled",
+                    defaultValue);
+        } else {
+            transcodeEnabled = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                    "transcode_enabled", defaultValue);
+        }
+        SystemProperties.set("sys.fuse.transcode_enabled", String.valueOf(transcodeEnabled));
     }
 
     /**
@@ -3583,7 +3568,7 @@ class StorageManagerService extends IStorageManager.Stub
             final String description = mContext.getString(android.R.string.unknownName);
 
             res.add(new StorageVolume(id, path, path, description, primary, removable,
-                    emulated, allowMassStorage, maxFileSize, user, id, envState));
+                    emulated, allowMassStorage, maxFileSize, user, null /*uuid */, id, envState));
         }
 
         if (!foundPrimary) {
@@ -3601,12 +3586,13 @@ class StorageManagerService extends IStorageManager.Stub
             final boolean allowMassStorage = false;
             final long maxFileSize = 0L;
             final UserHandle owner = new UserHandle(userId);
-            final String uuid = null;
+            final String fsUuid = null;
+            final UUID uuid = null;
             final String state = Environment.MEDIA_REMOVED;
 
             res.add(0, new StorageVolume(id, path, path,
                     description, primary, removable, emulated,
-                    allowMassStorage, maxFileSize, owner, uuid, state));
+                    allowMassStorage, maxFileSize, owner, uuid, fsUuid, state));
         }
 
         return res.toArray(new StorageVolume[res.size()]);
@@ -4424,14 +4410,7 @@ class StorageManagerService extends IStorageManager.Stub
 
                     // Create package obb and data dir if it doesn't exist.
                     int appUid = UserHandle.getUid(userId, mPmInternal.getPackage(pkg).getUid());
-                    File file = new File(packageObbDir);
-                    if (!file.exists()) {
-                        vold.setupAppDir(packageObbDir, appUid);
-                    }
-                    file = new File(packageDataDir);
-                    if (!file.exists()) {
-                        vold.setupAppDir(packageDataDir, appUid);
-                    }
+                    vold.ensureAppDirsCreated(new String[] {packageObbDir, packageDataDir}, appUid);
                 }
             } catch (ServiceManager.ServiceNotFoundException | RemoteException e) {
                 Slog.e(TAG, "Unable to create obb and data directories for " + processName,e);
@@ -4511,6 +4490,15 @@ class StorageManagerService extends IStorageManager.Stub
             return mMediaStoreAuthorityAppId == UserHandle.getAppId(uid);
         }
 
+        @Override
+        public void freeCache(String volumeUuid, long freeBytes) {
+            try {
+                mStorageSessionController.freeCache(volumeUuid, freeBytes);
+            } catch (ExternalStorageServiceException e) {
+                Log.e(TAG, "Failed to free cache of vol : " + volumeUuid, e);
+            }
+        }
+
         public boolean hasExternalStorage(int uid, String packageName) {
             // No need to check for system uid. This avoids a deadlock between
             // PackageManagerService and AppOpsService.
@@ -4537,10 +4525,13 @@ class StorageManagerService extends IStorageManager.Stub
                 // When using FUSE, we may need to kill the app if the op changes
                 switch(code) {
                     case OP_REQUEST_INSTALL_PACKAGES:
-                        if (previousMode == MODE_ALLOWED || mode == MODE_ALLOWED) {
-                            // If we transition to/from MODE_ALLOWED, kill the app to make
-                            // sure it has the correct view of /storage. Changing between
-                            // MODE_DEFAULT / MODE_ERRORED is a no-op
+                        // In R, we used to kill the app here if it transitioned to/from
+                        // MODE_ALLOWED, to make sure the app had the correct (writable) OBB
+                        // view. But the majority of apps don't handle OBBs anyway, and for those
+                        // that do, they can restart themselves. Therefore, starting from S,
+                        // only kill the app when it transitions away from MODE_ALLOWED (eg,
+                        // when the permission is taken away).
+                        if (previousMode == MODE_ALLOWED && mode != MODE_ALLOWED) {
                             killAppForOpChange(code, uid);
                         }
                         return;

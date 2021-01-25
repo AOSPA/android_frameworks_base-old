@@ -17,6 +17,7 @@
 package android.widget;
 
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
+import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.view.ContentInfo.FLAG_CONVERT_TO_PLAIN_TEXT;
 import static android.view.ContentInfo.SOURCE_AUTOFILL;
 import static android.view.ContentInfo.SOURCE_CLIPBOARD;
@@ -8738,6 +8739,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     outAttrs.imeOptions |= EditorInfo.IME_FLAG_NO_ENTER_ACTION;
                 }
             }
+            if (getResources().getConfiguration().orientation == ORIENTATION_PORTRAIT) {
+                outAttrs.internalImeOptions |= EditorInfo.IME_FLAG_APP_WINDOW_PORTRAIT;
+            }
             if (isMultilineInputType(outAttrs.inputType)) {
                 // Multi-line text editors should always show an enter key.
                 outAttrs.imeOptions |= EditorInfo.IME_FLAG_NO_ENTER_ACTION;
@@ -8911,6 +8915,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     public void onEndBatchEdit() {
         // intentionally empty
+    }
+
+    /** @hide */
+    public void onPerformSpellCheck() {
+        if (mEditor != null && mEditor.mSpellChecker != null) {
+            mEditor.mSpellChecker.onPerformSpellCheck();
+        }
     }
 
     /**
@@ -13736,8 +13747,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * custom behavior should configure a listener via {@link #setOnReceiveContentListener}.
      *
      * <p>For non-editable TextViews the default behavior is a no-op (returns the passed-in
-     * content without acting on it). For editable TextViews the default behavior coerces all
-     * content to text and inserts into the view.
+     * content without acting on it).
+     *
+     * <p>For editable TextViews the default behavior is to insert text into the view, coercing
+     * non-text content to text as needed. The MIME types "text/plain" and "text/html" have
+     * well-defined behavior for this, while other MIME types have reasonable fallback behavior
+     * (see {@link ClipData.Item#coerceToStyledText}).
      *
      * @param payload The content to insert and related metadata.
      *

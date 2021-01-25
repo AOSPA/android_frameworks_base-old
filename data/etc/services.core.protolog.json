@@ -901,6 +901,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1069336896": {
+      "message": "onRootTaskOrderChanged(): rootTask=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_RECENTS_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RecentsAnimation.java"
+    },
     "-1066383762": {
       "message": "Sleep still waiting to pause %s",
       "level": "VERBOSE",
@@ -1021,12 +1027,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "-903853754": {
-      "message": "pauseBackStacks: stack=%s mResumedActivity=%s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/TaskDisplayArea.java"
-    },
     "-883738232": {
       "message": "Adding more than one toast window for UID at a time.",
       "level": "WARN",
@@ -1068,6 +1068,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/ActivityTaskSupervisor.java"
+    },
+    "-856590985": {
+      "message": "dcTarget: %s mImeRequester: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_IME",
+      "at": "com\/android\/server\/wm\/ImeInsetsSourceProvider.java"
     },
     "-856025122": {
       "message": "SURFACE transparentRegionHint=%s: %s",
@@ -1302,6 +1308,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_CONFIGURATION",
       "at": "com\/android\/server\/am\/ActivityManagerService.java"
+    },
+    "-592371899": {
+      "message": "Skipping rootTask: (mismatch activity\/rootTask) %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_TASKS",
+      "at": "com\/android\/server\/wm\/TaskDisplayArea.java"
     },
     "-583031528": {
       "message": "%s",
@@ -1717,12 +1729,6 @@
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/Session.java"
     },
-    "-49129622": {
-      "message": "performLayout: Activity exiting now removed %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_ADD_REMOVE",
-      "at": "com\/android\/server\/wm\/TaskDisplayArea.java"
-    },
     "-33096143": {
       "message": "applyAnimation: transition animation is disabled or skipped. container=%s",
       "level": "VERBOSE",
@@ -1776,6 +1782,12 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "44438983": {
+      "message": "performLayout: Activity exiting now removed %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_ADD_REMOVE",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
     "45285419": {
       "message": "startingWindow was set but startingSurface==null, couldn't remove",
@@ -1836,12 +1848,6 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowContextListenerController.java"
-    },
-    "91350919": {
-      "message": "Attempted to set IME flag to a display that does not exist: %d",
-      "level": "WARN",
-      "group": "WM_ERROR",
-      "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
     "94402792": {
       "message": "Moving to RESUMED: %s (in existing)",
@@ -2161,6 +2167,12 @@
       "group": "WM_DEBUG_BOOT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "391189028": {
+      "message": "pauseBackTasks: task=%s mResumedActivity=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskDisplayArea.java"
+    },
     "397105698": {
       "message": "grantEmbeddedWindowFocus remove request for win=%s dropped since no candidate was found",
       "level": "VERBOSE",
@@ -2244,12 +2256,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_WINDOW_ORGANIZER",
       "at": "com\/android\/server\/wm\/DisplayAreaOrganizerController.java"
-    },
-    "490877640": {
-      "message": "onStackOrderChanged(): stack=%s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_RECENTS_ANIMATIONS",
-      "at": "com\/android\/server\/wm\/RecentsAnimation.java"
     },
     "495032901": {
       "message": "Expected target stack=%s to restored behind stack=%s but it is behind stack=%s",
@@ -2382,12 +2388,6 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "632168013": {
-      "message": "dcTarget: %s mImeTargetFromIme: %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_IME",
-      "at": "com\/android\/server\/wm\/ImeInsetsSourceProvider.java"
     },
     "633654009": {
       "message": "SURFACE POS (setPositionInTransaction) @ (%f,%f): %s",
@@ -2580,12 +2580,6 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
-    },
-    "875196661": {
-      "message": "Skipping stack: (mismatch activity\/stack) %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_TASKS",
-      "at": "com\/android\/server\/wm\/TaskDisplayArea.java"
     },
     "883475718": {
       "message": "Report configuration: %s %s %s",

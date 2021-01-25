@@ -58,8 +58,9 @@ import org.codeaurora.internal.Status;
 import org.codeaurora.internal.Token;
 
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
+import com.android.settingslib.mobile.TelephonyIcons;
+import com.android.settingslib.SignalIcon.MobileIconGroup;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.policy.MobileSignalController.MobileIconGroup;
 
 public class FiveGServiceClient {
     private static final String TAG = "FiveGServiceClient";

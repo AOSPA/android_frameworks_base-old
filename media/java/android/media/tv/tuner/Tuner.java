@@ -167,13 +167,13 @@ public class Tuner implements AutoCloseable  {
     public static final int INVALID_LNB_ID =
             android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_LNB_ID;
     /**
-     * Invalid key token. It is used to remove the current key from descrambler.
+     * A void key token. It is used to remove the current key from descrambler.
      *
      * <p>If the current keyToken comes from a MediaCas session, App is recommended to
      * to use this constant to remove current key before closing MediaCas session.
      */
     @NonNull
-    public static final byte[] INVALID_KEYTOKEN =
+    public static final byte[] VOID_KEYTOKEN =
             {android.hardware.tv.tuner.V1_1.Constants.Constant.INVALID_KEYTOKEN};
 
     /** @hide */
@@ -279,6 +279,7 @@ public class Tuner implements AutoCloseable  {
     @Nullable
     private FrontendInfo mFrontendInfo;
     private Integer mFrontendHandle;
+    private Boolean mIsSharedFrontend = false;
     private int mFrontendType = FrontendSettings.TYPE_UNDEFINED;
     private int mUserId;
     private Lnb mLnb;
@@ -441,8 +442,11 @@ public class Tuner implements AutoCloseable  {
      */
     public void shareFrontendFromTuner(@NonNull Tuner tuner) {
         mTunerResourceManager.shareFrontend(mClientId, tuner.mClientId);
-        mFrontendHandle = tuner.mFrontendHandle;
-        mFrontend = nativeOpenFrontendByHandle(mFrontendHandle);
+        synchronized (mIsSharedFrontend) {
+            mFrontendHandle = tuner.mFrontendHandle;
+            mFrontend = tuner.mFrontend;
+            mIsSharedFrontend = true;
+        }
     }
 
     /**
@@ -450,10 +454,12 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>Tuner resource manager (TRM) uses the client priority value to decide whether it is able
      * to reclaim insufficient resources from another client.
+     *
      * <p>The nice value represents how much the client intends to give up the resource when an
      * insufficient resource situation happens.
      *
-     * @param priority the new priority.
+     * @param priority the new priority. Any negative value would cause no-op on priority setting
+     *                 and the API would only process nice value setting in that case.
      * @param niceValue the nice value.
      */
     public void updateResourcePriority(int priority, int niceValue) {
@@ -473,14 +479,19 @@ public class Tuner implements AutoCloseable  {
 
     private void releaseAll() {
         if (mFrontendHandle != null) {
-            int res = nativeCloseFrontend(mFrontendHandle);
-            if (res != Tuner.RESULT_SUCCESS) {
-                TunerUtils.throwExceptionForResult(res, "failed to close frontend");
+            synchronized (mIsSharedFrontend) {
+                if (!mIsSharedFrontend) {
+                    int res = nativeCloseFrontend(mFrontendHandle);
+                    if (res != Tuner.RESULT_SUCCESS) {
+                        TunerUtils.throwExceptionForResult(res, "failed to close frontend");
+                    }
+                }
+                mIsSharedFrontend = false;
             }
             mTunerResourceManager.releaseFrontend(mFrontendHandle, mClientId);
             FrameworkStatsLog
                     .write(FrameworkStatsLog.TV_TUNER_STATE_CHANGED, mUserId,
-                        FrameworkStatsLog.TV_TUNER_STATE_CHANGED__STATE__UNKNOWN);
+                    FrameworkStatsLog.TV_TUNER_STATE_CHANGED__STATE__UNKNOWN);
             mFrontendHandle = null;
             mFrontend = null;
         }
@@ -546,7 +557,6 @@ public class Tuner implements AutoCloseable  {
      */
     private native Frontend nativeOpenFrontendByHandle(int handle);
     @Result
-    private native int nativeCloseFrontendByHandle(int handle);
     private native int nativeTune(int type, FrontendSettings settings);
     private native int nativeStopTune();
     private native int nativeScan(int settingsType, FrontendSettings settings, int scanType);
@@ -677,7 +687,7 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>Tuner resource manager (TRM) uses the client priority value to decide whether it is able
      * to get frontend resource. If the client can't get the resource, this call returns {@link
-     * Result#RESULT_UNAVAILABLE}.
+     * #RESULT_UNAVAILABLE}.
      *
      * <p>
      * This locks the frontend to a frequency by providing signal
@@ -691,7 +701,7 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>Tuning with {@link android.media.tv.tuner.frontend.DtmbFrontendSettings} is only
      * supported in Tuner 1.1 or higher version. Unsupported version will cause no-op. Use {@link
-     * TunerVersionChecker.getTunerVersion()} to get the version information.
+     * TunerVersionChecker#getTunerVersion()} to get the version information.
      *
      * @param settings Signal delivery information the frontend uses to
      *                 search and lock the signal.
@@ -740,7 +750,7 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>Scanning with {@link android.media.tv.tuner.frontend.DtmbFrontendSettings} is only
      * supported in Tuner 1.1 or higher version. Unsupported version will cause no-op. Use {@link
-     * TunerVersionChecker.getTunerVersion()} to get the version information.
+     * TunerVersionChecker#getTunerVersion()} to get the version information.
      *
      * @param settings A {@link FrontendSettings} to configure the frontend.
      * @param scanType The scan type.
@@ -846,7 +856,7 @@ public class Tuner implements AutoCloseable  {
      * <p>This retrieve the statuses of the frontend for given status types.
      *
      * @param statusTypes an array of status types which the caller requests. Any types that are not
-     *        in {@link FrontendInfo.getStatusCapabilities()} would be ignored.
+     *        in {@link FrontendInfo#getStatusCapabilities()} would be ignored.
      * @return statuses which response the caller's requests. {@code null} if the operation failed.
      */
     @Nullable
@@ -895,7 +905,7 @@ public class Tuner implements AutoCloseable  {
      * use the output from CI-CAM as the input after this call.
      *
      * <p> Note that this API is used to connect the CI-CAM to the Demux module while
-     * {@link connectFrontendToCiCam(int)} is used to connect CI-CAM to the Frontend module.
+     * {@link #connectFrontendToCiCam(int)} is used to connect CI-CAM to the Frontend module.
      *
      * @param ciCamId specify CI-CAM Id to connect.
      * @return result status of the operation.
@@ -917,20 +927,20 @@ public class Tuner implements AutoCloseable  {
      * the TS directly from the frontend.
      *
      * <p> Note that this API is used to connect the CI-CAM to the Frontend module while
-     * {@link connectCiCam(int)} is used to connect CI-CAM to the Demux module.
+     * {@link #connectCiCam(int)} is used to connect CI-CAM to the Demux module.
      *
      * <p>Use {@link #disconnectFrontendToCiCam(int)} to disconnect.
      *
      * <p>This API is only supported by Tuner HAL 1.1 or higher. Unsupported version would cause
-     * no-op and return {@link INVALID_LTS_ID}. Use {@link TunerVersionChecker.getTunerVersion()} to
-     * check the version.
+     * no-op and return {@link #INVALID_LTS_ID}. Use {@link TunerVersionChecker#getTunerVersion()}
+     * to check the version.
      *
      * @param ciCamId specify CI-CAM Id, which is the id of the Conditional Access Modules (CAM)
      *                Common Interface (CI), to link.
      * @return Local transport stream id when connection is successfully established. Failed
-     *         operation returns {@link INVALID_LTS_ID} while unsupported version also returns
-     *         {@link INVALID_LTS_ID}. Check the current HAL version using
-     *         {@link TunerVersionChecker.getTunerVersion()}.
+     *         operation returns {@link #INVALID_LTS_ID} while unsupported version also returns
+     *         {@link #INVALID_LTS_ID}. Check the current HAL version using
+     *         {@link TunerVersionChecker#getTunerVersion()}.
      */
     public int connectFrontendToCiCam(int ciCamId) {
         if (TunerVersionChecker.checkHigherOrEqualVersionTo(TunerVersionChecker.TUNER_VERSION_1_1,
@@ -948,7 +958,7 @@ public class Tuner implements AutoCloseable  {
      * <p>The demux will use the output from the frontend as the input after this call.
      *
      * <p> Note that this API is used to disconnect the CI-CAM to the Demux module while
-     * {@link disconnectFrontendToCiCam(int)} is used to disconnect CI-CAM to the Frontend module.
+     * {@link #disconnectFrontendToCiCam(int)} is used to disconnect CI-CAM to the Frontend module.
      *
      * @return result status of the operation.
      */
@@ -966,15 +976,15 @@ public class Tuner implements AutoCloseable  {
      * <p>It is used by the client to unlink CI-CAM to a Frontend.
      *
      * <p> Note that this API is used to disconnect the CI-CAM to the Demux module while
-     * {@link disconnectCiCam(int)} is used to disconnect CI-CAM to the Frontend module.
+     * {@link #disconnectCiCam(int)} is used to disconnect CI-CAM to the Frontend module.
      *
      * <p>This API is only supported by Tuner HAL 1.1 or higher. Unsupported version would cause
-     * no-op. Use {@link TunerVersionChecker.getTunerVersion()} to check the version.
+     * no-op. Use {@link TunerVersionChecker#getTunerVersion()} to check the version.
      *
      * @param ciCamId specify CI-CAM Id, which is the id of the Conditional Access Modules (CAM)
      *                Common Interface (CI), to disconnect.
      * @return result status of the operation. Unsupported version would return
-     *         {@link RESULT_UNAVAILABLE}
+     *         {@link #RESULT_UNAVAILABLE}
      */
     @Result
     public int disconnectFrontendToCiCam(int ciCamId) {
@@ -1283,7 +1293,7 @@ public class Tuner implements AutoCloseable  {
     /**
      * Opens a Descrambler in tuner.
      *
-     * @return  a {@link Descrambler} object.
+     * @return a {@link Descrambler} object.
      */
     @RequiresPermission(android.Manifest.permission.ACCESS_TV_DESCRAMBLER)
     @Nullable

@@ -778,7 +778,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 if (surfaceController != null) {
                     ProtoLog.i(WM_SHOW_SURFACE_ALLOC,
                             "SURFACE RECOVER DESTROY: %s", winAnimator.mWin);
-                    winAnimator.destroySurface();
+                    SurfaceControl.Transaction t = mWmService.mTransactionFactory.get();
+                    winAnimator.destroySurface(t);
+                    t.apply();
                     if (winAnimator.mWin.mActivityRecord != null) {
                         winAnimator.mWin.mActivityRecord.removeStartingWindow();
                     }
@@ -926,7 +928,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     displayContent.pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
                 }
                 win.destroySurfaceUnchecked();
-                win.mWinAnimator.destroyPreservedSurfaceLocked();
+                win.mWinAnimator.destroyPreservedSurfaceLocked(win.getSyncTransaction());
             } while (i > 0);
             mWmService.mDestroySurface.clear();
         }
@@ -1826,26 +1828,22 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
-     * @return a list of activities which are the top ones in each visible stack. The first
+     * @return a list of activities which are the top ones in each visible root task. The first
      * entry will be the focused activity.
      */
     List<IBinder> getTopVisibleActivities() {
         final ArrayList<IBinder> topActivityTokens = new ArrayList<>();
-        final Task topFocusedStack = getTopDisplayFocusedRootTask();
+        final Task topFocusedRootTask = getTopDisplayFocusedRootTask();
         // Traverse all displays.
-        forAllTaskDisplayAreas(taskDisplayArea -> {
-            // Traverse all stacks on a display area.
-            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                // Get top activity from a visible stack and add it to the list.
-                if (stack.shouldBeVisible(null /* starting */)) {
-                    final ActivityRecord top = stack.getTopNonFinishingActivity();
-                    if (top != null) {
-                        if (stack == topFocusedStack) {
-                            topActivityTokens.add(0, top.appToken);
-                        } else {
-                            topActivityTokens.add(top.appToken);
-                        }
+        forAllRootTasks(rootTask -> {
+            // Get top activity from a visible root task and add it to the list.
+            if (rootTask.shouldBeVisible(null /* starting */)) {
+                final ActivityRecord top = rootTask.getTopNonFinishingActivity();
+                if (top != null) {
+                    if (rootTask == topFocusedRootTask) {
+                        topActivityTokens.add(0, top.appToken);
+                    } else {
+                        topActivityTokens.add(top.appToken);
                     }
                 }
             }
@@ -1856,9 +1854,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     @Nullable
     public Task getTopDisplayFocusedRootTask() {
         for (int i = getChildCount() - 1; i >= 0; --i) {
-            final Task focusedStack = getChildAt(i).getFocusedRootTask();
-            if (focusedStack != null) {
-                return focusedStack;
+            final Task focusedRootTask = getChildAt(i).getFocusedRootTask();
+            if (focusedRootTask != null) {
+                return focusedRootTask;
             }
         }
         return null;
@@ -1866,15 +1864,15 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @Nullable
     ActivityRecord getTopResumedActivity() {
-        final Task focusedStack = getTopDisplayFocusedRootTask();
-        if (focusedStack == null) {
+        final Task focusedRootTask = getTopDisplayFocusedRootTask();
+        if (focusedRootTask == null) {
             return null;
         }
-        final ActivityRecord resumedActivity = focusedStack.getResumedActivity();
+        final ActivityRecord resumedActivity = focusedRootTask.getResumedActivity();
         if (resumedActivity != null && resumedActivity.app != null) {
             return resumedActivity;
         }
-        // The top focused stack might not have a resumed activity yet - look on all displays in
+        // The top focused root task might not have a resumed activity yet - look on all displays in
         // focus order.
         return getItemFromTaskDisplayAreas(TaskDisplayArea::getFocusedActivity);
     }
@@ -1890,21 +1888,17 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // First, found out what is currently the foreground app, so that we don't blow away the
         // previous app if this activity is being hosted by the process that is actually still the
         // foreground.
-        WindowProcessController fgApp = reduceOnAllTaskDisplayAreas((taskDisplayArea, app) -> {
-            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                if (isTopDisplayFocusedRootTask(stack)) {
-                    final ActivityRecord resumedActivity = stack.getResumedActivity();
-                    if (resumedActivity != null) {
-                        app = resumedActivity.app;
-                    } else if (stack.mPausingActivity != null) {
-                        app = stack.mPausingActivity.app;
-                    }
-                    break;
+        WindowProcessController fgApp = getItemFromRootTasks(rootTask -> {
+            if (isTopDisplayFocusedRootTask(rootTask)) {
+                final ActivityRecord resumedActivity = rootTask.getResumedActivity();
+                if (resumedActivity != null) {
+                    return resumedActivity.app;
+                } else if (rootTask.getPausingActivity() != null) {
+                    return rootTask.getPausingActivity().app;
                 }
             }
-            return app;
-        }, null /* initValue */);
+            return null;
+        });
 
         // Now set this one as the previous process, only if that really makes sense to.
         if (r.hasProcess() && fgApp != null && r.app != fgApp
@@ -1921,27 +1915,21 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mTmpRemoteException = null;
             mTmpBoolean = false; // Set to true if an activity was started.
             final DisplayContent display = getChildAt(displayNdx);
-            display.forAllTaskDisplayAreas(displayArea -> {
+            display.forAllRootTasks(rootTask -> {
                 if (mTmpRemoteException != null) {
                     return;
                 }
 
-                for (int taskNdx = displayArea.getRootTaskCount() - 1; taskNdx >= 0; --taskNdx) {
-                    final Task rootTask = displayArea.getRootTaskAt(taskNdx);
-                    if (rootTask.getVisibility(null /*starting*/) == TASK_VISIBILITY_INVISIBLE) {
-                        break;
-                    }
-
-                    final PooledFunction c = PooledLambda.obtainFunction(
-                            RootWindowContainer::startActivityForAttachedApplicationIfNeeded, this,
-                            PooledLambda.__(ActivityRecord.class), app,
-                            rootTask.topRunningActivity());
-                    rootTask.forAllActivities(c);
-                    c.recycle();
-                    if (mTmpRemoteException != null) {
-                        return;
-                    }
+                if (rootTask.getVisibility(null /*starting*/) == TASK_VISIBILITY_INVISIBLE) {
+                    return;
                 }
+
+                final PooledFunction c = PooledLambda.obtainFunction(
+                        RootWindowContainer::startActivityForAttachedApplicationIfNeeded, this,
+                        PooledLambda.__(ActivityRecord.class), app,
+                        rootTask.topRunningActivity());
+                rootTask.forAllActivities(c);
+                c.recycle();
             });
             if (mTmpRemoteException != null) {
                 throw mTmpRemoteException;
@@ -2009,39 +1997,36 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     boolean switchUser(int userId, UserState uss) {
-        final Task topFocusedStack = getTopDisplayFocusedRootTask();
-        final int focusStackId = topFocusedStack != null
-                ? topFocusedStack.getRootTaskId() : INVALID_TASK_ID;
-        // We dismiss the docked stack whenever we switch users.
+        final Task topFocusedRootTask = getTopDisplayFocusedRootTask();
+        final int focusRootTaskId = topFocusedRootTask != null
+                ? topFocusedRootTask.getRootTaskId() : INVALID_TASK_ID;
+        // We dismiss the docked root task whenever we switch users.
         if (getDefaultTaskDisplayArea().isSplitScreenModeActivated()) {
             getDefaultTaskDisplayArea().onSplitScreenModeDismissed();
         }
-        // Also dismiss the pinned stack whenever we switch users. Removing the pinned stack will
-        // also cause all tasks to be moved to the fullscreen stack at a position that is
+        // Also dismiss the pinned root task whenever we switch users. Removing the pinned root task
+        // will also cause all tasks to be moved to the fullscreen root task at a position that is
         // appropriate.
         removeRootTasksInWindowingModes(WINDOWING_MODE_PINNED);
 
-        mUserRootTaskInFront.put(mCurrentUser, focusStackId);
+        mUserRootTaskInFront.put(mCurrentUser, focusRootTaskId);
         mCurrentUser = userId;
 
         mTaskSupervisor.mStartingUsers.add(uss);
-        forAllTaskDisplayAreas(taskDisplayArea -> {
-            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                stack.switchUser(userId);
-            }
+        forAllRootTasks(rootTask -> {
+            rootTask.switchUser(userId);
         });
 
-        final int restoreStackId = mUserRootTaskInFront.get(userId);
-        Task stack = getRootTask(restoreStackId);
-        if (stack == null) {
-            stack = getDefaultTaskDisplayArea().getOrCreateRootHomeTask();
+        final int restoreRootTaskId = mUserRootTaskInFront.get(userId);
+        Task rootTask = getRootTask(restoreRootTaskId);
+        if (rootTask == null) {
+            rootTask = getDefaultTaskDisplayArea().getOrCreateRootHomeTask();
         }
-        final boolean homeInFront = stack.isActivityTypeHome();
-        if (stack.isOnHomeDisplay()) {
-            stack.moveToFront("switchUserOnHomeDisplay");
+        final boolean homeInFront = rootTask.isActivityTypeHome();
+        if (rootTask.isOnHomeDisplay()) {
+            rootTask.moveToFront("switchUserOnHomeDisplay");
         } else {
-            // Stack was moved to another display while user was swapped out.
+            // Root task was moved to another display while user was swapped out.
             resumeHomeActivity(null, "switchUserOnOtherDisplay", getDefaultTaskDisplayArea());
         }
         return homeInFront;
@@ -2292,20 +2277,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
      */
     int finishTopCrashedActivities(WindowProcessController app, String reason) {
         Task focusedStack = getTopDisplayFocusedRootTask();
-        Task finishedTask = reduceOnAllTaskDisplayAreas((taskDisplayArea, task) -> {
-            // It is possible that request to finish activity might also remove its task and
-            // stack, so we need to be careful with indexes in the loop and check child count
-            // every time.
-            for (int stackNdx = 0; stackNdx < taskDisplayArea.getRootTaskCount(); ++stackNdx) {
-                final Task stack = taskDisplayArea.getRootTaskAt(stackNdx);
-                final Task t = stack.finishTopCrashedActivityLocked(app, reason);
-                if (stack == focusedStack || task == null) {
-                    task = t;
-                }
+        final Task[] finishedTask = new Task[1];
+        forAllTasks(stack -> {
+            final Task t = stack.finishTopCrashedActivityLocked(app, reason);
+            if (stack == focusedStack || finishedTask[0] == null) {
+                finishedTask[0] = t;
             }
-            return task;
-        }, null /* initValue */);
-        return finishedTask != null ? finishedTask.mTaskId : INVALID_TASK_ID;
+        });
+        return finishedTask[0] != null ? finishedTask[0].mTaskId : INVALID_TASK_ID;
     }
 
     boolean resumeFocusedTasksTopActivities() {
@@ -2320,7 +2299,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
 
         boolean result = false;
-        if (targetRootTask != null && (targetRootTask.isTopStackInDisplayArea()
+        if (targetRootTask != null && (targetRootTask.isTopRootTaskInDisplayArea()
                 || getTopDisplayFocusedRootTask() == targetRootTask)) {
             result = targetRootTask.resumeTopActivityUncheckedLocked(target, targetOptions);
         }
@@ -2328,36 +2307,32 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
             final DisplayContent display = getChildAt(displayNdx);
             final boolean curResult = result;
-            boolean resumedOnDisplay = display.reduceOnAllTaskDisplayAreas(
-                    (taskDisplayArea, resumed) -> {
-                        for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                            final Task rootTask = taskDisplayArea.getRootTaskAt(sNdx);
-                            final ActivityRecord topRunningActivity = rootTask.topRunningActivity();
-                            if (!rootTask.isFocusableAndVisible() || topRunningActivity == null) {
-                                continue;
-                            }
-                            if (rootTask == targetRootTask) {
-                                // Simply update the result for targetStack because the targetStack
-                                // had already resumed in above. We don't want to resume it again,
-                                // especially in some cases, it would cause a second launch failure
-                                // if app process was dead.
-                                resumed |= curResult;
-                                continue;
-                            }
-                            if (taskDisplayArea.isTopRootTask(rootTask)
-                                    && topRunningActivity.isState(RESUMED)) {
-                                // Kick off any lingering app transitions form the MoveTaskToFront
-                                // operation, but only consider the top task and stack on that
-                                // display.
-                                rootTask.executeAppTransition(targetOptions);
-                            } else {
-                                resumed |= topRunningActivity.makeActiveIfNeeded(target);
-                            }
-                        }
-                        return resumed;
-                    }, false /* initValue */);
-            result |= resumedOnDisplay;
-            if (!resumedOnDisplay) {
+            boolean[] resumedOnDisplay = new boolean[1];
+            display.forAllRootTasks(rootTask -> {
+                final ActivityRecord topRunningActivity = rootTask.topRunningActivity();
+                if (!rootTask.isFocusableAndVisible() || topRunningActivity == null) {
+                    return;
+                }
+                if (rootTask == targetRootTask) {
+                    // Simply update the result for targetStack because the targetStack
+                    // had already resumed in above. We don't want to resume it again,
+                    // especially in some cases, it would cause a second launch failure
+                    // if app process was dead.
+                    resumedOnDisplay[0] |= curResult;
+                    return;
+                }
+                if (rootTask.getDisplayArea().isTopRootTask(rootTask)
+                        && topRunningActivity.isState(RESUMED)) {
+                    // Kick off any lingering app transitions form the MoveTaskToFront
+                    // operation, but only consider the top task and stack on that
+                    // display.
+                    rootTask.executeAppTransition(targetOptions);
+                } else {
+                    resumedOnDisplay[0] |= topRunningActivity.makeActiveIfNeeded(target);
+                }
+            });
+            result |= resumedOnDisplay[0];
+            if (!resumedOnDisplay[0]) {
                 // In cases when there are no valid activities (e.g. device just booted or launcher
                 // crashed) it's possible that nothing was resumed on a display. Requesting resume
                 // of top activity in focused stack explicitly will make sure that at least home
@@ -2375,7 +2350,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         return result;
     }
 
-    void applySleepTokens(boolean applyToStacks) {
+    void applySleepTokens(boolean applyToRootTasks) {
         for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
             // Set the sleeping state of the display.
             final DisplayContent display = getChildAt(displayNdx);
@@ -2385,35 +2360,32 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
             display.setIsSleeping(displayShouldSleep);
 
-            if (!applyToStacks) {
+            if (!applyToRootTasks) {
                 continue;
             }
 
-            // Set the sleeping state of the stacks on the display.
-            display.forAllTaskDisplayAreas(taskDisplayArea -> {
-                for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                    final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                    if (displayShouldSleep) {
-                        stack.goToSleepIfPossible(false /* shuttingDown */);
-                    } else {
-                        stack.awakeFromSleepingLocked();
-                        if (stack.isFocusedStackOnDisplay()
-                                && !mTaskSupervisor.getKeyguardController()
-                                .isKeyguardOrAodShowing(display.mDisplayId)) {
-                            // If the keyguard is unlocked - resume immediately.
-                            // It is possible that the display will not be awake at the time we
-                            // process the keyguard going away, which can happen before the sleep
-                            // token is released. As a result, it is important we resume the
-                            // activity here.
-                            stack.resumeTopActivityUncheckedLocked(null, null);
-                        }
-                        // The visibility update must not be called before resuming the top, so the
-                        // display orientation can be updated first if needed. Otherwise there may
-                        // have redundant configuration changes due to apply outdated display
-                        // orientation (from keyguard) to activity.
-                        stack.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
-                                false /* preserveWindows */);
+            // Set the sleeping state of the root tasks on the display.
+            display.forAllRootTasks(rootTask -> {
+                if (displayShouldSleep) {
+                    rootTask.goToSleepIfPossible(false /* shuttingDown */);
+                } else {
+                    rootTask.awakeFromSleepingLocked();
+                    if (rootTask.isFocusedRootTaskOnDisplay()
+                            && !mTaskSupervisor.getKeyguardController()
+                            .isKeyguardOrAodShowing(display.mDisplayId)) {
+                        // If the keyguard is unlocked - resume immediately.
+                        // It is possible that the display will not be awake at the time we
+                        // process the keyguard going away, which can happen before the sleep
+                        // token is released. As a result, it is important we resume the
+                        // activity here.
+                        rootTask.resumeTopActivityUncheckedLocked(null, null);
                     }
+                    // The visibility update must not be called before resuming the top, so the
+                    // display orientation can be updated first if needed. Otherwise there may
+                    // have redundant configuration changes due to apply outdated display
+                    // orientation (from keyguard) to activity.
+                    rootTask.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                            false /* preserveWindows */);
                 }
             });
         }
@@ -2450,12 +2422,27 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     private RootTaskInfo getRootTaskInfo(Task task) {
-        final TaskDisplayArea taskDisplayArea = task.getDisplayArea();
         RootTaskInfo info = new RootTaskInfo();
         task.fillTaskInfo(info);
 
-        // A task might be not attached to a display.
-        info.position = taskDisplayArea != null ? taskDisplayArea.getIndexOf(task) : 0;
+        final DisplayContent displayContent = task.getDisplayContent();
+        if (displayContent == null) {
+            // A task might be not attached to a display.
+            info.position = -1;
+        } else {
+            // Find the task z-order among all root tasks on the display from bottom to top.
+            final int[] taskIndex = new int[1];
+            final boolean[] hasFound = new boolean[1];
+            displayContent.forAllRootTasks(rootTask -> {
+                if (task == rootTask) {
+                    hasFound[0] = true;
+                    return true;
+                }
+                taskIndex[0]++;
+                return false;
+            }, false /* traverseTopToBottom */);
+            info.position = hasFound[0] ? taskIndex[0] : -1;
+        }
         info.visible = task.shouldBeVisible(null);
         task.getBounds(info.bounds);
 
@@ -2499,24 +2486,21 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     RootTaskInfo getRootTaskInfo(int windowingMode, int activityType) {
-        final Task stack = getRootTask(windowingMode, activityType);
-        return (stack != null) ? getRootTaskInfo(stack) : null;
+        final Task rootTask = getRootTask(windowingMode, activityType);
+        return (rootTask != null) ? getRootTaskInfo(rootTask) : null;
     }
 
     RootTaskInfo getRootTaskInfo(int windowingMode, int activityType, int displayId) {
-        final Task stack = getRootTask(windowingMode, activityType, displayId);
-        return (stack != null) ? getRootTaskInfo(stack) : null;
+        final Task rootTask = getRootTask(windowingMode, activityType, displayId);
+        return (rootTask != null) ? getRootTaskInfo(rootTask) : null;
     }
 
     /** If displayId == INVALID_DISPLAY, this will get root task infos on all displays */
     ArrayList<RootTaskInfo> getAllRootTaskInfos(int displayId) {
-        ArrayList<RootTaskInfo> list = new ArrayList<>();
+        final ArrayList<RootTaskInfo> list = new ArrayList<>();
         if (displayId == INVALID_DISPLAY) {
-            forAllTaskDisplayAreas(taskDisplayArea -> {
-                for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                    final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                    list.add(getRootTaskInfo(stack));
-                }
+            forAllRootTasks(rootTask -> {
+                list.add(getRootTaskInfo(rootTask));
             });
             return list;
         }
@@ -2524,11 +2508,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         if (display == null) {
             return list;
         }
-        display.forAllTaskDisplayAreas(taskDisplayArea -> {
-            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                list.add(getRootTaskInfo(stack));
-            }
+        display.forAllRootTasks(rootTask -> {
+            list.add(getRootTaskInfo(rootTask));
         });
         return list;
     }
@@ -2601,10 +2582,17 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     Task findRootTaskBehind(Task rootTask) {
         final TaskDisplayArea taskDisplayArea = rootTask.getDisplayArea();
         if (taskDisplayArea != null) {
-            for (int i = taskDisplayArea.getRootTaskCount() - 1; i >= 0; i--) {
-                if (taskDisplayArea.getRootTaskAt(i) == rootTask && i > 0) {
-                    return taskDisplayArea.getRootTaskAt(i - 1);
+            final boolean[] hasFound = new boolean[1];
+            // TODO(b/175136051): should this be only the direct child root task?
+            final Task rootTaskBehind = taskDisplayArea.getRootTask(task -> {
+                if (hasFound[0]) {
+                    return true;
                 }
+                hasFound[0] = task == rootTask;
+                return false;
+            });
+            if (rootTaskBehind != null) {
+                return rootTaskBehind;
             }
         }
         throw new IllegalStateException("Failed to find a root task behind root task =" + rootTask
@@ -2736,8 +2724,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         if (DEBUG_SWITCH) {
             Slog.v(TAG_SWITCH, "Destroying " + r + " in state " + r.getState()
-                    + " resumed=" + r.getStack().mResumedActivity + " pausing="
-                    + r.getStack().mPausingActivity + " for reason " + mDestroyAllActivitiesReason);
+                    + " resumed=" + r.getTask().getResumedActivity() + " pausing="
+                    + r.getTask().getPausingActivity() + " for reason "
+                    + mDestroyAllActivitiesReason);
         }
 
         r.destroyImmediately(mDestroyAllActivitiesReason);
@@ -2746,24 +2735,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     // Tries to put all activity tasks to sleep. Returns true if all tasks were
     // successfully put to sleep.
     boolean putTasksToSleep(boolean allowDelay, boolean shuttingDown) {
-        return reduceOnAllTaskDisplayAreas((taskDisplayArea, result) -> {
-            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                // Stacks and activities could be removed while putting activities to sleep if
-                // the app process was gone. This prevents us getting exception by accessing an
-                // invalid stack index.
-                if (sNdx >= taskDisplayArea.getRootTaskCount()) {
-                    continue;
-                }
-                final Task task = taskDisplayArea.getRootTaskAt(sNdx);
-                if (allowDelay) {
-                    result &= task.goToSleepIfPossible(shuttingDown);
-                } else {
-                    task.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
-                            !PRESERVE_WINDOWS);
-                }
+        final boolean[] result = {true};
+        forAllRootTasks(task -> {
+            if (allowDelay) {
+                result[0] &= task.goToSleepIfPossible(shuttingDown);
+            } else {
+                task.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                        !PRESERVE_WINDOWS);
             }
-            return result;
-        }, true /* initValue */);
+        });
+        return result[0];
     }
 
     void handleAppCrash(WindowProcessController app) {
@@ -2989,8 +2970,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
 
         // If {@code r} is already in target display area and its task is the same as the candidate
-        // task, the intention should be getting a launch stack for the reusable activity, so we can
-        // use the existing stack.
+        // task, the intention should be getting a launch root task for the reusable activity, so we
+        // can use the existing root task.
         if (candidateTask != null) {
             final TaskDisplayArea attachedTaskDisplayArea = candidateTask.getDisplayArea();
             if (attachedTaskDisplayArea == null || attachedTaskDisplayArea == taskDisplayArea) {
@@ -2999,9 +2980,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             // Or the candidate task is already a root task that can be reused by reparenting
             // it to the target display.
             if (candidateTask.isRootTask()) {
-                final Task stack = candidateTask.getRootTask();
-                stack.reparent(taskDisplayArea, true /* onTop */);
-                return stack;
+                final Task rootTask = candidateTask.getRootTask();
+                rootTask.reparent(taskDisplayArea, true /* onTop */);
+                return rootTask;
             }
         }
 
@@ -3018,16 +2999,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         windowingMode = taskDisplayArea.validateWindowingMode(windowingMode, r, candidateTask,
                 r.getActivityType());
 
-        // Return the topmost valid stack on the display.
-        for (int i = taskDisplayArea.getRootTaskCount() - 1; i >= 0; --i) {
-            final Task stack = taskDisplayArea.getRootTaskAt(i);
-            if (isValidLaunchRootTask(stack, r, windowingMode)) {
-                return stack;
-            }
+        // Return the topmost valid root task on the display.
+        final int targetWindowingMode = windowingMode;
+        final Task topmostValidRootTask = taskDisplayArea.getRootTask(rootTask ->
+                isValidLaunchRootTask(rootTask, r, targetWindowingMode));
+        if (topmostValidRootTask != null) {
+            return topmostValidRootTask;
         }
 
-        // If there is no valid stack on the secondary display area - check if new dynamic stack
-        // will do.
+        // If there is no valid root task on the secondary display area - check if new dynamic root
+        // task will do.
         if (taskDisplayArea != getDisplayContent(taskDisplayArea.getDisplayId())
                 .getDefaultTaskDisplayArea()) {
             final int activityType =
@@ -3258,12 +3239,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     void finishVoiceTask(IVoiceInteractionSession session) {
-        forAllTaskDisplayAreas(taskDisplayArea -> {
-            final int numStacks = taskDisplayArea.getRootTaskCount();
-            for (int stackNdx = 0; stackNdx < numStacks; ++stackNdx) {
-                final Task stack = taskDisplayArea.getRootTaskAt(stackNdx);
-                stack.finishVoiceTask(session);
-            }
+        forAllRootTasks(rootTask -> {
+            rootTask.finishVoiceTask(session);
         });
     }
 
@@ -3322,20 +3299,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     boolean allResumedActivitiesVisible() {
         boolean[] foundResumed = {false};
-        final boolean foundInvisibleResumedActivity = forAllTaskDisplayAreas(
-                taskDisplayArea -> {
-                    for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                        final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                        final ActivityRecord r = stack.getResumedActivity();
-                        if (r != null) {
-                            if (!r.nowVisible) {
-                                return true;
-                            }
-                            foundResumed[0] = true;
-                        }
-                    }
-                    return false;
-                });
+        final boolean foundInvisibleResumedActivity = forAllRootTasks(rootTask -> {
+            final ActivityRecord r = rootTask.getResumedActivity();
+            if (r != null) {
+                if (!r.nowVisible) {
+                    return true;
+                }
+                foundResumed[0] = true;
+            }
+            return false;
+        });
         if (foundInvisibleResumedActivity) {
             return false;
         }
@@ -3344,23 +3317,19 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     boolean allPausedActivitiesComplete() {
         boolean[] pausing = {true};
-        final boolean hasActivityNotCompleted = forAllTaskDisplayAreas(
-                taskDisplayArea -> {
-                    for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                        final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                        final ActivityRecord r = stack.mPausingActivity;
-                        if (r != null && !r.isState(PAUSED, STOPPED, STOPPING, FINISHING)) {
-                            ProtoLog.d(WM_DEBUG_STATES, "allPausedActivitiesComplete: "
-                                    + "r=%s state=%s", r, r.getState());
-                            if (WM_DEBUG_STATES.isEnabled()) {
-                                pausing[0] = false;
-                            } else {
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
-                });
+        final boolean hasActivityNotCompleted = forAllLeafTasks(task -> {
+            final ActivityRecord r = task.getPausingActivity();
+            if (r != null && !r.isState(PAUSED, STOPPED, STOPPING, FINISHING)) {
+                ProtoLog.d(WM_DEBUG_STATES, "allPausedActivitiesComplete: "
+                        + "r=%s state=%s", r, r.getState());
+                if (WM_DEBUG_STATES.isEnabled()) {
+                    pausing[0] = false;
+                } else {
+                    return true;
+                }
+            }
+            return false;
+        });
         if (hasActivityNotCompleted) {
             return false;
         }
@@ -3411,13 +3380,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     void cancelInitializingActivities() {
-        forAllTaskDisplayAreas(taskDisplayArea -> {
-            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                // We don't want to clear starting window for activities that aren't occluded
-                // as we need to display their starting window until they are done initializing.
-                taskDisplayArea.getRootTaskAt(sNdx).forAllOccludedActivities(
-                        ActivityRecord::cancelInitializing);
-            }
+        forAllRootTasks(task -> {
+            // We don't want to clear starting window for activities that aren't occluded
+            // as we need to display their starting window until they are done initializing.
+            task.forAllOccludedActivities(ActivityRecord::cancelInitializing);
         });
     }
 
@@ -3577,13 +3543,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 return new ArrayList<>();
             }
         } else {
-            ArrayList<ActivityRecord> activities = new ArrayList<>();
-            forAllTaskDisplayAreas(taskDisplayArea -> {
-                for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                    final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                    if (!dumpVisibleStacksOnly || stack.shouldBeVisible(null)) {
-                        activities.addAll(stack.getDumpActivitiesLocked(name));
-                    }
+            final ArrayList<ActivityRecord> activities = new ArrayList<>();
+            forAllRootTasks(rootTask -> {
+                if (!dumpVisibleStacksOnly || rootTask.shouldBeVisible(null)) {
+                    activities.addAll(rootTask.getDumpActivitiesLocked(name));
                 }
             });
             return activities;
@@ -3633,15 +3596,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             pw.print("Display #");
             pw.print(displayContent.mDisplayId);
             pw.println(" (activities from top to bottom):");
-            displayContent.forAllTaskDisplayAreas(taskDisplayArea -> {
-                for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                    final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                    if (needSep[0]) {
-                        pw.println();
-                    }
-                    needSep[0] = stack.dump(fd, pw, dumpAll, dumpClient, dumpPackage, false);
-                    printed[0] |= needSep[0];
+            displayContent.forAllRootTasks(rootTask -> {
+                if (needSep[0]) {
+                    pw.println();
                 }
+                needSep[0] = rootTask.dump(fd, pw, dumpAll, dumpClient, dumpPackage, false);
+                printed[0] |= needSep[0];
             });
             displayContent.forAllTaskDisplayAreas(taskDisplayArea -> {
                 printed[0] |= printThisActivity(pw, taskDisplayArea.getFocusedActivity(),

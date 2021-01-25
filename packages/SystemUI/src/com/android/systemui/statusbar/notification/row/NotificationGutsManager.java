@@ -324,7 +324,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 userHandle.getIdentifier());
 
         if (mAssistantFeedbackController.showFeedbackIndicator(row.getEntry())) {
-            feedbackInfo.bindGuts(pmUser, sbn, row.getEntry(), mAssistantFeedbackController);
+            feedbackInfo.bindGuts(pmUser, sbn, row.getEntry(), row, mAssistantFeedbackController);
         }
     }
 
@@ -378,7 +378,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 mDeviceProvisionedController.isDeviceProvisioned(),
                 row.getIsNonblockable(),
                 mHighPriorityProvider.isHighPriority(row.getEntry()),
-                mAssistantFeedbackController.isFeedbackEnabled());
+                mAssistantFeedbackController);
     }
 
     /**

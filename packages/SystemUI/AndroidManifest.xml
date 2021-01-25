@@ -104,6 +104,7 @@
     <uses-permission android:name="android.permission.START_ACTIVITY_AS_CALLER" />
     <uses-permission android:name="android.permission.START_TASKS_FROM_RECENTS" />
     <uses-permission android:name="android.permission.GET_INTENT_SENDER_INTENT" />
+    <uses-permission android:name="android.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS" />
 
     <!-- WindowManager -->
     <uses-permission android:name="android.permission.INTERNAL_SYSTEM_WINDOW" />
@@ -391,7 +392,7 @@
         </activity-alias>
 
         <activity
-            android:name="com.android.wm.shell.splitscreen.ForcedResizableInfoActivity"
+            android:name="com.android.wm.shell.legacysplitscreen.ForcedResizableInfoActivity"
             android:theme="@style/ForcedResizableTheme"
             android:excludeFromRecents="true"
             android:stateNotNeeded="true"
@@ -570,14 +571,10 @@
         <!-- People Space UI Screen -->
         <activity android:name=".people.PeopleSpaceActivity"
             android:label="People"
-            android:icon="@drawable/ic_music_note"
             android:exported="true"
-            android:enabled="false"
-            android:theme="@android:style/Theme.Material.NoActionBar"
-            android:launchMode="singleInstance">
+            android:theme="@android:style/Theme.Material.NoActionBar">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE"/>
             </intent-filter>
         </activity>
 

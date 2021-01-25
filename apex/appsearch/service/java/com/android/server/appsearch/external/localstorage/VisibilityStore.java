@@ -51,21 +51,59 @@ import java.util.Set;
  * this class. Take care to not cause any circular dependencies.
  */
 class VisibilityStore {
-    // Schema type for documents that hold AppSearch's metadata, e.g. visibility settings
+    /** Schema type for documents that hold AppSearch's metadata, e.g. visibility settings */
     @VisibleForTesting static final String SCHEMA_TYPE = "Visibility";
-    // Property that holds the list of platform-hidden schemas, as part of the visibility
-    // settings.
-    @VisibleForTesting static final String PLATFORM_HIDDEN_PROPERTY = "platformHidden";
-    // Database name to prefix all visibility schemas and documents with. Special-cased to
-    // minimize the chance of collision with a client-supplied database.
-    @VisibleForTesting static final String DATABASE_NAME = "$$__AppSearch__Database";
-    // Namespace of documents that contain visibility settings
-    private static final String NAMESPACE = "namespace";
+
+    /**
+     * Property that holds the list of platform-hidden schemas, as part of the visibility settings.
+     */
+    @VisibleForTesting
+    static final String NOT_PLATFORM_SURFACEABLE_PROPERTY = "notPlatformSurfaceable";
+
+    /** Schema for the VisibilityStore's docuemnts. */
+    @VisibleForTesting
+    static final AppSearchSchema SCHEMA =
+            new AppSearchSchema.Builder(SCHEMA_TYPE)
+                    .addProperty(
+                            new AppSearchSchema.PropertyConfig.Builder(
+                                            NOT_PLATFORM_SURFACEABLE_PROPERTY)
+                                    .setDataType(AppSearchSchema.PropertyConfig.DATA_TYPE_STRING)
+                                    .setCardinality(
+                                            AppSearchSchema.PropertyConfig.CARDINALITY_REPEATED)
+                                    .build())
+                    .build();
+
+    /**
+     * These cannot have any of the special characters used by AppSearchImpl (e.g. {@link
+     * AppSearchImpl#PACKAGE_DELIMITER} or {@link AppSearchImpl#DATABASE_DELIMITER}.
+     */
+    static final String PACKAGE_NAME = "VS#Pkg";
+
+    static final String DATABASE_NAME = "VS#Db";
+
+    /**
+     * Prefix that AppSearchImpl creates for the VisibilityStore based on our package name and
+     * database name. Tracked here to tell when we're looking at our own prefix when looking through
+     * AppSearchImpl.
+     */
+    private static final String VISIBILITY_STORE_PREFIX =
+            AppSearchImpl.createPrefix(PACKAGE_NAME, DATABASE_NAME);
+
+    /** Namespace of documents that contain visibility settings */
+    private static final String NAMESPACE = GenericDocument.DEFAULT_NAMESPACE;
+
+    /**
+     * Prefix to add to all visibility document uri's. IcingSearchEngine doesn't allow empty uri's.
+     */
+    private static final String URI_PREFIX = "uri:";
+
     private final AppSearchImpl mAppSearchImpl;
 
-    // The map contains schemas that are platform-hidden for each database. All schemas in the map
-    // have a database name prefix.
-    private final Map<String, Set<String>> mPlatformHiddenMap = new ArrayMap<>();
+    /**
+     * Maps prefixes to the set of schemas that are platform-hidden within that prefix. All schemas
+     * in the map are prefixed.
+     */
+    private final Map<String, Set<String>> mNotPlatformSurfaceableMap = new ArrayMap<>();
 
     /**
      * Creates an uninitialized VisibilityStore object. Callers must also call {@link #initialize()}
@@ -82,46 +120,42 @@ class VisibilityStore {
      *
      * <p>This is kept separate from the constructor because this will call methods on
      * AppSearchImpl. Some may even then recursively call back into VisibilityStore (for example,
-     * {@link AppSearchImpl#setSchema} will call {@link #updateSchemas}. We need to have both
-     * AppSearchImpl and VisibilityStore fully initialized for this call flow to work.
+     * {@link AppSearchImpl#setSchema} will call {@link #setVisibility(String, Set)}. We need to
+     * have both AppSearchImpl and VisibilityStore fully initialized for this call flow to work.
      *
      * @throws AppSearchException AppSearchException on AppSearchImpl error.
      */
     public void initialize() throws AppSearchException {
-        if (!mAppSearchImpl.hasSchemaTypeLocked(DATABASE_NAME, SCHEMA_TYPE)) {
+        if (!mAppSearchImpl.hasSchemaTypeLocked(PACKAGE_NAME, DATABASE_NAME, SCHEMA_TYPE)) {
             // Schema type doesn't exist yet. Add it.
             mAppSearchImpl.setSchema(
+                    PACKAGE_NAME,
                     DATABASE_NAME,
-                    Collections.singleton(
-                            new AppSearchSchema.Builder(SCHEMA_TYPE)
-                                    .addProperty(
-                                            new AppSearchSchema.PropertyConfig.Builder(
-                                                            PLATFORM_HIDDEN_PROPERTY)
-                                                    .setDataType(
-                                                            AppSearchSchema.PropertyConfig
-                                                                    .DATA_TYPE_STRING)
-                                                    .setCardinality(
-                                                            AppSearchSchema.PropertyConfig
-                                                                    .CARDINALITY_REPEATED)
-                                                    .build())
-                                    .build()),
+                    Collections.singletonList(SCHEMA),
+                    /*schemasNotPlatformSurfaceable=*/ Collections.emptyList(),
                     /*forceOverride=*/ false);
         }
 
-        // Populate visibility settings map
-        for (String database : mAppSearchImpl.getDatabasesLocked()) {
-            if (database.equals(DATABASE_NAME)) {
-                // Our own database. Skip
+        // Populate visibility settings set
+        mNotPlatformSurfaceableMap.clear();
+        for (String prefix : mAppSearchImpl.getPrefixesLocked()) {
+            if (prefix.equals(VISIBILITY_STORE_PREFIX)) {
+                // Our own prefix. Skip
                 continue;
             }
 
             try {
-                // Note: We use the other clients' database names as uris
+                // Note: We use the other clients' prefixed names as uris
                 GenericDocument document =
-                        mAppSearchImpl.getDocument(DATABASE_NAME, NAMESPACE, /*uri=*/ database);
+                        mAppSearchImpl.getDocument(
+                                PACKAGE_NAME,
+                                DATABASE_NAME,
+                                NAMESPACE,
+                                /*uri=*/ addUriPrefix(prefix));
 
-                String[] schemas = document.getPropertyStringArray(PLATFORM_HIDDEN_PROPERTY);
-                mPlatformHiddenMap.put(database, new ArraySet<>(Arrays.asList(schemas)));
+                String[] schemas =
+                        document.getPropertyStringArray(NOT_PLATFORM_SURFACEABLE_PROPERTY);
+                mNotPlatformSurfaceableMap.put(prefix, new ArraySet<>(Arrays.asList(schemas)));
             } catch (AppSearchException e) {
                 if (e.getResultCode() == AppSearchResult.RESULT_NOT_FOUND) {
                     // TODO(b/172068212): This indicates some desync error. We were expecting a
@@ -136,122 +170,64 @@ class VisibilityStore {
     }
 
     /**
-     * Update visibility settings for the {@code databaseName}.
-     *
-     * @param schemasToRemove Database-prefixed schemas that should be removed
-     */
-    public void updateSchemas(@NonNull String databaseName, @NonNull Set<String> schemasToRemove)
-            throws AppSearchException {
-        Preconditions.checkNotNull(databaseName);
-        Preconditions.checkNotNull(schemasToRemove);
-
-        GenericDocument visibilityDocument;
-        try {
-            visibilityDocument =
-                    mAppSearchImpl.getDocument(DATABASE_NAME, NAMESPACE, /*uri=*/ databaseName);
-        } catch (AppSearchException e) {
-            if (e.getResultCode() == AppSearchResult.RESULT_NOT_FOUND) {
-                // This might be the first time we're seeing visibility changes for a database.
-                // Create a new visibility document.
-                mAppSearchImpl.putDocument(
-                        DATABASE_NAME,
-                        new GenericDocument.Builder(/*uri=*/ databaseName, SCHEMA_TYPE)
-                                .setNamespace(NAMESPACE)
-                                .build());
-
-                // Since we know there was nothing that existed before, we don't need to remove
-                // anything either. Return early.
-                return;
-            }
-            // Otherwise, this is some real error we should pass up.
-            throw e;
-        }
-
-        String[] hiddenSchemas =
-                visibilityDocument.getPropertyStringArray(PLATFORM_HIDDEN_PROPERTY);
-        if (hiddenSchemas == null) {
-            // Nothing to remove.
-            return;
-        }
-
-        // Create a new set so we can remove from it.
-        Set<String> remainingSchemas = new ArraySet<>(Arrays.asList(hiddenSchemas));
-        boolean changed = remainingSchemas.removeAll(schemasToRemove);
-        if (!changed) {
-            // Nothing was actually removed. Can return early.
-            return;
-        }
-
-        // Update our persisted document
-        // TODO(b/171882200): Switch to a .toBuilder API when it's available.
-        GenericDocument.Builder newVisibilityDocument =
-                new GenericDocument.Builder(/*uri=*/ databaseName, SCHEMA_TYPE)
-                        .setNamespace(NAMESPACE);
-        if (!remainingSchemas.isEmpty()) {
-            newVisibilityDocument.setPropertyString(
-                    PLATFORM_HIDDEN_PROPERTY, remainingSchemas.toArray(new String[0]));
-        }
-        mAppSearchImpl.putDocument(DATABASE_NAME, newVisibilityDocument.build());
-
-        // Update derived data structures
-        mPlatformHiddenMap.put(databaseName, remainingSchemas);
-    }
-
-    /**
-     * Sets visibility settings for {@code databaseName}. Any previous visibility settings will be
+     * Sets visibility settings for {@code prefix}. Any previous visibility settings will be
      * overwritten.
      *
-     * @param databaseName Database name that owns the {@code platformHiddenSchemas}.
-     * @param platformHiddenSchemas Set of database-qualified schemas that should be hidden from the
+     * @param prefix Prefix that identifies who owns the {@code schemasNotPlatformSurfaceable}.
+     * @param schemasNotPlatformSurfaceable Set of prefixed schemas that should be hidden from the
      *     platform.
      * @throws AppSearchException on AppSearchImpl error.
      */
     public void setVisibility(
-            @NonNull String databaseName, @NonNull Set<String> platformHiddenSchemas)
+            @NonNull String prefix, @NonNull Set<String> schemasNotPlatformSurfaceable)
             throws AppSearchException {
-        Preconditions.checkNotNull(databaseName);
-        Preconditions.checkNotNull(platformHiddenSchemas);
+        Preconditions.checkNotNull(prefix);
+        Preconditions.checkNotNull(schemasNotPlatformSurfaceable);
 
         // Persist the document
         GenericDocument.Builder visibilityDocument =
-                new GenericDocument.Builder(/*uri=*/ databaseName, SCHEMA_TYPE)
+                new GenericDocument.Builder(/*uri=*/ addUriPrefix(prefix), SCHEMA_TYPE)
                         .setNamespace(NAMESPACE);
-        if (!platformHiddenSchemas.isEmpty()) {
+        if (!schemasNotPlatformSurfaceable.isEmpty()) {
             visibilityDocument.setPropertyString(
-                    PLATFORM_HIDDEN_PROPERTY, platformHiddenSchemas.toArray(new String[0]));
+                    NOT_PLATFORM_SURFACEABLE_PROPERTY,
+                    schemasNotPlatformSurfaceable.toArray(new String[0]));
         }
-        mAppSearchImpl.putDocument(DATABASE_NAME, visibilityDocument.build());
+        mAppSearchImpl.putDocument(PACKAGE_NAME, DATABASE_NAME, visibilityDocument.build());
 
         // Update derived data structures.
-        mPlatformHiddenMap.put(databaseName, platformHiddenSchemas);
+        mNotPlatformSurfaceableMap.put(prefix, schemasNotPlatformSurfaceable);
     }
 
-    /**
-     * Returns the set of database-qualified schemas in {@code databaseName} that are hidden from
-     * the platform.
-     *
-     * @param databaseName Database name to retrieve schemas for
-     * @return Set of database-qualified schemas that are hidden from the platform. Empty set if
-     *     none exist.
-     */
+    /** Returns if the schema is surfaceable by the platform. */
     @NonNull
-    public Set<String> getPlatformHiddenSchemas(@NonNull String databaseName) {
-        Preconditions.checkNotNull(databaseName);
-        Set<String> platformHiddenSchemas = mPlatformHiddenMap.get(databaseName);
-        if (platformHiddenSchemas == null) {
-            return Collections.emptySet();
+    public boolean isSchemaPlatformSurfaceable(
+            @NonNull String prefix, @NonNull String prefixedSchema) {
+        Preconditions.checkNotNull(prefix);
+        Preconditions.checkNotNull(prefixedSchema);
+        Set<String> notPlatformSurfaceableSchemas = mNotPlatformSurfaceableMap.get(prefix);
+        if (notPlatformSurfaceableSchemas == null) {
+            return true;
         }
-        return platformHiddenSchemas;
+        return !notPlatformSurfaceableSchemas.contains(prefixedSchema);
     }
 
     /**
-     * Handles an {@link AppSearchImpl#reset()} by clearing any cached state and resetting to a
-     * first-initialized state.
+     * Handles an {@code AppSearchImpl#reset()} by clearing any cached state.
      *
-     * @throws AppSearchException on AppSearchImpl error.
+     * <p>{@link #initialize()} must be called after this.
      */
-    public void handleReset() throws AppSearchException {
-        mPlatformHiddenMap.clear();
-        initialize();
+    void handleReset() {
+        mNotPlatformSurfaceableMap.clear();
+    }
+
+    /**
+     * Adds a uri prefix to create a visibility store document's uri.
+     *
+     * @param uri Non-prefixed uri
+     * @return Prefixed uri
+     */
+    private static String addUriPrefix(String uri) {
+        return URI_PREFIX + uri;
     }
 }

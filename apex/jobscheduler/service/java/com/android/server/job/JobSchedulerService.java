@@ -835,9 +835,10 @@ public class JobSchedulerService extends com.android.server.SystemService
             return o2.overrideState - o1.overrideState;
         }
         if (o1.getSourceUid() == o2.getSourceUid()) {
-            final boolean o1FGJ = o1.isRequestedForegroundJob();
-            if (o1FGJ != o2.isRequestedForegroundJob()) {
-                // Attempt to run requested HPJs ahead of regular jobs, regardless of HPJ quota.
+            final boolean o1FGJ = o1.isRequestedExpeditedJob();
+            if (o1FGJ != o2.isRequestedExpeditedJob()) {
+                // Attempt to run requested expedited jobs ahead of regular jobs, regardless of
+                // expedited job quota.
                 return o1FGJ ? -1 : 1;
             }
         }
@@ -1143,9 +1144,9 @@ public class JobSchedulerService extends com.android.server.SystemService
 
             JobStatus jobStatus = JobStatus.createFromJobInfo(job, uId, packageName, userId, tag);
 
-            // Return failure early if HPJ quota used up.
-            if (jobStatus.isRequestedForegroundJob()
-                    && !mQuotaController.isWithinHpjQuotaLocked(jobStatus)) {
+            // Return failure early if expedited job quota used up.
+            if (jobStatus.isRequestedExpeditedJob()
+                    && !mQuotaController.isWithinEJQuotaLocked(jobStatus)) {
                 return JobScheduler.RESULT_FAILURE;
             }
 
@@ -1897,9 +1898,9 @@ public class JobSchedulerService extends com.android.server.SystemService
             Slog.d(TAG, "Completed " + jobStatus + ", reschedule=" + needsReschedule);
         }
 
-        // Intentionally not checking HPJ quota here. An app can't find out if it's run out of quota
-        // when it asks JS to reschedule an HPJ. Instead, the rescheduled HPJ will just be demoted
-        // to a regular job if the app has no HPJ quota left.
+        // Intentionally not checking expedited job quota here. An app can't find out if it's run
+        // out of quota when it asks JS to reschedule an expedited job. Instead, the rescheduled
+        // EJ will just be demoted to a regular job if the app has no EJ quota left.
 
         // If the job wants to be rescheduled, we first need to make the next upcoming
         // job so we can transfer any appropriate state over from the previous job when
@@ -2044,7 +2045,6 @@ public class JobSchedulerService extends com.android.server.SystemService
 
                 }
                 maybeRunPendingJobsLocked();
-                // Don't remove JOB_EXPIRED in case one came along while processing the queue.
             }
         }
     }
@@ -2110,6 +2110,15 @@ public class JobSchedulerService extends com.android.server.SystemService
      * as many as we can.
      */
     private void queueReadyJobsForExecutionLocked() {
+        // This method will check and capture all ready jobs, so we don't need to keep any messages
+        // in the queue.
+        mHandler.removeMessages(MSG_CHECK_JOB_GREEDY);
+        // MSG_CHECK_JOB is a weaker form of _GREEDY. Since we're checking and queueing all ready
+        // jobs, we don't need to keep any MSG_CHECK_JOB messages in the queue.
+        mHandler.removeMessages(MSG_CHECK_JOB);
+        // This method will capture all expired jobs that are ready, so there's no need to keep
+        // the _EXPIRED messages in the queue.
+        mHandler.removeMessages(MSG_JOB_EXPIRED);
         if (DEBUG) {
             Slog.d(TAG, "queuing all ready jobs for execution:");
         }

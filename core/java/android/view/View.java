@@ -73,6 +73,7 @@ import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
+import android.graphics.RenderEffect;
 import android.graphics.RenderNode;
 import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
@@ -154,6 +155,7 @@ import com.android.internal.widget.ScrollBarUtils;
 import com.google.android.collect.Lists;
 import com.google.android.collect.Maps;
 
+import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
@@ -21068,6 +21070,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Configure the {@link android.graphics.RenderEffect} to apply to this View.
+     * This will apply a visual effect to the results of the View before it is drawn. For example if
+     * {@link RenderEffect#createBlurEffect(float, float, RenderEffect, Shader.TileMode)}
+     * is provided, the contents will be drawn in a separate layer, then this layer will be blurred
+     * when this View is drawn.
+     * @param renderEffect to be applied to the View. Passing null clears the previously configured
+     *                     {@link RenderEffect}
+     */
+    public void setRenderEffect(@Nullable RenderEffect renderEffect) {
+        if (mRenderNode.setRenderEffect(renderEffect)) {
+            invalidateViewProperty(true, true);
+        }
+    }
+
+    /**
      * Updates the {@link Paint} object used with the current layer (used only if the current
      * layer type is not set to {@link #LAYER_TYPE_NONE}). Changed properties of the Paint
      * provided to {@link #setLayerType(int, android.graphics.Paint)} will be used the next time
@@ -29027,6 +29044,33 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         boolean mUse32BitDrawingCache;
 
         /**
+         * For windows that are full-screen but using insets to layout inside
+         * of the screen decorations, these are the current insets for the
+         * content of the window.
+         */
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q,
+                publicAlternatives = "Use {@link WindowInsets#getInsets(int)}")
+        final Rect mContentInsets = new Rect();
+
+        /**
+         * For windows that are full-screen but using insets to layout inside
+         * of the screen decorations, these are the current insets for the
+         * actual visible parts of the window.
+         */
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q,
+                publicAlternatives = "Use {@link WindowInsets#getInsets(int)}")
+        final Rect mVisibleInsets = new Rect();
+
+        /**
+         * For windows that are full-screen but using insets to layout inside
+         * of the screen decorations, these are the current insets for the
+         * stable system windows.
+         */
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q,
+                publicAlternatives = "Use {@link WindowInsets#getInsets(int)}")
+        final Rect mStableInsets = new Rect();
+
+        /**
          * Current caption insets to the display coordinate.
          */
         final Rect mCaptionInsets = new Rect();
@@ -29418,6 +29462,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 mScrollCaptureInternal = new ScrollCaptureInternal();
             }
             return mScrollCaptureInternal;
+        }
+
+        public void dump(String prefix, PrintWriter writer) {
+            String innerPrefix = prefix + "  ";
+            writer.println(prefix + "AttachInfo:");
+            writer.println(innerPrefix + "mHasWindowFocus=" + mHasWindowFocus);
+            writer.println(innerPrefix + "mWindowVisibility=" + mWindowVisibility);
+            writer.println(innerPrefix + "mInTouchMode=" + mInTouchMode);
+            writer.println(innerPrefix + "mUnbufferedDispatchRequested="
+                    + mUnbufferedDispatchRequested);
         }
     }
 

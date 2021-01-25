@@ -37,6 +37,7 @@ import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager.DeleteFlags;
 import android.content.pm.PackageManager.InstallReason;
+import android.content.pm.PackageManager.InstallScenario;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
@@ -52,10 +53,12 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.system.ErrnoException;
 import android.system.Os;
+import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.ExceptionUtils;
 
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
 
 import java.io.Closeable;
@@ -1348,12 +1351,13 @@ public class PackageInstaller {
          *
          * @throws PackageManager.NameNotFoundException if the new owner could not be found.
          * @throws SecurityException if called after the session has been committed or abandoned.
-         * @throws IllegalArgumentException if streams opened through
+         * @throws IllegalStateException if streams opened through
          *                                  {@link #openWrite(String, long, long) are still open.
+         * @throws IllegalArgumentException if {@code packageName} is invalid.
          */
         public void transfer(@NonNull String packageName)
                 throws PackageManager.NameNotFoundException {
-            Objects.requireNonNull(packageName);
+            Preconditions.checkArgument(!TextUtils.isEmpty(packageName));
 
             try {
                 mSession.transfer(packageName);
@@ -1525,6 +1529,14 @@ public class PackageInstaller {
         public int installLocation = PackageInfo.INSTALL_LOCATION_INTERNAL_ONLY;
         /** {@hide} */
         public @InstallReason int installReason = PackageManager.INSTALL_REASON_UNKNOWN;
+        /**
+         * {@hide}
+         *
+         * This flag indicates which installation scenario best describes this session.  The system
+         * may use this value when making decisions about how to handle the installation, such as
+         * prioritizing system health or user experience.
+         */
+        public @InstallScenario int installScenario = PackageManager.INSTALL_SCENARIO_DEFAULT;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public long sizeBytes = -1;
@@ -1588,6 +1600,7 @@ public class PackageInstaller {
             installFlags = source.readInt();
             installLocation = source.readInt();
             installReason = source.readInt();
+            installScenario = source.readInt();
             sizeBytes = source.readLong();
             appPackageName = source.readString();
             appIcon = source.readParcelable(null);
@@ -1619,6 +1632,7 @@ public class PackageInstaller {
             ret.installFlags = installFlags;
             ret.installLocation = installLocation;
             ret.installReason = installReason;
+            ret.installScenario = installScenario;
             ret.sizeBytes = sizeBytes;
             ret.appPackageName = appPackageName;
             ret.appIcon = appIcon;  // not a copy.
@@ -2044,6 +2058,8 @@ public class PackageInstaller {
             pw.printPair("mode", mode);
             pw.printHexPair("installFlags", installFlags);
             pw.printPair("installLocation", installLocation);
+            pw.printPair("installReason", installReason);
+            pw.printPair("installScenario", installScenario);
             pw.printPair("sizeBytes", sizeBytes);
             pw.printPair("appPackageName", appPackageName);
             pw.printPair("appIcon", (appIcon != null));
@@ -2077,6 +2093,7 @@ public class PackageInstaller {
             dest.writeInt(installFlags);
             dest.writeInt(installLocation);
             dest.writeInt(installReason);
+            dest.writeInt(installScenario);
             dest.writeLong(sizeBytes);
             dest.writeString(appPackageName);
             dest.writeParcelable(appIcon, flags);
@@ -2195,6 +2212,8 @@ public class PackageInstaller {
         /** {@hide} */
         public @InstallReason int installReason;
         /** {@hide} */
+        public @InstallReason int installScenario;
+        /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public long sizeBytes;
         /** {@hide} */
@@ -2273,6 +2292,7 @@ public class PackageInstaller {
 
             mode = source.readInt();
             installReason = source.readInt();
+            installScenario = source.readInt();
             sizeBytes = source.readLong();
             appPackageName = source.readString();
             appIcon = source.readParcelable(null);
@@ -2820,6 +2840,7 @@ public class PackageInstaller {
 
             dest.writeInt(mode);
             dest.writeInt(installReason);
+            dest.writeInt(installScenario);
             dest.writeLong(sizeBytes);
             dest.writeString(appPackageName);
             dest.writeParcelable(appIcon, flags);

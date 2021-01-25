@@ -26,6 +26,7 @@ import android.util.Rational;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Represents a set of parameters used to initialize and update an Activity in picture-in-picture
@@ -47,7 +48,9 @@ public final class PictureInPictureParams implements Parcelable {
         @Nullable
         private Rect mSourceRectHint;
 
-        private boolean mAutoEnterEnabled;
+        private Boolean mAutoEnterEnabled;
+
+        private Boolean mSeamlessResizeEnabled;
 
         /**
          * Sets the aspect ratio.  This aspect ratio is defined as the desired width / height, and
@@ -112,7 +115,7 @@ public final class PictureInPictureParams implements Parcelable {
          *
          * If true, {@link Activity#onPictureInPictureRequested()} will never be called.
          *
-         * This property is false by default.
+         * This property is {@code false} by default.
          * @param autoEnterEnabled {@code true} if the system will automatically put the activity
          *                                     in picture-in-picture mode.
          *
@@ -125,6 +128,23 @@ public final class PictureInPictureParams implements Parcelable {
         }
 
         /**
+         * Sets whether the system can seamlessly resize the window while the activity is in
+         * picture-in-picture mode. This should normally be the case for video content and
+         * when it's set to {@code false}, system will perform transitions to overcome the
+         * artifacts due to resize.
+         *
+         * This property is {@code true} by default for backwards compatibility.
+         * @param seamlessResizeEnabled {@code true} if the system can seamlessly resize the window
+         *                                          while activity is in picture-in-picture mode.
+         * @return this builder instance.
+         */
+        @NonNull
+        public Builder setSeamlessResizeEnabled(boolean seamlessResizeEnabled) {
+            mSeamlessResizeEnabled = seamlessResizeEnabled;
+            return this;
+        }
+
+        /**
          * @return an immutable {@link PictureInPictureParams} to be used when entering or updating
          * the activity in picture-in-picture.
          *
@@ -133,7 +153,7 @@ public final class PictureInPictureParams implements Parcelable {
          */
         public PictureInPictureParams build() {
             PictureInPictureParams params = new PictureInPictureParams(mAspectRatio, mUserActions,
-                    mSourceRectHint, mAutoEnterEnabled);
+                    mSourceRectHint, mAutoEnterEnabled, mSeamlessResizeEnabled);
             return params;
         }
     }
@@ -160,8 +180,16 @@ public final class PictureInPictureParams implements Parcelable {
 
     /**
      * Whether the system is allowed to automatically put the activity in picture-in-picture mode.
+     * {@link #isAutoEnterEnabled()} defaults to {@code false} if this is not set.
      */
-    private boolean mAutoEnterEnabled;
+    private Boolean mAutoEnterEnabled;
+
+    /**
+     * Whether system can seamlessly resize the window when activity is in picture-in-picture mode.
+     * {@link #isSeamlessResizeEnabled()} defaults to {@code true} if this is not set for
+     * backwards compatibility.
+     */
+    private Boolean mSeamlessResizeEnabled;
 
     /** {@hide} */
     PictureInPictureParams() {
@@ -182,15 +210,29 @@ public final class PictureInPictureParams implements Parcelable {
         if (in.readInt() != 0) {
             mAutoEnterEnabled = in.readBoolean();
         }
+        if (in.readInt() != 0) {
+            mSeamlessResizeEnabled = in.readBoolean();
+        }
     }
 
     /** {@hide} */
     PictureInPictureParams(Rational aspectRatio, List<RemoteAction> actions,
-            Rect sourceRectHint, boolean autoEnterEnabled) {
+            Rect sourceRectHint, Boolean autoEnterEnabled, Boolean seamlessResizeEnabled) {
         mAspectRatio = aspectRatio;
         mUserActions = actions;
         mSourceRectHint = sourceRectHint;
         mAutoEnterEnabled = autoEnterEnabled;
+        mSeamlessResizeEnabled = seamlessResizeEnabled;
+    }
+
+    /**
+     * Makes a copy from the other picture-in-picture args.
+     * @hide
+     */
+    public PictureInPictureParams(PictureInPictureParams other) {
+        this(other.mAspectRatio, other.mUserActions,
+                other.hasSourceBoundsHint() ? new Rect(other.getSourceRectHint()) : null,
+                other.mAutoEnterEnabled, other.mSeamlessResizeEnabled);
     }
 
     /**
@@ -207,7 +249,12 @@ public final class PictureInPictureParams implements Parcelable {
         if (otherArgs.hasSourceBoundsHint()) {
             mSourceRectHint = new Rect(otherArgs.getSourceRectHint());
         }
-        mAutoEnterEnabled = otherArgs.mAutoEnterEnabled;
+        if (otherArgs.mAutoEnterEnabled != null) {
+            mAutoEnterEnabled = otherArgs.mAutoEnterEnabled;
+        }
+        if (otherArgs.mSeamlessResizeEnabled != null) {
+            mSeamlessResizeEnabled = otherArgs.mSeamlessResizeEnabled;
+        }
     }
 
     /**
@@ -284,7 +331,16 @@ public final class PictureInPictureParams implements Parcelable {
      * @hide
      */
     public boolean isAutoEnterEnabled() {
-        return mAutoEnterEnabled;
+        return mAutoEnterEnabled == null ? false : mAutoEnterEnabled;
+    }
+
+    /**
+     * @return whether seamless resize is enabled.
+     * @hide
+     */
+    @TestApi
+    public boolean isSeamlessResizeEnabled() {
+        return mSeamlessResizeEnabled == null ? true : mSeamlessResizeEnabled;
     }
 
     /**
@@ -293,7 +349,25 @@ public final class PictureInPictureParams implements Parcelable {
      */
     public boolean empty() {
         return !hasSourceBoundsHint() && !hasSetActions() && !hasSetAspectRatio()
-                && !mAutoEnterEnabled;
+                && mAutoEnterEnabled != null && mSeamlessResizeEnabled != null;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof PictureInPictureParams)) return false;
+        PictureInPictureParams that = (PictureInPictureParams) o;
+        return Objects.equals(mAutoEnterEnabled, that.mAutoEnterEnabled)
+                && Objects.equals(mSeamlessResizeEnabled, that.mSeamlessResizeEnabled)
+                && Objects.equals(mAspectRatio, that.mAspectRatio)
+                && Objects.equals(mUserActions, that.mUserActions)
+                && Objects.equals(mSourceRectHint, that.mSourceRectHint);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mAspectRatio, mUserActions, mSourceRectHint,
+                mAutoEnterEnabled, mSeamlessResizeEnabled);
     }
 
     @Override
@@ -322,8 +396,18 @@ public final class PictureInPictureParams implements Parcelable {
         } else {
             out.writeInt(0);
         }
-        out.writeInt(1);
-        out.writeBoolean(mAutoEnterEnabled);
+        if (mAutoEnterEnabled != null) {
+            out.writeInt(1);
+            out.writeBoolean(mAutoEnterEnabled);
+        } else {
+            out.writeInt(0);
+        }
+        if (mSeamlessResizeEnabled != null) {
+            out.writeInt(1);
+            out.writeBoolean(mSeamlessResizeEnabled);
+        } else {
+            out.writeInt(0);
+        }
     }
 
     @Override
@@ -333,6 +417,7 @@ public final class PictureInPictureParams implements Parcelable {
                 + " sourceRectHint=" + getSourceRectHint()
                 + " hasSetActions=" + hasSetActions()
                 + " isAutoPipEnabled=" + isAutoEnterEnabled()
+                + " isSeamlessResizeEnabled=" + isSeamlessResizeEnabled()
                 + ")";
     }
 

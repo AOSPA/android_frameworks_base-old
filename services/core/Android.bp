@@ -113,6 +113,7 @@ java_library_static {
     ],
 
     required: [
+        "cec_config.xml",
         "gps_debug.conf",
         "protolog.conf.json.gz",
     ],
@@ -177,6 +178,11 @@ java_library_host {
 }
 
 prebuilt_etc {
+    name: "cec_config.xml",
+    src: "java/com/android/server/hdmi/cec_config.xml",
+}
+
+prebuilt_etc {
     name: "gps_debug.conf",
     src: "java/com/android/server/location/gnss/gps_debug.conf",
 }
@@ -218,7 +224,6 @@ filegroup {
         "java/com/android/server/connectivity/KeepaliveTracker.java",
         "java/com/android/server/connectivity/LingerMonitor.java",
         "java/com/android/server/connectivity/MockableSystemProperties.java",
-        "java/com/android/server/connectivity/MultipathPolicyTracker.java",
         "java/com/android/server/connectivity/Nat464Xlat.java",
         "java/com/android/server/connectivity/NetdEventListenerService.java",
         "java/com/android/server/connectivity/NetworkAgentInfo.java",
@@ -231,19 +236,5 @@ filegroup {
         "java/com/android/server/connectivity/Vpn.java",
         "java/com/android/server/connectivity/VpnIkev2Utils.java",
         "java/com/android/server/net/LockdownVpnTracker.java",
-    ],
-}
-
-java_library {
-    name: "service-connectivity",
-    srcs: [
-        ":connectivity-service-srcs",
-    ],
-    installable: true,
-    libs: [
-        "android.net.ipsec.ike",
-        "services.core",
-        "services.net",
-        "unsupportedappusage",
     ],
 }

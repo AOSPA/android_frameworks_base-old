@@ -19,14 +19,14 @@ package android.app.appsearch;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.util.Log;
 
-import com.android.internal.util.Preconditions;
-
 import java.io.Closeable;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -39,7 +39,6 @@ import java.util.function.Consumer;
  * <p>Should close this object after finish fetching results.
  *
  * <p>This class is not thread safe.
- * @hide
  */
 public class SearchResults implements Closeable {
     private static final String TAG = "SearchResults";
@@ -48,6 +47,9 @@ public class SearchResults implements Closeable {
 
     @Nullable
     private final String mDatabaseName;
+
+    @UserIdInt
+    private final int mUserId;
 
     private final String mQueryExpression;
 
@@ -63,12 +65,14 @@ public class SearchResults implements Closeable {
             @Nullable String databaseName,
             @NonNull String queryExpression,
             @NonNull SearchSpec searchSpec,
+            @UserIdInt int userId,
             @NonNull @CallbackExecutor Executor executor) {
-        mService = Preconditions.checkNotNull(service);
-        mExecutor = Preconditions.checkNotNull(executor);
-        mDatabaseName = databaseName;
-        mQueryExpression = Preconditions.checkNotNull(queryExpression);
-        mSearchSpec = Preconditions.checkNotNull(searchSpec);
+        mService = Objects.requireNonNull(service);
+        mUserId = userId;
+        mDatabaseName = Objects.requireNonNull(databaseName);
+        mQueryExpression = Objects.requireNonNull(queryExpression);
+        mSearchSpec = Objects.requireNonNull(searchSpec);
+        mExecutor = Objects.requireNonNull(executor);
     }
 
     /**
@@ -77,7 +81,7 @@ public class SearchResults implements Closeable {
      * <p>Re-call this method to get next page of {@link SearchResult}, until it returns an
      * empty list.
      *
-     * <p>The page size is set by {@link SearchSpec.Builder#setNumPerPage}.
+     * <p>The page size is set by {@link SearchSpec.Builder#setResultCountPerPage}.
      *
      * @param callback Callback to receive the pending result of performing this operation.
      */
@@ -86,14 +90,14 @@ public class SearchResults implements Closeable {
             if (mIsFirstLoad) {
                 mIsFirstLoad = false;
                 if (mDatabaseName == null) {
-                    mService.globalQuery(mQueryExpression, mSearchSpec.getBundle(),
+                    mService.globalQuery(mQueryExpression, mSearchSpec.getBundle(), mUserId,
                             wrapCallback(callback));
                 } else {
                     mService.query(mDatabaseName, mQueryExpression, mSearchSpec.getBundle(),
-                            wrapCallback(callback));
+                            mUserId, wrapCallback(callback));
                 }
             } else {
-                mService.getNextPage(mNextPageToken, wrapCallback(callback));
+                mService.getNextPage(mNextPageToken, mUserId, wrapCallback(callback));
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -120,7 +124,7 @@ public class SearchResults implements Closeable {
     public void close() {
         mExecutor.execute(() -> {
             try {
-                mService.invalidateNextPageToken(mNextPageToken);
+                mService.invalidateNextPageToken(mNextPageToken, mUserId);
             } catch (RemoteException e) {
                 Log.d(TAG, "Unable to close the SearchResults", e);
             }

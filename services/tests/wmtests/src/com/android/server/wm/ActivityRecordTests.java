@@ -75,7 +75,6 @@ import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 
-import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
@@ -102,6 +101,7 @@ import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationTarget;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
+import android.window.TaskSnapshot;
 
 import androidx.test.filters.MediumTest;
 
@@ -745,7 +745,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertEquals("Duplicate finish request must be ignored", FINISH_RESULT_CANCELLED,
                 activity.finishIfPossible("test", false /* oomAdj */));
         assertTrue(activity.finishing);
-        assertTrue(activity.isInStackLocked());
+        assertTrue(activity.isInRootTaskLocked());
 
         // Remove activity from task
         activity.finishing = false;
@@ -766,7 +766,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertEquals("Currently resumed activity must be prepared removal", FINISH_RESULT_REQUESTED,
                 activity.finishIfPossible("test", false /* oomAdj */));
         assertTrue(activity.finishing);
-        assertTrue(activity.isInStackLocked());
+        assertTrue(activity.isInRootTaskLocked());
 
         // First request to finish activity must schedule a "destroy" request to the client.
         // Activity must be removed from history after the client reports back or after timeout.
@@ -775,7 +775,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertEquals("Activity outside of task/stack cannot be finished", FINISH_RESULT_REQUESTED,
                 activity.finishIfPossible("test", false /* oomAdj */));
         assertTrue(activity.finishing);
-        assertTrue(activity.isInStackLocked());
+        assertTrue(activity.isInRootTaskLocked());
     }
 
     /**
@@ -804,7 +804,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertEquals("Activity outside of task/stack cannot be finished", FINISH_RESULT_REMOVED,
                 activity.finishIfPossible("test", false /* oomAdj */));
         assertTrue(activity.finishing);
-        assertFalse(activity.isInStackLocked());
+        assertFalse(activity.isInRootTaskLocked());
     }
 
     /**
@@ -826,13 +826,13 @@ public class ActivityRecordTests extends WindowTestsBase {
         final Task task2 = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         task2.moveToBack("test", task2.getBottomMostTask());
 
-        assertTrue(task.isTopStackInDisplayArea());
+        assertTrue(task.isTopRootTaskInDisplayArea());
 
         activity.setState(RESUMED, "test");
         activity.finishIfPossible(0 /* resultCode */, null /* resultData */,
                 null /* resultGrants */, "test", false /* oomAdj */);
 
-        assertTrue(task1.isTopStackInDisplayArea());
+        assertTrue(task1.isTopRootTaskInDisplayArea());
     }
 
     /**
@@ -854,7 +854,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 .build();
         Task topRootableTask = topActivity.getTask();
         topRootableTask.moveToFront("test");
-        assertTrue(rootTask.isTopStackInDisplayArea());
+        assertTrue(rootTask.isTopRootTaskInDisplayArea());
 
         // Finish top activity and verify the next focusable rootable task has adjusted to top.
         topActivity.setState(RESUMED, "test");
@@ -876,7 +876,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 createActivityOnDisplay(true /* defaultDisplay */, null /* process */);
         Task topRootableTask = topActivityOnNonTopDisplay.getRootTask();
         topRootableTask.moveToFront("test");
-        assertTrue(topRootableTask.isTopStackInDisplayArea());
+        assertTrue(topRootableTask.isTopRootTaskInDisplayArea());
         assertEquals(topRootableTask, topActivityOnNonTopDisplay.getDisplayArea()
                 .mPreferredTopFocusableRootTask);
 
@@ -884,7 +884,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 createActivityOnDisplay(false /* defaultDisplay */, null /* process */);
         topRootableTask = secondaryDisplayActivity.getRootTask();
         topRootableTask.moveToFront("test");
-        assertTrue(topRootableTask.isTopStackInDisplayArea());
+        assertTrue(topRootableTask.isTopRootTaskInDisplayArea());
         assertEquals(topRootableTask,
                 secondaryDisplayActivity.getDisplayArea().mPreferredTopFocusableRootTask);
 
@@ -1051,7 +1051,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord nextTop = nextStack.getTopNonFinishingActivity();
         nextTop.setState(STOPPED, "test");
 
-        task.mPausingActivity = currentTop;
+        task.setPausingActivity(currentTop);
         currentTop.finishing = true;
         currentTop.setState(PAUSED, "test");
         currentTop.completeFinishing("completePauseLocked");
@@ -1211,7 +1211,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         focusedActivity.nowVisible = true;
         focusedActivity.mVisibleRequested = true;
         focusedActivity.setState(RESUMED, "test");
-        stack.mResumedActivity = focusedActivity;
+        stack.setResumedActivity(focusedActivity, "test");
 
         topActivity.completeFinishing("test");
 
@@ -1662,7 +1662,8 @@ public class ActivityRecordTests extends WindowTestsBase {
                     any() /* requestedVisibility */, any() /* outFrame */,
                     any() /* outDisplayCutout */, any() /* outInputChannel */,
                     any() /* outInsetsState */, any() /* outActiveControls */);
-            TaskSnapshotSurface.create(mAtm.mWindowManager, activity, snapshot);
+            mAtm.mWindowManager.mStartingSurfaceController
+                    .createTaskSnapshotSurface(activity, snapshot);
         } catch (RemoteException ignored) {
         } finally {
             reset(session);

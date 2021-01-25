@@ -27,12 +27,12 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Point;
-import android.graphics.Rect;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.util.Log;
+import android.window.TaskSnapshot;
 import android.window.WindowContainerToken;
 
 import java.util.ArrayList;
@@ -187,14 +187,6 @@ public class TaskInfo {
     public boolean isResizeable;
 
     /**
-     * Activity bounds if this task or its top activity is presented in letterbox mode and
-     * {@code null} otherwise.
-     * @hide
-     */
-    @Nullable
-    public Rect letterboxActivityBounds;
-
-    /**
      * Relative position of the task's top left corner in the parent container.
      * @hide
      */
@@ -213,12 +205,6 @@ public class TaskInfo {
      * @hide
      */
     public int parentTaskId;
-
-    /**
-     * Parent bounds.
-     * @hide
-     */
-    public Rect parentBounds;
 
     /**
      * Whether this task is focused.
@@ -245,9 +231,9 @@ public class TaskInfo {
      * @return
      * @hide
      */
-    public ActivityManager.TaskSnapshot getTaskSnapshot(boolean isLowResolution) {
+    public TaskSnapshot getTaskSnapshot(boolean isLowResolution) {
         try {
-            return ActivityManager.getService().getTaskSnapshot(taskId, isLowResolution);
+            return ActivityTaskManager.getService().getTaskSnapshot(taskId, isLowResolution);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to get task snapshot, taskId=" + taskId, e);
             return null;
@@ -312,23 +298,11 @@ public class TaskInfo {
         return topActivityType == that.topActivityType
                 && isResizeable == that.isResizeable
                 && Objects.equals(positionInParent, that.positionInParent)
-                && equalsLetterboxParams(that)
-                && pictureInPictureParams == that.pictureInPictureParams
+                && Objects.equals(pictureInPictureParams, that.pictureInPictureParams)
                 && getWindowingMode() == that.getWindowingMode()
                 && Objects.equals(taskDescription, that.taskDescription)
                 && isFocused == that.isFocused
                 && isVisible == that.isVisible;
-    }
-
-    private boolean equalsLetterboxParams(TaskInfo that) {
-        return Objects.equals(letterboxActivityBounds, that.letterboxActivityBounds)
-                && Objects.equals(
-                        getConfiguration().windowConfiguration.getBounds(),
-                        that.getConfiguration().windowConfiguration.getBounds())
-                && Objects.equals(
-                        getConfiguration().windowConfiguration.getMaxBounds(),
-                        that.getConfiguration().windowConfiguration.getMaxBounds())
-                && Objects.equals(parentBounds, that.parentBounds);
     }
 
     /**
@@ -359,10 +333,8 @@ public class TaskInfo {
         topActivityInfo = source.readTypedObject(ActivityInfo.CREATOR);
         isResizeable = source.readBoolean();
         source.readBinderList(launchCookies);
-        letterboxActivityBounds = source.readTypedObject(Rect.CREATOR);
         positionInParent = source.readTypedObject(Point.CREATOR);
         parentTaskId = source.readInt();
-        parentBounds = source.readTypedObject(Rect.CREATOR);
         isFocused = source.readBoolean();
         isVisible = source.readBoolean();
     }
@@ -396,10 +368,8 @@ public class TaskInfo {
         dest.writeTypedObject(topActivityInfo, flags);
         dest.writeBoolean(isResizeable);
         dest.writeBinderList(launchCookies);
-        dest.writeTypedObject(letterboxActivityBounds, flags);
         dest.writeTypedObject(positionInParent, flags);
         dest.writeInt(parentTaskId);
-        dest.writeTypedObject(parentBounds, flags);
         dest.writeBoolean(isFocused);
         dest.writeBoolean(isVisible);
     }
@@ -422,10 +392,8 @@ public class TaskInfo {
                 + " pictureInPictureParams=" + pictureInPictureParams
                 + " topActivityInfo=" + topActivityInfo
                 + " launchCookies=" + launchCookies
-                + " letterboxActivityBounds=" + letterboxActivityBounds
                 + " positionInParent=" + positionInParent
                 + " parentTaskId=" + parentTaskId
-                + " parentBounds=" + parentBounds
                 + " isFocused=" + isFocused
                 + " isVisible=" + isVisible
                 + "}";

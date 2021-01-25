@@ -22,8 +22,10 @@ import static android.view.WindowManager.LayoutParams.FLAG_SLIPPERY;
 import static android.view.WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
 import static android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 
+import android.app.ActivityTaskManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.PixelFormat;
@@ -31,6 +33,8 @@ import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.Binder;
 import android.os.IBinder;
+import android.os.RemoteException;
+import android.util.Slog;
 import android.view.IWindow;
 import android.view.LayoutInflater;
 import android.view.SurfaceControl;
@@ -46,14 +50,23 @@ import com.android.wm.shell.R;
  * Holds view hierarchy of a root surface and helps to inflate {@link DividerView} for a split.
  */
 public final class SplitWindowManager extends WindowlessWindowManager {
+    private static final String TAG = SplitWindowManager.class.getSimpleName();
     private static final String DIVIDER_WINDOW_TITLE = "SplitDivider";
 
+    private final ParentContainerCallbacks mParentContainerCallbacks;
     private Context mContext;
     private SurfaceControlViewHost mViewHost;
+    private boolean mResizingSplits;
 
-    public SplitWindowManager(Context context, Configuration config, SurfaceControl rootSurface) {
-        super(config, rootSurface, null /* hostInputToken */);
+    public interface ParentContainerCallbacks {
+        void attachToParentSurface(SurfaceControl.Builder b);
+    }
+
+    public SplitWindowManager(Context context, Configuration config,
+            ParentContainerCallbacks parentContainerCallbacks) {
+        super(config, null /* rootSurface */, null /* hostInputToken */);
         mContext = context.createConfigurationContext(config);
+        mParentContainerCallbacks = parentContainerCallbacks;
     }
 
     @Override
@@ -70,6 +83,11 @@ public final class SplitWindowManager extends WindowlessWindowManager {
     public void setConfiguration(Configuration configuration) {
         super.setConfiguration(configuration);
         mContext = mContext.createConfigurationContext(configuration);
+    }
+
+    @Override
+    protected void attachToParentSurface(SurfaceControl.Builder b) {
+        mParentContainerCallbacks.attachToParentSurface(b);
     }
 
     /** Inflates {@link DividerView} on to the root surface. */
@@ -89,9 +107,9 @@ public final class SplitWindowManager extends WindowlessWindowManager {
                 PixelFormat.TRANSLUCENT);
         lp.token = new Binder();
         lp.setTitle(DIVIDER_WINDOW_TITLE);
-        lp.privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION;
+        lp.privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION | PRIVATE_FLAG_TRUSTED_OVERLAY;
         mViewHost.setView(dividerView, lp);
-        dividerView.setup(splitLayout, mViewHost, null /* dragListener */);
+        dividerView.setup(splitLayout, mViewHost);
     }
 
     /**
@@ -102,6 +120,16 @@ public final class SplitWindowManager extends WindowlessWindowManager {
         if (mViewHost == null) return;
         mViewHost.release();
         mViewHost = null;
+    }
+
+    void setResizingSplits(boolean resizing) {
+        if (resizing == mResizingSplits) return;
+        try {
+            ActivityTaskManager.getService().setSplitScreenResizing(resizing);
+            mResizingSplits = resizing;
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Error calling setSplitScreenResizing", e);
+        }
     }
 
     /**

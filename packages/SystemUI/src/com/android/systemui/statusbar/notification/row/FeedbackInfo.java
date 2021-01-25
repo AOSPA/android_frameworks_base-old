@@ -16,11 +16,6 @@
 
 package com.android.systemui.statusbar.notification.row;
 
-import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
-import static android.service.notification.NotificationListenerService.Ranking.RANKING_DEMOTED;
-import static android.service.notification.NotificationListenerService.Ranking.RANKING_PROMOTED;
-import static android.service.notification.NotificationListenerService.Ranking.RANKING_UNCHANGED;
-
 import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.content.Context;
@@ -31,6 +26,7 @@ import android.os.Bundle;
 import android.os.RemoteException;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
+import android.text.Html;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -43,6 +39,7 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.notification.AssistantFeedbackController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -64,6 +61,9 @@ public class FeedbackInfo extends LinearLayout implements NotificationGuts.GutsC
     private NotificationEntryManager mNotificationEntryManager;
     private IStatusBarService mStatusBarService;
     private AssistantFeedbackController mFeedbackController;
+    private NotificationGutsManager mNotificationGutsManager;
+    private NotificationMenuRowPlugin mMenuRowPlugin;
+    private ExpandableNotificationRow mExpandableNotificationRow;
 
     public FeedbackInfo(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -73,19 +73,21 @@ public class FeedbackInfo extends LinearLayout implements NotificationGuts.GutsC
             final PackageManager pm,
             final StatusBarNotification sbn,
             final NotificationEntry entry,
+            final ExpandableNotificationRow row,
             final AssistantFeedbackController controller) {
         mPkg = sbn.getPackageName();
         mPm = pm;
         mEntry = entry;
+        mExpandableNotificationRow = row;
         mRanking = entry.getRanking();
         mFeedbackController = controller;
         mAppName = mPkg;
         mNotificationEntryManager = Dependency.get(NotificationEntryManager.class);
         mStatusBarService = Dependency.get(IStatusBarService.class);
+        mNotificationGutsManager = Dependency.get(NotificationGutsManager.class);
 
         bindHeader();
         bindPrompt();
-        bindButton();
     }
 
     private void bindHeader() {
@@ -133,55 +135,52 @@ public class FeedbackInfo extends LinearLayout implements NotificationGuts.GutsC
         no.setVisibility(View.VISIBLE);
         yes.setOnClickListener(this::positiveFeedback);
         no.setOnClickListener(this::negativeFeedback);
-        prompt.setText(getPrompt());
+        prompt.setText(Html.fromHtml(getPrompt()));
     }
 
     @SuppressLint("DefaultLocale")
     private String getPrompt() {
         StringBuilder sb = new StringBuilder();
-        int oldImportance = mRanking.getChannel().getImportance();
-        int newImportance = mRanking.getImportance();
-        int ranking = mRanking.getRankingAdjustment();
+        int status = mFeedbackController.getFeedbackStatus(mEntry);
         if (DEBUG) {
             sb.append(String.format(
                     "[DEBUG]: oldImportance=%d, newImportance=%d, ranking=%d\n\n",
                     mRanking.getChannel().getImportance(), mRanking.getImportance(),
                     mRanking.getRankingAdjustment()));
         }
-        if (oldImportance >= IMPORTANCE_DEFAULT && newImportance < IMPORTANCE_DEFAULT) {
-            sb.append(mContext.getString(R.string.feedback_silenced));
-        } else if (newImportance > oldImportance || ranking == RANKING_PROMOTED) {
-            sb.append(mContext.getString(R.string.feedback_promoted));
-        } else if (newImportance < oldImportance || ranking == RANKING_DEMOTED) {
-            sb.append(mContext.getString(R.string.feedback_demoted));
+        if (status == mFeedbackController.STATUS_ALERTED) {
+            sb.append(mContext.getText(R.string.feedback_alerted));
+        } else if (status == mFeedbackController.STATUS_SILENCED) {
+            sb.append(mContext.getText(R.string.feedback_silenced));
+        } else if (status == mFeedbackController.STATUS_PROMOTED) {
+            sb.append(mContext.getText(R.string.feedback_promoted));
+        } else if (status == mFeedbackController.STATUS_DEMOTED) {
+            sb.append(mContext.getText(R.string.feedback_demoted));
         }
         sb.append(" ");
-        sb.append(mContext.getString(R.string.feedback_prompt));
+        sb.append(mContext.getText(R.string.feedback_prompt));
 
         return sb.toString();
     }
 
-    private void bindButton() {
-        TextView ok = findViewById(R.id.ok);
-        ok.setOnClickListener(this::closeControls);
-    }
-
     private void positiveFeedback(View v) {
+        mGutsContainer.closeControls(v, false);
         handleFeedback(true);
     }
 
     private void negativeFeedback(View v) {
+        mMenuRowPlugin = mExpandableNotificationRow.getProvider();
+        NotificationMenuRowPlugin.MenuItem menuItem = null;
+        if (mMenuRowPlugin != null) {
+            menuItem = mMenuRowPlugin.getLongpressMenuItem(mContext);
+        }
+
+        mGutsContainer.closeControls(v, false);
+        mNotificationGutsManager.openGuts(mExpandableNotificationRow, 0, 0, menuItem);
         handleFeedback(false);
     }
 
     private void handleFeedback(boolean positive) {
-        TextView prompt = findViewById(R.id.prompt);
-        prompt.setText(mContext.getString(R.string.feedback_response));
-        TextView yes = findViewById(R.id.yes);
-        yes.setVisibility(View.GONE);
-        TextView no = findViewById(R.id.no);
-        no.setVisibility(View.GONE);
-
         Bundle feedback = new Bundle();
         feedback.putBoolean(FEEDBACK_KEY, positive);
         sendFeedbackToAssistant(feedback);

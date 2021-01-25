@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS-teenus"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Anduri märguande teenus"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Teenus Twilight"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"Ajavööndi tuvastaja (ühenduvus puudub)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Seade kustutatakse"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Administraatori rakendust ei saa kasutada. Teie seade tühjendatakse nüüd.\n\nKui teil on küsimusi, võtke ühendust organisatsiooni administraatoriga."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"Rakendus <xliff:g id="OWNER_APP">%s</xliff:g> on printimise keelanud."</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB-ühendus"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"Rakendus töötab"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"Rakendused kasutavad akutoidet"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"Suurendus"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> kasutab akutoidet"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> rakendust kasutab akutoidet"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"Aku ja andmekasutuse üksikasjade nägemiseks puudutage"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"Võimaldab rakendusel vastu võtta ja töödelda multimeediumsõnumeid. See tähendab, et rakendus võib jälgida või kustutada teie seadmele saadetud sõnumeid neid teile näitamata."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"Kärjeteadete edasisaatmine"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"Võimaldab rakendusel luua ühenduse kärjeteadete mooduliga, et saabunud kärjeteateid edasi saata. Kärjeteateid edastatakse mõnes asukohas eriolukorrast teavitamiseks. Pahatahtlikud rakendused võivad seadme toimivust või tööd eriolukorra kärjeteate vastuvõtmisel segada."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"Käimasolevate kõnede haldamine"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"Võimaldab rakendusel näha teie seadmes käimasolevate kõnede üksikasju ja neid kõnesid hallata."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"mobiilsidesõnumite lugemine"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"Võimaldab rakendusel lugeda seadme vastu võetud mobiilsidesõnumeid. Mobiilsidemärguandeid edastatakse mõnes asukohas eriolukorrast teavitamiseks. Pahatahtlikud rakendused võivad segada seadme toimivust või tööd eriolukorra sõnumi vastuvõtmisel."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"loe tellitud kanaleid"</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofon"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"teie ekraanil muude rakenduste peal kuvamine"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"Andke tagasisidet"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"Sellele märguandele määrati prioriteet Vaikimisi. Puudutage tagasiside andmiseks."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Sellele märguandele määrati prioriteet Vaikne. Puudutage tagasiside andmiseks."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Sellele märguandele määrati kõrgem prioriteet. Puudutage tagasiside andmiseks."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Sellele märguandele määrati madalam prioriteet. Puudutage tagasiside andmiseks."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Rutiinirežiimi teabe märguanne"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Aku võib enne tavapärast laadimist tühjaks saada"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Akusäästja aktiveeriti aku tööea pikendamiseks"</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"Uus: akna suurendaja"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"Nüüd saab suurendada kogu ekraanikuva või osa sellest"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"Lülitage sisse menüüs Seaded"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"Loobu"</string>
 </resources>

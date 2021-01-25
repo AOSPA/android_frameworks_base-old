@@ -16,7 +16,7 @@
 
 package com.android.systemui.shared.system;
 
-import android.app.ActivityManager.TaskSnapshot;
+import android.window.TaskSnapshot;
 import android.graphics.Rect;
 import android.os.RemoteException;
 import android.util.Log;
@@ -135,6 +135,17 @@ public class RecentsAnimationControllerCompat {
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to remove remote animation target", e);
             return false;
+        }
+    }
+
+    /**
+     * @see IRecentsAnimationController#detachNavigationBarFromApp
+     */
+    public void detachNavigationBarFromApp() {
+        try {
+            mAnimationController.detachNavigationBarFromApp();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to detach the navigation bar from app", e);
         }
     }
 }

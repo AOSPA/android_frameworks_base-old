@@ -21,6 +21,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_ORGANIZER;
+import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.WindowOrganizerController.CONTROLLABLE_CONFIGS;
 import static com.android.server.wm.WindowOrganizerController.CONTROLLABLE_WINDOW_CONFIGS;
 
@@ -38,6 +39,7 @@ import android.util.Slog;
 import android.view.SurfaceControl;
 import android.window.ITaskOrganizer;
 import android.window.ITaskOrganizerController;
+import android.window.StartingWindowInfo;
 import android.window.TaskAppearedInfo;
 import android.window.WindowContainerToken;
 
@@ -115,10 +117,10 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         }
 
         void addStartingWindow(Task task, IBinder appToken) {
-            final RunningTaskInfo taskInfo = task.getTaskInfo();
+            final StartingWindowInfo info = task.getStartingWindowInfo();
             mDeferTaskOrgCallbacksConsumer.accept(() -> {
                 try {
-                    mTaskOrganizer.addStartingWindow(taskInfo, appToken);
+                    mTaskOrganizer.addStartingWindow(info, appToken);
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Exception sending onTaskStart callback", e);
                 }
@@ -126,10 +128,9 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         }
 
         void removeStartingWindow(Task task) {
-            final RunningTaskInfo taskInfo = task.getTaskInfo();
             mDeferTaskOrgCallbacksConsumer.accept(() -> {
                 try {
-                    mTaskOrganizer.removeStartingWindow(taskInfo);
+                    mTaskOrganizer.removeStartingWindow(task.mTaskId);
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Exception sending onStartTaskFinished callback", e);
                 }
@@ -272,7 +273,9 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
 
         void removeTask(Task t) {
             if (t.mTaskAppearedSent) {
-                t.migrateToNewSurfaceControl();
+                if (t.getSurfaceControl() != null) {
+                    t.migrateToNewSurfaceControl();
+                }
                 t.mTaskAppearedSent = false;
                 mOrganizer.onTaskVanished(t);
             }
@@ -288,8 +291,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             // possible.
             while (!mOrganizedTasks.isEmpty()) {
                 final Task t = mOrganizedTasks.get(0);
-                t.updateTaskOrganizerState(true /* forceUpdate */);
-                if (mOrganizedTasks.contains(t)) {
+                if (!t.updateTaskOrganizerState(true /* forceUpdate */)) {
                     removeTask(t);
                 }
             }
@@ -579,11 +581,11 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             synchronized (mGlobalLock) {
                 DisplayContent dc = mService.mWindowManager.mRoot
                         .getDisplayContent(displayId);
-                if (dc == null || dc.mInputMethodTarget == null) {
+                if (dc == null || dc.getImeTarget(IME_TARGET_LAYERING) == null) {
                     return null;
                 }
                 // Avoid WindowState#getRootTask() so we don't attribute system windows to a task.
-                final Task task = dc.mInputMethodTarget.getTask();
+                final Task task = dc.getImeTarget(IME_TARGET_LAYERING).getWindow().getTask();
                 if (task == null) {
                     return null;
                 }
@@ -686,16 +688,13 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
                 if (dc == null) {
                     throw new IllegalArgumentException("Display " + displayId + " doesn't exist");
                 }
-                ArrayList<RunningTaskInfo> out = new ArrayList<>();
-                dc.forAllTaskDisplayAreas(taskDisplayArea -> {
-                    for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                        final Task task = taskDisplayArea.getRootTaskAt(sNdx);
-                        if (activityTypes != null
-                                && !ArrayUtils.contains(activityTypes, task.getActivityType())) {
-                            continue;
-                        }
-                        out.add(task.getTaskInfo());
+                final ArrayList<RunningTaskInfo> out = new ArrayList<>();
+                dc.forAllRootTasks(task -> {
+                    if (activityTypes != null
+                            && !ArrayUtils.contains(activityTypes, task.getActivityType())) {
+                        return;
                     }
+                    out.add(task.getTaskInfo());
                 });
                 return out;
             }

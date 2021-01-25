@@ -85,6 +85,7 @@ import android.media.IAudioRoutesObserver;
 import android.media.IAudioServerStateDispatcher;
 import android.media.IAudioService;
 import android.media.ICapturePresetDevicesRoleDispatcher;
+import android.media.ICommunicationDeviceDispatcher;
 import android.media.IPlaybackConfigDispatcher;
 import android.media.IRecordingConfigDispatcher;
 import android.media.IRingtonePlayer;
@@ -2111,6 +2112,24 @@ public class AudioService extends IAudioService.Stub
         return getDevicesForAttributesInt(attributes);
     }
 
+    /**
+     * @see AudioManager#isMusicActive()
+     * @param remotely true if query is for remote playback (cast), false for local playback.
+     */
+    public boolean isMusicActive(boolean remotely) {
+        // no permission required
+        final long token = Binder.clearCallingIdentity();
+        try {
+            if (remotely) {
+                return AudioSystem.isStreamActiveRemotely(AudioSystem.STREAM_MUSIC, 0);
+            } else {
+                return AudioSystem.isStreamActive(AudioSystem.STREAM_MUSIC, 0);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     protected @NonNull ArrayList<AudioDeviceAttributes> getDevicesForAttributesInt(
             @NonNull AudioAttributes attributes) {
         Objects.requireNonNull(attributes);
@@ -3457,6 +3476,8 @@ public class AudioService extends IAudioService.Stub
     /** @see AudioManager#getStreamVolume(int) */
     public int getStreamVolume(int streamType) {
         ensureValidStreamType(streamType);
+        Log.e(TAG, "AudioSystem.getDevicesForStream In AudioService from u/pid"
+                + Binder.getCallingUid() + "/" + Binder.getCallingPid());
         int device = getDeviceForStream(streamType);
         synchronized (VolumeStreamState.class) {
             int index = mStreamStates[streamType].getIndex(device);
@@ -4411,6 +4432,115 @@ public class AudioService extends IAudioService.Stub
         restoreDeviceVolumeBehavior();
     }
 
+    private static final int[] VALID_COMMUNICATION_DEVICE_TYPES = {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_HEARING_AID,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_LINE_ANALOG,
+        AudioDeviceInfo.TYPE_HDMI,
+        AudioDeviceInfo.TYPE_AUX_LINE
+    };
+
+    private boolean isValidCommunicationDevice(AudioDeviceInfo device) {
+        for (int type : VALID_COMMUNICATION_DEVICE_TYPES) {
+            if (device.getType() == type) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @see AudioManager#setDeviceForCommunication(int) */
+    public boolean setDeviceForCommunication(IBinder cb, int portId) {
+        final int uid = Binder.getCallingUid();
+        final int pid = Binder.getCallingPid();
+
+        AudioDeviceInfo device = null;
+        if (portId != 0) {
+            device = AudioManager.getDeviceForPortId(portId, AudioManager.GET_DEVICES_OUTPUTS);
+            if (device == null) {
+                throw new IllegalArgumentException("invalid portID " + portId);
+            }
+            if (!isValidCommunicationDevice(device)) {
+                throw new IllegalArgumentException("invalid device type " + device.getType());
+            }
+        }
+        final String eventSource = new StringBuilder("setDeviceForCommunication(")
+                .append(") from u/pid:").append(uid).append("/")
+                .append(pid).toString();
+
+        int deviceType = AudioSystem.DEVICE_OUT_DEFAULT;
+        String deviceAddress = null;
+        if (device != null) {
+            deviceType = device.getPort().type();
+            deviceAddress = device.getAddress();
+        } else {
+            AudioDeviceInfo curDevice = mDeviceBroker.getDeviceForCommunication();
+            if (curDevice != null) {
+                deviceType = curDevice.getPort().type();
+                deviceAddress = curDevice.getAddress();
+            }
+        }
+        // do not log metrics if clearing communication device while no communication device
+        // was selected
+        if (deviceType != AudioSystem.DEVICE_OUT_DEFAULT) {
+            new MediaMetrics.Item(MediaMetrics.Name.AUDIO_DEVICE
+                    + MediaMetrics.SEPARATOR + "setDeviceForCommunication")
+                    .set(MediaMetrics.Property.DEVICE,
+                            AudioSystem.getDeviceName(deviceType))
+                    .set(MediaMetrics.Property.ADDRESS, deviceAddress)
+                    .set(MediaMetrics.Property.STATE, device != null
+                            ? MediaMetrics.Value.CONNECTED : MediaMetrics.Value.DISCONNECTED)
+                    .record();
+        }
+
+        final long ident = Binder.clearCallingIdentity();
+        boolean status =
+                mDeviceBroker.setDeviceForCommunication(cb, pid, device, eventSource);
+        Binder.restoreCallingIdentity(ident);
+        return status;
+    }
+
+    /** @see AudioManager#getDeviceForCommunication() */
+    public int getDeviceForCommunication() {
+        final long ident = Binder.clearCallingIdentity();
+        AudioDeviceInfo device = mDeviceBroker.getDeviceForCommunication();
+        Binder.restoreCallingIdentity(ident);
+        if (device == null) {
+            return 0;
+        }
+        return device.getId();
+    }
+
+    /** @see AudioManager#addOnCommunicationDeviceChangedListener(
+     *               Executor, AudioManager.OnCommunicationDeviceChangedListener)
+     */
+    public void registerCommunicationDeviceDispatcher(
+            @Nullable ICommunicationDeviceDispatcher dispatcher) {
+        if (dispatcher == null) {
+            return;
+        }
+        mDeviceBroker.registerCommunicationDeviceDispatcher(dispatcher);
+    }
+
+    /** @see AudioManager#removeOnCommunicationDeviceChangedListener(
+     *               AudioManager.OnCommunicationDeviceChangedListener)
+     */
+    public void unregisterCommunicationDeviceDispatcher(
+            @Nullable ICommunicationDeviceDispatcher dispatcher) {
+        if (dispatcher == null) {
+            return;
+        }
+        mDeviceBroker.unregisterCommunicationDeviceDispatcher(dispatcher);
+    }
+
     /** @see AudioManager#setSpeakerphoneOn(boolean) */
     public void setSpeakerphoneOn(IBinder cb, boolean on) {
         if (!checkAudioSettingsPermission("setSpeakerphoneOn()")) {
@@ -5022,8 +5152,7 @@ public class AudioService extends IAudioService.Stub
         switch (mPlatformType) {
         case AudioSystem.PLATFORM_VOICE:
             if (isInCommunication()) {
-                if (mAudioSystem.getForceUse(AudioSystem.FOR_COMMUNICATION)
-                        == AudioSystem.FORCE_BT_SCO) {
+                if (mDeviceBroker.isBluetoothScoOn()) {
                     // Log.v(TAG, "getActiveStreamType: Forcing STREAM_BLUETOOTH_SCO...");
                     return AudioSystem.STREAM_BLUETOOTH_SCO;
                 } else {
@@ -5059,8 +5188,7 @@ public class AudioService extends IAudioService.Stub
             }
         default:
             if (isInCommunication()) {
-                if (mAudioSystem.getForceUse(AudioSystem.FOR_COMMUNICATION)
-                        == AudioSystem.FORCE_BT_SCO) {
+                if (mDeviceBroker.isBluetoothScoOn()) {
                     if (DEBUG_VOL) Log.v(TAG, "getActiveStreamType: Forcing STREAM_BLUETOOTH_SCO");
                     return AudioSystem.STREAM_BLUETOOTH_SCO;
                 } else {
@@ -5204,7 +5332,7 @@ public class AudioService extends IAudioService.Stub
     /** only public for mocking/spying, do not call outside of AudioService */
     @VisibleForTesting
     public int getDeviceForStream(int stream) {
-        int device = getDevicesForStream(stream);
+        int device = getDevicesForStreamInt(stream);
         if ((device & (device - 1)) != 0) {
             // Multiple device selection is either:
             //  - speaker + one other device: give priority to speaker in this case.
@@ -5233,14 +5361,23 @@ public class AudioService extends IAudioService.Stub
         return device;
     }
 
-    private int getDevicesForStream(int stream) {
-        return getDevicesForStream(stream, true /*checkOthers*/);
+    /**
+     * @see AudioManager#getDevicesForStream(int)
+     */
+    public int getDevicesForStream(int streamType) {
+        ensureValidStreamType(streamType);
+        final long token = Binder.clearCallingIdentity();
+        try {
+            return mAudioSystem.getDevicesForStream(streamType);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
     }
 
-    private int getDevicesForStream(int stream, boolean checkOthers) {
+    private int getDevicesForStreamInt(int stream) {
         ensureValidStreamType(stream);
         synchronized (VolumeStreamState.class) {
-            return mStreamStates[stream].observeDevicesForStream_syncVSS(checkOthers);
+            return mStreamStates[stream].observeDevicesForStream_syncVSS(true);
         }
     }
 
@@ -6446,10 +6583,10 @@ public class AudioService extends IAudioService.Stub
             }
             pw.println();
             pw.print("   Devices: ");
-            final int devices = getDevicesForStream(mStreamType);
+            final int devices = getDevicesForStreamInt(mStreamType);
             int device, i = 0, n = 0;
             // iterate all devices from 1 to DEVICE_OUT_DEFAULT exclusive
-            // (the default device is not returned by getDevicesForStream)
+            // (the default device is not returned by getDevicesForStreamInt)
             while ((device = 1 << i) != AudioSystem.DEVICE_OUT_DEFAULT) {
                 if ((devices & device) != 0) {
                     if (n++ > 0) {
@@ -7493,8 +7630,8 @@ public class AudioService extends IAudioService.Stub
     private static final int UNSAFE_VOLUME_MUSIC_ACTIVE_MS_MAX = (20 * 3600 * 1000); // 20 hours
     private static final int MUSIC_ACTIVE_POLL_PERIOD_MS = 60000;  // 1 minute polling interval
     private static final int SAFE_VOLUME_CONFIGURE_TIMEOUT_MS = 30000;  // 30s after boot completed
-    // check playback or record activity every 3 seconds for UIDs owning mode IN_COMMUNICATION
-    private static final int CHECK_MODE_FOR_UID_PERIOD_MS = 3000;
+    // check playback or record activity every 6 seconds for UIDs owning mode IN_COMMUNICATION
+    private static final int CHECK_MODE_FOR_UID_PERIOD_MS = 6000;
 
     private int safeMediaVolumeIndex(int device) {
         if (!mSafeMediaVolumeDevices.contains(device)) {
@@ -7680,7 +7817,7 @@ public class AudioService extends IAudioService.Stub
                     mDeviceBroker.setForceUse_Async(AudioSystem.FOR_HDMI_SYSTEM_AUDIO, config,
                             "setHdmiSystemAudioSupported");
                 }
-                device = getDevicesForStream(AudioSystem.STREAM_MUSIC);
+                device = getDevicesForStreamInt(AudioSystem.STREAM_MUSIC);
             }
         }
         return device;
@@ -7864,6 +8001,8 @@ public class AudioService extends IAudioService.Stub
     @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
+
+        mAudioSystem.dump(pw);
 
         sLifecycleLogger.dump(pw);
         if (mAudioHandler != null) {

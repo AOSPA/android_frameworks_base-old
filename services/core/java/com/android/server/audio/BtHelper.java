@@ -27,6 +27,7 @@ import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothHearingAid;
 import android.bluetooth.BluetoothProfile;
 import android.content.Intent;
+import android.media.AudioDeviceAttributes;
 import android.media.AudioManager;
 import android.media.AudioSystem;
 import android.os.Binder;
@@ -673,6 +674,41 @@ public class BtHelper {
         mDeviceBroker.postBroadcastScoConnectionState(state);
     }
 
+    @Nullable AudioDeviceAttributes getHeadsetAudioDevice() {
+        if (mBluetoothHeadsetDevice == null) {
+            return null;
+        }
+        return btHeadsetDeviceToAudioDevice(mBluetoothHeadsetDevice);
+    }
+
+    private AudioDeviceAttributes btHeadsetDeviceToAudioDevice(BluetoothDevice btDevice) {
+        String address = btDevice.getAddress();
+        if (!BluetoothAdapter.checkBluetoothAddress(address)) {
+            address = "";
+        }
+        String dummyAddress = "00:00:00:00:00:00";
+        BluetoothClass btClass = dummyAddress.equals(address) ? null :
+                                 btDevice.getBluetoothClass();
+        int nativeType = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO;
+        if (btClass != null) {
+            switch (btClass.getDeviceClass()) {
+                case BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET:
+                case BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE:
+                    nativeType = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET;
+                    break;
+                case BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO:
+                    nativeType = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT;
+                    break;
+            }
+        }
+        if (AudioService.DEBUG_DEVICES) {
+            Log.i(TAG, "btHeadsetDeviceToAudioDevice btDevice: " + btDevice
+                    + " btClass: " + (btClass == null ? "Unknown" : btClass)
+                    + " nativeType: " + nativeType + " address: " + address);
+        }
+        return new AudioDeviceAttributes(nativeType, address);
+    }
+
     private boolean handleBtScoActiveDeviceChange(BluetoothDevice btDevice, boolean isActive) {
         if (btDevice == null) {
             return true;
@@ -682,25 +718,7 @@ public class BtHelper {
         BluetoothClass btClass = dummyAddress.equals(address) ? null :
                                  btDevice.getBluetoothClass();
         int inDevice = AudioSystem.DEVICE_IN_BLUETOOTH_SCO_HEADSET;
-        int[] outDeviceTypes = {
-                AudioSystem.DEVICE_OUT_BLUETOOTH_SCO,
-                AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET,
-                AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT
-        };
-        if (btClass != null) {
-            switch (btClass.getDeviceClass()) {
-                case BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET:
-                case BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE:
-                    outDeviceTypes = new int[] { AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET };
-                    break;
-                case BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO:
-                    outDeviceTypes = new int[] { AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT };
-                    break;
-            }
-        }
-        if (!BluetoothAdapter.checkBluetoothAddress(address)) {
-            address = "";
-        }
+        AudioDeviceAttributes audioDevice =  btHeadsetDeviceToAudioDevice(btDevice);
         String btDeviceName =  getName(btDevice);
         if (btDeviceName == null) {
             Log.i(TAG, "handleBtScoActiveDeviceChange: btDeviceName is null," +
@@ -710,17 +728,22 @@ public class BtHelper {
 
         boolean result = false;
         if (isActive) {
-            result |= mDeviceBroker.handleDeviceConnection(
-                    isActive, outDeviceTypes[0], address, btDeviceName);
+            result |= mDeviceBroker.handleDeviceConnection(isActive, audioDevice.getInternalType(),
+                    audioDevice.getAddress(), btDeviceName);
         } else {
+            int[] outDeviceTypes = {
+                    AudioSystem.DEVICE_OUT_BLUETOOTH_SCO,
+                    AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET,
+                    AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT
+            };
             for (int outDeviceType : outDeviceTypes) {
                 result |= mDeviceBroker.handleDeviceConnection(
-                        isActive, outDeviceType, address, btDeviceName);
+                        isActive, outDeviceType, audioDevice.getAddress(), btDeviceName);
             }
         }
         // handleDeviceConnection() && result to make sure the method get executed
         result = mDeviceBroker.handleDeviceConnection(
-                isActive, inDevice, address, btDeviceName) && result;
+                isActive, inDevice, audioDevice.getAddress(), btDeviceName) && result;
         return result;
     }
 

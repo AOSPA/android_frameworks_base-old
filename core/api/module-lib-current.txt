@@ -80,6 +80,17 @@ package android.media {
 
   public class MediaMetadataRetriever implements java.lang.AutoCloseable {
     field public static final int METADATA_KEY_VIDEO_CODEC_MIME_TYPE = 40; // 0x28
+    field public static final int METADATA_KEY_XMP_LENGTH = 42; // 0x2a
+    field public static final int METADATA_KEY_XMP_OFFSET = 41; // 0x29
+  }
+
+  public class MediaServiceManager {
+    method @NonNull public android.media.MediaServiceManager.ServiceRegisterer getMediaSessionServiceRegisterer();
+    method @NonNull public android.media.MediaServiceManager.ServiceRegisterer getMediaTranscodingServiceRegisterer();
+  }
+
+  public static final class MediaServiceManager.ServiceRegisterer {
+    method @Nullable public android.os.IBinder get();
   }
 
 }
@@ -118,6 +129,20 @@ package android.media.session {
 
   public final class PlaybackState implements android.os.Parcelable {
     method public boolean isActiveState();
+  }
+
+}
+
+package android.net {
+
+  public final class TcpRepairWindow {
+    ctor public TcpRepairWindow(int, int, int, int, int, int);
+    field public final int maxWindow;
+    field public final int rcvWnd;
+    field public final int rcvWndScale;
+    field public final int rcvWup;
+    field public final int sndWl1;
+    field public final int sndWnd;
   }
 
 }

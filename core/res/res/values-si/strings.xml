@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS සේවාව"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"සංවේදක දැනුම් දීමේ සේවාව"</string>
     <string name="twilight_service" msgid="8964898045693187224">"ඇඳිරි සේවාව"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"වේලා කලාප අනාවරකය (සම්බන්ධතාවක් නොමැත)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"ඔබගේ උපාංගය මකා දැමෙනු ඇත"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"පරිපාලක යෙදුම භාවිතා කළ නොහැකිය. ඔබේ උපාංගය දැන් මකා දමනු ඇත.\n\nඔබට ප්‍රශ්න තිබේ නම්, ඔබේ සංවිධානයේ පරිපාලකට අමතන්න."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g> විසින් මුද්‍රණය කිරීම අබල කර ඇත."</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB සම්බන්ධතාවය"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"යෙදුම ධාවනය කරමින්"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"බැටරිය භාවිත කරන යෙදුම්"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"විශාලනය"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> බැටරිය භාවිත කරයි"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"යෙදුම් <xliff:g id="NUMBER">%1$d</xliff:g>ක් බැටරිය භාවිත කරයි"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"බැටරි හා දත්ත භාවිතය පිළිබඳව විස්තර සඳහා තට්ටු කරන්න"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"MMS පණිවිඩ සොයා ලබාගැනීමට සහ ක්‍රියාත්මක කිරීමට යෙදුමට අවසර දෙන්න. යෙදුම නිරීක්ෂණය කරනු ලබන අතර ඔබට ලැබුන පණිවිඩ පෙන්වීමෙන් තොරවම මකා දැමිය හැකි බව මෙමඟින් අදහස් කරයි."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"සෙල් විකාශන පණිවිඩ යොමු කිරීම"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"සෙල් විකාශන පණිවිඩ ලැබුණු විට ඒවා යොමු කිරීම සඳහා සෙල් විකාශන මොඩියුලයට බැඳීමට යෙදුමට ඉඩ දෙයි. හදිසි අවස්ථා පිළිබඳව ඔබට අනතුරු ඇඟවීම සඳහා සෙල් විකාශන ඇඟවීම් සමහර ස්ථානවල ලබා දෙනු ලැබේ. හදිසි සෙල් විකාශනයක් ලැබෙන අවස්ථාවකදී, අනිෂ්ට යෙදුම්වලින් ඔබගේ උපාංග කාර්ය සාධනයට හෝ මෙහෙයුමට බාධා සිදු විය හැකිය."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"සිදු වෙමින් පවතින ඇමතුම් කළමනාකරණය කරන්න"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"ඔබගේ උපාංගයේ සිදු වෙමින් පවතින ඇමතුම් පිළිබඳ විස්තර බැලීමට සහ මෙම ඇමතුම් පාලනය කිරීමට යෙදුමකට ඉඩ දෙයි."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"සෙල් ප්‍රචාරණ පණිවිඩ කියවීම"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"ඔබගේ උපාංගයට ලැබුණු සෙල් විකාශන පණිවිඩ කියවීමට යෙදුමට අවසර දෙන්න. ඔබට හදිසි අවස්ථාවන් පිළිබඳ අනතුරු ඇඟවීමට සෙල් විකාශන පණිවිඩ ඇතැම් ස්ථානවල සිට යවනු ලබයි. හදිසි සෙල් විකාශන ලැබෙන අවස්ථාවකදී, අනිෂ්ට යෙදුම් මඟින් ඔබගේ උපාංගයට කාර්ය සාධනයට හෝ ක්‍රියකරණයට බාධා සිදුවිය හැක."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"දායක වූ සංග්‍රහ කියවීම"</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"මයික්‍රෆෝනය"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"ඔබගේ තිරය මත වෙනත් යෙදුම්වලට උඩින් සංදර්ශනය කරමින්"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"ප්‍රතිපෝෂණ සපයන්න"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"මෙම දැනුම් දීම පෙරනිමි වෙත ප්‍රවර්ධනය කරන ලදී. ප්‍රතිපෝෂණය ලබා දීමට තට්ටු කරන්න."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"මෙම දැනුම්දීම නිහඬ වෙත පහත දමන ලදී. ප්‍රතිපෝෂණය ලබා දීමට තට්ටු කරන්න."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"මෙම දැනුම්දීම ඉහළට ශ්‍රේණිගත කරන ලදී. ප්‍රතිපෝෂණය ලබා දීමට තට්ටු කරන්න."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"මෙම දැනුම්දීම පහළට ශ්‍රේණිගත කරන ලදී. ප්‍රතිපෝෂණය ලබා දීමට තට්ටු කරන්න."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"දිනචරියා ප්‍රකාර තතු දැනුම්දීම"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"බැටරිය සුපුරුදු ආරෝපණයට පෙර ඉවර විය හැක"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"බැටරි සුරැකුම බැටරි ආයු කාලය දීර්ඝ කිරීමට සක්‍රිය කෙරිණි"</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"නව: කවුළු විශාලකය"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"ඔබට දැන් තිරයේ සමහර හෝ සියලු දේ විශාලනය කළ හැකිය"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"සැකසීම් තුළ ක්‍රියාත්මක කරන්න"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"ඉවත ලන්න"</string>
 </resources>
