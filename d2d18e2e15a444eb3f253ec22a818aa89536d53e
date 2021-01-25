@@ -18,6 +18,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "d0508a15_7321737f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2021-01-25T17:23:55Z",
+      "side": 1,
+      "message": "yes the default behavior is vibration for success and also for fail. this commit is to allow disabling the vibration for success and keep only for fail.",
+      "parentUuid": "b28e9c62_ee574328",
+      "revId": "d2d18e2e15a444eb3f253ec22a818aa89536d53e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "50d16292_68e5e9ba",
