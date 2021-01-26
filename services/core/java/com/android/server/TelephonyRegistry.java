@@ -52,7 +52,6 @@ import android.telephony.CallAttributes;
 import android.telephony.CallQuality;
 import android.telephony.CellIdentity;
 import android.telephony.CellInfo;
-import android.telephony.CellLocation;
 import android.telephony.CellSignalStrength;
 import android.telephony.CellSignalStrengthCdma;
 import android.telephony.CellSignalStrengthGsm;
@@ -310,7 +309,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
 
     private final LocalLog mLocalLog = new LocalLog(200);
 
-    private final LocalLog mListenLog = new LocalLog(00);
+    private final LocalLog mListenLog = new LocalLog(200);
 
     private List<PhysicalChannelConfig> mPhysicalChannelConfigs;
 
@@ -564,8 +563,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             mPreciseDataConnectionStates.add(new ArrayMap<>());
             mBarringInfo.add(i, new BarringInfo());
             mTelephonyDisplayInfos[i] = null;
-            mPhysicalChannelConfigs.add(i, new PhysicalChannelConfig(
-                    PhysicalChannelConfig.CONNECTION_UNKNOWN,0));
+            mPhysicalChannelConfigs.add(i, new PhysicalChannelConfig.Builder().build());
         }
     }
 
@@ -586,8 +584,6 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
 
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public TelephonyRegistry(Context context, ConfigurationProvider configurationProvider) {
-        CellLocation  location = CellLocation.getEmpty();
-
         mContext = context;
         mConfigurationProvider = configurationProvider;
         mBatteryStats = BatteryStatsService.getService();
@@ -656,8 +652,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             mPreciseDataConnectionStates.add(new ArrayMap<>());
             mBarringInfo.add(i, new BarringInfo());
             mTelephonyDisplayInfos[i] = null;
-            mPhysicalChannelConfigs.add(i, new PhysicalChannelConfig(
-                    PhysicalChannelConfig.CONNECTION_UNKNOWN,0));
+            mPhysicalChannelConfigs.add(i, new PhysicalChannelConfig.Builder().build());
         }
 
         mAppOps = mContext.getSystemService(AppOpsManager.class);
@@ -2455,7 +2450,9 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             pw.println("local logs:");
             pw.increaseIndent();
             mLocalLog.dump(fd, pw, args);
+            pw.decreaseIndent();
             pw.println("listen logs:");
+            pw.increaseIndent();
             mListenLog.dump(fd, pw, args);
             pw.decreaseIndent();
             pw.println("registrations: count=" + recordCount);

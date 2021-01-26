@@ -836,16 +836,13 @@ public final class BluetoothGatt implements BluetoothProfile {
      * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission.
      *
      * @param callback GATT callback handler that will receive asynchronous callbacks.
-     * @param eattSupport specifies whether client app needs EATT channel for client operations.
-     * If both local and remote devices support EATT and local app asks for EATT, GATT client
-     * operations will be performed using EATT channel.
-     * If either local or remote device doesn't support EATT but local App asks for EATT, GATT
-     * client operations will be performed using unenhanced ATT channel.
+     * @param eatt_support indicate to allow for eatt support
      * @return If true, the callback will be called to notify success or failure, false on immediate
      * error
      * @hide
      */
-    private boolean registerApp(BluetoothGattCallback callback, Handler handler, boolean eattSupport) {
+    private boolean registerApp(BluetoothGattCallback callback, Handler handler,
+                                boolean eatt_support) {
         if (DBG) Log.d(TAG, "registerApp()");
         if (mService == null) return false;
 
@@ -855,7 +852,7 @@ public final class BluetoothGatt implements BluetoothProfile {
         if (DBG) Log.d(TAG, "registerApp() - UUID=" + uuid);
 
         try {
-            mService.registerClient(new ParcelUuid(uuid), mBluetoothGattCallback, eattSupport);
+            mService.registerClient(new ParcelUuid(uuid), mBluetoothGattCallback, eatt_support);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
             return false;

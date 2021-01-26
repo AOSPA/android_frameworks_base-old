@@ -38,6 +38,7 @@ import android.app.ActivityOptions;
 import android.app.ExitTransitionCoordinator;
 import android.app.ExitTransitionCoordinator.ExitTransitionCallbacks;
 import android.app.Notification;
+import android.app.WindowContext;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
@@ -78,10 +79,13 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.internal.policy.PhoneWindow;
 import com.android.settingslib.applications.InterestingConfigChanges;
 import com.android.systemui.R;
-import com.android.systemui.screenshot.ScreenshotController.SavedImageData.ShareTransition;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.screenshot.ScreenshotController.SavedImageData.ActionTransition;
 import com.android.systemui.util.DeviceConfigProxy;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -111,17 +115,17 @@ public class ScreenshotController {
      */
     static class SavedImageData {
         public Uri uri;
-        public Supplier<ShareTransition> shareTransition;
-        public Notification.Action editAction;
+        public Supplier<ActionTransition> shareTransition;
+        public Supplier<ActionTransition> editTransition;
         public Notification.Action deleteAction;
         public List<Notification.Action> smartActions;
 
         /**
-         * POD for shared element transition to share sheet.
+         * POD for shared element transition.
          */
-        static class ShareTransition {
+        static class ActionTransition {
             public Bundle bundle;
-            public Notification.Action shareAction;
+            public Notification.Action action;
             public Runnable onCancelRunnable;
         }
 
@@ -131,7 +135,7 @@ public class ScreenshotController {
         public void reset() {
             uri = null;
             shareTransition = null;
-            editAction = null;
+            editTransition = null;
             deleteAction = null;
             smartActions = null;
         }
@@ -162,10 +166,13 @@ public class ScreenshotController {
     // From WizardManagerHelper.java
     private static final String SETTINGS_SECURE_USER_SETUP_COMPLETE = "user_setup_complete";
 
-    private final Context mContext;
+    private final WindowContext mContext;
     private final ScreenshotNotificationsController mNotificationsController;
     private final ScreenshotSmartActions mScreenshotSmartActions;
     private final UiEventLogger mUiEventLogger;
+    private final ImageExporter mImageExporter;
+    private final Executor mMainExecutor;
+    private final Executor mBgExecutor;
 
     private final WindowManager mWindowManager;
     private final WindowManager.LayoutParams mWindowLayoutParams;
@@ -219,16 +226,22 @@ public class ScreenshotController {
             ScreenshotNotificationsController screenshotNotificationsController,
             ScrollCaptureClient scrollCaptureClient,
             UiEventLogger uiEventLogger,
-            DeviceConfigProxy configProxy) {
+            DeviceConfigProxy configProxy,
+            ImageExporter imageExporter,
+            @Main Executor mainExecutor,
+            @Background Executor bgExecutor) {
         mScreenshotSmartActions = screenshotSmartActions;
         mNotificationsController = screenshotNotificationsController;
         mScrollCaptureClient = scrollCaptureClient;
         mUiEventLogger = uiEventLogger;
+        mImageExporter = imageExporter;
+        mMainExecutor = mainExecutor;
+        mBgExecutor = bgExecutor;
 
         final DisplayManager dm = requireNonNull(context.getSystemService(DisplayManager.class));
         final Display display = dm.getDisplay(DEFAULT_DISPLAY);
         final Context displayContext = context.createDisplayContext(display);
-        mContext = displayContext.createWindowContext(TYPE_SCREENSHOT, null);
+        mContext = (WindowContext) displayContext.createWindowContext(TYPE_SCREENSHOT, null);
         mWindowManager = mContext.getSystemService(WindowManager.class);
 
         mAccessibilityManager = AccessibilityManager.getInstance(mContext);
@@ -337,6 +350,17 @@ public class ScreenshotController {
         } else {
             mScreenshotView.animateDismissal();
         }
+    }
+
+    boolean isPendingSharedTransition() {
+        return mScreenshotView.isPendingSharedTransition();
+    }
+
+    /**
+     * Release the constructed window context.
+     */
+    void releaseContext() {
+        mContext.release();
     }
 
     /**
@@ -502,9 +526,10 @@ public class ScreenshotController {
         }
     }
 
-    private void runScrollCapture(ScrollCaptureClient.Connection connection,
-            Runnable after) {
-        new ScrollCaptureController(mContext, connection).run(after);
+    private void runScrollCapture(ScrollCaptureClient.Connection connection, Runnable andThen) {
+        ScrollCaptureController controller = new ScrollCaptureController(mContext, connection,
+                mMainExecutor, mBgExecutor, mImageExporter);
+        controller.run(andThen);
     }
 
     /**
@@ -604,8 +629,8 @@ public class ScreenshotController {
             mSaveInBgTask.setActionsReadyListener(this::logSuccessOnActionsReady);
         }
 
-        mSaveInBgTask = new SaveImageInBackgroundTask(mContext, mScreenshotSmartActions, data,
-                getShareTransitionSupplier());
+        mSaveInBgTask = new SaveImageInBackgroundTask(mContext, mImageExporter,
+                mScreenshotSmartActions, data, getActionTransitionSupplier());
         mSaveInBgTask.execute();
     }
 
@@ -659,7 +684,7 @@ public class ScreenshotController {
      * Supplies the necessary bits for the shared element transition to share sheet.
      * Note that once supplied, the action intent to share must be sent immediately after.
      */
-    private Supplier<ShareTransition> getShareTransitionSupplier() {
+    private Supplier<ActionTransition> getActionTransitionSupplier() {
         return () -> {
             ExitTransitionCallbacks cb = new ExitTransitionCallbacks() {
                 @Override
@@ -668,7 +693,13 @@ public class ScreenshotController {
                 }
 
                 @Override
-                public void onFinish() { }
+                public void hideSharedElements() {
+                    resetScreenshotView();
+                }
+
+                @Override
+                public void onFinish() {
+                }
             };
 
             Pair<ActivityOptions, ExitTransitionCoordinator> transition =
@@ -677,7 +708,7 @@ public class ScreenshotController {
                                     ChooserActivity.FIRST_IMAGE_PREVIEW_TRANSITION_NAME));
             transition.second.startExit();
 
-            ShareTransition supply = new ShareTransition();
+            ActionTransition supply = new ActionTransition();
             supply.bundle = transition.first.toBundle();
             supply.onCancelRunnable = () -> ActivityOptions.stopSharedElementAnimation(mWindow);
             return supply;

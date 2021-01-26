@@ -96,6 +96,16 @@ class BiometricTestSessionImpl extends ITestSession.Stub {
         public void onChallengeGenerated(int sensorId, long challenge) {
 
         }
+
+        @Override
+        public void onUdfpsPointerDown(int sensorId) {
+
+        }
+
+        @Override
+        public void onUdfpsPointerUp(int sensorId) {
+
+        }
     };
 
     BiometricTestSessionImpl(@NonNull Context context, int sensorId,
@@ -121,7 +131,7 @@ class BiometricTestSessionImpl extends ITestSession.Stub {
         Utils.checkPermission(mContext, TEST_BIOMETRIC);
 
         mProvider.scheduleEnroll(mSensorId, new Binder(), new byte[69], userId, mReceiver,
-                mContext.getOpPackageName());
+                mContext.getOpPackageName(), true /* shouldLogMetrics */);
     }
 
     @Override

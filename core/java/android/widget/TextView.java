@@ -494,6 +494,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     private TextUtils.TruncateAt mEllipsize;
 
+    // A flag to indicate the cursor was hidden by IME.
+    private boolean mImeTemporarilyConsumesInput;
+
+    // Whether cursor is visible without regard to {@link mImeTemporarilyConsumesInput}.
+    // {code true} is the default value.
+    private boolean mCursorVisibleFromAttr = true;
+
     static class Drawables {
         static final int LEFT = 0;
         static final int TOP = 1;
@@ -10496,7 +10503,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     /**
      * Set whether the cursor is visible. The default is true. Note that this property only
-     * makes sense for editable TextView.
+     * makes sense for editable TextView. If IME is temporarily consuming the input, the cursor will
+     * be always invisible, visibility will be updated as the last state when IME does not consume
+     * the input anymore.
      *
      * @see #isCursorVisible()
      *
@@ -10504,6 +10513,25 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @android.view.RemotableViewMethod
     public void setCursorVisible(boolean visible) {
+        mCursorVisibleFromAttr = visible;
+        updateCursorVisibleInternal();
+    }
+
+    /**
+     * Sets the IME is temporarily consuming the input and make the cursor invisible if
+     * {@code imeTemporarilyConsumesInput} is {@code true}. Otherwise, make the cursor visible.
+     *
+     * @param imeTemporarilyConsumesInput {@code true} if IME is temporarily consuming the input
+     *
+     * @hide
+     */
+    public void setImeTemporarilyConsumesInput(boolean imeTemporarilyConsumesInput) {
+        mImeTemporarilyConsumesInput = imeTemporarilyConsumesInput;
+        updateCursorVisibleInternal();
+    }
+
+    private void updateCursorVisibleInternal()  {
+        boolean visible = mCursorVisibleFromAttr && !mImeTemporarilyConsumesInput;
         if (visible && mEditor == null) return; // visible is the default value with no edit data
         createEditorIfNeeded();
         if (mEditor.mCursorVisible != visible) {
@@ -10518,7 +10546,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * @return whether or not the cursor is visible (assuming this TextView is editable)
+     * @return whether or not the cursor is visible (assuming this TextView is editable). This
+     * method may return {@code false} when the IME is temporarily consuming the input even if the
+     * {@code mEditor.mCursorVisible} attribute is {@code true} or {@code #setCursorVisible(true)}
+     * is called.
      *
      * @see #setCursorVisible(boolean)
      *
@@ -11686,6 +11717,18 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     }
                 }
             }
+            String[] mimeTypes = getOnReceiveContentMimeTypes();
+            if (mimeTypes == null && mEditor != null) {
+                // If the app hasn't set a listener for receiving content on this view (ie,
+                // getOnReceiveContentMimeTypes() returns null), check if it implements the
+                // keyboard image API and, if possible, use those MIME types as fallback.
+                // This fallback is only in place for autofill, not other mechanisms for
+                // inserting content. See AUTOFILL_NON_TEXT_REQUIRES_ON_RECEIVE_CONTENT_LISTENER
+                // in TextViewOnReceiveContentListener for more info.
+                mimeTypes = mEditor.getDefaultOnReceiveContentListener()
+                        .getFallbackMimeTypesForAutofill(this);
+            }
+            structure.setOnReceiveContentMimeTypes(mimeTypes);
         }
 
         if (!isPassword || viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
@@ -11862,16 +11905,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             Log.w(LOG_TAG, "cannot autofill non-editable TextView: " + this);
             return;
         }
-        final ClipData clip;
-        if (value.isRichContent()) {
-            clip = value.getRichContentValue();
-        } else if (value.isText()) {
-            clip = ClipData.newPlainText("", value.getTextValue());
-        } else {
+        if (!value.isText()) {
             Log.w(LOG_TAG, "value of type " + value.describeContents()
                     + " cannot be autofilled into " + this);
             return;
         }
+        final ClipData clip = ClipData.newPlainText("", value.getTextValue());
         final ContentInfo payload = new ContentInfo.Builder(clip, SOURCE_AUTOFILL).build();
         performReceiveContent(payload);
     }

@@ -18,7 +18,10 @@ package com.android.wm.shell.legacysplitscreen;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
@@ -40,11 +43,10 @@ import android.window.WindowOrganizer;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.wm.shell.common.SyncTransactionQueue;
+import com.android.wm.shell.transition.Transitions;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Proxy to simplify calls into window manager/activity manager
@@ -53,6 +55,17 @@ class WindowManagerProxy {
 
     private static final String TAG = "WindowManagerProxy";
     private static final int[] HOME_AND_RECENTS = {ACTIVITY_TYPE_HOME, ACTIVITY_TYPE_RECENTS};
+    private static final int[] CONTROLLED_ACTIVITY_TYPES = {
+            ACTIVITY_TYPE_STANDARD,
+            ACTIVITY_TYPE_HOME,
+            ACTIVITY_TYPE_RECENTS,
+            ACTIVITY_TYPE_UNDEFINED
+    };
+    private static final int[] CONTROLLED_WINDOWING_MODES = {
+            WINDOWING_MODE_FULLSCREEN,
+            WINDOWING_MODE_SPLIT_SCREEN_SECONDARY,
+            WINDOWING_MODE_UNDEFINED
+    };
 
     @GuardedBy("mDockedRect")
     private final Rect mDockedRect = new Rect();
@@ -62,25 +75,7 @@ class WindowManagerProxy {
     @GuardedBy("mDockedRect")
     private final Rect mTouchableRegion = new Rect();
 
-    private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
-
     private final SyncTransactionQueue mSyncTransactionQueue;
-
-    private final Runnable mSetTouchableRegionRunnable = new Runnable() {
-        @Override
-        public void run() {
-            try {
-                synchronized (mDockedRect) {
-                    mTmpRect1.set(mTouchableRegion);
-                }
-                WindowManagerGlobal.getWindowManagerService().setDockedStackDividerTouchRegion(
-                        mTmpRect1);
-            } catch (RemoteException e) {
-                Log.w(TAG, "Failed to set touchable region: " + e);
-            }
-        }
-    };
-
     private final TaskOrganizer mTaskOrganizer;
 
     WindowManagerProxy(SyncTransactionQueue syncQueue, TaskOrganizer taskOrganizer) {
@@ -90,28 +85,32 @@ class WindowManagerProxy {
 
     void dismissOrMaximizeDocked(final LegacySplitScreenTaskListener tiles,
             LegacySplitDisplayLayout layout, final boolean dismissOrMaximize) {
-        mExecutor.execute(() -> applyDismissSplit(tiles, layout, dismissOrMaximize));
+        if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+            tiles.mSplitScreenController.startDismissSplit(!dismissOrMaximize, true /* snapped */);
+        } else {
+            applyDismissSplit(tiles, layout, dismissOrMaximize);
+        }
     }
 
     public void setResizing(final boolean resizing) {
-        mExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    ActivityTaskManager.getService().setSplitScreenResizing(resizing);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Error calling setDockedStackResizing: " + e);
-                }
-            }
-        });
+        try {
+            ActivityTaskManager.getService().setSplitScreenResizing(resizing);
+        } catch (RemoteException e) {
+            Log.w(TAG, "Error calling setDockedStackResizing: " + e);
+        }
     }
 
     /** Sets a touch region */
     public void setTouchRegion(Rect region) {
-        synchronized (mDockedRect) {
-            mTouchableRegion.set(region);
+        try {
+            synchronized (mDockedRect) {
+                mTouchableRegion.set(region);
+            }
+            WindowManagerGlobal.getWindowManagerService().setDockedStackDividerTouchRegion(
+                    mTouchableRegion);
+        } catch (RemoteException e) {
+            Log.w(TAG, "Failed to set touchable region: " + e);
         }
-        mExecutor.execute(mSetTouchableRegionRunnable);
     }
 
     void applyResizeSplits(int position, LegacySplitDisplayLayout splitLayout) {
@@ -181,6 +180,19 @@ class WindowManagerProxy {
         return isHomeResizable;
     }
 
+    /** @see #buildEnterSplit */
+    boolean applyEnterSplit(LegacySplitScreenTaskListener tiles, LegacySplitDisplayLayout layout) {
+        // Set launchtile first so that any stack created after
+        // getAllRootTaskInfos and before reparent (even if unlikely) are placed
+        // correctly.
+        WindowContainerTransaction wct = new WindowContainerTransaction();
+        wct.setLaunchRoot(tiles.mSecondary.token, CONTROLLED_WINDOWING_MODES,
+                CONTROLLED_ACTIVITY_TYPES);
+        final boolean isHomeResizable = buildEnterSplit(wct, tiles, layout);
+        applySyncTransaction(wct);
+        return isHomeResizable;
+    }
+
     /**
      * Finishes entering split-screen by reparenting all FULLSCREEN tasks into the secondary split.
      * This assumes there is already something in the primary split since that is usually what
@@ -189,14 +201,10 @@ class WindowManagerProxy {
      *
      * @return whether the home stack is resizable
      */
-    boolean applyEnterSplit(LegacySplitScreenTaskListener tiles, LegacySplitDisplayLayout layout) {
-        // Set launchtile first so that any stack created after
-        // getAllRootTaskInfos and before reparent (even if unlikely) are placed
-        // correctly.
-        mTaskOrganizer.setLaunchRoot(DEFAULT_DISPLAY, tiles.mSecondary.token);
+    boolean buildEnterSplit(WindowContainerTransaction outWct, LegacySplitScreenTaskListener tiles,
+            LegacySplitDisplayLayout layout) {
         List<ActivityManager.RunningTaskInfo> rootTasks =
                 mTaskOrganizer.getRootTasks(DEFAULT_DISPLAY, null /* activityTypes */);
-        WindowContainerTransaction wct = new WindowContainerTransaction();
         if (rootTasks.isEmpty()) {
             return false;
         }
@@ -215,24 +223,37 @@ class WindowManagerProxy {
             // Since this iterates from bottom to top, update topHomeTask for every fullscreen task
             // so it will be left with the status of the top one.
             topHomeTask = isHomeOrRecentTask(rootTask) ? rootTask : null;
-            wct.reparent(rootTask.token, tiles.mSecondary.token, true /* onTop */);
+            outWct.reparent(rootTask.token, tiles.mSecondary.token, true /* onTop */);
         }
         // Move the secondary split-forward.
-        wct.reorder(tiles.mSecondary.token, true /* onTop */);
-        boolean isHomeResizable = applyHomeTasksMinimized(layout, null /* parent */, wct);
-        if (topHomeTask != null) {
+        outWct.reorder(tiles.mSecondary.token, true /* onTop */);
+        boolean isHomeResizable = applyHomeTasksMinimized(layout, null /* parent */,
+                outWct);
+        if (topHomeTask != null && !Transitions.ENABLE_SHELL_TRANSITIONS) {
             // Translate/update-crop of secondary out-of-band with sync transaction -- Until BALST
             // is enabled, this temporarily syncs the home surface position with offset until
             // sync transaction finishes.
-            wct.setBoundsChangeTransaction(topHomeTask.token, tiles.mHomeBounds);
+            outWct.setBoundsChangeTransaction(topHomeTask.token, tiles.mHomeBounds);
         }
-        applySyncTransaction(wct);
         return isHomeResizable;
     }
 
-    boolean isHomeOrRecentTask(ActivityManager.RunningTaskInfo ti) {
+    static boolean isHomeOrRecentTask(ActivityManager.RunningTaskInfo ti) {
         final int atype = ti.getActivityType();
         return atype == ACTIVITY_TYPE_HOME || atype == ACTIVITY_TYPE_RECENTS;
+    }
+
+    /** @see #buildDismissSplit */
+    void applyDismissSplit(LegacySplitScreenTaskListener tiles, LegacySplitDisplayLayout layout,
+            boolean dismissOrMaximize) {
+        // TODO(task-org): Once task-org is more complete, consider using Appeared/Vanished
+        //                 plus specific APIs to clean this up.
+        final WindowContainerTransaction wct = new WindowContainerTransaction();
+        // Set launch root first so that any task created after getChildContainers and
+        // before reparent (pretty unlikely) are put into fullscreen.
+        wct.setLaunchRoot(tiles.mSecondary.token, null, null);
+        buildDismissSplit(wct, tiles, layout, dismissOrMaximize);
+        applySyncTransaction(wct);
     }
 
     /**
@@ -241,22 +262,21 @@ class WindowManagerProxy {
      *                          split (thus resulting in the top of the secondary split becoming
      *                          fullscreen. {@code false} resolves the other way.
      */
-    void applyDismissSplit(LegacySplitScreenTaskListener tiles, LegacySplitDisplayLayout layout,
+    static void buildDismissSplit(WindowContainerTransaction outWct,
+            LegacySplitScreenTaskListener tiles, LegacySplitDisplayLayout layout,
             boolean dismissOrMaximize) {
-        // Set launch root first so that any task created after getChildContainers and
-        // before reparent (pretty unlikely) are put into fullscreen.
-        mTaskOrganizer.setLaunchRoot(Display.DEFAULT_DISPLAY, null);
         // TODO(task-org): Once task-org is more complete, consider using Appeared/Vanished
         //                 plus specific APIs to clean this up.
+        final TaskOrganizer taskOrg = tiles.getTaskOrganizer();
         List<ActivityManager.RunningTaskInfo> primaryChildren =
-                mTaskOrganizer.getChildTasks(tiles.mPrimary.token, null /* activityTypes */);
+                taskOrg.getChildTasks(tiles.mPrimary.token, null /* activityTypes */);
         List<ActivityManager.RunningTaskInfo> secondaryChildren =
-                mTaskOrganizer.getChildTasks(tiles.mSecondary.token, null /* activityTypes */);
+                taskOrg.getChildTasks(tiles.mSecondary.token, null /* activityTypes */);
         // In some cases (eg. non-resizable is launched), system-server will leave split-screen.
         // as a result, the above will not capture any tasks; yet, we need to clean-up the
         // home task bounds.
         List<ActivityManager.RunningTaskInfo> freeHomeAndRecents =
-                mTaskOrganizer.getRootTasks(DEFAULT_DISPLAY, HOME_AND_RECENTS);
+                taskOrg.getRootTasks(DEFAULT_DISPLAY, HOME_AND_RECENTS);
         // Filter out the root split tasks
         freeHomeAndRecents.removeIf(p -> p.token.equals(tiles.mSecondary.token)
                 || p.token.equals(tiles.mPrimary.token));
@@ -265,11 +285,10 @@ class WindowManagerProxy {
                 && freeHomeAndRecents.isEmpty()) {
             return;
         }
-        WindowContainerTransaction wct = new WindowContainerTransaction();
         if (dismissOrMaximize) {
             // Dismissing, so move all primary split tasks first
             for (int i = primaryChildren.size() - 1; i >= 0; --i) {
-                wct.reparent(primaryChildren.get(i).token, null /* parent */,
+                outWct.reparent(primaryChildren.get(i).token, null /* parent */,
                         true /* onTop */);
             }
             boolean homeOnTop = false;
@@ -277,16 +296,16 @@ class WindowManagerProxy {
             // order within the secondary split.
             for (int i = secondaryChildren.size() - 1; i >= 0; --i) {
                 final ActivityManager.RunningTaskInfo ti = secondaryChildren.get(i);
-                wct.reparent(ti.token, null /* parent */, true /* onTop */);
+                outWct.reparent(ti.token, null /* parent */, true /* onTop */);
                 if (isHomeOrRecentTask(ti)) {
-                    wct.setBounds(ti.token, null);
-                    wct.setWindowingMode(ti.token, WINDOWING_MODE_UNDEFINED);
+                    outWct.setBounds(ti.token, null);
+                    outWct.setWindowingMode(ti.token, WINDOWING_MODE_UNDEFINED);
                     if (i == 0) {
                         homeOnTop = true;
                     }
                 }
             }
-            if (homeOnTop) {
+            if (homeOnTop && !Transitions.ENABLE_SHELL_TRANSITIONS) {
                 // Translate/update-crop of secondary out-of-band with sync transaction -- instead
                 // play this in sync with new home-app frame because until BALST is enabled this
                 // shows up on screen before the syncTransaction returns.
@@ -304,7 +323,7 @@ class WindowManagerProxy {
                         layout.mDisplayLayout.height());
                 crop.offset(-posX, -posY);
                 sft.setWindowCrop(tiles.mSecondarySurface, crop);
-                wct.setBoundsChangeTransaction(tiles.mSecondary.token, sft);
+                outWct.setBoundsChangeTransaction(tiles.mSecondary.token, sft);
             }
         } else {
             // Maximize, so move non-home secondary split first
@@ -312,7 +331,7 @@ class WindowManagerProxy {
                 if (isHomeOrRecentTask(secondaryChildren.get(i))) {
                     continue;
                 }
-                wct.reparent(secondaryChildren.get(i).token, null /* parent */,
+                outWct.reparent(secondaryChildren.get(i).token, null /* parent */,
                         true /* onTop */);
             }
             // Find and place home tasks in-between. This simulates the fact that there was
@@ -320,24 +339,23 @@ class WindowManagerProxy {
             for (int i = secondaryChildren.size() - 1; i >= 0; --i) {
                 final ActivityManager.RunningTaskInfo ti = secondaryChildren.get(i);
                 if (isHomeOrRecentTask(ti)) {
-                    wct.reparent(ti.token, null /* parent */, true /* onTop */);
+                    outWct.reparent(ti.token, null /* parent */, true /* onTop */);
                     // reset bounds and mode too
-                    wct.setBounds(ti.token, null);
-                    wct.setWindowingMode(ti.token, WINDOWING_MODE_UNDEFINED);
+                    outWct.setBounds(ti.token, null);
+                    outWct.setWindowingMode(ti.token, WINDOWING_MODE_UNDEFINED);
                 }
             }
             for (int i = primaryChildren.size() - 1; i >= 0; --i) {
-                wct.reparent(primaryChildren.get(i).token, null /* parent */,
+                outWct.reparent(primaryChildren.get(i).token, null /* parent */,
                         true /* onTop */);
             }
         }
         for (int i = freeHomeAndRecents.size() - 1; i >= 0; --i) {
-            wct.setBounds(freeHomeAndRecents.get(i).token, null);
-            wct.setWindowingMode(freeHomeAndRecents.get(i).token, WINDOWING_MODE_UNDEFINED);
+            outWct.setBounds(freeHomeAndRecents.get(i).token, null);
+            outWct.setWindowingMode(freeHomeAndRecents.get(i).token, WINDOWING_MODE_UNDEFINED);
         }
         // Reset focusable to true
-        wct.setFocusable(tiles.mPrimary.token, true /* focusable */);
-        applySyncTransaction(wct);
+        outWct.setFocusable(tiles.mPrimary.token, true /* focusable */);
     }
 
     /**

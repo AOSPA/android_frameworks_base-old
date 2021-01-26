@@ -3032,8 +3032,8 @@ public class AppOpsService extends IAppOpsService.Stub {
 
         // This is a workaround for R QPR, new API change is not allowed. We only allow the current
         // voice recognizer is also the voice interactor to noteproxy op.
-        final boolean isTrustVoiceServiceProxy =
-                AppOpsManager.isTrustedVoiceServiceProxy(mContext, proxyPackageName, code);
+        final boolean isTrustVoiceServiceProxy = AppOpsManager.isTrustedVoiceServiceProxy(mContext,
+                proxyPackageName, code, UserHandle.getUserId(proxyUid));
         final boolean isSelfBlame = Binder.getCallingUid() == proxiedUid;
         final boolean isProxyTrusted = mContext.checkPermission(
                 Manifest.permission.UPDATE_APP_OPS_STATS, -1, proxyUid)
@@ -3502,8 +3502,8 @@ public class AppOpsService extends IAppOpsService.Stub {
 
         // This is a workaround for R QPR, new API change is not allowed. We only allow the current
         // voice recognizer is also the voice interactor to noteproxy op.
-        final boolean isTrustVoiceServiceProxy =
-                AppOpsManager.isTrustedVoiceServiceProxy(mContext, proxyPackageName, code);
+        final boolean isTrustVoiceServiceProxy = AppOpsManager.isTrustedVoiceServiceProxy(mContext,
+                proxyPackageName, code, UserHandle.getUserId(proxyUid));
         final boolean isSelfBlame = Binder.getCallingUid() == proxiedUid;
         final boolean isProxyTrusted = mContext.checkPermission(
                 Manifest.permission.UPDATE_APP_OPS_STATS, -1, proxyUid)
@@ -6143,6 +6143,12 @@ public class AppOpsService extends IAppOpsService.Stub {
     /** Pulls current AppOps access report and resamples package and app op to watch */
     @Override
     public @Nullable RuntimeAppOpAccessMessage collectRuntimeAppOpAccessMessage() {
+        ActivityManagerInternal ami = LocalServices.getService(ActivityManagerInternal.class);
+        boolean isCallerInstrumented = ami.isUidCurrentlyInstrumented(Binder.getCallingUid());
+        boolean isCallerSystem = Binder.getCallingPid() == Process.myPid();
+        if (!isCallerSystem && !isCallerInstrumented) {
+            return null;
+        }
         mContext.enforcePermission(android.Manifest.permission.GET_APP_OPS_STATS,
                 Binder.getCallingPid(), Binder.getCallingUid(), null);
         RuntimeAppOpAccessMessage result;

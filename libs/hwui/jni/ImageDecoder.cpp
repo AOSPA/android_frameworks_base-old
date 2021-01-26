@@ -135,19 +135,15 @@ static jobject native_create(JNIEnv* env, std::unique_ptr<SkStream> stream,
         return throw_exception(env, kSourceException, "", jexception, source);
     }
 
-    auto androidCodec = SkAndroidCodec::MakeFromCodec(std::move(codec),
-            SkAndroidCodec::ExifOrientationBehavior::kRespect);
+    auto androidCodec = SkAndroidCodec::MakeFromCodec(std::move(codec));
     if (!androidCodec.get()) {
         return throw_exception(env, kSourceMalformedData, "", nullptr, source);
     }
 
-    const auto& info = androidCodec->getInfo();
-    const int width = info.width();
-    const int height = info.height();
     const bool isNinePatch = peeker->mPatch != nullptr;
     ImageDecoder* decoder = new ImageDecoder(std::move(androidCodec), std::move(peeker));
     return env->NewObject(gImageDecoder_class, gImageDecoder_constructorMethodID,
-                          reinterpret_cast<jlong>(decoder), width, height,
+                          reinterpret_cast<jlong>(decoder), decoder->width(), decoder->height(),
                           animated, isNinePatch);
 }
 
@@ -469,7 +465,7 @@ static jobject ImageDecoder_nDecodeBitmap(JNIEnv* env, jobject /*clazz*/, jlong 
 static jobject ImageDecoder_nGetSampledSize(JNIEnv* env, jobject /*clazz*/, jlong nativePtr,
                                             jint sampleSize) {
     auto* decoder = reinterpret_cast<ImageDecoder*>(nativePtr);
-    SkISize size = decoder->mCodec->getSampledDimensions(sampleSize);
+    SkISize size = decoder->getSampledDimensions(sampleSize);
     return env->NewObject(gSize_class, gSize_constructorMethodID, size.width(), size.height());
 }
 

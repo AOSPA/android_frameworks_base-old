@@ -117,8 +117,8 @@ public final class Completable {
         }
 
         /**
-         * @return {@link true} if {@link #onComplete()} gets called and {@link #mState} is
-         *         {@link CompletionState#COMPLETED_WITH_VALUE} .
+         * @return {@code true} if {@link #onComplete()} gets called and {@link #mState} is
+         *         {@link CompletionState#COMPLETED_WITH_VALUE}.
          */
         @AnyThread
         public boolean hasValue() {
@@ -232,13 +232,25 @@ public final class Completable {
         }
 
         /**
-         * Blocks the calling thread until this object becomes ready to return the value.
+         * Blocks the calling thread until this object becomes ready to return the value, even if
+         * {@link InterruptedException} is thrown.
          */
         @AnyThread
         public void await() {
-            try {
-                mLatch.await();
-            } catch (InterruptedException ignored) { }
+            boolean interrupted = false;
+            while (true) {
+                try {
+                    mLatch.await();
+                    break;
+                } catch (InterruptedException ignored) {
+                    interrupted = true;
+                }
+            }
+
+            if (interrupted) {
+                // Try to preserve the interrupt bit on this thread.
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -281,6 +293,42 @@ public final class Completable {
             synchronized (mStateLock) {
                 enforceGetValueLocked();
                 return mValue;
+            }
+        }
+    }
+
+    /**
+     * Completable object of {@link java.lang.Void}.
+     */
+    public static final class Void extends ValueBase {
+        /**
+         * Notify when this completable object callback.
+         */
+        @AnyThread
+        @Override
+        protected void onComplete() {
+            synchronized (mStateLock) {
+                switch (mState) {
+                    case CompletionState.NOT_COMPLETED:
+                        mState = CompletionState.COMPLETED_WITH_VALUE;
+                        break;
+                    default:
+                        throw new UnsupportedOperationException(
+                                "onComplete() is not allowed on state=" + stateToString(mState));
+                }
+            }
+            super.onComplete();
+        }
+
+        /**
+         * @throws RuntimeException when called while {@link #onError} happened.
+         * @throws UnsupportedOperationException when called while {@link #hasValue()} returns
+         *                                       {@code false}.
+         */
+        @AnyThread
+        public void getValue() {
+            synchronized (mStateLock) {
+                enforceGetValueLocked();
             }
         }
     }
@@ -396,6 +444,13 @@ public final class Completable {
     }
 
     /**
+     * @return an instance of {@link Completable.Void}.
+     */
+    public static Completable.Void createVoid() {
+        return new Completable.Void();
+    }
+
+    /**
      * Completable object of {@link java.lang.Boolean}.
      */
     public static final class Boolean extends Values<java.lang.Boolean> { }
@@ -444,7 +499,7 @@ public final class Completable {
     /**
      * Await the result by the {@link Completable.Values}.
      *
-     * @return the result once {@link ValueBase#onComplete()}
+     * @return the result once {@link ValueBase#onComplete()}.
      */
     @AnyThread
     @Nullable
@@ -456,12 +511,23 @@ public final class Completable {
     /**
      * Await the int result by the {@link Completable.Int}.
      *
-     * @return the result once {@link ValueBase#onComplete()}
+     * @return the result once {@link ValueBase#onComplete()}.
      */
     @AnyThread
     public static int getIntResult(@NonNull Completable.Int value) {
         value.await();
         return value.getValue();
+    }
+
+    /**
+     * Await the result by the {@link Completable.Void}.
+     *
+     * Check the result once {@link ValueBase#onComplete()}
+     */
+    @AnyThread
+    public static void getResult(@NonNull Completable.Void value) {
+        value.await();
+        value.getValue();
     }
 
     /**

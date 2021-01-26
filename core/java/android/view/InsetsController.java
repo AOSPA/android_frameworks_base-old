@@ -522,7 +522,6 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
     private int mLastLegacyWindowFlags;
     private int mLastLegacySystemUiFlags;
     private int mLastWindowingMode;
-    private DisplayCutout mLastDisplayCutout;
     private boolean mStartingAnimation;
     private int mCaptionInsetsHeight = 0;
     private boolean mAnimationsDisabled;
@@ -589,9 +588,8 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
 
             WindowInsets insets = state.calculateInsets(mFrame, mState /* ignoringVisibilityState*/,
                     mLastInsets.isRound(), mLastInsets.shouldAlwaysConsumeSystemBars(),
-                    mLastDisplayCutout, mLastLegacySoftInputMode, mLastLegacyWindowFlags,
-                    mLastLegacySystemUiFlags, mWindowType, mLastWindowingMode,
-                    null /* typeSideMap */);
+                    mLastLegacySoftInputMode, mLastLegacyWindowFlags, mLastLegacySystemUiFlags,
+                    mWindowType, mLastWindowingMode, null /* typeSideMap */);
             mHost.dispatchWindowInsetsAnimationProgress(insets, mUnmodifiableTmpRunningAnims);
             if (DEBUG) {
                 for (WindowInsetsAnimation anim : mUnmodifiableTmpRunningAnims) {
@@ -644,7 +642,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         updateState(state);
         applyLocalVisibilityOverride();
 
-        if (!mState.equals(lastState, true /* excludingCaptionInsets */,
+        if (!mState.equals(lastState, false /* excludingCaptionInsets */,
                 true /* excludeInvisibleIme */)) {
             if (DEBUG) Log.d(TAG, "onStateChanged, notifyInsetsChanged");
             mHost.notifyInsetsChanged();
@@ -654,6 +652,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
 
     private void updateState(InsetsState newState) {
         mState.setDisplayFrame(newState.getDisplayFrame());
+        mState.setDisplayCutout(newState.getDisplayCutout());
         @InsetsType int disabledUserAnimationTypes = 0;
         @InsetsType int[] cancelledUserAnimationTypes = {0};
         for (@InternalInsetsType int type = 0; type < InsetsState.SIZE; type++) {
@@ -673,15 +672,13 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
             getSourceConsumer(type).updateSource(source, animationType);
         }
         for (@InternalInsetsType int type = 0; type < InsetsState.SIZE; type++) {
+            // Only update the server side insets here.
+            if (type == ITYPE_CAPTION_BAR) continue;
             InsetsSource source = mState.peekSource(type);
             if (source == null) continue;
             if (newState.peekSource(type) == null) {
                 mState.removeSource(type);
             }
-        }
-        if (mCaptionInsetsHeight != 0) {
-            mState.getSource(ITYPE_CAPTION_BAR).setFrame(new Rect(mFrame.left, mFrame.top,
-                    mFrame.right, mFrame.top + mCaptionInsetsHeight));
         }
 
         updateDisabledUserAnimationTypes(disabledUserAnimationTypes);
@@ -725,18 +722,16 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
      */
     @VisibleForTesting
     public WindowInsets calculateInsets(boolean isScreenRound, boolean alwaysConsumeSystemBars,
-            DisplayCutout cutout, int windowType, int windowingMode,
-            int legacySoftInputMode, int legacyWindowFlags, int legacySystemUiFlags) {
+            int windowType, int windowingMode, int legacySoftInputMode, int legacyWindowFlags,
+            int legacySystemUiFlags) {
         mWindowType = windowType;
         mLastWindowingMode = windowingMode;
         mLastLegacySoftInputMode = legacySoftInputMode;
         mLastLegacyWindowFlags = legacyWindowFlags;
         mLastLegacySystemUiFlags = legacySystemUiFlags;
-        mLastDisplayCutout = cutout;
         mLastInsets = mState.calculateInsets(mFrame, null /* ignoringVisibilityState*/,
-                isScreenRound, alwaysConsumeSystemBars, cutout,
-                legacySoftInputMode, legacyWindowFlags, legacySystemUiFlags,
-                windowType, windowingMode, null /* typeSideMap */);
+                isScreenRound, alwaysConsumeSystemBars, legacySoftInputMode, legacyWindowFlags,
+                legacySystemUiFlags, windowType, windowingMode, null /* typeSideMap */);
         return mLastInsets;
     }
 
@@ -1491,7 +1486,16 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
 
     @Override
     public void setCaptionInsetsHeight(int height) {
-        mCaptionInsetsHeight = height;
+        if (mCaptionInsetsHeight != height) {
+            mCaptionInsetsHeight = height;
+            if (mCaptionInsetsHeight != 0) {
+                mState.getSource(ITYPE_CAPTION_BAR).setFrame(new Rect(mFrame.left, mFrame.top,
+                        mFrame.right, mFrame.top + mCaptionInsetsHeight));
+            } else {
+                mState.removeSource(ITYPE_CAPTION_BAR);
+            }
+            mHost.notifyInsetsChanged();
+        }
     }
 
     @Override

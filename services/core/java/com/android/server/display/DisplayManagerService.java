@@ -49,6 +49,7 @@ import android.database.ContentObserver;
 import android.graphics.ColorSpace;
 import android.graphics.Point;
 import android.hardware.SensorManager;
+import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.display.AmbientBrightnessDayStats;
 import android.hardware.display.BrightnessChangeEvent;
 import android.hardware.display.BrightnessConfiguration;
@@ -56,6 +57,7 @@ import android.hardware.display.Curve;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.DisplayManagerInternal;
+import android.hardware.display.DisplayManagerInternal.DisplayGroupListener;
 import android.hardware.display.DisplayManagerInternal.DisplayTransactionListener;
 import android.hardware.display.DisplayViewport;
 import android.hardware.display.DisplayedContentSample;
@@ -71,6 +73,7 @@ import android.media.projection.IMediaProjectionManager;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.IBinder.DeathRecipient;
 import android.os.Looper;
@@ -101,7 +104,6 @@ import android.view.Display;
 import android.view.DisplayEventReceiver;
 import android.view.DisplayInfo;
 import android.view.DisplayAddress;
-import android.view.IDisplayFoldListener;
 import android.view.Surface;
 import android.view.SurfaceControl;
 
@@ -115,7 +117,6 @@ import com.android.server.DisplayThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.UiThread;
-import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.SurfaceAnimationThread;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -191,6 +192,7 @@ public final class DisplayManagerService extends SystemService {
     private static final int MSG_UPDATE_VIEWPORT = 5;
     private static final int MSG_LOAD_BRIGHTNESS_CONFIGURATION = 6;
     private static final int MSG_DELIVER_DISPLAY_EVENT_FRAME_RATE_OVERRIDE = 7;
+    private static final int MSG_DELIVER_DISPLAY_GROUP_EVENT = 8;
 
     private final Context mContext;
     private final DisplayManagerHandler mHandler;
@@ -238,36 +240,54 @@ public final class DisplayManagerService extends SystemService {
     private final CopyOnWriteArrayList<DisplayTransactionListener> mDisplayTransactionListeners =
             new CopyOnWriteArrayList<DisplayTransactionListener>();
 
+    /** List of all display group listeners. */
+    private final CopyOnWriteArrayList<DisplayGroupListener> mDisplayGroupListeners =
+            new CopyOnWriteArrayList<>();
+
     /** All {@link DisplayPowerController}s indexed by {@link LogicalDisplay} ID. */
     private final SparseArray<DisplayPowerController> mDisplayPowerControllers =
             new SparseArray<>();
 
     /** {@link DisplayBlanker} used by all {@link DisplayPowerController}s. */
     private final DisplayBlanker mDisplayBlanker = new DisplayBlanker() {
+        // Synchronized to avoid race conditions when updating multiple display states.
         @Override
-        public void requestDisplayState(int displayId, int state, float brightness) {
-            // TODO (b/168210494): Stop applying default display state to all displays.
-            if (displayId != Display.DEFAULT_DISPLAY) {
-                return;
-            }
-            final int[] displayIds;
+        public synchronized void requestDisplayState(int displayId, int state, float brightness) {
+            boolean allInactive = true;
+            boolean allOff = true;
+            final boolean stateChanged;
             synchronized (mSyncRoot) {
-                displayIds = mLogicalDisplayMapper.getDisplayIdsLocked();
+                final int index = mDisplayStates.indexOfKey(displayId);
+                final int newState = mDisplayStates.valueAt(index);
+                stateChanged = index == -1 || state != newState;
+                if (stateChanged) {
+                    final int size = mDisplayStates.size();
+                    for (int i = 0; i < size; i++) {
+                        final int displayState = i == index ? newState : state;
+                        if (displayState != Display.STATE_OFF) {
+                            allOff = false;
+                        }
+                        if (Display.isActiveState(displayState)) {
+                            allInactive = false;
+                        }
+                        if (!allOff && !allInactive) {
+                            break;
+                        }
+                    }
+                }
             }
 
             // The order of operations is important for legacy reasons.
             if (state == Display.STATE_OFF) {
-                for (int id : displayIds) {
-                    requestDisplayStateInternal(id, state, brightness);
-                }
+                requestDisplayStateInternal(displayId, state, brightness);
             }
 
-            mDisplayPowerCallbacks.onDisplayStateChange(state);
+            if (stateChanged) {
+                mDisplayPowerCallbacks.onDisplayStateChange(allInactive, allOff);
+            }
 
             if (state != Display.STATE_OFF) {
-                for (int id : displayIds) {
-                    requestDisplayStateInternal(id, state, brightness);
-                }
+                requestDisplayStateInternal(displayId, state, brightness);
             }
         }
     };
@@ -288,9 +308,6 @@ public final class DisplayManagerService extends SystemService {
     // A map from LogicalDisplay ID to display brightness.
     @GuardedBy("mSyncRoot")
     private final SparseArray<Float> mDisplayBrightnesses = new SparseArray<>();
-
-    // The default brightness.
-    private final float mDisplayDefaultBrightness;
 
     // Set to true when there are pending display changes that have yet to be applied
     // to the surface flinger state.
@@ -364,8 +381,8 @@ public final class DisplayManagerService extends SystemService {
     // Receives notifications about changes to Settings.
     private SettingsObserver mSettingsObserver;
 
-    // Received notifications of the display-fold action
-    private DisplayFoldListener mDisplayFoldListener;
+    // Received notifications of the device-state action (such as "fold", "unfold")
+    private DeviceStateManager mDeviceStateManager;
 
     private final boolean mAllowNonNativeRefreshRateOverride;
 
@@ -424,9 +441,6 @@ public final class DisplayManagerService extends SystemService {
         mMinimumBrightnessCurve = new Curve(lux, nits);
         mMinimumBrightnessSpline = Spline.createSpline(lux, nits);
 
-        PowerManager pm = mContext.getSystemService(PowerManager.class);
-        mDisplayDefaultBrightness = pm.getBrightnessConstraint(
-                PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_DEFAULT);
         mCurrentUserId = UserHandle.USER_SYSTEM;
         ColorSpace[] colorSpaces = SurfaceControl.getCompositionColorSpaces();
         mWideColorSpace = colorSpaces[1];
@@ -519,10 +533,11 @@ public final class DisplayManagerService extends SystemService {
         synchronized (mSyncRoot) {
             mWindowManagerInternal = LocalServices.getService(WindowManagerInternal.class);
             mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
-            WindowManagerPolicy policy = LocalServices.getService(WindowManagerPolicy.class);
 
-            mDisplayFoldListener = new DisplayFoldListener();
-            policy.registerDisplayFoldListener(mDisplayFoldListener);
+            DeviceStateManager deviceStateManager =
+                    mContext.getSystemService(DeviceStateManager.class);
+            deviceStateManager.registerDeviceStateListener(new DeviceStateListener(),
+                    new HandlerExecutor(mHandler));
 
             scheduleTraversalLocked(false);
         }
@@ -1115,9 +1130,9 @@ public final class DisplayManagerService extends SystemService {
             recordStableDisplayStatsIfNeededLocked(display);
             recordTopInsetLocked(display);
         }
-        addDisplayPowerControllerLocked(displayId);
+        addDisplayPowerControllerLocked(display);
         mDisplayStates.append(displayId, Display.STATE_OFF);
-        mDisplayBrightnesses.append(displayId, mDisplayDefaultBrightness);
+        mDisplayBrightnesses.append(displayId, display.getDisplayInfoLocked().brightnessDefault);
 
         DisplayManagerGlobal.invalidateLocalDisplayInfoCaches();
 
@@ -1147,6 +1162,11 @@ public final class DisplayManagerService extends SystemService {
         // this point.
         sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
         scheduleTraversalLocked(false);
+
+        DisplayPowerController dpc = mDisplayPowerControllers.get(displayId);
+        if (dpc != null) {
+            dpc.onDisplayChanged();
+        }
     }
 
     private void handleLogicalDisplayFrameRateOverridesChangedLocked(
@@ -1161,7 +1181,7 @@ public final class DisplayManagerService extends SystemService {
 
     private void handleLogicalDisplayRemovedLocked(@NonNull LogicalDisplay display) {
         final int displayId = display.getDisplayIdLocked();
-        mDisplayPowerControllers.delete(displayId);
+        mDisplayPowerControllers.removeReturnOld(displayId).stop();
         mDisplayStates.delete(displayId);
         mDisplayBrightnesses.delete(displayId);
         DisplayManagerGlobal.invalidateLocalDisplayInfoCaches();
@@ -1678,6 +1698,11 @@ public final class DisplayManagerService extends SystemService {
         mHandler.sendMessage(msg);
     }
 
+    private void sendDisplayGroupEvent(int groupId, int event) {
+        Message msg = mHandler.obtainMessage(MSG_DELIVER_DISPLAY_GROUP_EVENT, groupId, event);
+        mHandler.sendMessage(msg);
+    }
+
     private void sendDisplayEventFrameRateOverrideLocked(int displayId) {
         Message msg = mHandler.obtainMessage(MSG_DELIVER_DISPLAY_EVENT_FRAME_RATE_OVERRIDE,
                 displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
@@ -1720,6 +1745,35 @@ public final class DisplayManagerService extends SystemService {
             mTempCallbacks.get(i).notifyDisplayEventAsync(displayId, event);
         }
         mTempCallbacks.clear();
+    }
+
+    // Runs on Handler thread.
+    // Delivers display group event notifications to callbacks.
+    private void deliverDisplayGroupEvent(int groupId, int event) {
+        if (DEBUG) {
+            Slog.d(TAG, "Delivering display group event: groupId=" + groupId + ", event="
+                    + event);
+        }
+
+        switch (event) {
+            case LogicalDisplayMapper.DISPLAY_GROUP_EVENT_ADDED:
+                for (DisplayGroupListener listener : mDisplayGroupListeners) {
+                    listener.onDisplayGroupAdded(groupId);
+                }
+                break;
+
+            case LogicalDisplayMapper.DISPLAY_GROUP_EVENT_CHANGED:
+                for (DisplayGroupListener listener : mDisplayGroupListeners) {
+                    listener.onDisplayGroupChanged(groupId);
+                }
+                break;
+
+            case LogicalDisplayMapper.DISPLAY_GROUP_EVENT_REMOVED:
+                for (DisplayGroupListener listener : mDisplayGroupListeners) {
+                    listener.onDisplayGroupRemoved(groupId);
+                }
+                break;
+        }
     }
 
     private IMediaProjectionManager getProjectionService() {
@@ -1886,18 +1940,18 @@ public final class DisplayManagerService extends SystemService {
 
     private void initializeDisplayPowerControllersLocked() {
         mLogicalDisplayMapper.forEachLocked((logicalDisplay) -> addDisplayPowerControllerLocked(
-                logicalDisplay.getDisplayIdLocked()));
+                logicalDisplay));
     }
 
-    private void addDisplayPowerControllerLocked(int displayId) {
+    private void addDisplayPowerControllerLocked(LogicalDisplay display) {
         if (mPowerHandler == null) {
             // initPowerManagement has not yet been called.
             return;
         }
         final DisplayPowerController displayPowerController = new DisplayPowerController(
                 mContext, mDisplayPowerCallbacks, mPowerHandler, mSensorManager,
-                mDisplayBlanker, displayId);
-        mDisplayPowerControllers.append(displayId, displayPowerController);
+                mDisplayBlanker, display);
+        mDisplayPowerControllers.append(display.getDisplayIdLocked(), displayPowerController);
     }
 
     private final class DisplayManagerHandler extends Handler {
@@ -1955,6 +2009,11 @@ public final class DisplayManagerService extends SystemService {
                     }
                     deliverDisplayEvent(msg.arg1, uids, msg.arg2);
                     break;
+
+                case MSG_DELIVER_DISPLAY_GROUP_EVENT:
+                    deliverDisplayGroupEvent(msg.arg1, msg.arg2);
+                    break;
+
             }
         }
     }
@@ -1983,6 +2042,11 @@ public final class DisplayManagerService extends SystemService {
                     handleLogicalDisplayFrameRateOverridesChangedLocked(display);
                     break;
             }
+        }
+
+        @Override
+        public void onDisplayGroupEventLocked(int groupId, int event) {
+            sendDisplayGroupEvent(groupId, event);
         }
 
         @Override
@@ -2720,11 +2784,25 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override
-        public boolean requestPowerState(DisplayPowerRequest request,
+        public boolean requestPowerState(int groupId, DisplayPowerRequest request,
                 boolean waitForNegativeProximity) {
             synchronized (mSyncRoot) {
-                return mDisplayPowerControllers.get(Display.DEFAULT_DISPLAY)
-                        .requestPowerState(request, waitForNegativeProximity);
+                final DisplayGroup displayGroup = mLogicalDisplayMapper.getDisplayGroupLocked(
+                        groupId);
+                if (displayGroup == null) {
+                    return true;
+                }
+
+                final int size = displayGroup.getSizeLocked();
+                boolean ready = true;
+                for (int i = 0; i < size; i++) {
+                    final DisplayPowerController displayPowerController =
+                            mDisplayPowerControllers.get(displayGroup.getIdLocked(i));
+                    ready &= displayPowerController.requestPowerState(request,
+                            waitForNegativeProximity);
+                }
+
+                return ready;
             }
         }
 
@@ -2737,10 +2815,13 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override
-        public int getDisplayGroupId(int displayId) {
-            synchronized (mSyncRoot) {
-                return mLogicalDisplayMapper.getDisplayGroupIdLocked(displayId);
-            }
+        public void registerDisplayGroupListener(DisplayGroupListener listener) {
+            mDisplayGroupListeners.add(listener);
+        }
+
+        @Override
+        public void unregisterDisplayGroupListener(DisplayGroupListener listener) {
+            mDisplayGroupListeners.remove(listener);
         }
 
         @Override
@@ -2901,15 +2982,14 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    class DisplayFoldListener extends IDisplayFoldListener.Stub {
+    /**
+     * Listens to changes in device state and reports the state to LogicalDisplayMapper.
+     */
+    class DeviceStateListener implements DeviceStateManager.DeviceStateListener {
         @Override
-        public void onDisplayFoldChanged(int displayId, boolean folded) {
-            // TODO: multi-display - IDisplayFoldListener callback only really works for the
-            // Display.DEFAULT_DISPLAY.
-            if (displayId == Display.DEFAULT_DISPLAY) {
-                synchronized (mSyncRoot) {
-                    mLogicalDisplayMapper.setDeviceFoldedLocked(folded);
-                }
+        public void onDeviceStateChanged(int deviceState) {
+            synchronized (mSyncRoot) {
+                mLogicalDisplayMapper.setDeviceStateLocked(deviceState);
             }
         }
     };

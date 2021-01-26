@@ -16,6 +16,8 @@
 
 package com.android.wm.shell.common;
 
+import android.os.Looper;
+
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -51,6 +53,16 @@ public interface ShellExecutor extends Executor {
     }
 
     /**
+     * Convenience method to execute the blocking call with a default timeout.
+     *
+     * @throws InterruptedException if runnable does not return in the time specified by
+     *                              {@param waitTimeout}
+     */
+    default void executeBlocking(Runnable runnable) throws InterruptedException {
+        executeBlocking(runnable, 2, TimeUnit.SECONDS);
+    }
+
+    /**
      * See {@link android.os.Handler#postDelayed(Runnable, long)}.
      */
     void executeDelayed(Runnable r, long delayMillis);
@@ -59,4 +71,14 @@ public interface ShellExecutor extends Executor {
      * See {@link android.os.Handler#removeCallbacks}.
      */
     void removeCallbacks(Runnable r);
+
+    /**
+     * See {@link android.os.Handler#hasCallbacks(Runnable)}.
+     */
+    boolean hasCallback(Runnable r);
+
+    /**
+     * Returns the looper that this executor is running on.
+     */
+    Looper getLooper();
 }

@@ -57,7 +57,8 @@
     <string name="imei" msgid="2157082351232630390">"IMEI"</string>
     <string name="meid" msgid="3291227361605924674">"MEID"</string>
     <string name="ClipMmi" msgid="4110549342447630629">"‏ان کمنگ کالر ID"</string>
-    <string name="ClirMmi" msgid="4702929460236547156">"‏آؤٹ گوئنگ کالر ID"</string>
+    <!-- no translation found for ClirMmi (6752346475055446417) -->
+    <skip />
     <string name="ColpMmi" msgid="4736462893284419302">"‏منسلک لائن ID"</string>
     <string name="ColrMmi" msgid="5889782479745764278">"‏منسلک لائن ID کی پابندی"</string>
     <string name="CfMmi" msgid="8390012691099787178">"کال فارورڈنگ"</string>
@@ -146,6 +147,9 @@
     <string name="wfc_mode_wifi_preferred_summary" msgid="1035175836270943089">"‏Wi-Fi پر کال کریں"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="4958965609212575619">"موبائل نیٹ ورک پر کال کریں"</string>
     <string name="wfc_mode_wifi_only_summary" msgid="104951993894678665">"‏صرف Wi-Fi"</string>
+    <!-- no translation found for crossSimFormat_spn (9125246077491634262) -->
+    <skip />
+    <string name="crossSimFormat_spn_cross_sim_calling" msgid="779976494687695991">"‏<xliff:g id="SPN">%s</xliff:g> کراس sim کالنگ"</string>
     <string name="cfTemplateNotForwarded" msgid="862202427794270501">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g> : فارورڈ نہیں کی گئی"</string>
     <string name="cfTemplateForwarded" msgid="9132506315842157860">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g>"</string>
     <string name="cfTemplateForwardedTime" msgid="735042369233323609">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g> بعد از <xliff:g id="TIME_DELAY">{2}</xliff:g> سیکنڈ"</string>
@@ -829,7 +833,7 @@
     <string name="keyguard_password_enter_puk_code" msgid="3112256684547584093">"‏PUK اور نیا PIN کوڈ ٹائپ کریں"</string>
     <string name="keyguard_password_enter_puk_prompt" msgid="2825313071899938305">"‏PUK کوڈ"</string>
     <string name="keyguard_password_enter_pin_prompt" msgid="5505434724229581207">"‏نیا PIN کوڈ"</string>
-    <string name="keyguard_password_entry_touch_hint" msgid="4032288032993261520"><font size="17">"پاسورڈ ٹائپ کرنے کیلئے تھپتھپائیں"</font></string>
+    <string name="keyguard_password_entry_touch_hint" msgid="4032288032993261520"><font size="17">"پاس ورڈ ٹائپ کرنے کیلئے تھپتھپائیں"</font></string>
     <string name="keyguard_password_enter_password_code" msgid="2751130557661643482">"غیر مقفل کرنے کیلئے پاس ورڈ ٹائپ کریں"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7792964196473964340">"‏غیر مقفل کرنے کیلئے PIN ٹائپ کریں"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="8583732939138432793">"‏غلط PIN کوڈ۔"</string>

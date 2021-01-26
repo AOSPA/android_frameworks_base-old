@@ -264,7 +264,6 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.EMERGENCY_GESTURE_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.EMERGENCY_GESTURE_SOUND_ENABLED, BOOLEAN_VALIDATOR);
-        VALIDATORS.put(Secure.EMERGENCY_GESTURE_CALL_NUMBER, NONE_NEGATIVE_LONG_VALIDATOR);
         VALIDATORS.put(Secure.ADAPTIVE_CONNECTIVITY_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
                 Secure.ASSIST_HANDLES_LEARNING_TIME_ELAPSED_MILLIS, NONE_NEGATIVE_LONG_VALIDATOR);
@@ -273,5 +272,11 @@ public class SecureSettingsValidators {
                 new InclusiveIntegerRangeValidator(
                         Secure.ACCESSIBILITY_BUTTON_MODE_NAVIGATION_BAR,
                         Secure.ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU));
+        VALIDATORS.put(Secure.ACCESSIBILITY_FLOATING_MENU_SIZE,
+                new DiscreteValueValidator(new String[] {"0", "1"}));
+        VALIDATORS.put(Secure.ACCESSIBILITY_FLOATING_MENU_ICON_TYPE,
+                new DiscreteValueValidator(new String[] {"0", "1"}));
+        VALIDATORS.put(Secure.ACCESSIBILITY_FLOATING_MENU_OPACITY,
+                new InclusiveFloatRangeValidator(0.0f, 1.0f));
     }
 }

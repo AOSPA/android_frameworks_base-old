@@ -34,13 +34,14 @@ import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.wm.shell.ShellCommandHandler;
+import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
+import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedGestureHandler;
 import com.android.wm.shell.onehanded.OneHandedTransitionCallback;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
-import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -63,22 +64,22 @@ public class WMShellTest extends SysuiTestCase {
     @Mock SysUiState mSysUiState;
     @Mock Pip mPip;
     @Mock PipTouchHandler mPipTouchHandler;
-    @Mock
-    LegacySplitScreen mLegacySplitScreen;
+    @Mock LegacySplitScreen mLegacySplitScreen;
     @Mock OneHanded mOneHanded;
     @Mock HideDisplayCutout mHideDisplayCutout;
     @Mock ProtoTracer mProtoTracer;
     @Mock ShellCommandHandler mShellCommandHandler;
+    @Mock ShellExecutor mSysUiMainExecutor;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
-        mWMShell = new WMShell(mContext, mCommandQueue, mConfigurationController,
+        mWMShell = new WMShell(mContext, Optional.of(mPip), Optional.of(mLegacySplitScreen),
+                Optional.of(mOneHanded), Optional.of(mHideDisplayCutout),
+                Optional.of(mShellCommandHandler), mCommandQueue, mConfigurationController,
                 mKeyguardUpdateMonitor, mNavigationModeController,
-                mScreenLifecycle, mSysUiState, Optional.of(mPip), Optional.of(mLegacySplitScreen),
-                Optional.of(mOneHanded), Optional.of(mHideDisplayCutout), mProtoTracer,
-                Optional.of(mShellCommandHandler));
+                mScreenLifecycle, mSysUiState, mProtoTracer, mSysUiMainExecutor);
 
         when(mPip.getPipTouchHandler()).thenReturn(mPipTouchHandler);
     }

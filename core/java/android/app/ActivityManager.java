@@ -32,7 +32,7 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.Disabled;
+import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
@@ -44,18 +44,13 @@ import android.content.pm.IPackageDataObserver;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.UserInfo;
-import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.ColorSpace;
-import android.graphics.GraphicBuffer;
 import android.graphics.Matrix;
 import android.graphics.Point;
-import android.graphics.Rect;
 import android.graphics.drawable.Icon;
-import android.hardware.HardwareBuffer;
 import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.Build;
@@ -81,8 +76,6 @@ import android.util.Singleton;
 import android.util.Size;
 import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
-import android.view.Surface;
-import android.view.WindowInsetsController.Appearance;
 
 import com.android.internal.app.LocalePicker;
 import com.android.internal.app.procstats.ProcessStats;
@@ -882,7 +875,6 @@ public class ActivityManager {
      */
     @TestApi
     @ChangeId
-    @Disabled
     public static final long DROP_CLOSE_SYSTEM_DIALOGS = 174664120L;
 
     /**
@@ -898,8 +890,7 @@ public class ActivityManager {
      */
     @TestApi
     @ChangeId
-    @Disabled
-    // @EnabledSince(targetSdkVersion = VERSION_CODES.S)
+    @EnabledSince(targetSdkVersion = VERSION_CODES.S)
     public static final long LOCK_DOWN_CLOSE_SYSTEM_DIALOGS = 174664365L;
 
     /** @hide */
@@ -3889,6 +3880,52 @@ public class ActivityManager {
             throw new IllegalArgumentException("UserHandle cannot be null.");
         }
         return switchUser(user.getIdentifier());
+    }
+
+    /**
+     * Starts a profile.
+     * To be used with non-managed profiles, managed profiles should use
+     * {@link UserManager#requestQuietModeEnabled}
+     *
+     * @param userHandle user handle of the profile.
+     * @return true if the profile has been successfully started or if the profile is already
+     * running, false if profile failed to start.
+     * @throws IllegalArgumentException if {@code userHandle} is not a profile.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL})
+    public boolean startProfile(@NonNull UserHandle userHandle) {
+        try {
+            return getService().startProfile(userHandle.getIdentifier());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Stops a running profile.
+     * To be used with non-managed profiles, managed profiles should use
+     * {@link UserManager#requestQuietModeEnabled}
+     *
+     * @param userHandle user handle of the profile.
+     * @return true if the profile has been successfully stopped or is already stopped. Otherwise
+     * the exceptions listed below are thrown.
+     * @throws IllegalArgumentException if {@code userHandle} is not a profile.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL})
+    public boolean stopProfile(@NonNull UserHandle userHandle) {
+        try {
+            return getService().stopProfile(userHandle.getIdentifier());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
     }
 
     /**

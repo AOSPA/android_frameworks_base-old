@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.os.Handler;
+import android.os.RemoteCallback;
 import android.util.IndentingPrintWriter;
 
 import com.android.internal.annotations.GuardedBy;
@@ -69,7 +70,7 @@ abstract class LocationTimeZoneProviderProxy implements Dumpable {
 
     /**
      * Initializes the proxy. The supplied listener can expect to receive all events after this
-     * point. This method also calls {@link #onInitialize()} for subclasses to handle their own
+     * point. This method calls {@link #onInitialize()} for subclasses to handle their own
      * initialization.
      */
     void initialize(@NonNull Listener listener) {
@@ -79,19 +80,44 @@ abstract class LocationTimeZoneProviderProxy implements Dumpable {
                 throw new IllegalStateException("listener already set");
             }
             this.mListener = listener;
+            onInitialize();
         }
-        onInitialize();
     }
 
     /**
-     * Initializes the proxy. This is called after {@link #mListener} is set.
+     * Implemented by subclasses to initializes the proxy. This is called after {@link #mListener}
+     * is set.
      */
+    @GuardedBy("mSharedLock")
     abstract void onInitialize();
+
+    /**
+     * Destroys the proxy. This method calls {@link #onDestroy()} for subclasses to handle their own
+     * destruction.
+     */
+    void destroy() {
+        synchronized (mSharedLock) {
+            onDestroy();
+        }
+    }
+
+    /**
+     * Implemented by subclasses to destroy the proxy.
+     */
+    @GuardedBy("mSharedLock")
+    abstract void onDestroy();
 
     /**
      * Sets a new request for the provider.
      */
     abstract void setRequest(@NonNull TimeZoneProviderRequest request);
+
+    /**
+     * Processes the supplied test command. An optional callback can be supplied to listen for a
+     * response.
+     */
+    abstract void handleTestCommand(@NonNull TestCommand testCommand,
+            @Nullable RemoteCallback callback);
 
     /**
      * Handles a {@link TimeZoneProviderEvent} from a remote process.

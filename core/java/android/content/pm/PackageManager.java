@@ -449,6 +449,7 @@ public abstract class PackageManager {
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
             MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS,
+            GET_ATTRIBUTIONS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PackageInfoFlags {}
@@ -841,6 +842,11 @@ public abstract class PackageManager {
      * </ul>
      */
     public static final int MATCH_DIRECT_BOOT_AUTO = 0x10000000;
+
+    /**
+     * {@link PackageInfo} flag: return all attributions declared in the package manifest
+     */
+    public static final int GET_ATTRIBUTIONS = 0x80000000;
 
     /** @hide */
     @Deprecated
@@ -3400,6 +3406,14 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device supports translation of text-to-text in multiple languages via integration with
+     * the system {@link android.service.translation.TranslationService translation provider}.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_TRANSLATION = "android.software.translation";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
      * The device implements headtracking suitable for a VR device.
      */
     @SdkConstant(SdkConstantType.FEATURE)
@@ -3499,6 +3513,17 @@ public abstract class PackageManager {
     public static final String FEATURE_TUNER = "android.hardware.tv.tuner";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device supports a enabling/disabling sensor privacy for
+     * camera. When sensory privacy for the camera is enabled no camera data is send to clients,
+     * e.g. the view finder in a camera app would appear blank.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_CAMERA_TOGGLE = "android.hardware.camera.toggle";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
      * the necessary changes to support app enumeration.
      *
@@ -3506,6 +3531,17 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_APP_ENUMERATION = "android.software.app_enumeration";
+
+    /**
+     * Feature for {@link android.view.WindowManager.LayoutParams.backgroundBlurRedius} and
+     * {@link android.graphics.drawable.BackgroundBlurDrawable}: the device supports cross-layer
+     * blurring.
+     *
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_CROSS_LAYER_BLUR = "android.software.cross_layer_blur";
 
     /** @hide */
     public static final boolean APP_ENUMERATION_ENABLED_BY_DEFAULT = true;

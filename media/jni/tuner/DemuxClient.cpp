@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "FrontendClient"
+#define LOG_TAG "DemuxClient"
 
 #include <android-base/logging.h>
 #include <utils/Log.h>
@@ -32,11 +32,13 @@ namespace android {
 // TODO: pending aidl interface
 DemuxClient::DemuxClient() {
     //mTunerDemux = tunerDemux;
+    mId = -1;
 }
 
 DemuxClient::~DemuxClient() {
     //mTunerDemux = NULL;
     mDemux = NULL;
+    mId = -1;
 }
 
 // TODO: remove after migration to Tuner Service is done.
@@ -71,6 +73,21 @@ sp<FilterClient> DemuxClient::openFilter(DemuxFilterType type, int bufferSize,
             sp<FilterClient> filterClient = new FilterClient(type);
             filterClient->setHidlFilter(hidlFilter);
             return filterClient;
+        }
+    }
+
+    return NULL;
+}
+
+sp<TimeFilterClient> DemuxClient::openTimeFilter() {
+    // TODO: pending aidl interface
+
+    if (mDemux != NULL) {
+        sp<ITimeFilter> hidlTimeFilter = openHidlTimeFilter();
+        if (hidlTimeFilter != NULL) {
+            sp<TimeFilterClient> timeFilterClient = new TimeFilterClient();
+            timeFilterClient->setHidlTimeFilter(hidlTimeFilter);
+            return timeFilterClient;
         }
     }
 
@@ -116,7 +133,21 @@ long DemuxClient::getAvSyncTime(int avSyncHwId) {
     return -1;
 }
 
-//DvrClient openDvr(int dvbType, int bufferSize, DvrClientCallback cb);
+sp<DvrClient> DemuxClient::openDvr(DvrType dvbType, int bufferSize, sp<DvrClientCallback> cb) {
+    // TODO: pending aidl interface
+
+    if (mDemux != NULL) {
+        sp<HidlDvrCallback> callback = new HidlDvrCallback(cb);
+        sp<IDvr> hidlDvr = openHidlDvr(dvbType, bufferSize, callback);
+        if (hidlDvr != NULL) {
+            sp<DvrClient> dvrClient = new DvrClient();
+            dvrClient->setHidlDvr(hidlDvr);
+            return dvrClient;
+        }
+    }
+
+    return NULL;
+}
 
 Result DemuxClient::connectCiCam(int ciCamId) {
     // pending aidl interface
@@ -172,5 +203,45 @@ sp<IFilter> DemuxClient::openHidlFilter(DemuxFilterType type, int bufferSize,
     }
 
     return hidlFilter;
+}
+
+sp<ITimeFilter> DemuxClient::openHidlTimeFilter() {
+    if (mDemux == NULL) {
+        return NULL;
+    }
+
+    sp<ITimeFilter> timeFilter;
+    Result res;
+    mDemux->openTimeFilter(
+            [&](Result r, const sp<ITimeFilter>& timeFilterSp) {
+                timeFilter = timeFilterSp;
+                res = r;
+            });
+
+    if (res != Result::SUCCESS || timeFilter == NULL) {
+        return NULL;
+    }
+
+    return timeFilter;
+}
+
+sp<IDvr> DemuxClient::openHidlDvr(DvrType dvrType, int bufferSize,
+        sp<HidlDvrCallback> callback) {
+    if (mDemux == NULL) {
+        return NULL;
+    }
+
+    sp<IDvr> hidlDvr;
+    Result res;
+    mDemux->openDvr(dvrType, bufferSize, callback,
+            [&](Result r, const sp<IDvr>& dvr) {
+                hidlDvr = dvr;
+                res = r;
+            });
+    if (res != Result::SUCCESS || hidlDvr == NULL) {
+        return NULL;
+    }
+
+    return hidlDvr;
 }
 }  // namespace android

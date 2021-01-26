@@ -28,6 +28,7 @@ import android.app.appsearch.GenericDocument;
 import android.app.appsearch.GetByUriRequest;
 import android.app.appsearch.PutDocumentsRequest;
 import android.app.appsearch.RemoveByUriRequest;
+import android.app.appsearch.ReportUsageRequest;
 import android.app.appsearch.SearchResults;
 import android.app.appsearch.SearchResultsShim;
 import android.app.appsearch.SearchSpec;
@@ -58,10 +59,17 @@ public class AppSearchSessionShimImpl implements AppSearchSessionShim {
     @NonNull
     public static ListenableFuture<AppSearchSessionShim> createSearchSession(
             @NonNull AppSearchManager.SearchContext searchContext) {
+        return createSearchSession(searchContext, Executors.newCachedThreadPool());
+    }
+
+    /**  Creates the SearchSession with given ExecutorService. */
+    @NonNull
+    public static ListenableFuture<AppSearchSessionShim> createSearchSession(
+            @NonNull AppSearchManager.SearchContext searchContext,
+            @NonNull ExecutorService executor) {
         Context context = ApplicationProvider.getApplicationContext();
         AppSearchManager appSearchManager = context.getSystemService(AppSearchManager.class);
         SettableFuture<AppSearchResult<AppSearchSession>> future = SettableFuture.create();
-        ExecutorService executor = Executors.newCachedThreadPool();
         appSearchManager.createSearchSession(searchContext, executor, future::set);
         return Futures.transform(
                 future,
@@ -122,6 +130,14 @@ public class AppSearchSessionShimImpl implements AppSearchSessionShim {
 
     @Override
     @NonNull
+    public ListenableFuture<Void> reportUsage(@NonNull ReportUsageRequest request) {
+        SettableFuture<AppSearchResult<Void>> future = SettableFuture.create();
+        mAppSearchSession.reportUsage(request, mExecutor, future::set);
+        return Futures.transformAsync(future, this::transformResult, mExecutor);
+    }
+
+    @Override
+    @NonNull
     public ListenableFuture<AppSearchBatchResult<String, Void>> removeByUri(
             @NonNull RemoveByUriRequest request) {
         SettableFuture<AppSearchBatchResult<String, Void>> future = SettableFuture.create();
@@ -136,6 +152,11 @@ public class AppSearchSessionShimImpl implements AppSearchSessionShim {
         SettableFuture<AppSearchResult<Void>> future = SettableFuture.create();
         mAppSearchSession.removeByQuery(queryExpression, searchSpec, mExecutor, future::set);
         return Futures.transformAsync(future, this::transformResult, mExecutor);
+    }
+
+    @Override
+    public void close() {
+        mAppSearchSession.close();
     }
 
     private <T> ListenableFuture<T> transformResult(

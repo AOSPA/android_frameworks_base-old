@@ -40,6 +40,7 @@ import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.VrManager;
+import android.app.people.PeopleManager;
 import android.app.time.TimeManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
@@ -4508,6 +4509,26 @@ public abstract class Context {
     public static final String CONTENT_CAPTURE_MANAGER_SERVICE = "content_capture";
 
     /**
+     * Official published name of the translation service.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    // TODO(b/176208267): change it back to translation before S release.
+    @SystemApi
+    @SuppressLint("ServiceName")
+    public static final String TRANSLATION_MANAGER_SERVICE = "transformer";
+
+    /**
+     * Official published name of the translation service which supports ui translation function.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    @SystemApi
+    public static final String UI_TRANSLATION_SERVICE = "ui_translation";
+
+    /**
      * Used for getting content selections and classifications for task snapshots.
      *
      * @hide
@@ -4821,16 +4842,6 @@ public abstract class Context {
     public static final String ROLE_SERVICE = "role";
 
     /**
-     * Official published name of the (internal) role controller service.
-     *
-     * @see #getSystemService(String)
-     * @see android.app.role.RoleControllerService
-     *
-     * @hide
-     */
-    public static final String ROLE_CONTROLLER_SERVICE = "role_controller";
-
-    /**
      * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.hardware.camera2.CameraManager} for interacting with
      * camera devices.
@@ -5084,9 +5095,7 @@ public abstract class Context {
      * Service to capture a bugreport.
      * @see #getSystemService(String)
      * @see android.os.BugreportManager
-     * @hide
      */
-    @SystemApi
     public static final String BUGREPORT_SERVICE = "bugreport";
 
     /**
@@ -5311,10 +5320,10 @@ public abstract class Context {
     public static final String SMS_SERVICE = "sms";
 
     /**
-     * Use with {@link #getSystemService(String)} to access people service.
+     * Use with {@link #getSystemService(String)} to access a {@link PeopleManager} to interact
+     * with your published conversations.
      *
      * @see #getSystemService(String)
-     * @hide
      */
     public static final String PEOPLE_SERVICE = "people";
 
@@ -6014,10 +6023,13 @@ public abstract class Context {
     }
 
     /**
-     * A special version of {@link #createWindowContext(int, Bundle)} which also takes
-     * {@link Display}. The only difference between this API and
-     * {@link #createWindowContext(int, Bundle)} is that this API can create window context from
-     * any context even if the context which is not associated to a {@link Display} instance.
+     * Creates a {@code Context} for a non-{@link android.app.Activity activity} window on the given
+     * {@link Display}.
+     *
+     * <p>
+     * Similar to {@link #createWindowContext(int, Bundle)}, but the {@code display} is passed in,
+     * instead of implicitly using the {@link #getDisplay() original Context's Display}.
+     * </p>
      *
      * @param display The {@link Display} to associate with
      * @param type Window type in {@link WindowManager.LayoutParams}
@@ -6121,6 +6133,21 @@ public abstract class Context {
     @SuppressWarnings("HiddenAbstractMethod")
     @SystemApi
     public abstract Context createCredentialProtectedStorageContext();
+
+    /**
+     * Creates a UI context with a {@code token}. The users of this API should handle this context's
+     * configuration changes.
+     *
+     * @param token The token to associate with the {@link Resources}
+     * @param display The display to associate with the token context
+     *
+     * @hide
+     */
+    @UiContext
+    @NonNull
+    public Context createTokenContext(@NonNull IBinder token, @NonNull Display display) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Gets the display adjustments holder for this context.  This information

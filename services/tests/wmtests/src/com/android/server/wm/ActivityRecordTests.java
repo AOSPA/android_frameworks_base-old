@@ -79,6 +79,7 @@ import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ClientTransaction;
+import android.app.servertransaction.DestroyActivityItem;
 import android.app.servertransaction.PauseActivityItem;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -254,26 +255,26 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         // Set and apply options for ActivityRecord. Pending options should be cleared
         activity.updateOptionsLocked(activityOptions);
-        activity.applyOptionsLocked();
-        assertNull(activity.pendingOptions);
+        activity.applyOptionsAnimation();
+        assertNull(activity.getOptions());
 
         // Set options for two ActivityRecords in same Task. Apply one ActivityRecord options.
         // Pending options should be cleared for both ActivityRecords
         ActivityRecord activity2 = new ActivityBuilder(mAtm).setTask(activity.getTask()).build();
         activity2.updateOptionsLocked(activityOptions);
         activity.updateOptionsLocked(activityOptions);
-        activity.applyOptionsLocked();
-        assertNull(activity.pendingOptions);
-        assertNull(activity2.pendingOptions);
+        activity.applyOptionsAnimation();
+        assertNull(activity.getOptions());
+        assertNull(activity2.getOptions());
 
         // Set options for two ActivityRecords in separate Tasks. Apply one ActivityRecord options.
         // Pending options should be cleared for only ActivityRecord that was applied
         activity2 = new ActivityBuilder(mAtm).setCreateTask(true).build();
         activity2.updateOptionsLocked(activityOptions);
         activity.updateOptionsLocked(activityOptions);
-        activity.applyOptionsLocked();
-        assertNull(activity.pendingOptions);
-        assertNotNull(activity2.pendingOptions);
+        activity.applyOptionsAnimation();
+        assertNull(activity.getOptions());
+        assertNotNull(activity2.getOptions());
     }
 
     @Test
@@ -653,21 +654,21 @@ public class ActivityRecordTests extends WindowTestsBase {
                     public void onAnimationStart(RemoteAnimationTarget[] apps,
                             RemoteAnimationTarget[] wallpapers,
                             IRemoteAnimationFinishedCallback finishedCallback) {
-
                     }
 
                     @Override
                     public void onAnimationCancelled() {
-
                     }
                 }, 0, 0));
         activity.updateOptionsLocked(opts);
-        assertNotNull(activity.takeOptionsLocked(true /* fromClient */));
-        assertNotNull(activity.pendingOptions);
+        assertNotNull(activity.takeOptions());
+        assertNull(activity.getOptions());
 
-        activity.updateOptionsLocked(ActivityOptions.makeBasic());
-        assertNotNull(activity.takeOptionsLocked(false /* fromClient */));
-        assertNull(activity.pendingOptions);
+        final AppTransition appTransition = activity.mDisplayContent.mAppTransition;
+        spyOn(appTransition);
+        activity.applyOptionsAnimation();
+
+        verify(appTransition).overridePendingAppTransitionRemote(any());
     }
 
     @Test
@@ -1063,6 +1064,21 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     /**
+     * Verify that finish bottom activity from a task won't boost it to top.
+     */
+    @Test
+    public void testFinishBottomActivityIfPossible_noZBoost() {
+        final ActivityRecord bottomActivity = createActivityWithTask();
+        final ActivityRecord topActivity = new ActivityBuilder(mAtm)
+                .setTask(bottomActivity.getTask()).build();
+        topActivity.mVisibleRequested = true;
+        // simulating bottomActivity as a trampoline activity.
+        bottomActivity.setState(RESUMED, "test");
+        bottomActivity.finishIfPossible("test", false);
+        assertFalse(bottomActivity.mNeedsZBoost);
+    }
+
+    /**
      * Verify that complete finish request for visible activity must be delayed before the next one
      * becomes visible.
      */
@@ -1449,6 +1465,19 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
+    public void testRemoveImmediately() throws RemoteException {
+        final ActivityRecord activity = createActivityWithTask();
+        final WindowProcessController wpc = activity.app;
+        activity.getTask().removeImmediately("test");
+
+        verify(mAtm.getLifecycleManager()).scheduleTransaction(any(), eq(activity.appToken),
+                isA(DestroyActivityItem.class));
+        assertNull(activity.app);
+        assertEquals(DESTROYED, activity.getState());
+        assertFalse(wpc.hasActivities());
+    }
+
+    @Test
     public void testRemoveFromHistory() {
         final ActivityRecord activity = createActivityWithTask();
         final Task rootTask = activity.getRootTask();
@@ -1507,7 +1536,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord activity = createActivityWithTask();
         final WindowProcessController wpc = activity.app;
         assertTrue(wpc.registeredForActivityConfigChanges());
-        assertFalse(wpc.registeredForDisplayConfigChanges());
+        assertFalse(wpc.registeredForDisplayAreaConfigChanges());
 
         final ActivityRecord secondaryDisplayActivity =
                 createActivityOnDisplay(false /* defaultDisplay */, null /* process */);
@@ -1660,8 +1689,8 @@ public class ActivityRecordTests extends WindowTestsBase {
                     any() /* window */,  any() /* attrs */,
                     anyInt() /* viewVisibility */, anyInt() /* displayId */,
                     any() /* requestedVisibility */, any() /* outFrame */,
-                    any() /* outDisplayCutout */, any() /* outInputChannel */,
-                    any() /* outInsetsState */, any() /* outActiveControls */);
+                    any() /* outInputChannel */, any() /* outInsetsState */,
+                    any() /* outActiveControls */);
             mAtm.mWindowManager.mStartingSurfaceController
                     .createTaskSnapshotSurface(activity, snapshot);
         } catch (RemoteException ignored) {
@@ -1701,7 +1730,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertTrue(wpc.registeredForActivityConfigChanges());
         assertEquals(0, secondActivityRecord.getMergedOverrideConfiguration()
                 .diff(wpc.getRequestedOverrideConfiguration()));
-        assertFalse(wpc.registeredForDisplayConfigChanges());
+        assertFalse(wpc.registeredForDisplayAreaConfigChanges());
     }
 
     @Test

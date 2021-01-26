@@ -17,10 +17,15 @@
 package com.android.server.wm;
 
 import static android.Manifest.permission.READ_FRAME_BUFFER;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REORDER;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REPARENT;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_SET_ADJACENT_ROOTS;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_SET_LAUNCH_ROOT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_ORGANIZER;
-import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ActivityTaskManagerService.LAYOUT_REASON_CONFIG_CHANGED;
+import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_TASK_ORG;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
@@ -49,13 +54,16 @@ import android.window.WindowContainerTransaction;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledLambda;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Server side implementation for the interface for organizing windows
@@ -163,6 +171,11 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         try {
             synchronized (mGlobalLock) {
                 Transition transition = Transition.fromBinder(transitionToken);
+                // In cases where transition is already provided, the "readiness lifecycle" of the
+                // transition is determined outside of this transaction. However, if this is a
+                // direct call from shell, the entire transition lifecycle is contained in the
+                // provided transaction and thus we can setReady immediately after apply.
+                boolean needsSetReady = transition == null && t != null;
                 if (transition == null) {
                     if (type < 0) {
                         throw new IllegalArgumentException("Can't create transition with no type");
@@ -174,6 +187,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     t = new WindowContainerTransaction();
                 }
                 applyTransaction(t, -1 /*syncId*/, transition);
+                if (needsSetReady) {
+                    transition.setReady();
+                }
                 return transition;
             }
         } finally {
@@ -248,27 +264,56 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             final List<WindowContainerTransaction.HierarchyOp> hops = t.getHierarchyOps();
             for (int i = 0, n = hops.size(); i < n; ++i) {
                 final WindowContainerTransaction.HierarchyOp hop = hops.get(i);
-                final WindowContainer wc = WindowContainer.fromBinder(hop.getContainer());
-                if (wc == null || !wc.isAttached()) {
-                    Slog.e(TAG, "Attempt to operate on detached container: " + wc);
-                    continue;
-                }
-                if (syncId >= 0) {
-                    addToSyncSet(syncId, wc);
-                }
-                if (transition != null) {
-                    transition.collect(wc);
-                    if (hop.isReparent() && hop.getNewParent() != null) {
-                        final WindowContainer parentWc =
-                                WindowContainer.fromBinder(hop.getNewParent());
-                        if (parentWc == null) {
-                            Slog.e(TAG, "Can't resolve parent window from token");
+                switch (hop.getType()) {
+                    case HIERARCHY_OP_TYPE_SET_LAUNCH_ROOT: {
+                        final WindowContainer wc = WindowContainer.fromBinder(hop.getContainer());
+                        final Task task = wc != null ? wc.asTask() : null;
+                        if (task != null) {
+                            task.getDisplayArea().setLaunchRootTask(task,
+                                    hop.getWindowingModes(), hop.getActivityTypes());
+                        } else {
+                            throw new IllegalArgumentException(
+                                    "Cannot set non-task as launch root: " + wc);
+                        }
+                        break;
+                    }
+                    case HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT:
+                        effects |= reparentChildrenTasksHierarchyOp(hop, transition, syncId);
+                        break;
+                    case HIERARCHY_OP_TYPE_SET_ADJACENT_ROOTS:
+                        effects |= setAdjacentRootsHierarchyOp(hop);
+                        break;
+                    case HIERARCHY_OP_TYPE_REORDER:
+                    case HIERARCHY_OP_TYPE_REPARENT:
+                        final WindowContainer wc = WindowContainer.fromBinder(hop.getContainer());
+                        if (wc == null || !wc.isAttached()) {
+                            Slog.e(TAG, "Attempt to operate on detached container: " + wc);
                             continue;
                         }
-                        transition.collect(parentWc);
-                    }
+                        if (syncId >= 0) {
+                            addToSyncSet(syncId, wc);
+                        }
+                        if (transition != null) {
+                            transition.collect(wc);
+                            if (hop.isReparent()) {
+                                if (wc.getParent() != null) {
+                                    // Collect the current parent. It's visibility may change as
+                                    // a result of this reparenting.
+                                    transition.collect(wc.getParent());
+                                }
+                                if (hop.getNewParent() != null) {
+                                    final WindowContainer parentWc =
+                                            WindowContainer.fromBinder(hop.getNewParent());
+                                    if (parentWc == null) {
+                                        Slog.e(TAG, "Can't resolve parent window from token");
+                                        continue;
+                                    }
+                                    transition.collect(parentWc);
+                                }
+                            }
+                        }
+                        effects |= sanitizeAndApplyHierarchyOp(wc, hop);
                 }
-                effects |= sanitizeAndApplyHierarchyOp(wc, hop);
             }
             // Queue-up bounds-change transactions for tasks which are now organized. Do
             // this after hierarchy ops so we have the final organized state.
@@ -307,6 +352,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             if ((effects & TRANSACT_EFFECTS_LIFECYCLE) != 0) {
                 // Already calls ensureActivityConfig
                 mService.mRootWindowContainer.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS);
+                mService.mRootWindowContainer.resumeFocusedTasksTopActivities();
             } else if ((effects & TRANSACT_EFFECTS_CLIENT_CONFIG) != 0) {
                 final PooledConsumer f = PooledLambda.obtainConsumer(
                         ActivityRecord::ensureActivityConfiguration,
@@ -473,6 +519,96 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     hop.getToTop() ? POSITION_TOP : POSITION_BOTTOM,
                     task, false /* includingParents */);
         }
+        return TRANSACT_EFFECTS_LIFECYCLE;
+    }
+
+    private int reparentChildrenTasksHierarchyOp(WindowContainerTransaction.HierarchyOp hop,
+            @Nullable Transition transition, int syncId) {
+        WindowContainer currentParent = hop.getContainer() != null
+                ? WindowContainer.fromBinder(hop.getContainer()) : null;
+        WindowContainer newParent = hop.getNewParent() != null
+                ? WindowContainer.fromBinder(hop.getNewParent()) : null;
+        if (currentParent == null && newParent == null) {
+            throw new IllegalArgumentException("reparentChildrenTasksHierarchyOp: " + hop);
+        } else if (currentParent == null) {
+            currentParent = newParent.asTask().getDisplayContent().getDefaultTaskDisplayArea();
+        } else if (newParent == null) {
+            newParent = currentParent.asTask().getDisplayContent().getDefaultTaskDisplayArea();
+        }
+
+        if (currentParent == newParent) {
+            Slog.e(TAG, "reparentChildrenTasksHierarchyOp parent not changing: " + hop);
+            return 0;
+        }
+        if (!currentParent.isAttached()) {
+            Slog.e(TAG, "reparentChildrenTasksHierarchyOp currentParent detached="
+                    + currentParent + " hop=" + hop);
+            return 0;
+        }
+        if (!newParent.isAttached()) {
+            Slog.e(TAG, "reparentChildrenTasksHierarchyOp newParent detached="
+                    + newParent + " hop=" + hop);
+            return 0;
+        }
+
+        final boolean newParentInMultiWindow = newParent.inMultiWindowMode();
+        final WindowContainer finalCurrentParent = currentParent;
+        Slog.i(TAG, "reparentChildrenTasksHierarchyOp"
+                + " currentParent=" + currentParent + " newParent=" + newParent + " hop=" + hop);
+
+        // We want to collect the tasks first before re-parenting to avoid array shifting on us.
+        final ArrayList<Task> tasksToReparent = new ArrayList<>();
+
+        currentParent.forAllTasks((Consumer<Task>) (task) -> {
+            Slog.i(TAG, " Processing task=" + task);
+            if (task.mCreatedByOrganizer
+                    || task.getParent() != finalCurrentParent) {
+                // We only care about non-organized task that are direct children of the thing we
+                // are reparenting from.
+                return;
+            }
+
+            if (newParentInMultiWindow && !task.isResizeable()) {
+                Slog.e(TAG, "reparentChildrenTasksHierarchyOp non-resizeable task=" + task);
+            }
+
+            if (!ArrayUtils.contains(hop.getActivityTypes(), task.getActivityType())) return;
+            if (!ArrayUtils.contains(hop.getWindowingModes(), task.getWindowingMode())) return;
+
+            tasksToReparent.add(task);
+        }, !hop.getToTop());
+
+        final int count = tasksToReparent.size();
+        for (int i = 0; i < count; ++i) {
+            final Task task = tasksToReparent.get(i);
+            if (syncId >= 0) {
+                addToSyncSet(syncId, task);
+            }
+            if (transition != null) transition.collect(task);
+
+            if (newParent instanceof TaskDisplayArea) {
+                // For now, reparenting to display area is different from other reparents...
+                task.reparent((TaskDisplayArea) newParent, hop.getToTop());
+            } else {
+                task.reparent((Task) newParent,
+                        hop.getToTop() ? POSITION_TOP : POSITION_BOTTOM,
+                        false /*moveParents*/, "processChildrenTaskReparentHierarchyOp");
+            }
+        }
+
+        if (transition != null) transition.collect(newParent);
+
+        return TRANSACT_EFFECTS_LIFECYCLE;
+    }
+
+    private int setAdjacentRootsHierarchyOp(WindowContainerTransaction.HierarchyOp hop) {
+        final Task root1 = WindowContainer.fromBinder(hop.getContainer()).asTask();
+        final Task root2 = WindowContainer.fromBinder(hop.getAdjacentRoot()).asTask();
+        if (!root1.mCreatedByOrganizer || !root2.mCreatedByOrganizer) {
+            throw new IllegalArgumentException("setAdjacentRootsHierarchyOp: Not created by"
+                    + " organizer root1=" + root1 + " root2=" + root2);
+        }
+        root1.setAdjacentTask(root2);
         return TRANSACT_EFFECTS_LIFECYCLE;
     }
 

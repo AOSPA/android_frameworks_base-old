@@ -19,8 +19,6 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
-import static android.view.DisplayCutout.BOUNDS_POSITION_TOP;
-import static android.view.DisplayCutout.fromBoundingRect;
 import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
@@ -41,8 +39,6 @@ import android.view.WindowManager;
 
 import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
-
-import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -258,30 +254,6 @@ public class WindowFrameTests extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 130388666)
-    public void testDisplayCutout() {
-        // Regular fullscreen task and window
-        WindowState w = createWindow();
-        w.mAttrs.gravity = Gravity.LEFT | Gravity.TOP;
-
-        final Rect pf = new Rect(0, 0, 1000, 2000);
-        // Create a display cutout of size 50x50, aligned top-center
-        final WmDisplayCutout cutout = WmDisplayCutout.computeSafeInsets(
-                fromBoundingRect(500, 0, 550, 50, BOUNDS_POSITION_TOP),
-                pf.width(), pf.height());
-
-        final WindowFrames windowFrames = w.getWindowFrames();
-        windowFrames.setFrames(pf, pf);
-        windowFrames.setDisplayCutout(cutout);
-        w.computeFrame();
-
-        assertEquals(w.getWmDisplayCutout().getDisplayCutout().getSafeInsetTop(), 50);
-        assertEquals(w.getWmDisplayCutout().getDisplayCutout().getSafeInsetBottom(), 0);
-        assertEquals(w.getWmDisplayCutout().getDisplayCutout().getSafeInsetLeft(), 0);
-        assertEquals(w.getWmDisplayCutout().getDisplayCutout().getSafeInsetRight(), 0);
-    }
-
-    @Test
     public void testFreeformContentInsets() {
         removeGlobalMinSizeRestriction();
         // fullscreen task doesn't use bounds for computeFrame
@@ -303,7 +275,7 @@ public class WindowFrameTests extends WindowTestsBase {
         imeSource.setFrame(imeFrame);
         imeSource.setVisible(true);
         w.updateRequestedVisibility(state);
-        w.mBehindIme = true;
+        w.mAboveInsetsState.addSource(imeSource);
 
         // With no insets or system decor all the frames incoming from PhoneWindowManager
         // are identical.

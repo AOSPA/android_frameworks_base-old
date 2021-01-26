@@ -3646,6 +3646,7 @@ public class UserManagerService extends IUserManager.Stub {
 
         //...then external ones
         Intent addedIntent = new Intent(Intent.ACTION_USER_ADDED);
+        addedIntent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
         addedIntent.putExtra(Intent.EXTRA_USER_HANDLE, userInfo.id);
         // Also, add the UserHandle for mainline modules which can't use the @hide
         // EXTRA_USER_HANDLE.
@@ -3728,7 +3729,7 @@ public class UserManagerService extends IUserManager.Stub {
     UserData putUserInfo(UserInfo userInfo) {
         final UserData userData = new UserData();
         userData.info = userInfo;
-        synchronized (mUsers) {
+        synchronized (mUsersLock) {
             mUsers.put(userInfo.id, userData);
         }
         return userData;
@@ -3736,7 +3737,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @VisibleForTesting
     void removeUserInfo(@UserIdInt int userId) {
-        synchronized (mUsers) {
+        synchronized (mUsersLock) {
             mUsers.remove(userId);
         }
     }
@@ -4048,6 +4049,7 @@ public class UserManagerService extends IUserManager.Stub {
         final long ident = Binder.clearCallingIdentity();
         try {
             Intent removedIntent = new Intent(Intent.ACTION_USER_REMOVED);
+            removedIntent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
             removedIntent.putExtra(Intent.EXTRA_USER_HANDLE, userId);
             // Also, add the UserHandle for mainline modules which can't use the @hide
             // EXTRA_USER_HANDLE.
@@ -4140,7 +4142,7 @@ public class UserManagerService extends IUserManager.Stub {
         userFile.delete();
         updateUserIds();
         if (RELEASE_DELETED_USER_ID) {
-            synchronized (mUsers) {
+            synchronized (mUsersLock) {
                 mRemovingUserIds.delete(userId);
             }
         }
@@ -4760,13 +4762,32 @@ public class UserManagerService extends IUserManager.Stub {
                 final boolean hasParent = user.profileGroupId != user.id
                         && user.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID;
                 if (verbose) {
-                    pw.printf("%d: id=%d, name=%s, flags=%s%s%s%s%s%s%s\n", i, user.id, user.name,
+                    final DevicePolicyManagerInternal dpm = getDevicePolicyManagerInternal();
+                    String deviceOwner = "";
+                    String profileOwner = "";
+                    if (dpm != null) {
+                        final long ident = Binder.clearCallingIdentity();
+                        // NOTE: dpm methods below CANNOT be called while holding the mUsersLock
+                        try {
+                            if (dpm.getDeviceOwnerUserId() == user.id) {
+                                deviceOwner = " (device-owner)";
+                            }
+                            if (dpm.getProfileOwnerAsUser(user.id) != null) {
+                                profileOwner = " (profile-owner)";
+                            }
+                        } finally {
+                            Binder.restoreCallingIdentity(ident);
+                        }
+                    }
+                    pw.printf("%d: id=%d, name=%s, flags=%s%s%s%s%s%s%s%s%s\n", i, user.id,
+                            user.name,
                             UserInfo.flagsToString(user.flags),
                             hasParent ? " (parentId=" + user.profileGroupId + ")" : "",
                             running ? " (running)" : "",
                             user.partial ? " (partial)" : "",
                             user.preCreated ? " (pre-created)" : "",
                             user.convertedFromPreCreated ? " (converted)" : "",
+                            deviceOwner, profileOwner,
                             current ? " (current)" : "");
                 } else {
                     // NOTE: the standard "list users" command is used by integration tests and
@@ -5326,6 +5347,9 @@ public class UserManagerService extends IUserManager.Stub {
                                 debugMsg + " for another profile "
                                         + targetUserId + " from " + callingUserId);
                     }
+                    Slog.w(LOG_TAG, debugMsg + " for another profile "
+                            + targetUserId + " from " + callingUserId);
+                    return false;
                 }
 
                 UserInfo targetUserInfo = getUserInfoLU(targetUserId);

@@ -55,11 +55,15 @@ void SkiaRecordingCanvas::initDisplayList(uirenderer::RenderNode* renderNode, in
     SkiaCanvas::reset(&mRecorder);
 }
 
-uirenderer::DisplayList* SkiaRecordingCanvas::finishRecording() {
+std::unique_ptr<SkiaDisplayList> SkiaRecordingCanvas::finishRecording() {
     // close any existing chunks if necessary
     enableZ(false);
     mRecorder.restoreToCount(1);
-    return mDisplayList.release();
+    return std::move(mDisplayList);
+}
+
+void SkiaRecordingCanvas::finishRecording(uirenderer::RenderNode* destination) {
+    destination->setStagingDisplayList(uirenderer::DisplayList(finishRecording()));
 }
 
 // ----------------------------------------------------------------------------
@@ -83,6 +87,16 @@ void SkiaRecordingCanvas::drawCircle(uirenderer::CanvasPropertyPrimitive* x,
                                      uirenderer::CanvasPropertyPrimitive* radius,
                                      uirenderer::CanvasPropertyPaint* paint) {
     drawDrawable(mDisplayList->allocateDrawable<AnimatedCircle>(x, y, radius, paint));
+}
+
+void SkiaRecordingCanvas::drawRipple(uirenderer::CanvasPropertyPrimitive* x,
+                                     uirenderer::CanvasPropertyPrimitive* y,
+                                     uirenderer::CanvasPropertyPrimitive* radius,
+                                     uirenderer::CanvasPropertyPaint* paint,
+                                     uirenderer::CanvasPropertyPrimitive* progress,
+                                     const SkRuntimeShaderBuilder& effectBuilder) {
+    drawDrawable(mDisplayList->allocateDrawable<AnimatedRipple>(x, y, radius, paint, progress,
+                                                                effectBuilder));
 }
 
 void SkiaRecordingCanvas::enableZ(bool enableZ) {
@@ -185,18 +199,21 @@ static SkDrawLooper* get_looper(const Paint* paint) {
 }
 
 template <typename Proc>
-void applyLooper(SkDrawLooper* looper, const SkPaint& paint, Proc proc) {
+void applyLooper(SkDrawLooper* looper, const SkPaint* paint, Proc proc) {
     if (looper) {
         SkSTArenaAlloc<256> alloc;
         SkDrawLooper::Context* ctx = looper->makeContext(&alloc);
         if (ctx) {
             SkDrawLooper::Context::Info info;
             for (;;) {
-                SkPaint p = paint;
+                SkPaint p;
+                if (paint) {
+                    p = *paint;
+                }
                 if (!ctx->next(&info, &p)) {
                     break;
                 }
-                proc(info.fTranslate.fX, info.fTranslate.fY, p);
+                proc(info.fTranslate.fX, info.fTranslate.fY, &p);
             }
         }
     } else {
@@ -204,11 +221,22 @@ void applyLooper(SkDrawLooper* looper, const SkPaint& paint, Proc proc) {
     }
 }
 
+static SkFilterMode Paint_to_filter(const SkPaint* paint) {
+    return paint && paint->getFilterQuality() != kNone_SkFilterQuality ? SkFilterMode::kLinear
+                                                                       : SkFilterMode::kNearest;
+}
+
+static SkSamplingOptions Paint_to_sampling(const SkPaint* paint) {
+    // Android only has 1-bit for "filter", so we don't try to cons-up mipmaps or cubics
+    return SkSamplingOptions(Paint_to_filter(paint), SkMipmapMode::kNone);
+}
+
 void SkiaRecordingCanvas::drawBitmap(Bitmap& bitmap, float left, float top, const Paint* paint) {
     sk_sp<SkImage> image = bitmap.makeImage();
 
-    applyLooper(get_looper(paint), *filterBitmap(paint), [&](SkScalar x, SkScalar y, const SkPaint& p) {
-        mRecorder.drawImage(image, left + x, top + y, &p, bitmap.palette());
+    applyLooper(get_looper(paint), filterBitmap(paint), [&](SkScalar x, SkScalar y,
+                const SkPaint* p) {
+        mRecorder.drawImage(image, left + x, top + y, Paint_to_sampling(p), p, bitmap.palette());
     });
 
     // if image->unique() is true, then mRecorder.drawImage failed for some reason. It also means
@@ -225,8 +253,9 @@ void SkiaRecordingCanvas::drawBitmap(Bitmap& bitmap, const SkMatrix& matrix, con
 
     sk_sp<SkImage> image = bitmap.makeImage();
 
-    applyLooper(get_looper(paint), *filterBitmap(paint), [&](SkScalar x, SkScalar y, const SkPaint& p) {
-        mRecorder.drawImage(image, x, y, &p, bitmap.palette());
+    applyLooper(get_looper(paint), filterBitmap(paint), [&](SkScalar x, SkScalar y,
+                const SkPaint* p) {
+        mRecorder.drawImage(image, x, y, Paint_to_sampling(p), p, bitmap.palette());
     });
 
     if (!bitmap.isImmutable() && image.get() && !image->unique()) {
@@ -242,9 +271,10 @@ void SkiaRecordingCanvas::drawBitmap(Bitmap& bitmap, float srcLeft, float srcTop
 
     sk_sp<SkImage> image = bitmap.makeImage();
 
-    applyLooper(get_looper(paint), *filterBitmap(paint), [&](SkScalar x, SkScalar y, const SkPaint& p) {
-        mRecorder.drawImageRect(image, srcRect, dstRect.makeOffset(x, y), &p,
-                                SkCanvas::kFast_SrcRectConstraint, bitmap.palette());
+    applyLooper(get_looper(paint), filterBitmap(paint), [&](SkScalar x, SkScalar y,
+                const SkPaint* p) {
+        mRecorder.drawImageRect(image, srcRect, dstRect.makeOffset(x, y), Paint_to_sampling(p),
+                                p, SkCanvas::kFast_SrcRectConstraint, bitmap.palette());
     });
 
     if (!bitmap.isImmutable() && image.get() && !image->unique() && !srcRect.isEmpty() &&
@@ -276,16 +306,15 @@ void SkiaRecordingCanvas::drawNinePatch(Bitmap& bitmap, const Res_png_9patch& ch
 
     lattice.fBounds = nullptr;
     SkRect dst = SkRect::MakeLTRB(dstLeft, dstTop, dstRight, dstBottom);
-
-    PaintCoW filteredPaint(paint);
-    // HWUI always draws 9-patches with bilinear filtering, regardless of what is set in the Paint.
-    if (!filteredPaint || filteredPaint->getFilterQuality() != kLow_SkFilterQuality) {
-        filteredPaint.writeable().setFilterQuality(kLow_SkFilterQuality);
-    }
     sk_sp<SkImage> image = bitmap.makeImage();
 
-    applyLooper(get_looper(paint), *filterBitmap(paint), [&](SkScalar x, SkScalar y, const SkPaint& p) {
-        mRecorder.drawImageLattice(image, lattice, dst.makeOffset(x, y), &p, bitmap.palette());
+    // HWUI always draws 9-patches with linear filtering, regardless of the Paint.
+    const SkFilterMode filter = SkFilterMode::kLinear;
+
+    applyLooper(get_looper(paint), filterBitmap(paint), [&](SkScalar x, SkScalar y,
+                const SkPaint* p) {
+        mRecorder.drawImageLattice(image, lattice, dst.makeOffset(x, y), filter, p,
+                                   bitmap.palette());
     });
 
     if (!bitmap.isImmutable() && image.get() && !image->unique() && !dst.isEmpty()) {

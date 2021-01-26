@@ -57,7 +57,8 @@
     <string name="imei" msgid="2157082351232630390">"IMEI"</string>
     <string name="meid" msgid="3291227361605924674">"MEID"</string>
     <string name="ClipMmi" msgid="4110549342447630629">"আগত কলার আইডি"</string>
-    <string name="ClirMmi" msgid="4702929460236547156">"আউটগোয়িং কলার আইডি"</string>
+    <!-- no translation found for ClirMmi (6752346475055446417) -->
+    <skip />
     <string name="ColpMmi" msgid="4736462893284419302">"সংযুক্ত লাইন ID"</string>
     <string name="ColrMmi" msgid="5889782479745764278">"সংযুক্ত লাইন ID-র বিধিনিষেধ"</string>
     <string name="CfMmi" msgid="8390012691099787178">"কল ফরওয়ার্ড করা"</string>
@@ -146,6 +147,9 @@
     <string name="wfc_mode_wifi_preferred_summary" msgid="1035175836270943089">"ওয়াই-ফাইয়ের মাধ্যমে কল করুন"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="4958965609212575619">"মোবাইল নেটওয়ার্কের মাধ্যমে কল করুন"</string>
     <string name="wfc_mode_wifi_only_summary" msgid="104951993894678665">"শুধুমাত্র ওয়াই-ফাই"</string>
+    <!-- no translation found for crossSimFormat_spn (9125246077491634262) -->
+    <skip />
+    <string name="crossSimFormat_spn_cross_sim_calling" msgid="779976494687695991">"<xliff:g id="SPN">%s</xliff:g> ক্রস সিম কল করা"</string>
     <string name="cfTemplateNotForwarded" msgid="862202427794270501">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: ফরওয়ার্ড করা হয়নি"</string>
     <string name="cfTemplateForwarded" msgid="9132506315842157860">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g>"</string>
     <string name="cfTemplateForwardedTime" msgid="735042369233323609">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g> <xliff:g id="TIME_DELAY">{2}</xliff:g> সেকেন্ড পরে"</string>
@@ -2009,14 +2013,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"মাইক্রোফোন"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"স্ক্রিনে অন্যান্য অ্যাপের উপরে দেখানো হচ্ছে"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"মতামত জানান"</string>
-    <!-- no translation found for notification_feedback_indicator_alerted (6552871804121942099) -->
-    <skip />
-    <!-- no translation found for notification_feedback_indicator_silenced (3799442124723177262) -->
-    <skip />
-    <!-- no translation found for notification_feedback_indicator_promoted (9030204303764698640) -->
-    <skip />
-    <!-- no translation found for notification_feedback_indicator_demoted (8880309924296450875) -->
-    <skip />
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"এই বিজ্ঞপ্তির গুরুত্ব বাড়িয়ে ডিফল্ট হিসেবে সেট করা হয়েছে। মতামত জানাতে ট্যাপ করুন।"</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"এই বিজ্ঞপ্তির গুরুত্ব কমিয়ে মিউট হিসেবে সেট করা হয়েছে। মতামত জানাতে ট্যাপ করুন।"</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"এই বিজ্ঞপ্তির গুরুত্ব বাড়ানো হয়েছে। মতামত জানাতে ট্যাপ করুন।"</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"এই বিজ্ঞপ্তির গুরুত্ব কমানো হয়েছে। মতামত জানাতে ট্যাপ করুন।"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"রুটিন মোডের তথ্য সংক্রান্ত বিজ্ঞপ্তি"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"সাধারণত যখন চার্জ দেন, তার আগে চার্জ শেষ হয়ে যেতে পারে"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"ডিভাইস বেশিক্ষণ চালু রাখতে ব্যাটারি সেভার চালু করা হয়েছে"</string>

@@ -29,8 +29,8 @@ import android.app.blob.BlobStoreManagerFrameworkInitializer;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
 import android.app.job.JobSchedulerFrameworkInitializer;
+import android.app.people.PeopleManager;
 import android.app.prediction.AppPredictionManager;
-import android.app.role.RoleControllerManager;
 import android.app.role.RoleManager;
 import android.app.search.SearchUiManager;
 import android.app.slice.SliceManager;
@@ -208,6 +208,9 @@ import android.view.contentcapture.IContentCaptureManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textservice.TextServicesManager;
+import android.view.translation.ITranslationManager;
+import android.view.translation.TranslationManager;
+import android.view.translation.UiTranslationManager;
 
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.app.IBatteryStats;
@@ -584,6 +587,13 @@ public final class SystemServiceRegistry {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.NSD_SERVICE);
                 INsdManager service = INsdManager.Stub.asInterface(b);
                 return new NsdManager(ctx.getOuterContext(), service);
+            }});
+
+        registerService(Context.PEOPLE_SERVICE, PeopleManager.class,
+                new CachedServiceFetcher<PeopleManager>() {
+            @Override
+            public PeopleManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                return new PeopleManager(ctx);
             }});
 
         registerService(Context.POWER_SERVICE, PowerManager.class,
@@ -1164,6 +1174,33 @@ public final class SystemServiceRegistry {
                 return null;
             }});
 
+        registerService(Context.TRANSLATION_MANAGER_SERVICE, TranslationManager.class,
+                new CachedServiceFetcher<TranslationManager>() {
+                    @Override
+                    public TranslationManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getService(Context.TRANSLATION_MANAGER_SERVICE);
+                        ITranslationManager service = ITranslationManager.Stub.asInterface(b);
+                        // Service is null when not provided by OEM.
+                        if (service != null) {
+                            return new TranslationManager(ctx.getOuterContext(), service);
+                        }
+                        return null;
+                    }});
+
+        registerService(Context.UI_TRANSLATION_SERVICE, UiTranslationManager.class,
+                new CachedServiceFetcher<UiTranslationManager>() {
+                    @Override
+                    public UiTranslationManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getService(Context.TRANSLATION_MANAGER_SERVICE);
+                        ITranslationManager service = ITranslationManager.Stub.asInterface(b);
+                        if (service != null) {
+                            return new UiTranslationManager(ctx.getOuterContext(), service);
+                        }
+                        return null;
+                    }});
+
         registerService(Context.SEARCH_UI_SERVICE, SearchUiManager.class,
             new CachedServiceFetcher<SearchUiManager>() {
                 @Override
@@ -1289,14 +1326,6 @@ public final class SystemServiceRegistry {
                     public RoleManager createService(ContextImpl ctx)
                             throws ServiceNotFoundException {
                         return new RoleManager(ctx.getOuterContext());
-                    }});
-
-        registerService(Context.ROLE_CONTROLLER_SERVICE, RoleControllerManager.class,
-                new CachedServiceFetcher<RoleControllerManager>() {
-                    @Override
-                    public RoleControllerManager createService(ContextImpl ctx)
-                            throws ServiceNotFoundException {
-                        return new RoleControllerManager(ctx.getOuterContext());
                     }});
 
         registerService(Context.DYNAMIC_SYSTEM_SERVICE, DynamicSystemManager.class,
@@ -1719,7 +1748,7 @@ public final class SystemServiceRegistry {
                 synchronized (cache) {
                     // Return it if we already have a cached instance.
                     T service = (T) cache[mCacheIndex];
-                    if (service != null || gates[mCacheIndex] == ContextImpl.STATE_NOT_FOUND) {
+                    if (service != null) {
                         ret = service;
                         break; // exit the for (;;)
                     }
@@ -1729,7 +1758,9 @@ public final class SystemServiceRegistry {
                     // Grr... if gate is STATE_READY, then this means we initialized the service
                     // once but someone cleared it.
                     // We start over from STATE_UNINITIALIZED.
-                    if (gates[mCacheIndex] == ContextImpl.STATE_READY) {
+                    // Similarly, if the previous attempt returned null, we'll retry again.
+                    if (gates[mCacheIndex] == ContextImpl.STATE_READY
+                            || gates[mCacheIndex] == ContextImpl.STATE_NOT_FOUND) {
                         gates[mCacheIndex] = ContextImpl.STATE_UNINITIALIZED;
                     }
 

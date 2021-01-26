@@ -271,7 +271,8 @@ public class AssistStructure implements Parcelable {
                     + ", views=" + mNumWrittenViews
                     + ", level=" + (mCurViewStackPos+levelAdj));
             out.writeInt(VALIDATE_VIEW_TOKEN);
-            int flags = child.writeSelfToParcel(out, pwriter, mSanitizeOnWrite, mTmpMatrix);
+            int flags = child.writeSelfToParcel(out, pwriter, mSanitizeOnWrite,
+                    mTmpMatrix, /*willWriteChildren=*/true);
             mNumWrittenViews++;
             // If the child has children, push it on the stack to write them next.
             if ((flags&ViewNode.FLAGS_HAS_CHILDREN) != 0) {
@@ -671,6 +672,7 @@ public class AssistStructure implements Parcelable {
         static final int FLAGS_CONTEXT_CLICKABLE = 0x00004000;
         static final int FLAGS_OPAQUE = 0x00008000;
 
+        static final int FLAGS_HAS_MIME_TYPES = 0x80000000;
         static final int FLAGS_HAS_MATRIX = 0x40000000;
         static final int FLAGS_HAS_ALPHA = 0x20000000;
         static final int FLAGS_HAS_ELEVATION = 0x10000000;
@@ -714,6 +716,7 @@ public class AssistStructure implements Parcelable {
         String mWebDomain;
         Bundle mExtras;
         LocaleList mLocaleList;
+        String[] mOnReceiveContentMimeTypes;
 
         ViewNode[] mChildren;
 
@@ -724,11 +727,51 @@ public class AssistStructure implements Parcelable {
         public ViewNode() {
         }
 
+        ViewNode(@NonNull Parcel in) {
+            initializeFromParcelWithoutChildren(in, /*preader=*/null, /*tmpMatrix=*/null);
+        }
+
         ViewNode(ParcelTransferReader reader, int nestingLevel) {
             final Parcel in = reader.readParcel(VALIDATE_VIEW_TOKEN, nestingLevel);
             reader.mNumReadViews++;
-            final PooledStringReader preader = reader.mStringReader;
-            mClassName = preader.readString();
+            initializeFromParcelWithoutChildren(in, Objects.requireNonNull(reader.mStringReader),
+                    Objects.requireNonNull(reader.mTmpMatrix));
+            if ((mFlags & FLAGS_HAS_CHILDREN) != 0) {
+                final int numChildren = in.readInt();
+                if (DEBUG_PARCEL_TREE || DEBUG_PARCEL_CHILDREN) {
+                    Log.d(TAG,
+                            "Preparing to read " + numChildren
+                                    + " children: @ #" + reader.mNumReadViews
+                                    + ", level " + nestingLevel);
+                }
+                mChildren = new ViewNode[numChildren];
+                for (int i = 0; i < numChildren; i++) {
+                    mChildren[i] = new ViewNode(reader, nestingLevel + 1);
+                }
+            }
+        }
+
+        private static void writeString(@NonNull Parcel out, @Nullable PooledStringWriter pwriter,
+                @Nullable String str) {
+            if (pwriter != null) {
+                pwriter.writeString(str);
+            } else {
+                out.writeString(str);
+            }
+        }
+
+        @Nullable
+        private static String readString(@NonNull Parcel in, @Nullable PooledStringReader preader) {
+            if (preader != null) {
+                return preader.readString();
+            }
+            return in.readString();
+        }
+
+        // This does not read the child nodes.
+        void initializeFromParcelWithoutChildren(Parcel in, @Nullable PooledStringReader preader,
+                @Nullable float[] tmpMatrix) {
+            mClassName = readString(in, preader);
             mFlags = in.readInt();
             final int flags = mFlags;
             mAutofillFlags = in.readInt();
@@ -736,10 +779,10 @@ public class AssistStructure implements Parcelable {
             if ((flags&FLAGS_HAS_ID) != 0) {
                 mId = in.readInt();
                 if (mId != View.NO_ID) {
-                    mIdEntry = preader.readString();
+                    mIdEntry = readString(in, preader);
                     if (mIdEntry != null) {
-                        mIdType = preader.readString();
-                        mIdPackage = preader.readString();
+                        mIdType = readString(in, preader);
+                        mIdPackage = readString(in, preader);
                     }
                 }
             }
@@ -784,10 +827,10 @@ public class AssistStructure implements Parcelable {
                     mMaxLength = in.readInt();
                 }
                 if ((autofillFlags & AUTOFILL_FLAGS_HAS_TEXT_ID_ENTRY) != 0) {
-                    mTextIdEntry = preader.readString();
+                    mTextIdEntry = readString(in, preader);
                 }
                 if ((autofillFlags & AUTOFILL_FLAGS_HAS_HINT_ID_ENTRY) != 0) {
-                    mHintIdEntry = preader.readString();
+                    mHintIdEntry = readString(in, preader);
                 }
             }
             if ((flags&FLAGS_HAS_LARGE_COORDS) != 0) {
@@ -809,8 +852,11 @@ public class AssistStructure implements Parcelable {
             }
             if ((flags&FLAGS_HAS_MATRIX) != 0) {
                 mMatrix = new Matrix();
-                in.readFloatArray(reader.mTmpMatrix);
-                mMatrix.setValues(reader.mTmpMatrix);
+                if (tmpMatrix == null) {
+                    tmpMatrix = new float[9];
+                }
+                in.readFloatArray(tmpMatrix);
+                mMatrix.setValues(tmpMatrix);
             }
             if ((flags&FLAGS_HAS_ELEVATION) != 0) {
                 mElevation = in.readFloat();
@@ -836,24 +882,22 @@ public class AssistStructure implements Parcelable {
             if ((flags&FLAGS_HAS_LOCALE_LIST) != 0) {
                 mLocaleList = in.readParcelable(null);
             }
+            if ((flags & FLAGS_HAS_MIME_TYPES) != 0) {
+                mOnReceiveContentMimeTypes = in.readStringArray();
+            }
             if ((flags&FLAGS_HAS_EXTRAS) != 0) {
                 mExtras = in.readBundle();
             }
-            if ((flags&FLAGS_HAS_CHILDREN) != 0) {
-                final int NCHILDREN = in.readInt();
-                if (DEBUG_PARCEL_TREE || DEBUG_PARCEL_CHILDREN) Log.d(TAG,
-                        "Preparing to read " + NCHILDREN
-                                + " children: @ #" + reader.mNumReadViews
-                                + ", level " + nestingLevel);
-                mChildren = new ViewNode[NCHILDREN];
-                for (int i=0; i<NCHILDREN; i++) {
-                    mChildren[i] = new ViewNode(reader, nestingLevel + 1);
-                }
-            }
         }
 
-        int writeSelfToParcel(Parcel out, PooledStringWriter pwriter, boolean sanitizeOnWrite,
-                float[] tmpMatrix) {
+        /**
+         * This does not write the child nodes.
+         *
+         * @param willWriteChildren whether child nodes will be written to the parcel or not after
+         *                          calling this method.
+         */
+        int writeSelfToParcel(@NonNull Parcel out, @Nullable PooledStringWriter pwriter,
+                boolean sanitizeOnWrite, @Nullable float[] tmpMatrix, boolean willWriteChildren) {
             // Guard used to skip non-sanitized data when writing for autofill.
             boolean writeSensitive = true;
 
@@ -900,10 +944,13 @@ public class AssistStructure implements Parcelable {
             if (mLocaleList != null) {
                 flags |= FLAGS_HAS_LOCALE_LIST;
             }
+            if (mOnReceiveContentMimeTypes != null) {
+                flags |= FLAGS_HAS_MIME_TYPES;
+            }
             if (mExtras != null) {
                 flags |= FLAGS_HAS_EXTRAS;
             }
-            if (mChildren != null) {
+            if (mChildren != null && willWriteChildren) {
                 flags |= FLAGS_HAS_CHILDREN;
             }
             if (mAutofillId != null) {
@@ -946,7 +993,7 @@ public class AssistStructure implements Parcelable {
                 autofillFlags |= AUTOFILL_FLAGS_HAS_HINT_ID_ENTRY;
             }
 
-            pwriter.writeString(mClassName);
+            writeString(out, pwriter, mClassName);
 
             int writtenFlags = flags;
             if (autofillFlags != 0 && (mSanitized || !sanitizeOnWrite)) {
@@ -966,10 +1013,10 @@ public class AssistStructure implements Parcelable {
             if ((flags&FLAGS_HAS_ID) != 0) {
                 out.writeInt(mId);
                 if (mId != View.NO_ID) {
-                    pwriter.writeString(mIdEntry);
+                    writeString(out, pwriter, mIdEntry);
                     if (mIdEntry != null) {
-                        pwriter.writeString(mIdType);
-                        pwriter.writeString(mIdPackage);
+                        writeString(out, pwriter, mIdType);
+                        writeString(out, pwriter, mIdPackage);
                     }
                 }
             }
@@ -1020,10 +1067,10 @@ public class AssistStructure implements Parcelable {
                     out.writeInt(mMaxLength);
                 }
                 if ((autofillFlags & AUTOFILL_FLAGS_HAS_TEXT_ID_ENTRY) != 0) {
-                    pwriter.writeString(mTextIdEntry);
+                    writeString(out, pwriter, mTextIdEntry);
                 }
                 if ((autofillFlags & AUTOFILL_FLAGS_HAS_HINT_ID_ENTRY) != 0) {
-                    pwriter.writeString(mHintIdEntry);
+                    writeString(out, pwriter, mHintIdEntry);
                 }
             }
             if ((flags&FLAGS_HAS_LARGE_COORDS) != 0) {
@@ -1040,6 +1087,9 @@ public class AssistStructure implements Parcelable {
                 out.writeInt(mScrollY);
             }
             if ((flags&FLAGS_HAS_MATRIX) != 0) {
+                if (tmpMatrix == null) {
+                    tmpMatrix = new float[9];
+                }
                 mMatrix.getValues(tmpMatrix);
                 out.writeFloatArray(tmpMatrix);
             }
@@ -1066,6 +1116,9 @@ public class AssistStructure implements Parcelable {
             }
             if ((flags&FLAGS_HAS_LOCALE_LIST) != 0) {
                 out.writeParcelable(mLocaleList, 0);
+            }
+            if ((flags & FLAGS_HAS_MIME_TYPES) != 0) {
+                out.writeStringArray(mOnReceiveContentMimeTypes);
             }
             if ((flags&FLAGS_HAS_EXTRAS) != 0) {
                 out.writeBundle(mExtras);
@@ -1485,6 +1538,15 @@ public class AssistStructure implements Parcelable {
         }
 
         /**
+         * Returns the MIME types accepted by {@link View#performReceiveContent} for this view. See
+         * {@link View#getOnReceiveContentMimeTypes()} for details.
+         */
+        @Nullable
+        public String[] getOnReceiveContentMimeTypes() {
+            return mOnReceiveContentMimeTypes;
+        }
+
+        /**
          * Returns any text associated with the node that is displayed to the user, or null
          * if there is none.
          */
@@ -1695,6 +1757,57 @@ public class AssistStructure implements Parcelable {
     }
 
     /**
+     * A parcelable wrapper class around {@link ViewNode}.
+     *
+     * <p>This class, when parceled and unparceled, does not carry the child nodes.
+     *
+     * @hide
+     */
+    public static final class ViewNodeParcelable implements Parcelable {
+
+        @NonNull
+        private final ViewNode mViewNode;
+
+        public ViewNodeParcelable(@NonNull ViewNode viewNode) {
+            mViewNode = viewNode;
+        }
+
+        public ViewNodeParcelable(@NonNull Parcel in) {
+            mViewNode = new ViewNode(in);
+        }
+
+        @NonNull
+        public ViewNode getViewNode() {
+            return mViewNode;
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(@NonNull Parcel parcel, int flags) {
+            mViewNode.writeSelfToParcel(parcel, /*pwriter=*/null, /*sanitizeOnWrite=*/false,
+                    /*tmpMatrix*/null, /*willWriteChildren=*/ false);
+        }
+
+        @NonNull
+        public static final Parcelable.Creator<ViewNodeParcelable> CREATOR =
+                new Parcelable.Creator<ViewNodeParcelable>() {
+                    @Override
+                    public ViewNodeParcelable createFromParcel(@NonNull Parcel in) {
+                        return new ViewNodeParcelable(in);
+                    }
+
+                    @Override
+                    public ViewNodeParcelable[] newArray(int size) {
+                        return new ViewNodeParcelable[size];
+                    }
+                };
+    }
+
+    /**
      * POJO used to override some autofill-related values when the node is parcelized.
      *
      * @hide
@@ -1704,15 +1817,33 @@ public class AssistStructure implements Parcelable {
         public AutofillValue value;
     }
 
-    static class ViewNodeBuilder extends ViewStructure {
+    /**
+     * @hide
+     */
+    public static class ViewNodeBuilder extends ViewStructure {
         final AssistStructure mAssist;
         final ViewNode mNode;
         final boolean mAsync;
+
+        /**
+         * Used to instantiate a builder for a stand-alone {@link ViewNode} which is not associated
+         * to a properly created {@link AssistStructure}.
+         */
+        public ViewNodeBuilder() {
+            mAssist = new AssistStructure();
+            mNode = new ViewNode();
+            mAsync = false;
+        }
 
         ViewNodeBuilder(AssistStructure assist, ViewNode node, boolean async) {
             mAssist = assist;
             mNode = node;
             mAsync = async;
+        }
+
+        @NonNull
+        public ViewNode getViewNode() {
+            return mNode;
         }
 
         @Override
@@ -2035,6 +2166,11 @@ public class AssistStructure implements Parcelable {
         }
 
         @Override
+        public void setOnReceiveContentMimeTypes(@Nullable String[] mimeTypes) {
+            mNode.mOnReceiveContentMimeTypes = mimeTypes;
+        }
+
+        @Override
         public void setInputType(int inputType) {
             mNode.mInputType = inputType;
         }
@@ -2310,6 +2446,10 @@ public class AssistStructure implements Parcelable {
         LocaleList localeList = node.getLocaleList();
         if (localeList != null) {
             Log.i(TAG, prefix + "  LocaleList: " + localeList);
+        }
+        String[] mimeTypes = node.getOnReceiveContentMimeTypes();
+        if (mimeTypes != null) {
+            Log.i(TAG, prefix + "  MIME types: " + Arrays.toString(mimeTypes));
         }
         String hint = node.getHint();
         if (hint != null) {

@@ -455,12 +455,13 @@ public final class BluetoothGattServer implements BluetoothProfile {
      * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission.
      *
      * @param callback GATT callback handler that will receive asynchronous callbacks.
-     * @param eattSupport whether eattSupport is needed for Gatt server
+     * @param eatt_support indicates if server can use eatt
      * @return true, the callback will be called to notify success or failure, false on immediate
      * error
      * @hide
      */
-    /*package*/ boolean registerCallback(BluetoothGattServerCallback callback, boolean eattSupport) {
+    /*package*/ boolean registerCallback(BluetoothGattServerCallback callback,
+                                         boolean eatt_support) {
         if (DBG) Log.d(TAG, "registerCallback()");
         if (mService == null) {
             Log.e(TAG, "GATT service not available");
@@ -477,7 +478,7 @@ public final class BluetoothGattServer implements BluetoothProfile {
 
             mCallback = callback;
             try {
-                mService.registerServer(new ParcelUuid(uuid), mBluetoothGattServerCallback, eattSupport);
+                mService.registerServer(new ParcelUuid(uuid), mBluetoothGattServerCallback, eatt_support);
             } catch (RemoteException e) {
                 Log.e(TAG, "", e);
                 mCallback = null;

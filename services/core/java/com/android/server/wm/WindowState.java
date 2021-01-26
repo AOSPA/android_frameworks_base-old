@@ -45,6 +45,7 @@ import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
+import static android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
 import static android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
@@ -71,6 +72,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_MAGNIFI
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA_OVERLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_BOOT_PROGRESS;
@@ -131,6 +133,7 @@ import static com.android.server.wm.MoveAnimationSpecProto.DURATION_MS;
 import static com.android.server.wm.MoveAnimationSpecProto.FROM;
 import static com.android.server.wm.MoveAnimationSpecProto.TO;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -210,6 +213,7 @@ import android.os.Trace;
 import android.os.WorkSource;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.MergedConfiguration;
@@ -252,7 +256,6 @@ import com.android.internal.util.ToBooleanFunction;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.LocalAnimationAdapter.AnimationSpec;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
-import com.android.server.wm.utils.WmDisplayCutout;
 
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
@@ -294,6 +297,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     final int mShowUserId;
     /** The owner has {@link android.Manifest.permission#INTERNAL_SYSTEM_WINDOW} */
     final boolean mOwnerCanAddInternalSystemWindow;
+    /** The owner has {@link android.Manifest.permission#USE_BACKGROUND_BLUR} */
+    final boolean mOwnerCanUseBackgroundBlur;
     final WindowId mWindowId;
     WindowToken mToken;
     // The same object as mToken if this is an app window and null for non-app windows.
@@ -643,9 +648,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     boolean mSeamlesslyRotated = false;
 
     /**
-     * Indicates if this window is behind IME. Only windows behind IME can get insets from IME.
+     * The insets state of sources provided by windows above the current window.
      */
-    boolean mBehindIme = false;
+    InsetsState mAboveInsetsState = new InsetsState();
+
+    /**
+     * The insets sources provided by this window.
+     */
+    ArrayMap<Integer, InsetsSource> mProvidedInsetsSources = new ArrayMap<>();
 
     /**
      * Surface insets from the previous call to relayout(), used to track
@@ -723,7 +733,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     static final int BLAST_TIMEOUT_DURATION = 5000; /* milliseconds */
 
-    private final WindowProcessController mWpcForDisplayConfigChanges;
+    private final WindowProcessController mWpcForDisplayAreaConfigChanges;
 
     /**
      * Returns the visibility of the given {@link InternalInsetsType type} requested by the client.
@@ -846,9 +856,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     WindowState(WindowManagerService service, Session s, IWindow c, WindowToken token,
             WindowState parentWindow, int appOp, WindowManager.LayoutParams a, int viewVisibility,
-            int ownerId, int showUserId, boolean ownerCanAddInternalSystemWindow) {
+            int ownerId, int showUserId, boolean ownerCanAddInternalSystemWindow,
+            boolean ownerCanUseBackgroundBlur) {
         this(service, s, c, token, parentWindow, appOp, a, viewVisibility, ownerId, showUserId,
-                ownerCanAddInternalSystemWindow, new PowerManagerWrapper() {
+                ownerCanAddInternalSystemWindow, ownerCanUseBackgroundBlur,
+                new PowerManagerWrapper() {
                     @Override
                     public void wakeUp(long time, @WakeReason int reason, String details) {
                         service.mPowerManager.wakeUp(time, reason, details);
@@ -864,7 +876,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     WindowState(WindowManagerService service, Session s, IWindow c, WindowToken token,
             WindowState parentWindow, int appOp, WindowManager.LayoutParams a, int viewVisibility,
             int ownerId, int showUserId, boolean ownerCanAddInternalSystemWindow,
-            PowerManagerWrapper powerManagerWrapper) {
+            boolean ownerCanUseBackgroundBlur, PowerManagerWrapper powerManagerWrapper) {
         super(service);
         mTmpTransaction = service.mTransactionFactory.get();
         mSession = s;
@@ -875,6 +887,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mOwnerUid = ownerId;
         mShowUserId = showUserId;
         mOwnerCanAddInternalSystemWindow = ownerCanAddInternalSystemWindow;
+        mOwnerCanUseBackgroundBlur = ownerCanUseBackgroundBlur;
         mWindowId = new WindowId(this);
         mAttrs.copyFrom(a);
         mLastSurfaceInsets.set(mAttrs.surfaceInsets);
@@ -915,7 +928,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mBaseLayer = 0;
             mSubLayer = 0;
             mWinAnimator = null;
-            mWpcForDisplayConfigChanges = null;
+            mWpcForDisplayAreaConfigChanges = null;
             return;
         }
         mDeathRecipient = deathRecipient;
@@ -969,8 +982,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             parentWindow.addChild(this, sWindowSubLayerComparator);
         }
 
-        // System process or invalid process cannot register to display config change.
-        mWpcForDisplayConfigChanges = (s.mPid == MY_PID || s.mPid < 0)
+        // System process or invalid process cannot register to display area config change.
+        mWpcForDisplayAreaConfigChanges = (s.mPid == MY_PID || s.mPid < 0)
                 ? null
                 : service.mAtmService.getProcessController(s.mPid, s.mUid);
     }
@@ -1071,8 +1084,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         frame.inset(left, top, right, bottom);
     }
 
-    void computeFrame(DisplayFrames displayFrames) {
-        getLayoutingWindowFrames().setDisplayCutout(displayFrames.mDisplayCutout);
+    void computeFrameAndUpdateSourceFrame() {
         computeFrame();
         // Update the source frame to provide insets to other windows during layout. If the
         // simulated frames exist, then this is not computing a stable result so just skip.
@@ -1213,9 +1225,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             }
         }
 
-        windowFrames.setDisplayCutout(
-                windowFrames.mDisplayCutout.calculateRelativeTo(windowFrames.mFrame));
-
         // Offset the actual frame by the amount layout frame is off.
         windowFrames.offsetFrames(-layoutXDiff, -layoutYDiff);
 
@@ -1290,10 +1299,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     Rect getContainingFrame() {
         return mWindowFrames.mContainingFrame;
-    }
-
-    WmDisplayCutout getWmDisplayCutout() {
-        return mWindowFrames.mDisplayCutout;
     }
 
     void getCompatFrameSize(Rect outFrame) {
@@ -2103,7 +2108,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return getDisplayContent().getBounds().equals(getBounds());
     }
 
-    private boolean matchesRootDisplayAreaBounds() {
+    boolean matchesRootDisplayAreaBounds() {
         RootDisplayArea root = getRootDisplayArea();
         if (root == null || root == getDisplayContent()) {
             return matchesDisplayBounds();
@@ -2290,7 +2295,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                         mWmService.mAccessibilityController.onWindowTransitionLocked(this, transit);
                     }
                 }
-                final boolean isAnimating = isAnimating(TRANSITION | PARENTS)
+                final boolean isAnimating = mAnimatingExit || isAnimating(TRANSITION | PARENTS,
+                        ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_WINDOW_ANIMATION)
                         && (mActivityRecord == null || !mActivityRecord.isWaitingForTransitionStart());
                 final boolean lastWindowIsStartingWindow = startingWindow && mActivityRecord != null
                         && mActivityRecord.isLastWindow(this);
@@ -2299,8 +2305,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 // Also, If isn't the an animating starting window that is the last window in the app.
                 // We allow the removal of the non-animating starting window now as there is no
                 // additional window or animation that will trigger its removal.
-                if (mWinAnimator.getShown() && mAnimatingExit
-                        && (!lastWindowIsStartingWindow || isAnimating)) {
+                if (mWinAnimator.getShown() && !lastWindowIsStartingWindow && isAnimating) {
+                    // Make isSelfOrAncestorWindowAnimatingExit return true so onExitAnimationDone
+                    // can proceed to remove this window.
+                    mAnimatingExit = true;
                     // The exit animation is running or should run... wait for it!
                     ProtoLog.v(WM_DEBUG_ADD_REMOVE,
                             "Not removing %s due to exit animation", this);
@@ -3039,6 +3047,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 || (!isSystemAlertWindowType(mAttrs.type) && mAttrs.type != TYPE_TOAST)) {
             return;
         }
+
+        if (mAttrs.type == TYPE_APPLICATION_OVERLAY && mAttrs.isSystemApplicationOverlay()
+                && mSession.mCanCreateSystemApplicationOverlay) {
+            return;
+        }
+
         if (mForceHideNonSystemOverlayWindow == forceHide) {
             return;
         }
@@ -3530,9 +3544,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return mActivityRecord.mFrozenMergedConfig.peek();
         }
 
-        // If the process has not registered to any display to listen to the configuration change,
-        // we can simply return the mFullConfiguration as default.
-        if (!registeredForDisplayConfigChanges()) {
+        // If the process has not registered to any display area to listen to the configuration
+        // change, we can simply return the mFullConfiguration as default.
+        if (!registeredForDisplayAreaConfigChanges()) {
             return super.getConfiguration();
         }
 
@@ -3543,13 +3557,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mTempConfiguration;
     }
 
-    /** @return {@code true} if the process registered to a display as a config listener. */
-    private boolean registeredForDisplayConfigChanges() {
+    /** @return {@code true} if the process registered to a display area as a config listener. */
+    private boolean registeredForDisplayAreaConfigChanges() {
         final WindowState parentWindow = getParentWindow();
         final WindowProcessController wpc = parentWindow != null
-                ? parentWindow.mWpcForDisplayConfigChanges
-                : mWpcForDisplayConfigChanges;
-        return wpc != null && wpc.registeredForDisplayConfigChanges();
+                ? parentWindow.mWpcForDisplayAreaConfigChanges
+                : mWpcForDisplayAreaConfigChanges;
+        return wpc != null && wpc.registeredForDisplayAreaConfigChanges();
     }
 
     void fillClientWindowFrames(ClientWindowFrames outFrames) {
@@ -3577,7 +3591,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             final DisplayInfo displayInfo = getDisplayInfo();
             backdropFrame.set(0, 0, displayInfo.logicalWidth, displayInfo.logicalHeight);
         }
-        outFrames.displayCutout.set(mWindowFrames.mDisplayCutout.getDisplayCutout());
     }
 
     void reportResized() {
@@ -5237,7 +5250,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (!mAnimatingExit && mAppDied) {
             mIsDimming = true;
             getDimmer().dimAbove(getSyncTransaction(), this, DEFAULT_DIM_AMOUNT_DEAD_WINDOW);
-        } else if (((mAttrs.flags & FLAG_DIM_BEHIND) != 0 || mAttrs.backgroundBlurRadius != 0)
+        } else if (((mAttrs.flags & FLAG_DIM_BEHIND) != 0 || isBlurEnabled())
                    && isVisibleNow() && !mHidden) {
             // Only show the Dimmer when the following is satisfied:
             // 1. The window has the flag FLAG_DIM_BEHIND or background blur is requested
@@ -5246,9 +5259,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // 4. The WS is not hidden.
             mIsDimming = true;
             final float dimAmount = (mAttrs.flags & FLAG_DIM_BEHIND) != 0 ? mAttrs.dimAmount : 0;
-            getDimmer().dimBelow(
-                    getSyncTransaction(), this, mAttrs.dimAmount, mAttrs.backgroundBlurRadius);
+            final int blurRadius = isBlurEnabled() ? mAttrs.backgroundBlurRadius : 0;
+            getDimmer().dimBelow(getSyncTransaction(), this, dimAmount, blurRadius);
         }
+    }
+
+    private boolean isBlurEnabled() {
+        return (mAttrs.flags & FLAG_BLUR_BEHIND) != 0 && mOwnerCanUseBackgroundBlur;
     }
 
 
@@ -5734,6 +5751,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     @Override
     boolean fillsParent() {
         return mAttrs.type == TYPE_APPLICATION_STARTING;
+    }
+
+    @Override
+    boolean showWallpaper() {
+        if (!isVisibleRequested()
+                // in multi-window mode, wallpaper is always visible at the back and not tied to
+                // the app (there is no wallpaper target).
+                || inMultiWindowMode()) {
+            return false;
+        }
+        return (mAttrs.flags & FLAG_SHOW_WALLPAPER) != 0;
     }
 
     /**
