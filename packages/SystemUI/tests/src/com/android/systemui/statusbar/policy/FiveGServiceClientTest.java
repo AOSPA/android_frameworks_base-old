@@ -35,10 +35,10 @@ import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 
-import org.codeaurora.internal.INetworkCallback;
-import org.codeaurora.internal.NrIconType;
-import org.codeaurora.internal.Status;
-import org.codeaurora.internal.Token;
+import com.qti.extphone.IExtPhoneCallback;
+import com.qti.extphone.NrIconType;
+import com.qti.extphone.Status;
+import com.qti.extphone.Token;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -55,7 +55,7 @@ import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceStat
 public class FiveGServiceClientTest extends NetworkControllerBaseTest {
     private final static String TAG = "FiveGServiceClientTest";
     private FiveGServiceClient mFiveGServiceClient;
-    protected INetworkCallback mCallback;
+    protected IExtPhoneCallback mCallback;
 
     Token mToken;
     Status mSuccessStatus;

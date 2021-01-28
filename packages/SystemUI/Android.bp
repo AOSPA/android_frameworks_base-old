@@ -90,8 +90,8 @@ android_library {
     libs: [
         "android.car",
         "android.car.userlib",
-        "telephony-ext",
         "ims-common",
+        "extphonelib",
     ],
 
     kotlincflags: ["-Xjvm-default=enable"],
@@ -173,8 +173,8 @@ android_library {
     libs: [
         "android.test.runner",
         "android.test.base",
-        "telephony-ext",
         "ims-common",
+        "extphonelib",
     ],
     kotlincflags: ["-Xjvm-default=enable"],
     aaptflags: [
@@ -205,7 +205,7 @@ android_app {
         "android.car",
         "android.car.userlib",
         "ims-common",
-        "telephony-ext",
+        "extphonelib",
     ],
 
     kotlincflags: ["-Xjvm-default=enable"],
