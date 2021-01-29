@@ -33,6 +33,42 @@
       "message": "Not sure if this is still active but looks good to me",
       "revId": "6f61ed3e6355efb2576fdfb6b0adf0d76d66ec66",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b23b7b32_05a67fa8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-29T23:12:25Z",
+      "side": 1,
+      "message": "we\u0027ll just wait for CAF to merge wifi telephony etc",
+      "parentUuid": "2566e32b_92bac8d0",
+      "revId": "6f61ed3e6355efb2576fdfb6b0adf0d76d66ec66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "34edba74_81a32465",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-01-29T23:12:25Z",
+      "side": 1,
+      "message": "we can just drop it for now then",
+      "parentUuid": "884ab1f5_6845035d",
+      "revId": "6f61ed3e6355efb2576fdfb6b0adf0d76d66ec66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
