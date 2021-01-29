@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "556409b4_9bd00e41",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-29T20:59:26Z",
+      "side": 1,
+      "message": "I still like that button btw, so maybe it should be conditional based on if it\u0027s a fod device or not",
+      "revId": "e790619f40fef684504395544074c7f337ecdc02",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
