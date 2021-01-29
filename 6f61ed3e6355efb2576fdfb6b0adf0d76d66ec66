@@ -16,6 +16,23 @@
       "message": "This needs r20 merge in fw/opt/net/wifi",
       "revId": "6f61ed3e6355efb2576fdfb6b0adf0d76d66ec66",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2566e32b_92bac8d0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-29T21:02:16Z",
+      "side": 1,
+      "message": "Not sure if this is still active but looks good to me",
+      "revId": "6f61ed3e6355efb2576fdfb6b0adf0d76d66ec66",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
