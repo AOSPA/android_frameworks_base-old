@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3347327a_465a184a",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 753,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-01-29T20:58:05Z",
+      "side": 0,
+      "message": "Why not changing this in the xml layout and removing those lines at all",
+      "revId": "ff207086a444345a1dd6b5a5c96e1ef8e6f3baf5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
