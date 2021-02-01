@@ -44,6 +44,7 @@ import android.text.FontConfig;
 import android.util.Base64;
 import android.util.LongSparseArray;
 import android.util.LruCache;
+import android.util.Pair;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
@@ -79,6 +80,9 @@ import java.util.Map;
 public class Typeface {
 
     private static String TAG = "Typeface";
+
+    /** @hide */
+    public static final boolean ENABLE_LAZY_TYPEFACE_INITIALIZATION = true;
 
     private static final NativeAllocationRegistry sRegistry =
             NativeAllocationRegistry.createMalloced(
@@ -168,6 +172,8 @@ public class Typeface {
      */
     @UnsupportedAppUsage
     public long native_instance;
+
+    private Runnable mCleaner;
 
     /** @hide */
     @IntDef(value = {NORMAL, BOLD, ITALIC, BOLD_ITALIC})
@@ -808,18 +814,16 @@ public class Typeface {
          */
         public @NonNull Typeface build() {
             final int userFallbackSize = mFamilies.size();
-            final FontFamily[] fallback = SystemFonts.getSystemFallback(mFallbackName);
-            final long[] ptrArray = new long[fallback.length + userFallbackSize];
+            final Typeface fallbackTypeface = getSystemDefaultTypeface(mFallbackName);
+            final long[] ptrArray = new long[userFallbackSize];
             for (int i = 0; i < userFallbackSize; ++i) {
                 ptrArray[i] = mFamilies.get(i).getNativePtr();
-            }
-            for (int i = 0; i < fallback.length; ++i) {
-                ptrArray[i + userFallbackSize] = fallback[i].getNativePtr();
             }
             final int weight = mStyle == null ? 400 : mStyle.getWeight();
             final int italic =
                     (mStyle == null || mStyle.getSlant() == FontStyle.FONT_SLANT_UPRIGHT) ?  0 : 1;
-            return new Typeface(nativeCreateFromArray(ptrArray, weight, italic));
+            return new Typeface(nativeCreateFromArray(
+                    ptrArray, fallbackTypeface.native_instance, weight, italic));
         }
     }
 
@@ -1056,7 +1060,8 @@ public class Typeface {
             ptrArray[i] = families[i].mNativePtr;
         }
         return new Typeface(nativeCreateFromArray(
-                ptrArray, RESOLVE_BY_FONT_TABLE, RESOLVE_BY_FONT_TABLE));
+                ptrArray, 0, RESOLVE_BY_FONT_TABLE,
+                RESOLVE_BY_FONT_TABLE));
     }
 
     /**
@@ -1069,7 +1074,7 @@ public class Typeface {
         for (int i = 0; i < families.length; ++i) {
             ptrArray[i] = families[i].getNativePtr();
         }
-        return new Typeface(nativeCreateFromArray(ptrArray,
+        return new Typeface(nativeCreateFromArray(ptrArray, 0,
                   RESOLVE_BY_FONT_TABLE, RESOLVE_BY_FONT_TABLE));
     }
 
@@ -1104,15 +1109,13 @@ public class Typeface {
     @Deprecated
     private static Typeface createFromFamiliesWithDefault(android.graphics.FontFamily[] families,
                 String fallbackName, int weight, int italic) {
-        android.graphics.fonts.FontFamily[] fallback = SystemFonts.getSystemFallback(fallbackName);
-        long[] ptrArray = new long[families.length + fallback.length];
+        final Typeface fallbackTypeface = getSystemDefaultTypeface(fallbackName);
+        long[] ptrArray = new long[families.length];
         for (int i = 0; i < families.length; i++) {
             ptrArray[i] = families[i].mNativePtr;
         }
-        for (int i = 0; i < fallback.length; i++) {
-            ptrArray[i + families.length] = fallback[i].getNativePtr();
-        }
-        return new Typeface(nativeCreateFromArray(ptrArray, weight, italic));
+        return new Typeface(nativeCreateFromArray(
+                ptrArray, fallbackTypeface.native_instance, weight, italic));
     }
 
     // don't allow clients to call this directly
@@ -1123,7 +1126,7 @@ public class Typeface {
         }
 
         native_instance = ni;
-        sRegistry.registerNativeAllocation(this, native_instance);
+        mCleaner = sRegistry.registerNativeAllocation(this, native_instance);
         mStyle = nativeGetStyle(ni);
         mWeight = nativeGetWeight(ni);
     }
@@ -1237,6 +1240,13 @@ public class Typeface {
         bos.write(value & 0xFF);
     }
 
+    /** @hide */
+    public static Map<String, Typeface> getSystemFontMap() {
+        synchronized (SYSTEM_FONT_MAP_LOCK) {
+            return sSystemFontMap;
+        }
+    }
+
     /**
      * Deserialize font map and set it as system font map. This method should be called at most once
      * per process.
@@ -1297,11 +1307,34 @@ public class Typeface {
         }
     }
 
-    static {
+    /** @hide */
+    @VisibleForTesting
+    public static void destroySystemFontMap() {
+        synchronized (SYSTEM_FONT_MAP_LOCK) {
+            for (Typeface typeface : sSystemFontMap.values()) {
+                typeface.mCleaner.run();
+            }
+            sSystemFontMap.clear();
+            if (sSystemFontMapBuffer != null) {
+                SharedMemory.unmap(sSystemFontMapBuffer);
+            }
+            sSystemFontMapBuffer = null;
+        }
+    }
+
+    /** @hide */
+    public static void loadPreinstalledSystemFontMap() {
         final HashMap<String, Typeface> systemFontMap = new HashMap<>();
-        initSystemDefaultTypefaces(systemFontMap, SystemFonts.getRawSystemFallbackMap(),
-                SystemFonts.getAliases());
+        Pair<FontConfig.Alias[], Map<String, FontFamily[]>> pair =
+                SystemFonts.initializePreinstalledFonts();
+        initSystemDefaultTypefaces(systemFontMap, pair.second, pair.first);
         setSystemFontMap(systemFontMap);
+    }
+
+    static {
+        if (!ENABLE_LAZY_TYPEFACE_INITIALIZATION) {
+            loadPreinstalledSystemFontMap();
+        }
     }
 
     @Override
@@ -1350,7 +1383,8 @@ public class Typeface {
     @UnsupportedAppUsage
     private static native long nativeCreateWeightAlias(long native_instance, int weight);
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    private static native long nativeCreateFromArray(long[] familyArray, int weight, int italic);
+    private static native long nativeCreateFromArray(
+            long[] familyArray, long fallbackTypeface, int weight, int italic);
     private static native int[] nativeGetSupportedAxes(long native_instance);
 
     @CriticalNative

@@ -22,12 +22,15 @@ import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.content.res.Configuration;
+import android.os.Bundle;
 import android.service.notification.NotificationListenerService.RankingMap;
 import android.util.ArraySet;
 import android.view.View;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+
+import com.android.wm.shell.common.annotations.ExternalThread;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -39,6 +42,7 @@ import java.util.function.IntConsumer;
 /**
  * Interface to engage bubbles feature.
  */
+@ExternalThread
 public interface Bubbles {
 
     @Retention(SOURCE)
@@ -103,6 +107,12 @@ public interface Bubbles {
      * @param entry the notification for the bubble to be selected
      */
     void expandStackAndSelectBubble(BubbleEntry entry);
+
+    /** Called for any taskbar changes. */
+    void onTaskbarChanged(Bundle b);
+
+    /** Open the overflow view. */
+    void openBubbleOverflow();
 
     /**
      * We intercept notification entries (including group summaries) dismissed by the user when

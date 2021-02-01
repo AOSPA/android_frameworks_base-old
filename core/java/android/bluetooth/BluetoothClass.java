@@ -119,6 +119,11 @@ public final class BluetoothClass implements Parcelable {
         private static final int BITMASK = 0xFFE000;
 
         public static final int LIMITED_DISCOVERABILITY = 0x002000;
+        /**
+          * @hide
+          */
+        public static final int GROUP = 0x004000;
+
         public static final int POSITIONING = 0x010000;
         public static final int NETWORKING = 0x020000;
         public static final int RENDER = 0x040000;
@@ -426,13 +431,13 @@ public final class BluetoothClass implements Parcelable {
                     return false;
             }
         } else if (profile == PROFILE_HID) {
-            return (getDeviceClass() & Device.Major.PERIPHERAL) == Device.Major.PERIPHERAL;
+            return getMajorDeviceClass() == Device.Major.PERIPHERAL;
         } else if (profile == PROFILE_PANU || profile == PROFILE_NAP) {
             // No good way to distinguish between the two, based on class bits.
             if (hasService(Service.NETWORKING)) {
                 return true;
             }
-            return (getDeviceClass() & Device.Major.NETWORKING) == Device.Major.NETWORKING;
+            return getMajorDeviceClass() == Device.Major.NETWORKING;
         } else {
             return false;
         }

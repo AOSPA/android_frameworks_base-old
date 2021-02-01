@@ -63,6 +63,7 @@ import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.StatFs;
+import android.os.StrictMode;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
@@ -364,6 +365,16 @@ public abstract class Context {
 
     /***********    Public flags above this line ***********/
     /***********    Hidden flags below this line ***********/
+
+    /**
+     * Flag for {@link #bindService}: allow background foreground service starts from the bound
+     * service's process.
+     * This flag is only respected if the caller is holding
+     * {@link android.Manifest.permission#START_FOREGROUND_SERVICES_FROM_BACKGROUND}.
+     * @hide
+     */
+    @SystemApi
+    public static final int BIND_ALLOW_FOREGROUND_SERVICE_STARTS_FROM_BACKGROUND = 0x00040000;
 
     /**
      * Flag for {@link #bindService}: This flag is intended to be used only by the system to adjust
@@ -3106,6 +3117,10 @@ public abstract class Context {
      * @throws SecurityException If the caller does not have permission to access the service
      * or the service can not be found.
      *
+     * @throws IllegalStateException If the caller app's targeting API is
+     * {@link android.os.Build.VERSION_CODES#S} or later, and the foreground service is restricted
+     * from start due to background restriction.
+     *
      * @see #stopService
      * @see android.app.Service#startForeground(int, android.app.Notification)
      */
@@ -3529,6 +3544,7 @@ public abstract class Context {
             LIGHTS_SERVICE,
             //@hide: PEOPLE_SERVICE,
             //@hide: DEVICE_STATE_SERVICE,
+            UWB_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -5245,6 +5261,15 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.uwb.UwbManager}.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String UWB_SERVICE = "uwb";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.DreamManager} for controlling Dream states.
      *
      * @see #getSystemService(String)
@@ -6142,10 +6167,40 @@ public abstract class Context {
     public abstract boolean canLoadUnsafeResources();
 
     /**
+     * Returns token if the {@link Context} is a {@link android.app.Activity}. Returns
+     * {@code null} otherwise.
+     *
      * @hide
      */
+    @Nullable
     public IBinder getActivityToken() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Returns token if the {@link Context} is a {@link android.app.WindowContext}. Returns
+     * {@code null} otherwise.
+     *
+     * @hide
+     */
+    @Nullable
+    public IBinder getWindowContextToken() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Returns the proper token of a {@link Context}.
+     *
+     * If the {@link Context} is an {@link android.app.Activity}, returns
+     * {@link #getActivityToken()}. If the {@lijnk Context} is a {@link android.app.WindowContext},
+     * returns {@link #getWindowContextToken()}. Returns {@code null}, otherwise.
+     *
+     * @hide
+     */
+    @Nullable
+    public static IBinder getToken(@NonNull Context context) {
+        return context.getActivityToken() != null ? context.getActivityToken()
+                : context.getWindowContextToken();
     }
 
     /**
@@ -6254,5 +6309,26 @@ public abstract class Context {
      */
     public boolean isUiContext() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Returns {@code true} if the context is a UI context which can access UI components such as
+     * {@link WindowManager}, {@link android.view.LayoutInflater LayoutInflater} or
+     * {@link android.app.WallpaperManager WallpaperManager}. Accessing UI components from non-UI
+     * contexts throws {@link android.os.strictmode.Violation} if
+     * {@link StrictMode.VmPolicy.Builder#detectIncorrectContextUse()} is enabled.
+     * <p>
+     * Examples of UI contexts are
+     * an {@link android.app.Activity Activity}, a context created from
+     * {@link #createWindowContext(int, Bundle)} or
+     * {@link android.inputmethodservice.InputMethodService InputMethodService}
+     * </p>
+     *
+     * @see #getDisplay()
+     * @see #getSystemService(String)
+     * @see StrictMode.VmPolicy.Builder#detectIncorrectContextUse()
+     */
+    public static boolean isUiContext(@NonNull Context context) {
+        return context.isUiContext();
     }
 }

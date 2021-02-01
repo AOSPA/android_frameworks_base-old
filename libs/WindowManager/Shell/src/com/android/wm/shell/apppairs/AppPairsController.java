@@ -26,6 +26,7 @@ import androidx.annotation.NonNull;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.SyncTransactionQueue;
 
 import java.io.PrintWriter;
@@ -42,10 +43,13 @@ public class AppPairsController implements AppPairs {
     private AppPairsPool mPairsPool;
     // Active app-pairs mapped by root task id key.
     private final SparseArray<AppPair> mActiveAppPairs = new SparseArray<>();
+    private final DisplayController mDisplayController;
 
-    public AppPairsController(ShellTaskOrganizer organizer, SyncTransactionQueue syncQueue) {
+    public AppPairsController(ShellTaskOrganizer organizer, SyncTransactionQueue syncQueue,
+                DisplayController displayController) {
         mTaskOrganizer = organizer;
         mSyncQueue = syncQueue;
+        mDisplayController = displayController;
     }
 
     @Override
@@ -125,6 +129,10 @@ public class AppPairsController implements AppPairs {
 
     SyncTransactionQueue getSyncTransactionQueue() {
         return mSyncQueue;
+    }
+
+    DisplayController getDisplayController() {
+        return mDisplayController;
     }
 
     @Override

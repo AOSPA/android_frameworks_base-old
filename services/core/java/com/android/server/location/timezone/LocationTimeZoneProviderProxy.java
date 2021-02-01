@@ -19,11 +19,11 @@ package com.android.server.location.timezone;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.location.timezone.LocationTimeZoneEvent;
 import android.os.Handler;
 import android.util.IndentingPrintWriter;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.location.timezone.LocationTimeZoneEvent;
 import com.android.internal.location.timezone.LocationTimeZoneProviderRequest;
 import com.android.server.timezonedetector.Dumpable;
 
@@ -70,9 +70,11 @@ abstract class LocationTimeZoneProviderProxy implements Dumpable {
     }
 
     /**
-     * Sets the listener. The listener can expect to receive all events after this point.
+     * Initializes the proxy. The supplied listener can expect to receive all events after this
+     * point. This method also calls {@link #onInitialize()} for subclasses to handle their own
+     * initialization.
      */
-    void setListener(@NonNull Listener listener) {
+    void initialize(@NonNull Listener listener) {
         Objects.requireNonNull(listener);
         synchronized (mSharedLock) {
             if (mListener != null) {
@@ -80,7 +82,13 @@ abstract class LocationTimeZoneProviderProxy implements Dumpable {
             }
             this.mListener = listener;
         }
+        onInitialize();
     }
+
+    /**
+     * Initializes the proxy. This is called after {@link #mListener} is set.
+     */
+    abstract void onInitialize();
 
     /**
      * Sets a new request for the provider.

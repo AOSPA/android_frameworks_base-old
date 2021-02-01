@@ -19,6 +19,7 @@ package com.android.server.location.timezone;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.content.res.Resources;
 import android.os.Binder;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
@@ -27,6 +28,7 @@ import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Slog;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.DumpUtils;
 import com.android.server.FgThread;
@@ -42,7 +44,7 @@ import java.util.Objects;
  * A service class that acts as a container for the {@link LocationTimeZoneProviderController},
  * which determines what {@link com.android.server.timezonedetector.GeolocationTimeZoneSuggestion}
  * are made to the {@link TimeZoneDetectorInternal}, and the {@link LocationTimeZoneProvider}s that
- * offer {@link android.location.timezone.LocationTimeZoneEvent}s.
+ * (indirectly) generate {@link com.android.internal.location.timezone.LocationTimeZoneEvent}s.
  *
  * <p>For details of the time zone suggestion behavior, see {@link
  * LocationTimeZoneProviderController}.
@@ -179,56 +181,50 @@ public class LocationTimeZoneManagerService extends Binder {
     }
 
     private LocationTimeZoneProvider createPrimaryProvider() {
+        Resources resources = mContext.getResources();
+        if (!resources.getBoolean(R.bool.config_enablePrimaryLocationTimeZoneProvider)) {
+            return new NullLocationTimeZoneProvider(mThreadingDomain, PRIMARY_PROVIDER_NAME);
+        }
+
         LocationTimeZoneProviderProxy proxy;
         if (isInSimulationMode(PRIMARY_PROVIDER_NAME)) {
             proxy = new SimulatedLocationTimeZoneProviderProxy(mContext, mThreadingDomain);
         } else {
-            proxy = RealLocationTimeZoneProviderProxy.createAndRegister(
+            proxy = new RealLocationTimeZoneProviderProxy(
                     mContext,
                     mThreadingDomain,
                     PRIMARY_LOCATION_TIME_ZONE_SERVICE_ACTION,
-                    com.android.internal.R.bool.config_enablePrimaryLocationTimeZoneOverlay,
-                    com.android.internal.R.string.config_primaryLocationTimeZoneProviderPackageName
+                    R.bool.config_enablePrimaryLocationTimeZoneOverlay,
+                    R.string.config_primaryLocationTimeZoneProviderPackageName
             );
         }
-        return createLocationTimeZoneProvider(PRIMARY_PROVIDER_NAME, proxy);
+        return new BinderLocationTimeZoneProvider(mThreadingDomain, PRIMARY_PROVIDER_NAME, proxy);
     }
 
     private LocationTimeZoneProvider createSecondaryProvider() {
+        Resources resources = mContext.getResources();
+        if (!resources.getBoolean(R.bool.config_enableSecondaryLocationTimeZoneProvider)) {
+            return new NullLocationTimeZoneProvider(mThreadingDomain, SECONDARY_PROVIDER_NAME);
+        }
+
         LocationTimeZoneProviderProxy proxy;
         if (isInSimulationMode(SECONDARY_PROVIDER_NAME)) {
             proxy = new SimulatedLocationTimeZoneProviderProxy(mContext, mThreadingDomain);
         } else {
-            proxy = RealLocationTimeZoneProviderProxy.createAndRegister(
+            proxy = new RealLocationTimeZoneProviderProxy(
                     mContext,
                     mThreadingDomain,
                     SECONDARY_LOCATION_TIME_ZONE_SERVICE_ACTION,
-                    com.android.internal.R.bool.config_enableSecondaryLocationTimeZoneOverlay,
-                    com.android.internal.R.string
-                            .config_secondaryLocationTimeZoneProviderPackageName
+                    R.bool.config_enableSecondaryLocationTimeZoneOverlay,
+                    R.string.config_secondaryLocationTimeZoneProviderPackageName
             );
         }
-        return createLocationTimeZoneProvider(SECONDARY_PROVIDER_NAME, proxy);
+        return new BinderLocationTimeZoneProvider(mThreadingDomain, SECONDARY_PROVIDER_NAME, proxy);
     }
 
     private boolean isInSimulationMode(String providerName) {
         return SystemProperties.getBoolean(
                 SIMULATION_MODE_SYSTEM_PROPERTY_PREFIX + providerName, false);
-    }
-
-    private LocationTimeZoneProvider createLocationTimeZoneProvider(
-            @NonNull String providerName, @NonNull LocationTimeZoneProviderProxy proxy) {
-        LocationTimeZoneProvider provider;
-        if (proxy != null) {
-            debugLog("LocationTimeZoneProvider found for providerName=" + providerName);
-            provider = new BinderLocationTimeZoneProvider(mThreadingDomain,
-                    providerName, proxy);
-        } else {
-            debugLog("No LocationTimeZoneProvider found for providerName=" + providerName
-                    + ": stubbing");
-            provider = new NullLocationTimeZoneProvider(mThreadingDomain, providerName);
-        }
-        return provider;
     }
 
     @Override

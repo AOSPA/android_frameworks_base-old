@@ -16,14 +16,23 @@
 
 package com.android.wm.shell.apppairs;
 
+import static android.view.Display.DEFAULT_DISPLAY;
+
 import static com.google.common.truth.Truth.assertThat;
 
-import android.app.ActivityManager;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.when;
 
+import android.app.ActivityManager;
+import android.hardware.display.DisplayManager;
+
+import androidx.test.annotation.UiThreadTest;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.ShellTestCase;
+import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.SyncTransactionQueue;
 
 import org.junit.After;
@@ -36,22 +45,30 @@ import org.mockito.MockitoAnnotations;
 /** Tests for {@link AppPair} */
 @SmallTest
 @RunWith(AndroidJUnit4.class)
-public class AppPairTests {
+public class AppPairTests extends ShellTestCase {
 
     private AppPairsController mController;
     @Mock private SyncTransactionQueue mSyncQueue;
     @Mock private ShellTaskOrganizer mTaskOrganizer;
+    @Mock private DisplayController mDisplayController;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        mController = new TestAppPairsController(mTaskOrganizer, mSyncQueue);
+        when(mDisplayController.getDisplayContext(anyInt())).thenReturn(mContext);
+        when(mDisplayController.getDisplay(anyInt())).thenReturn(
+                mContext.getSystemService(DisplayManager.class).getDisplay(DEFAULT_DISPLAY));
+        mController = new TestAppPairsController(
+                mTaskOrganizer,
+                mSyncQueue,
+                mDisplayController);
     }
 
     @After
     public void tearDown() {}
 
     @Test
+    @UiThreadTest
     public void testContains() {
         final ActivityManager.RunningTaskInfo task1 = new TestRunningTaskInfoBuilder().build();
         final ActivityManager.RunningTaskInfo task2 = new TestRunningTaskInfoBuilder().build();
@@ -66,6 +83,7 @@ public class AppPairTests {
     }
 
     @Test
+    @UiThreadTest
     public void testVanishUnpairs() {
         final ActivityManager.RunningTaskInfo task1 = new TestRunningTaskInfoBuilder().build();
         final ActivityManager.RunningTaskInfo task2 = new TestRunningTaskInfoBuilder().build();

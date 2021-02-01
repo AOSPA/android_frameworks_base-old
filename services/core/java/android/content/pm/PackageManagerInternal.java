@@ -77,6 +77,7 @@ public abstract class PackageManagerInternal {
             PACKAGE_WIFI,
             PACKAGE_COMPANION,
             PACKAGE_RETAIL_DEMO,
+            PACKAGE_RECENTS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface KnownPackage {}
@@ -97,9 +98,10 @@ public abstract class PackageManagerInternal {
     public static final int PACKAGE_WIFI = 13;
     public static final int PACKAGE_COMPANION = 14;
     public static final int PACKAGE_RETAIL_DEMO = 15;
+    public static final int PACKAGE_RECENTS = 16;
     // Integer value of the last known package ID. Increases as new ID is added to KnownPackage.
     // Please note the numbers should be continuous.
-    public static final int LAST_KNOWN_PACKAGE = PACKAGE_RETAIL_DEMO;
+    public static final int LAST_KNOWN_PACKAGE = PACKAGE_RECENTS;
 
     @IntDef(flag = true, prefix = "RESOLVE_", value = {
             RESOLVE_NON_BROWSER_ONLY,
@@ -947,9 +949,6 @@ public abstract class PackageManagerInternal {
     /** Returns whether or not permissions need to be upgraded for the given user */
     public abstract boolean isPermissionUpgradeNeeded(@UserIdInt int userId);
 
-    /** Sets the enforcement of reading external storage */
-    public abstract void setReadExternalStorageEnforced(boolean enforced);
-
     /**
      * Allows the integrity component to respond to the
      * {@link Intent#ACTION_PACKAGE_NEEDS_INTEGRITY_VERIFICATION package verification
@@ -1060,6 +1059,8 @@ public abstract class PackageManagerInternal {
                 return "Retail Demo";
             case PACKAGE_OVERLAY_CONFIG_SIGNATURE:
                 return "Overlay Config Signature";
+            case PACKAGE_RECENTS:
+                return "Recents";
         }
         return "Unknown";
     }
@@ -1126,4 +1127,16 @@ public abstract class PackageManagerInternal {
      * Notifies that a package has crashed or ANR'd.
      */
     public abstract void notifyPackageCrashOrAnr(String packageName);
+
+    /**
+     * Requesting the checksums for APKs within a package.
+     * See {@link PackageManager#requestChecksums} for details.
+     *
+     * @param executor to use for digest calculations.
+     * @param handler to use for postponed calculations.
+     */
+    public abstract void requestChecksums(@NonNull String packageName, boolean includeSplits,
+            @Checksum.Type int optional, @Checksum.Type int required,
+            @Nullable List trustedInstallers, @NonNull IntentSender statusReceiver, int userId,
+            @NonNull Executor executor, @NonNull Handler handler);
 }

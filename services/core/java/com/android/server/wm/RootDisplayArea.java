@@ -16,9 +16,16 @@
 
 package com.android.server.wm;
 
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManagerPolicyConstants.APPLICATION_LAYER;
+import static android.window.DisplayAreaOrganizer.FEATURE_IME_PLACEHOLDER;
 
 import static com.android.server.wm.DisplayAreaPolicyBuilder.Feature;
+
+import android.annotation.Nullable;
+
+import com.android.server.policy.WindowManagerPolicy;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,7 +46,7 @@ class RootDisplayArea extends DisplayArea<DisplayArea> {
      * Mapping from policy supported {@link Feature} to list of {@link DisplayArea} created to cover
      * all the window types that the {@link Feature} will be applied to.
      */
-    Map<Feature, List<DisplayArea<? extends WindowContainer>>> mFeatureToDisplayAreas;
+    Map<Feature, List<DisplayArea<WindowContainer>>> mFeatureToDisplayAreas;
 
     /** Mapping from window layer to {@link DisplayArea.Tokens} that holds windows on that layer. */
     private DisplayArea.Tokens[] mAreaForLayer;
@@ -56,18 +63,66 @@ class RootDisplayArea extends DisplayArea<DisplayArea> {
         return this;
     }
 
+    @Override
+    RootDisplayArea asRootDisplayArea() {
+        return this;
+    }
+
     /** Whether the orientation (based on dimensions) of this root is different from the Display. */
     boolean isOrientationDifferentFromDisplay() {
         return false;
     }
 
+    /**
+     * Places the IME container below this root, so that it's bounds and config will be updated to
+     * match the root.
+     */
+    void placeImeContainer(DisplayArea.Tokens imeContainer) {
+        final RootDisplayArea previousRoot = imeContainer.getRootDisplayArea();
+        if (previousRoot == this) {
+            // No need to reparent if IME container is below the same root.
+            return;
+        }
+
+        List<Feature> features = mFeatures;
+        for (int i = 0; i < features.size(); i++) {
+            Feature feature = features.get(i);
+            if (feature.getId() == FEATURE_IME_PLACEHOLDER) {
+                List<DisplayArea<WindowContainer>> imeDisplayAreas =
+                        mFeatureToDisplayAreas.get(feature);
+                if (imeDisplayAreas.size() != 1) {
+                    throw new IllegalStateException("There must be exactly one DisplayArea for the "
+                            + "FEATURE_IME_PLACEHOLDER");
+                }
+
+                previousRoot.updateImeContainerForLayers(null /* imeContainer */);
+                imeContainer.reparent(imeDisplayAreas.get(0), POSITION_TOP);
+                updateImeContainerForLayers(imeContainer);
+                return;
+            }
+        }
+        throw new IllegalStateException(
+                "There is no FEATURE_IME_PLACEHOLDER in this root to place the IME container");
+    }
+
     /** Finds the {@link DisplayArea.Tokens} that this type of window should be attached to. */
+    @Nullable
     DisplayArea.Tokens findAreaForToken(WindowToken token) {
-        int windowLayerFromType = token.getWindowLayerFromType();
+        return findAreaForToken(token.windowType, token.mOwnerCanManageAppTokens,
+                token.mRoundedCornerOverlay);
+    }
+
+    @Nullable
+    DisplayArea.Tokens findAreaForToken(int windowType, boolean ownerCanManageAppTokens,
+            boolean roundedCornerOverlay) {
+        // TODO(b/159767464): cover TYPE_INPUT_METHOD(_DIALOG) case here. mAreaForLayer doesn't
+        // contain IME container.
+        int windowLayerFromType = mWmService.mPolicy.getWindowLayerFromTypeLw(windowType,
+                ownerCanManageAppTokens);
         if (windowLayerFromType == APPLICATION_LAYER) {
             throw new IllegalArgumentException(
                     "There shouldn't be WindowToken on APPLICATION_LAYER");
-        } else if (token.mRoundedCornerOverlay) {
+        } else if (roundedCornerOverlay) {
             windowLayerFromType = mAreaForLayer.length - 1;
         }
         return mAreaForLayer[windowLayerFromType];
@@ -75,7 +130,7 @@ class RootDisplayArea extends DisplayArea<DisplayArea> {
 
     /** Callback after {@link DisplayArea} hierarchy has been built. */
     void onHierarchyBuilt(ArrayList<Feature> features, DisplayArea.Tokens[] areaForLayer,
-            Map<Feature, List<DisplayArea<? extends WindowContainer>>> featureToDisplayAreas) {
+            Map<Feature, List<DisplayArea<WindowContainer>>> featureToDisplayAreas) {
         if (mHasBuiltHierarchy) {
             throw new IllegalStateException("Root should only build the hierarchy once");
         }
@@ -83,5 +138,11 @@ class RootDisplayArea extends DisplayArea<DisplayArea> {
         mFeatures = Collections.unmodifiableList(features);
         mAreaForLayer = areaForLayer;
         mFeatureToDisplayAreas = featureToDisplayAreas;
+    }
+
+    private void updateImeContainerForLayers(@Nullable DisplayArea.Tokens imeContainer) {
+        final WindowManagerPolicy policy = mWmService.mPolicy;
+        mAreaForLayer[policy.getWindowLayerFromTypeLw(TYPE_INPUT_METHOD)] = imeContainer;
+        mAreaForLayer[policy.getWindowLayerFromTypeLw(TYPE_INPUT_METHOD_DIALOG)] = imeContainer;
     }
 }

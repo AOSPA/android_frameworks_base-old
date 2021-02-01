@@ -25,6 +25,7 @@ import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.TypedXmlPullParser;
 import android.util.Xml;
 
 import com.android.internal.util.HexDump;
@@ -537,6 +538,33 @@ final class HdmiUtils {
         return cmd.getParams()[1];
     }
 
+    /**
+     * Build a CEC message from a hex byte string with bytes separated by {@code :}.
+     *
+     * <p>This format is used by both cec-client and www.cec-o-matic.com
+     */
+    public static HdmiCecMessage buildMessage(String message) {
+        String[] parts = message.split(":");
+
+        if (parts.length < 2) {
+            throw new IllegalArgumentException("Message is too short");
+        }
+        for (String part : parts) {
+            if (part.length() != 2) {
+                throw new IllegalArgumentException("Malformatted CEC message: " + message);
+            }
+        }
+
+        int src = Integer.parseInt(parts[0].substring(0, 1), 16);
+        int dest = Integer.parseInt(parts[0].substring(1, 2), 16);
+        int opcode = Integer.parseInt(parts[1], 16);
+        byte[] params = new byte[parts.length - 2];
+        for (int i = 0; i < params.length; i++) {
+            params[i] = (byte) Integer.parseInt(parts[i + 2], 16);
+        }
+        return new HdmiCecMessage(src, dest, opcode, params);
+    }
+
     public static class ShortAudioDescriptorXmlParser {
         // We don't use namespaces
         private static final String NS = null;
@@ -544,14 +572,13 @@ final class HdmiUtils {
         // return a list of devices config
         public static List<DeviceConfig> parse(InputStream in)
                 throws XmlPullParserException, IOException {
-            XmlPullParser parser = Xml.newPullParser();
-            parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
-            parser.setInput(in, null);
+            TypedXmlPullParser parser = Xml.resolvePullParser(in);
             parser.nextTag();
             return readDevices(parser);
         }
 
-        private static void skip(XmlPullParser parser) throws XmlPullParserException, IOException {
+        private static void skip(TypedXmlPullParser parser)
+                throws XmlPullParserException, IOException {
             if (parser.getEventType() != XmlPullParser.START_TAG) {
                 throw new IllegalStateException();
             }
@@ -568,7 +595,7 @@ final class HdmiUtils {
             }
         }
 
-        private static List<DeviceConfig> readDevices(XmlPullParser parser)
+        private static List<DeviceConfig> readDevices(TypedXmlPullParser parser)
                 throws XmlPullParserException, IOException {
             List<DeviceConfig> devices = new ArrayList<>();
 
@@ -597,7 +624,7 @@ final class HdmiUtils {
 
         // Processes device tags in the config.
         @Nullable
-        private static DeviceConfig readDeviceConfig(XmlPullParser parser, String deviceType)
+        private static DeviceConfig readDeviceConfig(TypedXmlPullParser parser, String deviceType)
                 throws XmlPullParserException, IOException {
             List<CodecSad> codecSads = new ArrayList<>();
             int format;

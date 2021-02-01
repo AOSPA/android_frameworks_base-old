@@ -21,15 +21,6 @@ import static android.content.pm.UserInfo.FLAG_MANAGED_PROFILE;
 import static android.content.pm.UserInfo.FLAG_PRIMARY;
 import static android.content.pm.UserInfo.FLAG_RESTRICTED;
 import static android.net.ConnectivityManager.NetworkCallback;
-import static android.net.NetworkCapabilities.LINK_BANDWIDTH_UNSPECIFIED;
-import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
-import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED;
-import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
-import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING;
-import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
-import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
-import static android.net.NetworkCapabilities.TRANSPORT_VPN;
-import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -41,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
@@ -86,10 +78,10 @@ import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.ConditionVariable;
 import android.os.INetworkManagementService;
-import android.os.Looper;
 import android.os.Process;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.test.TestLooper;
 import android.provider.Settings;
 import android.security.Credentials;
 import android.security.KeyStore;
@@ -100,6 +92,7 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.R;
+import com.android.internal.net.LegacyVpnInfo;
 import com.android.internal.net.VpnConfig;
 import com.android.internal.net.VpnProfile;
 import com.android.server.IpSecService;
@@ -223,6 +216,8 @@ public class VpnTest {
                 .thenReturn(mNotificationManager);
         when(mContext.getSystemService(eq(Context.CONNECTIVITY_SERVICE)))
                 .thenReturn(mConnectivityManager);
+        when(mContext.getSystemServiceName(eq(ConnectivityManager.class)))
+                .thenReturn(Context.CONNECTIVITY_SERVICE);
         when(mContext.getSystemService(eq(Context.IPSEC_SERVICE))).thenReturn(mIpSecManager);
         when(mContext.getString(R.string.config_customVpnAlwaysOnDisconnectedDialogComponent))
                 .thenReturn(Resources.getSystem().getString(
@@ -589,7 +584,7 @@ public class VpnTest {
     }
 
     @Test
-    public void testNotificationShownForAlwaysOnApp() {
+    public void testNotificationShownForAlwaysOnApp() throws Exception {
         final UserHandle userHandle = UserHandle.of(primaryUser.id);
         final Vpn vpn = createVpn(primaryUser.id);
         setMockedUsers(primaryUser);
@@ -615,103 +610,6 @@ public class VpnTest {
         // Notification should be cleared after unsetting always-on package.
         vpn.setAlwaysOnPackage(null, false, null, mKeyStore);
         order.verify(mNotificationManager).cancel(anyString(), anyInt());
-    }
-
-    @Test
-    public void testCapabilities() {
-        final Vpn vpn = createVpn(primaryUser.id);
-        setMockedUsers(primaryUser);
-
-        final Network mobile = new Network(1);
-        final Network wifi = new Network(2);
-
-        final Map<Network, NetworkCapabilities> networks = new HashMap<>();
-        networks.put(
-                mobile,
-                new NetworkCapabilities()
-                        .addTransportType(TRANSPORT_CELLULAR)
-                        .addCapability(NET_CAPABILITY_INTERNET)
-                        .addCapability(NET_CAPABILITY_NOT_CONGESTED)
-                        .setLinkDownstreamBandwidthKbps(10));
-        networks.put(
-                wifi,
-                new NetworkCapabilities()
-                        .addTransportType(TRANSPORT_WIFI)
-                        .addCapability(NET_CAPABILITY_INTERNET)
-                        .addCapability(NET_CAPABILITY_NOT_METERED)
-                        .addCapability(NET_CAPABILITY_NOT_ROAMING)
-                        .addCapability(NET_CAPABILITY_NOT_CONGESTED)
-                        .addCapability(NET_CAPABILITY_NOT_SUSPENDED)
-                        .setLinkUpstreamBandwidthKbps(20));
-        setMockedNetworks(networks);
-
-        final NetworkCapabilities caps = new NetworkCapabilities();
-
-        Vpn.applyUnderlyingCapabilities(
-                mConnectivityManager, new Network[] {}, caps, false /* isAlwaysMetered */);
-        assertTrue(caps.hasTransport(TRANSPORT_VPN));
-        assertFalse(caps.hasTransport(TRANSPORT_CELLULAR));
-        assertFalse(caps.hasTransport(TRANSPORT_WIFI));
-        assertEquals(LINK_BANDWIDTH_UNSPECIFIED, caps.getLinkDownstreamBandwidthKbps());
-        assertEquals(LINK_BANDWIDTH_UNSPECIFIED, caps.getLinkUpstreamBandwidthKbps());
-        assertFalse(caps.hasCapability(NET_CAPABILITY_NOT_METERED));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_ROAMING));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_CONGESTED));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_SUSPENDED));
-
-        Vpn.applyUnderlyingCapabilities(
-                mConnectivityManager,
-                new Network[] {mobile},
-                caps,
-                false /* isAlwaysMetered */);
-        assertTrue(caps.hasTransport(TRANSPORT_VPN));
-        assertTrue(caps.hasTransport(TRANSPORT_CELLULAR));
-        assertFalse(caps.hasTransport(TRANSPORT_WIFI));
-        assertEquals(10, caps.getLinkDownstreamBandwidthKbps());
-        assertEquals(LINK_BANDWIDTH_UNSPECIFIED, caps.getLinkUpstreamBandwidthKbps());
-        assertFalse(caps.hasCapability(NET_CAPABILITY_NOT_METERED));
-        assertFalse(caps.hasCapability(NET_CAPABILITY_NOT_ROAMING));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_CONGESTED));
-        assertFalse(caps.hasCapability(NET_CAPABILITY_NOT_SUSPENDED));
-
-        Vpn.applyUnderlyingCapabilities(
-                mConnectivityManager, new Network[] {wifi}, caps, false /* isAlwaysMetered */);
-        assertTrue(caps.hasTransport(TRANSPORT_VPN));
-        assertFalse(caps.hasTransport(TRANSPORT_CELLULAR));
-        assertTrue(caps.hasTransport(TRANSPORT_WIFI));
-        assertEquals(LINK_BANDWIDTH_UNSPECIFIED, caps.getLinkDownstreamBandwidthKbps());
-        assertEquals(20, caps.getLinkUpstreamBandwidthKbps());
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_METERED));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_ROAMING));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_CONGESTED));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_SUSPENDED));
-
-        Vpn.applyUnderlyingCapabilities(
-                mConnectivityManager, new Network[] {wifi}, caps, true /* isAlwaysMetered */);
-        assertTrue(caps.hasTransport(TRANSPORT_VPN));
-        assertFalse(caps.hasTransport(TRANSPORT_CELLULAR));
-        assertTrue(caps.hasTransport(TRANSPORT_WIFI));
-        assertEquals(LINK_BANDWIDTH_UNSPECIFIED, caps.getLinkDownstreamBandwidthKbps());
-        assertEquals(20, caps.getLinkUpstreamBandwidthKbps());
-        assertFalse(caps.hasCapability(NET_CAPABILITY_NOT_METERED));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_ROAMING));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_CONGESTED));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_SUSPENDED));
-
-        Vpn.applyUnderlyingCapabilities(
-                mConnectivityManager,
-                new Network[] {mobile, wifi},
-                caps,
-                false /* isAlwaysMetered */);
-        assertTrue(caps.hasTransport(TRANSPORT_VPN));
-        assertTrue(caps.hasTransport(TRANSPORT_CELLULAR));
-        assertTrue(caps.hasTransport(TRANSPORT_WIFI));
-        assertEquals(10, caps.getLinkDownstreamBandwidthKbps());
-        assertEquals(20, caps.getLinkUpstreamBandwidthKbps());
-        assertFalse(caps.hasCapability(NET_CAPABILITY_NOT_METERED));
-        assertFalse(caps.hasCapability(NET_CAPABILITY_NOT_ROAMING));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_CONGESTED));
-        assertTrue(caps.hasCapability(NET_CAPABILITY_NOT_SUSPENDED));
     }
 
     /**
@@ -1037,7 +935,7 @@ public class VpnTest {
         when(exception.getErrorType())
                 .thenReturn(IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED);
 
-        final Vpn vpn = startLegacyVpn(mVpnProfile);
+        final Vpn vpn = startLegacyVpn(createVpn(primaryUser.id), (mVpnProfile));
         final NetworkCallback cb = triggerOnAvailableAndGetCallback();
 
         // Wait for createIkeSession() to be called before proceeding in order to ensure consistent
@@ -1048,20 +946,20 @@ public class VpnTest {
         ikeCb.onClosedExceptionally(exception);
 
         verify(mConnectivityManager, timeout(TEST_TIMEOUT_MS)).unregisterNetworkCallback(eq(cb));
-        assertEquals(DetailedState.FAILED, vpn.getNetworkInfo().getDetailedState());
+        assertEquals(LegacyVpnInfo.STATE_FAILED, vpn.getLegacyVpnInfo().state);
     }
 
     @Test
     public void testStartPlatformVpnIllegalArgumentExceptionInSetup() throws Exception {
         when(mIkev2SessionCreator.createIkeSession(any(), any(), any(), any(), any(), any()))
                 .thenThrow(new IllegalArgumentException());
-        final Vpn vpn = startLegacyVpn(mVpnProfile);
+        final Vpn vpn = startLegacyVpn(createVpn(primaryUser.id), mVpnProfile);
         final NetworkCallback cb = triggerOnAvailableAndGetCallback();
 
         // Wait for createIkeSession() to be called before proceeding in order to ensure consistent
         // state
         verify(mConnectivityManager, timeout(TEST_TIMEOUT_MS)).unregisterNetworkCallback(eq(cb));
-        assertEquals(DetailedState.FAILED, vpn.getNetworkInfo().getDetailedState());
+        assertEquals(LegacyVpnInfo.STATE_FAILED, vpn.getLegacyVpnInfo().state);
     }
 
     private void setAndVerifyAlwaysOnPackage(Vpn vpn, int uid, boolean lockdownEnabled) {
@@ -1100,8 +998,7 @@ public class VpnTest {
         // a subsequent CL.
     }
 
-    public Vpn startLegacyVpn(final VpnProfile vpnProfile) throws Exception {
-        final Vpn vpn = createVpn(primaryUser.id);
+    private Vpn startLegacyVpn(final Vpn vpn, final VpnProfile vpnProfile) throws Exception {
         setMockedUsers(primaryUser);
 
         // Dummy egress interface
@@ -1118,7 +1015,7 @@ public class VpnTest {
 
     @Test
     public void testStartPlatformVpn() throws Exception {
-        startLegacyVpn(mVpnProfile);
+        startLegacyVpn(createVpn(primaryUser.id), mVpnProfile);
         // TODO: Test the Ikev2VpnRunner started up properly. Relies on utility methods added in
         // a subsequent patch.
     }
@@ -1153,7 +1050,7 @@ public class VpnTest {
                     legacyRunnerReady.open();
                     return new Network(102);
                 });
-        final Vpn vpn = startLegacyVpn(profile);
+        final Vpn vpn = startLegacyVpn(createVpn(primaryUser.id), profile);
         final TestDeps deps = (TestDeps) vpn.mDeps;
         try {
             // udppsk and 1701 are the values for TYPE_L2TP_IPSEC_PSK
@@ -1287,8 +1184,13 @@ public class VpnTest {
         doReturn(UserHandle.of(userId)).when(asUserContext).getUser();
         when(mContext.createContextAsUser(eq(UserHandle.of(userId)), anyInt()))
                 .thenReturn(asUserContext);
-        return new Vpn(Looper.myLooper(), mContext, new TestDeps(), mNetService,
+        final TestLooper testLooper = new TestLooper();
+        final Vpn vpn = new Vpn(testLooper.getLooper(), mContext, new TestDeps(), mNetService,
                 userId, mKeyStore, mSystemServices, mIkev2SessionCreator);
+        verify(mConnectivityManager, times(1)).registerNetworkProvider(argThat(
+                provider -> provider.getName().contains("VpnNetworkProvider")
+        ));
+        return vpn;
     }
 
     private static void assertBlocked(Vpn vpn, int... uids) {

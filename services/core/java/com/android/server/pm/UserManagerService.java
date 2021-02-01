@@ -78,8 +78,6 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManager.EnforcingUser;
 import android.os.UserManager.QuietModeFlag;
-import android.os.UserManagerInternal;
-import android.os.UserManagerInternal.UserRestrictionsListener;
 import android.os.storage.StorageManager;
 import android.security.GateKeeper;
 import android.service.gatekeeper.IGateKeeperService;
@@ -112,6 +110,7 @@ import com.android.server.LocalServices;
 import com.android.server.LockGuard;
 import com.android.server.SystemService;
 import com.android.server.am.UserState;
+import com.android.server.pm.UserManagerInternal.UserRestrictionsListener;
 import com.android.server.storage.DeviceStorageMonitorInternal;
 import com.android.server.utils.TimingsTraceAndSlog;
 import com.android.server.wm.ActivityTaskManagerInternal;
@@ -120,7 +119,6 @@ import libcore.io.IoUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -176,6 +174,7 @@ public class UserManagerService extends IUserManager.Stub {
     private static final String ATTR_CONVERTED_FROM_PRE_CREATED = "convertedFromPreCreated";
     private static final String ATTR_GUEST_TO_REMOVE = "guestToRemove";
     private static final String ATTR_USER_VERSION = "version";
+    private static final String ATTR_USER_TYPE_VERSION = "userTypeConfigVersion";
     private static final String ATTR_PROFILE_GROUP_ID = "profileGroupId";
     private static final String ATTR_PROFILE_BADGE = "profileBadge";
     private static final String ATTR_RESTRICTED_PROFILE_PARENT_ID = "restrictedProfileParentId";
@@ -423,6 +422,7 @@ public class UserManagerService extends IUserManager.Stub {
     @GuardedBy("mPackagesLock")
     private int mNextSerialNumber;
     private int mUserVersion = 0;
+    private int mUserTypeVersion = 0;
 
     private IAppOpsService mAppOpsService;
 
@@ -2562,14 +2562,12 @@ public class UserManagerService extends IUserManager.Stub {
 
             mNextSerialNumber = -1;
             if (parser.getName().equals(TAG_USERS)) {
-                String lastSerialNumber = parser.getAttributeValue(null, ATTR_NEXT_SERIAL_NO);
-                if (lastSerialNumber != null) {
-                    mNextSerialNumber = Integer.parseInt(lastSerialNumber);
-                }
-                String versionNumber = parser.getAttributeValue(null, ATTR_USER_VERSION);
-                if (versionNumber != null) {
-                    mUserVersion = Integer.parseInt(versionNumber);
-                }
+                mNextSerialNumber =
+                        parser.getAttributeInt(null, ATTR_NEXT_SERIAL_NO, mNextSerialNumber);
+                mUserVersion =
+                        parser.getAttributeInt(null, ATTR_USER_VERSION, mUserVersion);
+                mUserTypeVersion =
+                        parser.getAttributeInt(null, ATTR_USER_TYPE_VERSION, mUserTypeVersion);
             }
 
             // Pre-O global user restriction were stored as a single bundle (as opposed to per-user
@@ -2580,9 +2578,7 @@ public class UserManagerService extends IUserManager.Stub {
                 if (type == XmlPullParser.START_TAG) {
                     final String name = parser.getName();
                     if (name.equals(TAG_USER)) {
-                        String id = parser.getAttributeValue(null, ATTR_ID);
-
-                        UserData userData = readUserLP(Integer.parseInt(id));
+                        UserData userData = readUserLP(parser.getAttributeInt(null, ATTR_ID));
 
                         if (userData != null) {
                             synchronized (mUsersLock) {
@@ -2609,10 +2605,8 @@ public class UserManagerService extends IUserManager.Stub {
                     } else if (name.equals(TAG_DEVICE_OWNER_USER_ID)
                             // Legacy name, should only be encountered when upgrading from pre-O.
                             || name.equals(TAG_GLOBAL_RESTRICTION_OWNER_ID)) {
-                        String ownerUserId = parser.getAttributeValue(null, ATTR_ID);
-                        if (ownerUserId != null) {
-                            mDeviceOwnerUserId = Integer.parseInt(ownerUserId);
-                        }
+                        mDeviceOwnerUserId =
+                                parser.getAttributeInt(null, ATTR_ID, mDeviceOwnerUserId);
                     } else if (name.equals(TAG_DEVICE_POLICY_RESTRICTIONS)) {
                         // Should only happen when upgrading from pre-O (version < 7).
                         oldDevicePolicyGlobalUserRestrictions =
@@ -2636,7 +2630,7 @@ public class UserManagerService extends IUserManager.Stub {
      */
     @GuardedBy({"mRestrictionsLock", "mPackagesLock"})
     private void upgradeIfNecessaryLP(Bundle oldGlobalUserRestrictions) {
-        upgradeIfNecessaryLP(oldGlobalUserRestrictions, mUserVersion);
+        upgradeIfNecessaryLP(oldGlobalUserRestrictions, mUserVersion, mUserTypeVersion);
     }
 
     /**
@@ -2645,9 +2639,11 @@ public class UserManagerService extends IUserManager.Stub {
      */
     @GuardedBy({"mRestrictionsLock", "mPackagesLock"})
     @VisibleForTesting
-    void upgradeIfNecessaryLP(Bundle oldGlobalUserRestrictions, int userVersion) {
+    void upgradeIfNecessaryLP(Bundle oldGlobalUserRestrictions, int userVersion,
+            int userTypeVersion) {
         Set<Integer> userIdsToWrite = new ArraySet<>();
         final int originalVersion = mUserVersion;
+        final int originalUserTypeVersion = mUserTypeVersion;
         if (userVersion < 1) {
             // Assign a proper name for the owner, if not initialized correctly before
             UserData userData = getUserDataNoChecks(UserHandle.USER_SYSTEM);
@@ -2780,13 +2776,24 @@ public class UserManagerService extends IUserManager.Stub {
             userVersion = 9;
         }
 
+        // Done with userVersion changes, moving on to deal with userTypeVersion upgrades
+        // Upgrade from previous user type to a new user type
+        final int newUserTypeVersion = UserTypeFactory.getUserTypeVersion();
+        if (newUserTypeVersion > userTypeVersion) {
+            synchronized (mUsersLock) {
+                upgradeUserTypesLU(UserTypeFactory.getUserTypeUpgrades(), mUserTypes,
+                        userTypeVersion, userIdsToWrite);
+            }
+        }
+
         if (userVersion < USER_VERSION) {
             Slog.w(LOG_TAG, "User version " + mUserVersion + " didn't upgrade as expected to "
                     + USER_VERSION);
         } else {
             mUserVersion = userVersion;
+            mUserTypeVersion = newUserTypeVersion;
 
-            if (originalVersion < mUserVersion) {
+            if (originalVersion < mUserVersion || originalUserTypeVersion < mUserTypeVersion) {
                 for (int userId : userIdsToWrite) {
                     UserData userData = getUserDataNoChecks(userId);
                     if (userData != null) {
@@ -2810,6 +2817,7 @@ public class UserManagerService extends IUserManager.Stub {
         UserData userData = putUserInfo(system);
         mNextSerialNumber = MIN_USER_ID;
         mUserVersion = USER_VERSION;
+        mUserTypeVersion = UserTypeFactory.getUserTypeVersion();
 
         Bundle restrictions = new Bundle();
         try {
@@ -2896,13 +2904,12 @@ public class UserManagerService extends IUserManager.Stub {
 
         final UserInfo userInfo = userData.info;
         serializer.startTag(null, TAG_USER);
-        serializer.attribute(null, ATTR_ID, Integer.toString(userInfo.id));
-        serializer.attribute(null, ATTR_SERIAL_NO, Integer.toString(userInfo.serialNumber));
-        serializer.attribute(null, ATTR_FLAGS, Integer.toString(userInfo.flags));
+        serializer.attributeInt(null, ATTR_ID, userInfo.id);
+        serializer.attributeInt(null, ATTR_SERIAL_NO, userInfo.serialNumber);
+        serializer.attributeInt(null, ATTR_FLAGS, userInfo.flags);
         serializer.attribute(null, ATTR_TYPE, userInfo.userType);
-        serializer.attribute(null, ATTR_CREATION_TIME, Long.toString(userInfo.creationTime));
-        serializer.attribute(null, ATTR_LAST_LOGGED_IN_TIME,
-                Long.toString(userInfo.lastLoggedInTime));
+        serializer.attributeLong(null, ATTR_CREATION_TIME, userInfo.creationTime);
+        serializer.attributeLong(null, ATTR_LAST_LOGGED_IN_TIME, userInfo.lastLoggedInTime);
         if (userInfo.lastLoggedInFingerprint != null) {
             serializer.attribute(null, ATTR_LAST_LOGGED_IN_FINGERPRINT,
                     userInfo.lastLoggedInFingerprint);
@@ -2911,26 +2918,24 @@ public class UserManagerService extends IUserManager.Stub {
             serializer.attribute(null,  ATTR_ICON_PATH, userInfo.iconPath);
         }
         if (userInfo.partial) {
-            serializer.attribute(null, ATTR_PARTIAL, "true");
+            serializer.attributeBoolean(null, ATTR_PARTIAL, true);
         }
         if (userInfo.preCreated) {
-            serializer.attribute(null, ATTR_PRE_CREATED, "true");
+            serializer.attributeBoolean(null, ATTR_PRE_CREATED, true);
         }
         if (userInfo.convertedFromPreCreated) {
-            serializer.attribute(null, ATTR_CONVERTED_FROM_PRE_CREATED, "true");
+            serializer.attributeBoolean(null, ATTR_CONVERTED_FROM_PRE_CREATED, true);
         }
         if (userInfo.guestToRemove) {
-            serializer.attribute(null, ATTR_GUEST_TO_REMOVE, "true");
+            serializer.attributeBoolean(null, ATTR_GUEST_TO_REMOVE, true);
         }
         if (userInfo.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID) {
-            serializer.attribute(null, ATTR_PROFILE_GROUP_ID,
-                    Integer.toString(userInfo.profileGroupId));
+            serializer.attributeInt(null, ATTR_PROFILE_GROUP_ID, userInfo.profileGroupId);
         }
-        serializer.attribute(null, ATTR_PROFILE_BADGE,
-                Integer.toString(userInfo.profileBadge));
+        serializer.attributeInt(null, ATTR_PROFILE_BADGE, userInfo.profileBadge);
         if (userInfo.restrictedProfileParentId != UserInfo.NO_PROFILE_GROUP_ID) {
-            serializer.attribute(null, ATTR_RESTRICTED_PROFILE_PARENT_ID,
-                    Integer.toString(userInfo.restrictedProfileParentId));
+            serializer.attributeInt(null, ATTR_RESTRICTED_PROFILE_PARENT_ID,
+                    userInfo.restrictedProfileParentId);
         }
         // Write seed data
         if (userData.persistSeedData) {
@@ -3001,8 +3006,9 @@ public class UserManagerService extends IUserManager.Stub {
             serializer.setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true);
 
             serializer.startTag(null, TAG_USERS);
-            serializer.attribute(null, ATTR_NEXT_SERIAL_NO, Integer.toString(mNextSerialNumber));
-            serializer.attribute(null, ATTR_USER_VERSION, Integer.toString(mUserVersion));
+            serializer.attributeInt(null, ATTR_NEXT_SERIAL_NO, mNextSerialNumber);
+            serializer.attributeInt(null, ATTR_USER_VERSION, mUserVersion);
+            serializer.attributeInt(null, ATTR_USER_TYPE_VERSION, mUserTypeVersion);
 
             serializer.startTag(null, TAG_GUEST_RESTRICTIONS);
             synchronized (mGuestRestrictions) {
@@ -3011,7 +3017,7 @@ public class UserManagerService extends IUserManager.Stub {
             }
             serializer.endTag(null, TAG_GUEST_RESTRICTIONS);
             serializer.startTag(null, TAG_DEVICE_OWNER_USER_ID);
-            serializer.attribute(null, ATTR_ID, Integer.toString(mDeviceOwnerUserId));
+            serializer.attributeInt(null, ATTR_ID, mDeviceOwnerUserId);
             serializer.endTag(null, TAG_DEVICE_OWNER_USER_ID);
             int[] userIdsToWrite;
             synchronized (mUsersLock) {
@@ -3023,7 +3029,7 @@ public class UserManagerService extends IUserManager.Stub {
             }
             for (int id : userIdsToWrite) {
                 serializer.startTag(null, TAG_USER);
-                serializer.attribute(null, ATTR_ID, Integer.toString(id));
+                serializer.attributeInt(null, ATTR_ID, id);
                 serializer.endTag(null, TAG_USER);
             }
 
@@ -3096,41 +3102,29 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         if (type == XmlPullParser.START_TAG && parser.getName().equals(TAG_USER)) {
-            int storedId = readIntAttribute(parser, ATTR_ID, -1);
+            int storedId = parser.getAttributeInt(null, ATTR_ID, -1);
             if (storedId != id) {
                 Slog.e(LOG_TAG, "User id does not match the file name");
                 return null;
             }
-            serialNumber = readIntAttribute(parser, ATTR_SERIAL_NO, id);
-            flags = readIntAttribute(parser, ATTR_FLAGS, 0);
+            serialNumber = parser.getAttributeInt(null, ATTR_SERIAL_NO, id);
+            flags = parser.getAttributeInt(null, ATTR_FLAGS, 0);
             userType = parser.getAttributeValue(null, ATTR_TYPE);
             userType = userType != null ? userType.intern() : null;
             iconPath = parser.getAttributeValue(null, ATTR_ICON_PATH);
-            creationTime = readLongAttribute(parser, ATTR_CREATION_TIME, 0);
-            lastLoggedInTime = readLongAttribute(parser, ATTR_LAST_LOGGED_IN_TIME, 0);
+            creationTime = parser.getAttributeLong(null, ATTR_CREATION_TIME, 0);
+            lastLoggedInTime = parser.getAttributeLong(null, ATTR_LAST_LOGGED_IN_TIME, 0);
             lastLoggedInFingerprint = parser.getAttributeValue(null,
                     ATTR_LAST_LOGGED_IN_FINGERPRINT);
-            profileGroupId = readIntAttribute(parser, ATTR_PROFILE_GROUP_ID,
+            profileGroupId = parser.getAttributeInt(null, ATTR_PROFILE_GROUP_ID,
                     UserInfo.NO_PROFILE_GROUP_ID);
-            profileBadge = readIntAttribute(parser, ATTR_PROFILE_BADGE, 0);
-            restrictedProfileParentId = readIntAttribute(parser,
+            profileBadge = parser.getAttributeInt(null, ATTR_PROFILE_BADGE, 0);
+            restrictedProfileParentId = parser.getAttributeInt(null,
                     ATTR_RESTRICTED_PROFILE_PARENT_ID, UserInfo.NO_PROFILE_GROUP_ID);
-            String valueString = parser.getAttributeValue(null, ATTR_PARTIAL);
-            if ("true".equals(valueString)) {
-                partial = true;
-            }
-            valueString = parser.getAttributeValue(null, ATTR_PRE_CREATED);
-            if ("true".equals(valueString)) {
-                preCreated = true;
-            }
-            valueString = parser.getAttributeValue(null, ATTR_CONVERTED_FROM_PRE_CREATED);
-            if ("true".equals(valueString)) {
-                converted = true;
-            }
-            valueString = parser.getAttributeValue(null, ATTR_GUEST_TO_REMOVE);
-            if ("true".equals(valueString)) {
-                guestToRemove = true;
-            }
+            partial = parser.getAttributeBoolean(null, ATTR_PARTIAL, false);
+            preCreated = parser.getAttributeBoolean(null, ATTR_PRE_CREATED, false);
+            converted = parser.getAttributeBoolean(null, ATTR_CONVERTED_FROM_PRE_CREATED, false);
+            guestToRemove = parser.getAttributeBoolean(null, ATTR_GUEST_TO_REMOVE, false);
 
             seedAccountName = parser.getAttributeValue(null, ATTR_SEED_ACCOUNT_NAME);
             seedAccountType = parser.getAttributeValue(null, ATTR_SEED_ACCOUNT_TYPE);
@@ -3219,26 +3213,6 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
         return userData;
-    }
-
-    private int readIntAttribute(TypedXmlPullParser parser, String attr, int defaultValue) {
-        String valueString = parser.getAttributeValue(null, attr);
-        if (valueString == null) return defaultValue;
-        try {
-            return Integer.parseInt(valueString);
-        } catch (NumberFormatException nfe) {
-            return defaultValue;
-        }
-    }
-
-    private long readLongAttribute(TypedXmlPullParser parser, String attr, long defaultValue) {
-        String valueString = parser.getAttributeValue(null, attr);
-        if (valueString == null) return defaultValue;
-        try {
-            return Long.parseLong(valueString);
-        } catch (NumberFormatException nfe) {
-            return defaultValue;
-        }
     }
 
     /**
@@ -4019,15 +3993,13 @@ public class UserManagerService extends IUserManager.Stub {
                     if (removeUser(userId)) {
                         return UserManager.REMOVE_RESULT_REMOVED;
                     }
-
-                    Slog.w(LOG_TAG, "Unable to immediately remove non-current user: " + userId
-                            + ". User is still set as ephemeral and will be removed on user "
-                            + "switch or reboot.");
                 }
-
                 // If the user was not immediately removed, make sure it is marked as ephemeral.
                 // Don't mark as disabled since, per UserInfo.FLAG_DISABLED documentation, an
                 // ephemeral user should only be marked as disabled when its removal is in progress.
+                Slog.i(LOG_TAG, "Unable to immediately remove user " + userId + " (current user is "
+                        + currentUser + "). User is set as ephemeral and will be removed on user "
+                        + "switch or reboot.");
                 userData.info.flags |= UserInfo.FLAG_EPHEMERAL;
                 writeUserLP(userData);
 
@@ -4273,10 +4245,9 @@ public class UserManagerService extends IUserManager.Stub {
         if (type == XmlPullParser.START_TAG && parser.getName().equals(TAG_ENTRY)) {
             String key = parser.getAttributeValue(null, ATTR_KEY);
             String valType = parser.getAttributeValue(null, ATTR_VALUE_TYPE);
-            String multiple = parser.getAttributeValue(null, ATTR_MULTIPLE);
-            if (multiple != null) {
+            int count = parser.getAttributeInt(null, ATTR_MULTIPLE, -1);
+            if (count != -1) {
                 values.clear();
-                int count = Integer.parseInt(multiple);
                 while (count > 0 && (type = parser.next()) != XmlPullParser.END_DOCUMENT) {
                     if (type == XmlPullParser.START_TAG
                             && parser.getName().equals(TAG_VALUE)) {
@@ -4386,7 +4357,7 @@ public class UserManagerService extends IUserManager.Stub {
             } else {
                 serializer.attribute(null, ATTR_VALUE_TYPE, ATTR_TYPE_STRING_ARRAY);
                 String[] values = (String[]) value;
-                serializer.attribute(null, ATTR_MULTIPLE, Integer.toString(values.length));
+                serializer.attributeInt(null, ATTR_MULTIPLE, values.length);
                 for (String choice : values) {
                     serializer.startTag(null, TAG_VALUE);
                     serializer.text(choice != null ? choice : "");
@@ -4991,6 +4962,7 @@ public class UserManagerService extends IUserManager.Stub {
 
         // Dump UserTypes
         pw.println();
+        pw.println("User types version: " + mUserTypeVersion);
         pw.println("User types (" + mUserTypes.size() + " types):");
         for (int i = 0; i < mUserTypes.size(); i++) {
             pw.println("    " + mUserTypes.keyAt(i) + ": ");
@@ -5481,6 +5453,9 @@ public class UserManagerService extends IUserManager.Stub {
      * Returns the maximum number of users allowed for the given userTypeDetails per parent user.
      * This is applicable for user types that are {@link UserTypeDetails#isProfile()}.
      * If there is no maximum, {@link UserTypeDetails#UNLIMITED_NUMBER_OF_USERS} is returned.
+     * Under certain circumstances (such as after a change-user-type) the max value can actually
+     * be exceeded: this is allowed in order to keep the device in a usable state.
+     * An error is logged in {@link UserManagerService#upgradeProfileToTypeLU}
      */
     private static int getMaxUsersOfTypePerParent(UserTypeDetails userTypeDetails) {
         final int defaultMax = userTypeDetails.getMaxAllowedPerParent();
@@ -5567,5 +5542,99 @@ public class UserManagerService extends IUserManager.Stub {
                     LocalServices.getService(DevicePolicyManagerInternal.class);
         }
         return mDevicePolicyManagerInternal;
+    }
+
+    @GuardedBy("mUsersLock")
+    @VisibleForTesting
+    void upgradeUserTypesLU(@NonNull List<UserTypeFactory.UserTypeUpgrade> upgradeOps,
+            @NonNull ArrayMap<String, UserTypeDetails> userTypes,
+            final int formerUserTypeVersion,
+            @NonNull Set<Integer> userIdsToWrite) {
+        for (UserTypeFactory.UserTypeUpgrade userTypeUpgrade : upgradeOps) {
+            if (DBG) {
+                Slog.i(LOG_TAG, "Upgrade: " + userTypeUpgrade.getFromType() + " to: "
+                        + userTypeUpgrade.getToType() + " maxVersion: "
+                        + userTypeUpgrade.getUpToVersion());
+            }
+
+            // upgrade user type if version up to getUpToVersion()
+            if (formerUserTypeVersion <= userTypeUpgrade.getUpToVersion()) {
+                for (int i = 0; i < mUsers.size(); i++) {
+                    UserData userData = mUsers.valueAt(i);
+                    if (userTypeUpgrade.getFromType().equals(userData.info.userType)) {
+                        final UserTypeDetails newUserType = userTypes.get(
+                                userTypeUpgrade.getToType());
+
+                        if (newUserType == null) {
+                            throw new IllegalStateException(
+                                    "Upgrade destination user type not defined: "
+                                            + userTypeUpgrade.getToType());
+                        }
+
+                        upgradeProfileToTypeLU(userData.info, newUserType);
+                        userIdsToWrite.add(userData.info.id);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Changes the user type of a profile to a new user type.
+     * @param userInfo    The user to be updated.
+     * @param newUserType The new user type.
+     */
+    @GuardedBy("mUsersLock")
+    @VisibleForTesting
+    void upgradeProfileToTypeLU(@NonNull UserInfo userInfo, @NonNull UserTypeDetails newUserType) {
+        Slog.i(LOG_TAG, "Upgrading user " + userInfo.id
+                + " from " + userInfo.userType
+                + " to " + newUserType.getName());
+
+        if (!userInfo.isProfile()) {
+            throw new IllegalStateException(
+                    "Can only upgrade profile types. " + userInfo.userType
+                            + " is not a profile type.");
+        }
+
+        // Exceeded maximum profiles for parent user: log error, but allow upgrade
+        if (!canAddMoreProfilesToUser(newUserType.getName(), userInfo.profileGroupId, false)) {
+            Slog.w(LOG_TAG,
+                    "Exceeded maximum profiles of type " + newUserType.getName() + " for user "
+                            + userInfo.id + ". Maximum allowed= "
+                            + newUserType.getMaxAllowedPerParent());
+        }
+
+        final UserTypeDetails oldUserType = mUserTypes.get(userInfo.userType);
+        final int oldFlags;
+        if (oldUserType != null) {
+            oldFlags = oldUserType.getDefaultUserInfoFlags();
+        } else {
+            // if oldUserType is missing from config_user_types.xml -> can only assume FLAG_PROFILE
+            oldFlags = UserInfo.FLAG_PROFILE;
+        }
+
+        //convert userData to newUserType
+        userInfo.userType = newUserType.getName();
+        // remove old default flags and add newUserType's default flags
+        userInfo.flags = newUserType.getDefaultUserInfoFlags() | (userInfo.flags ^ oldFlags);
+
+        // merge existing base restrictions with the new type's default restrictions
+        synchronized (mRestrictionsLock) {
+            if (!UserRestrictionsUtils.isEmpty(newUserType.getDefaultRestrictions())) {
+                final Bundle newRestrictions = UserRestrictionsUtils.clone(
+                        mBaseUserRestrictions.getRestrictions(userInfo.id));
+                UserRestrictionsUtils.merge(newRestrictions,
+                        newUserType.getDefaultRestrictions());
+                updateUserRestrictionsInternalLR(newRestrictions, userInfo.id);
+                if (DBG) {
+                    Slog.i(LOG_TAG, "Updated user " + userInfo.id
+                            + " restrictions to " + newRestrictions);
+                }
+            }
+        }
+
+        // re-compute badge index
+        userInfo.profileBadge = getFreeProfileBadgeLU(userInfo.profileGroupId, userInfo.userType);
     }
 }

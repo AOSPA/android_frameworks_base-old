@@ -30,11 +30,11 @@ import static android.view.Display.FLAG_PRIVATE;
 import static android.view.DisplayCutout.BOUNDS_POSITION_LEFT;
 import static android.view.DisplayCutout.BOUNDS_POSITION_TOP;
 import static android.view.DisplayCutout.fromBoundingRect;
+import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
+import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_90;
-import static android.view.View.SYSTEM_UI_FLAG_FULLSCREEN;
-import static android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-import static android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
@@ -101,6 +101,7 @@ import android.view.IDisplayWindowRotationCallback;
 import android.view.IDisplayWindowRotationController;
 import android.view.ISystemGestureExclusionListener;
 import android.view.IWindowManager;
+import android.view.InsetsState;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceControl.Transaction;
@@ -309,6 +310,21 @@ public class DisplayContentTests extends WindowTestsBase {
         assertTrue(childWin.canBeImeTarget());
         imeTarget = mDisplayContent.computeImeTarget(false /* updateImeTarget */);
         assertEquals(childWin, imeTarget);
+    }
+
+    @UseTestDisplay(addAllCommonWindows = true)
+    @Test
+    public void testComputeImeTarget_placeImeToTheTargetRoot() {
+        ActivityRecord activity = createActivityRecord(mDisplayContent);
+
+        final WindowState startingWin = createWindow(null, TYPE_APPLICATION_STARTING, activity,
+                "startingWin");
+        startingWin.setHasSurface(true);
+        assertTrue(startingWin.canBeImeTarget());
+        DisplayArea.Tokens imeContainer = mDisplayContent.getImeContainer();
+
+        WindowState imeTarget = mDisplayContent.computeImeTarget(true /* updateImeTarget */);
+        verify(imeTarget.getRootDisplayArea()).placeImeContainer(imeContainer);
     }
 
     /**
@@ -823,12 +839,12 @@ public class DisplayContentTests extends WindowTestsBase {
         final DisplayContent newDisplay = createNewDisplay();
 
         final WindowState appWin = createWindow(null, TYPE_APPLICATION, mDisplayContent, "appWin");
-        final Task stack = mDisplayContent.getTopStack();
+        final Task stack = mDisplayContent.getTopRootTask();
         final ActivityRecord activity = stack.topRunningActivity();
         doReturn(true).when(activity).shouldBeVisibleUnchecked();
 
         final WindowState appWin1 = createWindow(null, TYPE_APPLICATION, newDisplay, "appWin1");
-        final Task stack1 = newDisplay.getTopStack();
+        final Task stack1 = newDisplay.getTopRootTask();
         final ActivityRecord activity1 = stack1.topRunningActivity();
         doReturn(true).when(activity1).shouldBeVisibleUnchecked();
         appWin.setHasSurface(true);
@@ -870,7 +886,7 @@ public class DisplayContentTests extends WindowTestsBase {
         doReturn(true).when(freeformStack).isVisible();
         freeformStack.getTopChild().setBounds(100, 100, 300, 400);
 
-        assertTrue(dc.getDefaultTaskDisplayArea().isStackVisible(WINDOWING_MODE_FREEFORM));
+        assertTrue(dc.getDefaultTaskDisplayArea().isRootTaskVisible(WINDOWING_MODE_FREEFORM));
 
         freeformStack.getTopNonFinishingActivity().setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
         stack.getTopNonFinishingActivity().setOrientation(SCREEN_ORIENTATION_PORTRAIT);
@@ -1092,9 +1108,11 @@ public class DisplayContentTests extends WindowTestsBase {
         win.getAttrs().flags |= FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_INSET_DECOR;
         win.getAttrs().layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         win.getAttrs().privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION;
-        win.getAttrs().subtreeSystemUiVisibility = win.mSystemUiVisibility =
-                SYSTEM_UI_FLAG_FULLSCREEN | SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        win.getAttrs().insetsFlags.behavior = BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
+        final InsetsState requestedState = new InsetsState();
+        requestedState.getSource(ITYPE_NAVIGATION_BAR).setVisible(false);
+        requestedState.getSource(ITYPE_STATUS_BAR).setVisible(false);
+        win.updateRequestedVisibility(requestedState);
         win.mActivityRecord.mTargetSdk = P;
 
         performLayout(dc);
@@ -1168,8 +1186,7 @@ public class DisplayContentTests extends WindowTestsBase {
 
         final ActivityRecord app = mAppWindow.mActivityRecord;
         app.setVisible(false);
-        mDisplayContent.prepareAppTransitionOld(WindowManager.TRANSIT_OLD_ACTIVITY_OPEN,
-                false /* alwaysKeepCurrent */);
+        mDisplayContent.prepareAppTransition(WindowManager.TRANSIT_OPEN);
         mDisplayContent.mOpeningApps.add(app);
         final int newOrientation = getRotatedOrientation(mDisplayContent);
         app.setRequestedOrientation(newOrientation);
@@ -1184,6 +1201,17 @@ public class DisplayContentTests extends WindowTestsBase {
                 ANIMATION_TYPE_FIXED_TRANSFORM));
         assertTrue(mNavBarWindow.getParent().isAnimating(WindowContainer.AnimationFlags.PARENTS,
                 ANIMATION_TYPE_FIXED_TRANSFORM));
+
+        // If the visibility of insets state is changed, the rotated state should be updated too.
+        final InsetsState rotatedState = app.getFixedRotationTransformInsetsState();
+        final InsetsState state = mDisplayContent.getInsetsStateController().getRawInsetsState();
+        assertEquals(state.getSource(ITYPE_STATUS_BAR).isVisible(),
+                rotatedState.getSource(ITYPE_STATUS_BAR).isVisible());
+        state.getSource(ITYPE_STATUS_BAR).setVisible(
+                !rotatedState.getSource(ITYPE_STATUS_BAR).isVisible());
+        mDisplayContent.getInsetsStateController().notifyInsetsChanged();
+        assertEquals(state.getSource(ITYPE_STATUS_BAR).isVisible(),
+                rotatedState.getSource(ITYPE_STATUS_BAR).isVisible());
 
         final Rect outFrame = new Rect();
         final Rect outInsets = new Rect();
@@ -1352,8 +1380,7 @@ public class DisplayContentTests extends WindowTestsBase {
         final ActivityRecord app = new ActivityBuilder(mAtm).setCreateTask(true).build();
         app.setVisible(false);
         app.setState(Task.ActivityState.RESUMED, "test");
-        mDisplayContent.prepareAppTransitionOld(WindowManager.TRANSIT_OLD_ACTIVITY_OPEN,
-                false /* alwaysKeepCurrent */);
+        mDisplayContent.prepareAppTransition(WindowManager.TRANSIT_OPEN);
         mDisplayContent.mOpeningApps.add(app);
         final int newOrientation = getRotatedOrientation(mDisplayContent);
         app.setRequestedOrientation(newOrientation);

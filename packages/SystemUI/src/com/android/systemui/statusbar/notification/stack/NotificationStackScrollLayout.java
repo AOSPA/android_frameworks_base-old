@@ -53,7 +53,6 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.MathUtils;
 import android.util.Pair;
-import android.view.ContextThemeWrapper;
 import android.view.DisplayCutout;
 import android.view.InputDevice;
 import android.view.LayoutInflater;
@@ -353,31 +352,24 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private boolean mContinuousShadowUpdate;
     private boolean mContinuousBackgroundUpdate;
     private ViewTreeObserver.OnPreDrawListener mShadowUpdater
-            = new ViewTreeObserver.OnPreDrawListener() {
-
-        @Override
-        public boolean onPreDraw() {
-            updateViewShadows();
-            return true;
-        }
-    };
+            = () -> {
+                updateViewShadows();
+                return true;
+            };
     private ViewTreeObserver.OnPreDrawListener mBackgroundUpdater = () -> {
                 updateBackground();
                 return true;
             };
-    private Comparator<ExpandableView> mViewPositionComparator = new Comparator<ExpandableView>() {
-        @Override
-        public int compare(ExpandableView view, ExpandableView otherView) {
-            float endY = view.getTranslationY() + view.getActualHeight();
-            float otherEndY = otherView.getTranslationY() + otherView.getActualHeight();
-            if (endY < otherEndY) {
-                return -1;
-            } else if (endY > otherEndY) {
-                return 1;
-            } else {
-                // The two notifications end at the same location
-                return 0;
-            }
+    private Comparator<ExpandableView> mViewPositionComparator = (view, otherView) -> {
+        float endY = view.getTranslationY() + view.getActualHeight();
+        float otherEndY = otherView.getTranslationY() + otherView.getActualHeight();
+        if (endY < otherEndY) {
+            return -1;
+        } else if (endY > otherEndY) {
+            return 1;
+        } else {
+            // The two notifications end at the same location
+            return 0;
         }
     };
     private final ViewOutlineProvider mOutlineProvider = new ViewOutlineProvider() {
@@ -415,9 +407,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
      */
     private float mBackgroundXFactor = 1f;
 
-    private boolean mSwipingInProgress;
-
-    private boolean mUsingLightTheme;
     private boolean mQsExpanded;
     private boolean mForwardScrollable;
     private boolean mBackwardScrollable;
@@ -539,7 +528,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mSections = mSectionsManager.createSectionsForBuckets();
 
         mAmbientState = new AmbientState(context, mSectionsManager);
-        mBgColor = context.getColor(R.color.notification_shade_background_color);
+        mBgColor = Utils.getColorAttr(mContext, android.R.attr.colorBackground).getDefaultColor();
         int minHeight = res.getDimensionPixelSize(R.dimen.notification_min_height);
         int maxHeight = res.getDimensionPixelSize(R.dimen.notification_max_height);
         mExpandHelper = new ExpandHelper(getContext(), mExpandHelperCallback,
@@ -650,7 +639,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     }
 
     void updateBgColor() {
-        mBgColor = mContext.getColor(R.color.notification_shade_background_color);
+        mBgColor = Utils.getColorAttr(mContext, android.R.attr.colorBackground).getDefaultColor();
         updateBackgroundDimming();
         mShelf.onUiModeChanged();
     }
@@ -834,9 +823,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         if (!mShouldDrawNotificationBackground) {
             return;
         }
-        final boolean clearUndershelf = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.SHOW_NEW_NOTIF_DISMISS, 0 /* show background by default */) == 1;
-        if (clearUndershelf) {
+        final boolean newFlowHideShelf = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.SHOW_NEW_NOTIF_DISMISS, 1 /* on by default */) == 1;
+        if (newFlowHideShelf) {
             mBackgroundPaint.setColor(Color.TRANSPARENT);
             invalidate();
             return;
@@ -2554,12 +2543,13 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         int childCount = getChildCount();
         for (int i = 0; i < childCount; i++) {
             ExpandableView child = (ExpandableView) getChildAt(i);
-            if (child.getVisibility() != View.GONE && !(child instanceof StackScrollerDecorView)
-                    && child != mShelf) {
+            if (child.getVisibility() != View.GONE
+                    && !(child instanceof StackScrollerDecorView)
+                    && child != mShelf
+                    && mSwipeHelper.getSwipedView() != child) {
                 children.add(child);
             }
         }
-
         return children;
     }
 
@@ -3577,7 +3567,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @Override
     @ShadeViewRefactor(RefactorComponent.INPUT)
     public boolean onGenericMotionEvent(MotionEvent event) {
-        if (!isScrollingEnabled() || !mIsExpanded || mSwipingInProgress || mExpandingNotification
+        if (!isScrollingEnabled()
+                || !mIsExpanded
+                || mSwipeHelper.isSwiping()
+                || mExpandingNotification
                 || mDisallowScrollingInThisMotion) {
             return false;
         }
@@ -4077,14 +4070,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         return false;
     }
 
-    @ShadeViewRefactor(RefactorComponent.INPUT)
-    void setSwipingInProgress(boolean swiping) {
-        mSwipingInProgress = swiping;
-        if (swiping) {
-            requestDisallowInterceptTouchEvent(true);
-        }
-    }
-
     @Override
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void onWindowFocusChanged(boolean hasWindowFocus) {
@@ -4127,9 +4112,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             mStatusBar.resetUserExpandedStates();
             clearTemporaryViews();
             clearUserLockedViews();
-            ArrayList<View> draggedViews = mAmbientState.getDraggedViews();
-            if (draggedViews.size() > 0) {
-                draggedViews.clear();
+            if (mSwipeHelper.isSwiping()) {
+                mSwipeHelper.resetSwipeState();
                 updateContinuousShadowDrawing();
             }
         }
@@ -4482,15 +4466,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
      * @param lightTheme True if light theme should be used.
      */
     @ShadeViewRefactor(RefactorComponent.DECORATOR)
-    void updateDecorViews(boolean lightTheme) {
-        if (lightTheme == mUsingLightTheme) {
-            return;
-        }
-        mUsingLightTheme = lightTheme;
-        Context context = new ContextThemeWrapper(mContext,
-                lightTheme ? R.style.Theme_SystemUI_Light : R.style.Theme_SystemUI);
+    void updateDecorViews() {
         final @ColorInt int textColor =
-                Utils.getColorAttrDefaultColor(context, R.attr.wallpaperTextColor);
+                Utils.getColorAttrDefaultColor(mContext, android.R.attr.textColorPrimary);
         mSectionsManager.setHeaderForegroundColor(textColor);
         mFooterView.setTextColor(textColor);
         mEmptyShadeView.setTextColor(textColor);
@@ -5196,15 +5174,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             ExpandableView child = (ExpandableView) getTransientView(i);
             child.dump(fd, pw, args);
         }
-        ArrayList<View> draggedViews = mAmbientState.getDraggedViews();
-        int draggedCount = draggedViews.size();
-        pw.println("  Dragged Views: " + draggedCount);
-        for (int i = 0; i < draggedCount; i++) {
-            View view = draggedViews.get(i);
-            if (view instanceof ExpandableView) {
-                ExpandableView expandableView = (ExpandableView) view;
-                expandableView.dump(fd, pw, args);
-            }
+        View swipedView = mSwipeHelper.getSwipedView();
+        pw.println("  Swiped view: " + swipedView);
+        if (swipedView instanceof ExpandableView) {
+            ExpandableView expandableView = (ExpandableView) swipedView;
+            expandableView.dump(fd, pw, args);
         }
     }
 
@@ -5522,12 +5496,16 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mSwipedOutViews.add(v);
     }
 
-    void addDraggedView(View view) {
-        mAmbientState.onBeginDrag(view);
+    void onSwipeBegin() {
+        requestDisallowInterceptTouchEvent(true);
+        updateFirstAndLastBackgroundViews();
+        updateContinuousShadowDrawing();
+        updateContinuousBackgroundDrawing();
+        requestChildrenUpdate();
     }
 
-    void removeDraggedView(View view) {
-        mAmbientState.onDragFinished(view);
+    void onSwipeEnd() {
+        updateFirstAndLastBackgroundViews();
     }
 
     void setTopHeadsUpEntry(NotificationEntry topEntry) {
@@ -5537,10 +5515,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     void setNumHeadsUp(long numHeadsUp) {
         mNumHeadsUp = numHeadsUp;
         mAmbientState.setHasAlertEntries(numHeadsUp > 0);
-    }
-
-    boolean getSwipingInProgress() {
-        return mSwipingInProgress;
     }
 
     public boolean getIsExpanded() {
@@ -5581,10 +5555,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     void setTouchHandler(NotificationStackScrollLayoutController.TouchHandler touchHandler) {
         mTouchHandler = touchHandler;
-    }
-
-    boolean isSwipingInProgress() {
-        return mSwipingInProgress;
     }
 
     boolean getCheckSnoozeLeaveBehind() {
@@ -5661,9 +5631,17 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mSectionsManager.updateSectionBoundaries(reason);
     }
 
+    boolean isSilkDismissEnabled() {
+        return Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.SHOW_NEW_NOTIF_DISMISS, 1 /* enabled by default */) == 1;
+    }
+
     void updateContinuousBackgroundDrawing() {
+        if (isSilkDismissEnabled()) {
+            return;
+        }
         boolean continuousBackground = !mAmbientState.isFullyAwake()
-                && !mAmbientState.getDraggedViews().isEmpty();
+                && mSwipeHelper.isSwiping();
         if (continuousBackground != mContinuousBackgroundUpdate) {
             mContinuousBackgroundUpdate = continuousBackground;
             if (continuousBackground) {
@@ -5677,7 +5655,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
     void updateContinuousShadowDrawing() {
         boolean continuousShadowUpdate = mAnimationRunning
-                || !mAmbientState.getDraggedViews().isEmpty();
+                || mSwipeHelper.isSwiping();
         if (continuousShadowUpdate != mContinuousShadowUpdate) {
             if (continuousShadowUpdate) {
                 getViewTreeObserver().addOnPreDrawListener(mShadowUpdater);

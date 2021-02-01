@@ -30,6 +30,7 @@ import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTI
 import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_NONE;
 import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_REMOVE_STACK;
 import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_SAME;
+import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_SNAP_AFTER_RESIZE;
 import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_TO_PIP;
 import static com.android.wm.shell.pip.PipAnimationController.isInPipDirection;
 import static com.android.wm.shell.pip.PipAnimationController.isOutPipDirection;
@@ -63,7 +64,6 @@ import com.android.internal.os.SomeArgs;
 import com.android.wm.shell.R;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayController;
-import com.android.wm.shell.pip.phone.PipMenuActivityController;
 import com.android.wm.shell.pip.phone.PipMotionHelper;
 import com.android.wm.shell.pip.phone.PipUpdateThread;
 import com.android.wm.shell.splitscreen.SplitScreen;
@@ -135,8 +135,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     private final Handler mUpdateHandler;
     private final PipBoundsState mPipBoundsState;
     private final PipBoundsAlgorithm mPipBoundsAlgorithm;
-    // TODO(b/172286265): Remove dependency on .pip.PHONE.PipMenuActivityController
-    private final PipMenuActivityController mMenuActivityController;
+    private final @NonNull PipMenuController mPipMenuController;
     private final PipAnimationController mPipAnimationController;
     private final PipUiEventLogger mPipUiEventLoggerLogger;
     private final List<PipTransitionCallback> mPipTransitionCallbacks = new ArrayList<>();
@@ -264,7 +263,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
 
     public PipTaskOrganizer(Context context, @NonNull PipBoundsState pipBoundsState,
             @NonNull PipBoundsAlgorithm boundsHandler,
-            PipMenuActivityController menuActivityController,
+            @NonNull PipMenuController pipMenuController,
             @NonNull PipSurfaceTransactionHelper surfaceTransactionHelper,
             Optional<SplitScreen> splitScreenOptional,
             @NonNull DisplayController displayController,
@@ -274,7 +273,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         mUpdateHandler = new Handler(PipUpdateThread.get().getLooper(), mUpdateCallbacks);
         mPipBoundsState = pipBoundsState;
         mPipBoundsAlgorithm = boundsHandler;
-        mMenuActivityController = menuActivityController;
+        mPipMenuController = pipMenuController;
         mEnterExitAnimationDuration = context.getResources()
                 .getInteger(R.integer.config_pipResizeAnimationDuration);
         mSurfaceTransactionHelper = surfaceTransactionHelper;
@@ -501,9 +500,8 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             mOnDisplayIdChangeCallback.accept(info.displayId);
         }
 
-        if (mMenuActivityController != null) {
-            mMenuActivityController.onTaskAppeared();
-        }
+        mPipMenuController.attach(leash);
+
 
         if (mShouldIgnoreEnteringPipTransition) {
             final Rect destinationBounds = mPipBoundsState.getBounds();
@@ -674,9 +672,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         mPictureInPictureParams = null;
         mState = State.UNDEFINED;
         mPipUiEventLoggerLogger.setTaskInfo(null);
-        if (mMenuActivityController != null) {
-            mMenuActivityController.onTaskVanished();
-        }
+        mPipMenuController.detach();
     }
 
     @Override
@@ -819,6 +815,20 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
                 TRANSITION_DIRECTION_NONE, duration, updateBoundsCallback);
     }
 
+    /**
+     * Animates resizing of the pinned stack given the duration and start bounds.
+     * This is used when the starting bounds is not the current PiP bounds.
+     */
+    public void scheduleAnimateResizePip(Rect fromBounds, Rect toBounds, int duration,
+            Consumer<Rect> updateBoundsCallback) {
+        if (mShouldDeferEnteringPip) {
+            Log.d(TAG, "skip scheduleAnimateResizePip, entering pip deferred");
+            return;
+        }
+        scheduleAnimateResizePip(fromBounds, toBounds, null /* sourceHintRect */,
+                TRANSITION_DIRECTION_SNAP_AFTER_RESIZE, duration, updateBoundsCallback);
+    }
+
     private void scheduleAnimateResizePip(Rect currentBounds, Rect destinationBounds,
             Rect sourceHintRect, @PipAnimationController.TransitionDirection int direction,
             int durationMs, Consumer<Rect> updateBoundsCallback) {
@@ -956,9 +966,9 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         mSurfaceTransactionHelper
                 .crop(tx, mLeash, destinationBounds)
                 .round(tx, mLeash, mState.isInPip());
-        if (mMenuActivityController != null && mMenuActivityController.isMenuVisible()) {
+        if (mPipMenuController.isMenuVisible()) {
             runOnMainHandler(() ->
-                    mMenuActivityController.resizePipMenu(mLeash, tx, destinationBounds));
+                    mPipMenuController.resizePipMenu(mLeash, tx, destinationBounds));
         } else {
             tx.apply();
         }
@@ -982,9 +992,9 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
 
         final SurfaceControl.Transaction tx = mSurfaceControlTransactionFactory.getTransaction();
         mSurfaceTransactionHelper.scale(tx, mLeash, startBounds, destinationBounds);
-        if (mMenuActivityController != null && mMenuActivityController.isMenuVisible()) {
+        if (mPipMenuController.isMenuVisible()) {
             runOnMainHandler(() ->
-                    mMenuActivityController.movePipMenu(mLeash, tx, destinationBounds));
+                    mPipMenuController.movePipMenu(mLeash, tx, destinationBounds));
         } else {
             tx.apply();
         }
@@ -1001,8 +1011,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         if (direction == TRANSITION_DIRECTION_REMOVE_STACK) {
             removePipImmediately();
             return;
-        } else if (isInPipDirection(direction) && type == ANIM_TYPE_ALPHA
-                && mMenuActivityController != null) {
+        } else if (isInPipDirection(direction) && type == ANIM_TYPE_ALPHA) {
             // TODO: Synchronize this correctly in #applyEnterPipSyncTransaction
             finishResizeForMenu(destinationBounds);
             return;
@@ -1015,13 +1024,9 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     }
 
     private void finishResizeForMenu(Rect destinationBounds) {
-        if (mMenuActivityController == null) {
-            if (DEBUG) Log.d(TAG, "mMenuActivityController is null");
-            return;
-        }
         runOnMainHandler(() -> {
-            mMenuActivityController.movePipMenu(null, null, destinationBounds);
-            mMenuActivityController.updateMenuBounds(destinationBounds);
+            mPipMenuController.movePipMenu(null, null, destinationBounds);
+            mPipMenuController.updateMenuBounds(destinationBounds);
         });
     }
 
@@ -1083,8 +1088,11 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             Log.w(TAG, "Abort animation, invalid leash");
             return;
         }
+        Rect baseBounds = direction == TRANSITION_DIRECTION_SNAP_AFTER_RESIZE
+                ? mPipBoundsState.getBounds() : currentBounds;
         mPipAnimationController
-                .getAnimator(mLeash, currentBounds, destinationBounds, sourceHintRect, direction)
+                .getAnimator(mLeash, baseBounds, currentBounds, destinationBounds, sourceHintRect,
+                        direction)
                 .setTransitionDirection(direction)
                 .setPipAnimationCallback(mPipAnimationCallback)
                 .setDuration(durationMs)

@@ -49,7 +49,8 @@ android_test {
         // TODO: remove once Android migrates to JUnit 4.12,
         // which provides assertThrows
         "testng",
-
+        "junit",
+        "platform-compat-test-rules",
     ],
 
     aidl: {
@@ -103,9 +104,20 @@ android_test {
         ":PackageParserTestApp1",
         ":PackageParserTestApp2",
         ":PackageParserTestApp3",
+        ":PackageParserTestApp4",
         ":apex.test",
     ],
     resource_zips: [":FrameworksServicesTests_apks_as_resources"],
+}
+
+java_library {
+    name: "servicestests-core-utils",
+    srcs: [
+        "src/com/android/server/pm/PackageSettingBuilder.java",
+    ],
+    static_libs: [
+        "services.core",
+    ],
 }
 
 java_library {
@@ -114,6 +126,7 @@ java_library {
         "utils/**/*.java",
         "utils/**/*.kt",
         "utils-mockito/**/*.kt",
+        ":services.core-sources-deviceconfig-interface",
     ],
     static_libs: [
         "junit",
@@ -130,6 +143,7 @@ java_library {
         "utils/**/*.java",
         "utils/**/*.kt",
         "utils-mockito/**/*.kt",
+        ":services.core-sources-deviceconfig-interface",
     ],
     static_libs: [
         "junit",

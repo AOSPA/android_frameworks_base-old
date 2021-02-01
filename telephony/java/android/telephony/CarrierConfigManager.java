@@ -53,9 +53,13 @@ public class CarrierConfigManager {
     public static final String EXTRA_SLOT_INDEX = "android.telephony.extra.SLOT_INDEX";
 
     /**
-     * Extra included in {@link #ACTION_CARRIER_CONFIG_CHANGED} to indicate whether this is a
-     * rebroadcast on unlock. Defaults to {@code false} if not specified.
-     * @hide
+     * {@link #ACTION_CARRIER_CONFIG_CHANGED} is broadcast once on device bootup and then again when
+     * the device is unlocked. Direct-Boot-aware applications may use the first broadcast as an
+     * early signal that the carrier config has been loaded, but other applications will only
+     * receive the second broadcast, when the device is unlocked.
+     *
+     * This extra is included in {@link #ACTION_CARRIER_CONFIG_CHANGED} to indicate whether this is
+     * a rebroadcast on unlock.
      */
     public static final String EXTRA_REBROADCAST_ON_UNLOCK =
             "android.telephony.extra.REBROADCAST_ON_UNLOCK";
@@ -1923,9 +1927,8 @@ public class CarrierConfigManager {
      *     "APN_1, ERROR_CODE_1 : CARRIER_ACTION_IDX_1, CARRIER_ACTION_IDX_2...",
      *     "APN_1, ERROR_CODE_2 : CARRIER_ACTION_IDX_1 "
      * }
-     * Where {@code APN_1} is a string defined in
-     * com.android.internal.telephony.PhoneConstants
-     * Example: "default"
+     * Where {@code APN_1} is an integer defined in {@link android.telephony.data.ApnSetting}
+     * (e.g. {@link android.telephony.data.ApnSetting#TYPE_DEFAULT}
      *
      * {@code ERROR_CODE_1} is an integer defined in android.telephony.DataFailCause
      * Example:
@@ -2072,8 +2075,16 @@ public class CarrierConfigManager {
             "allow_hold_call_during_emergency_bool";
 
     /**
-     * Flag indicating whether the carrier supports RCS presence indication for
-     * User Capability Exchange (UCE).  When presence is supported, the device should use the
+     * Flag indicating whether or not the carrier supports the periodic exchange of phone numbers
+     * in the user's address book with the carrier's presence server in order to retrieve the RCS
+     * capabilities for each contact used in the RCS User Capability Exchange (UCE) procedure. See
+     * RCC.71, section 3 for more information.
+     * <p>
+     * The flag {@link Ims#KEY_ENABLE_PRESENCE_PUBLISH_BOOL} must also be enabled if this flag is
+     * enabled, as sending a periodic SIP PUBLISH with this device's RCS capabilities is a
+     * requirement for capability exchange to begin.
+     * <p>
+     * When presence is supported, the device should use the
      * {@link android.provider.ContactsContract.Data#CARRIER_PRESENCE} bit mask and set the
      * {@link android.provider.ContactsContract.Data#CARRIER_PRESENCE_VT_CAPABLE} bit to indicate
      * whether each contact supports video calling.  The UI is made aware that presence is enabled
@@ -3889,12 +3900,27 @@ public class CarrierConfigManager {
         public static final String KEY_IMS_SINGLE_REGISTRATION_REQUIRED_BOOL =
                 KEY_PREFIX + "ims_single_registration_required_bool";
 
+        /**
+         * A boolean flag specifying whether or not this carrier supports the device notifying the
+         * network of its RCS capabilities using the SIP PUBLISH procedure defined for User
+         * Capability Exchange (UCE). See RCC.71, section 3 for more information.
+         * <p>
+         * If this key's value is set to false, the procedure for RCS contact capability exchange
+         * via SIP SUBSCRIBE/NOTIFY will also be disabled internally, and
+         * {@link #KEY_USE_RCS_PRESENCE_BOOL} must also be set to false to ensure apps do not
+         * improperly think that capability exchange via SIP PUBLISH is enabled.
+         * <p> The default value for this key is {@code false}.
+         */
+        public static final String KEY_ENABLE_PRESENCE_PUBLISH_BOOL =
+                KEY_PREFIX + "enable_presence_publish_bool";
+
         private Ims() {}
 
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
             defaults.putInt(KEY_WIFI_OFF_DEFERRING_TIME_MILLIS_INT, 4000);
             defaults.putBoolean(KEY_IMS_SINGLE_REGISTRATION_REQUIRED_BOOL, false);
+            defaults.putBoolean(KEY_ENABLE_PRESENCE_PUBLISH_BOOL, false);
             return defaults;
         }
     }
@@ -4026,6 +4052,17 @@ public class CarrierConfigManager {
      */
     public static final String KEY_DEFAULT_PREFERRED_APN_NAME_STRING =
             "default_preferred_apn_name_string";
+
+    /**
+     * Indicates if the carrier supports call composer.
+     */
+    public static final String KEY_SUPPORTS_CALL_COMPOSER_BOOL = "supports_call_composer_bool";
+
+    /**
+     * Indicates the carrier server url that serves the call composer picture.
+     */
+    public static final String KEY_CALL_COMPOSER_PICTURE_SERVER_URL_STRING =
+            "call_composer_picture_server_url_string";
 
     /**
      * For Android 11, provide a temporary solution for OEMs to use the lower of the two MTU values
@@ -4602,6 +4639,8 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_DISABLE_DUN_APN_WHILE_ROAMING_WITH_PRESET_APN_BOOL, false);
         sDefaults.putString(KEY_DEFAULT_PREFERRED_APN_NAME_STRING, "");
+        sDefaults.putBoolean(KEY_SUPPORTS_CALL_COMPOSER_BOOL, false);
+        sDefaults.putString(KEY_CALL_COMPOSER_PICTURE_SERVER_URL_STRING, "");
         sDefaults.putBoolean(KEY_USE_LOWER_MTU_VALUE_IF_BOTH_RECEIVED, false);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
         sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);

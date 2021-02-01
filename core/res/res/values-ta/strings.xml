@@ -287,6 +287,8 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB இணைப்பு"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"ஆப்ஸ் இயங்குகிறது"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"பேட்டரியைப் பயன்படுத்தும் ஆப்ஸ்"</string>
+    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
+    <skip />
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> ஆப்ஸ் பேட்டரியைப் பயன்படுத்துகிறது"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> ஆப்ஸ் பேட்டரியைப் பயன்படுத்துகின்றன"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"பேட்டரி மற்றும் டேட்டா உபயோக விவரங்களைக் காண, தட்டவும்"</string>
@@ -1316,7 +1318,7 @@
     <string name="usb_unsupported_audio_accessory_title" msgid="2335775548086533065">"அனலாக் ஆடியோ துணைக்கருவி கண்டறியப்பட்டது"</string>
     <string name="usb_unsupported_audio_accessory_message" msgid="1300168007129796621">"இணைத்துள்ள சாதனமானது இந்த மொபைலுடன் இணங்கவில்லை. மேலும் அறிய, தட்டவும்."</string>
     <string name="adb_active_notification_title" msgid="408390247354560331">"USB பிழைதிருத்தம் இணைக்கப்பட்டது"</string>
-    <string name="adb_active_notification_message" msgid="5617264033476778211">"USB பிழைதிருத்தத்தை ஆஃப் செய்ய தட்டவும்"</string>
+    <string name="adb_active_notification_message" msgid="5617264033476778211">"USB பிழைதிருத்தத்தை ஆஃப் செய்யத் தட்டவும்"</string>
     <string name="adb_active_notification_message" product="tv" msgid="6624498401272780855">"USB பிழைதிருத்தத்தை முடக்க, தேர்ந்தெடுக்கவும்."</string>
     <string name="adbwifi_active_notification_title" msgid="6147343659168302473">"வைஃபை பிழைதிருத்தம் இணைக்கப்பட்டது"</string>
     <string name="adbwifi_active_notification_message" msgid="930987922852867972">"வைஃபை பிழைதிருத்தத்தை ஆஃப் செய்ய தட்டவும்"</string>
@@ -2188,4 +2190,12 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
+    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
+    <skip />
+    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
+    <skip />
+    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
+    <skip />
+    <!-- no translation found for dismiss_action (1728820550388704784) -->
+    <skip />
 </resources>

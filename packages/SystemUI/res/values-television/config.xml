@@ -29,7 +29,8 @@
         <item>com.android.systemui.util.NotificationChannels</item>
         <item>com.android.systemui.volume.VolumeUI</item>
         <item>com.android.systemui.statusbar.tv.TvStatusBar</item>
-        <item>com.android.systemui.statusbar.tv.TvNotificationPanel</item>
+        <item>com.android.systemui.statusbar.tv.notifications.TvNotificationPanel</item>
+        <item>com.android.systemui.statusbar.tv.notifications.TvNotificationHandler</item>
         <item>com.android.systemui.statusbar.tv.VpnStatusObserver</item>
         <item>com.android.systemui.usb.StorageNotification</item>
         <item>com.android.systemui.power.PowerUI</item>
@@ -43,6 +44,9 @@
         <item>com.android.systemui.toast.ToastUI</item>
         <item>com.android.systemui.wmshell.WMShell</item>
     </string-array>
+
+    <!-- Svelte specific logic, see RecentsConfiguration.SVELTE_* constants. -->
+    <integer name="recents_svelte_level">3</integer>
 
     <!-- Show a separate icon for low and high volume on the volume dialog -->
     <bool name="config_showLowMediaVolumeIcon">true</bool>

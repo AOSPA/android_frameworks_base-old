@@ -77,7 +77,10 @@ import android.util.ArrayMap;
 import android.util.DisplayMetrics;
 import android.util.Singleton;
 import android.util.Size;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.view.Surface;
+import android.view.WindowInsetsController.Appearance;
 
 import com.android.internal.app.LocalePicker;
 import com.android.internal.app.procstats.ProcessStats;
@@ -322,8 +325,8 @@ public class ActivityManager {
     public static final int START_RETURN_INTENT_TO_CALLER = FIRST_START_SUCCESS_CODE + 1;
 
     /**
-     * Result for IActivityManaqer.startActivity: activity wasn't really started, but
-     * a task was simply brought to the foreground.
+     * Result for IActivityManaqer.startActivity: activity was started or brought forward in an
+     * existing task which was brought to the foreground.
      * @hide
      */
     public static final int START_TASK_TO_FRONT = FIRST_START_SUCCESS_CODE + 2;
@@ -1501,57 +1504,54 @@ public class ActivityManager {
         }
 
         /** @hide */
-        public void saveToXml(XmlSerializer out) throws IOException {
+        public void saveToXml(TypedXmlSerializer out) throws IOException {
             if (mLabel != null) {
                 out.attribute(null, ATTR_TASKDESCRIPTIONLABEL, mLabel);
             }
             if (mColorPrimary != 0) {
-                out.attribute(null, ATTR_TASKDESCRIPTIONCOLOR_PRIMARY,
-                        Integer.toHexString(mColorPrimary));
+                out.attributeIntHex(null, ATTR_TASKDESCRIPTIONCOLOR_PRIMARY, mColorPrimary);
             }
             if (mColorBackground != 0) {
-                out.attribute(null, ATTR_TASKDESCRIPTIONCOLOR_BACKGROUND,
-                        Integer.toHexString(mColorBackground));
+                out.attributeIntHex(null, ATTR_TASKDESCRIPTIONCOLOR_BACKGROUND, mColorBackground);
             }
             if (mIconFilename != null) {
                 out.attribute(null, ATTR_TASKDESCRIPTIONICON_FILENAME, mIconFilename);
             }
             if (mIcon != null && mIcon.getType() == Icon.TYPE_RESOURCE) {
-                out.attribute(null, ATTR_TASKDESCRIPTIONICON_RESOURCE,
-                        Integer.toString(mIcon.getResId()));
+                out.attributeInt(null, ATTR_TASKDESCRIPTIONICON_RESOURCE, mIcon.getResId());
                 out.attribute(null, ATTR_TASKDESCRIPTIONICON_RESOURCE_PACKAGE,
                         mIcon.getResPackage());
             }
         }
 
         /** @hide */
-        public void restoreFromXml(XmlPullParser in) {
+        public void restoreFromXml(TypedXmlPullParser in) {
             final String label = in.getAttributeValue(null, ATTR_TASKDESCRIPTIONLABEL);
             if (label != null) {
                 setLabel(label);
             }
-            final String colorPrimary = in.getAttributeValue(null,
-                    ATTR_TASKDESCRIPTIONCOLOR_PRIMARY);
-            if (colorPrimary != null) {
-                setPrimaryColor((int) Long.parseLong(colorPrimary, 16));
+            final int colorPrimary = in.getAttributeIntHex(null,
+                    ATTR_TASKDESCRIPTIONCOLOR_PRIMARY, 0);
+            if (colorPrimary != 0) {
+                setPrimaryColor(colorPrimary);
             }
-            final String colorBackground = in.getAttributeValue(null,
-                    ATTR_TASKDESCRIPTIONCOLOR_BACKGROUND);
-            if (colorBackground != null) {
-                setBackgroundColor((int) Long.parseLong(colorBackground, 16));
+            final int colorBackground = in.getAttributeIntHex(null,
+                    ATTR_TASKDESCRIPTIONCOLOR_BACKGROUND, 0);
+            if (colorBackground != 0) {
+                setBackgroundColor(colorBackground);
             }
             final String iconFilename = in.getAttributeValue(null,
                     ATTR_TASKDESCRIPTIONICON_FILENAME);
             if (iconFilename != null) {
                 setIconFilename(iconFilename);
             }
-            final String iconResourceId = in.getAttributeValue(null,
-                    ATTR_TASKDESCRIPTIONICON_RESOURCE);
+            final int iconResourceId = in.getAttributeInt(null,
+                    ATTR_TASKDESCRIPTIONICON_RESOURCE, Resources.ID_NULL);
             final String iconResourcePackage = in.getAttributeValue(null,
                     ATTR_TASKDESCRIPTIONICON_RESOURCE_PACKAGE);
-            if (iconResourceId != null && iconResourcePackage != null) {
+            if (iconResourceId != Resources.ID_NULL && iconResourcePackage != null) {
                 setIcon(Icon.createWithResource(iconResourcePackage,
-                        Integer.parseInt(iconResourceId, 10)));
+                        iconResourceId));
             }
         }
 
@@ -1853,16 +1853,12 @@ public class ActivityManager {
      * the recent tasks.
      */
     @Deprecated
-    public List<RecentTaskInfo> getRecentTasks(int maxNum, int flags)
-            throws SecurityException {
-        try {
-            if (maxNum < 0) {
-                throw new IllegalArgumentException("The requested number of tasks should be >= 0");
-            }
-            return getTaskService().getRecentTasks(maxNum, flags, mContext.getUserId()).getList();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+    public List<RecentTaskInfo> getRecentTasks(int maxNum, int flags) throws SecurityException {
+        if (maxNum < 0) {
+            throw new IllegalArgumentException("The requested number of tasks should be >= 0");
         }
+        return ActivityTaskManager.getInstance().getRecentTasks(
+                maxNum, flags, mContext.getUserId());
     }
 
     /**
@@ -2083,11 +2079,7 @@ public class ActivityManager {
     @Deprecated
     public List<RunningTaskInfo> getRunningTasks(int maxNum)
             throws SecurityException {
-        try {
-            return getTaskService().getTasks(maxNum);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return ActivityTaskManager.getInstance().getTasks(maxNum);
     }
 
     /**
@@ -2116,7 +2108,7 @@ public class ActivityManager {
         // the task having a secure window or having previews disabled
         private final boolean mIsRealSnapshot;
         private final int mWindowingMode;
-        private final int mSystemUiVisibility;
+        private final @Appearance int mAppearance;
         private final boolean mIsTranslucent;
         // Must be one of the named color spaces, otherwise, always use SRGB color space.
         private final ColorSpace mColorSpace;
@@ -2125,7 +2117,7 @@ public class ActivityManager {
                 @NonNull ComponentName topActivityComponent, HardwareBuffer snapshot,
                 @NonNull ColorSpace colorSpace, int orientation, int rotation, Point taskSize,
                 Rect contentInsets, boolean isLowResolution, boolean isRealSnapshot,
-                int windowingMode, int systemUiVisibility, boolean isTranslucent) {
+                int windowingMode, @Appearance int appearance, boolean isTranslucent) {
             mId = id;
             mTopActivityComponent = topActivityComponent;
             mSnapshot = snapshot;
@@ -2138,7 +2130,7 @@ public class ActivityManager {
             mIsLowResolution = isLowResolution;
             mIsRealSnapshot = isRealSnapshot;
             mWindowingMode = windowingMode;
-            mSystemUiVisibility = systemUiVisibility;
+            mAppearance = appearance;
             mIsTranslucent = isTranslucent;
         }
 
@@ -2157,7 +2149,7 @@ public class ActivityManager {
             mIsLowResolution = source.readBoolean();
             mIsRealSnapshot = source.readBoolean();
             mWindowingMode = source.readInt();
-            mSystemUiVisibility = source.readInt();
+            mAppearance = source.readInt();
             mIsTranslucent = source.readBoolean();
         }
 
@@ -2265,11 +2257,11 @@ public class ActivityManager {
         }
 
         /**
-         * @return The system ui visibility flags for the top most visible fullscreen window at the
+         * @return The {@link Appearance} flags for the top most visible fullscreen window at the
          *         time that the snapshot was taken.
          */
-        public int getSystemUiVisibility() {
-            return mSystemUiVisibility;
+        public @Appearance int getAppearance() {
+            return mAppearance;
         }
 
         @Override
@@ -2291,7 +2283,7 @@ public class ActivityManager {
             dest.writeBoolean(mIsLowResolution);
             dest.writeBoolean(mIsRealSnapshot);
             dest.writeInt(mWindowingMode);
-            dest.writeInt(mSystemUiVisibility);
+            dest.writeInt(mAppearance);
             dest.writeBoolean(mIsTranslucent);
         }
 
@@ -2311,7 +2303,7 @@ public class ActivityManager {
                     + " mIsLowResolution=" + mIsLowResolution
                     + " mIsRealSnapshot=" + mIsRealSnapshot
                     + " mWindowingMode=" + mWindowingMode
-                    + " mSystemUiVisibility=" + mSystemUiVisibility
+                    + " mAppearance=" + mAppearance
                     + " mIsTranslucent=" + mIsTranslucent;
         }
 
@@ -2336,7 +2328,7 @@ public class ActivityManager {
             private Rect mContentInsets;
             private boolean mIsRealSnapshot;
             private int mWindowingMode;
-            private int mSystemUiVisibility;
+            private @Appearance int mAppearance;
             private boolean mIsTranslucent;
             private int mPixelFormat;
 
@@ -2393,8 +2385,8 @@ public class ActivityManager {
                 return this;
             }
 
-            public Builder setSystemUiVisibility(int systemUiVisibility) {
-                mSystemUiVisibility = systemUiVisibility;
+            public Builder setAppearance(@Appearance int appearance) {
+                mAppearance = appearance;
                 return this;
             }
 
@@ -2428,7 +2420,7 @@ public class ActivityManager {
                         false /* isLowResolution */,
                         mIsRealSnapshot,
                         mWindowingMode,
-                        mSystemUiVisibility,
+                        mAppearance,
                         mIsTranslucent);
 
             }

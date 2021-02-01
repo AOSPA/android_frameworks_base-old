@@ -45,7 +45,6 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.os.UserManagerInternal;
 import android.util.Slog;
 import android.view.Display;
 import android.view.DragEvent;
@@ -60,10 +59,10 @@ import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 
-import com.android.internal.os.SomeArgs;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.view.IDragAndDropPermissions;
 import com.android.server.LocalServices;
+import com.android.server.pm.UserManagerInternal;
 
 import java.util.ArrayList;
 
@@ -590,7 +589,7 @@ class DragState {
         final DragAndDropPermissionsHandler dragAndDropPermissions;
         if ((mFlags & View.DRAG_FLAG_GLOBAL) != 0 && (mFlags & DRAG_FLAGS_URI_ACCESS) != 0
                 && mData != null) {
-            dragAndDropPermissions = new DragAndDropPermissionsHandler(
+            dragAndDropPermissions = new DragAndDropPermissionsHandler(mService.mGlobalLock,
                     mData,
                     mUid,
                     touchedWin.getOwningPackage(),

@@ -29,10 +29,13 @@ import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.SyncTransactionQueue;
+import com.android.wm.shell.common.split.SplitLayout;
 
 import java.io.PrintWriter;
 
@@ -41,9 +44,7 @@ import java.io.PrintWriter;
  * {@link #mTaskInfo1} and {@link #mTaskInfo2} in the pair.
  * Also includes all UI for managing the pair like the divider.
  */
-// TODO: Add divider
-// TODO: Handle display rotation
-class AppPair implements ShellTaskOrganizer.TaskListener {
+class AppPair implements ShellTaskOrganizer.TaskListener, SplitLayout.LayoutChangeListener {
     private static final String TAG = AppPair.class.getSimpleName();
 
     private ActivityManager.RunningTaskInfo mRootTaskInfo;
@@ -55,10 +56,13 @@ class AppPair implements ShellTaskOrganizer.TaskListener {
 
     private final AppPairsController mController;
     private final SyncTransactionQueue mSyncQueue;
+    private final DisplayController mDisplayController;
+    private SplitLayout mSplitLayout;
 
     AppPair(AppPairsController controller) {
         mController = controller;
         mSyncQueue = controller.getSyncTransactionQueue();
+        mDisplayController = controller.getDisplayController();
     }
 
     int getRootTaskId() {
@@ -90,13 +94,10 @@ class AppPair implements ShellTaskOrganizer.TaskListener {
 
         mTaskInfo1 = task1;
         mTaskInfo2 = task2;
+        mSplitLayout = new SplitLayout(
+                mDisplayController.getDisplayContext(mRootTaskInfo.displayId),
+                mRootTaskInfo.configuration, this, mRootTaskLeash);
 
-        // TODO: properly calculate bounds for pairs.
-        final Rect rootBounds = mRootTaskInfo.configuration.windowConfiguration.getBounds();
-        final Rect bounds1 = new Rect(
-                rootBounds.left, rootBounds.top, rootBounds.right / 2, rootBounds.bottom / 2);
-        final Rect bounds2 = new Rect(
-                bounds1.right, bounds1.bottom, rootBounds.right, rootBounds.bottom);
         final WindowContainerToken token1 = task1.token;
         final WindowContainerToken token2 = task2.token;
         final WindowContainerTransaction wct = new WindowContainerTransaction();
@@ -106,8 +107,8 @@ class AppPair implements ShellTaskOrganizer.TaskListener {
                 .reparent(token2, mRootTaskInfo.token, true /* onTop */)
                 .setWindowingMode(token1, WINDOWING_MODE_MULTI_WINDOW)
                 .setWindowingMode(token2, WINDOWING_MODE_MULTI_WINDOW)
-                .setBounds(token1, bounds1)
-                .setBounds(token2, bounds2)
+                .setBounds(token1, mSplitLayout.getBounds1())
+                .setBounds(token2, mSplitLayout.getBounds2())
                 // Moving the root task to top after the child tasks were repareted , or the root
                 // task cannot be visible and focused.
                 .reorder(mRootTaskInfo.token, true);
@@ -116,6 +117,10 @@ class AppPair implements ShellTaskOrganizer.TaskListener {
     }
 
     void unpair() {
+        unpair(null /* toTopToken */);
+    }
+
+    private void unpair(@Nullable WindowContainerToken toTopToken) {
         final WindowContainerToken token1 = mTaskInfo1.token;
         final WindowContainerToken token2 = mTaskInfo2.token;
         final WindowContainerTransaction wct = new WindowContainerTransaction();
@@ -123,14 +128,16 @@ class AppPair implements ShellTaskOrganizer.TaskListener {
         // Reparent out of this container and reset windowing mode.
         wct.setHidden(mRootTaskInfo.token, true)
                 .reorder(mRootTaskInfo.token, false)
-                .reparent(token1, null, false /* onTop */)
-                .reparent(token2, null, false /* onTop */)
+                .reparent(token1, null, token1 == toTopToken /* onTop */)
+                .reparent(token2, null, token2 == toTopToken /* onTop */)
                 .setWindowingMode(token1, WINDOWING_MODE_UNDEFINED)
                 .setWindowingMode(token2, WINDOWING_MODE_UNDEFINED);
         mController.getTaskOrganizer().applyTransaction(wct);
 
         mTaskInfo1 = null;
         mTaskInfo2 = null;
+        mSplitLayout.release();
+        mSplitLayout = null;
     }
 
     @Override
@@ -150,21 +157,57 @@ class AppPair implements ShellTaskOrganizer.TaskListener {
 
         if (mTaskLeash1 == null || mTaskLeash2 == null) return;
 
+        mSplitLayout.init();
+        final SurfaceControl dividerLeash = mSplitLayout.getDividerLeash();
+        final Rect dividerBounds = mSplitLayout.getDividerBounds();
+
         // TODO: Is there more we need to do here?
-        mSyncQueue.runInSync(t -> t
-                .setPosition(mTaskLeash1, mTaskInfo1.positionInParent.x,
-                        mTaskInfo1.positionInParent.y)
-                .setPosition(mTaskLeash2, mTaskInfo2.positionInParent.x,
-                        mTaskInfo2.positionInParent.y)
-                .show(mRootTaskLeash)
-                .show(mTaskLeash1)
-                .show(mTaskLeash2));
+        mSyncQueue.runInSync(t -> {
+            t.setLayer(dividerLeash, Integer.MAX_VALUE)
+                    .setPosition(mTaskLeash1, mTaskInfo1.positionInParent.x,
+                            mTaskInfo1.positionInParent.y)
+                    .setPosition(mTaskLeash2, mTaskInfo2.positionInParent.x,
+                            mTaskInfo2.positionInParent.y)
+                    .setPosition(dividerLeash, dividerBounds.left, dividerBounds.top)
+                    .show(mRootTaskLeash)
+                    .show(mTaskLeash1)
+                    .show(mTaskLeash2);
+        });
     }
 
     @Override
     public void onTaskInfoChanged(ActivityManager.RunningTaskInfo taskInfo) {
         if (taskInfo.taskId == getRootTaskId()) {
+            if (mRootTaskInfo.isVisible != taskInfo.isVisible) {
+                mSyncQueue.runInSync(t -> {
+                    if (taskInfo.isVisible) {
+                        t.show(mRootTaskLeash);
+                    } else {
+                        t.hide(mRootTaskLeash);
+                    }
+                });
+            }
             mRootTaskInfo = taskInfo;
+
+            if (mSplitLayout != null
+                    && mSplitLayout.updateConfiguration(mRootTaskInfo.configuration)) {
+                // Update bounds when root bounds or its orientation changed.
+                final WindowContainerTransaction wct = new WindowContainerTransaction();
+                final SurfaceControl dividerLeash = mSplitLayout.getDividerLeash();
+                final Rect dividerBounds = mSplitLayout.getDividerBounds();
+                final Rect bounds1 = mSplitLayout.getBounds1();
+                final Rect bounds2 = mSplitLayout.getBounds2();
+
+                wct.setBounds(mTaskInfo1.token, bounds1)
+                        .setBounds(mTaskInfo2.token, bounds2);
+                mController.getTaskOrganizer().applyTransaction(wct);
+                mSyncQueue.runInSync(t -> t
+                        .setPosition(mTaskLeash1, bounds1.left, bounds1.top)
+                        .setPosition(mTaskLeash2, bounds2.left, bounds2.top)
+                        .setPosition(dividerLeash, dividerBounds.left, dividerBounds.top)
+                        // Resets layer to divider bar to make sure it is always on top.
+                        .setLayer(dividerLeash, Integer.MAX_VALUE));
+            }
         } else if (taskInfo.taskId == getTaskId1()) {
             mTaskInfo1 = taskInfo;
         } else if (taskInfo.taskId == getTaskId2()) {
@@ -204,5 +247,40 @@ class AppPair implements ShellTaskOrganizer.TaskListener {
     @Override
     public String toString() {
         return TAG + "#" + getRootTaskId();
+    }
+
+    @Override
+    public void onSnappedToDismiss(boolean snappedToEnd) {
+        unpair(snappedToEnd ? mTaskInfo1.token : mTaskInfo2.token /* toTopToken */);
+    }
+
+    @Override
+    public void onBoundsChanging(SplitLayout layout) {
+        final SurfaceControl dividerLeash = mSplitLayout.getDividerLeash();
+        if (dividerLeash == null) return;
+        final Rect dividerBounds = layout.getDividerBounds();
+        final Rect bounds1 = layout.getBounds1();
+        final Rect bounds2 = layout.getBounds2();
+        mSyncQueue.runInSync(t -> t
+                .setPosition(dividerLeash, dividerBounds.left, dividerBounds.top)
+                .setPosition(mTaskLeash1, bounds1.left, bounds1.top)
+                .setPosition(mTaskLeash2, bounds2.left, bounds2.top));
+    }
+
+    @Override
+    public void onBoundsChanged(SplitLayout layout) {
+        final SurfaceControl dividerLeash = mSplitLayout.getDividerLeash();
+        if (dividerLeash == null) return;
+        final Rect dividerBounds = layout.getDividerBounds();
+        final Rect bounds1 = layout.getBounds1();
+        final Rect bounds2 = layout.getBounds2();
+        final WindowContainerTransaction wct = new WindowContainerTransaction();
+        wct.setBounds(mTaskInfo1.token, bounds1)
+                .setBounds(mTaskInfo2.token, bounds2);
+        mController.getTaskOrganizer().applyTransaction(wct);
+        mSyncQueue.runInSync(t -> t
+                .setPosition(dividerLeash, dividerBounds.left, dividerBounds.top)
+                .setPosition(mTaskLeash1, bounds1.left, bounds1.top)
+                .setPosition(mTaskLeash2, bounds2.left, bounds2.top));
     }
 }

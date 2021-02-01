@@ -24,6 +24,7 @@ import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.service.attestation.ImpressionToken;
 import android.util.Log;
 import android.util.MergedConfiguration;
 import android.window.ClientWindowFrames;
@@ -207,12 +208,19 @@ public class WindowlessWindowManager implements IWindowSession {
     }
 
     /** @hide */
+    @Nullable
     protected SurfaceControl getSurfaceControl(View rootView) {
         final ViewRootImpl root = rootView.getViewRootImpl();
         if (root == null) {
             return null;
         }
-        final State s = mStateForWindow.get(root.mWindow.asBinder());
+        return getSurfaceControl(root.mWindow);
+    }
+
+    /** @hide */
+    @Nullable
+    protected SurfaceControl getSurfaceControl(IWindow window) {
+        final State s = mStateForWindow.get(window.asBinder());
         if (s == null) {
             return null;
         }
@@ -452,5 +460,11 @@ public class WindowlessWindowManager implements IWindowSession {
     @Override
     public void grantEmbeddedWindowFocus(IWindow callingWindow, IBinder targetInputToken,
                                          boolean grantFocus) {
+    }
+
+    @Override
+    public ImpressionToken generateImpressionToken(IWindow window, Rect boundsInWindow,
+            String hashAlgorithm) {
+        return null;
     }
 }

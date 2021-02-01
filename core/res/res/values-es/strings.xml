@@ -287,6 +287,8 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"Conexión USB"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"Aplicación en ejecución"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"Aplicaciones que consumen batería"</string>
+    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
+    <skip />
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> está usando la batería"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> aplicaciones están usando la batería"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"Toca para ver información detallada sobre el uso de datos y de la batería"</string>
@@ -1635,7 +1637,7 @@
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Al mantener pulsadas ambas teclas de volumen durante unos segundos se activa <xliff:g id="SERVICE">%1$s</xliff:g>, una función de accesibilidad. Esta función puede modificar el funcionamiento del dispositivo.\n\nPuedes asignar este acceso directo a otra función en Ajustes &gt; Accesibilidad."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Activar"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"No activar"</string>
-    <string name="accessibility_shortcut_menu_item_status_on" msgid="6608392117189732543">"SÍ"</string>
+    <string name="accessibility_shortcut_menu_item_status_on" msgid="6608392117189732543">"ACTIVADO"</string>
     <string name="accessibility_shortcut_menu_item_status_off" msgid="5531598275559472393">"NO"</string>
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"¿Permitir que <xliff:g id="SERVICE">%1$s</xliff:g> pueda controlar totalmente tu dispositivo?"</string>
     <string name="accessibility_enable_service_encryption_warning" msgid="8603532708618236909">"Si activas <xliff:g id="SERVICE">%1$s</xliff:g>, el dispositivo no utilizará el bloqueo de pantalla para mejorar el cifrado de datos."</string>
@@ -2188,4 +2190,12 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
+    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
+    <skip />
+    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
+    <skip />
+    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
+    <skip />
+    <!-- no translation found for dismiss_action (1728820550388704784) -->
+    <skip />
 </resources>

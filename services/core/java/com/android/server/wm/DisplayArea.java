@@ -33,7 +33,6 @@ import static com.android.server.wm.WindowContainerChildProto.DISPLAY_AREA;
 import android.annotation.Nullable;
 import android.content.res.Configuration;
 import android.graphics.Rect;
-import android.os.IBinder;
 import android.util.proto.ProtoOutputStream;
 import android.window.DisplayAreaInfo;
 import android.window.IDisplayAreaOrganizer;
@@ -151,12 +150,11 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
     }
 
     @Override
-    boolean onDescendantOrientationChanged(IBinder freezeDisplayToken,
-            WindowContainer requestingContainer) {
+    boolean onDescendantOrientationChanged(WindowContainer requestingContainer) {
         // If this is set to ignore the orientation request, we don't propagate descendant
         // orientation request.
         return !mIgnoreOrientationRequest
-                && super.onDescendantOrientationChanged(freezeDisplayToken, requestingContainer);
+                && super.onDescendantOrientationChanged(requestingContainer);
     }
 
     /**
@@ -174,6 +172,13 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         // Check whether we should notify Display to update orientation.
         if (mDisplayContent == null) {
             return false;
+        }
+
+        if (mDisplayContent.mFocusedApp != null) {
+            // We record the last focused TDA that respects orientation request, check if this
+            // change may affect it.
+            mDisplayContent.onLastFocusedTaskDisplayAreaChanged(
+                    mDisplayContent.mFocusedApp.getDisplayArea());
         }
 
         // The orientation request from this DA may now be respected.
@@ -309,6 +314,11 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         return this;
     }
 
+    /** Cheap way of doing cast and instanceof. */
+    DisplayArea.Tokens asTokens() {
+        return null;
+    }
+
     @Override
     void forAllDisplayAreas(Consumer<DisplayArea> callback) {
         super.forAllDisplayAreas(callback);
@@ -378,6 +388,13 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
             i += traverseTopToBottom ? -1 : 1;
         }
         return result;
+    }
+
+    @Nullable
+    @Override
+    <R> R getItemFromDisplayAreas(Function<DisplayArea, R> callback) {
+        final R item = super.getItemFromDisplayAreas(callback);
+        return item != null ? item : callback.apply(this);
     }
 
     @Nullable
@@ -538,6 +555,11 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
             }
             mLastOrientationSource = win;
             return req;
+        }
+
+        @Override
+        final DisplayArea.Tokens asTokens() {
+            return this;
         }
     }
 

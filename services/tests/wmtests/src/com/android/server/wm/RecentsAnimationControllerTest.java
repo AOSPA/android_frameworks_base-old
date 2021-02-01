@@ -252,7 +252,7 @@ public class RecentsAnimationControllerTest extends WindowTestsBase {
         assertNull(mController.mRecentScreenshotAnimator);
 
         // Simulate the app transition finishing
-        mController.mAppTransitionListener.onAppTransitionStartingLocked(0, 0, 0, 0);
+        mController.mAppTransitionListener.onAppTransitionStartingLocked(false, 0, 0, 0);
         verify(mAnimationCallbacks).onAnimationFinished(REORDER_KEEP_IN_PLACE, false);
     }
 
@@ -322,7 +322,7 @@ public class RecentsAnimationControllerTest extends WindowTestsBase {
         assertEquals(landActivity.findMainWindow(), win1);
 
         // Ensure that the display is in Landscape
-        landActivity.onDescendantOrientationChanged(landActivity.token, landActivity);
+        landActivity.onDescendantOrientationChanged(landActivity);
         assertEquals(Configuration.ORIENTATION_LANDSCAPE,
                 mDefaultDisplay.getConfiguration().orientation);
 

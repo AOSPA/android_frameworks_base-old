@@ -139,7 +139,7 @@ public class LockTaskController {
     static final int LOCK_TASK_AUTH_LAUNCHABLE_PRIV = 4;
 
     private final IBinder mToken = new LockTaskToken();
-    private final ActivityStackSupervisor mSupervisor;
+    private final ActivityTaskSupervisor mSupervisor;
     private final Context mContext;
 
     // The following system services cannot be final, because they do not exist when this class
@@ -188,7 +188,7 @@ public class LockTaskController {
     private volatile int mLockTaskModeState = LOCK_TASK_MODE_NONE;
 
     /**
-     * This is ActivityStackSupervisor's Handler.
+     * This is ActivityTaskSupervisor's Handler.
      */
     private final Handler mHandler;
 
@@ -203,7 +203,7 @@ public class LockTaskController {
      */
     private int mPendingDisableFromDismiss = UserHandle.USER_NULL;
 
-    LockTaskController(Context context, ActivityStackSupervisor supervisor,
+    LockTaskController(Context context, ActivityTaskSupervisor supervisor,
             Handler handler) {
         mContext = context;
         mSupervisor = supervisor;
@@ -504,7 +504,7 @@ public class LockTaskController {
             return;
         }
         task.performClearTaskLocked();
-        mSupervisor.mRootWindowContainer.resumeFocusedStacksTopActivities();
+        mSupervisor.mRootWindowContainer.resumeFocusedTasksTopActivities();
     }
 
     /**
@@ -640,7 +640,7 @@ public class LockTaskController {
         if (andResume) {
             mSupervisor.findTaskToMoveToFront(task, 0, null, reason,
                     lockTaskModeState != LOCK_TASK_MODE_NONE);
-            mSupervisor.mRootWindowContainer.resumeFocusedStacksTopActivities();
+            mSupervisor.mRootWindowContainer.resumeFocusedTasksTopActivities();
             final Task rootTask = task.getRootTask();
             if (rootTask != null) {
                 rootTask.mDisplayContent.executeAppTransition();
@@ -717,7 +717,7 @@ public class LockTaskController {
         }
 
         if (taskChanged) {
-            mSupervisor.mRootWindowContainer.resumeFocusedStacksTopActivities();
+            mSupervisor.mRootWindowContainer.resumeFocusedTasksTopActivities();
         }
     }
 
@@ -729,7 +729,7 @@ public class LockTaskController {
             return LOCK_TASK_AUTH_PINNABLE;
         }
 
-        final String pkg = (task == null || task.realActivity == null) ? null
+        final String pkg = (task == null || task.realActivity == null) ? rootActivity.packageName
                 : task.realActivity.getPackageName();
         final int userId = task != null ? task.mUserId : rootActivity.mUserId;
         int lockTaskAuth = LOCK_TASK_AUTH_DONT_LOCK;

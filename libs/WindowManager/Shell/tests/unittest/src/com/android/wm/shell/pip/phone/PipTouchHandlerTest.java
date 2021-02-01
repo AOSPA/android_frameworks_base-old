@@ -33,6 +33,7 @@ import androidx.test.filters.SmallTest;
 import com.android.wm.shell.R;
 import com.android.wm.shell.ShellTestCase;
 import com.android.wm.shell.common.FloatingContentCoordinator;
+import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipSnapAlgorithm;
@@ -60,7 +61,7 @@ public class PipTouchHandlerTest extends ShellTestCase {
     private PipTouchHandler mPipTouchHandler;
 
     @Mock
-    private PipMenuActivityController mPipMenuActivityController;
+    private PhonePipMenuController mPhonePipMenuController;
 
     @Mock
     private PipTaskOrganizer mPipTaskOrganizer;
@@ -70,6 +71,9 @@ public class PipTouchHandlerTest extends ShellTestCase {
 
     @Mock
     private PipUiEventLogger mPipUiEventLogger;
+
+    @Mock
+    private ShellExecutor mShellMainExecutor;
 
     private PipBoundsState mPipBoundsState;
     private PipBoundsAlgorithm mPipBoundsAlgorithm;
@@ -91,10 +95,10 @@ public class PipTouchHandlerTest extends ShellTestCase {
         mPipBoundsState = new PipBoundsState(mContext);
         mPipBoundsAlgorithm = new PipBoundsAlgorithm(mContext, mPipBoundsState);
         mPipSnapAlgorithm = mPipBoundsAlgorithm.getSnapAlgorithm();
-        mPipSnapAlgorithm = new PipSnapAlgorithm(mContext);
-        mPipTouchHandler = new PipTouchHandler(mContext, mPipMenuActivityController,
+        mPipSnapAlgorithm = new PipSnapAlgorithm();
+        mPipTouchHandler = new PipTouchHandler(mContext, mPhonePipMenuController,
                 mPipBoundsAlgorithm, mPipBoundsState, mPipTaskOrganizer,
-                mFloatingContentCoordinator, mPipUiEventLogger);
+                mFloatingContentCoordinator, mPipUiEventLogger, mShellMainExecutor);
         mMotionHelper = Mockito.spy(mPipTouchHandler.getMotionHelper());
         mPipResizeGestureHandler = Mockito.spy(mPipTouchHandler.getPipResizeGestureHandler());
         mPipTouchHandler.setPipMotionHelper(mMotionHelper);
@@ -115,7 +119,8 @@ public class PipTouchHandlerTest extends ShellTestCase {
     @Test
     public void updateMovementBounds_minBounds() {
         Rect expectedMinMovementBounds = new Rect();
-        mPipSnapAlgorithm.getMovementBounds(mMinBounds, mInsetBounds, expectedMinMovementBounds, 0);
+        mPipBoundsAlgorithm.getMovementBounds(mMinBounds, mInsetBounds, expectedMinMovementBounds,
+                0);
 
         mPipTouchHandler.onMovementBoundsChanged(mInsetBounds, mMinBounds, mCurBounds,
                 mFromImeAdjustment, mFromShelfAdjustment, mDisplayRotation);
@@ -129,12 +134,13 @@ public class PipTouchHandlerTest extends ShellTestCase {
     public void updateMovementBounds_maxBounds() {
         Point displaySize = new Point();
         mContext.getDisplay().getRealSize(displaySize);
-        Size maxSize = mPipSnapAlgorithm.getSizeForAspectRatio(1,
+        Size maxSize = mPipBoundsAlgorithm.getSizeForAspectRatio(1,
                 mContext.getResources().getDimensionPixelSize(
                         R.dimen.pip_expanded_shortest_edge_size), displaySize.x, displaySize.y);
         Rect maxBounds = new Rect(0, 0, maxSize.getWidth(), maxSize.getHeight());
         Rect expectedMaxMovementBounds = new Rect();
-        mPipSnapAlgorithm.getMovementBounds(maxBounds, mInsetBounds, expectedMaxMovementBounds, 0);
+        mPipBoundsAlgorithm.getMovementBounds(maxBounds, mInsetBounds, expectedMaxMovementBounds,
+                0);
 
         mPipTouchHandler.onMovementBoundsChanged(mInsetBounds, mMinBounds, mCurBounds,
                 mFromImeAdjustment, mFromShelfAdjustment, mDisplayRotation);

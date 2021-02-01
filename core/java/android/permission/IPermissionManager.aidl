@@ -73,10 +73,6 @@ interface IPermissionManager {
 
     void resetRuntimePermissions();
 
-    boolean setDefaultBrowser(String packageName, int userId);
-
-    String getDefaultBrowser(int userId);
-
     void grantDefaultPermissionsToEnabledCarrierApps(in String[] packageNames, int userId);
 
     void grantDefaultPermissionsToEnabledImsServices(in String[] packageNames, int userId);
@@ -90,10 +86,6 @@ interface IPermissionManager {
     void grantDefaultPermissionsToActiveLuiApp(in String packageName, int userId);
 
     void revokeDefaultPermissionsFromLuiApps(in String[] packageNames, int userId);
-
-    void setPermissionEnforced(String permName, boolean enforced);
-
-    boolean isPermissionEnforced(String permName);
 
     boolean shouldShowRequestPermissionRationale(String permName,
             String packageName, int userId);

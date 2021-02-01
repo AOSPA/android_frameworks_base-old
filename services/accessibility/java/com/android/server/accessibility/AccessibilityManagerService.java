@@ -80,7 +80,6 @@ import android.os.ShellCallback;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.os.UserManagerInternal;
 import android.provider.Settings;
 import android.provider.SettingsStringUtil.SettingStringHelper;
 import android.text.TextUtils;
@@ -120,8 +119,8 @@ import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.accessibility.magnification.FullScreenMagnificationController;
 import com.android.server.accessibility.magnification.MagnificationController;
-import com.android.server.accessibility.magnification.MagnificationGestureHandler;
 import com.android.server.accessibility.magnification.WindowMagnificationManager;
+import com.android.server.pm.UserManagerInternal;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -153,7 +152,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         AccessibilityUserState.ServiceInfoChangeListener,
         AccessibilityWindowManager.AccessibilityEventSender,
         AccessibilitySecurityPolicy.AccessibilityUserManager,
-        MagnificationGestureHandler.ScaleChangedListener,
         SystemActionPerformer.SystemActionsChangedListener {
 
     private static final boolean DEBUG = false;
@@ -1066,17 +1064,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
     }
 
-    @Override
-    public void onMagnificationScaleChanged(int displayId, int mode) {
-        synchronized (mLock) {
-            final int capabilities =
-                    getCurrentUserStateLocked().getMagnificationCapabilitiesLocked();
-            if (capabilities == Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_ALL) {
-                getWindowMagnificationMgr().showMagnificationButton(displayId, mode);
-            }
-        }
-    }
-
     /**
      * Called by AccessibilityInputFilter when it creates or destroys the motionEventInjector.
      * Not using a getter because the AccessibilityInputFilter isn't thread-safe
@@ -1981,6 +1968,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         // Update the capabilities before the mode.
         updateMagnificationCapabilitiesSettingsChangeLocked(userState);
         updateMagnificationModeChangeSettingsLocked(userState);
+        updateFocusAppearanceDataLocked(userState);
     }
 
     private void updateWindowsForAccessibilityCallbackLocked(AccessibilityUserState userState) {
@@ -3000,6 +2988,17 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
     }
 
+    /**
+     * Getter of {@link MagnificationController}.
+     *
+     * @return MagnificationController
+     */
+    MagnificationController getMagnificationController() {
+        synchronized (mLock) {
+            return mMagnificationController;
+        }
+    }
+
     @Override
     public void associateEmbeddedHierarchy(@NonNull IBinder host, @NonNull IBinder embedded) {
         synchronized (mLock) {
@@ -3011,6 +3010,30 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     public void disassociateEmbeddedHierarchy(@NonNull IBinder token) {
         synchronized (mLock) {
             mA11yWindowManager.disassociateEmbeddedHierarchyLocked(token);
+        }
+    }
+
+    /**
+     * Gets the stroke width of the focus rectangle.
+     * @return The stroke width.
+     */
+    public int getFocusStrokeWidth() {
+        synchronized (mLock) {
+            final AccessibilityUserState userState = getCurrentUserStateLocked();
+
+            return userState.getFocusStrokeWidthLocked();
+        }
+    }
+
+    /**
+     * Gets the color of the focus rectangle.
+     * @return The color.
+     */
+    public int getFocusColor() {
+        synchronized (mLock) {
+            final AccessibilityUserState userState = getCurrentUserStateLocked();
+
+            return userState.getFocusColorLocked();
         }
     }
 
@@ -3584,6 +3607,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN, userState.mUserId);
         if (capabilities != userState.getMagnificationCapabilitiesLocked()) {
             userState.setMagnificationCapabilitiesLocked(capabilities);
+            mMagnificationController.setMagnificationCapabilities(capabilities);
             return true;
         }
         return false;
@@ -3623,5 +3647,19 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 mInputFilter.setGestureDetectionPassthroughRegion(displayId, region);
             }
         }
+    }
+
+    private void updateFocusAppearanceDataLocked(AccessibilityUserState userState) {
+        if (userState.mUserId != mCurrentUserId) {
+            return;
+        }
+
+        mMainHandler.post(() -> {
+            broadcastToClients(userState, ignoreRemoteException(client -> {
+                client.mCallback.setFocusAppearance(userState.getFocusStrokeWidthLocked(),
+                        userState.getFocusColorLocked());
+            }));
+        });
+
     }
 }

@@ -28,14 +28,24 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.util.DisplayMetrics.DENSITY_DEFAULT;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.InsetsState.ITYPE_CLIMATE_BAR;
+import static android.view.InsetsState.ITYPE_EXTRA_NAVIGATION_BAR;
+import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
+import static android.view.InsetsState.ITYPE_STATUS_BAR;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
+import static com.android.server.wm.ActivityStarter.Request;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.RESULT_CONTINUE;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.RESULT_SKIP;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import android.app.ActivityOptions;
 import android.content.pm.ActivityInfo;
@@ -45,6 +55,7 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.platform.test.annotations.Presubmit;
 import android.view.Gravity;
+import android.view.InsetsState;
 
 import androidx.test.filters.SmallTest;
 
@@ -256,6 +267,180 @@ public class TaskLaunchParamsModifierTests extends WindowTestsBase {
 
         assertEquals(freeformDisplay.getDefaultTaskDisplayArea(),
                 mResult.mPreferredTaskDisplayArea);
+    }
+
+    @Test
+    public void testUsesDisplayAreaFromTopMostActivityInApplicationIfAvailable() {
+        final String processName = "processName";
+        final int uid = 124214;
+        final TestDisplayContent firstScreen = createNewDisplayContent(WINDOWING_MODE_FULLSCREEN);
+        final TestDisplayContent secondScreen = createNewDisplayContent(WINDOWING_MODE_FULLSCREEN);
+        final TaskDisplayArea expectedDisplayArea = secondScreen.getDefaultTaskDisplayArea();
+        final WindowProcessController controller = mock(WindowProcessController.class);
+
+        when(controller.getTopActivityDisplayArea()).thenReturn(expectedDisplayArea);
+
+        when(mActivity.getProcessName()).thenReturn(processName);
+        when(mActivity.getUid()).thenReturn(uid);
+        doReturn(controller)
+                .when(mSupervisor.mService)
+                .getProcessController(processName, uid);
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(
+                null /* task */,
+                null /* layout */,
+                mActivity /* activity */,
+                null /* source */,
+                null /* options */,
+                -1 /* phase */,
+                mCurrent,
+                mResult,
+                null /* request */
+        ));
+
+        assertEquals(expectedDisplayArea, mResult.mPreferredTaskDisplayArea);
+    }
+
+    @Test
+    public void testUsesDisplayAreaFromLaunchingActivityIfApplicationLaunching() {
+        final String processName = "processName";
+        final int uid = 124214;
+        final TestDisplayContent firstScreen = createNewDisplayContent(WINDOWING_MODE_FULLSCREEN);
+        final TestDisplayContent secondScreen = createNewDisplayContent(WINDOWING_MODE_FULLSCREEN);
+        final TaskDisplayArea expectedTaskDisplayArea = secondScreen.getDefaultTaskDisplayArea();
+        final WindowProcessController controller = mock(WindowProcessController.class);
+
+        when(controller.getTopActivityDisplayArea()).thenReturn(expectedTaskDisplayArea);
+
+        when(mActivity.getProcessName()).thenReturn(processName);
+        when(mActivity.getUid()).thenReturn(uid);
+        doReturn(null)
+                .when(mSupervisor.mService)
+                .getProcessController(processName, uid);
+
+        doReturn(controller)
+                .when(mSupervisor.mService)
+                .getProcessController(mActivity.launchedFromPid, mActivity.launchedFromUid);
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(
+                null /* task */,
+                null /* layout */,
+                mActivity /* activity */,
+                null /* source */,
+                null /* options */,
+                -1 /* phase */,
+                mCurrent,
+                mResult,
+                null /* request */
+        ));
+
+        assertEquals(expectedTaskDisplayArea, mResult.mPreferredTaskDisplayArea);
+    }
+
+    @Test
+    public void testDisplayAreaFromLaunchingActivityTakesPrecedence() {
+        final String processName = "processName";
+        final int uid = 124214;
+        final TestDisplayContent firstScreen = createNewDisplayContent(WINDOWING_MODE_FULLSCREEN);
+        final TestDisplayContent secondScreen = createNewDisplayContent(WINDOWING_MODE_FULLSCREEN);
+        final TaskDisplayArea firstTaskDisplayArea = firstScreen.getDefaultTaskDisplayArea();
+        final TaskDisplayArea expectedTaskDisplayArea = secondScreen.getDefaultTaskDisplayArea();
+        final WindowProcessController controllerForLaunching = mock(WindowProcessController.class);
+        final WindowProcessController controllerForApplication =
+                mock(WindowProcessController.class);
+
+        when(mActivity.getProcessName()).thenReturn(processName);
+        when(mActivity.getUid()).thenReturn(uid);
+
+        when(controllerForApplication.getTopActivityDisplayArea()).thenReturn(firstTaskDisplayArea);
+        when(controllerForLaunching.getTopActivityDisplayArea())
+                .thenReturn(expectedTaskDisplayArea);
+
+        doReturn(controllerForApplication)
+                .when(mSupervisor.mService)
+                .getProcessController(processName, uid);
+        doReturn(controllerForLaunching)
+                .when(mSupervisor.mService)
+                .getProcessController(mActivity.launchedFromPid, mActivity.launchedFromUid);
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(
+                null /* task */,
+                null /* layout */,
+                mActivity /* activity */,
+                null /* source */,
+                null /* options */,
+                -1 /* phase */,
+                mCurrent,
+                mResult,
+                null /* request */
+        ));
+
+        assertEquals(expectedTaskDisplayArea, mResult.mPreferredTaskDisplayArea);
+    }
+
+    @Test
+    public void testUsesDisplayAreaOriginalProcessAsLastResort() {
+        final TestDisplayContent firstScreen = createNewDisplayContent(WINDOWING_MODE_FULLSCREEN);
+        final TestDisplayContent secondScreen = createNewDisplayContent(WINDOWING_MODE_FULLSCREEN);
+        final TaskDisplayArea expectedTaskDisplayArea = secondScreen.getDefaultTaskDisplayArea();
+        final Request request = new Request();
+        request.realCallingPid = 12412413;
+        request.realCallingUid = 235424;
+
+        final WindowProcessController controller = mock(WindowProcessController.class);
+
+        when(controller.getTopActivityDisplayArea()).thenReturn(expectedTaskDisplayArea);
+
+        doReturn(null)
+                .when(mSupervisor.mService)
+                .getProcessController(mActivity.processName, mActivity.info.applicationInfo.uid);
+
+        doReturn(null)
+                .when(mSupervisor.mService)
+                .getProcessController(mActivity.launchedFromPid, mActivity.launchedFromUid);
+
+        doReturn(controller)
+                .when(mSupervisor.mService)
+                .getProcessController(request.realCallingPid, request.realCallingUid);
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(
+                null /* task */,
+                null /* layout */,
+                mActivity /* activity */,
+                null /* source */,
+                null /* options */,
+                -1 /* phase */,
+                mCurrent,
+                mResult,
+                request
+        ));
+
+        assertEquals(expectedTaskDisplayArea, mResult.mPreferredTaskDisplayArea);
+    }
+
+    @Test
+    public void testUsesDefaultDisplayAreaIfWindowProcessControllerIsNotPresent() {
+        doReturn(null)
+                .when(mSupervisor.mService)
+                .getProcessController(mActivity.processName, mActivity.info.applicationInfo.uid);
+
+        doReturn(null)
+                .when(mSupervisor.mService)
+                .getProcessController(mActivity.launchedFromPid, mActivity.launchedFromUid);
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(
+                null /* task */,
+                null /* layout */,
+                mActivity /* activity */,
+                null /* source */,
+                null /* options */,
+                -1 /* phase */,
+                mCurrent,
+                mResult,
+                null /* request */
+        ));
+
+        assertEquals(DEFAULT_DISPLAY, mResult.mPreferredTaskDisplayArea.getDisplayId());
     }
 
     // =====================================
@@ -1114,8 +1299,9 @@ public class TaskLaunchParamsModifierTests extends WindowTestsBase {
 
         // This test case requires a relatively big app bounds to ensure the default size calculated
         // by letterbox won't be too small to hold the minimum width/height.
-        freeformDisplay.mDisplayContent.mDisplayFrames.mStable.set(/* left */ 10, /* top */ 10,
-                /* right */ 1910, /* top */ 1070);
+        configInsetsState(
+                freeformDisplay.getInsetsStateController().getRawInsetsState(),
+                DISPLAY_BOUNDS, new Rect(10, 10, 1910, 1070));
 
         final ActivityOptions options = ActivityOptions.makeBasic();
         options.setLaunchDisplayId(freeformDisplay.mDisplayId);
@@ -1339,24 +1525,54 @@ public class TaskLaunchParamsModifierTests extends WindowTestsBase {
         display.setBounds(DISPLAY_BOUNDS);
         display.getConfiguration().densityDpi = DENSITY_DEFAULT;
         display.getConfiguration().orientation = ORIENTATION_LANDSCAPE;
-        display.mDisplayContent.mDisplayFrames.mStable.set(DISPLAY_STABLE_BOUNDS);
-        spyOn(display.mDisplayContent.mDisplayFrames);
+        configInsetsState(display.getInsetsStateController().getRawInsetsState(),
+                DISPLAY_BOUNDS, DISPLAY_STABLE_BOUNDS);
 
         // We didn't set up the overall environment for this test, so we need to mute the side
         // effect of layout passes that loosen the stable frame.
-        doNothing().when(display.mDisplayContent.mDisplayFrames).onBeginLayout();
+        final DisplayPolicy policy = display.getDisplayPolicy();
+        spyOn(policy);
+        doNothing().when(policy).beginLayoutLw(any(), anyInt());
         return display;
+    }
+
+    /**
+     * Creates insets sources so that we can get the expected stable frame.
+     */
+    private static void configInsetsState(InsetsState state, Rect displayFrame, Rect stableFrame) {
+        final int dl = displayFrame.left;
+        final int dt = displayFrame.top;
+        final int dr = displayFrame.right;
+        final int db = displayFrame.bottom;
+        final int sl = stableFrame.left;
+        final int st = stableFrame.top;
+        final int sr = stableFrame.right;
+        final int sb = stableFrame.bottom;
+
+        state.setDisplayFrame(displayFrame);
+        if (sl > dl) {
+            state.getSource(ITYPE_CLIMATE_BAR).setFrame(dl, dt, sl, db);
+        }
+        if (st > dt) {
+            state.getSource(ITYPE_STATUS_BAR).setFrame(dl, dt, dr, st);
+        }
+        if (sr < dr) {
+            state.getSource(ITYPE_EXTRA_NAVIGATION_BAR).setFrame(sr, dt, dr, db);
+        }
+        if (sb < db) {
+            state.getSource(ITYPE_NAVIGATION_BAR).setFrame(dl, sb, dr, db);
+        }
     }
 
     private ActivityRecord createSourceActivity(TestDisplayContent display) {
         final Task stack = display.getDefaultTaskDisplayArea()
-                .createStack(display.getWindowingMode(), ACTIVITY_TYPE_STANDARD, true);
+                .createRootTask(display.getWindowingMode(), ACTIVITY_TYPE_STANDARD, true);
         return new ActivityBuilder(mAtm).setTask(stack).build();
     }
 
     private void addFreeformTaskTo(TestDisplayContent display, Rect bounds) {
         final Task stack = display.getDefaultTaskDisplayArea()
-                .createStack(display.getWindowingMode(), ACTIVITY_TYPE_STANDARD, true);
+                .createRootTask(display.getWindowingMode(), ACTIVITY_TYPE_STANDARD, true);
         stack.setWindowingMode(WINDOWING_MODE_FREEFORM);
         final Task task = new TaskBuilder(mSupervisor).setParentTask(stack).build();
         // Just work around the unnecessary adjustments for bounds.

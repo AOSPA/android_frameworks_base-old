@@ -21,8 +21,11 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.hardware.power.stats.EnergyConsumerId;
+import android.hardware.power.stats.EnergyConsumerResult;
 import android.os.BatteryStats;
 import android.os.BatteryStatsInternal;
+import android.os.BatteryUsageStats;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -37,7 +40,6 @@ import android.os.Process;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
-import android.os.UserManagerInternal;
 import android.os.WorkSource;
 import android.os.connectivity.CellularBatteryStats;
 import android.os.connectivity.GpsBatteryStats;
@@ -56,16 +58,20 @@ import android.util.Slog;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BatteryStatsImpl;
+import com.android.internal.os.BatteryUsageStatsProvider;
 import com.android.internal.os.BinderCallsStats;
 import com.android.internal.os.PowerProfile;
 import com.android.internal.os.RailStats;
 import com.android.internal.os.RpmStats;
+import com.android.internal.power.MeasuredEnergyArray;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.ParseUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.Watchdog;
+import com.android.server.pm.UserManagerInternal;
+import com.android.server.powerstats.PowerStatsHALWrapper;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -90,7 +96,7 @@ import java.util.concurrent.Future;
 public final class BatteryStatsService extends IBatteryStats.Stub
         implements PowerManagerInternal.LowPowerModeListener,
         BatteryStatsImpl.PlatformIdleStateCallback,
-        BatteryStatsImpl.RailEnergyDataCallback,
+        BatteryStatsImpl.MeasuredEnergyRetriever,
         Watchdog.Monitor {
     static final String TAG = "BatteryStatsService";
     static final boolean DBG = false;
@@ -101,6 +107,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     private final BatteryStatsImpl.UserInfoProvider mUserManagerUserInfoProvider;
     private final Context mContext;
     private final BatteryExternalStatsWorker mWorker;
+    private final BatteryUsageStatsProvider mBatteryUsageStatsProvider;
 
     private native void getLowPowerStats(RpmStats rpmStats);
     private native int getPlatformLowPowerStats(ByteBuffer outBuffer);
@@ -114,6 +121,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     private ByteBuffer mUtf8BufferStat = ByteBuffer.allocateDirect(MAX_LOW_POWER_STATS_SIZE);
     private CharBuffer mUtf16BufferStat = CharBuffer.allocate(MAX_LOW_POWER_STATS_SIZE);
     private static final int MAX_LOW_POWER_STATS_SIZE = 4096;
+
+    private final PowerStatsHALWrapper.IPowerStatsHALWrapper mPowerStatsHALWrapper;
 
     private final HandlerThread mHandlerThread;
     private final Handler mHandler;
@@ -186,6 +195,43 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
+    @Override
+    public MeasuredEnergyArray getEnergyConsumptionData() {
+        final EnergyConsumerResult[] results = mPowerStatsHALWrapper.getEnergyConsumed(new int[0]);
+        if (results == null) return null;
+        final int size = results.length;
+        final int[] subsystems = new int[size];
+        final long[] energyUJ = new long[size];
+
+        for (int i = 0; i < size; i++) {
+            final EnergyConsumerResult consumer = results[i];
+            final int subsystem;
+            switch (consumer.energyConsumerId) {
+                case EnergyConsumerId.DISPLAY:
+                    subsystem = MeasuredEnergyArray.SUBSYSTEM_DISPLAY;
+                    break;
+                default:
+                    continue;
+            }
+            subsystems[i] = subsystem;
+            energyUJ[i] = consumer.energyUWs;
+        }
+        return new MeasuredEnergyArray() {
+            @Override
+            public int getSubsystem(int index) {
+                return subsystems[index];
+            }
+            @Override
+            public long getEnergy(int index) {
+                return energyUJ[index];
+            }
+            @Override
+            public int size() {
+                return size;
+            }
+        };
+    }
+
     BatteryStatsService(Context context, File systemDir, Handler handler) {
         // BatteryStatsImpl expects the ActivityManagerService handler, so pass that one through.
         mContext = context;
@@ -202,6 +248,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         mHandlerThread = new HandlerThread("batterystats-handler");
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper());
+
+        // TODO(b/173077356): Replace directly calling the HAL with PowerStatsService queries
+        // Make sure to init Hal Wrapper before creating BatteryStatsImpl.
+        mPowerStatsHALWrapper = new PowerStatsHALWrapper.PowerStatsHALWrapperImpl();
+        mPowerStatsHALWrapper.initialize();
+
         mStats = new BatteryStatsImpl(systemDir, handler, this,
                 this, mUserManagerUserInfoProvider);
         mWorker = new BatteryExternalStatsWorker(context, mStats);
@@ -209,6 +261,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         mStats.setRadioScanningTimeoutLocked(mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_radioScanningTimeout) * 1000L);
         mStats.setPowerProfileLocked(new PowerProfile(context));
+        mBatteryUsageStatsProvider = new BatteryUsageStatsProvider(context, mStats);
     }
 
     public void publish() {
@@ -501,6 +554,16 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
     // Public interface...
 
+    /**
+     * Returns BatteryUsageStats, which contains power attribution data on a per-subsystem
+     * and per-UID basis.
+     */
+    public BatteryUsageStats getBatteryUsageStats() {
+        mContext.enforceCallingPermission(
+                android.Manifest.permission.BATTERY_STATS, null);
+        return mBatteryUsageStatsProvider.getBatteryUsageStats();
+    }
+
     public byte[] getStatistics() {
         mContext.enforceCallingPermission(
                 android.Manifest.permission.BATTERY_STATS, null);
@@ -519,16 +582,24 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         return data;
     }
 
-    public ParcelFileDescriptor getStatisticsStream() {
+    /**
+     * Returns parceled BatteryStats as a MemoryFile.
+     *
+     * @param forceUpdate If true, runs a sync to get fresh battery stats. Otherwise,
+     *                  returns the current values.
+     */
+    public ParcelFileDescriptor getStatisticsStream(boolean forceUpdate) {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.BATTERY_STATS, null);
         //Slog.i("foo", "SENDING BATTERY INFO:");
         //mStats.dumpLocked(new LogPrinter(Log.INFO, "foo", Log.LOG_ID_SYSTEM));
         Parcel out = Parcel.obtain();
-        // Drain the handler queue to make sure we've handled all pending works, so we'll get
-        // an accurate stats.
-        awaitCompletion();
-        syncStats("get-stats", BatteryExternalStatsWorker.UPDATE_ALL);
+        if (forceUpdate) {
+            // Drain the handler queue to make sure we've handled all pending works, so we'll get
+            // an accurate stats.
+            awaitCompletion();
+            syncStats("get-stats", BatteryExternalStatsWorker.UPDATE_ALL);
+        }
         synchronized (mStats) {
             mStats.writeToParcel(out, 0);
         }
@@ -1955,6 +2026,15 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
+    private void dumpMeasuredEnergyStats(PrintWriter pw) {
+        // Wait for the completion of pending works if there is any
+        awaitCompletion();
+        syncStats("dump", BatteryExternalStatsWorker.UPDATE_ENERGY);
+        synchronized (mStats) {
+            mStats.dumpMeasuredEnergyStatsLocked(pw);
+        }
+    }
+
     private int doEnableOrDisable(PrintWriter pw, int i, String[] args, boolean enable) {
         i++;
         if (i >= args.length) {
@@ -2094,6 +2174,9 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     return;
                 } else if ("--cpu".equals(arg)) {
                     dumpCpuStats(pw);
+                    return;
+                } else  if ("--measured-energy".equals(arg)) {
+                    dumpMeasuredEnergyStats(pw);
                     return;
                 } else if ("-a".equals(arg)) {
                     flags |= BatteryStats.DUMP_VERBOSE;

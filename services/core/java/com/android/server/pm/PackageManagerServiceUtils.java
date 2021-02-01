@@ -46,7 +46,6 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
-import android.os.UserManagerInternal;
 import android.os.incremental.IncrementalManager;
 import android.os.incremental.V4Signature;
 import android.os.incremental.V4Signature.HashingInfo;
@@ -820,8 +819,8 @@ public class PackageManagerServiceUtils {
     /**
      * Parse given package and return minimal details.
      */
-    public static PackageInfoLite getMinimalPackageInfo(Context context, String packagePath,
-            int flags, String abiOverride) {
+    public static PackageInfoLite getMinimalPackageInfo(Context context,
+            PackageParser.PackageLite pkg, String packagePath, int flags, String abiOverride) {
         final PackageInfoLite ret = new PackageInfoLite();
         if (packagePath == null) {
             Slog.i(TAG, "Invalid package file " + packagePath);
@@ -830,14 +829,10 @@ public class PackageManagerServiceUtils {
         }
 
         final File packageFile = new File(packagePath);
-        final PackageParser.PackageLite pkg;
         final long sizeBytes;
         try {
-            pkg = PackageParser.parsePackageLite(packageFile, 0);
             sizeBytes = PackageHelper.calculateInstalledSize(pkg, abiOverride);
-        } catch (PackageParserException | IOException e) {
-            Slog.w(TAG, "Failed to parse package at " + packagePath + ": " + e);
-
+        } catch (IOException e) {
             if (!packageFile.exists()) {
                 ret.recommendedInstallLocation = PackageHelper.RECOMMEND_FAILED_INVALID_URI;
             } else {

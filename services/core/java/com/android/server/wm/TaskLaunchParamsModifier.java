@@ -35,6 +35,7 @@ import static android.util.DisplayMetrics.DENSITY_DEFAULT;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
+import static com.android.server.wm.ActivityStarter.Request;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
@@ -83,13 +84,14 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
     // We always want to step by at least this.
     private static final int MINIMAL_STEP = 1;
 
-    private final ActivityStackSupervisor mSupervisor;
+    private final ActivityTaskSupervisor mSupervisor;
     private final Rect mTmpBounds = new Rect();
+    private final Rect mTmpStableBounds = new Rect();
     private final int[] mTmpDirections = new int[2];
 
     private StringBuilder mLogBuilder;
 
-    TaskLaunchParamsModifier(ActivityStackSupervisor supervisor) {
+    TaskLaunchParamsModifier(ActivityTaskSupervisor supervisor) {
         mSupervisor = supervisor;
     }
 
@@ -98,23 +100,25 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
             ActivityRecord source, ActivityOptions options, LaunchParams currentParams,
             LaunchParams outParams) {
         return onCalculate(task, layout, activity, source, options, PHASE_BOUNDS, currentParams,
-                outParams);
+                outParams, null);
     }
 
     @Override
-    public int onCalculate(Task task, ActivityInfo.WindowLayout layout,
-                           ActivityRecord activity, ActivityRecord source, ActivityOptions options,
-                           int phase, LaunchParams currentParams, LaunchParams outParams) {
+    public int onCalculate(@Nullable Task task, @NonNull ActivityInfo.WindowLayout layout,
+            @NonNull ActivityRecord activity, @Nullable ActivityRecord source,
+            ActivityOptions options, int phase, LaunchParams currentParams, LaunchParams outParams,
+            @Nullable Request request) {
         initLogBuilder(task, activity);
         final int result = calculate(task, layout, activity, source, options, phase, currentParams,
-                outParams);
+                outParams, request);
         outputLog();
         return result;
     }
 
-    private int calculate(Task task, ActivityInfo.WindowLayout layout,
-            ActivityRecord activity, ActivityRecord source, ActivityOptions options, int phase,
-            LaunchParams currentParams, LaunchParams outParams) {
+    private int calculate(@Nullable Task task, @NonNull ActivityInfo.WindowLayout layout,
+            @NonNull ActivityRecord activity, @Nullable ActivityRecord source,
+            ActivityOptions options, int phase, LaunchParams currentParams, LaunchParams outParams,
+            @Nullable Request request) {
         final ActivityRecord root;
         if (task != null) {
             root = task.getRootActivity() == null ? activity : task.getRootActivity();
@@ -137,7 +141,7 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
 
         // STEP 1: Determine the display area to launch the activity/task.
         final TaskDisplayArea taskDisplayArea = getPreferredLaunchTaskDisplayArea(task,
-                options, source, currentParams);
+                options, source, currentParams, activity, request);
         outParams.mPreferredTaskDisplayArea = taskDisplayArea;
         // TODO(b/152116619): Update the usages of display to use taskDisplayArea below.
         final DisplayContent display = taskDisplayArea.mDisplayContent;
@@ -297,7 +301,8 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
     }
 
     private TaskDisplayArea getPreferredLaunchTaskDisplayArea(@Nullable Task task,
-            @Nullable ActivityOptions options, ActivityRecord source, LaunchParams currentParams) {
+            @Nullable ActivityOptions options, ActivityRecord source, LaunchParams currentParams,
+            @NonNull ActivityRecord activityRecord, @Nullable Request request) {
         TaskDisplayArea taskDisplayArea = null;
 
         final WindowContainerToken optionLaunchTaskDisplayAreaToken = options != null
@@ -368,7 +373,7 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
             taskDisplayArea = currentParams.mPreferredTaskDisplayArea;
         }
 
-        // Fallback to default display if the device didn't declare support for multi-display
+        // Re-route to default display if the device didn't declare support for multi-display
         if (taskDisplayArea != null && !mSupervisor.mService.mSupportsMultiDisplay
                 && taskDisplayArea.getDisplayId() != DEFAULT_DISPLAY) {
             taskDisplayArea = mSupervisor.mRootWindowContainer.getDefaultTaskDisplayArea();
@@ -376,7 +381,53 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
 
         return (taskDisplayArea != null)
                 ? taskDisplayArea
-                : mSupervisor.mRootWindowContainer.getDefaultTaskDisplayArea();
+                : getFallbackDisplayAreaForActivity(activityRecord, request);
+    }
+
+    /**
+     * Calculates the default {@link TaskDisplayArea} for a task. We attempt to put the activity
+     * within the same display area if possible. The strategy is to find the display in the
+     * following order:
+     *
+     * <ol>
+     *     <li>The display area of the top activity from the launching process will be used</li>
+     *     <li>The display area of the top activity from the real launching process will be used
+     *     </li>
+     *     <li>Default display area from the associated root window container.</li>
+     * </ol>
+     * @param activityRecord the activity being started
+     * @param request optional {@link Request} made to start the activity record
+     * @return {@link TaskDisplayArea} to house the task
+     */
+    private TaskDisplayArea getFallbackDisplayAreaForActivity(
+            @NonNull ActivityRecord activityRecord, @Nullable Request request) {
+
+        WindowProcessController controllerFromLaunchingRecord = mSupervisor.mService
+                .getProcessController(activityRecord.launchedFromPid,
+                        activityRecord.launchedFromUid);
+        final TaskDisplayArea displayAreaForLaunchingRecord = controllerFromLaunchingRecord == null
+                ? null : controllerFromLaunchingRecord.getTopActivityDisplayArea();
+        if (displayAreaForLaunchingRecord != null) {
+            return displayAreaForLaunchingRecord;
+        }
+
+        WindowProcessController controllerFromProcess = mSupervisor.mService.getProcessController(
+                activityRecord.getProcessName(), activityRecord.getUid());
+        final TaskDisplayArea displayAreaForRecord = controllerFromProcess == null ? null
+                : controllerFromProcess.getTopActivityDisplayArea();
+        if (displayAreaForRecord != null) {
+            return displayAreaForRecord;
+        }
+
+        WindowProcessController controllerFromRequest = request == null ? null : mSupervisor
+                .mService.getProcessController(request.realCallingPid, request.realCallingUid);
+        final TaskDisplayArea displayAreaFromSourceProcess = controllerFromRequest == null ? null
+                : controllerFromRequest.getTopActivityDisplayArea();
+        if (displayAreaFromSourceProcess != null) {
+            return displayAreaFromSourceProcess;
+        }
+
+        return mSupervisor.mRootWindowContainer.getDefaultTaskDisplayArea();
     }
 
     private boolean canInheritWindowingModeFromSource(@NonNull DisplayContent display,
@@ -425,7 +476,8 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
 
         // Use stable frame instead of raw frame to avoid launching freeform windows on top of
         // stable insets, which usually are system widgets such as sysbar & navbar.
-        final Rect displayStableBounds = display.mDisplayContent.mDisplayFrames.mStable;
+        final Rect displayStableBounds = mTmpStableBounds;
+        display.getStableRect(displayStableBounds);
         final int defaultWidth = displayStableBounds.width();
         final int defaultHeight = displayStableBounds.height();
 
@@ -636,7 +688,8 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         // of default size is calculated to keep the same aspect ratio as the display's. Here we use
         // stable bounds of displays because that indicates the area that isn't occupied by system
         // widgets (e.g. sysbar and navbar).
-        Rect displayStableBounds = display.mDisplayContent.mDisplayFrames.mStable;
+        final Rect displayStableBounds = mTmpStableBounds;
+        display.getStableRect(displayStableBounds);
         final int portraitHeight =
                 Math.min(displayStableBounds.width(), displayStableBounds.height());
         final int otherDimension =
@@ -676,7 +729,7 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
     private void centerBounds(@NonNull DisplayContent display, int width, int height,
             @NonNull Rect inOutBounds) {
         if (inOutBounds.isEmpty()) {
-            inOutBounds.set(display.mDisplayContent.mDisplayFrames.mStable);
+            display.getStableRect(inOutBounds);
         }
         final int left = inOutBounds.centerX() - width / 2;
         final int top = inOutBounds.centerY() - height / 2;
@@ -685,7 +738,8 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
 
     private void adjustBoundsToFitInDisplay(@NonNull DisplayContent display,
             @NonNull Rect inOutBounds) {
-        final Rect displayStableBounds = display.mDisplayContent.mDisplayFrames.mStable;
+        final Rect displayStableBounds = mTmpStableBounds;
+        display.getStableRect(displayStableBounds);
 
         if (displayStableBounds.width() < inOutBounds.width()
                 || displayStableBounds.height() < inOutBounds.height()) {
@@ -742,9 +796,9 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
             @NonNull Rect inOutBounds) {
         final List<Rect> taskBoundsToCheck = new ArrayList<>();
         display.forAllTaskDisplayAreas(taskDisplayArea -> {
-            int numStacks = taskDisplayArea.getStackCount();
+            int numStacks = taskDisplayArea.getRootTaskCount();
             for (int sNdx = 0; sNdx < numStacks; ++sNdx) {
-                final Task task = taskDisplayArea.getStackAt(sNdx);
+                final Task task = taskDisplayArea.getRootTaskAt(sNdx);
                 if (!task.inFreeformWindowingMode()) {
                     continue;
                 }

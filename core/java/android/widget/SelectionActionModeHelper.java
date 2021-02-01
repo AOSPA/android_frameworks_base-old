@@ -1022,7 +1022,13 @@ public final class SelectionActionModeHelper {
         protected SelectionResult doInBackground(Void... params) {
             final Runnable onTimeOut = this::onTimeOut;
             mTextView.postDelayed(onTimeOut, mTimeOutDuration);
-            final SelectionResult result = mSelectionResultSupplier.get();
+            SelectionResult result = null;
+            try {
+                result = mSelectionResultSupplier.get();
+            } catch (IllegalStateException e) {
+                // TODO(b/174300371): Only swallows the exception if the TCSession is destroyed
+                Log.w(LOG_TAG, "TextClassificationAsyncTask failed.", e);
+            }
             mTextView.removeCallbacks(onTimeOut);
             return result;
         }
@@ -1118,6 +1124,7 @@ public final class SelectionActionModeHelper {
                         mTrimmedText, mRelativeStart, mRelativeEnd)
                         .setDefaultLocales(mDefaultLocales)
                         .setDarkLaunchAllowed(true)
+                        .setIncludeTextClassification(true)
                         .build();
                 selection = mTextClassifier.get().suggestSelection(request);
             } else {
@@ -1175,6 +1182,8 @@ public final class SelectionActionModeHelper {
                     // Do not show smart actions for text containing unsupported characters.
                     android.util.EventLog.writeEvent(0x534e4554, "116321860", -1, "");
                     classification = TextClassification.EMPTY;
+                } else if (selection != null && selection.getTextClassification() != null) {
+                    classification = selection.getTextClassification();
                 } else if (mContext.getApplicationInfo().targetSdkVersion
                         >= Build.VERSION_CODES.P) {
                     final TextClassification.Request request =

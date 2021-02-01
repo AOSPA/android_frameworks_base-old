@@ -27,6 +27,7 @@ import static com.android.server.hdmi.HdmiControlService.STANDBY_SCREEN_OFF;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.content.Context;
+import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.hdmi.IHdmiControlCallback;
@@ -169,7 +170,7 @@ public class HdmiCecLocalDeviceAudioSystemTest {
                 }
 
                 @Override
-                void writeStringSystemProperty(String key, String value) {
+                protected void writeStringSystemProperty(String key, String value) {
                     // do nothing
                 }
 
@@ -184,12 +185,12 @@ public class HdmiCecLocalDeviceAudioSystemTest {
                 }
 
                 @Override
-                PowerManager getPowerManager() {
+                protected PowerManager getPowerManager() {
                     return powerManager;
                 }
 
                 @Override
-                HdmiCecConfig getHdmiCecConfig() {
+                protected HdmiCecConfig getHdmiCecConfig() {
                     return hdmiCecConfig;
                 }
             };
@@ -449,6 +450,39 @@ public class HdmiCecLocalDeviceAudioSystemTest {
         mTestLooper.dispatchAll();
         assertThat(mHdmiCecLocalDeviceAudioSystem.getActiveSource().equals(expectedActiveSource))
             .isTrue();
+    }
+
+    @Test
+    public void systemAudioModeMuting_enabled() {
+        mHdmiControlService.getHdmiCecConfig().setIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING,
+                HdmiControlManager.SYSTEM_AUDIO_MODE_MUTING_ENABLED);
+        mHdmiCecLocalDeviceAudioSystem.checkSupportAndSetSystemAudioMode(true);
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isSystemAudioActivated()).isTrue();
+        assertThat(mHdmiControlService.getAudioManager().isStreamMute(
+                AudioManager.STREAM_MUSIC)).isFalse();
+        mHdmiCecLocalDeviceAudioSystem.checkSupportAndSetSystemAudioMode(false);
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isSystemAudioActivated()).isFalse();
+        assertThat(mHdmiControlService.getAudioManager().isStreamMute(
+                AudioManager.STREAM_MUSIC)).isTrue();
+    }
+
+    @Test
+    public void systemAudioModeMuting_disabled() {
+        mHdmiControlService.getHdmiCecConfig().setIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING,
+                HdmiControlManager.SYSTEM_AUDIO_MODE_MUTING_DISABLED);
+        mHdmiCecLocalDeviceAudioSystem.checkSupportAndSetSystemAudioMode(true);
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isSystemAudioActivated()).isTrue();
+        assertThat(mHdmiControlService.getAudioManager().isStreamMute(
+                AudioManager.STREAM_MUSIC)).isFalse();
+        mHdmiCecLocalDeviceAudioSystem.checkSupportAndSetSystemAudioMode(false);
+        assertThat(mHdmiCecLocalDeviceAudioSystem.isSystemAudioActivated()).isFalse();
+        assertThat(mHdmiControlService.getAudioManager().isStreamMute(
+                AudioManager.STREAM_MUSIC)).isFalse();
+        mHdmiControlService.getHdmiCecConfig().setIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING,
+                HdmiControlManager.SYSTEM_AUDIO_MODE_MUTING_ENABLED);
     }
 
     @Test

@@ -46,7 +46,6 @@ import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
-import android.os.UserManagerInternal;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -71,8 +70,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
-import com.android.server.SystemService.TargetUser;
-import com.android.server.pm.permission.PermissionManagerServiceInternal;
+import com.android.server.pm.UserManagerInternal;
 
 import java.io.ByteArrayOutputStream;
 import java.io.FileDescriptor;
@@ -84,7 +82,6 @@ import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Consumer;
 
 /**
  * Service for role management.
@@ -162,12 +159,6 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         mAppOpsManager = context.getSystemService(AppOpsManager.class);
 
         LocalServices.addService(RoleManagerInternal.class, new Internal());
-
-        PermissionManagerServiceInternal permissionManagerInternal =
-                LocalServices.getService(PermissionManagerServiceInternal.class);
-        permissionManagerInternal.setDefaultBrowserProvider(new DefaultBrowserProvider());
-        permissionManagerInternal.setDefaultDialerProvider(new DefaultDialerProvider());
-        permissionManagerInternal.setDefaultHomeProvider(new DefaultHomeProvider());
 
         registerUserRemovedReceiver();
     }
@@ -658,12 +649,78 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                     resultReceiver);
         }
 
+        @Nullable
         @Override
-        public String getDefaultSmsPackage(int userId) {
+        public String getBrowserRoleHolder(@UserIdInt int userId) {
+            final int callingUid = Binder.getCallingUid();
+            if (UserHandle.getUserId(callingUid) != userId) {
+                getContext().enforceCallingOrSelfPermission(
+                        android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
+            }
+            final PackageManagerInternal packageManager = LocalServices.getService(
+                    PackageManagerInternal.class);
+            if (packageManager.getInstantAppPackageName(callingUid) != null) {
+                return null;
+            }
+
             final long identity = Binder.clearCallingIdentity();
             try {
-                return CollectionUtils.firstOrNull(
-                        getRoleHoldersAsUser(RoleManager.ROLE_SMS, userId));
+                return CollectionUtils.firstOrNull(getRoleHoldersAsUser(RoleManager.ROLE_BROWSER,
+                        userId));
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public boolean setBrowserRoleHolder(@Nullable String packageName, @UserIdInt int userId) {
+            final Context context = getContext();
+            context.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.SET_PREFERRED_APPLICATIONS, null);
+            if (UserHandle.getCallingUserId() != userId) {
+                context.enforceCallingOrSelfPermission(
+                        android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
+            }
+
+            if (!mUserManagerInternal.exists(userId)) {
+                return false;
+            }
+
+            final AndroidFuture<Void> future = new AndroidFuture<>();
+            final RemoteCallback callback = new RemoteCallback(result -> {
+                boolean successful = result != null;
+                if (successful) {
+                    future.complete(null);
+                } else {
+                    future.completeExceptionally(new RuntimeException());
+                }
+            });
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                if (packageName != null) {
+                    addRoleHolderAsUser(RoleManager.ROLE_BROWSER, packageName, 0, userId, callback);
+                } else {
+                    clearRoleHoldersAsUser(RoleManager.ROLE_BROWSER, 0, userId, callback);
+                }
+                try {
+                    future.get(5, TimeUnit.SECONDS);
+                } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                    Slog.e(LOG_TAG, "Exception while setting default browser: " + packageName, e);
+                    return false;
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+
+            return true;
+        }
+
+        @Override
+        public String getSmsRoleHolder(int userId) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                return CollectionUtils.firstOrNull(getRoleHoldersAsUser(RoleManager.ROLE_SMS,
+                        userId));
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -717,102 +774,6 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @Override
         public ArrayMap<String, ArraySet<String>> getRolesAndHolders(@UserIdInt int userId) {
             return getOrCreateUserState(userId).getRolesAndHolders();
-        }
-    }
-
-    private class DefaultBrowserProvider implements
-            PermissionManagerServiceInternal.DefaultBrowserProvider {
-
-        @Nullable
-        @Override
-        public String getDefaultBrowser(@UserIdInt int userId) {
-            return CollectionUtils.firstOrNull(getOrCreateUserState(userId).getRoleHolders(
-                    RoleManager.ROLE_BROWSER));
-        }
-
-        @Override
-        public boolean setDefaultBrowser(@Nullable String packageName, @UserIdInt int userId) {
-            AndroidFuture<Void> future = new AndroidFuture<>();
-            RemoteCallback callback = new RemoteCallback(result -> {
-                boolean successful = result != null;
-                if (successful) {
-                    future.complete(null);
-                } else {
-                    future.completeExceptionally(new RuntimeException());
-                }
-            });
-            if (packageName != null) {
-                getOrCreateController(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
-                        packageName, 0, callback);
-            } else {
-                getOrCreateController(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
-                        callback);
-            }
-            try {
-                future.get(5, TimeUnit.SECONDS);
-                return true;
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                Slog.e(LOG_TAG, "Exception while setting default browser: " + packageName, e);
-                return false;
-            }
-        }
-
-        @Override
-        public void setDefaultBrowserAsync(@Nullable String packageName, @UserIdInt int userId) {
-            RemoteCallback callback = new RemoteCallback(result -> {
-                boolean successful = result != null;
-                if (!successful) {
-                    Slog.e(LOG_TAG, "Failed to set default browser: " + packageName);
-                }
-            });
-            if (packageName != null) {
-                getOrCreateController(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
-                        packageName, 0, callback);
-            } else {
-                getOrCreateController(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
-                        callback);
-            }
-        }
-    }
-
-    private class DefaultDialerProvider implements
-            PermissionManagerServiceInternal.DefaultDialerProvider {
-
-        @Nullable
-        @Override
-        public String getDefaultDialer(@UserIdInt int userId) {
-            return CollectionUtils.firstOrNull(getOrCreateUserState(userId).getRoleHolders(
-                    RoleManager.ROLE_DIALER));
-        }
-    }
-
-    private class DefaultHomeProvider implements
-            PermissionManagerServiceInternal.DefaultHomeProvider {
-
-        @Nullable
-        @Override
-        public String getDefaultHome(@UserIdInt int userId) {
-            return CollectionUtils.firstOrNull(getOrCreateUserState(userId).getRoleHolders(
-                    RoleManager.ROLE_HOME));
-        }
-
-        @Override
-        public void setDefaultHomeAsync(@Nullable String packageName, @UserIdInt int userId,
-                @NonNull Consumer<Boolean> callback) {
-            RemoteCallback remoteCallback = new RemoteCallback(result -> {
-                boolean successful = result != null;
-                if (!successful) {
-                    Slog.e(LOG_TAG, "Failed to set default home: " + packageName);
-                }
-                callback.accept(successful);
-            });
-            if (packageName != null) {
-                getOrCreateController(userId).onAddRoleHolder(RoleManager.ROLE_HOME,
-                        packageName, 0, remoteCallback);
-            } else {
-                getOrCreateController(userId).onClearRoleHolders(RoleManager.ROLE_HOME, 0,
-                        remoteCallback);
-            }
         }
     }
 }

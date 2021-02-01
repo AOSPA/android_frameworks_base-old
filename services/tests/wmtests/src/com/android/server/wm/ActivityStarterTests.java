@@ -52,7 +52,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
-import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
+import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
@@ -127,6 +127,7 @@ public class ActivityStarterTests extends WindowTestsBase {
     private static final String FAKE_CALLING_PACKAGE = "com.whatever.dude";
     private static final int UNIMPORTANT_UID = 12345;
     private static final int UNIMPORTANT_UID2 = 12346;
+    private static final int CURRENT_IME_UID = 12347;
 
     @Before
     public void setUp() throws Exception {
@@ -197,7 +198,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         final ActivityStartController controller = mock(ActivityStartController.class);
 
         final ActivityStarter starter = new ActivityStarter(controller, service,
-                service.mStackSupervisor, mock(ActivityStartInterceptor.class));
+                service.mTaskSupervisor, mock(ActivityStartInterceptor.class));
         prepareStarter(launchFlags);
         final IApplicationThread caller = mock(IApplicationThread.class);
         final WindowProcessListener listener = mock(WindowProcessListener.class);
@@ -222,7 +223,7 @@ public class ActivityStarterTests extends WindowTestsBase {
 
         // Create source token
         final ActivityBuilder builder = new ActivityBuilder(service).setTask(
-                new TaskBuilder(service.mStackSupervisor)
+                new TaskBuilder(service.mTaskSupervisor)
                         .setVoiceSession(voiceSession)
                         .setCreateParentTask(true)
                         .build());
@@ -250,7 +251,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         }
 
         if (containsConditions(preconditions, PRECONDITION_CANNOT_START_ANY_ACTIVITY)) {
-            doReturn(false).when(service.mStackSupervisor).checkStartAnyActivityPermission(
+            doReturn(false).when(service.mTaskSupervisor).checkStartAnyActivityPermission(
                     any(), any(), any(), anyInt(), anyInt(), anyInt(), any(), any(),
                     anyBoolean(), anyBoolean(), any(), any(), any());
         }
@@ -292,7 +293,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         // Ensure that {@link ActivityOptions} are aborted with unsuccessful result.
         if (expectedResult != START_SUCCESS) {
             final ActivityStarter optionStarter = new ActivityStarter(mController, mAtm,
-                    mAtm.mStackSupervisor, mock(ActivityStartInterceptor.class));
+                    mAtm.mTaskSupervisor, mock(ActivityStartInterceptor.class));
             final ActivityOptions options = spy(ActivityOptions.makeBasic());
 
             final int optionResult = optionStarter.setCaller(caller)
@@ -316,11 +317,17 @@ public class ActivityStarterTests extends WindowTestsBase {
         return prepareStarter(launchFlags, mockGetLaunchStack, LAUNCH_MULTIPLE);
     }
 
+    private void setupImeWindow() {
+        final WindowState imeWindow = createWindow(null, W_INPUT_METHOD,
+                "mImeWindow", CURRENT_IME_UID);
+        mDisplayContent.mInputMethodWindow = imeWindow;
+    }
+
     /**
      * Creates a {@link ActivityStarter} with default parameters and necessary mocks.
      *
      * @param launchFlags The intent flags to launch activity.
-     * @param mockGetLaunchStack Whether to mock {@link RootWindowContainer#getLaunchStack} for
+     * @param mockGetLaunchStack Whether to mock {@link RootWindowContainer#getLaunchRootTask} for
      *                           always launching to the testing stack. Set to false when allowing
      *                           the activity can be launched to any stack that is decided by real
      *                           implementation.
@@ -336,14 +343,14 @@ public class ActivityStarterTests extends WindowTestsBase {
         if (mockGetLaunchStack) {
             // Instrument the stack and task used.
             final Task stack = mRootWindowContainer.getDefaultTaskDisplayArea()
-                    .createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                    .createRootTask(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
                             true /* onTop */);
 
             // Direct starter to use spy stack.
             doReturn(stack).when(mRootWindowContainer)
-                    .getLaunchStack(any(), any(), any(), anyBoolean());
-            doReturn(stack).when(mRootWindowContainer)
-                    .getLaunchStack(any(), any(), any(), anyBoolean(), any(), anyInt(), anyInt());
+                    .getLaunchRootTask(any(), any(), any(), anyBoolean());
+            doReturn(stack).when(mRootWindowContainer).getLaunchRootTask(any(), any(), any(),
+                    anyBoolean(), any(), anyInt(), anyInt());
         }
 
         // Set up mock package manager internal and make sure no unmocked methods are called
@@ -374,7 +381,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         info.launchMode = launchMode;
 
         return new ActivityStarter(mController, mAtm,
-                mAtm.mStackSupervisor, mock(ActivityStartInterceptor.class))
+                mAtm.mTaskSupervisor, mock(ActivityStartInterceptor.class))
                 .setIntent(intent)
                 .setActivityInfo(info);
     }
@@ -388,7 +395,7 @@ public class ActivityStarterTests extends WindowTestsBase {
     public void testCreateTaskLayout() {
         // modifier for validating passed values.
         final LaunchParamsModifier modifier = mock(LaunchParamsModifier.class);
-        mAtm.mStackSupervisor.getLaunchParamsController().registerModifier(modifier);
+        mAtm.mTaskSupervisor.getLaunchParamsController().registerModifier(modifier);
 
         // add custom values to activity info to make unique.
         final ActivityInfo info = new ActivityInfo();
@@ -417,7 +424,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         // verify that values are passed to the modifier. Values are passed thrice -- two for
         // setting initial state, another when task is created.
         verify(modifier, times(3)).onCalculate(any(), eq(windowLayout), any(), any(), eq(options),
-                anyInt(), any(), any());
+                anyInt(), any(), any(), any());
     }
 
     /**
@@ -509,8 +516,8 @@ public class ActivityStarterTests extends WindowTestsBase {
 
     private void assertNoTasks(DisplayContent display) {
         display.forAllTaskDisplayAreas(taskDisplayArea -> {
-            for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
-                final Task stack = taskDisplayArea.getStackAt(sNdx);
+            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
+                final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
                 assertFalse(stack.hasChild());
             }
         });
@@ -523,7 +530,7 @@ public class ActivityStarterTests extends WindowTestsBase {
     @Test
     public void testActivityStartsLogging_noLoggingWhenDisabled() {
         doReturn(false).when(mAtm).isActivityStartsLoggingEnabled();
-        doReturn(mActivityMetricsLogger).when(mAtm.mStackSupervisor).getActivityMetricsLogger();
+        doReturn(mActivityMetricsLogger).when(mAtm.mTaskSupervisor).getActivityMetricsLogger();
 
         ActivityStarter starter = prepareStarter(FLAG_ACTIVITY_NEW_TASK);
         starter.setReason("testActivityStartsLogging_noLoggingWhenDisabled").execute();
@@ -541,7 +548,7 @@ public class ActivityStarterTests extends WindowTestsBase {
     public void testActivityStartsLogging_logsWhenEnabled() {
         // note: conveniently this package doesn't have any activity visible
         doReturn(true).when(mAtm).isActivityStartsLoggingEnabled();
-        doReturn(mActivityMetricsLogger).when(mAtm.mStackSupervisor).getActivityMetricsLogger();
+        doReturn(mActivityMetricsLogger).when(mAtm.mTaskSupervisor).getActivityMetricsLogger();
 
         ActivityStarter starter = prepareStarter(FLAG_ACTIVITY_NEW_TASK)
                 .setCallingUid(FAKE_CALLING_UID)
@@ -659,6 +666,14 @@ public class ActivityStarterTests extends WindowTestsBase {
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
                 false, false, false, false, true);
+
+        setupImeWindow();
+        runAndVerifyBackgroundActivityStartsSubtest(
+                "disallowed_callingPackageNameIsIme_notAborted", false,
+                CURRENT_IME_UID, false, PROCESS_STATE_TOP + 1,
+                UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
+                false, false, false, false, false);
+
     }
 
     private void runAndVerifyBackgroundActivityStartsSubtest(String name, boolean shouldHaveAborted,
@@ -685,14 +700,11 @@ public class ActivityStarterTests extends WindowTestsBase {
             boolean isCallingUidDeviceOwner,
             boolean isPinnedSingleInstance) {
         // window visibility
-        doReturn(callingUidHasVisibleWindow).when(mAtm.mWindowManager.mRoot)
-                .isAnyNonToastWindowVisibleForUid(callingUid);
-        doReturn(realCallingUidHasVisibleWindow).when(mAtm.mWindowManager.mRoot)
-                .isAnyNonToastWindowVisibleForUid(realCallingUid);
-
+        doReturn(callingUidHasVisibleWindow).when(mAtm).hasActiveVisibleWindow(callingUid);
+        doReturn(realCallingUidHasVisibleWindow).when(mAtm).hasActiveVisibleWindow(realCallingUid);
         // process importance
-        doReturn(callingUidProcState).when(mAtm).getUidState(callingUid);
-        doReturn(realCallingUidProcState).when(mAtm).getUidState(realCallingUid);
+        mAtm.mActiveUids.onUidActive(callingUid, callingUidProcState);
+        mAtm.mActiveUids.onUidActive(realCallingUid, realCallingUidProcState);
         // foreground activities
         final IApplicationThread caller = mock(IApplicationThread.class);
         final WindowProcessListener listener = mock(WindowProcessListener.class);
@@ -705,7 +717,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         doReturn(callerApp).when(mAtm).getProcessController(caller);
         // caller is recents
         RecentTasks recentTasks = mock(RecentTasks.class);
-        mAtm.mStackSupervisor.setRecentTasks(recentTasks);
+        mAtm.mTaskSupervisor.setRecentTasks(recentTasks);
         doReturn(callerIsRecents).when(recentTasks).isCallerRecents(callingUid);
         // caller is temp allowed
         if (callerIsTempAllowed) {
@@ -799,7 +811,7 @@ public class ActivityStarterTests extends WindowTestsBase {
                 new TestDisplayContent.Builder(mAtm, 1000, 1500)
                         .setPosition(POSITION_BOTTOM).build();
         final TaskDisplayArea secondaryTaskContainer = secondaryDisplay.getDefaultTaskDisplayArea();
-        final Task stack = secondaryTaskContainer.createStack(
+        final Task stack = secondaryTaskContainer.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Create an activity record on the top of secondary display.
@@ -821,7 +833,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         assertEquals(START_DELIVERED_TO_TOP, result);
 
         // Ensure secondary display only creates one stack.
-        verify(secondaryTaskContainer, times(1)).createStack(anyInt(), anyInt(), anyBoolean());
+        verify(secondaryTaskContainer, times(1)).createRootTask(anyInt(), anyInt(), anyBoolean());
     }
 
     /**
@@ -841,11 +853,11 @@ public class ActivityStarterTests extends WindowTestsBase {
                 false /* includingParents */);
         final TaskDisplayArea secondaryTaskContainer = secondaryDisplay.getDefaultTaskDisplayArea();
         final ActivityRecord singleTaskActivity = createSingleTaskActivityOn(
-                secondaryTaskContainer.createStack(WINDOWING_MODE_FULLSCREEN,
+                secondaryTaskContainer.createRootTask(WINDOWING_MODE_FULLSCREEN,
                         ACTIVITY_TYPE_STANDARD, false /* onTop */));
 
         // Create another activity on top of the secondary display.
-        final Task topStack = secondaryTaskContainer.createStack(WINDOWING_MODE_FULLSCREEN,
+        final Task topStack = secondaryTaskContainer.createRootTask(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
         final Task topTask = new TaskBuilder(mSupervisor).setParentTask(topStack).build();
         new ActivityBuilder(mAtm).setTask(topTask).build();
@@ -863,7 +875,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         assertEquals(START_TASK_TO_FRONT, result);
 
         // Ensure secondary display only creates two stacks.
-        verify(secondaryTaskContainer, times(2)).createStack(anyInt(), anyInt(), anyBoolean());
+        verify(secondaryTaskContainer, times(2)).createRootTask(anyInt(), anyInt(), anyBoolean());
         // The metrics logger should receive the same result and non-null options.
         verify(mActivityMetricsLogger).notifyActivityLaunched(any() /* launchingState */,
                 eq(result), eq(singleTaskActivity), notNull() /* options */);
@@ -931,7 +943,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         // Create a secondary display at bottom.
         final TestDisplayContent secondaryDisplay = addNewDisplayContentAt(POSITION_BOTTOM);
         final TaskDisplayArea secondaryTaskContainer = secondaryDisplay.getDefaultTaskDisplayArea();
-        secondaryTaskContainer.createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+        secondaryTaskContainer.createRootTask(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
                 true /* onTop */);
 
         // Put an activity on default display as the top focused activity.
@@ -959,7 +971,7 @@ public class ActivityStarterTests extends WindowTestsBase {
     @Test
     public void testFreezeTaskListActivityOption() {
         RecentTasks recentTasks = mock(RecentTasks.class);
-        mAtm.mStackSupervisor.setRecentTasks(recentTasks);
+        mAtm.mTaskSupervisor.setRecentTasks(recentTasks);
         doReturn(true).when(recentTasks).isCallerRecents(anyInt());
 
         final ActivityStarter starter = prepareStarter(0 /* flags */);
@@ -981,7 +993,7 @@ public class ActivityStarterTests extends WindowTestsBase {
     @Test
     public void testFreezeTaskListActivityOptionFailedStart_expectResetFreezeTaskList() {
         RecentTasks recentTasks = mock(RecentTasks.class);
-        mAtm.mStackSupervisor.setRecentTasks(recentTasks);
+        mAtm.mTaskSupervisor.setRecentTasks(recentTasks);
         doReturn(true).when(recentTasks).isCallerRecents(anyInt());
 
         final ActivityStarter starter = prepareStarter(0 /* flags */);
@@ -1018,7 +1030,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         intent.setComponent(ActivityBuilder.getDefaultComponent());
 
         doReturn(true).when(mMockPackageManager).isInstantAppInstallerComponent(any());
-        starter.setIntent(intent).mRequest.resolveActivity(mAtm.mStackSupervisor);
+        starter.setIntent(intent).mRequest.resolveActivity(mAtm.mTaskSupervisor);
 
         // Make sure the client intent won't be modified.
         assertThat(intent.getComponent()).isNotNull();
@@ -1045,8 +1057,8 @@ public class ActivityStarterTests extends WindowTestsBase {
     public void testRecycleTaskFromAnotherUser() {
         final ActivityStarter starter = prepareStarter(0 /* flags */);
         starter.mStartActivity = new ActivityBuilder(mAtm).build();
-        final Task task = new TaskBuilder(mAtm.mStackSupervisor)
-                .setParentTask(mAtm.mRootWindowContainer.getDefaultTaskDisplayArea().createStack(
+        final Task task = new TaskBuilder(mAtm.mTaskSupervisor)
+                .setParentTask(mAtm.mRootWindowContainer.getDefaultTaskDisplayArea().createRootTask(
                         WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */))
                 .setUserId(10)
                 .build();
@@ -1085,7 +1097,7 @@ public class ActivityStarterTests extends WindowTestsBase {
     @Test
     public void testActivityStart_expectAddedToRecentTask() {
         RecentTasks recentTasks = mock(RecentTasks.class);
-        mAtm.mStackSupervisor.setRecentTasks(recentTasks);
+        mAtm.mTaskSupervisor.setRecentTasks(recentTasks);
         doReturn(true).when(recentTasks).isCallerRecents(anyInt());
 
         final ActivityStarter starter = prepareStarter(0 /* flags */);
@@ -1110,13 +1122,13 @@ public class ActivityStarterTests extends WindowTestsBase {
 
         final Task stack = spy(
                 mRootWindowContainer.getDefaultTaskDisplayArea()
-                        .createStack(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD,
+                        .createRootTask(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD,
                                 /* onTop */true));
 
         stack.addChild(targetRecord);
 
         doReturn(stack).when(mRootWindowContainer)
-                .getLaunchStack(any(), any(), any(), anyBoolean(), any(), anyInt(), anyInt());
+                .getLaunchRootTask(any(), any(), any(), anyBoolean(), any(), anyInt(), anyInt());
 
         starter.mStartActivity = new ActivityBuilder(mAtm).build();
 

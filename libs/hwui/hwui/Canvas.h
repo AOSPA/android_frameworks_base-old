@@ -18,6 +18,7 @@
 
 #include <cutils/compiler.h>
 #include <utils/Functor.h>
+#include <SaveFlags.h>
 
 #include <androidfw/ResourceTypes.h>
 #include "Properties.h"
@@ -56,22 +57,6 @@ class SkiaDisplayList;
  */
 using DisplayList = skiapipeline::SkiaDisplayList;
 }
-
-namespace SaveFlags {
-
-// These must match the corresponding Canvas API constants.
-enum {
-    Matrix = 0x01,
-    Clip = 0x02,
-    HasAlphaLayer = 0x04,
-    ClipToLayer = 0x10,
-
-    // Helper constant
-    MatrixClip = Matrix | Clip,
-};
-typedef uint32_t Flags;
-
-}  // namespace SaveFlags
 
 namespace uirenderer {
 namespace VectorDrawable {
@@ -178,10 +163,8 @@ public:
     virtual void restoreToCount(int saveCount) = 0;
     virtual void restoreUnclippedLayer(int saveCount, const SkPaint& paint) = 0;
 
-    virtual int saveLayer(float left, float top, float right, float bottom, const SkPaint* paint,
-                          SaveFlags::Flags flags) = 0;
-    virtual int saveLayerAlpha(float left, float top, float right, float bottom, int alpha,
-                               SaveFlags::Flags flags) = 0;
+    virtual int saveLayer(float left, float top, float right, float bottom, const SkPaint* paint) = 0;
+    virtual int saveLayerAlpha(float left, float top, float right, float bottom, int alpha) = 0;
     virtual int saveUnclippedLayer(int, int, int, int) = 0;
 
     // Matrix

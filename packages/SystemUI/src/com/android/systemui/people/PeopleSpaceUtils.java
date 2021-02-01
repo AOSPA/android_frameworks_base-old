@@ -19,8 +19,9 @@ package com.android.systemui.people;
 import android.app.INotificationManager;
 import android.app.people.ConversationChannel;
 import android.app.people.IPeopleManager;
+import android.app.people.PeopleSpaceTile;
 import android.content.Context;
-import android.content.pm.ShortcutInfo;
+import android.content.pm.LauncherApps;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
@@ -28,15 +29,19 @@ import android.graphics.drawable.Drawable;
 import android.icu.text.MeasureFormat;
 import android.icu.util.Measure;
 import android.icu.util.MeasureUnit;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.ConversationChannelWrapper;
+import android.util.Log;
 
 import com.android.systemui.R;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** Utils class for People Space. */
 public class PeopleSpaceUtils {
@@ -47,25 +52,52 @@ public class PeopleSpaceUtils {
     private static final int MIN_HOUR = 1;
     private static final int ONE_DAY = 1;
 
-    /** Returns a list of {@link ShortcutInfo} corresponding to user's conversations. */
-    public static List<ShortcutInfo> getShortcutInfos(Context context,
-            INotificationManager notificationManager, IPeopleManager peopleManager)
+    /** Returns a list of map entries corresponding to user's conversations. */
+    public static List<Map.Entry<Long, PeopleSpaceTile>> getTiles(
+            Context context, INotificationManager notificationManager, IPeopleManager peopleManager,
+            LauncherApps launcherApps)
             throws Exception {
         boolean showAllConversations = Settings.Global.getInt(context.getContentResolver(),
                 Settings.Global.PEOPLE_SPACE_CONVERSATION_TYPE, 0) == 0;
         List<ConversationChannelWrapper> conversations = notificationManager.getConversations(
-                !showAllConversations /* priority only */).getList();
-        List<ShortcutInfo> shortcutInfos = conversations.stream().filter(
-                c -> shouldKeepConversation(c)).map(c -> c.getShortcutInfo()).collect(
-                Collectors.toList());
+                true).getList();
+        List<Map.Entry<Long, PeopleSpaceTile>> tiles = getSortedTiles(peopleManager,
+                conversations.stream().map(c ->
+                        new PeopleSpaceTile.Builder(c.getShortcutInfo(), launcherApps).build()));
         if (showAllConversations) {
             List<ConversationChannel> recentConversations =
                     peopleManager.getRecentConversations().getList();
-            List<ShortcutInfo> recentShortcuts = recentConversations.stream().map(
-                    c -> c.getShortcutInfo()).collect(Collectors.toList());
-            shortcutInfos.addAll(recentShortcuts);
+            List<Map.Entry<Long, PeopleSpaceTile>> recentTiles =
+                    getSortedTiles(peopleManager, recentConversations.stream().map(c ->
+                            new PeopleSpaceTile
+                                    .Builder(c.getShortcutInfo(), launcherApps)
+                                    .build()));
+            tiles.addAll(recentTiles);
         }
-        return shortcutInfos;
+        return tiles;
+    }
+
+    /** Returns a list sorted by ascending last interaction time from {@code stream}. */
+    private static List<Map.Entry<Long, PeopleSpaceTile>> getSortedTiles(
+            IPeopleManager peopleManager, Stream<PeopleSpaceTile> stream) {
+        return stream
+                .filter(c -> shouldKeepConversation(c))
+                .map(c -> Map.entry(getLastInteraction(peopleManager, c), c))
+                .sorted((c1, c2) -> (c2.getKey().compareTo(c1.getKey())))
+                .collect(Collectors.toList());
+    }
+
+    /** Returns the last interaction time with the user specified by {@code PeopleSpaceTile}. */
+    private static Long getLastInteraction(IPeopleManager peopleManager,
+            PeopleSpaceTile tile) {
+        try {
+            int userId = UserHandle.getUserHandleForUid(tile.getUid()).getIdentifier();
+            String pkg = tile.getPackageName();
+            return peopleManager.getLastInteraction(pkg, userId, tile.getId());
+        } catch (Exception e) {
+            Log.e(TAG, "Couldn't retrieve last interaction time", e);
+            return 0L;
+        }
     }
 
     /** Converts {@code drawable} to a {@link Bitmap}. */
@@ -99,6 +131,7 @@ public class PeopleSpaceUtils {
     /** Returns a readable status describing the {@code lastInteraction}. */
     public static String getLastInteractionString(Context context, long lastInteraction) {
         if (lastInteraction == 0L) {
+            Log.e(TAG, "Could not get valid last interaction");
             return context.getString(R.string.basic_status);
         }
         long now = System.currentTimeMillis();
@@ -129,14 +162,13 @@ public class PeopleSpaceUtils {
      *
      * <p>A valid {@code conversation} must:
      *     <ul>
-     *         <li>Have a non-null {@link ShortcutInfo}
-     *         <li>Have an associated label in the {@link ShortcutInfo}
+     *         <li>Have a non-null {@link PeopleSpaceTile}
+     *         <li>Have an associated label in the {@link PeopleSpaceTile}
      *     </ul>
      * </li>
      */
-    public static boolean shouldKeepConversation(ConversationChannelWrapper conversation) {
-        ShortcutInfo shortcutInfo = conversation.getShortcutInfo();
-        return shortcutInfo != null && shortcutInfo.getLabel().length() != 0;
+    public static boolean shouldKeepConversation(PeopleSpaceTile tile) {
+        return tile != null && tile.getUserName().length() != 0;
     }
 
 }

@@ -51,6 +51,7 @@ import java.util.UUID;
  */
 public class BluetoothEventManager {
     private static final String TAG = "BluetoothEventManager";
+    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private final LocalBluetoothAdapter mLocalAdapter;
     private final CachedBluetoothDeviceManager mDeviceManager;
@@ -253,6 +254,7 @@ public class BluetoothEventManager {
     protected void dispatchNewGroupFound(
             CachedBluetoothDevice cachedDevice, int groupId, UUID setPrimaryServiceUuid) {
         synchronized(mCallbacks) {
+            updateCacheDeviceInfo(groupId, cachedDevice);
             for (BluetoothCallback callback : mCallbacks) {
                 callback.onNewGroupFound(cachedDevice, groupId,
                         setPrimaryServiceUuid);
@@ -373,6 +375,21 @@ public class BluetoothEventManager {
                 cachedDevice = mDeviceManager.addDevice(device);
             }
 
+            if(bondState == BluetoothDevice.BOND_BONDED) {
+                int groupId  = intent.getIntExtra(BluetoothDevice.EXTRA_GROUP_ID,
+                        BluetoothDevice.ERROR);
+                if (groupId != BluetoothDevice.ERROR && groupId >= 0) {
+                    updateCacheDeviceInfo(groupId, cachedDevice);
+                } else if (intent.getBooleanExtra(BluetoothDevice.EXTRA_IS_PRIVATE_ADDRESS,
+                        false)) {
+                    /*
+                     * Do not show private address in UI, just ignore assuming remaining
+                     * events will receive on public address (connection, disconnection)
+                     */
+                    Log.d(TAG, "Hide showing private address in UI  " + cachedDevice);
+                    updateIgnoreDeviceFlag(cachedDevice);
+                }
+            }
             for (BluetoothCallback callback : mCallbacks) {
                 callback.onDeviceBondStateChanged(cachedDevice, bondState);
             }
@@ -397,6 +414,9 @@ public class BluetoothEventManager {
          *               BluetoothDevice.UNBOND_REASON_*
          */
         private void showUnbondMessage(Context context, String name, int reason) {
+            if (DEBUG) {
+                Log.d(TAG, "showUnbondMessage() name : " + name + ", reason : " + reason);
+            }
             int errorMsg;
 
             switch (reason) {
@@ -413,6 +433,7 @@ public class BluetoothEventManager {
                 case BluetoothDevice.UNBOND_REASON_AUTH_TIMEOUT:
                 case BluetoothDevice.UNBOND_REASON_REPEATED_ATTEMPTS:
                 case BluetoothDevice.UNBOND_REASON_REMOTE_AUTH_CANCELED:
+                case BluetoothDevice.UNBOND_REASON_REMOVED:
                     errorMsg = R.string.bluetooth_pairing_error_message;
                     break;
                 default:
@@ -569,4 +590,26 @@ public class BluetoothEventManager {
             dispatchA2dpCodecConfigChanged(cachedDevice, codecStatus);
         }
     }
+
+    private void updateCacheDeviceInfo(int groupId, CachedBluetoothDevice cachedDevice) {
+        BluetoothDevice device = cachedDevice.getDevice();
+        boolean isGroup = cachedDevice.isGroupDevice();
+        Log.d(TAG, "updateCacheDeviceInfo groupId " + groupId
+                + ", cachedDevice :" + cachedDevice + ", name :" + cachedDevice.getName()
+                +" isGroup :" + isGroup + " groupId " + cachedDevice.getGroupId());
+        if (isGroup) {
+            if (groupId !=  cachedDevice.getGroupId()) {
+                Log.d(TAG, "groupId mismatch ignore" + cachedDevice.getGroupId());
+                return;
+            }
+            Log.d(TAG, "updateCacheDeviceInfo update ignored ");
+        } else {
+            cachedDevice.setDeviceType(groupId);
+        }
+    }
+
+    private void updateIgnoreDeviceFlag(CachedBluetoothDevice cachedDevice) {
+        cachedDevice.setDeviceType(CachedBluetoothDevice.PRIVATE_ADDR);
+    }
+
 }

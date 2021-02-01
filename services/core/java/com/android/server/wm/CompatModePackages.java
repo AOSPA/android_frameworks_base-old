@@ -17,10 +17,10 @@
 package com.android.server.wm;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
-import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 
 import android.app.ActivityManager;
 import android.app.AppGlobals;
@@ -40,16 +40,13 @@ import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import com.android.internal.protolog.common.ProtoLog;
-import com.android.internal.util.FastXmlSerializer;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -115,14 +112,7 @@ public final class CompatModePackages {
                             if ("pkg".equals(tagName)) {
                                 String pkg = parser.getAttributeValue(null, "name");
                                 if (pkg != null) {
-                                    String mode = parser.getAttributeValue(null, "mode");
-                                    int modeInt = 0;
-                                    if (mode != null) {
-                                        try {
-                                            modeInt = Integer.parseInt(mode);
-                                        } catch (NumberFormatException e) {
-                                        }
-                                    }
+                                    int modeInt = parser.getAttributeInt(null, "mode", 0);
                                     mPackages.put(pkg, modeInt);
                                 }
                             }
@@ -323,7 +313,7 @@ public final class CompatModePackages {
 
             scheduleWrite();
 
-            final Task stack = mService.getTopDisplayFocusedStack();
+            final Task stack = mService.getTopDisplayFocusedRootTask();
             ActivityRecord starting = stack.restartPackage(packageName);
 
             // Tell all processes that loaded this package about the change.
@@ -398,7 +388,7 @@ public final class CompatModePackages {
                 }
                 out.startTag(null, "pkg");
                 out.attribute(null, "name", pkg);
-                out.attribute(null, "mode", Integer.toString(mode));
+                out.attributeInt(null, "mode", mode);
                 out.endTag(null, "pkg");
             }
 

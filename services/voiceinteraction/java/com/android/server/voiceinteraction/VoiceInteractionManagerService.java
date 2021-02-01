@@ -23,7 +23,6 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
-import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.role.OnRoleHoldersChangedListener;
 import android.app.role.RoleManager;
@@ -49,9 +48,7 @@ import android.hardware.soundtrigger.SoundTrigger.KeyphraseSoundModel;
 import android.hardware.soundtrigger.SoundTrigger.ModelParamRange;
 import android.hardware.soundtrigger.SoundTrigger.ModuleProperties;
 import android.hardware.soundtrigger.SoundTrigger.RecognitionConfig;
-import android.media.permission.ClearCallingIdentityContext;
 import android.media.permission.Identity;
-import android.media.permission.IdentityContext;
 import android.media.permission.PermissionUtil;
 import android.media.permission.SafeCloseable;
 import android.os.Binder;
@@ -66,7 +63,6 @@ import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.Trace;
 import android.os.UserHandle;
-import android.os.UserManagerInternal;
 import android.provider.Settings;
 import android.service.voice.IVoiceInteractionSession;
 import android.service.voice.VoiceInteractionManagerInternal;
@@ -94,7 +90,8 @@ import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.UiThread;
-import com.android.server.pm.permission.PermissionManagerServiceInternal;
+import com.android.server.pm.UserManagerInternal;
+import com.android.server.pm.permission.LegacyPermissionManagerInternal;
 import com.android.server.soundtrigger.SoundTriggerInternal;
 import com.android.server.utils.TimingsTraceAndSlog;
 import com.android.server.wm.ActivityTaskManagerInternal;
@@ -143,10 +140,10 @@ public class VoiceInteractionManagerService extends SystemService {
         mUserManagerInternal = Objects.requireNonNull(
                 LocalServices.getService(UserManagerInternal.class));
 
-        PermissionManagerServiceInternal permissionManagerInternal = LocalServices.getService(
-                PermissionManagerServiceInternal.class);
+        LegacyPermissionManagerInternal permissionManagerInternal = LocalServices.getService(
+                LegacyPermissionManagerInternal.class);
         permissionManagerInternal.setVoiceInteractionPackagesProvider(
-                new PermissionManagerServiceInternal.PackagesProvider() {
+                new LegacyPermissionManagerInternal.PackagesProvider() {
             @Override
             public String[] getPackages(int userId) {
                 mServiceStub.initForUser(userId);
@@ -262,8 +259,7 @@ public class VoiceInteractionManagerService extends SystemService {
             try (SafeCloseable ignored = PermissionUtil.establishIdentityDirect(
                     originatorIdentity)) {
                 SoundTriggerSession session = new SoundTriggerSession(
-                        mSoundTriggerInternal.attachAsOriginator(IdentityContext.getNonNull(),
-                                client));
+                        mSoundTriggerInternal.attach(client));
                 synchronized (mSessions) {
                     mSessions.add(new WeakReference<>(session));
                 }

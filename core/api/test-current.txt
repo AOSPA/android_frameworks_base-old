@@ -7,6 +7,7 @@ package android {
     field public static final String APPROVE_INCIDENT_REPORTS = "android.permission.APPROVE_INCIDENT_REPORTS";
     field public static final String BIND_CELL_BROADCAST_SERVICE = "android.permission.BIND_CELL_BROADCAST_SERVICE";
     field public static final String BRIGHTNESS_SLIDER_USAGE = "android.permission.BRIGHTNESS_SLIDER_USAGE";
+    field public static final String BROADCAST_CLOSE_SYSTEM_DIALOGS = "android.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS";
     field public static final String CHANGE_APP_IDLE_STATE = "android.permission.CHANGE_APP_IDLE_STATE";
     field public static final String CLEAR_APP_USER_DATA = "android.permission.CLEAR_APP_USER_DATA";
     field public static final String CONFIGURE_DISPLAY_BRIGHTNESS = "android.permission.CONFIGURE_DISPLAY_BRIGHTNESS";
@@ -17,6 +18,7 @@ package android {
     field public static final String MANAGE_CRATES = "android.permission.MANAGE_CRATES";
     field public static final String MANAGE_NOTIFICATION_LISTENERS = "android.permission.MANAGE_NOTIFICATION_LISTENERS";
     field public static final String MANAGE_ROLLBACKS = "android.permission.MANAGE_ROLLBACKS";
+    field public static final String MODIFY_REFRESH_RATE_SWITCHING_TYPE = "android.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE";
     field public static final String NETWORK_SETTINGS = "android.permission.NETWORK_SETTINGS";
     field public static final String NETWORK_STACK = "android.permission.NETWORK_STACK";
     field public static final String OVERRIDE_DISPLAY_MODE_REQUESTS = "android.permission.OVERRIDE_DISPLAY_MODE_REQUESTS";
@@ -302,8 +304,10 @@ package android.app {
     method public void destroy();
     method @NonNull public android.os.ParcelFileDescriptor[] executeShellCommandRwe(@NonNull String);
     method @Deprecated public boolean grantRuntimePermission(String, String, android.os.UserHandle);
+    method public boolean injectInputEvent(@NonNull android.view.InputEvent, boolean, boolean);
     method @Deprecated public boolean revokeRuntimePermission(String, String, android.os.UserHandle);
     method public void syncInputTransactions();
+    method public void syncInputTransactions(boolean);
   }
 
   public class UiModeManager {
@@ -698,6 +702,7 @@ package android.hardware.biometrics {
   public class BiometricManager {
     method @NonNull @RequiresPermission(android.Manifest.permission.TEST_BIOMETRIC) public android.hardware.biometrics.BiometricTestSession createTestSession(int);
     method @NonNull @RequiresPermission(android.Manifest.permission.TEST_BIOMETRIC) public java.util.List<android.hardware.biometrics.SensorProperties> getSensorProperties();
+    method @NonNull @RequiresPermission(android.Manifest.permission.TEST_BIOMETRIC) public String getUiPackage();
   }
 
   public class BiometricTestSession implements java.lang.AutoCloseable {
@@ -739,9 +744,14 @@ package android.hardware.display {
   }
 
   public final class DisplayManager {
+    method @RequiresPermission(android.Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE) public int getRefreshRateSwitchingType();
     method public boolean isMinimalPostProcessingRequested(int);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE) public void setRefreshRateSwitchingType(int);
     method @RequiresPermission(android.Manifest.permission.OVERRIDE_DISPLAY_MODE_REQUESTS) public void setShouldAlwaysRespectAppRequestedMode(boolean);
     method @RequiresPermission(android.Manifest.permission.OVERRIDE_DISPLAY_MODE_REQUESTS) public boolean shouldAlwaysRespectAppRequestedMode();
+    field public static final int SWITCHING_TYPE_ACROSS_AND_WITHIN_GROUPS = 2; // 0x2
+    field public static final int SWITCHING_TYPE_NONE = 0; // 0x0
+    field public static final int SWITCHING_TYPE_WITHIN_GROUPS = 1; // 0x1
     field public static final int VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS = 512; // 0x200
     field public static final int VIRTUAL_DISPLAY_FLAG_TRUSTED = 1024; // 0x400
   }
@@ -825,6 +835,14 @@ package android.hardware.soundtrigger {
 
   public static class SoundTrigger.RecognitionEvent {
     ctor public SoundTrigger.RecognitionEvent(int, int, boolean, int, int, int, boolean, @NonNull android.media.AudioFormat, @Nullable byte[]);
+  }
+
+}
+
+package android.inputmethodservice {
+
+  public class InputMethodService extends android.inputmethodservice.AbstractInputMethodService {
+    field public static final long FINISH_INPUT_NO_FALLBACK_CONNECTION = 156215187L; // 0x94fa793L
   }
 
 }
@@ -934,6 +952,11 @@ package android.location {
 
 package android.media {
 
+  public final class AudioAttributes implements android.os.Parcelable {
+    method @NonNull public static String usageToXsdString(int);
+    method public static int xsdStringToUsage(@NonNull String);
+  }
+
   public final class AudioFocusRequest {
     method @Nullable public android.media.AudioManager.OnAudioFocusChangeListener getOnAudioFocusChangeListener();
   }
@@ -964,9 +987,9 @@ package android.media {
   }
 
   public class AudioSystem {
-    method public static float getMasterBalance();
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS) public static float getMasterBalance();
     method public static final int getNumStreamTypes();
-    method public static int setMasterBalance(float);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS) public static int setMasterBalance(float);
     field public static final int DEVICE_ROLE_DISABLED = 2; // 0x2
     field public static final int DEVICE_ROLE_NONE = 0; // 0x0
     field public static final int DEVICE_ROLE_PREFERRED = 1; // 0x1
@@ -1221,7 +1244,6 @@ package android.os {
   }
 
   public static final class StrictMode.VmPolicy.Builder {
-    method @NonNull public android.os.StrictMode.VmPolicy.Builder detectIncorrectContextUse();
     method @NonNull public android.os.StrictMode.VmPolicy.Builder permitIncorrectContextUse();
   }
 
@@ -1484,7 +1506,6 @@ package android.provider {
     field public static final String HIDDEN_API_BLACKLIST_EXEMPTIONS = "hidden_api_blacklist_exemptions";
     field public static final String HIDDEN_API_POLICY = "hidden_api_policy";
     field public static final String HIDE_ERROR_DIALOGS = "hide_error_dialogs";
-    field public static final String LOCATION_GLOBAL_KILL_SWITCH = "location_global_kill_switch";
     field public static final String LOCATION_IGNORE_SETTINGS_PACKAGE_WHITELIST = "location_ignore_settings_package_whitelist";
     field public static final String LOW_POWER_MODE = "low_power";
     field public static final String LOW_POWER_MODE_STICKY = "low_power_sticky";
@@ -2075,12 +2096,15 @@ package android.view {
   }
 
   public interface WindowManager extends android.view.ViewManager {
+    method public default int getDisplayImePolicy(int);
     method public default void holdLock(android.os.IBinder, int);
-    method public default void setShouldShowIme(int, boolean);
+    method public default void setDisplayImePolicy(int, int);
     method public default void setShouldShowSystemDecors(int, boolean);
     method public default void setShouldShowWithInsecureKeyguard(int, boolean);
-    method public default boolean shouldShowIme(int);
     method public default boolean shouldShowSystemDecors(int);
+    field public static final int DISPLAY_IME_POLICY_FALLBACK_DISPLAY = 1; // 0x1
+    field public static final int DISPLAY_IME_POLICY_HIDE = 2; // 0x2
+    field public static final int DISPLAY_IME_POLICY_LOCAL = 0; // 0x0
   }
 
   public static class WindowManager.LayoutParams extends android.view.ViewGroup.LayoutParams implements android.os.Parcelable {

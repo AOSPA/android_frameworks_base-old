@@ -62,9 +62,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.accessibility.gestures.GestureUtils;
 
-import java.util.ArrayDeque;
-import java.util.Queue;
-
 /**
  * This class handles full screen magnification in response to touch events.
  *
@@ -115,13 +112,10 @@ import java.util.Queue;
  */
 @SuppressWarnings("WeakerAccess")
 public class FullScreenMagnificationGestureHandler extends MagnificationGestureHandler {
-    private static final String LOG_TAG = "FullScreenMagnificationGestureHandler";
 
-    private static final boolean DEBUG_ALL = false;
     private static final boolean DEBUG_STATE_TRANSITIONS = false | DEBUG_ALL;
     private static final boolean DEBUG_DETECTING = false | DEBUG_ALL;
     private static final boolean DEBUG_PANNING_SCALING = false | DEBUG_ALL;
-    private static final boolean DEBUG_EVENT_STREAM = false | DEBUG_ALL;
 
     // The MIN_SCALE is different from MagnificationController.MIN_SCALE due
     // to AccessibilityService.MagnificationController#setScale() has
@@ -137,18 +131,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
     @VisibleForTesting final ViewportDraggingState mViewportDraggingState;
 
     private final ScreenStateReceiver mScreenStateReceiver;
-
-    /**
-     * {@code true} if this detector should detect and respond to triple-tap
-     * gestures for engaging and disengaging magnification,
-     * {@code false} if it should ignore such gestures
-     */
-    final boolean mDetectTripleTap;
-
-    /**
-     * Whether {@link DetectingState#mShortcutTriggered shortcut} is enabled
-     */
-    final boolean mDetectShortcutTrigger;
+    private final WindowMagnificationPromptController mPromptController;
 
     @VisibleForTesting State mCurrentState;
     @VisibleForTesting State mPreviousState;
@@ -156,45 +139,26 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
     private PointerCoords[] mTempPointerCoords;
     private PointerProperties[] mTempPointerProperties;
 
-    private final int mDisplayId;
-
-    private final Queue<MotionEvent> mDebugInputEventHistory;
-    private final Queue<MotionEvent> mDebugOutputEventHistory;
-
-    /**
-     * @param context Context for resolving various magnification-related resources
-     * @param fullScreenMagnificationController the {@link FullScreenMagnificationController}
-     *
-     * @param detectTripleTap {@code true} if this detector should detect and respond to triple-tap
-     *                                gestures for engaging and disengaging magnification,
-     *                                {@code false} if it should ignore such gestures
-     * @param detectShortcutTrigger {@code true} if this detector should be "triggerable" by some
-     *                           external shortcut invoking {@link #notifyShortcutTriggered},
-     *                           {@code false} if it should ignore such triggers.
-     * @param displayId The logical display id.
-     */
     public FullScreenMagnificationGestureHandler(Context context,
             FullScreenMagnificationController fullScreenMagnificationController,
             ScaleChangedListener listener,
             boolean detectTripleTap,
             boolean detectShortcutTrigger,
+            @NonNull WindowMagnificationPromptController promptController,
             int displayId) {
-        super(listener);
+        super(displayId, detectTripleTap, detectShortcutTrigger, listener);
         if (DEBUG_ALL) {
-            Log.i(LOG_TAG,
+            Log.i(mLogTag,
                     "FullScreenMagnificationGestureHandler(detectTripleTap = " + detectTripleTap
                             + ", detectShortcutTrigger = " + detectShortcutTrigger + ")");
         }
         mFullScreenMagnificationController = fullScreenMagnificationController;
-        mDisplayId = displayId;
+        mPromptController = promptController;
 
         mDelegatingState = new DelegatingState();
         mDetectingState = new DetectingState(context);
         mViewportDraggingState = new ViewportDraggingState();
         mPanningScalingState = new PanningScalingState(context);
-
-        mDetectTripleTap = detectTripleTap;
-        mDetectShortcutTrigger = detectShortcutTrigger;
 
         if (mDetectShortcutTrigger) {
             mScreenStateReceiver = new ScreenStateReceiver(context, this);
@@ -203,36 +167,11 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
             mScreenStateReceiver = null;
         }
 
-        mDebugInputEventHistory = DEBUG_EVENT_STREAM ? new ArrayDeque<>() : null;
-        mDebugOutputEventHistory = DEBUG_EVENT_STREAM ? new ArrayDeque<>() : null;
-
         transitionTo(mDetectingState);
     }
 
     @Override
-    public void onMotionEvent(MotionEvent event, MotionEvent rawEvent, int policyFlags) {
-        if (DEBUG_EVENT_STREAM) {
-            storeEventInto(mDebugInputEventHistory, event);
-            try {
-                onMotionEventInternal(event, rawEvent, policyFlags);
-            } catch (Exception e) {
-                throw new RuntimeException(
-                        "Exception following input events: " + mDebugInputEventHistory, e);
-            }
-        } else {
-            onMotionEventInternal(event, rawEvent, policyFlags);
-        }
-    }
-
-    private void onMotionEventInternal(MotionEvent event, MotionEvent rawEvent, int policyFlags) {
-        if (DEBUG_ALL) Slog.i(LOG_TAG, "onMotionEvent(" + event + ")");
-
-        if ((!mDetectTripleTap && !mDetectShortcutTrigger)
-                || !event.isFromSource(SOURCE_TOUCHSCREEN)) {
-            dispatchTransformedEvent(event, rawEvent, policyFlags);
-            return;
-        }
-
+    void onMotionEventInternal(MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         handleEventWith(mCurrentState, event, rawEvent, policyFlags);
     }
 
@@ -257,13 +196,14 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
     @Override
     public void onDestroy() {
         if (DEBUG_STATE_TRANSITIONS) {
-            Slog.i(LOG_TAG, "onDestroy(); delayed = "
+            Slog.i(mLogTag, "onDestroy(); delayed = "
                     + MotionEventInfo.toString(mDetectingState.mDelayedEventQueue));
         }
 
         if (mScreenStateReceiver != null) {
             mScreenStateReceiver.unregister();
         }
+        mPromptController.onDestroy();
         // Check if need to reset when MagnificationGestureHandler is the last magnifying service.
         mFullScreenMagnificationController.resetAllIfNeeded(
                 AccessibilityManagerService.MAGNIFICATION_GESTURE_HANDLER_ID);
@@ -278,6 +218,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
             if (wasMagnifying) {
                 clearAndTransitionToStateDetecting();
             } else {
+                mPromptController.showNotificationIfNeeded();
                 mDetectingState.toggleShortcutTriggered();
             }
         }
@@ -293,31 +234,6 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
         mDetectingState.clear();
         mViewportDraggingState.clear();
         mPanningScalingState.clear();
-    }
-
-    private void dispatchTransformedEvent(MotionEvent event, MotionEvent rawEvent,
-            int policyFlags) {
-        if (DEBUG_EVENT_STREAM) {
-            storeEventInto(mDebugOutputEventHistory, event);
-            try {
-                super.onMotionEvent(event, rawEvent, policyFlags);
-            } catch (Exception e) {
-                throw new RuntimeException(
-                        "Exception downstream following input events: " + mDebugInputEventHistory
-                                + "\nTransformed into output events: " + mDebugOutputEventHistory,
-                        e);
-            }
-        } else {
-            super.onMotionEvent(event, rawEvent, policyFlags);
-        }
-    }
-
-    private static void storeEventInto(Queue<MotionEvent> queue, MotionEvent event) {
-        queue.add(MotionEvent.obtain(event));
-        // Prune old events
-        while (!queue.isEmpty() && (event.getEventTime() - queue.peek().getEventTime() > 5000)) {
-            queue.remove().recycle();
-        }
     }
 
     private PointerCoords[] getTempPointerCoordsWithMinSize(int size) {
@@ -354,7 +270,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
 
     private void transitionTo(State state) {
         if (DEBUG_STATE_TRANSITIONS) {
-            Slog.i(LOG_TAG,
+            Slog.i(mLogTag,
                     (State.nameOf(mCurrentState) + " -> " + State.nameOf(state)
                     + " at " + asList(copyOfRange(new RuntimeException().getStackTrace(), 1, 5)))
                     .replace(getClass().getName(), ""));
@@ -436,7 +352,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
                 return true;
             }
             if (DEBUG_PANNING_SCALING) {
-                Slog.i(LOG_TAG, "Panned content by scrollX: " + distanceX
+                Slog.i(mLogTag, "Panned content by scrollX: " + distanceX
                         + " scrollY: " + distanceY);
             }
             mFullScreenMagnificationController.offsetMagnifiedRegion(mDisplayId, distanceX,
@@ -476,7 +392,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
 
             final float pivotX = detector.getFocusX();
             final float pivotY = detector.getFocusY();
-            if (DEBUG_PANNING_SCALING) Slog.i(LOG_TAG, "Scaled content to: " + scale + "x");
+            if (DEBUG_PANNING_SCALING) Slog.i(mLogTag, "Scaled content to: " + scale + "x");
             mFullScreenMagnificationController.setScale(mDisplayId, scale, pivotX, pivotY, false,
                     AccessibilityManagerService.MAGNIFICATION_GESTURE_HANDLER_ID);
             mListener.onMagnificationScaleChanged(mDisplayId, getMode());
@@ -941,7 +857,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
 
         private void onTripleTap(MotionEvent up) {
             if (DEBUG_DETECTING) {
-                Slog.i(LOG_TAG, "onTripleTap(); delayed: "
+                Slog.i(mLogTag, "onTripleTap(); delayed: "
                         + MotionEventInfo.toString(mDelayedEventQueue));
             }
             clear();
@@ -950,6 +866,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
             if (mFullScreenMagnificationController.isMagnifying(mDisplayId)) {
                 zoomOff();
             } else {
+                mPromptController.showNotificationIfNeeded();
                 zoomOn(up.getX(), up.getY());
             }
         }
@@ -960,7 +877,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
 
         void transitionToViewportDraggingStateAndClear(MotionEvent down) {
 
-            if (DEBUG_DETECTING) Slog.i(LOG_TAG, "onTripleTapAndHold()");
+            if (DEBUG_DETECTING) Slog.i(mLogTag, "onTripleTapAndHold()");
             clear();
 
             mViewportDraggingState.mZoomedInBeforeDrag =
@@ -992,7 +909,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
             if (mShortcutTriggered == state) {
                 return;
             }
-            if (DEBUG_DETECTING) Slog.i(LOG_TAG, "setShortcutTriggered(" + state + ")");
+            if (DEBUG_DETECTING) Slog.i(mLogTag, "setShortcutTriggered(" + state + ")");
 
             mShortcutTriggered = state;
             mFullScreenMagnificationController.setForceShowMagnifiableBounds(mDisplayId, state);
@@ -1025,7 +942,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
     }
 
     private void zoomOn(float centerX, float centerY) {
-        if (DEBUG_DETECTING) Slog.i(LOG_TAG, "zoomOn(" + centerX + ", " + centerY + ")");
+        if (DEBUG_DETECTING) Slog.i(mLogTag, "zoomOn(" + centerX + ", " + centerY + ")");
 
         final float scale = MathUtils.constrain(
                 mFullScreenMagnificationController.getPersistedScale(),
@@ -1037,7 +954,7 @@ public class FullScreenMagnificationGestureHandler extends MagnificationGestureH
     }
 
     private void zoomOff() {
-        if (DEBUG_DETECTING) Slog.i(LOG_TAG, "zoomOff()");
+        if (DEBUG_DETECTING) Slog.i(mLogTag, "zoomOff()");
         mFullScreenMagnificationController.reset(mDisplayId, /* animate */ true);
     }
 

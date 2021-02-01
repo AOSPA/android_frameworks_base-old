@@ -230,6 +230,8 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.StatsEvent;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 import android.view.accessibility.AccessibilityEvent;
@@ -255,7 +257,6 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
-import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.util.function.TriPredicate;
@@ -276,6 +277,7 @@ import com.android.server.pm.PackageManagerService;
 import com.android.server.policy.PhoneWindowManager;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
+import com.android.server.utils.quota.MultiRateLimiter;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.BackgroundActivityStartCallback;
 import com.android.server.wm.WindowManagerInternal;
@@ -284,9 +286,7 @@ import libcore.io.IoUtils;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -299,6 +299,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -329,6 +330,9 @@ public class NotificationManagerService extends SystemService {
 
     static final int MAX_PACKAGE_NOTIFICATIONS = 50;
     static final float DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE = 5f;
+
+    // To limit bad UX of seeing a toast many seconds after if was triggered.
+    static final int MAX_PACKAGE_TOASTS = 5;
 
     // message codes
     static final int MESSAGE_DURATION_REACHED = 2;
@@ -367,6 +371,20 @@ public class NotificationManagerService extends SystemService {
     static final String[] NON_BLOCKABLE_DEFAULT_ROLES = new String[] {
             RoleManager.ROLE_DIALER,
             RoleManager.ROLE_EMERGENCY
+    };
+
+    // Used for rate limiting toasts by package.
+    static final String TOAST_QUOTA_TAG = "toast_quota_tag";
+
+    // This constant defines rate limits applied to showing toasts. The numbers are set in a way
+    // such that an aggressive toast showing strategy would result in a roughly 1.5x longer wait
+    // time (before the package is allowed to show toasts again) each time the toast rate limit is
+    // reached. It's meant to protect the user against apps spamming them with toasts (either
+    // accidentally or on purpose).
+    private static final MultiRateLimiter.RateLimit[] TOAST_RATE_LIMITS = {
+            MultiRateLimiter.RateLimit.create(3, Duration.ofSeconds(20)),
+            MultiRateLimiter.RateLimit.create(5, Duration.ofSeconds(42)),
+            MultiRateLimiter.RateLimit.create(6, Duration.ofSeconds(68)),
     };
 
     // When #matchesCallFilter is called from the ringer, wait at most
@@ -419,6 +437,16 @@ public class NotificationManagerService extends SystemService {
     @ChangeId
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
     private static final long NOTIFICATION_TRAMPOLINE_BLOCK = 167676448L;
+
+    /**
+     * Rate limit showing toasts, on a per package basis.
+     *
+     * It limits the effects of {@link android.widget.Toast#show()} calls to prevent overburdening
+     * the user with too many toasts in a limited time. Any attempt to show more toasts than allowed
+     * in a certain time frame will result in the toast being discarded.
+     */
+    @ChangeId
+    private static final long RATE_LIMIT_TOASTS = 154198299L;
 
     private IActivityManager mAm;
     private ActivityTaskManagerInternal mAtm;
@@ -497,6 +525,9 @@ public class NotificationManagerService extends SystemService {
     // True if the toast that's on top of the queue is being shown at the moment.
     @GuardedBy("mToastQueue")
     private boolean mIsCurrentToastShown = false;
+
+    // Used for rate limiting toasts by package.
+    private MultiRateLimiter mToastRateLimiter;
 
     // The last key in this list owns the hardware.
     ArrayList<String> mLights = new ArrayList<>();
@@ -732,7 +763,7 @@ public class NotificationManagerService extends SystemService {
                         null,
                         MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE, userId);
         if (candidate != null && validAssistants.contains(candidate)) {
-            setNotificationAssistantAccessGrantedForUserInternal(candidate, userId, true);
+            setNotificationAssistantAccessGrantedForUserInternal(candidate, userId, true, false);
             return true;
         }
         return false;
@@ -740,8 +771,13 @@ public class NotificationManagerService extends SystemService {
 
     void readPolicyXml(InputStream stream, boolean forRestore, int userId)
             throws XmlPullParserException, NumberFormatException, IOException {
-        final XmlPullParser parser = Xml.newPullParser();
-        parser.setInput(stream, StandardCharsets.UTF_8.name());
+        final TypedXmlPullParser parser;
+        if (forRestore) {
+            parser = Xml.newFastPullParser();
+            parser.setInput(stream, StandardCharsets.UTF_8.name());
+        } else {
+            parser = Xml.resolvePullParser(stream);
+        }
         XmlUtils.beginDocument(parser, TAG_NOTIFICATION_POLICY);
         boolean migratedManagedServices = false;
         boolean ineligibleForManagedServices = forRestore && mUm.isManagedProfile(userId);
@@ -778,9 +814,8 @@ public class NotificationManagerService extends SystemService {
                 if (forRestore && userId != UserHandle.USER_SYSTEM) {
                     continue;
                 }
-                mLockScreenAllowSecureNotifications =
-                        safeBoolean(parser.getAttributeValue(null,
-                                        LOCKSCREEN_ALLOW_SECURE_NOTIFICATIONS_VALUE), true);
+                mLockScreenAllowSecureNotifications = parser.getAttributeBoolean(null,
+                        LOCKSCREEN_ALLOW_SECURE_NOTIFICATIONS_VALUE, true);
             }
         }
 
@@ -853,11 +888,16 @@ public class NotificationManagerService extends SystemService {
 
     private void writePolicyXml(OutputStream stream, boolean forBackup, int userId)
             throws IOException {
-        final XmlSerializer out = new FastXmlSerializer();
-        out.setOutput(stream, StandardCharsets.UTF_8.name());
+        final TypedXmlSerializer out;
+        if (forBackup) {
+            out = Xml.newFastSerializer();
+            out.setOutput(stream, StandardCharsets.UTF_8.name());
+        } else {
+            out = Xml.resolveSerializer(stream);
+        }
         out.startDocument(null, true);
         out.startTag(null, TAG_NOTIFICATION_POLICY);
-        out.attribute(null, ATTR_VERSION, Integer.toString(DB_VERSION));
+        out.attributeInt(null, ATTR_VERSION, DB_VERSION);
         mZenModeHelper.writeXml(out, forBackup, null, userId);
         mPreferencesHelper.writeXml(out, forBackup, userId);
         mListeners.writeXml(out, forBackup, userId);
@@ -1651,6 +1691,11 @@ public class NotificationManagerService extends SystemService {
                 = Settings.Secure.getUriFor(Settings.Secure.NOTIFICATION_HISTORY_ENABLED);
         private final Uri NOTIFICATION_SHOW_MEDIA_ON_QUICK_SETTINGS_URI
                 = Settings.Global.getUriFor(Settings.Global.SHOW_MEDIA_ON_QUICK_SETTINGS);
+        private final Uri LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS
+                = Settings.Secure.getUriFor(
+                        Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS);
+        private final Uri LOCK_SCREEN_SHOW_NOTIFICATIONS
+                = Settings.Secure.getUriFor(Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS);
 
         SettingsObserver(Handler handler) {
             super(handler);
@@ -1669,6 +1714,11 @@ public class NotificationManagerService extends SystemService {
             resolver.registerContentObserver(NOTIFICATION_HISTORY_ENABLED,
                     false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(NOTIFICATION_SHOW_MEDIA_ON_QUICK_SETTINGS_URI,
+                    false, this, UserHandle.USER_ALL);
+
+            resolver.registerContentObserver(LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS,
+                    false, this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(LOCK_SCREEN_SHOW_NOTIFICATIONS,
                     false, this, UserHandle.USER_ALL);
             update(null);
         }
@@ -1710,6 +1760,12 @@ public class NotificationManagerService extends SystemService {
             }
             if (uri == null || NOTIFICATION_SHOW_MEDIA_ON_QUICK_SETTINGS_URI.equals(uri)) {
                 mPreferencesHelper.updateMediaNotificationFilteringEnabled();
+            }
+            if (uri == null || LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS.equals(uri)) {
+                mPreferencesHelper.updateLockScreenPrivateNotifications();
+            }
+            if (uri == null || LOCK_SCREEN_SHOW_NOTIFICATIONS.equals(uri)) {
+                mPreferencesHelper.updateLockScreenShowNotifications();
             }
         }
     }
@@ -1904,7 +1960,8 @@ public class NotificationManagerService extends SystemService {
             DevicePolicyManagerInternal dpm, IUriGrantsManager ugm,
             UriGrantsManagerInternal ugmInternal, AppOpsManager appOps, UserManager userManager,
             NotificationHistoryManager historyManager, StatsManager statsManager,
-            TelephonyManager telephonyManager, ActivityManagerInternal ami) {
+            TelephonyManager telephonyManager, ActivityManagerInternal ami,
+            MultiRateLimiter toastRateLimiter) {
         mHandler = handler;
         Resources resources = getContext().getResources();
         mMaxPackageEnqueueRate = Settings.Global.getFloat(getContext().getContentResolver(),
@@ -2096,6 +2153,8 @@ public class NotificationManagerService extends SystemService {
                 com.android.internal.R.array.config_notificationMsgPkgsAllowedAsConvos));
         mStatsManager = statsManager;
 
+        mToastRateLimiter = toastRateLimiter;
+
         // register for various Intents.
         // If this is called within a test, make sure to unregister the intent receivers by
         // calling onDestroy()
@@ -2206,7 +2265,8 @@ public class NotificationManagerService extends SystemService {
                 mStatsManager = (StatsManager) getContext().getSystemService(
                         Context.STATS_MANAGER),
                 getContext().getSystemService(TelephonyManager.class),
-                LocalServices.getService(ActivityManagerInternal.class));
+                LocalServices.getService(ActivityManagerInternal.class),
+                createToastRateLimiter());
 
         publishBinderService(Context.NOTIFICATION_SERVICE, mService, /* allowIsolated= */ false,
                 DUMP_FLAG_PRIORITY_CRITICAL | DUMP_FLAG_PRIORITY_NORMAL);
@@ -2844,6 +2904,10 @@ public class NotificationManagerService extends SystemService {
         return mInternalService;
     }
 
+    private MultiRateLimiter createToastRateLimiter() {
+        return new MultiRateLimiter.Builder(getContext()).addRateLimits(TOAST_RATE_LIMITS).build();
+    }
+
     @VisibleForTesting
     final IBinder mService = new INotificationManager.Stub() {
         // Toasts
@@ -2949,8 +3013,8 @@ public class NotificationManagerService extends SystemService {
                             final ToastRecord r = mToastQueue.get(i);
                             if (r.pkg.equals(pkg)) {
                                 count++;
-                                if (count >= MAX_PACKAGE_NOTIFICATIONS) {
-                                    Slog.e(TAG, "Package has already posted " + count
+                                if (count >= MAX_PACKAGE_TOASTS) {
+                                    Slog.e(TAG, "Package has already queued " + count
                                             + " toasts. Not showing more. Package=" + pkg);
                                     return;
                                 }
@@ -3580,8 +3644,9 @@ public class NotificationManagerService extends SystemService {
         public ParceledListSlice<ConversationChannelWrapper> getConversations(
                 boolean onlyImportant) {
             enforceSystemOrSystemUI("getConversations");
+            IntArray userIds = mUserProfiles.getCurrentProfileIds();
             ArrayList<ConversationChannelWrapper> conversations =
-                    mPreferencesHelper.getConversations(onlyImportant);
+                    mPreferencesHelper.getConversations(userIds, onlyImportant);
             for (ConversationChannelWrapper conversation : conversations) {
                 if (mShortcutHelper == null) {
                     conversation.setShortcutInfo(null);
@@ -4899,7 +4964,8 @@ public class NotificationManagerService extends SystemService {
             }
             final long identity = Binder.clearCallingIdentity();
             try {
-                setNotificationAssistantAccessGrantedForUserInternal(assistant, userId, granted);
+                setNotificationAssistantAccessGrantedForUserInternal(assistant, userId, granted,
+                        true);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -5150,7 +5216,7 @@ public class NotificationManagerService extends SystemService {
 
     @VisibleForTesting
     protected void setNotificationAssistantAccessGrantedForUserInternal(
-            ComponentName assistant, int baseUserId, boolean granted) {
+            ComponentName assistant, int baseUserId, boolean granted, boolean userSet) {
         List<UserInfo> users = mUm.getEnabledProfiles(baseUserId);
         if (users != null) {
             for (UserInfo user : users) {
@@ -5160,7 +5226,7 @@ public class NotificationManagerService extends SystemService {
                             mAssistants.getAllowedComponents(userId));
                     if (allowedAssistant != null) {
                         setNotificationAssistantAccessGrantedForUserInternal(
-                                allowedAssistant, userId, false);
+                                allowedAssistant, userId, false, userSet);
                     }
                     continue;
                 }
@@ -5169,7 +5235,7 @@ public class NotificationManagerService extends SystemService {
                     mConditionProviders.setPackageOrComponentEnabled(assistant.flattenToString(),
                             userId, false, granted);
                     mAssistants.setPackageOrComponentEnabled(assistant.flattenToString(),
-                            userId, true, granted);
+                            userId, true, granted, userSet);
 
                     getContext().sendBroadcastAsUser(
                             new Intent(ACTION_NOTIFICATION_POLICY_ACCESS_GRANTED_CHANGED)
@@ -7103,15 +7169,15 @@ public class NotificationManagerService extends SystemService {
         if (record.getSbn().isGroup() && record.getNotification().suppressAlertingDueToGrouping()) {
             return false;
         }
-        // not if in call or the screen's on
-        if (isInCall() || mScreenOn) {
+        // not if in call
+        if (isInCall()) {
             return false;
         }
         // check current user
         if (!isNotificationForCurrentUser(record)) {
             return false;
         }
-
+        // Light, but only when the screen is off
         return true;
     }
 
@@ -7159,6 +7225,16 @@ public class NotificationManagerService extends SystemService {
                 || isLoopingRingtoneNotification(
                         mNotificationsByKey.get(mVibrateNotificationKey))) {
             return true;
+        }
+
+        // Suppressed since it's a non-interruptive update to a bubble-suppressed notification
+        final boolean isBubbleOrOverflowed = record.canBubble() && (record.isFlagBubbleRemoved()
+                || record.getNotification().isBubbleNotification());
+        if (record.isUpdate && !record.isInterruptive() && isBubbleOrOverflowed
+                && record.getNotification().getBubbleMetadata() != null) {
+            if (record.getNotification().getBubbleMetadata().isNotificationSuppressed()) {
+                return true;
+            }
         }
 
         return false;
@@ -7307,10 +7383,21 @@ public class NotificationManagerService extends SystemService {
 
         ToastRecord record = mToastQueue.get(0);
         while (record != null) {
-            if (record.show()) {
+            int userId = UserHandle.getUserId(record.uid);
+            boolean rateLimitingEnabled =
+                    CompatChanges.isChangeEnabled(RATE_LIMIT_TOASTS, record.uid);
+            boolean isWithinQuota =
+                    mToastRateLimiter.isWithinQuota(userId, record.pkg, TOAST_QUOTA_TAG);
+            if ((!rateLimitingEnabled || isWithinQuota) && record.show()) {
                 scheduleDurationReachedLocked(record);
                 mIsCurrentToastShown = true;
+                if (rateLimitingEnabled) {
+                    mToastRateLimiter.noteEvent(userId, record.pkg, TOAST_QUOTA_TAG);
+                }
                 return;
+            } else if (rateLimitingEnabled && !isWithinQuota) {
+                Slog.w(TAG, "Package " + record.pkg + " is above allowed toast quota, the "
+                        + "following toast was blocked and discarded: " + record);
             }
             int index = mToastQueue.indexOf(record);
             if (index >= 0) {
@@ -8962,7 +9049,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
-        protected void writeExtraXmlTags(XmlSerializer out) throws IOException {
+        protected void writeExtraXmlTags(TypedXmlSerializer out) throws IOException {
             synchronized (mLock) {
                 out.startTag(null, TAG_ALLOWED_ADJUSTMENT_TYPES);
                 out.attribute(null, ATT_TYPES, TextUtils.join(",", mAllowedAdjustments));
@@ -8971,7 +9058,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
-        protected void readExtraTag(String tag, XmlPullParser parser) throws IOException {
+        protected void readExtraTag(String tag, TypedXmlPullParser parser) throws IOException {
             if (TAG_ALLOWED_ADJUSTMENT_TYPES.equals(tag)) {
                 final String types = XmlUtils.readStringAttribute(parser, ATT_TYPES);
                 synchronized (mLock) {
@@ -9091,9 +9178,9 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
-        protected void readExtraAttributes(String tag, XmlPullParser parser, int userId)
+        protected void readExtraAttributes(String tag, TypedXmlPullParser parser, int userId)
                 throws IOException {
-            boolean userSet = XmlUtils.readBooleanAttribute(parser, ATT_USER_SET, false);
+            boolean userSet = parser.getAttributeBoolean(null, ATT_USER_SET, false);
             setUserSet(userId, userSet);
         }
 
@@ -9314,7 +9401,7 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         protected void setPackageOrComponentEnabled(String pkgOrComponent, int userId,
-                boolean isPrimary, boolean enabled) {
+                boolean isPrimary, boolean enabled, boolean userSet) {
             // Ensures that only one component is enabled at a time
             if (enabled) {
                 List<ComponentName> allowedComponents = getAllowedComponents(userId);
@@ -9322,10 +9409,10 @@ public class NotificationManagerService extends SystemService {
                     ComponentName currentComponent = CollectionUtils.firstOrNull(allowedComponents);
                     if (currentComponent.flattenToString().equals(pkgOrComponent)) return;
                     setNotificationAssistantAccessGrantedForUserInternal(
-                            currentComponent, userId, false);
+                            currentComponent, userId, false, userSet);
                 }
             }
-            super.setPackageOrComponentEnabled(pkgOrComponent, userId, isPrimary, enabled);
+            super.setPackageOrComponentEnabled(pkgOrComponent, userId, isPrimary, enabled, userSet);
         }
 
         private boolean isVerboseLogEnabled() {
@@ -10093,16 +10180,11 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    private void writeSecureNotificationsPolicy(XmlSerializer out) throws IOException {
+    private void writeSecureNotificationsPolicy(TypedXmlSerializer out) throws IOException {
         out.startTag(null, LOCKSCREEN_ALLOW_SECURE_NOTIFICATIONS_TAG);
-        out.attribute(null, LOCKSCREEN_ALLOW_SECURE_NOTIFICATIONS_VALUE,
-                Boolean.toString(mLockScreenAllowSecureNotifications));
+        out.attributeBoolean(null, LOCKSCREEN_ALLOW_SECURE_NOTIFICATIONS_VALUE,
+                mLockScreenAllowSecureNotifications);
         out.endTag(null, LOCKSCREEN_ALLOW_SECURE_NOTIFICATIONS_TAG);
-    }
-
-    private static boolean safeBoolean(String val, boolean defValue) {
-        if (TextUtils.isEmpty(val)) return defValue;
-        return Boolean.parseBoolean(val);
     }
 
     /**

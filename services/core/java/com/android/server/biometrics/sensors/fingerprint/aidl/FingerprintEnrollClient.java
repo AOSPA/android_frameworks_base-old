@@ -19,7 +19,7 @@ package com.android.server.biometrics.sensors.fingerprint.aidl;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.hardware.biometrics.BiometricFaceConstants;
+import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricFingerprintConstants;
 import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.common.ICancellationSignal;
@@ -60,6 +60,15 @@ class FingerprintEnrollClient extends EnrollClient<ISession> implements Udfps {
     }
 
     @Override
+    public void onEnrollResult(BiometricAuthenticator.Identifier identifier, int remaining) {
+        super.onEnrollResult(identifier, remaining);
+
+        if (remaining == 0) {
+            UdfpsHelper.hideUdfpsOverlay(getSensorId(), mUdfpsOverlayController);
+        }
+    }
+
+    @Override
     protected boolean hasReachedEnrollmentLimit() {
         return FingerprintUtils.getInstance(getSensorId())
                 .getBiometricsForUser(getContext(), getTargetUserId()).size()
@@ -89,7 +98,8 @@ class FingerprintEnrollClient extends EnrollClient<ISession> implements Udfps {
                     HardwareAuthTokenUtils.toHardwareAuthToken(mHardwareAuthToken));
         } catch (RemoteException e) {
             Slog.e(TAG, "Remote exception when requesting enroll", e);
-            onError(BiometricFaceConstants.FACE_ERROR_UNABLE_TO_PROCESS, 0 /* vendorCode */);
+            onError(BiometricFingerprintConstants.FINGERPRINT_ERROR_UNABLE_TO_PROCESS,
+                    0 /* vendorCode */);
             mCallback.onClientFinished(this, false /* success */);
         }
     }

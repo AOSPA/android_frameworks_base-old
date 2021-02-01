@@ -29,20 +29,17 @@ import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
-import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.JournaledFile;
 import com.android.internal.util.XmlUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -80,6 +77,8 @@ class DevicePolicyData {
     private static final String ATTR_DEVICE_PROVISIONING_CONFIG_APPLIED =
             "device-provisioning-config-applied";
     private static final String ATTR_DEVICE_PAIRED = "device-paired";
+    private static final String TAG = DevicePolicyManagerService.LOG_TAG;
+    private static final boolean VERBOSE_LOG = false; // DO NOT SUBMIT WITH TRUE
 
     int mFailedPasswordAttempts = 0;
     boolean mPasswordValidAtLastCheckpoint = true;
@@ -155,7 +154,12 @@ class DevicePolicyData {
     static boolean store(DevicePolicyData policyData, JournaledFile file, boolean isFdeDevice) {
         FileOutputStream stream = null;
         try {
-            stream = new FileOutputStream(file.chooseForWrite(), false);
+            File chooseForWrite = file.chooseForWrite();
+            if (VERBOSE_LOG) {
+                Slog.v(TAG, "Storing data for user " + policyData.mUserHandle + " on "
+                        + chooseForWrite);
+            }
+            stream = new FileOutputStream(chooseForWrite, false);
             TypedXmlSerializer out = Xml.resolveSerializer(stream);
             out.startDocument(null, true);
 
@@ -165,24 +169,20 @@ class DevicePolicyData {
                         policyData.mRestrictionsProvider.flattenToString());
             }
             if (policyData.mUserSetupComplete) {
-                out.attribute(null, ATTR_SETUP_COMPLETE,
-                        Boolean.toString(true));
+                if (VERBOSE_LOG) Slog.v(TAG, "setting " + ATTR_SETUP_COMPLETE + " to true");
+                out.attributeBoolean(null, ATTR_SETUP_COMPLETE, true);
             }
             if (policyData.mPaired) {
-                out.attribute(null, ATTR_DEVICE_PAIRED,
-                        Boolean.toString(true));
+                out.attributeBoolean(null, ATTR_DEVICE_PAIRED, true);
             }
             if (policyData.mDeviceProvisioningConfigApplied) {
-                out.attribute(null, ATTR_DEVICE_PROVISIONING_CONFIG_APPLIED,
-                        Boolean.toString(true));
+                out.attributeBoolean(null, ATTR_DEVICE_PROVISIONING_CONFIG_APPLIED, true);
             }
             if (policyData.mUserProvisioningState != DevicePolicyManager.STATE_USER_UNMANAGED) {
-                out.attribute(null, ATTR_PROVISIONING_STATE,
-                        Integer.toString(policyData.mUserProvisioningState));
+                out.attributeInt(null, ATTR_PROVISIONING_STATE, policyData.mUserProvisioningState);
             }
             if (policyData.mPermissionPolicy != DevicePolicyManager.PERMISSION_POLICY_PROMPT) {
-                out.attribute(null, ATTR_PERMISSION_POLICY,
-                        Integer.toString(policyData.mPermissionPolicy));
+                out.attributeInt(null, ATTR_PERMISSION_POLICY, policyData.mPermissionPolicy);
             }
 
             // Serialize delegations.
@@ -212,13 +212,13 @@ class DevicePolicyData {
 
             if (policyData.mPasswordOwner >= 0) {
                 out.startTag(null, "password-owner");
-                out.attribute(null, "value", Integer.toString(policyData.mPasswordOwner));
+                out.attributeInt(null, "value", policyData.mPasswordOwner);
                 out.endTag(null, "password-owner");
             }
 
             if (policyData.mFailedPasswordAttempts != 0) {
                 out.startTag(null, "failed-password-attempts");
-                out.attribute(null, "value", Integer.toString(policyData.mFailedPasswordAttempts));
+                out.attributeInt(null, "value", policyData.mFailedPasswordAttempts);
                 out.endTag(null, "failed-password-attempts");
             }
 
@@ -227,8 +227,7 @@ class DevicePolicyData {
             // security reasons, we don't want to store the full set of active password metrics.
             if (isFdeDevice) {
                 out.startTag(null, TAG_PASSWORD_VALIDITY);
-                out.attribute(null, ATTR_VALUE,
-                        Boolean.toString(policyData.mPasswordValidAtLastCheckpoint));
+                out.attributeBoolean(null, ATTR_VALUE, policyData.mPasswordValidAtLastCheckpoint);
                 out.endTag(null, TAG_PASSWORD_VALIDITY);
             }
 
@@ -247,19 +246,19 @@ class DevicePolicyData {
 
             if (policyData.mLockTaskFeatures != DevicePolicyManager.LOCK_TASK_FEATURE_NONE) {
                 out.startTag(null, TAG_LOCK_TASK_FEATURES);
-                out.attribute(null, ATTR_VALUE, Integer.toString(policyData.mLockTaskFeatures));
+                out.attributeInt(null, ATTR_VALUE, policyData.mLockTaskFeatures);
                 out.endTag(null, TAG_LOCK_TASK_FEATURES);
             }
 
             if (policyData.mSecondaryLockscreenEnabled) {
                 out.startTag(null, TAG_SECONDARY_LOCK_SCREEN);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(true));
+                out.attributeBoolean(null, ATTR_VALUE, true);
                 out.endTag(null, TAG_SECONDARY_LOCK_SCREEN);
             }
 
             if (policyData.mStatusBarDisabled) {
                 out.startTag(null, TAG_STATUS_BAR);
-                out.attribute(null, ATTR_DISABLED, Boolean.toString(policyData.mStatusBarDisabled));
+                out.attributeBoolean(null, ATTR_DISABLED, policyData.mStatusBarDisabled);
                 out.endTag(null, TAG_STATUS_BAR);
             }
 
@@ -276,29 +275,25 @@ class DevicePolicyData {
 
             if (policyData.mLastSecurityLogRetrievalTime >= 0) {
                 out.startTag(null, TAG_LAST_SECURITY_LOG_RETRIEVAL);
-                out.attribute(null, ATTR_VALUE,
-                        Long.toString(policyData.mLastSecurityLogRetrievalTime));
+                out.attributeLong(null, ATTR_VALUE, policyData.mLastSecurityLogRetrievalTime);
                 out.endTag(null, TAG_LAST_SECURITY_LOG_RETRIEVAL);
             }
 
             if (policyData.mLastBugReportRequestTime >= 0) {
                 out.startTag(null, TAG_LAST_BUG_REPORT_REQUEST);
-                out.attribute(null, ATTR_VALUE,
-                        Long.toString(policyData.mLastBugReportRequestTime));
+                out.attributeLong(null, ATTR_VALUE, policyData.mLastBugReportRequestTime);
                 out.endTag(null, TAG_LAST_BUG_REPORT_REQUEST);
             }
 
             if (policyData.mLastNetworkLogsRetrievalTime >= 0) {
                 out.startTag(null, TAG_LAST_NETWORK_LOG_RETRIEVAL);
-                out.attribute(null, ATTR_VALUE,
-                        Long.toString(policyData.mLastNetworkLogsRetrievalTime));
+                out.attributeLong(null, ATTR_VALUE, policyData.mLastNetworkLogsRetrievalTime);
                 out.endTag(null, TAG_LAST_NETWORK_LOG_RETRIEVAL);
             }
 
             if (policyData.mAdminBroadcastPending) {
                 out.startTag(null, TAG_ADMIN_BROADCAST_PENDING);
-                out.attribute(null, ATTR_VALUE,
-                        Boolean.toString(policyData.mAdminBroadcastPending));
+                out.attributeBoolean(null, ATTR_VALUE, policyData.mAdminBroadcastPending);
                 out.endTag(null, TAG_ADMIN_BROADCAST_PENDING);
             }
 
@@ -310,8 +305,7 @@ class DevicePolicyData {
 
             if (policyData.mPasswordTokenHandle != 0) {
                 out.startTag(null, TAG_PASSWORD_TOKEN_HANDLE);
-                out.attribute(null, ATTR_VALUE,
-                        Long.toString(policyData.mPasswordTokenHandle));
+                out.attributeLong(null, ATTR_VALUE, policyData.mPasswordTokenHandle);
                 out.endTag(null, TAG_PASSWORD_TOKEN_HANDLE);
             }
 
@@ -335,7 +329,7 @@ class DevicePolicyData {
 
             if (policyData.mAppsSuspended) {
                 out.startTag(null, TAG_APPS_SUSPENDED);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(policyData.mAppsSuspended));
+                out.attributeBoolean(null, ATTR_VALUE, policyData.mAppsSuspended);
                 out.endTag(null, TAG_APPS_SUSPENDED);
             }
 
@@ -348,7 +342,7 @@ class DevicePolicyData {
             file.commit();
             return true;
         } catch (XmlPullParserException | IOException e) {
-            Slog.w(DevicePolicyManagerService.LOG_TAG, "failed writing file", e);
+            Slog.w(TAG, "failed writing file", e);
             try {
                 if (stream != null) {
                     stream.close();
@@ -370,6 +364,9 @@ class DevicePolicyData {
             ComponentName ownerComponent) {
         FileInputStream stream = null;
         File file = journaledFile.chooseForRead();
+        if (VERBOSE_LOG) {
+            Slog.v(TAG, "Loading data for user " + policy.mUserHandle + " from " + file);
+        }
         boolean needsRewrite = false;
         try {
             stream = new FileInputStream(file);
@@ -393,6 +390,7 @@ class DevicePolicyData {
             }
             String userSetupComplete = parser.getAttributeValue(null, ATTR_SETUP_COMPLETE);
             if (Boolean.toString(true).equals(userSetupComplete)) {
+                if (VERBOSE_LOG) Slog.v(TAG, "setting mUserSetupComplete to true");
                 policy.mUserSetupComplete = true;
             }
             String paired = parser.getAttributeValue(null, ATTR_DEVICE_PAIRED);
@@ -404,13 +402,13 @@ class DevicePolicyData {
             if (Boolean.toString(true).equals(deviceProvisioningConfigApplied)) {
                 policy.mDeviceProvisioningConfigApplied = true;
             }
-            String provisioningState = parser.getAttributeValue(null, ATTR_PROVISIONING_STATE);
-            if (!TextUtils.isEmpty(provisioningState)) {
-                policy.mUserProvisioningState = Integer.parseInt(provisioningState);
+            int provisioningState = parser.getAttributeInt(null, ATTR_PROVISIONING_STATE, -1);
+            if (provisioningState != -1) {
+                policy.mUserProvisioningState = provisioningState;
             }
-            String permissionPolicy = parser.getAttributeValue(null, ATTR_PERMISSION_POLICY);
-            if (!TextUtils.isEmpty(permissionPolicy)) {
-                policy.mPermissionPolicy = Integer.parseInt(permissionPolicy);
+            int permissionPolicy = parser.getAttributeInt(null, ATTR_PERMISSION_POLICY, -1);
+            if (permissionPolicy != -1) {
+                policy.mPermissionPolicy = permissionPolicy;
             }
 
             parser.next();
@@ -443,8 +441,7 @@ class DevicePolicyData {
                             policy.mAdminMap.put(ap.info.getComponent(), ap);
                         }
                     } catch (RuntimeException e) {
-                        Slog.w(DevicePolicyManagerService.LOG_TAG,
-                                "Failed loading admin " + name, e);
+                        Slog.w(TAG, "Failed loading admin " + name, e);
                     }
                 } else if ("delegation".equals(tag)) {
                     // Parse delegation info.
@@ -464,37 +461,34 @@ class DevicePolicyData {
                         scopes.add(scope);
                     }
                 } else if ("failed-password-attempts".equals(tag)) {
-                    policy.mFailedPasswordAttempts = Integer.parseInt(
-                            parser.getAttributeValue(null, "value"));
+                    policy.mFailedPasswordAttempts = parser.getAttributeInt(null, "value");
                 } else if ("password-owner".equals(tag)) {
-                    policy.mPasswordOwner = Integer.parseInt(
-                            parser.getAttributeValue(null, "value"));
+                    policy.mPasswordOwner = parser.getAttributeInt(null, "value");
                 } else if (TAG_ACCEPTED_CA_CERTIFICATES.equals(tag)) {
                     policy.mAcceptedCaCertificates.add(parser.getAttributeValue(null, ATTR_NAME));
                 } else if (TAG_LOCK_TASK_COMPONENTS.equals(tag)) {
                     policy.mLockTaskPackages.add(parser.getAttributeValue(null, "name"));
                 } else if (TAG_LOCK_TASK_FEATURES.equals(tag)) {
-                    policy.mLockTaskFeatures = Integer.parseInt(
-                            parser.getAttributeValue(null, ATTR_VALUE));
+                    policy.mLockTaskFeatures = parser.getAttributeInt(null, ATTR_VALUE);
                 } else if (TAG_SECONDARY_LOCK_SCREEN.equals(tag)) {
-                    policy.mSecondaryLockscreenEnabled = Boolean.parseBoolean(
-                            parser.getAttributeValue(null, ATTR_VALUE));
+                    policy.mSecondaryLockscreenEnabled =
+                            parser.getAttributeBoolean(null, ATTR_VALUE, false);
                 } else if (TAG_STATUS_BAR.equals(tag)) {
-                    policy.mStatusBarDisabled = Boolean.parseBoolean(
-                            parser.getAttributeValue(null, ATTR_DISABLED));
+                    policy.mStatusBarDisabled =
+                            parser.getAttributeBoolean(null, ATTR_DISABLED, false);
                 } else if (TAG_DO_NOT_ASK_CREDENTIALS_ON_BOOT.equals(tag)) {
                     policy.mDoNotAskCredentialsOnBoot = true;
                 } else if (TAG_AFFILIATION_ID.equals(tag)) {
                     policy.mAffiliationIds.add(parser.getAttributeValue(null, ATTR_ID));
                 } else if (TAG_LAST_SECURITY_LOG_RETRIEVAL.equals(tag)) {
-                    policy.mLastSecurityLogRetrievalTime = Long.parseLong(
-                            parser.getAttributeValue(null, ATTR_VALUE));
+                    policy.mLastSecurityLogRetrievalTime =
+                            parser.getAttributeLong(null, ATTR_VALUE);
                 } else if (TAG_LAST_BUG_REPORT_REQUEST.equals(tag)) {
-                    policy.mLastBugReportRequestTime = Long.parseLong(
-                            parser.getAttributeValue(null, ATTR_VALUE));
+                    policy.mLastBugReportRequestTime =
+                            parser.getAttributeLong(null, ATTR_VALUE);
                 } else if (TAG_LAST_NETWORK_LOG_RETRIEVAL.equals(tag)) {
-                    policy.mLastNetworkLogsRetrievalTime = Long.parseLong(
-                            parser.getAttributeValue(null, ATTR_VALUE));
+                    policy.mLastNetworkLogsRetrievalTime =
+                            parser.getAttributeLong(null, ATTR_VALUE);
                 } else if (TAG_ADMIN_BROADCAST_PENDING.equals(tag)) {
                     String pending = parser.getAttributeValue(null, ATTR_VALUE);
                     policy.mAdminBroadcastPending = Boolean.toString(true).equals(pending);
@@ -507,12 +501,11 @@ class DevicePolicyData {
                 } else if (TAG_PASSWORD_VALIDITY.equals(tag)) {
                     if (isFdeDevice) {
                         // This flag is only used for FDE devices
-                        policy.mPasswordValidAtLastCheckpoint = Boolean.parseBoolean(
-                                parser.getAttributeValue(null, ATTR_VALUE));
+                        policy.mPasswordValidAtLastCheckpoint =
+                                parser.getAttributeBoolean(null, ATTR_VALUE, false);
                     }
                 } else if (TAG_PASSWORD_TOKEN_HANDLE.equals(tag)) {
-                    policy.mPasswordTokenHandle = Long.parseLong(
-                            parser.getAttributeValue(null, ATTR_VALUE));
+                    policy.mPasswordTokenHandle = parser.getAttributeLong(null, ATTR_VALUE);
                 } else if (TAG_CURRENT_INPUT_METHOD_SET.equals(tag)) {
                     policy.mCurrentInputMethodSet = true;
                 } else if (TAG_OWNER_INSTALLED_CA_CERT.equals(tag)) {
@@ -522,9 +515,9 @@ class DevicePolicyData {
                             parser.getAttributeValue(null, ATTR_NAME));
                 } else if (TAG_APPS_SUSPENDED.equals(tag)) {
                     policy.mAppsSuspended =
-                            Boolean.parseBoolean(parser.getAttributeValue(null, ATTR_VALUE));
+                            parser.getAttributeBoolean(null, ATTR_VALUE, false);
                 } else {
-                    Slog.w(DevicePolicyManagerService.LOG_TAG, "Unknown tag: " + tag);
+                    Slog.w(TAG, "Unknown tag: " + tag);
                     XmlUtils.skipCurrentTag(parser);
                 }
             }
@@ -532,7 +525,7 @@ class DevicePolicyData {
             // Don't be noisy, this is normal if we haven't defined any policies.
         } catch (NullPointerException | NumberFormatException | XmlPullParserException | IOException
                 | IndexOutOfBoundsException e) {
-            Slog.w(DevicePolicyManagerService.LOG_TAG, "failed parsing " + file, e);
+            Slog.w(TAG, "failed parsing " + file, e);
         }
         try {
             if (stream != null) {
@@ -557,8 +550,8 @@ class DevicePolicyData {
                 }
             }
             if (!haveOwner) {
-                Slog.w(DevicePolicyManagerService.LOG_TAG, "Previous password owner "
-                        + mPasswordOwner + " no longer active; disabling");
+                Slog.w(TAG, "Previous password owner " + mPasswordOwner
+                        + " no longer active; disabling");
                 mPasswordOwner = -1;
             }
         }

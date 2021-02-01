@@ -19,9 +19,11 @@ package android.app.appsearch;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.appsearch.exceptions.AppSearchException;
 import android.os.Parcel;
 import android.os.Parcelable;
 
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Objects;
@@ -30,7 +32,6 @@ import java.util.Objects;
  * Information about the success or failure of an AppSearch call.
  *
  * @param <ValueType> The type of result object for successful calls.
- * @hide
  */
 public final class AppSearchResult<ValueType> implements Parcelable {
     /**
@@ -105,6 +106,7 @@ public final class AppSearchResult<ValueType> implements Parcelable {
         mErrorMessage = in.readString();
     }
 
+    /** @hide */
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeInt(mResultCode);
@@ -179,13 +181,15 @@ public final class AppSearchResult<ValueType> implements Parcelable {
         return "[FAILURE(" + mResultCode + ")]: " + mErrorMessage;
     }
 
+    /** @hide */
     @Override
     public int describeContents() {
         return 0;
     }
 
-    public static final Creator<AppSearchResult> CREATOR =
-            new Creator<AppSearchResult>() {
+    /** @hide */
+    @NonNull
+    public static final Creator<AppSearchResult> CREATOR = new Creator<AppSearchResult>() {
         @NonNull
         @Override
         public AppSearchResult createFromParcel(@NonNull Parcel in) {
@@ -217,5 +221,26 @@ public final class AppSearchResult<ValueType> implements Parcelable {
     public static <ValueType> AppSearchResult<ValueType> newFailedResult(
             @ResultCode int resultCode, @Nullable String errorMessage) {
         return new AppSearchResult<>(resultCode, /*resultValue=*/ null, errorMessage);
+    }
+
+    /** @hide */
+    @NonNull
+    public static <ValueType> AppSearchResult<ValueType> throwableToFailedResult(
+            @NonNull Throwable t) {
+        if (t instanceof AppSearchException) {
+            return ((AppSearchException) t).toAppSearchResult();
+        }
+
+        @AppSearchResult.ResultCode int resultCode;
+        if (t instanceof IllegalStateException) {
+            resultCode = AppSearchResult.RESULT_INTERNAL_ERROR;
+        } else if (t instanceof IllegalArgumentException) {
+            resultCode = AppSearchResult.RESULT_INVALID_ARGUMENT;
+        } else if (t instanceof IOException) {
+            resultCode = AppSearchResult.RESULT_IO_ERROR;
+        } else {
+            resultCode = AppSearchResult.RESULT_UNKNOWN_ERROR;
+        }
+        return AppSearchResult.newFailedResult(resultCode, t.toString());
     }
 }

@@ -40,6 +40,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
 import static android.view.WindowManager.LayoutParams.TYPE_SECURE_SYSTEM_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
@@ -73,8 +74,8 @@ import java.util.function.Consumer;
 final class InputMonitor {
     private final WindowManagerService mService;
 
-    // Current window with input focus for keys and other non-touch events.  May be null.
-    private WindowState mInputFocus;
+    // Current input focus token for keys and other non-touch events.  May be null.
+    private IBinder mInputFocus = null;
 
     // When true, need to call updateInputWindowsLw().
     private boolean mUpdateInputWindowsNeeded = true;
@@ -377,31 +378,62 @@ final class InputMonitor {
     }
 
     /**
-     * Called when the current input focus changes.
+     * Called when the current input focus changes. Will apply it in next updateInputWindows.
      * Layer assignment is assumed to be complete by the time this is called.
      */
-    public void setInputFocusLw(WindowState newWindow, boolean updateInputWindows) {
+    void setInputFocusLw(WindowState newWindow, boolean updateInputWindows) {
         ProtoLog.v(WM_DEBUG_FOCUS_LIGHT, "Input focus has changed to %s display=%d",
                 newWindow, mDisplayId);
+        final IBinder focus = newWindow != null ? newWindow.mInputChannelToken : null;
+        if (focus == mInputFocus) {
+            return;
+        }
 
-        if (newWindow != mInputFocus) {
-            if (newWindow != null && newWindow.canReceiveKeys()) {
-                // Displaying a window implicitly causes dispatching to be unpaused.
-                // This is to protect against bugs if someone pauses dispatching but
-                // forgets to resume.
-                newWindow.mToken.paused = false;
-            }
+        if (newWindow != null && newWindow.canReceiveKeys()) {
+            // Displaying a window implicitly causes dispatching to be unpaused.
+            // This is to protect against bugs if someone pauses dispatching but
+            // forgets to resume.
+            newWindow.mToken.paused = false;
+        }
 
-            mInputFocus = newWindow;
-            setUpdateInputWindowsNeededLw();
+        setUpdateInputWindowsNeededLw();
 
-            if (updateInputWindows) {
-                updateInputWindowsLw(false /*force*/);
-            }
+        if (updateInputWindows) {
+            updateInputWindowsLw(false /*force*/);
         }
     }
 
-    public void setFocusedAppLw(ActivityRecord newApp) {
+    /**
+     * Called when the current input focus changes.
+     */
+    private void updateInputFocusRequest() {
+        final WindowState focus = mDisplayContent.mCurrentFocus;
+        final IBinder focusToken = focus != null ? focus.mInputChannelToken : null;
+
+        if (focusToken == null) {
+            mInputFocus = null;
+            return;
+        }
+
+        if (!focus.mWinAnimator.hasSurface() || !focus.mInputWindowHandle.isFocusable()) {
+            Slog.v(TAG_WM, "Focus not requested for window=%" + focus
+                    + " because it has no surface or is not focusable.");
+            mInputFocus = null;
+            return;
+        }
+
+        if (focusToken == mInputFocus) {
+            return;
+        }
+
+        mInputFocus = focusToken;
+        mInputTransaction.setFocusedWindow(mInputFocus, mDisplayId);
+        EventLog.writeEvent(LOGTAG_INPUT_FOCUS, "Focus request " + focus,
+                "reason=UpdateInputWindows");
+        ProtoLog.v(WM_DEBUG_FOCUS_LIGHT, "Focus requested for window=%s", focus);
+    }
+
+    void setFocusedAppLw(ActivityRecord newApp) {
         // Focused app has changed.
         mService.mInputManager.setFocusedApplication(mDisplayId,
                 newApp != null ? newApp.getInputApplicationHandle(true /* update */) : null);
@@ -482,30 +514,6 @@ final class InputMonitor {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
 
-        private void updateInputFocusRequest() {
-            if (mDisplayContent.mLastRequestedFocus == mDisplayContent.mCurrentFocus) {
-                return;
-            }
-
-            final WindowState focus = mDisplayContent.mCurrentFocus;
-            if (focus == null || focus.mInputChannelToken == null) {
-                mDisplayContent.mLastRequestedFocus = focus;
-                return;
-            }
-
-            if (!focus.mWinAnimator.hasSurface()) {
-                Slog.v(TAG_WM, "Focus not requested for window=%" + focus
-                        + " because it has no surface.");
-                return;
-            }
-
-            mInputTransaction.setFocusedWindow(focus.mInputChannelToken, mDisplayId);
-            EventLog.writeEvent(LOGTAG_INPUT_FOCUS,
-                    "Focus request " + focus, "reason=UpdateInputWindows");
-            mDisplayContent.mLastRequestedFocus = focus;
-            ProtoLog.v(WM_DEBUG_FOCUS_LIGHT, "Focus requested for window=%s", focus);
-        }
-
         @Override
         public void accept(WindowState w) {
             final InputWindowHandleWrapper inputWindowHandle = w.mInputWindowHandle;
@@ -516,9 +524,9 @@ final class InputMonitor {
             if (w.mInputChannelToken == null || w.mRemoved
                     || (!w.canReceiveTouchInput() && !shouldApplyRecentsInputConsumer)) {
                 if (w.mWinAnimator.hasSurface()) {
-                    // Assign an InputInfo with type to the overlay window which can't receive input
-                    // event. This is used to omit Surfaces from occlusion detection.
-                    populateOverlayInputInfo(inputWindowHandle, w.isVisible());
+                    // Make sure the input info can't receive input event. It may be omitted from
+                    // occlusion detection depending on the type or if it's a trusted overlay.
+                    populateOverlayInputInfo(inputWindowHandle, w);
                     setInputWindowInfoIfNeeded(mInputTransaction,
                             w.mWinAnimator.mSurfaceController.mSurfaceControl, inputWindowHandle);
                     return;
@@ -596,6 +604,12 @@ final class InputMonitor {
         }
     }
 
+    static void populateOverlayInputInfo(InputWindowHandleWrapper inputWindowHandle,
+            WindowState w) {
+        populateOverlayInputInfo(inputWindowHandle, w.isVisible());
+        inputWindowHandle.setTouchOcclusionMode(w.getTouchOcclusionMode());
+    }
+
     // This would reset InputWindowHandle fields to prevent it could be found by input event.
     // We need to check if any new field of InputWindowHandle could impact the result.
     @VisibleForTesting
@@ -642,6 +656,7 @@ final class InputMonitor {
                 || type == TYPE_SECURE_SYSTEM_OVERLAY
                 || type == TYPE_DOCK_DIVIDER
                 || type == TYPE_ACCESSIBILITY_OVERLAY
-                || type == TYPE_INPUT_CONSUMER;
+                || type == TYPE_INPUT_CONSUMER
+                || type == TYPE_VOICE_INTERACTION;
     }
 }

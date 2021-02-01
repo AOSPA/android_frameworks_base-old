@@ -27,6 +27,7 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.ServiceSpecificException;
 import android.telephony.TelephonyFrameworkInitializer;
 import android.telephony.ims.aidl.IImsRcsController;
 import android.telephony.ims.aidl.IRcsUceControllerCallback;
@@ -75,39 +76,46 @@ public class RcsUceAdapter {
      * @hide
      */
     public static final int ERROR_GENERIC_FAILURE = 1;
+
     /**
      * The carrier network does not have UCE support enabled for this subscriber.
      * @hide
      */
     public static final int ERROR_NOT_ENABLED = 2;
+
     /**
      * The data network that the device is connected to does not support UCE currently (e.g. it is
      * 1x only currently).
      * @hide
      */
     public static final int ERROR_NOT_AVAILABLE = 3;
+
     /**
      * The network has responded with SIP 403 error and a reason "User not registered."
      * @hide
      */
     public static final int ERROR_NOT_REGISTERED = 4;
+
     /**
      * The network has responded to this request with a SIP 403 error and reason "not authorized for
      * presence" for this subscriber.
      * @hide
      */
     public static final int ERROR_NOT_AUTHORIZED = 5;
+
     /**
      * The network has responded to this request with a SIP 403 error and no reason.
      * @hide
      */
     public static final int ERROR_FORBIDDEN = 6;
+
     /**
      * The contact URI requested is not provisioned for VoLTE or it is not known as an IMS
      * subscriber to the carrier network.
      * @hide
      */
     public static final int ERROR_NOT_FOUND = 7;
+
     /**
      * The capabilities request contained too many URIs for the carrier network to handle. Retry
      * with a lower number of contact numbers. The number varies per carrier.
@@ -115,21 +123,31 @@ public class RcsUceAdapter {
      */
     // TODO: Try to integrate this into the API so that the service will split based on carrier.
     public static final int ERROR_REQUEST_TOO_LARGE = 8;
+
     /**
      * The network did not respond to the capabilities request before the request timed out.
      * @hide
      */
     public static final int ERROR_REQUEST_TIMEOUT = 10;
+
     /**
      * The request failed due to the service having insufficient memory.
      * @hide
      */
     public static final int ERROR_INSUFFICIENT_MEMORY = 11;
+
     /**
      * The network was lost while trying to complete the request.
      * @hide
      */
     public static final int ERROR_LOST_NETWORK = 12;
+
+    /**
+     * The network is temporarily unavailable or busy. Retries should only be done after the retry
+     * time returned in {@link CapabilitiesCallback#onError} has elapsed.
+     * @hide
+     */
+    public static final int ERROR_SERVER_UNAVAILABLE = 13;
 
     /**@hide*/
     @Retention(RetentionPolicy.SOURCE)
@@ -144,7 +162,8 @@ public class RcsUceAdapter {
             ERROR_REQUEST_TOO_LARGE,
             ERROR_REQUEST_TIMEOUT,
             ERROR_INSUFFICIENT_MEMORY,
-            ERROR_LOST_NETWORK
+            ERROR_LOST_NETWORK,
+            ERROR_SERVER_UNAVAILABLE
     })
     public @interface ErrorCode {}
 
@@ -368,8 +387,10 @@ public class RcsUceAdapter {
          * The pending request has resulted in an error and may need to be retried, depending on the
          * error code.
          * @param errorCode The reason for the framework being unable to process the request.
+         * @param retryAfterMilliseconds The time in milliseconds the requesting application should
+         * wait before retrying, if non-zero.
          */
-        void onError(@ErrorCode int errorCode);
+        void onError(@ErrorCode int errorCode, long retryAfterMilliseconds);
     }
 
     private final Context mContext;
@@ -450,10 +471,10 @@ public class RcsUceAdapter {
                 }
             }
             @Override
-            public void onError(int errorCode) {
+            public void onError(int errorCode, long retryAfterMilliseconds) {
                 final long callingIdentity = Binder.clearCallingIdentity();
                 try {
-                    executor.execute(() -> c.onError(errorCode));
+                    executor.execute(() -> c.onError(errorCode, retryAfterMilliseconds));
                 } finally {
                     restoreCallingIdentity(callingIdentity);
                 }
@@ -463,6 +484,8 @@ public class RcsUceAdapter {
         try {
             imsRcsController.requestCapabilities(mSubId, mContext.getOpPackageName(),
                     mContext.getAttributionTag(), contactNumbers, internalCallback);
+        } catch (ServiceSpecificException e) {
+            throw new ImsException(e.toString(), e.errorCode);
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling IImsRcsController#requestCapabilities", e);
             throw new ImsException("Remote IMS Service is not available",
@@ -532,10 +555,10 @@ public class RcsUceAdapter {
                 }
             }
             @Override
-            public void onError(int errorCode) {
+            public void onError(int errorCode, long retryAfterMilliseconds) {
                 final long callingIdentity = Binder.clearCallingIdentity();
                 try {
-                    executor.execute(() -> c.onError(errorCode));
+                    executor.execute(() -> c.onError(errorCode, retryAfterMilliseconds));
                 } finally {
                     restoreCallingIdentity(callingIdentity);
                 }
@@ -545,6 +568,8 @@ public class RcsUceAdapter {
         try {
             imsRcsController.requestNetworkAvailability(mSubId, mContext.getOpPackageName(),
                     mContext.getAttributionTag(), contactNumber, internalCallback);
+        } catch (ServiceSpecificException e) {
+            throw new ImsException(e.toString(), e.errorCode);
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling IImsRcsController#requestNetworkAvailability", e);
             throw new ImsException("Remote IMS Service is not available",
@@ -574,7 +599,7 @@ public class RcsUceAdapter {
 
         try {
             return imsRcsController.getUcePublishState(mSubId);
-        } catch (android.os.ServiceSpecificException e) {
+        } catch (ServiceSpecificException e) {
             throw new ImsException(e.getMessage(), e.errorCode);
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling IImsRcsController#getUcePublishState", e);
@@ -621,7 +646,7 @@ public class RcsUceAdapter {
         c.setExecutor(executor);
         try {
             imsRcsController.registerUcePublishStateCallback(mSubId, c.getBinder());
-        } catch (android.os.ServiceSpecificException e) {
+        } catch (ServiceSpecificException e) {
             throw new ImsException(e.getMessage(), e.errorCode);
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling IImsRcsController#registerUcePublishStateCallback", e);

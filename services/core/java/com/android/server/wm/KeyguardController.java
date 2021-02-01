@@ -26,18 +26,14 @@ import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_W
 import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
-import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_GOING_AWAY;
-import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_OCCLUDE;
-import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_UNOCCLUDE;
-import static android.view.WindowManager.TRANSIT_OLD_UNSET;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_SUBTLE_WINDOW_ANIMATIONS;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_WITH_WALLPAPER;
 
-import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.KeyguardControllerProto.AOD_SHOWING;
 import static com.android.server.wm.KeyguardControllerProto.KEYGUARD_OCCLUDED_STATES;
 import static com.android.server.wm.KeyguardControllerProto.KEYGUARD_SHOWING;
@@ -67,7 +63,7 @@ class KeyguardController {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "KeyguardController" : TAG_ATM;
 
-    private final ActivityStackSupervisor mStackSupervisor;
+    private final ActivityTaskSupervisor mTaskSupervisor;
     private WindowManagerService mWindowManager;
     private boolean mKeyguardShowing;
     private boolean mAodShowing;
@@ -81,9 +77,9 @@ class KeyguardController {
 
 
     KeyguardController(ActivityTaskManagerService service,
-            ActivityStackSupervisor stackSupervisor) {
+            ActivityTaskSupervisor taskSupervisor) {
         mService = service;
-        mStackSupervisor = stackSupervisor;
+        mTaskSupervisor = taskSupervisor;
         mSleepTokenAcquirer = mService.new SleepTokenAcquirerImpl("keyguard");
     }
 
@@ -210,17 +206,12 @@ class KeyguardController {
                     mAodShowing ? 1 : 0,
                     1 /* keyguardGoingAway */,
                     "keyguardGoingAway");
-            mRootWindowContainer.getDefaultDisplay()
-                    .prepareAppTransitionOld(TRANSIT_OLD_KEYGUARD_GOING_AWAY,
-                            false /* alwaysKeepCurrent */, convertTransitFlags(flags),
-                            false /* forceOverride */);
-            mRootWindowContainer.getDefaultDisplay()
-                    .prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY,
-                            convertTransitFlags(flags));
+            mRootWindowContainer.getDefaultDisplay().requestTransitionAndLegacyPrepare(
+                    TRANSIT_KEYGUARD_GOING_AWAY, convertTransitFlags(flags));
             updateKeyguardSleepToken();
 
             // Some stack visibility might change (e.g. docked stack)
-            mRootWindowContainer.resumeFocusedStacksTopActivities();
+            mRootWindowContainer.resumeFocusedTasksTopActivities();
             mRootWindowContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
             mRootWindowContainer.addStartingWindowsForVisibleActivities();
             mWindowManager.executeAppTransition();
@@ -241,7 +232,7 @@ class KeyguardController {
         // If the client has requested to dismiss the keyguard and the Activity has the flag to
         // turn the screen on, wakeup the screen if it's the top Activity.
         if (activityRecord.getTurnScreenOnFlag() && activityRecord.isTopRunningActivity()) {
-            mStackSupervisor.wakeUp("dismissKeyguard");
+            mTaskSupervisor.wakeUp("dismissKeyguard");
         }
 
         mWindowManager.dismissKeyguard(callback, message);
@@ -323,7 +314,7 @@ class KeyguardController {
     /**
      * Makes sure to update lockscreen occluded/dismiss/turnScreenOn state if needed before
      * completing set all visibility
-     * ({@link ActivityStackSupervisor#beginActivityVisibilityUpdate}).
+     * ({@link ActivityTaskSupervisor#beginActivityVisibilityUpdate}).
      */
     void updateVisibility() {
         boolean requestDismissKeyguard = false;
@@ -363,10 +354,6 @@ class KeyguardController {
             mService.deferWindowLayout();
             try {
                 mRootWindowContainer.getDefaultDisplay()
-                        .prepareAppTransitionOld(resolveOccludeTransit(),
-                                false /* alwaysKeepCurrent */, 0 /* flags */,
-                                true /* forceOverride */);
-                mRootWindowContainer.getDefaultDisplay()
                         .prepareAppTransition(
                                 isDisplayOccluded(DEFAULT_DISPLAY)
                                         ? TRANSIT_KEYGUARD_OCCLUDE
@@ -397,10 +384,7 @@ class KeyguardController {
         // we immediately dismiss the Keyguard so the activity gets shown without a flicker.
         final DisplayContent dc = mRootWindowContainer.getDefaultDisplay();
         if (mKeyguardShowing && canDismissKeyguard()
-                && dc.mAppTransition.getAppTransitionOld() == TRANSIT_OLD_KEYGUARD_UNOCCLUDE) {
-            dc.prepareAppTransitionOld(mBeforeUnoccludeTransit, false /* alwaysKeepCurrent */,
-                    0 /* flags */, true /* forceOverride */);
-            dc.prepareAppTransition(TRANSIT_KEYGUARD_UNOCCLUDE);
+                && dc.mAppTransition.containsTransitRequest(TRANSIT_KEYGUARD_UNOCCLUDE)) {
             mWindowManager.executeAppTransition();
         }
     }
@@ -413,7 +397,7 @@ class KeyguardController {
             return;
         }
 
-        mStackSupervisor.wakeUp("handleTurnScreenOn");
+        mTaskSupervisor.wakeUp("handleTurnScreenOn");
         if (mKeyguardShowing && canDismissKeyguard()) {
             mWindowManager.dismissKeyguard(null /* callback */, null /* message */);
             mDismissalRequested = true;
@@ -430,28 +414,6 @@ class KeyguardController {
     boolean canDismissKeyguard() {
         return mWindowManager.mPolicy.isKeyguardTrustedLw()
                 || !mWindowManager.isKeyguardSecure(mService.getCurrentUserId());
-    }
-
-    private int resolveOccludeTransit() {
-        // TODO(new-app-transition): Remove after migrating to the enw transit system.
-        final DisplayContent dc = mRootWindowContainer.getDefaultDisplay();
-        if (mBeforeUnoccludeTransit != TRANSIT_OLD_UNSET
-                && dc.mAppTransition.getAppTransitionOld() == TRANSIT_OLD_KEYGUARD_UNOCCLUDE
-                // TODO(b/113840485): Handle app transition for individual display.
-                && isDisplayOccluded(DEFAULT_DISPLAY)) {
-
-            // Reuse old transit in case we are occluding Keyguard again, meaning that we never
-            // actually occclude/unocclude Keyguard, but just run a normal transition.
-            return mBeforeUnoccludeTransit;
-            // TODO(b/113840485): Handle app transition for individual display.
-        } else if (!isDisplayOccluded(DEFAULT_DISPLAY)) {
-
-            // Save transit in case we dismiss/occlude Keyguard shortly after.
-            mBeforeUnoccludeTransit = dc.mAppTransition.getAppTransitionOld();
-            return TRANSIT_OLD_KEYGUARD_UNOCCLUDE;
-        } else {
-            return TRANSIT_OLD_KEYGUARD_OCCLUDE;
-        }
     }
 
     private void dismissMultiWindowModeForTaskIfNeeded(
@@ -633,8 +595,8 @@ class KeyguardController {
         @Nullable
         private Task getRootTaskForControllingOccluding(DisplayContent display) {
             return display.getItemFromTaskDisplayAreas(taskDisplayArea -> {
-                for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
-                    final Task task = taskDisplayArea.getStackAt(sNdx);
+                for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
+                    final Task task = taskDisplayArea.getRootTaskAt(sNdx);
                     if (task != null && task.isFocusableAndVisible()
                             && !task.inPinnedWindowingMode()) {
                         return task;

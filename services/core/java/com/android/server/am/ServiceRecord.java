@@ -109,6 +109,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     boolean isForeground;   // is service currently in foreground mode?
     int foregroundId;       // Notification ID of last foreground req.
     Notification foregroundNoti; // Notification record of foreground state.
+    long fgDisplayTime;     // time at which the FGS notification should become visible
     int foregroundServiceType; // foreground service types.
     long lastActivity;      // last time there was some activity on the service.
     long startingBgTimeout;  // time at which we scheduled this for a delayed start.
@@ -145,6 +146,10 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     // null.
     @GuardedBy("ams")
     private List<IBinder> mBgActivityStartsByStartOriginatingTokens = new ArrayList<>();
+
+    // any current binding to this service has BIND_ALLOW_FOREGROUND_SERVICE_STARTS_FROM_BACKGROUND
+    // flag? if true, the process can start FGS from background.
+    boolean mIsAllowedBgFgsStartsByBinding;
 
     // allow while-in-use permissions in foreground service or not.
     // while-in-use permissions in FGS started from background might be restricted.
@@ -417,6 +422,10 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             pw.print(prefix); pw.print("mIsAllowedBgActivityStartsByStart=");
             pw.println(mIsAllowedBgActivityStartsByStart);
         }
+        if (mIsAllowedBgFgsStartsByBinding) {
+            pw.print(prefix); pw.print("mIsAllowedBgFgsStartsByBinding=");
+            pw.println(mIsAllowedBgFgsStartsByBinding);
+        }
         pw.print(prefix); pw.print("allowWhileInUsePermissionInFgs=");
                 pw.println(mAllowWhileInUsePermissionInFgs);
         pw.print(prefix); pw.print("recentCallingPackage=");
@@ -599,6 +608,11 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             } else {
                 _proc.removeAllowBackgroundActivityStartsToken(this);
             }
+            if (mIsAllowedBgFgsStartsByBinding) {
+                _proc.addAllowBackgroundFgsStartsToken(this);
+            } else {
+                _proc.removeAllowBackgroundFgsStartsToken(this);
+            }
         }
         if (app != null && app != _proc) {
             // If the old app is allowed to start bg activities because of a service start, leave it
@@ -685,9 +699,32 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         setAllowedBgActivityStartsByBinding(isAllowedByBinding);
     }
 
+    void updateIsAllowedBgFgsStartsByBinding() {
+        boolean isAllowedByBinding = false;
+        for (int conni = connections.size() - 1; conni >= 0; conni--) {
+            ArrayList<ConnectionRecord> cr = connections.valueAt(conni);
+            for (int i = 0; i < cr.size(); i++) {
+                if ((cr.get(i).flags
+                        & Context.BIND_ALLOW_FOREGROUND_SERVICE_STARTS_FROM_BACKGROUND) != 0) {
+                    isAllowedByBinding = true;
+                    break;
+                }
+            }
+            if (isAllowedByBinding) {
+                break;
+            }
+        }
+        setAllowedBgFgsStartsByBinding(isAllowedByBinding);
+    }
+
     void setAllowedBgActivityStartsByBinding(boolean newValue) {
         mIsAllowedBgActivityStartsByBinding = newValue;
         updateParentProcessBgActivityStartsToken();
+    }
+
+    void setAllowedBgFgsStartsByBinding(boolean newValue) {
+        mIsAllowedBgFgsStartsByBinding = newValue;
+        updateParentProcessBgFgsStartsToken();
     }
 
     /**
@@ -776,6 +813,17 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         }
     }
 
+    private void updateParentProcessBgFgsStartsToken() {
+        if (app == null) {
+            return;
+        }
+        if (mIsAllowedBgFgsStartsByBinding) {
+            app.addAllowBackgroundFgsStartsToken(this);
+        } else {
+            app.removeAllowBackgroundFgsStartsToken(this);
+        }
+    }
+
     /**
      * Returns the originating token if that's the only reason background activity starts are
      * allowed. In order for that to happen the service has to be allowed only due to starts, since
@@ -805,6 +853,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     void updateKeepWarmLocked() {
         mKeepWarming = ams.mConstants.KEEP_WARMING_SERVICES.contains(name)
                 && (ams.mUserController.getCurrentUserId() == userId
+                || ams.mUserController.isCurrentProfile(userId)
                 || ams.isSingleton(processName, appInfo, instanceName.getClassName(),
                         serviceInfo.flags));
     }

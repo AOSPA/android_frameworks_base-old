@@ -54,7 +54,6 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.accessibility.EventStreamTransformation;
 import com.android.server.accessibility.magnification.FullScreenMagnificationController.MagnificationRequestObserver;
-import com.android.server.accessibility.magnification.MagnificationGestureHandler.ScaleChangedListener;
 import com.android.server.testutils.OffsettableClock;
 import com.android.server.testutils.TestHandler;
 import com.android.server.wm.WindowManagerInternal;
@@ -65,7 +64,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-
 
 import java.util.ArrayList;
 import java.util.List;
@@ -126,9 +124,11 @@ public class FullScreenMagnificationGestureHandlerTest {
     private Context mContext;
     FullScreenMagnificationController mFullScreenMagnificationController;
     @Mock
-    ScaleChangedListener mMockScaleChangedListener;
+    MagnificationGestureHandler.ScaleChangedListener mMockScaleChangedListener;
     @Mock
     MagnificationRequestObserver mMagnificationRequestObserver;
+    @Mock
+    WindowMagnificationPromptController mWindowMagnificationPromptController;
 
     private OffsettableClock mClock;
     private FullScreenMagnificationGestureHandler mMgh;
@@ -170,7 +170,9 @@ public class FullScreenMagnificationGestureHandlerTest {
 
     @After
     public void tearDown() {
+        mMgh.onDestroy();
         mFullScreenMagnificationController.unregister(DISPLAY_0);
+        verify(mWindowMagnificationPromptController).onDestroy();
     }
 
     @NonNull
@@ -178,7 +180,8 @@ public class FullScreenMagnificationGestureHandlerTest {
             boolean detectShortcutTrigger) {
         FullScreenMagnificationGestureHandler h = new FullScreenMagnificationGestureHandler(
                 mContext, mFullScreenMagnificationController, mMockScaleChangedListener,
-                detectTripleTap, detectShortcutTrigger, DISPLAY_0);
+                detectTripleTap, detectShortcutTrigger,
+                mWindowMagnificationPromptController, DISPLAY_0);
         mHandler = new TestHandler(h.mDetectingState, mClock) {
             @Override
             protected String messageToString(Message m) {
@@ -432,6 +435,20 @@ public class FullScreenMagnificationGestureHandlerTest {
 
         assertIn(STATE_PANNING);
         returnToNormalFrom(STATE_PANNING);
+    }
+
+    @Test
+    public void testZoomedWithTripleTap_invokeShowWindowPromptAction() {
+        goFromStateIdleTo(STATE_ZOOMED);
+
+        verify(mWindowMagnificationPromptController).showNotificationIfNeeded();
+    }
+
+    @Test
+    public void testShortcutTriggered_invokeShowWindowPromptAction() {
+        goFromStateIdleTo(STATE_SHORTCUT_TRIGGERED);
+
+        verify(mWindowMagnificationPromptController).showNotificationIfNeeded();
     }
 
     private void assertActionsInOrder(List<MotionEvent> actualEvents,

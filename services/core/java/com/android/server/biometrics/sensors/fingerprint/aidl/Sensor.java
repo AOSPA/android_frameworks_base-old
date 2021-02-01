@@ -39,10 +39,10 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.biometrics.HardwareAuthTokenUtils;
+import com.android.server.biometrics.SensorServiceStateProto;
+import com.android.server.biometrics.SensorStateProto;
+import com.android.server.biometrics.UserStateProto;
 import com.android.server.biometrics.Utils;
-import com.android.server.biometrics.fingerprint.FingerprintServiceStateProto;
-import com.android.server.biometrics.fingerprint.SensorStateProto;
-import com.android.server.biometrics.fingerprint.UserStateProto;
 import com.android.server.biometrics.sensors.AcquisitionClient;
 import com.android.server.biometrics.sensors.AuthenticationConsumer;
 import com.android.server.biometrics.sensors.BiometricScheduler;
@@ -79,27 +79,6 @@ class Sensor implements IBinder.DeathRecipient {
 
     @Nullable private Session mCurrentSession;
     @NonNull private final ClientMonitor.LazyDaemon<ISession> mLazySession;
-
-    @Override
-    public void binderDied() {
-        Slog.e(mTag, "Binder died");
-        mHandler.post(() -> {
-            final ClientMonitor<?> client = mScheduler.getCurrentClient();
-            if (client instanceof Interruptable) {
-                Slog.e(mTag, "Sending ERROR_HW_UNAVAILABLE for client: " + client);
-                final Interruptable interruptable = (Interruptable) client;
-                interruptable.onError(FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE,
-                        0 /* vendorCode */);
-
-                mScheduler.recordCrashState();
-
-                FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_SYSTEM_HEALTH_ISSUE_DETECTED,
-                        BiometricsProtoEnums.MODALITY_FINGERPRINT,
-                        BiometricsProtoEnums.ISSUE_HAL_DEATH);
-                mCurrentSession = null;
-            }
-        });
-    }
 
     static class Session {
         @NonNull private final String mTag;
@@ -491,7 +470,7 @@ class Sensor implements IBinder.DeathRecipient {
     }
 
     void dumpProtoState(int sensorId, @NonNull ProtoOutputStream proto) {
-        final long sensorToken = proto.start(FingerprintServiceStateProto.SENSOR_STATES);
+        final long sensorToken = proto.start(SensorServiceStateProto.SENSOR_STATES);
 
         proto.write(SensorStateProto.SENSOR_ID, mSensorProperties.sensorId);
         proto.write(SensorStateProto.IS_BUSY, mScheduler.getCurrentClient() != null);
@@ -501,11 +480,33 @@ class Sensor implements IBinder.DeathRecipient {
 
             final long userToken = proto.start(SensorStateProto.USER_STATES);
             proto.write(UserStateProto.USER_ID, userId);
-            proto.write(UserStateProto.NUM_ENROLLED, FingerprintUtils.getInstance()
-                    .getBiometricsForUser(mContext, userId).size());
+            proto.write(UserStateProto.NUM_ENROLLED,
+                    FingerprintUtils.getInstance(mSensorProperties.sensorId)
+                            .getBiometricsForUser(mContext, userId).size());
             proto.end(userToken);
         }
 
         proto.end(sensorToken);
+    }
+
+    @Override
+    public void binderDied() {
+        Slog.e(mTag, "Binder died");
+        mHandler.post(() -> {
+            final ClientMonitor<?> client = mScheduler.getCurrentClient();
+            if (client instanceof Interruptable) {
+                Slog.e(mTag, "Sending ERROR_HW_UNAVAILABLE for client: " + client);
+                final Interruptable interruptable = (Interruptable) client;
+                interruptable.onError(FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE,
+                        0 /* vendorCode */);
+
+                mScheduler.recordCrashState();
+
+                FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_SYSTEM_HEALTH_ISSUE_DETECTED,
+                        BiometricsProtoEnums.MODALITY_FINGERPRINT,
+                        BiometricsProtoEnums.ISSUE_HAL_DEATH);
+                mCurrentSession = null;
+            }
+        });
     }
 }

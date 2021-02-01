@@ -21,7 +21,9 @@ import android.view.MotionEvent;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.util.sensors.ThresholdSensor;
 
+import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
 /**
@@ -29,28 +31,16 @@ import java.io.PrintWriter;
  */
 public class FalsingManagerFake implements FalsingManager {
     private boolean mIsFalseTouch;
+    private boolean mIsFalseTap;
+    private boolean mIsFalseDoubleTap;
     private boolean mIsUnlockingDisabled;
     private boolean mIsClassiferEnabled;
     private boolean mShouldEnforceBouncer;
     private boolean mIsReportingEnabled;
+    private boolean mIsFalseRobustTap;
 
     @Override
     public void onSuccessfulUnlock() {
-
-    }
-
-    @Override
-    public void onNotificationActive() {
-
-    }
-
-    @Override
-    public void setShowingAod(boolean showingAod) {
-
-    }
-
-    @Override
-    public void onNotificatonStartDraggingDown() {
 
     }
 
@@ -74,14 +64,26 @@ public class FalsingManagerFake implements FalsingManager {
         return mIsFalseTouch;
     }
 
-    @Override
-    public void onNotificatonStopDraggingDown() {
+    public void setFalseRobustTap(boolean falseRobustTap) {
+        mIsFalseRobustTap = falseRobustTap;
+    }
 
+    public void setFalseTap(boolean falseTap) {
+        mIsFalseTap = falseTap;
+    }
+
+    public void setFalseDoubleTap(boolean falseDoubleTap) {
+        mIsFalseDoubleTap = falseDoubleTap;
     }
 
     @Override
-    public void setNotificationExpanded() {
+    public boolean isFalseTap(boolean robustCheck) {
+        return robustCheck ? mIsFalseRobustTap : mIsFalseTap;
+    }
 
+    @Override
+    public boolean isFalseDoubleTap() {
+        return mIsFalseDoubleTap;
     }
 
     @VisibleForTesting
@@ -95,75 +97,14 @@ public class FalsingManagerFake implements FalsingManager {
     }
 
     @Override
-    public void onQsDown() {
-
-    }
-
-    @Override
-    public void setQsExpanded(boolean expanded) {
-
-    }
-
-    @VisibleForTesting
-    public void setShouldEnforceBouncer(boolean shouldEnforceBouncer) {
-        mShouldEnforceBouncer = shouldEnforceBouncer;
-    }
-
-    @Override
     public boolean shouldEnforceBouncer() {
         return mShouldEnforceBouncer;
-    }
-
-    @Override
-    public void onTrackingStarted(boolean secure) {
-
-    }
-
-    @Override
-    public void onTrackingStopped() {
-
-    }
-
-    @Override
-    public void onLeftAffordanceOn() {
-
-    }
-
-    @Override
-    public void onCameraOn() {
-
-    }
-
-    @Override
-    public void onAffordanceSwipingStarted(boolean rightCorner) {
-
-    }
-
-    @Override
-    public void onAffordanceSwipingAborted() {
-
-    }
-
-    @Override
-    public void onStartExpandingFromPulse() {
-
-    }
-
-    @Override
-    public void onExpansionFromPulseStopped() {
-
     }
 
     @Override
     public Uri reportRejectedTouch() {
         return null;
     }
-
-    @Override
-    public void onScreenOnFromTouch() {
-
-    }
-
 
     @VisibleForTesting
     public void setIsReportingEnabled(boolean isReportingEnabled) {
@@ -176,71 +117,20 @@ public class FalsingManagerFake implements FalsingManager {
     }
 
     @Override
-    public void onUnlockHintStarted() {
-
-    }
-
-    @Override
-    public void onCameraHintStarted() {
-
-    }
-
-    @Override
-    public void onLeftAffordanceHintStarted() {
-
-    }
-
-    @Override
-    public void onScreenTurningOn() {
-
-    }
-
-    @Override
-    public void onScreenOff() {
-
-    }
-
-    @Override
-    public void onNotificationStopDismissing() {
-
-    }
-
-    @Override
-    public void onNotificationDismissed() {
-
-    }
-
-    @Override
-    public void onNotificationStartDismissing() {
-
-    }
-
-    @Override
-    public void onNotificationDoubleTap(boolean accepted, float dx, float dy) {
-
-    }
-
-    @Override
-    public void onBouncerShown() {
-
-    }
-
-    @Override
-    public void onBouncerHidden() {
-
-    }
-
-    @Override
     public void onTouchEvent(MotionEvent ev, int width, int height) {
 
     }
 
     @Override
-    public void dump(PrintWriter pw) {
-
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
     }
 
     @Override
     public void cleanup() {
+    }
+
+    @Override
+    public void onProximityEvent(ThresholdSensor.ThresholdSensorEvent proximityEvent) {
+
     }
 }

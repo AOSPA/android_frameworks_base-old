@@ -27,6 +27,8 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.os.Process.SYSTEM_UID;
 import static android.view.View.VISIBLE;
+import static android.view.WindowManager.DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
+import static android.view.WindowManager.DISPLAY_IME_POLICY_LOCAL;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
@@ -47,6 +49,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
+import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -62,7 +65,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
-import android.content.res.Configuration;
 import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -80,6 +82,7 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.WindowManager.DisplayImePolicy;
 import android.window.ITaskOrganizer;
 
 import com.android.internal.util.ArrayUtils;
@@ -107,7 +110,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     ActivityTaskManagerService mAtm;
     RootWindowContainer mRootWindowContainer;
-    ActivityStackSupervisor mSupervisor;
+    ActivityTaskSupervisor mSupervisor;
     WindowManagerService mWm;
     private final IWindow mIWindow = new TestIWindow();
     private Session mMockSession;
@@ -146,7 +149,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
     @Before
     public void setUpBase() {
         mAtm = mSystemServicesTestRule.getActivityTaskManagerService();
-        mSupervisor = mAtm.mStackSupervisor;
+        mSupervisor = mAtm.mTaskSupervisor;
         mRootWindowContainer = mAtm.mRootWindowContainer;
         mWm = mSystemServicesTestRule.getWindowManagerService();
         SystemServicesTestRule.checkHoldsLock(mWm.mGlobalLock);
@@ -174,7 +177,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     private void createTestDisplay(UseTestDisplay annotation) {
         beforeCreateTestDisplay();
-        mDisplayContent = createNewDisplay(true /* supportIme */);
+        mDisplayContent = createNewDisplayWithImeSupport(DISPLAY_IME_POLICY_LOCAL);
 
         final boolean addAll = annotation.addAllCommonWindows();
         final @CommonTypes int[] requestedWindows = annotation.addWindows();
@@ -352,6 +355,13 @@ class WindowTestsBase extends SystemServiceTestsBase {
         }
     }
 
+    static void makeWindowVisibleAndDrawn(WindowState... windows) {
+        makeWindowVisible(windows);
+        for (WindowState win : windows) {
+            win.mWinAnimator.mDrawState = HAS_DRAWN;
+        }
+    }
+
     /** Creates a {@link TaskDisplayArea} right above the default one. */
     static TaskDisplayArea createTaskDisplayArea(DisplayContent displayContent,
             WindowManagerService service, String name, int displayAreaFeature) {
@@ -372,7 +382,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
     }
 
     Task createTaskStackOnDisplay(int windowingMode, int activityType, DisplayContent dc) {
-        return new TaskBuilder(dc.mAtmService.mStackSupervisor)
+        return new TaskBuilder(dc.mAtmService.mTaskSupervisor)
                 .setDisplay(dc)
                 .setWindowingMode(windowingMode)
                 .setActivityType(activityType)
@@ -382,7 +392,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     Task createTaskStackOnTaskDisplayArea(int windowingMode, int activityType,
             TaskDisplayArea tda) {
-        return new TaskBuilder(tda.mDisplayContent.mAtmService.mStackSupervisor)
+        return new TaskBuilder(tda.mDisplayContent.mAtmService.mTaskSupervisor)
                 .setTaskDisplayArea(tda)
                 .setWindowingMode(windowingMode)
                 .setActivityType(activityType)
@@ -392,7 +402,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     /** Creates a {@link Task} and adds it to the specified {@link Task}. */
     Task createTaskInStack(Task stack, int userId) {
-        final Task task = new TaskBuilder(stack.mStackSupervisor)
+        final Task task = new TaskBuilder(stack.mTaskSupervisor)
                 .setUserId(userId)
                 .setParentTask(stack)
                 .build();
@@ -482,26 +492,26 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     /** Creates a {@link DisplayContent} that supports IME and adds it to the system. */
     DisplayContent createNewDisplay() {
-        return createNewDisplay(true /* supportIme */);
+        return createNewDisplayWithImeSupport(DISPLAY_IME_POLICY_LOCAL);
     }
 
     /** Creates a {@link DisplayContent} and adds it to the system. */
-    private DisplayContent createNewDisplay(boolean supportIme) {
-        return createNewDisplay(mDisplayInfo, supportIme);
+    private DisplayContent createNewDisplayWithImeSupport(@DisplayImePolicy int imePolicy) {
+        return createNewDisplay(mDisplayInfo, imePolicy);
     }
 
     /** Creates a {@link DisplayContent} that supports IME and adds it to the system. */
     DisplayContent createNewDisplay(DisplayInfo info) {
-        return createNewDisplay(info, true /* supportIme */);
+        return createNewDisplay(info, DISPLAY_IME_POLICY_LOCAL);
     }
 
     /** Creates a {@link DisplayContent} and adds it to the system. */
-    private DisplayContent createNewDisplay(DisplayInfo info, boolean supportIme) {
+    private DisplayContent createNewDisplay(DisplayInfo info, @DisplayImePolicy int imePolicy) {
         final DisplayContent display =
                 new TestDisplayContent.Builder(mAtm, info).build();
         final DisplayContent dc = display.mDisplayContent;
         // this display can show IME.
-        dc.mWmService.mDisplayWindowSettings.setShouldShowImeLocked(dc, supportIme);
+        dc.mWmService.mDisplayWindowSettings.setDisplayImePolicy(dc, imePolicy);
         return dc;
     }
 
@@ -516,7 +526,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         DisplayInfo displayInfo = new DisplayInfo();
         displayInfo.copyFrom(mDisplayInfo);
         displayInfo.state = displayState;
-        return createNewDisplay(displayInfo, true /* supportIme */);
+        return createNewDisplay(displayInfo, DISPLAY_IME_POLICY_LOCAL);
     }
 
     /** Creates a {@link TestWindowState} */
@@ -532,7 +542,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         displayInfo.copyFrom(mDisplayInfo);
         displayInfo.type = Display.TYPE_VIRTUAL;
         displayInfo.ownerUid = SYSTEM_UID;
-        return createNewDisplay(displayInfo, false /* supportIme */);
+        return createNewDisplay(displayInfo, DISPLAY_IME_POLICY_FALLBACK_DISPLAY);
     }
 
     IDisplayWindowInsetsController createDisplayWindowInsetsController() {
@@ -637,6 +647,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
      * Builder for creating new activities.
      */
     protected static class ActivityBuilder {
+        static final int DEFAULT_FAKE_UID = 12345;
         // An id appended to the end of the component name to make it unique
         private static int sCurrentActivityId = 0;
 
@@ -647,7 +658,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         private Task mTask;
         private String mProcessName = "name";
         private String mAffinity;
-        private int mUid = 12345;
+        private int mUid = DEFAULT_FAKE_UID;
         private boolean mCreateTask = false;
         private Task mParentTask;
         private int mActivityFlags;
@@ -790,10 +801,10 @@ class WindowTestsBase extends SystemServiceTestsBase {
             }
 
             if (mCreateTask) {
-                mTask = new TaskBuilder(mService.mStackSupervisor)
+                mTask = new TaskBuilder(mService.mTaskSupervisor)
                         .setComponent(mComponent)
                         .setParentTask(mParentTask).build();
-            } else if (mTask == null && mParentTask != null && DisplayContent.alwaysCreateStack(
+            } else if (mTask == null && mParentTask != null && DisplayContent.alwaysCreateRootTask(
                     mParentTask.getWindowingMode(), mParentTask.getActivityType())) {
                 // The stack can be the task root.
                 mTask = mParentTask;
@@ -827,23 +838,27 @@ class WindowTestsBase extends SystemServiceTestsBase {
             if (mLaunchTaskBehind) {
                 options = ActivityOptions.makeTaskLaunchBehind();
             }
+            final ActivityRecord activity = new ActivityRecord.Builder(mService)
+                    .setLaunchedFromPid(mLaunchedFromPid)
+                    .setLaunchedFromUid(mLaunchedFromUid)
+                    .setIntent(intent)
+                    .setActivityInfo(aInfo)
+                    .setActivityOptions(options)
+                    .build();
 
-            final ActivityRecord activity = new ActivityRecord(mService, null /* caller */,
-                    mLaunchedFromPid /* launchedFromPid */, mLaunchedFromUid /* launchedFromUid */,
-                    null, null, intent, null, aInfo /*aInfo*/, new Configuration(),
-                    null /* resultTo */, null /* resultWho */, 0 /* reqCode */,
-                    false /*componentSpecified*/, false /* rootVoiceInteraction */,
-                    mService.mStackSupervisor, options, null /* sourceRecord */);
             spyOn(activity);
             if (mTask != null) {
                 // fullscreen value is normally read from resources in ctor, so for testing we need
                 // to set it somewhere else since we can't mock resources.
                 doReturn(true).when(activity).occludesParent();
                 doReturn(true).when(activity).fillsParent();
+                mTask.addChild(activity);
                 if (mOnTop) {
+                    // Move the task to front after activity added.
+                    // Or {@link TaskDisplayArea#mPreferredTopFocusableStack} could be other stacks
+                    // (e.g. home stack).
                     mTask.moveToFront("createActivity");
                 }
-                mTask.addChild(activity);
                 // Make visible by default...
                 activity.setVisible(true);
             }
@@ -854,7 +869,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
             } else {
                 wpc = new WindowProcessController(mService,
                         aInfo.applicationInfo, mProcessName, mUid,
-                        UserHandle.getUserId(12345), mock(Object.class),
+                        UserHandle.getUserId(mUid), mock(Object.class),
                         mock(WindowProcessListener.class));
                 wpc.setThread(mock(IApplicationThread.class));
             }
@@ -864,7 +879,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
                     activity.processName, activity.info.applicationInfo.uid);
 
             // Resume top activities to make sure all other signals in the system are connected.
-            mService.mRootWindowContainer.resumeFocusedStacksTopActivities();
+            mService.mRootWindowContainer.resumeFocusedTasksTopActivities();
             return activity;
         }
     }
@@ -873,7 +888,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
      * Builder for creating new tasks.
      */
     protected static class TaskBuilder {
-        private final ActivityStackSupervisor mSupervisor;
+        private final ActivityTaskSupervisor mSupervisor;
 
         private TaskDisplayArea mTaskDisplayArea;
         private ComponentName mComponent;
@@ -893,7 +908,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
         private boolean mCreateActivity = false;
 
-        TaskBuilder(ActivityStackSupervisor supervisor) {
+        TaskBuilder(ActivityTaskSupervisor supervisor) {
             mSupervisor = supervisor;
             mTaskDisplayArea = mSupervisor.mRootWindowContainer.getDefaultTaskDisplayArea();
         }
@@ -988,7 +1003,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
             // Create parent task.
             if (mParentTask == null && mCreateParentTask) {
-                mParentTask = mTaskDisplayArea.createStack(
+                mParentTask = mTaskDisplayArea.createRootTask(
                         WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
             }
             if (mParentTask != null && !Mockito.mockingDetails(mParentTask).isSpy()) {
@@ -1013,9 +1028,9 @@ class WindowTestsBase extends SystemServiceTestsBase {
             }
 
             Task task;
-            final int taskId = mTaskId >= 0 ? mTaskId : mTaskDisplayArea.getNextStackId();
+            final int taskId = mTaskId >= 0 ? mTaskId : mTaskDisplayArea.getNextRootTaskId();
             if (mParentTask == null) {
-                task = mTaskDisplayArea.createStackUnchecked(
+                task = mTaskDisplayArea.createRootTaskUnchecked(
                         mWindowingMode, mActivityType, taskId, mOnTop, mActivityInfo, mIntent,
                         false /* createdByOrganizer */, false /* deferTaskAppear */,
                         null /* launchCookie */);
@@ -1069,7 +1084,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
                     display, WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, null);;
         }
         TestSplitOrganizer(ActivityTaskManagerService service) {
-            this(service, service.mStackSupervisor.mRootWindowContainer.getDefaultDisplay());
+            this(service, service.mTaskSupervisor.mRootWindowContainer.getDefaultDisplay());
         }
         public void setMoveToSecondaryOnEnter(boolean move) {
             mMoveToSecondaryOnEnter = move;
@@ -1107,8 +1122,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
                     mSecondary.mRemoteToken.toWindowContainerToken());
             DisplayContent dc = mService.mRootWindowContainer.getDisplayContent(mDisplayId);
             dc.forAllTaskDisplayAreas(taskDisplayArea -> {
-                for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
-                    final Task stack = taskDisplayArea.getStackAt(sNdx);
+                for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
+                    final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
                     if (!WindowConfiguration.isSplitScreenWindowingMode(stack.getWindowingMode())) {
                         stack.reparent(mSecondary, POSITION_BOTTOM);
                     }

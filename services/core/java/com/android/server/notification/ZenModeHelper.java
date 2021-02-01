@@ -72,6 +72,8 @@ import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.StatsEvent;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.R;
@@ -79,6 +81,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
+import com.android.internal.util.XmlUtils;
 import com.android.server.LocalServices;
 
 import libcore.io.IoUtils;
@@ -702,7 +705,7 @@ public class ZenModeHelper {
         }
     }
 
-    public void readXml(XmlPullParser parser, boolean forRestore, int userId)
+    public void readXml(TypedXmlPullParser parser, boolean forRestore, int userId)
             throws XmlPullParserException, IOException {
         ZenModeConfig config = ZenModeConfig.readXml(parser);
         String reason = "readXml";
@@ -761,7 +764,7 @@ public class ZenModeHelper {
         }
     }
 
-    public void writeXml(XmlSerializer out, boolean forBackup, Integer version, int userId)
+    public void writeXml(TypedXmlSerializer out, boolean forBackup, Integer version, int userId)
             throws IOException {
         synchronized (mConfigs) {
             final int n = mConfigs.size();
@@ -1163,7 +1166,7 @@ public class ZenModeHelper {
         try {
             parser = resources.getXml(R.xml.default_zen_mode_config);
             while (parser.next() != XmlPullParser.END_DOCUMENT) {
-                final ZenModeConfig config = ZenModeConfig.readXml(parser);
+                final ZenModeConfig config = ZenModeConfig.readXml(XmlUtils.makeTyped(parser));
                 if (config != null) return config;
             }
         } catch (Exception e) {

@@ -17,7 +17,9 @@
 package com.android.keyguard;
 
 import android.app.WallpaperManager;
+import android.content.ContentResolver;
 import android.content.res.Resources;
+import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.util.TypedValue;
 import android.view.View;
@@ -55,7 +57,14 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private final ClockManager mClockManager;
     private final KeyguardSliceViewController mKeyguardSliceViewController;
     private final NotificationIconAreaController mNotificationIconAreaController;
-    private FrameLayout mNewLockscreenClockFrame;
+
+    /**
+     * Gradient clock for usage when mode != KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL.
+     */
+    private AnimatableClockController mNewLockScreenClockViewController;
+    private FrameLayout mNewLockScreenClockFrame;
+    private AnimatableClockController mNewLockScreenLargeClockViewController;
+    private FrameLayout mNewLockScreenLargeClockFrame;
 
     private int mLockScreenMode = KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL;
 
@@ -83,6 +92,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     };
 
     private ClockManager.ClockChangedListener mClockChangedListener = this::setClockPlugin;
+    private String mTimeFormat;
 
     @Inject
     public KeyguardClockSwitchController(
@@ -91,7 +101,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             StatusBarStateController statusBarStateController,
             SysuiColorExtractor colorExtractor, ClockManager clockManager,
             KeyguardSliceViewController keyguardSliceViewController,
-            NotificationIconAreaController notificationIconAreaController) {
+            NotificationIconAreaController notificationIconAreaController,
+            ContentResolver contentResolver) {
         super(keyguardClockSwitch);
         mResources = resources;
         mStatusBarStateController = statusBarStateController;
@@ -99,6 +110,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mClockManager = clockManager;
         mKeyguardSliceViewController = keyguardSliceViewController;
         mNotificationIconAreaController = notificationIconAreaController;
+        mTimeFormat = Settings.System.getString(contentResolver, Settings.System.TIME_12_24);
     }
 
     /**
@@ -119,7 +131,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mColorExtractor.addOnColorsChangedListener(mColorsListener);
         mView.updateColors(getGradientColors());
         updateAodIcons();
-        mNewLockscreenClockFrame = mView.findViewById(R.id.new_lockscreen_clock_view);
+        mNewLockScreenClockFrame = mView.findViewById(R.id.new_lockscreen_clock_view);
+        mNewLockScreenLargeClockFrame = mView.findViewById(R.id.new_lockscreen_clock_view_large);
     }
 
     @Override
@@ -182,19 +195,29 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
      * Refresh clock. Called in response to TIME_TICK broadcasts.
      */
     void refresh() {
+        if (mNewLockScreenClockViewController != null) {
+            mNewLockScreenClockViewController.refreshTime();
+            mNewLockScreenLargeClockViewController.refreshTime();
+        }
+
         mView.refresh();
     }
 
     /**
      * Update position of the view, with optional animation. Move the slice view and the clock
      * slightly towards the center in order to prevent burn-in. Y positioning occurs at the
-     * view parent level.
+     * view parent level. The large clock view will scale instead of using x position offsets, to
+     * keep the clock centered.
      */
-    void updatePosition(int x, AnimationProperties props, boolean animate) {
+    void updatePosition(int x, float scale, AnimationProperties props, boolean animate) {
         x = Math.abs(x);
-        if (mNewLockscreenClockFrame != null) {
-            PropertyAnimator.setProperty(mNewLockscreenClockFrame, AnimatableProperty.TRANSLATION_X,
+        if (mNewLockScreenClockFrame != null) {
+            PropertyAnimator.setProperty(mNewLockScreenClockFrame, AnimatableProperty.TRANSLATION_X,
                     -x, props, animate);
+            PropertyAnimator.setProperty(mNewLockScreenLargeClockFrame, AnimatableProperty.SCALE_X,
+                    scale, props, animate);
+            PropertyAnimator.setProperty(mNewLockScreenLargeClockFrame, AnimatableProperty.SCALE_Y,
+                    scale, props, animate);
         }
         mKeyguardSliceViewController.updatePosition(x, props, animate);
         mNotificationIconAreaController.updatePosition(x, props, animate);
@@ -205,18 +228,58 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
      */
     void updateLockScreenMode(int mode) {
         mLockScreenMode = mode;
+        if (mode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_LAYOUT_1) {
+            if (mNewLockScreenClockViewController == null) {
+                mNewLockScreenClockViewController =
+                        new AnimatableClockController(
+                                mView.findViewById(R.id.animatable_clock_view),
+                                mStatusBarStateController);
+                mNewLockScreenClockViewController.init();
+                mNewLockScreenLargeClockViewController =
+                        new AnimatableClockController(
+                                mView.findViewById(R.id.animatable_clock_view_large),
+                                mStatusBarStateController);
+                mNewLockScreenLargeClockViewController.init();
+            }
+        } else {
+            mNewLockScreenClockViewController = null;
+            mNewLockScreenLargeClockViewController = null;
+        }
         mView.updateLockScreenMode(mLockScreenMode);
         updateAodIcons();
     }
 
     void updateTimeZone(TimeZone timeZone) {
         mView.onTimeZoneChanged(timeZone);
+        if (mNewLockScreenClockViewController != null) {
+            mNewLockScreenClockViewController.onTimeZoneChanged(timeZone);
+            mNewLockScreenLargeClockViewController.onTimeZoneChanged(timeZone);
+        }
     }
 
-    void refreshFormat() {
+    void refreshFormat(String timeFormat) {
+        mTimeFormat = timeFormat;
         Patterns.update(mResources);
         mView.setFormat12Hour(Patterns.sClockView12);
         mView.setFormat24Hour(Patterns.sClockView24);
+        mView.onTimeFormatChanged(mTimeFormat);
+        if (mNewLockScreenClockViewController != null) {
+            mNewLockScreenClockViewController.refreshFormat();
+            mNewLockScreenLargeClockViewController.refreshFormat();
+        }
+    }
+
+    void refreshFormat() {
+        refreshFormat(mTimeFormat);
+    }
+
+    float getClockTextTopPadding() {
+        if (mLockScreenMode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_LAYOUT_1
+                && mNewLockScreenClockViewController != null) {
+            return mNewLockScreenClockViewController.getClockTextTopPadding();
+        }
+
+        return mView.getClockTextTopPadding();
     }
 
     private void updateAodIcons() {

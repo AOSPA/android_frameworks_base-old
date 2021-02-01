@@ -110,16 +110,18 @@ public class SystemUIFactory {
                     .setOneHanded(mWMComponent.getOneHanded())
                     .setBubbles(mWMComponent.getBubbles())
                     .setHideDisplayCutout(mWMComponent.getHideDisplayCutout())
-                    .setShellDump(mWMComponent.getShellDump())
+                    .setShellCommandHandler(mWMComponent.getShellCommandHandler())
                     .setAppPairs(mWMComponent.getAppPairs());
         } else {
-            // TODO: Call on prepareSysUIComponentBuilder but not with real components.
-            builder = builder.setPip(Optional.ofNullable(null))
+            // TODO: Call on prepareSysUIComponentBuilder but not with real components. Other option
+            // is separating this logic into newly creating SystemUITestsFactory.
+            builder = prepareSysUIComponentBuilder(builder, mWMComponent)
+                    .setPip(Optional.ofNullable(null))
                     .setSplitScreen(Optional.ofNullable(null))
                     .setOneHanded(Optional.ofNullable(null))
                     .setBubbles(Optional.ofNullable(null))
                     .setHideDisplayCutout(Optional.ofNullable(null))
-                    .setShellDump(Optional.ofNullable(null))
+                    .setShellCommandHandler(Optional.ofNullable(null))
                     .setAppPairs(Optional.ofNullable(null));
         }
         mSysUIComponent = builder.build();

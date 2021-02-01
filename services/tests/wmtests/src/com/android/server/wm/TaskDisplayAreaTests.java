@@ -70,23 +70,22 @@ import org.junit.runner.RunWith;
 @RunWith(WindowTestRunner.class)
 public class TaskDisplayAreaTests extends WindowTestsBase {
 
-    private Task mPinnedStack;
+    private Task mPinnedTask;
 
     @Before
     public void setUp() throws Exception {
-        mPinnedStack = createTaskStackOnDisplay(
+        mPinnedTask = createTaskStackOnDisplay(
                 WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD, mDisplayContent);
         // Stack should contain visible app window to be considered visible.
-        final Task pinnedTask = createTaskInStack(mPinnedStack, 0 /* userId */);
-        assertFalse(mPinnedStack.isVisible());
+        assertFalse(mPinnedTask.isVisible());
         final ActivityRecord pinnedApp = createNonAttachedActivityRecord(mDisplayContent);
-        pinnedTask.addChild(pinnedApp, 0 /* addPos */);
-        assertTrue(mPinnedStack.isVisible());
+        mPinnedTask.addChild(pinnedApp, 0 /* addPos */);
+        assertTrue(mPinnedTask.isVisible());
     }
 
     @After
     public void tearDown() throws Exception {
-        mPinnedStack.removeImmediately();
+        mPinnedTask.removeImmediately();
     }
 
     @Test
@@ -118,19 +117,19 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
 
         final int stack1Pos = taskStackContainer.mChildren.indexOf(stack1);
         final int stack2Pos = taskStackContainer.mChildren.indexOf(stack2);
-        final int pinnedStackPos = taskStackContainer.mChildren.indexOf(mPinnedStack);
+        final int pinnedStackPos = taskStackContainer.mChildren.indexOf(mPinnedTask);
         assertThat(pinnedStackPos).isGreaterThan(stack2Pos);
         assertThat(stack2Pos).isGreaterThan(stack1Pos);
 
-        taskStackContainer.positionChildAt(WindowContainer.POSITION_BOTTOM, mPinnedStack, false);
+        taskStackContainer.positionChildAt(WindowContainer.POSITION_BOTTOM, mPinnedTask, false);
         assertEquals(taskStackContainer.mChildren.get(stack1Pos), stack1);
         assertEquals(taskStackContainer.mChildren.get(stack2Pos), stack2);
-        assertEquals(taskStackContainer.mChildren.get(pinnedStackPos), mPinnedStack);
+        assertEquals(taskStackContainer.mChildren.get(pinnedStackPos), mPinnedTask);
 
-        taskStackContainer.positionChildAt(1, mPinnedStack, false);
+        taskStackContainer.positionChildAt(1, mPinnedTask, false);
         assertEquals(taskStackContainer.mChildren.get(stack1Pos), stack1);
         assertEquals(taskStackContainer.mChildren.get(stack2Pos), stack2);
-        assertEquals(taskStackContainer.mChildren.get(pinnedStackPos), mPinnedStack);
+        assertEquals(taskStackContainer.mChildren.get(pinnedStackPos), mPinnedTask);
     }
 
     @Test
@@ -141,16 +140,16 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
         final WindowContainer taskStackContainer = stack1.getParent();
 
         final int stackPos = taskStackContainer.mChildren.indexOf(stack1);
-        final int pinnedStackPos = taskStackContainer.mChildren.indexOf(mPinnedStack);
+        final int pinnedStackPos = taskStackContainer.mChildren.indexOf(mPinnedTask);
         assertThat(pinnedStackPos).isGreaterThan(stackPos);
 
         taskStackContainer.positionChildAt(WindowContainer.POSITION_TOP, stack1, false);
         assertEquals(taskStackContainer.mChildren.get(stackPos), stack1);
-        assertEquals(taskStackContainer.mChildren.get(pinnedStackPos), mPinnedStack);
+        assertEquals(taskStackContainer.mChildren.get(pinnedStackPos), mPinnedTask);
 
         taskStackContainer.positionChildAt(taskStackContainer.mChildren.size() - 1, stack1, false);
         assertEquals(taskStackContainer.mChildren.get(stackPos), stack1);
-        assertEquals(taskStackContainer.mChildren.get(pinnedStackPos), mPinnedStack);
+        assertEquals(taskStackContainer.mChildren.get(pinnedStackPos), mPinnedTask);
     }
 
     @Test
@@ -182,33 +181,33 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
         final Task newStack = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, mDisplayContent);
         final TaskDisplayArea taskDisplayArea = candidateTask.getDisplayArea();
-        doReturn(newStack).when(taskDisplayArea).createStack(anyInt(), anyInt(), anyBoolean(),
+        doReturn(newStack).when(taskDisplayArea).createRootTask(anyInt(), anyInt(), anyBoolean(),
                 any(), any(), anyBoolean());
 
         final int type = ACTIVITY_TYPE_STANDARD;
-        assertGetOrCreateStack(WINDOWING_MODE_FULLSCREEN, type, candidateTask,
+        assertGetOrCreateRootTask(WINDOWING_MODE_FULLSCREEN, type, candidateTask,
                 true /* reuseCandidate */);
-        assertGetOrCreateStack(WINDOWING_MODE_UNDEFINED, type, candidateTask,
+        assertGetOrCreateRootTask(WINDOWING_MODE_UNDEFINED, type, candidateTask,
                 true /* reuseCandidate */);
-        assertGetOrCreateStack(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, type, candidateTask,
+        assertGetOrCreateRootTask(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, type, candidateTask,
                 true /* reuseCandidate */);
-        assertGetOrCreateStack(WINDOWING_MODE_FREEFORM, type, candidateTask,
+        assertGetOrCreateRootTask(WINDOWING_MODE_FREEFORM, type, candidateTask,
                 true /* reuseCandidate */);
-        assertGetOrCreateStack(WINDOWING_MODE_MULTI_WINDOW, type, candidateTask,
+        assertGetOrCreateRootTask(WINDOWING_MODE_MULTI_WINDOW, type, candidateTask,
                 true /* reuseCandidate */);
-        assertGetOrCreateStack(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, type, candidateTask,
+        assertGetOrCreateRootTask(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, type, candidateTask,
                 false /* reuseCandidate */);
-        assertGetOrCreateStack(WINDOWING_MODE_PINNED, type, candidateTask,
+        assertGetOrCreateRootTask(WINDOWING_MODE_PINNED, type, candidateTask,
                 true /* reuseCandidate */);
 
         final int windowingMode = WINDOWING_MODE_FULLSCREEN;
-        assertGetOrCreateStack(windowingMode, ACTIVITY_TYPE_HOME, candidateTask,
+        assertGetOrCreateRootTask(windowingMode, ACTIVITY_TYPE_HOME, candidateTask,
                 false /* reuseCandidate */);
-        assertGetOrCreateStack(windowingMode, ACTIVITY_TYPE_RECENTS, candidateTask,
+        assertGetOrCreateRootTask(windowingMode, ACTIVITY_TYPE_RECENTS, candidateTask,
                 false /* reuseCandidate */);
-        assertGetOrCreateStack(windowingMode, ACTIVITY_TYPE_ASSISTANT, candidateTask,
+        assertGetOrCreateRootTask(windowingMode, ACTIVITY_TYPE_ASSISTANT, candidateTask,
                 false /* reuseCandidate */);
-        assertGetOrCreateStack(windowingMode, ACTIVITY_TYPE_DREAM, candidateTask,
+        assertGetOrCreateRootTask(windowingMode, ACTIVITY_TYPE_DREAM, candidateTask,
                 false /* reuseCandidate */);
     }
 
@@ -251,9 +250,9 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
         final TaskDisplayArea secondTaskDisplayArea = createTaskDisplayArea(
                 mDisplayContent, mRootWindowContainer.mWmService, "TestTaskDisplayArea",
                 FEATURE_VENDOR_FIRST);
-        final Task firstStack = firstTaskDisplayArea.createStack(
+        final Task firstStack = firstTaskDisplayArea.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
-        final Task secondStack = secondTaskDisplayArea.createStack(
+        final Task secondStack = secondTaskDisplayArea.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
         final ActivityRecord firstActivity = new ActivityBuilder(mAtm)
                 .setTask(firstStack).build();
@@ -263,26 +262,56 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
         // Activity on TDA1 is focused
         mDisplayContent.setFocusedApp(firstActivity);
 
-        assertThat(firstTaskDisplayArea.isLastFocused()).isTrue();
-        assertThat(secondTaskDisplayArea.isLastFocused()).isFalse();
+        assertThat(firstTaskDisplayArea.canSpecifyOrientation()).isTrue();
+        assertThat(secondTaskDisplayArea.canSpecifyOrientation()).isFalse();
 
         // No focused app, TDA1 is still recorded as last focused.
         mDisplayContent.setFocusedApp(null);
 
-        assertThat(firstTaskDisplayArea.isLastFocused()).isTrue();
-        assertThat(secondTaskDisplayArea.isLastFocused()).isFalse();
+        assertThat(firstTaskDisplayArea.canSpecifyOrientation()).isTrue();
+        assertThat(secondTaskDisplayArea.canSpecifyOrientation()).isFalse();
 
         // Activity on TDA2 is focused
         mDisplayContent.setFocusedApp(secondActivity);
 
-        assertThat(firstTaskDisplayArea.isLastFocused()).isFalse();
-        assertThat(secondTaskDisplayArea.isLastFocused()).isTrue();
+        assertThat(firstTaskDisplayArea.canSpecifyOrientation()).isFalse();
+        assertThat(secondTaskDisplayArea.canSpecifyOrientation()).isTrue();
+    }
+
+    @Test
+    public void testIsLastFocused_onlyCountIfTaskDisplayAreaHandlesOrientationRequest() {
+        final TaskDisplayArea firstTaskDisplayArea = mDisplayContent.getDefaultTaskDisplayArea();
+        final TaskDisplayArea secondTaskDisplayArea = createTaskDisplayArea(
+                mDisplayContent, mRootWindowContainer.mWmService, "TestTaskDisplayArea",
+                FEATURE_VENDOR_FIRST);
+        final Task firstStack = firstTaskDisplayArea.createRootTask(
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
+        final Task secondStack = secondTaskDisplayArea.createRootTask(
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
+        final ActivityRecord firstActivity = new ActivityBuilder(mAtm)
+                .setTask(firstStack).build();
+        final ActivityRecord secondActivity = new ActivityBuilder(mAtm)
+                .setTask(secondStack).build();
+        firstTaskDisplayArea.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        secondTaskDisplayArea.setIgnoreOrientationRequest(false /* ignoreOrientationRequest */);
+
+        // Activity on TDA1 is focused, but TDA1 doesn't respect orientation request
+        mDisplayContent.setFocusedApp(firstActivity);
+
+        assertThat(firstTaskDisplayArea.canSpecifyOrientation()).isFalse();
+        assertThat(secondTaskDisplayArea.canSpecifyOrientation()).isFalse();
+
+        // Activity on TDA2 is focused, and TDA2 respects orientation request
+        mDisplayContent.setFocusedApp(secondActivity);
+
+        assertThat(firstTaskDisplayArea.canSpecifyOrientation()).isFalse();
+        assertThat(secondTaskDisplayArea.canSpecifyOrientation()).isTrue();
     }
 
     @Test
     public void testIgnoreOrientationRequest() {
         final TaskDisplayArea taskDisplayArea = mDisplayContent.getDefaultTaskDisplayArea();
-        final Task stack = taskDisplayArea.createStack(
+        final Task stack = taskDisplayArea.createRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
         final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(stack).build();
 
@@ -327,10 +356,10 @@ public class TaskDisplayAreaTests extends WindowTestsBase {
         assertFalse(defaultTaskDisplayArea.mChildren.contains(task));
     }
 
-    private void assertGetOrCreateStack(int windowingMode, int activityType, Task candidateTask,
+    private void assertGetOrCreateRootTask(int windowingMode, int activityType, Task candidateTask,
             boolean reuseCandidate) {
         final TaskDisplayArea taskDisplayArea = candidateTask.getDisplayArea();
-        final Task stack = taskDisplayArea.getOrCreateStack(windowingMode, activityType,
+        final Task stack = taskDisplayArea.getOrCreateRootTask(windowingMode, activityType,
                 false /* onTop */, null /* intent */, candidateTask /* candidateTask */);
         assertEquals(reuseCandidate, stack == candidateTask);
     }

@@ -47,15 +47,12 @@ import android.util.Xml;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.BackgroundThread;
-import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.XmlUtils;
 
 import libcore.io.IoUtils;
 
-import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -64,7 +61,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -129,8 +125,16 @@ public class PackageWatchdog {
     @VisibleForTesting
     static final int DEFAULT_BOOT_LOOP_TRIGGER_COUNT = 5;
     static final long DEFAULT_BOOT_LOOP_TRIGGER_WINDOW_MS = TimeUnit.MINUTES.toMillis(10);
+
+    // These properties track individual system server boot events, and are reset once the boot
+    // threshold is met, or the boot loop trigger window is exceeded between boot events.
     private static final String PROP_RESCUE_BOOT_COUNT = "sys.rescue_boot_count";
     private static final String PROP_RESCUE_BOOT_START = "sys.rescue_boot_start";
+
+    // These properties track multiple calls made to observers tracking boot loops. They are reset
+    // when the de-escalation window is exceeded between boot events.
+    private static final String PROP_BOOT_MITIGATION_WINDOW_START = "sys.boot_mitigation_start";
+    private static final String PROP_BOOT_MITIGATION_COUNT = "sys.boot_mitigation_count";
 
     private long mNumberOfNativeCrashPollsRemaining;
 
@@ -143,6 +147,7 @@ public class PackageWatchdog {
     private static final String ATTR_DURATION = "duration";
     private static final String ATTR_EXPLICIT_HEALTH_CHECK_DURATION = "health-check-duration";
     private static final String ATTR_PASSED_HEALTH_CHECK = "passed-health-check";
+    private static final String ATTR_MITIGATION_CALLS = "mitigation-calls";
 
     @GuardedBy("PackageWatchdog.class")
     private static PackageWatchdog sPackageWatchdog;
@@ -191,7 +196,6 @@ public class PackageWatchdog {
     @FunctionalInterface
     @VisibleForTesting
     interface SystemClock {
-        // TODO: Add elapsedRealtime to this interface
         long uptimeMillis();
     }
 
@@ -471,13 +475,14 @@ public class PackageWatchdog {
         synchronized (mLock) {
             if (mBootThreshold.incrementAndTest()) {
                 mBootThreshold.reset();
+                int mitigationCount = mBootThreshold.getMitigationCount() + 1;
                 PackageHealthObserver currentObserverToNotify = null;
                 int currentObserverImpact = Integer.MAX_VALUE;
                 for (int i = 0; i < mAllObservers.size(); i++) {
                     final ObserverInternal observer = mAllObservers.valueAt(i);
                     PackageHealthObserver registeredObserver = observer.registeredObserver;
                     if (registeredObserver != null) {
-                        int impact = registeredObserver.onBootLoop();
+                        int impact = registeredObserver.onBootLoop(mitigationCount);
                         if (impact != PackageHealthObserverImpact.USER_IMPACT_NONE
                                 && impact < currentObserverImpact) {
                             currentObserverToNotify = registeredObserver;
@@ -486,7 +491,8 @@ public class PackageWatchdog {
                     }
                 }
                 if (currentObserverToNotify != null) {
-                    currentObserverToNotify.executeBootLoopMitigation();
+                    mBootThreshold.setMitigationCount(mitigationCount);
+                    currentObserverToNotify.executeBootLoopMitigation(mitigationCount);
                 }
             }
         }
@@ -609,15 +615,20 @@ public class PackageWatchdog {
         /**
          * Called when the system server has booted several times within a window of time, defined
          * by {@link #mBootThreshold}
+         *
+         * @param mitigationCount the number of times mitigation has been attempted for this
+         *                        boot loop (including this time).
          */
-        default @PackageHealthObserverImpact int onBootLoop() {
+        default @PackageHealthObserverImpact int onBootLoop(int mitigationCount) {
             return PackageHealthObserverImpact.USER_IMPACT_NONE;
         }
 
         /**
          * Executes mitigation for {@link #onBootLoop}
+         * @param mitigationCount the number of times mitigation has been attempted for this
+         *                        boot loop (including this time).
          */
-        default boolean executeBootLoopMitigation() {
+        default boolean executeBootLoopMitigation(int mitigationCount) {
             return false;
         }
 
@@ -767,7 +778,6 @@ public class PackageWatchdog {
 
     @GuardedBy("mLock")
     private Set<String> getPackagesPendingHealthChecksLocked() {
-        Slog.d(TAG, "Getting all observed packages pending health checks");
         Set<String> packages = new ArraySet<>();
         Iterator<ObserverInternal> oit = mAllObservers.values().iterator();
         while (oit.hasNext()) {
@@ -816,7 +826,6 @@ public class PackageWatchdog {
             Slog.i(TAG, "Cancelling state sync, nothing to sync");
             mUptimeAtLastStateSync = 0;
         } else {
-            Slog.i(TAG, "Scheduling next state sync in " + durationMs + "ms");
             mUptimeAtLastStateSync = mSystemClock.uptimeMillis();
             mShortTaskHandler.postDelayed(mSyncStateWithScheduledReason, durationMs);
         }
@@ -857,7 +866,6 @@ public class PackageWatchdog {
             return;
         }
 
-        Slog.i(TAG, "Removing " + elapsedMs + "ms from all packages on all observers");
         Iterator<ObserverInternal> it = mAllObservers.values().iterator();
         while (it.hasNext()) {
             ObserverInternal observer = it.next();
@@ -1031,7 +1039,7 @@ public class PackageWatchdog {
                 TypedXmlSerializer out = Xml.resolveSerializer(stream);
                 out.startDocument(null, true);
                 out.startTag(null, TAG_PACKAGE_WATCHDOG);
-                out.attribute(null, ATTR_VERSION, Integer.toString(DB_VERSION));
+                out.attributeInt(null, ATTR_VERSION, DB_VERSION);
                 for (int oIndex = 0; oIndex < mAllObservers.size(); oIndex++) {
                     mAllObservers.valueAt(oIndex).writeLocked(out);
                 }
@@ -1054,6 +1062,33 @@ public class PackageWatchdog {
             mLongTaskHandler.post(mSaveToFile);
         }
     }
+
+    /** Convert a {@code LongArrayQueue} to a String of comma-separated values. */
+    public static String longArrayQueueToString(LongArrayQueue queue) {
+        if (queue.size() > 0) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(queue.get(0));
+            for (int i = 1; i < queue.size(); i++) {
+                sb.append(",");
+                sb.append(queue.get(i));
+            }
+            return sb.toString();
+        }
+        return "";
+    }
+
+    /** Parse a comma-separated String of longs into a LongArrayQueue. */
+    public static LongArrayQueue parseLongArrayQueue(String commaSeparatedValues) {
+        LongArrayQueue result = new LongArrayQueue();
+        if (!TextUtils.isEmpty(commaSeparatedValues)) {
+            String[] values = commaSeparatedValues.split(",");
+            for (String value : values) {
+                result.addLast(Long.parseLong(value));
+            }
+        }
+        return result;
+    }
+
 
     /** Dump status of every observer in mAllObservers. */
     public void dump(IndentingPrintWriter pw) {
@@ -1095,7 +1130,7 @@ public class PackageWatchdog {
          * Does not persist any package failure thresholds.
          */
         @GuardedBy("mLock")
-        public boolean writeLocked(XmlSerializer out) {
+        public boolean writeLocked(TypedXmlSerializer out) {
             try {
                 out.startTag(null, TAG_OBSERVER);
                 out.attribute(null, ATTR_NAME, name);
@@ -1213,7 +1248,7 @@ public class PackageWatchdog {
          * #loadFromFile which in turn is only called on construction of the
          * singleton PackageWatchdog.
          **/
-        public static ObserverInternal read(XmlPullParser parser, PackageWatchdog watchdog) {
+        public static ObserverInternal read(TypedXmlPullParser parser, PackageWatchdog watchdog) {
             String observerName = null;
             if (TAG_OBSERVER.equals(parser.getName())) {
                 observerName = parser.getAttributeValue(null, ATTR_NAME);
@@ -1228,16 +1263,7 @@ public class PackageWatchdog {
                 while (XmlUtils.nextElementWithin(parser, innerDepth)) {
                     if (TAG_PACKAGE.equals(parser.getName())) {
                         try {
-                            String packageName = parser.getAttributeValue(null, ATTR_NAME);
-                            long duration = Long.parseLong(
-                                    parser.getAttributeValue(null, ATTR_DURATION));
-                            long healthCheckDuration = Long.parseLong(
-                                    parser.getAttributeValue(null,
-                                            ATTR_EXPLICIT_HEALTH_CHECK_DURATION));
-                            boolean hasPassedHealthCheck = Boolean.parseBoolean(
-                                    parser.getAttributeValue(null, ATTR_PASSED_HEALTH_CHECK));
-                            MonitoredPackage pkg = watchdog.newMonitoredPackage(packageName,
-                                    duration, healthCheckDuration, hasPassedHealthCheck);
+                            MonitoredPackage pkg = watchdog.parseMonitoredPackage(parser);
                             if (pkg != null) {
                                 packages.add(pkg);
                             }
@@ -1293,16 +1319,31 @@ public class PackageWatchdog {
 
     MonitoredPackage newMonitoredPackage(
             String name, long durationMs, boolean hasPassedHealthCheck) {
-        return newMonitoredPackage(name, durationMs, Long.MAX_VALUE, hasPassedHealthCheck);
+        return newMonitoredPackage(name, durationMs, Long.MAX_VALUE, hasPassedHealthCheck,
+                new LongArrayQueue());
     }
 
     MonitoredPackage newMonitoredPackage(String name, long durationMs, long healthCheckDurationMs,
-            boolean hasPassedHealthCheck) {
+            boolean hasPassedHealthCheck, LongArrayQueue mitigationCalls) {
         VersionedPackage pkg = getVersionedPackage(name);
         if (pkg == null) {
             return null;
         }
-        return new MonitoredPackage(pkg, durationMs, healthCheckDurationMs, hasPassedHealthCheck);
+        return new MonitoredPackage(pkg, durationMs, healthCheckDurationMs,
+                hasPassedHealthCheck, mitigationCalls);
+    }
+
+    MonitoredPackage parseMonitoredPackage(TypedXmlPullParser parser)
+            throws XmlPullParserException {
+        String packageName = parser.getAttributeValue(null, ATTR_NAME);
+        long duration = parser.getAttributeLong(null, ATTR_DURATION);
+        long healthCheckDuration = parser.getAttributeLong(null,
+                        ATTR_EXPLICIT_HEALTH_CHECK_DURATION);
+        boolean hasPassedHealthCheck = parser.getAttributeBoolean(null, ATTR_PASSED_HEALTH_CHECK);
+        LongArrayQueue mitigationCalls = parseLongArrayQueue(
+                parser.getAttributeValue(null, ATTR_MITIGATION_CALLS));
+        return newMonitoredPackage(packageName,
+                duration, healthCheckDuration, hasPassedHealthCheck, mitigationCalls);
     }
 
     /**
@@ -1320,7 +1361,7 @@ public class PackageWatchdog {
         // Times when an observer was called to mitigate this package's failure. Sorted in
         // ascending order.
         @GuardedBy("mLock")
-        private final LongArrayQueue mMitigationCalls = new LongArrayQueue();
+        private final LongArrayQueue mMitigationCalls;
         // One of STATE_[ACTIVE|INACTIVE|PASSED|FAILED]. Updated on construction and after
         // methods that could change the health check state: handleElapsedTimeLocked and
         // tryPassHealthCheckLocked
@@ -1341,25 +1382,27 @@ public class PackageWatchdog {
         @GuardedBy("mLock")
         private long mHealthCheckDurationMs = Long.MAX_VALUE;
 
-        private MonitoredPackage(VersionedPackage pkg, long durationMs,
-                long healthCheckDurationMs, boolean hasPassedHealthCheck) {
+        MonitoredPackage(VersionedPackage pkg, long durationMs,
+                long healthCheckDurationMs, boolean hasPassedHealthCheck,
+                LongArrayQueue mitigationCalls) {
             mPackage = pkg;
             mDurationMs = durationMs;
             mHealthCheckDurationMs = healthCheckDurationMs;
             mHasPassedHealthCheck = hasPassedHealthCheck;
+            mMitigationCalls = mitigationCalls;
             updateHealthCheckStateLocked();
         }
 
         /** Writes the salient fields to disk using {@code out}. */
         @GuardedBy("mLock")
-        public void writeLocked(XmlSerializer out) throws IOException {
+        public void writeLocked(TypedXmlSerializer out) throws IOException {
             out.startTag(null, TAG_PACKAGE);
             out.attribute(null, ATTR_NAME, getName());
-            out.attribute(null, ATTR_DURATION, String.valueOf(mDurationMs));
-            out.attribute(null, ATTR_EXPLICIT_HEALTH_CHECK_DURATION,
-                    String.valueOf(mHealthCheckDurationMs));
-            out.attribute(null, ATTR_PASSED_HEALTH_CHECK,
-                    String.valueOf(mHasPassedHealthCheck));
+            out.attributeLong(null, ATTR_DURATION, mDurationMs);
+            out.attributeLong(null, ATTR_EXPLICIT_HEALTH_CHECK_DURATION, mHealthCheckDurationMs);
+            out.attributeBoolean(null, ATTR_PASSED_HEALTH_CHECK, mHasPassedHealthCheck);
+            LongArrayQueue normalizedCalls = normalizeMitigationCalls();
+            out.attribute(null, ATTR_MITIGATION_CALLS, longArrayQueueToString(normalizedCalls));
             out.endTag(null, TAG_PACKAGE);
         }
 
@@ -1410,6 +1453,23 @@ public class PackageWatchdog {
             }
 
             return mMitigationCalls.size();
+        }
+
+        /**
+         * Before writing to disk, make the mitigation call timestamps relative to the current
+         * system uptime. This is because they need to be relative to the uptime which will reset
+         * at the next boot.
+         *
+         * @return a LongArrayQueue of the mitigation calls relative to the current system uptime.
+         */
+        @GuardedBy("mLock")
+        public LongArrayQueue normalizeMitigationCalls() {
+            LongArrayQueue normalized = new LongArrayQueue();
+            final long now = mSystemClock.uptimeMillis();
+            for (int i = 0; i < mMitigationCalls.size(); i++) {
+                normalized.addLast(mMitigationCalls.get(i) - now);
+            }
+            return normalized;
         }
 
         /**
@@ -1572,12 +1632,22 @@ public class PackageWatchdog {
         private long toPositive(long value) {
             return value > 0 ? value : Long.MAX_VALUE;
         }
+
+        /** Compares the equality of this object with another {@link MonitoredPackage}. */
+        @VisibleForTesting
+        boolean isEqualTo(MonitoredPackage pkg) {
+            return (getName().equals(pkg.getName()))
+                    && mDurationMs == pkg.mDurationMs
+                    && mHasPassedHealthCheck == pkg.mHasPassedHealthCheck
+                    && mHealthCheckDurationMs == pkg.mHealthCheckDurationMs
+                    && (mMitigationCalls.toString()).equals(pkg.mMitigationCalls.toString());
+        }
     }
 
     /**
      * Handles the thresholding logic for system server boots.
      */
-    static class BootThreshold {
+    class BootThreshold {
 
         private final int mBootTriggerCount;
         private final long mTriggerWindow;
@@ -1604,18 +1674,44 @@ public class PackageWatchdog {
             return SystemProperties.getLong(PROP_RESCUE_BOOT_START, 0);
         }
 
-        public void setStart(long start) {
-            final long now = android.os.SystemClock.elapsedRealtime();
-            final long newStart = MathUtils.constrain(start, 0, now);
-            SystemProperties.set(PROP_RESCUE_BOOT_START, Long.toString(newStart));
+        public int getMitigationCount() {
+            return SystemProperties.getInt(PROP_BOOT_MITIGATION_COUNT, 0);
         }
+
+        public void setStart(long start) {
+            setPropertyStart(PROP_RESCUE_BOOT_START, start);
+        }
+
+        public void setMitigationStart(long start) {
+            setPropertyStart(PROP_BOOT_MITIGATION_WINDOW_START, start);
+        }
+
+        public long getMitigationStart() {
+            return SystemProperties.getLong(PROP_BOOT_MITIGATION_WINDOW_START, 0);
+        }
+
+        public void setMitigationCount(int count) {
+            SystemProperties.set(PROP_BOOT_MITIGATION_COUNT, Integer.toString(count));
+        }
+
+        public void setPropertyStart(String property, long start) {
+            final long now = mSystemClock.uptimeMillis();
+            final long newStart = MathUtils.constrain(start, 0, now);
+            SystemProperties.set(property, Long.toString(newStart));
+        }
+
 
         /** Increments the boot counter, and returns whether the device is bootlooping. */
         public boolean incrementAndTest() {
-            final long now = android.os.SystemClock.elapsedRealtime();
+            final long now = mSystemClock.uptimeMillis();
             if (now - getStart() < 0) {
                 Slog.e(TAG, "Window was less than zero. Resetting start to current time.");
                 setStart(now);
+                setMitigationStart(now);
+            }
+            if (now - getMitigationStart() > DEFAULT_DEESCALATION_WINDOW_MS) {
+                setMitigationCount(0);
+                setMitigationStart(now);
             }
             final long window = now - getStart();
             if (window >= mTriggerWindow) {

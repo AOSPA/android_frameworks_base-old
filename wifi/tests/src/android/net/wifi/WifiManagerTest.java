@@ -19,6 +19,9 @@ package android.net.wifi;
 import static android.net.wifi.WifiConfiguration.METERED_OVERRIDE_METERED;
 import static android.net.wifi.WifiManager.ActionListener;
 import static android.net.wifi.WifiManager.BUSY;
+import static android.net.wifi.WifiManager.COEX_RESTRICTION_SOFTAP;
+import static android.net.wifi.WifiManager.COEX_RESTRICTION_WIFI_AWARE;
+import static android.net.wifi.WifiManager.COEX_RESTRICTION_WIFI_DIRECT;
 import static android.net.wifi.WifiManager.ERROR;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_GENERIC;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE;
@@ -43,6 +46,7 @@ import static android.net.wifi.WifiManager.WIFI_FEATURE_SCANNER;
 import static android.net.wifi.WifiManager.WIFI_FEATURE_WPA3_SAE;
 import static android.net.wifi.WifiManager.WIFI_FEATURE_WPA3_SUITE_B;
 import static android.net.wifi.WifiManager.WpsCallback;
+import static android.net.wifi.WifiScanner.WIFI_BAND_24_GHZ;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -74,6 +78,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.net.DhcpInfo;
 import android.net.MacAddress;
+import android.net.wifi.WifiManager.CoexCallback;
 import android.net.wifi.WifiManager.LocalOnlyHotspotCallback;
 import android.net.wifi.WifiManager.LocalOnlyHotspotObserver;
 import android.net.wifi.WifiManager.LocalOnlyHotspotReservation;
@@ -108,9 +113,11 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executor;
 
 /**
@@ -129,6 +136,7 @@ public class WifiManagerTest {
     private static final String[] TEST_MAC_ADDRESSES = {"da:a1:19:0:0:0"};
     private static final int TEST_AP_FREQUENCY = 2412;
     private static final int TEST_AP_BANDWIDTH = SoftApInfo.CHANNEL_WIDTH_20MHZ;
+    private static final int TEST_SUB_ID = 3;
 
     @Mock Context mContext;
     @Mock android.net.wifi.IWifiManager mWifiService;
@@ -151,6 +159,7 @@ public class WifiManagerTest {
     private WifiManager mWifiManager;
     private WifiNetworkSuggestion mWifiNetworkSuggestion;
     private ScanResultsCallback mScanResultsCallback;
+    private CoexCallback mCoexCallback;
     private WifiActivityEnergyInfo mWifiActivityEnergyInfo;
 
     /**
@@ -214,8 +223,147 @@ public class WifiManagerTest {
                 mRunnable.run();
             }
         };
+        mCoexCallback = new CoexCallback() {
+            @Override
+            public void onCoexUnsafeChannelsChanged() {
+                mRunnable.run();
+            }
+        };
         mWifiActivityEnergyInfo = new WifiActivityEnergyInfo(0, 0, 0, 0, 0, 0);
     }
+
+    /**
+     * Check the call to setCoexUnsafeChannels calls WifiServiceImpl to setCoexUnsafeChannels with
+     * the provided CoexUnsafeChannels and restrictions bitmask.
+     */
+    @Test
+    public void testSetCoexUnsafeChannelsGoesToWifiServiceImpl() throws Exception {
+        Set<CoexUnsafeChannel> unsafeChannels = new HashSet<>();
+        int restrictions = COEX_RESTRICTION_WIFI_DIRECT | COEX_RESTRICTION_SOFTAP
+                | COEX_RESTRICTION_WIFI_AWARE;
+
+        mWifiManager.setCoexUnsafeChannels(unsafeChannels, restrictions);
+
+        verify(mWifiService).setCoexUnsafeChannels(new ArrayList<>(unsafeChannels), restrictions);
+    }
+
+    /**
+     * Verify an IllegalArgumentException if passed a null value for unsafeChannels.
+     */
+    @Test
+    public void testSetCoexUnsafeChannelsThrowsIllegalArgumentExceptionOnNullUnsafeChannels() {
+        try {
+            mWifiManager.setCoexUnsafeChannels(null, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    /**
+     * Check the call to getCoexUnsafeChannels calls WifiServiceImpl to return the values from
+     * getCoexUnsafeChannels.
+     */
+    @Test
+    public void testGetCoexUnsafeChannelsGoesToWifiServiceImpl() throws Exception {
+        Set<CoexUnsafeChannel> unsafeChannels = new HashSet<>();
+        unsafeChannels.add(new CoexUnsafeChannel(WIFI_BAND_24_GHZ, 6));
+        when(mWifiService.getCoexUnsafeChannels()).thenReturn(new ArrayList<>(unsafeChannels));
+
+        assertEquals(mWifiManager.getCoexUnsafeChannels(), unsafeChannels);
+    }
+
+    /**
+     * Verify call to getCoexRestrictions calls WifiServiceImpl to return the value from
+     * getCoexRestrictions.
+     */
+    @Test
+    public void testGetCoexRestrictionsGoesToWifiServiceImpl() throws Exception {
+        int restrictions = COEX_RESTRICTION_WIFI_DIRECT | COEX_RESTRICTION_SOFTAP
+                | COEX_RESTRICTION_WIFI_AWARE;
+        when(mWifiService.getCoexRestrictions()).thenReturn(restrictions);
+
+        assertEquals(mWifiService.getCoexRestrictions(), restrictions);
+    }
+
+
+    /**
+     * Verify an IllegalArgumentException is thrown if callback is not provided.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testRegisterCoexCallbackWithNullCallback() throws Exception {
+        mWifiManager.registerCoexCallback(mExecutor, null);
+    }
+
+    /**
+     * Verify an IllegalArgumentException is thrown if executor is not provided.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testRegisterCoexCallbackWithNullExecutor() throws Exception {
+        mWifiManager.registerCoexCallback(null, mCoexCallback);
+    }
+
+    /**
+     * Verify client provided callback is being called to the right callback.
+     */
+    @Test
+    public void testAddCoexCallbackAndReceiveEvent() throws Exception {
+        ArgumentCaptor<ICoexCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ICoexCallback.Stub.class);
+        mWifiManager.registerCoexCallback(new SynchronousExecutor(), mCoexCallback);
+        verify(mWifiService).registerCoexCallback(callbackCaptor.capture());
+        callbackCaptor.getValue().onCoexUnsafeChannelsChanged();
+        verify(mRunnable).run();
+    }
+
+    /**
+     * Verify client provided callback is being called to the right executor.
+     */
+    @Test
+    public void testRegisterCoexCallbackWithTheTargetExecutor() throws Exception {
+        ArgumentCaptor<ICoexCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ICoexCallback.Stub.class);
+        mWifiManager.registerCoexCallback(mExecutor, mCoexCallback);
+        verify(mWifiService).registerCoexCallback(callbackCaptor.capture());
+        mWifiManager.registerCoexCallback(mAnotherExecutor, mCoexCallback);
+        callbackCaptor.getValue().onCoexUnsafeChannelsChanged();
+        verify(mExecutor, never()).execute(any(Runnable.class));
+        verify(mAnotherExecutor).execute(any(Runnable.class));
+    }
+
+    /**
+     * Verify client register unregister then register again, to ensure callback still works.
+     */
+    @Test
+    public void testRegisterUnregisterThenRegisterAgainWithCoexCallback() throws Exception {
+        ArgumentCaptor<ICoexCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ICoexCallback.Stub.class);
+        mWifiManager.registerCoexCallback(new SynchronousExecutor(), mCoexCallback);
+        verify(mWifiService).registerCoexCallback(callbackCaptor.capture());
+        mWifiManager.unregisterCoexCallback(mCoexCallback);
+        callbackCaptor.getValue().onCoexUnsafeChannelsChanged();
+        verify(mRunnable, never()).run();
+        mWifiManager.registerCoexCallback(new SynchronousExecutor(), mCoexCallback);
+        callbackCaptor.getValue().onCoexUnsafeChannelsChanged();
+        verify(mRunnable).run();
+    }
+
+    /**
+     * Verify client unregisterCoexCallback.
+     */
+    @Test
+    public void testUnregisterCoexCallback() throws Exception {
+        mWifiManager.unregisterCoexCallback(mCoexCallback);
+        verify(mWifiService).unregisterCoexCallback(any());
+    }
+
+    /**
+     * Verify client unregisterCoexCallback with null callback will cause an exception.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testUnregisterCoexCallbackWithNullCallback() throws Exception {
+        mWifiManager.unregisterCoexCallback(null);
+    }
+
 
     /**
      * Check the call to startSoftAp calls WifiService to startSoftAp with the provided
@@ -1634,6 +1782,24 @@ public class WifiManagerTest {
     }
 
     /**
+     * Verify the call to startTemporarilyDisablingAllNonCarrierMergedWifi goes to WifiServiceImpl.
+     */
+    @Test
+    public void testStartTemporarilyDisablingAllNonCarrierMergedWifi() throws Exception {
+        mWifiManager.startTemporarilyDisablingAllNonCarrierMergedWifi(1);
+        verify(mWifiService).startTemporarilyDisablingAllNonCarrierMergedWifi(1);
+    }
+
+    /**
+     * Verify the call to stopTemporarilyDisablingAllNonCarrierMergedWifi goes to WifiServiceImpl.
+     */
+    @Test
+    public void testStopTemporarilyDisablingAllNonCarrierMergedWifi() throws Exception {
+        mWifiManager.stopTemporarilyDisablingAllNonCarrierMergedWifi();
+        verify(mWifiService).stopTemporarilyDisablingAllNonCarrierMergedWifi();
+    }
+
+    /**
      * Verify the call to addOnWifiUsabilityStatsListener goes to WifiServiceImpl.
      */
     @Test
@@ -2418,10 +2584,29 @@ public class WifiManagerTest {
 
     @Test
     public void testGetNetworkSuggestionUserApprovalStatus() throws Exception {
+        assumeTrue(SdkLevel.isAtLeastS());
+
         when(mWifiService.getNetworkSuggestionUserApprovalStatus(TEST_PACKAGE_NAME))
                 .thenReturn(WifiManager.STATUS_SUGGESTION_APPROVAL_APPROVED_BY_USER);
         assertEquals(WifiManager.STATUS_SUGGESTION_APPROVAL_APPROVED_BY_USER,
                 mWifiManager.getNetworkSuggestionUserApprovalStatus());
         verify(mWifiService).getNetworkSuggestionUserApprovalStatus(TEST_PACKAGE_NAME);
     }
+
+    @Test
+    public void testSetCarrierNetworkOffload() throws Exception {
+        assumeTrue(SdkLevel.isAtLeastS());
+        mWifiManager.setCarrierNetworkOffloadEnabled(TEST_SUB_ID, true, false);
+        verify(mWifiService).setCarrierNetworkOffloadEnabled(TEST_SUB_ID,
+                true, false);
+    }
+
+    @Test
+    public void testGetCarrierNetworkOffload() throws Exception {
+        assumeTrue(SdkLevel.isAtLeastS());
+        when(mWifiService.isCarrierNetworkOffloadEnabled(TEST_SUB_ID, false)).thenReturn(true);
+        assertTrue(mWifiManager.isCarrierNetworkOffloadEnabled(TEST_SUB_ID, false));
+        verify(mWifiService).isCarrierNetworkOffloadEnabled(TEST_SUB_ID, false);
+    }
+
 }

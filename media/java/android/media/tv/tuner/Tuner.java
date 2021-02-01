@@ -60,6 +60,7 @@ import com.android.internal.util.FrameworkStatsLog;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -296,8 +297,8 @@ public class Tuner implements AutoCloseable  {
     private Executor mOnResourceLostListenerExecutor;
 
     private Integer mDemuxHandle;
-    private Map<Integer, Descrambler> mDescramblers = new HashMap<>();
-    private List<Filter> mFilters = new ArrayList<>();
+    private Map<Integer, WeakReference<Descrambler>> mDescramblers = new HashMap<>();
+    private List<WeakReference<Filter>> mFilters = new ArrayList<WeakReference<Filter>>();
 
     private final TunerResourceManager.ResourcesReclaimListener mResourceListener =
             new TunerResourceManager.ResourcesReclaimListener() {
@@ -308,6 +309,7 @@ public class Tuner implements AutoCloseable  {
                                 .write(FrameworkStatsLog.TV_TUNER_STATE_CHANGED, mUserId,
                                     FrameworkStatsLog.TV_TUNER_STATE_CHANGED__STATE__UNKNOWN);
                     }
+                    releaseAll();
                     mHandler.sendMessage(mHandler.obtainMessage(MSG_RESOURCE_LOST));
                 }
             };
@@ -485,18 +487,28 @@ public class Tuner implements AutoCloseable  {
         if (mLnb != null) {
             mLnb.close();
         }
-        if (!mDescramblers.isEmpty()) {
-            for (Map.Entry<Integer, Descrambler> d : mDescramblers.entrySet()) {
-                d.getValue().close();
-                mTunerResourceManager.releaseDescrambler(d.getKey(), mClientId);
+        synchronized (mDescramblers) {
+            if (!mDescramblers.isEmpty()) {
+                for (Map.Entry<Integer, WeakReference<Descrambler>> d : mDescramblers.entrySet()) {
+                    Descrambler descrambler = d.getValue().get();
+                    if (descrambler != null) {
+                        descrambler.close();
+                    }
+                    mTunerResourceManager.releaseDescrambler(d.getKey(), mClientId);
+                }
+                mDescramblers.clear();
             }
-            mDescramblers.clear();
         }
-        if (!mFilters.isEmpty()) {
-            for (Filter f : mFilters) {
-                f.close();
+        synchronized (mFilters) {
+            if (!mFilters.isEmpty()) {
+                for (WeakReference<Filter> weakFilter : mFilters) {
+                    Filter filter = weakFilter.get();
+                    if (filter != null) {
+                        filter.close();
+                    }
+                }
+                mFilters.clear();
             }
-            mFilters.clear();
         }
         if (mDemuxHandle != null) {
             int res = nativeCloseDemux(mDemuxHandle);
@@ -610,7 +622,6 @@ public class Tuner implements AutoCloseable  {
                     break;
                 }
                 case MSG_RESOURCE_LOST: {
-                    releaseAll();
                     if (mOnResourceLostListener != null
                                 && mOnResourceLostListenerExecutor != null) {
                         mOnResourceLostListenerExecutor.execute(
@@ -878,10 +889,13 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
-     * Connects Conditional Access Modules (CAM) through Common Interface (CI)
+     * Connects Conditional Access Modules (CAM) through Common Interface (CI).
      *
      * <p>The demux uses the output from the frontend as the input by default, and must change to
      * use the output from CI-CAM as the input after this call.
+     *
+     * <p> Note that this API is used to connect the CI-CAM to the Demux module while
+     * {@link connectFrontendToCiCam(int)} is used to connect CI-CAM to the Frontend module.
      *
      * @param ciCamId specify CI-CAM Id to connect.
      * @return result status of the operation.
@@ -895,23 +909,30 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
-     * Link Conditional Access Modules (CAM) Frontend to support Common Interface (CI) by-pass mode.
+     * Connect Conditional Access Modules (CAM) Frontend to support Common Interface (CI)
+     * by-pass mode.
      *
      * <p>It is used by the client to link CI-CAM to a Frontend. CI by-pass mode requires that
      * the CICAM also receives the TS concurrently from the frontend when the Demux is receiving
      * the TS directly from the frontend.
      *
-     * <p>Use {@link #unlinkFrontendToCicam(int)} to disconnect.
+     * <p> Note that this API is used to connect the CI-CAM to the Frontend module while
+     * {@link connectCiCam(int)} is used to connect CI-CAM to the Demux module.
+     *
+     * <p>Use {@link #disconnectFrontendToCiCam(int)} to disconnect.
      *
      * <p>This API is only supported by Tuner HAL 1.1 or higher. Unsupported version would cause
      * no-op and return {@link INVALID_LTS_ID}. Use {@link TunerVersionChecker.getTunerVersion()} to
      * check the version.
      *
-     * @param ciCamId specify CI-CAM Id to link.
+     * @param ciCamId specify CI-CAM Id, which is the id of the Conditional Access Modules (CAM)
+     *                Common Interface (CI), to link.
      * @return Local transport stream id when connection is successfully established. Failed
-     *         operation returns {@link INVALID_LTS_ID}.
+     *         operation returns {@link INVALID_LTS_ID} while unsupported version also returns
+     *         {@link INVALID_LTS_ID}. Check the current HAL version using
+     *         {@link TunerVersionChecker.getTunerVersion()}.
      */
-    public int linkFrontendToCiCam(int ciCamId) {
+    public int connectFrontendToCiCam(int ciCamId) {
         if (TunerVersionChecker.checkHigherOrEqualVersionTo(TunerVersionChecker.TUNER_VERSION_1_1,
                 "linkFrontendToCiCam")) {
             if (checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND)) {
@@ -922,9 +943,12 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
-     * Disconnects Conditional Access Modules (CAM)
+     * Disconnects Conditional Access Modules (CAM).
      *
      * <p>The demux will use the output from the frontend as the input after this call.
+     *
+     * <p> Note that this API is used to disconnect the CI-CAM to the Demux module while
+     * {@link disconnectFrontendToCiCam(int)} is used to disconnect CI-CAM to the Frontend module.
      *
      * @return result status of the operation.
      */
@@ -937,18 +961,23 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
-     * Unlink Conditional Access Modules (CAM) Frontend.
+     * Disconnect Conditional Access Modules (CAM) Frontend.
      *
      * <p>It is used by the client to unlink CI-CAM to a Frontend.
+     *
+     * <p> Note that this API is used to disconnect the CI-CAM to the Demux module while
+     * {@link disconnectCiCam(int)} is used to disconnect CI-CAM to the Frontend module.
      *
      * <p>This API is only supported by Tuner HAL 1.1 or higher. Unsupported version would cause
      * no-op. Use {@link TunerVersionChecker.getTunerVersion()} to check the version.
      *
-     * @param ciCamId specify CI-CAM Id to unlink.
-     * @return result status of the operation.
+     * @param ciCamId specify CI-CAM Id, which is the id of the Conditional Access Modules (CAM)
+     *                Common Interface (CI), to disconnect.
+     * @return result status of the operation. Unsupported version would return
+     *         {@link RESULT_UNAVAILABLE}
      */
     @Result
-    public int unlinkFrontendToCiCam(int ciCamId) {
+    public int disconnectFrontendToCiCam(int ciCamId) {
         if (TunerVersionChecker.checkHigherOrEqualVersionTo(TunerVersionChecker.TUNER_VERSION_1_1,
                 "unlinkFrontendToCiCam")) {
             if (checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND)) {
@@ -1165,7 +1194,10 @@ public class Tuner implements AutoCloseable  {
             if (mHandler == null) {
                 mHandler = createEventHandler();
             }
-            mFilters.add(filter);
+            synchronized (mFilters) {
+                WeakReference<Filter> weakFilter = new WeakReference<Filter>(filter);
+                mFilters.add(weakFilter);
+            }
         }
         return filter;
     }
@@ -1333,7 +1365,10 @@ public class Tuner implements AutoCloseable  {
         int handle = descramblerHandle[0];
         Descrambler descrambler = nativeOpenDescramblerByHandle(handle);
         if (descrambler != null) {
-            mDescramblers.put(handle, descrambler);
+            synchronized (mDescramblers) {
+                WeakReference weakDescrambler = new WeakReference<Descrambler>(descrambler);
+                mDescramblers.put(handle, weakDescrambler);
+            }
         } else {
             mTunerResourceManager.releaseDescrambler(handle, mClientId);
         }

@@ -104,6 +104,7 @@ import android.os.Parcelable;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
+import android.view.Gravity.GravityFlags;
 import android.view.View.OnApplyWindowInsetsListener;
 import android.view.WindowInsets.Side;
 import android.view.WindowInsets.Side.InsetsSide;
@@ -410,6 +411,13 @@ public interface WindowManager extends ViewManager {
     int TRANSIT_FLAG_APP_CRASHED = 0x10;
 
     /**
+     * Transition flag: A window in a new task is being opened behind an existing one in another
+     * activity's task.
+     * @hide
+     */
+    int TRANSIT_FLAG_OPEN_BEHIND = 0x20;
+
+    /**
      * @hide
      */
     @IntDef(flag = true, prefix = { "TRANSIT_FLAG_" }, value = {
@@ -417,7 +425,8 @@ public interface WindowManager extends ViewManager {
             TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION,
             TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER,
             TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION,
-            TRANSIT_FLAG_APP_CRASHED
+            TRANSIT_FLAG_APP_CRASHED,
+            TRANSIT_FLAG_OPEN_BEHIND
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface TransitionFlags {}
@@ -451,6 +460,40 @@ public interface WindowManager extends ViewManager {
             REMOVE_CONTENT_MODE_DESTROY,
     })
     @interface RemoveContentMode {}
+
+    /**
+     * Display IME Policy: The IME should appear on the local display.
+     * @hide
+     */
+    @TestApi
+    int DISPLAY_IME_POLICY_LOCAL = 0;
+
+    /**
+     * Display IME Policy: The IME should appear on the fallback display.
+     * @hide
+     */
+    @TestApi
+    int DISPLAY_IME_POLICY_FALLBACK_DISPLAY = 1;
+
+    /**
+     * Display IME Policy: The IME should be hidden.
+     *
+     * Setting this policy will prevent the IME from making a connection. This
+     * will prevent any IME from receiving metadata about input.
+     * @hide
+     */
+    @TestApi
+    int DISPLAY_IME_POLICY_HIDE = 2;
+
+    /**
+     * @hide
+     */
+    @IntDef({
+            DISPLAY_IME_POLICY_LOCAL,
+            DISPLAY_IME_POLICY_FALLBACK_DISPLAY,
+            DISPLAY_IME_POLICY_HIDE,
+    })
+    @interface DisplayImePolicy {}
 
     /**
      * Exception that is thrown when trying to add view whose
@@ -687,27 +730,26 @@ public interface WindowManager extends ViewManager {
     }
 
     /**
-     * Sets that the display should show IME.
+     * Sets the policy for how the display should show IME.
      *
      * @param displayId Display ID.
-     * @param shouldShow Indicates that the display should show IME.
+     * @param imePolicy Indicates the policy for how the display should show IME.
      * @hide
      */
     @TestApi
-    default void setShouldShowIme(int displayId, boolean shouldShow) {
+    default void setDisplayImePolicy(int displayId, @DisplayImePolicy int imePolicy) {
     }
 
     /**
-     * Indicates that the display should show IME.
+     * Indicates the policy for how the display should show IME.
      *
      * @param displayId The id of the display.
-     * @return {@code true} if the display should show IME when an input field becomes
-     * focused on it.
+     * @return The policy for how the display should show IME.
      * @hide
      */
     @TestApi
-    default boolean shouldShowIme(int displayId) {
-        return false;
+    default @DisplayImePolicy int getDisplayImePolicy(int displayId) {
+        return DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
     }
 
     public static class LayoutParams extends ViewGroup.LayoutParams implements Parcelable {
@@ -2116,15 +2158,6 @@ public interface WindowManager extends ViewManager {
         public static final int PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY = 0x00100000;
 
         /**
-         * Flag to indicate that this window should be considered a screen decoration similar to the
-         * nav bar and status bar. This will cause this window to affect the window insets reported
-         * to other windows when it is visible.
-         * @hide
-         */
-        @RequiresPermission(permission.STATUS_BAR_SERVICE)
-        public static final int PRIVATE_FLAG_IS_SCREEN_DECOR = 0x00400000;
-
-        /**
          * Flag to indicate that the status bar window is in a state such that it forces showing
          * the navigation bar unless the navigation bar window is explicitly set to
          * {@link View#GONE}.
@@ -2229,7 +2262,6 @@ public interface WindowManager extends ViewManager {
                 PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE,
                 SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS,
                 PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY,
-                PRIVATE_FLAG_IS_SCREEN_DECOR,
                 PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION,
                 PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC,
                 PRIVATE_FLAG_USE_BLAST,
@@ -2316,10 +2348,6 @@ public interface WindowManager extends ViewManager {
                         mask = PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY,
                         equals = PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY,
                         name = "IS_ROUNDED_CORNERS_OVERLAY"),
-                @ViewDebug.FlagToString(
-                        mask = PRIVATE_FLAG_IS_SCREEN_DECOR,
-                        equals = PRIVATE_FLAG_IS_SCREEN_DECOR,
-                        name = "IS_SCREEN_DECOR"),
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION,
                         equals = PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION,
@@ -2545,6 +2573,7 @@ public interface WindowManager extends ViewManager {
          *
          * @see Gravity
          */
+        @GravityFlags
         public int gravity;
 
         /**
@@ -2818,7 +2847,6 @@ public interface WindowManager extends ViewManager {
         /** @hide */
         @Retention(RetentionPolicy.SOURCE)
         @IntDef(
-                flag = true,
                 value = {LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT,
                         LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES,
                         LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER,

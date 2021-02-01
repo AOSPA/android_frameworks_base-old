@@ -26,6 +26,8 @@ import android.app.AppGlobals;
 import android.app.IUidObserver;
 import android.app.IUriGrantsManager;
 import android.app.UriGrantsManager;
+import android.app.role.OnRoleHoldersChangedListener;
+import android.app.role.RoleManager;
 import android.app.usage.UsageStatsManagerInternal;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.BroadcastReceiver;
@@ -81,7 +83,6 @@ import android.os.ShellCallback;
 import android.os.ShellCommand;
 import android.os.SystemClock;
 import android.os.UserHandle;
-import android.os.UserManagerInternal;
 import android.text.TextUtils;
 import android.text.format.TimeMigrationUtils;
 import android.util.ArraySet;
@@ -94,6 +95,8 @@ import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.SparseLongArray;
 import android.util.TypedValue;
+import android.util.TypedXmlPullParser;
+import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.view.IWindowManager;
 
@@ -103,12 +106,10 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.DumpUtils;
-import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.StatLogger;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
-import com.android.server.SystemService.TargetUser;
 import com.android.server.pm.ShortcutUser.PackageWithUser;
 import com.android.server.uri.UriGrantsManagerInternal;
 
@@ -119,10 +120,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -347,6 +345,7 @@ public class ShortcutService extends IShortcutService.Stub {
     private final IUriGrantsManager mUriGrantsManager;
     private final UriGrantsManagerInternal mUriGrantsManagerInternal;
     private final IBinder mUriPermissionOwner;
+    private final RoleManager mRoleManager;
 
     private final ShortcutRequestPinProcessor mShortcutRequestPinProcessor;
     private final ShortcutBitmapSaver mShortcutBitmapSaver;
@@ -464,10 +463,11 @@ public class ShortcutService extends IShortcutService.Stub {
         mActivityManagerInternal = Objects.requireNonNull(
                 LocalServices.getService(ActivityManagerInternal.class));
 
-        mUriGrantsManager = UriGrantsManager.getService();
+        mUriGrantsManager = Objects.requireNonNull(UriGrantsManager.getService());
         mUriGrantsManagerInternal = Objects.requireNonNull(
                 LocalServices.getService(UriGrantsManagerInternal.class));
         mUriPermissionOwner = mUriGrantsManagerInternal.newUriPermissionOwner(TAG);
+        mRoleManager = Objects.requireNonNull(mContext.getSystemService(RoleManager.class));
 
         mShortcutRequestPinProcessor = new ShortcutRequestPinProcessor(this, mLock);
         mShortcutBitmapSaver = new ShortcutBitmapSaver(this);
@@ -491,12 +491,6 @@ public class ShortcutService extends IShortcutService.Stub {
         mContext.registerReceiverAsUser(mPackageMonitor, UserHandle.ALL,
                 packageFilter, null, mHandler);
 
-        final IntentFilter preferedActivityFilter = new IntentFilter();
-        preferedActivityFilter.addAction(Intent.ACTION_PREFERRED_ACTIVITY_CHANGED);
-        preferedActivityFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
-        mContext.registerReceiverAsUser(mPackageMonitor, UserHandle.ALL,
-                preferedActivityFilter, null, mHandler);
-
         final IntentFilter localeFilter = new IntentFilter();
         localeFilter.addAction(Intent.ACTION_LOCALE_CHANGED);
         localeFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
@@ -505,6 +499,8 @@ public class ShortcutService extends IShortcutService.Stub {
 
         injectRegisterUidObserver(mUidObserver, ActivityManager.UID_OBSERVER_PROCSTATE
                 | ActivityManager.UID_OBSERVER_GONE);
+
+        injectRegisterRoleHoldersListener(mOnRoleHoldersChangedListener);
     }
 
     long getStatStartTime() {
@@ -518,6 +514,31 @@ public class ShortcutService extends IShortcutService.Stub {
     public String injectGetLocaleTagsForUser(@UserIdInt int userId) {
         // TODO This should get the per-user locale.  b/30123329 b/30119489
         return LocaleList.getDefault().toLanguageTags();
+    }
+
+    private final OnRoleHoldersChangedListener mOnRoleHoldersChangedListener =
+            new OnRoleHoldersChangedListener() {
+        @Override
+        public void onRoleHoldersChanged(String roleName, UserHandle user) {
+            if (RoleManager.ROLE_HOME.equals(roleName)) {
+                injectPostToHandler(() -> handleOnDefaultLauncherChanged(user.getIdentifier()));
+            }
+        }
+    };
+
+    void handleOnDefaultLauncherChanged(int userId) {
+        if (DEBUG) {
+            Slog.v(TAG, "Default launcher changed for user: " + userId);
+        }
+
+        // Default launcher is removed or changed, revoke all URI permissions.
+        mUriGrantsManagerInternal.revokeUriPermissionFromOwner(mUriPermissionOwner, null, ~0, 0);
+
+        synchronized (mLock) {
+            // Clear the launcher cache for this user. It will be set again next time the default
+            // launcher is read from RoleManager.
+            getUserShortcutsLocked(userId).setCachedLauncher(null);
+        }
     }
 
     final private IUidObserver mUidObserver = new IUidObserver.Stub() {
@@ -776,31 +797,31 @@ public class ShortcutService extends IShortcutService.Stub {
     // === Persisting ===
 
     @Nullable
-    static String parseStringAttribute(XmlPullParser parser, String attribute) {
+    static String parseStringAttribute(TypedXmlPullParser parser, String attribute) {
         return parser.getAttributeValue(null, attribute);
     }
 
-    static boolean parseBooleanAttribute(XmlPullParser parser, String attribute) {
+    static boolean parseBooleanAttribute(TypedXmlPullParser parser, String attribute) {
         return parseLongAttribute(parser, attribute) == 1;
     }
 
-    static boolean parseBooleanAttribute(XmlPullParser parser, String attribute, boolean def) {
+    static boolean parseBooleanAttribute(TypedXmlPullParser parser, String attribute, boolean def) {
         return parseLongAttribute(parser, attribute, (def ? 1 : 0)) == 1;
     }
 
-    static int parseIntAttribute(XmlPullParser parser, String attribute) {
+    static int parseIntAttribute(TypedXmlPullParser parser, String attribute) {
         return (int) parseLongAttribute(parser, attribute);
     }
 
-    static int parseIntAttribute(XmlPullParser parser, String attribute, int def) {
+    static int parseIntAttribute(TypedXmlPullParser parser, String attribute, int def) {
         return (int) parseLongAttribute(parser, attribute, def);
     }
 
-    static long parseLongAttribute(XmlPullParser parser, String attribute) {
+    static long parseLongAttribute(TypedXmlPullParser parser, String attribute) {
         return parseLongAttribute(parser, attribute, 0);
     }
 
-    static long parseLongAttribute(XmlPullParser parser, String attribute, long def) {
+    static long parseLongAttribute(TypedXmlPullParser parser, String attribute, long def) {
         final String value = parseStringAttribute(parser, attribute);
         if (TextUtils.isEmpty(value)) {
             return def;
@@ -814,7 +835,7 @@ public class ShortcutService extends IShortcutService.Stub {
     }
 
     @Nullable
-    static ComponentName parseComponentNameAttribute(XmlPullParser parser, String attribute) {
+    static ComponentName parseComponentNameAttribute(TypedXmlPullParser parser, String attribute) {
         final String value = parseStringAttribute(parser, attribute);
         if (TextUtils.isEmpty(value)) {
             return null;
@@ -823,7 +844,7 @@ public class ShortcutService extends IShortcutService.Stub {
     }
 
     @Nullable
-    static Intent parseIntentAttributeNoDefault(XmlPullParser parser, String attribute) {
+    static Intent parseIntentAttributeNoDefault(TypedXmlPullParser parser, String attribute) {
         final String value = parseStringAttribute(parser, attribute);
         Intent parsed = null;
         if (!TextUtils.isEmpty(value)) {
@@ -837,7 +858,7 @@ public class ShortcutService extends IShortcutService.Stub {
     }
 
     @Nullable
-    static Intent parseIntentAttribute(XmlPullParser parser, String attribute) {
+    static Intent parseIntentAttribute(TypedXmlPullParser parser, String attribute) {
         Intent parsed = parseIntentAttributeNoDefault(parser, attribute);
         if (parsed == null) {
             // Default intent.
@@ -846,7 +867,7 @@ public class ShortcutService extends IShortcutService.Stub {
         return parsed;
     }
 
-    static void writeTagValue(XmlSerializer out, String tag, String value) throws IOException {
+    static void writeTagValue(TypedXmlSerializer out, String tag, String value) throws IOException {
         if (TextUtils.isEmpty(value)) return;
 
         out.startTag(null, tag);
@@ -854,16 +875,17 @@ public class ShortcutService extends IShortcutService.Stub {
         out.endTag(null, tag);
     }
 
-    static void writeTagValue(XmlSerializer out, String tag, long value) throws IOException {
+    static void writeTagValue(TypedXmlSerializer out, String tag, long value) throws IOException {
         writeTagValue(out, tag, Long.toString(value));
     }
 
-    static void writeTagValue(XmlSerializer out, String tag, ComponentName name) throws IOException {
+    static void writeTagValue(TypedXmlSerializer out, String tag, ComponentName name)
+            throws IOException {
         if (name == null) return;
         writeTagValue(out, tag, name.flattenToString());
     }
 
-    static void writeTagExtra(XmlSerializer out, String tag, PersistableBundle bundle)
+    static void writeTagExtra(TypedXmlSerializer out, String tag, PersistableBundle bundle)
             throws IOException, XmlPullParserException {
         if (bundle == null) return;
 
@@ -872,17 +894,18 @@ public class ShortcutService extends IShortcutService.Stub {
         out.endTag(null, tag);
     }
 
-    static void writeAttr(XmlSerializer out, String name, CharSequence value) throws IOException {
+    static void writeAttr(TypedXmlSerializer out, String name, CharSequence value)
+            throws IOException {
         if (TextUtils.isEmpty(value)) return;
 
         out.attribute(null, name, value.toString());
     }
 
-    static void writeAttr(XmlSerializer out, String name, long value) throws IOException {
+    static void writeAttr(TypedXmlSerializer out, String name, long value) throws IOException {
         writeAttr(out, name, String.valueOf(value));
     }
 
-    static void writeAttr(XmlSerializer out, String name, boolean value) throws IOException {
+    static void writeAttr(TypedXmlSerializer out, String name, boolean value) throws IOException {
         if (value) {
             writeAttr(out, name, "1");
         } else {
@@ -890,12 +913,13 @@ public class ShortcutService extends IShortcutService.Stub {
         }
     }
 
-    static void writeAttr(XmlSerializer out, String name, ComponentName comp) throws IOException {
+    static void writeAttr(TypedXmlSerializer out, String name, ComponentName comp)
+            throws IOException {
         if (comp == null) return;
         writeAttr(out, name, comp.flattenToString());
     }
 
-    static void writeAttr(XmlSerializer out, String name, Intent intent) throws IOException {
+    static void writeAttr(TypedXmlSerializer out, String name, Intent intent) throws IOException {
         if (intent == null) return;
 
         writeAttr(out, name, intent.toUri(/* flags =*/ 0));
@@ -914,8 +938,7 @@ public class ShortcutService extends IShortcutService.Stub {
             outs = file.startWrite();
 
             // Write to XML
-            XmlSerializer out = new FastXmlSerializer();
-            out.setOutput(outs, StandardCharsets.UTF_8.name());
+            TypedXmlSerializer out = Xml.resolveSerializer(outs);
             out.startDocument(null, true);
             out.startTag(null, TAG_ROOT);
 
@@ -943,8 +966,7 @@ public class ShortcutService extends IShortcutService.Stub {
             Slog.d(TAG, "Loading from " + file.getBaseFile());
         }
         try (FileInputStream in = file.openRead()) {
-            XmlPullParser parser = Xml.newPullParser();
-            parser.setInput(in, StandardCharsets.UTF_8.name());
+            TypedXmlPullParser parser = Xml.resolvePullParser(in);
 
             int type;
             while ((type = parser.next()) != XmlPullParser.END_DOCUMENT) {
@@ -1020,18 +1042,20 @@ public class ShortcutService extends IShortcutService.Stub {
     private void saveUserInternalLocked(@UserIdInt int userId, OutputStream os,
             boolean forBackup) throws IOException, XmlPullParserException {
 
-        final BufferedOutputStream bos = new BufferedOutputStream(os);
-
         // Write to XML
-        XmlSerializer out = new FastXmlSerializer();
-        out.setOutput(bos, StandardCharsets.UTF_8.name());
+        final TypedXmlSerializer out;
+        if (forBackup) {
+            out = Xml.newFastSerializer();
+            out.setOutput(os, StandardCharsets.UTF_8.name());
+        } else {
+            out = Xml.resolveSerializer(os);
+        }
         out.startDocument(null, true);
 
         getUserShortcutsLocked(userId).saveToXml(out, forBackup);
 
         out.endDocument();
 
-        bos.flush();
         os.flush();
     }
 
@@ -1075,11 +1099,14 @@ public class ShortcutService extends IShortcutService.Stub {
             boolean fromBackup) throws XmlPullParserException, IOException,
             InvalidFileFormatException {
 
-        final BufferedInputStream bis = new BufferedInputStream(is);
-
         ShortcutUser ret = null;
-        XmlPullParser parser = Xml.newPullParser();
-        parser.setInput(bis, StandardCharsets.UTF_8.name());
+        TypedXmlPullParser parser;
+        if (fromBackup) {
+            parser = Xml.newFastPullParser();
+            parser.setInput(is, StandardCharsets.UTF_8.name());
+        } else {
+            parser = Xml.resolvePullParser(is);
+        }
 
         int type;
         while ((type = parser.next()) != XmlPullParser.END_DOCUMENT) {
@@ -2681,35 +2708,21 @@ public class ShortcutService extends IShortcutService.Stub {
         synchronized (mLock) {
             throwIfUserLockedL(userId);
 
-            final ShortcutUser user = getUserShortcutsLocked(userId);
+            final String defaultLauncher = getDefaultLauncher(userId);
 
-            // Always trust the cached component.
-            final ComponentName cached = user.getCachedLauncher();
-            if (cached != null) {
-                if (cached.getPackageName().equals(packageName)) {
-                    return true;
-                }
-            }
-            // If the cached one doesn't match, then go ahead
-
-            final ComponentName detected = getDefaultLauncher(userId);
-
-            // Update the cache.
-            user.setLauncher(detected);
-            if (detected != null) {
+            if (defaultLauncher != null) {
                 if (DEBUG) {
-                    Slog.v(TAG, "Detected launcher: " + detected);
+                    Slog.v(TAG, "Detected launcher: " + defaultLauncher + " user: " + userId);
                 }
-                return detected.getPackageName().equals(packageName);
+                return defaultLauncher.equals(packageName);
             } else {
-                // Default launcher not found.
                 return false;
             }
         }
     }
 
     @Nullable
-    ComponentName getDefaultLauncher(@UserIdInt int userId) {
+    String getDefaultLauncher(@UserIdInt int userId) {
         final long start = getStatStartTime();
         final long token = injectClearCallingIdentity();
         try {
@@ -2717,64 +2730,27 @@ public class ShortcutService extends IShortcutService.Stub {
                 throwIfUserLockedL(userId);
 
                 final ShortcutUser user = getUserShortcutsLocked(userId);
+                String cachedLauncher = user.getCachedLauncher();
+                if (cachedLauncher != null) {
+                    return cachedLauncher;
+                }
 
-                final List<ResolveInfo> allHomeCandidates = new ArrayList<>();
+                // Default launcher from role manager.
+                final long startGetHomeRoleHoldersAsUser = getStatStartTime();
+                final String defaultLauncher = injectGetHomeRoleHolderAsUser(userId);
+                logDurationStat(Stats.GET_DEFAULT_HOME, startGetHomeRoleHoldersAsUser);
 
-                // Default launcher from package manager.
-                final long startGetHomeActivitiesAsUser = getStatStartTime();
-                final ComponentName defaultLauncher = mPackageManagerInternal
-                        .getHomeActivitiesAsUser(allHomeCandidates, userId);
-                logDurationStat(Stats.GET_DEFAULT_HOME, startGetHomeActivitiesAsUser);
-
-                ComponentName detected = null;
                 if (defaultLauncher != null) {
-                    detected = defaultLauncher;
                     if (DEBUG) {
-                        Slog.v(TAG, "Default launcher from PM: " + detected);
+                        Slog.v(TAG, "Default launcher from RoleManager: " + defaultLauncher
+                                + " user: " + userId);
                     }
+                    user.setCachedLauncher(defaultLauncher);
                 } else {
-                    detected = user.getLastKnownLauncher();
-
-                    if (detected != null) {
-                        if (injectIsActivityEnabledAndExported(detected, userId)) {
-                            if (DEBUG) {
-                                Slog.v(TAG, "Cached launcher: " + detected);
-                            }
-                        } else {
-                            Slog.w(TAG, "Cached launcher " + detected + " no longer exists");
-                            detected = null;
-                            user.clearLauncher();
-                        }
-                    }
+                    Slog.e(TAG, "Default launcher not found." + " user: " + userId);
                 }
 
-                if (detected == null) {
-                    // If we reach here, that means it's the first check since the user was created,
-                    // and there's already multiple launchers and there's no default set.
-                    // Find the system one with the highest priority.
-                    // (We need to check the priority too because of FallbackHome in Settings.)
-                    // If there's no system launcher yet, then no one can access shortcuts, until
-                    // the user explicitly
-                    final int size = allHomeCandidates.size();
-
-                    int lastPriority = Integer.MIN_VALUE;
-                    for (int i = 0; i < size; i++) {
-                        final ResolveInfo ri = allHomeCandidates.get(i);
-                        if (!ri.activityInfo.applicationInfo.isSystemApp()) {
-                            continue;
-                        }
-                        if (DEBUG) {
-                            Slog.d(TAG, String.format("hasShortcutPermissionInner: pkg=%s prio=%d",
-                                    ri.activityInfo.getComponentName(), ri.priority));
-                        }
-                        if (ri.priority < lastPriority) {
-                            continue;
-                        }
-                        detected = ri.activityInfo.getComponentName();
-                        lastPriority = ri.priority;
-                    }
-                }
-                return detected;
+                return defaultLauncher;
             }
         } finally {
             injectRestoreCallingIdentity(token);
@@ -2865,10 +2841,14 @@ public class ShortcutService extends IShortcutService.Stub {
                 int queryFlags, int userId, int callingPid, int callingUid) {
             final ArrayList<ShortcutInfo> ret = new ArrayList<>();
 
-            final boolean cloneKeyFieldOnly =
-                    ((queryFlags & ShortcutQuery.FLAG_GET_KEY_FIELDS_ONLY) != 0);
-            final int cloneFlag = cloneKeyFieldOnly ? ShortcutInfo.CLONE_REMOVE_NON_KEY_INFO
-                    : ShortcutInfo.CLONE_REMOVE_FOR_LAUNCHER;
+            int flags = ShortcutInfo.CLONE_REMOVE_FOR_LAUNCHER;
+            if ((queryFlags & ShortcutQuery.FLAG_GET_KEY_FIELDS_ONLY) != 0) {
+                flags = ShortcutInfo.CLONE_REMOVE_NON_KEY_INFO;
+            } else if ((queryFlags & ShortcutQuery.FLAG_GET_PERSONS_DATA) != 0) {
+                flags &= ~ShortcutInfo.CLONE_REMOVE_PERSON;
+            }
+            final int cloneFlag = flags;
+
             if (packageName == null) {
                 shortcutIds = null; // LauncherAppsService already threw for it though.
             }
@@ -3351,11 +3331,11 @@ public class ShortcutService extends IShortcutService.Stub {
             Objects.requireNonNull(callingPackage);
 
             final int userId = UserHandle.getUserId(callingUid);
-            final ComponentName defaultLauncher = getDefaultLauncher(userId);
+            final String defaultLauncher = getDefaultLauncher(userId);
             if (defaultLauncher == null) {
                 return false;
             }
-            if (!callingPackage.equals(defaultLauncher.getPackageName())) {
+            if (!callingPackage.equals(defaultLauncher)) {
                 return false;
             }
             synchronized (mLock) {
@@ -3426,22 +3406,6 @@ public class ShortcutService extends IShortcutService.Stub {
                         }
                         return;
                     }
-
-                    // Whenever we get one of those package broadcasts, or get
-                    // ACTION_PREFERRED_ACTIVITY_CHANGED, we purge the default launcher cache.
-                    final ShortcutUser user = getUserShortcutsLocked(userId);
-                    user.clearLauncher();
-                }
-                if (Intent.ACTION_PREFERRED_ACTIVITY_CHANGED.equals(action)) {
-                    final ShortcutUser user = getUserShortcutsLocked(userId);
-                    final ComponentName lastLauncher = user.getLastKnownLauncher();
-                    final ComponentName currentLauncher = getDefaultLauncher(userId);
-                    if (currentLauncher == null || !currentLauncher.equals(lastLauncher)) {
-                        // Default launcher is removed or changed, revoke all URI permissions.
-                        mUriGrantsManagerInternal.revokeUriPermissionFromOwner(mUriPermissionOwner,
-                                null, ~0, 0);
-                    }
-                    return;
                 }
 
                 final Uri intentUri = intent.getData();
@@ -4629,9 +4593,6 @@ public class ShortcutService extends IShortcutService.Stub {
                     case "reset-config":
                         handleResetConfig();
                         break;
-                    case "clear-default-launcher":
-                        handleClearDefaultLauncher();
-                        break;
                     case "get-default-launcher":
                         handleGetDefaultLauncher();
                         break;
@@ -4672,11 +4633,10 @@ public class ShortcutService extends IShortcutService.Stub {
             pw.println("cmd shortcut reset-config");
             pw.println("    Reset the configuration set with \"update-config\"");
             pw.println();
-            pw.println("cmd shortcut clear-default-launcher [--user USER_ID]");
-            pw.println("    Clear the cached default launcher");
-            pw.println();
-            pw.println("cmd shortcut get-default-launcher [--user USER_ID]");
+            pw.println("[Deprecated] cmd shortcut get-default-launcher [--user USER_ID]");
             pw.println("    Show the default launcher");
+            pw.println("    Note: This command is deprecated. Callers should query the default"
+                    + " launcher directly from RoleManager instead.");
             pw.println();
             pw.println("cmd shortcut unload-user [--user USER_ID]");
             pw.println("    Unload a user from the memory");
@@ -4723,36 +4683,17 @@ public class ShortcutService extends IShortcutService.Stub {
             }
         }
 
-        private void clearLauncher() {
-            synchronized (mLock) {
-                getUserShortcutsLocked(mUserId).forceClearLauncher();
-            }
-        }
-
-        private void showLauncher() {
-            synchronized (mLock) {
-                // This ensures to set the cached launcher.  Package name doesn't matter.
-                hasShortcutHostPermissionInner("-", mUserId);
-
-                getOutPrintWriter().println("Launcher: "
-                        + getUserShortcutsLocked(mUserId).getLastKnownLauncher());
-            }
-        }
-
-        private void handleClearDefaultLauncher() throws CommandException {
-            synchronized (mLock) {
-                parseOptionsLocked(/* takeUser =*/ true);
-
-                clearLauncher();
-            }
-        }
-
+        // This method is used by various cts modules to get the current default launcher. Tests
+        // should query this information directly from RoleManager instead. Keeping the old behavior
+        // by returning the result from package manager.
         private void handleGetDefaultLauncher() throws CommandException {
             synchronized (mLock) {
                 parseOptionsLocked(/* takeUser =*/ true);
-
-                clearLauncher();
-                showLauncher();
+                final List<ResolveInfo> allHomeCandidates = new ArrayList<>();
+                // Default launcher from package manager.
+                final ComponentName defaultLauncher = mPackageManagerInternal
+                        .getHomeActivitiesAsUser(allHomeCandidates, mUserId);
+                getOutPrintWriter().println("Launcher: " + defaultLauncher);
             }
         }
 
@@ -4879,6 +4820,19 @@ public class ShortcutService extends IShortcutService.Stub {
                     ActivityManager.PROCESS_STATE_UNKNOWN, null);
         } catch (RemoteException shouldntHappen) {
         }
+    }
+
+    @VisibleForTesting
+    void injectRegisterRoleHoldersListener(OnRoleHoldersChangedListener listener) {
+        mRoleManager.addOnRoleHoldersChangedListenerAsUser(mContext.getMainExecutor(), listener,
+                UserHandle.ALL);
+    }
+
+    @VisibleForTesting
+    String injectGetHomeRoleHolderAsUser(int userId) {
+        List<String> roleHolders = mRoleManager.getRoleHoldersAsUser(
+                RoleManager.ROLE_HOME, UserHandle.of(userId));
+        return roleHolders.isEmpty() ? null : roleHolders.get(0);
     }
 
     File getUserBitmapFilePath(@UserIdInt int userId) {

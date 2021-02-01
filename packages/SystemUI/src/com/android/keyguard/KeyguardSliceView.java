@@ -154,12 +154,7 @@ public class KeyguardSliceView extends LinearLayout {
     public void updateLockScreenMode(int mode) {
         mLockScreenMode = mode;
         if (mLockScreenMode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_LAYOUT_1) {
-            // add top padding to better align with top of clock
-            final int topPadding = (int) TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP,
-                    20,
-                    getResources().getDisplayMetrics());
-            mTitle.setPaddingRelative(0, topPadding, 0, 0);
+            mTitle.setPaddingRelative(0, 0, 0, 0);
             mTitle.setGravity(Gravity.START);
             setGravity(Gravity.START);
             RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) getLayoutParams();
@@ -249,7 +244,7 @@ public class KeyguardSliceView extends LinearLayout {
                     iconDrawable.setBounds(0, 0, Math.max(width, 1), iconSize);
                 }
             }
-            button.setCompoundDrawables(iconDrawable, null, null, null);
+            button.setCompoundDrawablesRelative(iconDrawable, null, null, null);
             button.setOnClickListener(mOnClickListener);
             button.setClickable(pendingIntent != null);
         }
@@ -524,9 +519,9 @@ public class KeyguardSliceView extends LinearLayout {
                     .getDimension(R.dimen.widget_horizontal_padding) / 2;
             if (mLockScreenMode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_LAYOUT_1) {
                 // orientation is vertical, so add padding to top & bottom
-                setPadding(0, padding, 0, padding * (hasText ? 1 : -1));
+                setPadding(0, padding, 0, hasText ? padding : 0);
             } else {
-                // oreintation is horizontal, so add padding to left & right
+                // orientation is horizontal, so add padding to left & right
                 setPadding(padding, 0, padding * (hasText ? 1 : -1), 0);
             }
 
@@ -541,9 +536,9 @@ public class KeyguardSliceView extends LinearLayout {
         }
 
         @Override
-        public void setCompoundDrawables(Drawable left, Drawable top, Drawable right,
+        public void setCompoundDrawablesRelative(Drawable start, Drawable top, Drawable end,
                 Drawable bottom) {
-            super.setCompoundDrawables(left, top, right, bottom);
+            super.setCompoundDrawablesRelative(start, top, end, bottom);
             updateDrawableColors();
             updatePadding();
         }
@@ -563,9 +558,9 @@ public class KeyguardSliceView extends LinearLayout {
         public void setLockScreenMode(int mode) {
             mLockScreenMode = mode;
             if (mLockScreenMode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_LAYOUT_1) {
-                setGravity(Gravity.START);
+                setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
             } else {
-                setGravity(Gravity.CENTER);
+                setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             }
             updatePadding();
         }

@@ -30,6 +30,7 @@ import android.annotation.Nullable;
 import android.annotation.StringRes;
 import android.annotation.UserIdInt;
 import android.annotation.XmlRes;
+import android.app.role.RoleManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -58,6 +59,8 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.PackageManager.Property;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
@@ -2304,20 +2307,14 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public String getDefaultBrowserPackageNameAsUser(int userId) {
-        try {
-            return mPermissionManager.getDefaultBrowser(userId);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        RoleManager roleManager = mContext.getSystemService(RoleManager.class);
+        return roleManager.getBrowserRoleHolder(userId);
     }
 
     @Override
     public boolean setDefaultBrowserPackageNameAsUser(String packageName, int userId) {
-        try {
-            return mPermissionManager.setDefaultBrowser(packageName, userId);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        RoleManager roleManager = mContext.getSystemService(RoleManager.class);
+        return roleManager.setBrowserRoleHolder(packageName, userId);
     }
 
     @Override
@@ -3547,6 +3544,114 @@ public class ApplicationPackageManager extends PackageManager {
         try {
             List<String> mimeGroup = mPM.getMimeGroup(mContext.getPackageName(), group);
             return new ArraySet<>(mimeGroup);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public Property getProperty(String propertyName, String packageName)
+            throws NameNotFoundException {
+        Objects.requireNonNull(packageName);
+        Objects.requireNonNull(propertyName);
+        try {
+            final Property property = mPM.getProperty(propertyName, packageName, null);
+            if (property == null) {
+                throw new NameNotFoundException();
+            }
+            return property;
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public Property getProperty(String propertyName, ComponentName component)
+            throws NameNotFoundException {
+        Objects.requireNonNull(component);
+        Objects.requireNonNull(propertyName);
+        try {
+            final Property property = mPM.getProperty(
+                    propertyName, component.getPackageName(), component.getClassName());
+            if (property == null) {
+                throw new NameNotFoundException();
+            }
+            return property;
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public List<Property> queryApplicationProperty(String propertyName) {
+        Objects.requireNonNull(propertyName);
+        try {
+            final ParceledListSlice<Property> parceledList =
+                    mPM.queryProperty(propertyName, TYPE_APPLICATION);
+            if (parceledList == null) {
+                return Collections.emptyList();
+            }
+            return parceledList.getList();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public List<Property> queryActivityProperty(String propertyName) {
+        Objects.requireNonNull(propertyName);
+        try {
+            final ParceledListSlice<Property> parceledList =
+                    mPM.queryProperty(propertyName, TYPE_ACTIVITY);
+            if (parceledList == null) {
+                return Collections.emptyList();
+            }
+            return parceledList.getList();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public List<Property> queryProviderProperty(String propertyName) {
+        Objects.requireNonNull(propertyName);
+        try {
+            final ParceledListSlice<Property> parceledList =
+                    mPM.queryProperty(propertyName, TYPE_PROVIDER);
+            if (parceledList == null) {
+                return Collections.emptyList();
+            }
+            return parceledList.getList();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public List<Property> queryReceiverProperty(String propertyName) {
+        Objects.requireNonNull(propertyName);
+        try {
+            final ParceledListSlice<Property> parceledList =
+                    mPM.queryProperty(propertyName, TYPE_RECEIVER);
+            if (parceledList == null) {
+                return Collections.emptyList();
+            }
+            return parceledList.getList();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public List<Property> queryServiceProperty(String propertyName) {
+        Objects.requireNonNull(propertyName);
+        try {
+            final ParceledListSlice<Property> parceledList =
+                    mPM.queryProperty(propertyName, TYPE_SERVICE);
+            if (parceledList == null) {
+                return Collections.emptyList();
+            }
+            return parceledList.getList();
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }

@@ -287,7 +287,8 @@ class InsetsPolicy {
         if (mShowingTransientTypes.indexOf(ITYPE_STATUS_BAR) != -1) {
             return mDummyControlTarget;
         }
-        if (focusedWin == mPolicy.getNotificationShade()) {
+        final WindowState notificationShade = mPolicy.getNotificationShade();
+        if (focusedWin == notificationShade) {
             // Notification shade has control anyways, no reason to force anything.
             return focusedWin;
         }
@@ -308,9 +309,10 @@ class InsetsPolicy {
             // fake control to the client, so that it can re-show the bar during this scenario.
             return mDummyControlTarget;
         }
-        if (!canBeTopFullscreenOpaqueWindow(focusedWin) && mPolicy.topAppHidesStatusBar()) {
+        if (!canBeTopFullscreenOpaqueWindow(focusedWin) && mPolicy.topAppHidesStatusBar()
+                && (notificationShade == null || !notificationShade.canReceiveKeys())) {
             // Non-fullscreen focused window should not break the state that the top-fullscreen-app
-            // window hides status bar.
+            // window hides status bar, unless the notification shade can receive keys.
             return mPolicy.getTopFullscreenOpaqueWindow();
         }
         return focusedWin;
@@ -390,9 +392,9 @@ class InsetsPolicy {
 
     private boolean forceShowsSystemBarsForWindowingMode() {
         final boolean isDockedStackVisible = mDisplayContent.getDefaultTaskDisplayArea()
-                .isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+                .isRootTaskVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
         final boolean isFreeformStackVisible = mDisplayContent.getDefaultTaskDisplayArea()
-                .isStackVisible(WINDOWING_MODE_FREEFORM);
+                .isRootTaskVisible(WINDOWING_MODE_FREEFORM);
         final boolean isResizing = mDisplayContent.getDockedDividerController().isResizing();
 
         // We need to force system bars when the docked stack is visible, when the freeform stack
@@ -490,10 +492,10 @@ class InsetsPolicy {
                 }
                 mAnimatingShown = show;
 
+                final InsetsState state = getInsetsForWindow(mFocusedWin);
                 mAnimationControl = new InsetsAnimationControlImpl(controls,
-                        mFocusedWin.getDisplayContent().getBounds(), mFocusedWin.getInsetsState(),
-                        mListener, typesReady, this, mListener.getDurationMs(),
-                        InsetsController.SYSTEM_BARS_INTERPOLATOR,
+                        state.getDisplayFrame(), state, mListener, typesReady, this,
+                        mListener.getDurationMs(), InsetsController.SYSTEM_BARS_INTERPOLATOR,
                         show ? ANIMATION_TYPE_SHOW : ANIMATION_TYPE_HIDE, null /* translator */);
                 SurfaceAnimationThread.getHandler().post(
                         () -> mListener.onReady(mAnimationControl, typesReady));

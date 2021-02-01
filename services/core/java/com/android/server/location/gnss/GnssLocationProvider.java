@@ -77,10 +77,10 @@ import com.android.internal.location.ProviderRequest;
 import com.android.internal.location.gnssmetrics.GnssMetrics;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.FgThread;
-import com.android.server.location.AbstractLocationProvider;
 import com.android.server.location.gnss.GnssSatelliteBlocklistHelper.GnssSatelliteBlocklistCallback;
 import com.android.server.location.gnss.NtpTimeHelper.InjectNtpTimeCallback;
-import com.android.server.location.util.Injector;
+import com.android.server.location.injector.Injector;
+import com.android.server.location.provider.AbstractLocationProvider;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -363,6 +363,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private final GnssMeasurementCorrectionsProvider mGnssMeasurementCorrectionsProvider;
     private final GnssAntennaInfoProvider mGnssAntennaInfoProvider;
     private final GnssNavigationMessageProvider mGnssNavigationMessageProvider;
+    private final GnssPowerIndicationProvider mGnssPowerIndicationProvider;
     private final NtpTimeHelper mNtpTimeHelper;
     private final GnssGeofenceProvider mGnssGeofenceProvider;
     private final GnssCapabilitiesProvider mGnssCapabilitiesProvider;
@@ -534,6 +535,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mGnssMeasurementCorrectionsProvider = new GnssMeasurementCorrectionsProvider(mHandler);
         mGnssAntennaInfoProvider = new GnssAntennaInfoProvider(injector);
         mGnssNavigationMessageProvider = new GnssNavigationMessageProvider(injector);
+        mGnssPowerIndicationProvider = new GnssPowerIndicationProvider();
 
         mGnssMetrics = new GnssMetrics(mContext, mBatteryStats);
         mNtpTimeHelper = new NtpTimeHelper(mContext, mHandler.getLooper(), this);
@@ -707,8 +709,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                         "GNSS HAL Requesting location updates from %s provider for %d millis.",
                         provider, durationMillis));
 
-        locationManager.requestLocationUpdates(provider, locationRequest.build(),
-                DIRECT_EXECUTOR, locationListener);
+        if (locationManager.getProvider(provider) != null) {
+            locationManager.requestLocationUpdates(provider, locationRequest.build(),
+                    DIRECT_EXECUTOR, locationListener);
+        }
     }
 
     private void injectBestLocation(Location location) {
@@ -983,21 +987,17 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             // update client uids
             updateClientUids(mProviderRequest.getWorkSource());
 
-            mFixInterval = (int) mProviderRequest.getIntervalMillis();
-            // check for overflow
-            if (mFixInterval != mProviderRequest.getIntervalMillis()) {
+            if (mProviderRequest.getIntervalMillis() <= Integer.MAX_VALUE) {
+                mFixInterval = (int) mProviderRequest.getIntervalMillis();
+            } else {
                 Log.w(TAG, "interval overflow: " + mProviderRequest.getIntervalMillis());
                 mFixInterval = Integer.MAX_VALUE;
             }
-            // requested batch size, or zero to disable batching
-            int batchSize;
-            try {
-                batchSize = mBatchingEnabled ? Math.toIntExact(
-                        mProviderRequest.getMaxUpdateDelayMillis() / mFixInterval) : 0;
-            } catch (ArithmeticException e) {
-                batchSize = Integer.MAX_VALUE;
-            }
 
+            // requested batch size, or zero to disable batching
+            long batchSize =
+                    mBatchingEnabled ? mProviderRequest.getMaxUpdateDelayMillis() / Math.max(
+                            mFixInterval, 1) : 0;
             if (batchSize < getBatchSize()) {
                 batchSize = 0;
             }
@@ -1128,6 +1128,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 downloadPsdsData(/* psdsType= */
                         GnssPsdsDownloader.LONG_TERM_PSDS_SERVER_INDEX);
             }
+        } else if ("request_power_stats".equals(command)) {
+            GnssPowerIndicationProvider.requestPowerStats();
         } else {
             Log.w(TAG, "sendExtraCommand: unknown command " + command);
         }
@@ -1455,6 +1457,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
     }
 
+    void reportGnssPowerStats(GnssPowerStats powerStats) {
+        mHandler.post(() -> mGnssPowerIndicationProvider.onGnssPowerStatsAvailable(powerStats));
+    }
+
     void setTopHalCapabilities(int topHalCapabilities) {
         mHandler.post(() -> {
             mTopHalCapabilities = topHalCapabilities;
@@ -1479,6 +1485,15 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             mGnssCapabilitiesProvider.setSubHalMeasurementCorrectionsCapabilities(
                     subHalCapabilities);
         });
+    }
+
+    /**
+     * Sets the capabilities bits for IGnssPowerIndication HAL.
+     *
+     * These capabilities are defined in IGnssPowerIndicationCallback.aidl.
+     */
+    void setSubHalPowerIndicationCapabilities(int subHalCapabilities) {
+        mHandler.post(() -> mGnssPowerIndicationProvider.onCapabilitiesUpdated(subHalCapabilities));
     }
 
     private void restartRequests() {
@@ -1965,44 +1980,40 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             }
         }
 
-        StringBuilder s = new StringBuilder();
-        s.append("mStarted=").append(mStarted).append("   (changed ");
+        pw.print("mStarted=" + mStarted + "   (changed ");
         TimeUtils.formatDuration(SystemClock.elapsedRealtime()
-                - mStartedChangedElapsedRealtime, s);
-        s.append(" ago)").append('\n');
-        s.append("mBatchingEnabled=").append(mBatchingEnabled).append('\n');
-        s.append("mBatchingStarted=").append(mBatchingStarted).append('\n');
-        s.append("mBatchSize=").append(getBatchSize()).append('\n');
-        s.append("mFixInterval=").append(mFixInterval).append('\n');
-        s.append("mTopHalCapabilities=0x").append(Integer.toHexString(mTopHalCapabilities));
-        s.append(" ( ");
-        if (hasCapability(GPS_CAPABILITY_SCHEDULING)) s.append("SCHEDULING ");
-        if (hasCapability(GPS_CAPABILITY_MSB)) s.append("MSB ");
-        if (hasCapability(GPS_CAPABILITY_MSA)) s.append("MSA ");
-        if (hasCapability(GPS_CAPABILITY_SINGLE_SHOT)) s.append("SINGLE_SHOT ");
-        if (hasCapability(GPS_CAPABILITY_ON_DEMAND_TIME)) s.append("ON_DEMAND_TIME ");
-        if (hasCapability(GPS_CAPABILITY_GEOFENCING)) s.append("GEOFENCING ");
-        if (hasCapability(GPS_CAPABILITY_MEASUREMENTS)) s.append("MEASUREMENTS ");
-        if (hasCapability(GPS_CAPABILITY_NAV_MESSAGES)) s.append("NAV_MESSAGES ");
-        if (hasCapability(GPS_CAPABILITY_LOW_POWER_MODE)) s.append("LOW_POWER_MODE ");
-        if (hasCapability(GPS_CAPABILITY_SATELLITE_BLOCKLIST)) s.append("SATELLITE_BLOCKLIST ");
+                - mStartedChangedElapsedRealtime, pw);
+        pw.println(" ago)");
+        pw.println("mBatchingEnabled=" + mBatchingEnabled);
+        pw.println("mBatchingStarted=" + mBatchingStarted);
+        pw.println("mBatchSize=" + getBatchSize());
+        pw.println("mFixInterval=" + mFixInterval);
+        mGnssPowerIndicationProvider.dump(fd, pw, args);
+        pw.print("mTopHalCapabilities=0x" + Integer.toHexString(mTopHalCapabilities) + " ( ");
+        if (hasCapability(GPS_CAPABILITY_SCHEDULING)) pw.print("SCHEDULING ");
+        if (hasCapability(GPS_CAPABILITY_MSB)) pw.print("MSB ");
+        if (hasCapability(GPS_CAPABILITY_MSA)) pw.print("MSA ");
+        if (hasCapability(GPS_CAPABILITY_SINGLE_SHOT)) pw.print("SINGLE_SHOT ");
+        if (hasCapability(GPS_CAPABILITY_ON_DEMAND_TIME)) pw.print("ON_DEMAND_TIME ");
+        if (hasCapability(GPS_CAPABILITY_GEOFENCING)) pw.print("GEOFENCING ");
+        if (hasCapability(GPS_CAPABILITY_MEASUREMENTS)) pw.print("MEASUREMENTS ");
+        if (hasCapability(GPS_CAPABILITY_NAV_MESSAGES)) pw.print("NAV_MESSAGES ");
+        if (hasCapability(GPS_CAPABILITY_LOW_POWER_MODE)) pw.print("LOW_POWER_MODE ");
+        if (hasCapability(GPS_CAPABILITY_SATELLITE_BLOCKLIST)) pw.print("SATELLITE_BLOCKLIST ");
         if (hasCapability(GPS_CAPABILITY_MEASUREMENT_CORRECTIONS)) {
-            s.append("MEASUREMENT_CORRECTIONS ");
+            pw.print("MEASUREMENT_CORRECTIONS ");
         }
-        if (hasCapability(GPS_CAPABILITY_ANTENNA_INFO)) s.append("ANTENNA_INFO ");
-        s.append(")\n");
+        if (hasCapability(GPS_CAPABILITY_ANTENNA_INFO)) pw.print("ANTENNA_INFO ");
+        pw.println(")");
         if (hasCapability(GPS_CAPABILITY_MEASUREMENT_CORRECTIONS)) {
-            s.append("SubHal=MEASUREMENT_CORRECTIONS[");
-            s.append(mGnssMeasurementCorrectionsProvider.toStringCapabilities());
-            s.append("]\n");
+            pw.println("SubHal=MEASUREMENT_CORRECTIONS["
+                    + mGnssMeasurementCorrectionsProvider.toStringCapabilities() + "]");
         }
-        s.append(mGnssMetrics.dumpGnssMetricsAsText());
+        pw.print(mGnssMetrics.dumpGnssMetricsAsText());
         if (dumpAll) {
-            s.append("native internal state: \n");
-            s.append("  ").append(native_get_internal_state());
-            s.append("\n");
+            pw.println("native internal state: ");
+            pw.println("  " + native_get_internal_state());
         }
-        pw.append(s);
     }
 
     // preallocated to avoid memory allocation in reportNmea()

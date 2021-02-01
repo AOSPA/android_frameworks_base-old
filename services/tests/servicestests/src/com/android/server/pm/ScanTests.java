@@ -46,7 +46,6 @@ import android.content.pm.parsing.ParsingPackage;
 import android.content.res.TypedArray;
 import android.os.Environment;
 import android.os.UserHandle;
-import android.os.UserManagerInternal;
 import android.platform.test.annotations.Presubmit;
 import android.util.Pair;
 
@@ -102,7 +101,8 @@ public class ScanTests {
     @Before
     public void setupDefaultAbiBehavior() throws Exception {
         when(mMockPackageAbiHelper.derivePackageAbi(
-                any(AndroidPackage.class), anyBoolean(), nullable(String.class)))
+                any(AndroidPackage.class), anyBoolean(), nullable(String.class),
+                any(File.class)))
                 .thenReturn(new Pair<>(
                         new PackageAbiHelper.Abis("derivedPrimary", "derivedSecondary"),
                         new PackageAbiHelper.NativeLibraryPaths(

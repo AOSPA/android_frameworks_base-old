@@ -207,16 +207,23 @@ public interface BluetoothProfile {
     int HEARING_AID = 21;
 
     /**
+     * LE Audio Device
+     *
+     * @hide
+     */
+    int LE_AUDIO = 22;
+
+    /**
      * DUN
      * @hide
      */
-    public static final int DUN = 22;
+    public static final int DUN = 23;
 
     /**
      * Group Operation Profile (Client Role)
      * @hide
      */
-    public int GROUP_CLIENT = 23;
+    public int GROUP_CLIENT = 24;
 
     /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
@@ -224,7 +231,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
-    int MAX_PROFILE_ID = 23;
+    int MAX_PROFILE_ID = 24;
 
     /**
      * Default priority for devices that we try to auto-connect to and

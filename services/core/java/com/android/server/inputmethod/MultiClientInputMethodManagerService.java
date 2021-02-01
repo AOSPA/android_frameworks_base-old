@@ -72,6 +72,8 @@ import android.view.inputmethod.InputMethodSubtype;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.inputmethod.CallbackUtils;
+import com.android.internal.inputmethod.IInputBindResultResultCallback;
 import com.android.internal.inputmethod.IMultiClientInputMethod;
 import com.android.internal.inputmethod.IMultiClientInputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.IMultiClientInputMethodSession;
@@ -104,6 +106,7 @@ import java.lang.annotation.Retention;
 import java.util.Collections;
 import java.util.List;
 import java.util.WeakHashMap;
+import java.util.function.Supplier;
 
 /**
  * Actual implementation of multi-client InputMethodManagerService.
@@ -911,7 +914,8 @@ public final class MultiClientInputMethodManagerService {
                                     com.android.internal.R.string.input_method_binding_label)
                             .putExtra(Intent.EXTRA_CLIENT_INTENT, PendingIntent.getActivity(
                                     context, 0,
-                                    new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS), 0));
+                                    new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS),
+                                    PendingIntent.FLAG_MUTABLE));
 
             // Note: Instead of re-dispatching callback from the main thread to the worker thread
             // where OnWorkerThreadCallback is running, we pass the Handler object here so that
@@ -1338,7 +1342,7 @@ public final class MultiClientInputMethodManagerService {
                 switch (clientInfo.mState) {
                     case InputMethodClientState.WAITING_FOR_IME_SESSION:
                         try {
-                            clientInfo.mClient.setActive(true, false);
+                            clientInfo.mClient.setActive(true, false, false);
                         } catch (RemoteException e) {
                             // TODO(yukawa): Remove this client.
                             return;
@@ -1400,7 +1404,7 @@ public final class MultiClientInputMethodManagerService {
                     return;
                 }
                 try {
-                    clientInfo.mClient.setActive(active, false /* fullscreen */);
+                    clientInfo.mClient.setActive(active, false /* fullscreen */, false);
                 } catch (RemoteException e) {
                     return;
                 }
@@ -1587,7 +1591,26 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
-        public InputBindResult startInputOrWindowGainedFocus(
+        public void startInputOrWindowGainedFocus(
+                @StartInputReason int startInputReason,
+                @Nullable IInputMethodClient client,
+                @Nullable IBinder windowToken,
+                @StartInputFlags int startInputFlags,
+                @SoftInputModeFlags int softInputMode,
+                int windowFlags,
+                @Nullable EditorInfo editorInfo,
+                @Nullable IInputContext inputContext,
+                @MissingMethodFlags int missingMethods,
+                int unverifiedTargetSdkVersion,
+                IInputBindResultResultCallback resultCallback) {
+            CallbackUtils.onResult(resultCallback, (Supplier<InputBindResult>) () ->
+                    startInputOrWindowGainedFocusInternal(startInputReason, client, windowToken,
+                            startInputFlags, softInputMode, windowFlags, editorInfo, inputContext,
+                            missingMethods, unverifiedTargetSdkVersion));
+        }
+
+        @BinderThread
+        private InputBindResult startInputOrWindowGainedFocusInternal(
                 @StartInputReason int startInputReason,
                 @Nullable IInputMethodClient client,
                 @Nullable IBinder windowToken,
@@ -1675,8 +1698,7 @@ public final class MultiClientInputMethodManagerService {
                                 clientInfo.mMSInputMethodSession.startInputOrWindowGainedFocus(
                                         inputContext, missingMethods, editorInfo, startInputFlags,
                                         softInputMode, windowHandle);
-                            } catch (RemoteException e) {
-                            }
+                            } catch (RemoteException ignored) { }
                             break;
                     }
                     return InputBindResult.NULL_EDITOR_INFO;
@@ -1707,8 +1729,7 @@ public final class MultiClientInputMethodManagerService {
                             clientInfo.mMSInputMethodSession.startInputOrWindowGainedFocus(
                                     inputContext, missingMethods, editorInfo, startInputFlags,
                                     softInputMode, windowHandle);
-                        } catch (RemoteException e) {
-                        }
+                        } catch (RemoteException ignored) { }
                         clientInfo.mState = InputMethodClientState.ALREADY_SENT_BIND_RESULT;
                         return new InputBindResult(
                                 InputBindResult.ResultCode.SUCCESS_WITH_IME_SESSION,
@@ -1808,13 +1829,23 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
-        public void startProtoDump(byte[] clientProtoDump) throws RemoteException {
+        public void startProtoDump(byte[] clientProtoDump, int source, String where) {
         }
 
         @BinderThread
         @Override
-        public boolean isImeTraceEnabled() throws RemoteException {
+        public boolean isImeTraceEnabled() {
             return false;
+        }
+
+        @BinderThread
+        @Override
+        public void startImeTrace() {
+        }
+
+        @BinderThread
+        @Override
+        public void stopImeTrace() {
         }
     }
 }

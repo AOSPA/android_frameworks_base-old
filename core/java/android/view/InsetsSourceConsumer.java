@@ -110,6 +110,10 @@ public class InsetsSourceConsumer {
      */
     public void setControl(@Nullable InsetsSourceControl control,
             @InsetsType int[] showTypes, @InsetsType int[] hideTypes) {
+        if (mType == ITYPE_IME) {
+            ImeTracing.getInstance().triggerClientDump("InsetsSourceConsumer#setControl",
+                    mController.getHost().getInputMethodManager(), null /* icProto */);
+        }
         if (mSourceControl == control) {
             return;
         }
@@ -239,6 +243,12 @@ public class InsetsSourceConsumer {
         final boolean isVisible = source != null ? source.isVisible() : getDefaultVisibility(mType);
         final boolean hasControl = mSourceControl != null;
 
+        if (mType == ITYPE_IME) {
+            ImeTracing.getInstance().triggerClientDump(
+                    "InsetsSourceConsumer#applyLocalVisibilityOverride",
+                    mController.getHost().getInputMethodManager(), null /* icProto */);
+        }
+
         // We still need to let the legacy app know the visibility change even if we don't have the
         // control. If we don't have the source, we don't change the requested visibility for making
         // the callback behavior compatible.
@@ -328,9 +338,6 @@ public class InsetsSourceConsumer {
 
     @VisibleForTesting(visibility = PACKAGE)
     public boolean notifyAnimationFinished() {
-        if (mType == ITYPE_IME) {
-            ImeTracing.getInstance().triggerDump();
-        }
         if (mPendingFrame != null) {
             InsetsSource source = mState.getSource(mType);
             source.setFrame(mPendingFrame);

@@ -36,6 +36,7 @@ import android.util.Log;
 import android.window.WindowContainerToken;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 /**
  * Stores information about a particular Task.
@@ -213,6 +214,24 @@ public class TaskInfo {
      */
     public int parentTaskId;
 
+    /**
+     * Parent bounds.
+     * @hide
+     */
+    public Rect parentBounds;
+
+    /**
+     * Whether this task is focused.
+     * @hide
+     */
+    public boolean isFocused;
+
+    /**
+     * Whether this task is visible.
+     * @hide
+     */
+    public boolean isVisible;
+
     TaskInfo() {
         // Do nothing
     }
@@ -281,6 +300,38 @@ public class TaskInfo {
     }
 
     /**
+      * Returns {@code true} if parameters that are important for task organizers have changed
+      * and {@link com.android.server.wm.TaskOrginizerController} needs to notify listeners
+      * about that.
+      * @hide
+      */
+    public boolean equalsForTaskOrganizer(@Nullable TaskInfo that) {
+        if (that == null) {
+            return false;
+        }
+        return topActivityType == that.topActivityType
+                && isResizeable == that.isResizeable
+                && Objects.equals(positionInParent, that.positionInParent)
+                && equalsLetterboxParams(that)
+                && pictureInPictureParams == that.pictureInPictureParams
+                && getWindowingMode() == that.getWindowingMode()
+                && Objects.equals(taskDescription, that.taskDescription)
+                && isFocused == that.isFocused
+                && isVisible == that.isVisible;
+    }
+
+    private boolean equalsLetterboxParams(TaskInfo that) {
+        return Objects.equals(letterboxActivityBounds, that.letterboxActivityBounds)
+                && Objects.equals(
+                        getConfiguration().windowConfiguration.getBounds(),
+                        that.getConfiguration().windowConfiguration.getBounds())
+                && Objects.equals(
+                        getConfiguration().windowConfiguration.getMaxBounds(),
+                        that.getConfiguration().windowConfiguration.getMaxBounds())
+                && Objects.equals(parentBounds, that.parentBounds);
+    }
+
+    /**
      * Reads the TaskInfo from a parcel.
      */
     void readFromParcel(Parcel source) {
@@ -311,6 +362,9 @@ public class TaskInfo {
         letterboxActivityBounds = source.readTypedObject(Rect.CREATOR);
         positionInParent = source.readTypedObject(Point.CREATOR);
         parentTaskId = source.readInt();
+        parentBounds = source.readTypedObject(Rect.CREATOR);
+        isFocused = source.readBoolean();
+        isVisible = source.readBoolean();
     }
 
     /**
@@ -345,6 +399,9 @@ public class TaskInfo {
         dest.writeTypedObject(letterboxActivityBounds, flags);
         dest.writeTypedObject(positionInParent, flags);
         dest.writeInt(parentTaskId);
+        dest.writeTypedObject(parentBounds, flags);
+        dest.writeBoolean(isFocused);
+        dest.writeBoolean(isVisible);
     }
 
     @Override
@@ -364,10 +421,13 @@ public class TaskInfo {
                 + " topActivityType=" + topActivityType
                 + " pictureInPictureParams=" + pictureInPictureParams
                 + " topActivityInfo=" + topActivityInfo
-                + " launchCookies" + launchCookies
+                + " launchCookies=" + launchCookies
                 + " letterboxActivityBounds=" + letterboxActivityBounds
                 + " positionInParent=" + positionInParent
-                + " parentTaskId: " + parentTaskId
+                + " parentTaskId=" + parentTaskId
+                + " parentBounds=" + parentBounds
+                + " isFocused=" + isFocused
+                + " isVisible=" + isVisible
                 + "}";
     }
 }

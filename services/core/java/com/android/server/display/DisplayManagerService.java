@@ -37,6 +37,9 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.AppOpsManager;
+import android.app.compat.CompatChanges;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
@@ -50,6 +53,7 @@ import android.hardware.display.AmbientBrightnessDayStats;
 import android.hardware.display.BrightnessChangeEvent;
 import android.hardware.display.BrightnessConfiguration;
 import android.hardware.display.Curve;
+import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.DisplayManagerInternal.DisplayTransactionListener;
@@ -83,7 +87,9 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
+import android.sysprop.DisplayProperties;
 import android.text.TextUtils;
+import android.util.ArraySet;
 import android.util.EventLog;
 import android.util.IntArray;
 import android.util.Pair;
@@ -92,6 +98,7 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.Spline;
 import android.view.Display;
+import android.view.DisplayEventReceiver;
 import android.view.DisplayInfo;
 import android.view.DisplayAddress;
 import android.view.IDisplayFoldListener;
@@ -115,6 +122,7 @@ import com.android.server.wm.WindowManagerInternal;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
@@ -182,6 +190,7 @@ public final class DisplayManagerService extends SystemService {
     private static final int MSG_REQUEST_TRAVERSAL = 4;
     private static final int MSG_UPDATE_VIEWPORT = 5;
     private static final int MSG_LOAD_BRIGHTNESS_CONFIGURATION = 6;
+    private static final int MSG_DELIVER_DISPLAY_EVENT_FRAME_RATE_OVERRIDE = 7;
 
     private final Context mContext;
     private final DisplayManagerHandler mHandler;
@@ -358,6 +367,30 @@ public final class DisplayManagerService extends SystemService {
     // Received notifications of the display-fold action
     private DisplayFoldListener mDisplayFoldListener;
 
+    private final boolean mAllowNonNativeRefreshRateOverride;
+
+    private static final float THRESHOLD_FOR_REFRESH_RATES_DIVIDERS = 0.1f;
+
+    /**
+     * Applications use {@link android.view.Display#getRefreshRate} and
+     * {@link android.view.Display.Mode#getRefreshRate} to know what is the display refresh rate.
+     * Starting with Android S, the platform might throttle down applications frame rate to a
+     * divisor of the refresh rate if it is more preferable (for example if the application called
+     * to {@link android.view.Surface#setFrameRate}).
+     * Applications will experience {@link android.view.Choreographer#postFrameCallback} callbacks
+     * and backpressure at the throttled frame rate.
+     *
+     * {@link android.view.Display#getRefreshRate} will always return the application frame rate
+     * and not the physical display refresh rate to allow applications to do frame pacing correctly.
+     *
+     * {@link android.view.Display.Mode#getRefreshRate} will return the application frame rate if
+     * compiled to a previous release and starting with Android S it will return the physical
+     * display refresh rate.
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = android.os.Build.VERSION_CODES.S)
+    static final long DISPLAY_MODE_RETURNS_PHYSICAL_REFRESH_RATE = 170503758L;
+
     // The synchronization root for the display dumpsys.
     private final SyncRoot mSyncDump = new SyncRoot();
 
@@ -397,6 +430,7 @@ public final class DisplayManagerService extends SystemService {
         mCurrentUserId = UserHandle.USER_SYSTEM;
         ColorSpace[] colorSpaces = SurfaceControl.getCompositionColorSpaces();
         mWideColorSpace = colorSpaces[1];
+        mAllowNonNativeRefreshRateOverride = mInjector.getAllowNonNativeRefreshRateOverride();
 
         mSystemReady = false;
         mDumpInProgress = false;
@@ -686,11 +720,82 @@ public final class DisplayManagerService extends SystemService {
                 Settings.Secure.MINIMAL_POST_PROCESSING_ALLOWED, 1, UserHandle.USER_CURRENT) != 0;
     }
 
+    private DisplayInfo getDisplayInfoForFrameRateOverride(DisplayEventReceiver.FrameRateOverride[]
+            frameRateOverrides, DisplayInfo info, int callingUid) {
+        float frameRateHz = 0;
+        for (DisplayEventReceiver.FrameRateOverride frameRateOverride : frameRateOverrides) {
+            if (frameRateOverride.uid == callingUid) {
+                frameRateHz = frameRateOverride.frameRateHz;
+                break;
+            }
+        }
+        if (frameRateHz == 0) {
+            return info;
+        }
+
+        // Override the refresh rate only if it is a divider of the current
+        // refresh rate. This calculation needs to be in sync with the native code
+        // in RefreshRateConfigs::getRefreshRateDividerForUid
+        Display.Mode currentMode = info.getMode();
+        float numPeriods = currentMode.getRefreshRate() / frameRateHz;
+        float numPeriodsRound = Math.round(numPeriods);
+        if (Math.abs(numPeriods - numPeriodsRound) > THRESHOLD_FOR_REFRESH_RATES_DIVIDERS) {
+            return info;
+        }
+        frameRateHz = currentMode.getRefreshRate() / numPeriodsRound;
+
+        DisplayInfo overriddenInfo = new DisplayInfo();
+        overriddenInfo.copyFrom(info);
+        for (Display.Mode mode : info.supportedModes) {
+            if (!mode.equalsExceptRefreshRate(currentMode)) {
+                continue;
+            }
+
+            if (mode.getRefreshRate() >= frameRateHz - THRESHOLD_FOR_REFRESH_RATES_DIVIDERS
+                    && mode.getRefreshRate()
+                    <= frameRateHz + THRESHOLD_FOR_REFRESH_RATES_DIVIDERS) {
+                if (DEBUG) {
+                    Slog.d(TAG, "found matching modeId " + mode.getModeId());
+                }
+                overriddenInfo.refreshRateOverride = mode.getRefreshRate();
+
+                if (!CompatChanges.isChangeEnabled(DISPLAY_MODE_RETURNS_PHYSICAL_REFRESH_RATE,
+                        callingUid)) {
+                    overriddenInfo.modeId = mode.getModeId();
+                }
+                return overriddenInfo;
+            }
+        }
+
+        if (mAllowNonNativeRefreshRateOverride) {
+            overriddenInfo.refreshRateOverride = frameRateHz;
+            if (!CompatChanges.isChangeEnabled(DISPLAY_MODE_RETURNS_PHYSICAL_REFRESH_RATE,
+                    callingUid)) {
+                overriddenInfo.supportedModes = Arrays.copyOf(info.supportedModes,
+                        info.supportedModes.length + 1);
+                overriddenInfo.supportedModes[overriddenInfo.supportedModes.length - 1] =
+                        new Display.Mode(Display.DISPLAY_MODE_ID_FOR_FRAME_RATE_OVERRIDE,
+                                currentMode.getPhysicalWidth(), currentMode.getPhysicalHeight(),
+                                overriddenInfo.refreshRateOverride);
+                overriddenInfo.modeId =
+                        overriddenInfo.supportedModes[overriddenInfo.supportedModes.length - 1]
+                                .getModeId();
+            }
+            return overriddenInfo;
+        }
+
+
+
+        return info;
+    }
+
     private DisplayInfo getDisplayInfoInternal(int displayId, int callingUid) {
         synchronized (mSyncRoot) {
             LogicalDisplay display = mLogicalDisplayMapper.getLocked(displayId);
             if (display != null) {
-                DisplayInfo info = display.getDisplayInfoLocked();
+                DisplayInfo info =
+                        getDisplayInfoForFrameRateOverride(display.getFrameRateOverrides(),
+                                display.getDisplayInfoLocked(), callingUid);
                 if (info.hasAccess(callingUid)
                         || isUidPresentOnDisplayInternal(callingUid, displayId)) {
                     return info;
@@ -700,14 +805,15 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    private void registerCallbackInternal(IDisplayManagerCallback callback, int callingPid) {
+    private void registerCallbackInternal(IDisplayManagerCallback callback, int callingPid,
+            int callingUid) {
         synchronized (mSyncRoot) {
             if (mCallbacks.get(callingPid) != null) {
                 throw new SecurityException("The calling process has already "
                         + "registered an IDisplayManagerCallback.");
             }
 
-            CallbackRecord record = new CallbackRecord(callingPid, callback);
+            CallbackRecord record = new CallbackRecord(callingPid, callingUid, callback);
             try {
                 IBinder binder = callback.asBinder();
                 binder.linkToDeath(record, 0);
@@ -1043,6 +1149,16 @@ public final class DisplayManagerService extends SystemService {
         scheduleTraversalLocked(false);
     }
 
+    private void handleLogicalDisplayFrameRateOverridesChangedLocked(
+            @NonNull LogicalDisplay display) {
+        final int displayId = display.getDisplayIdLocked();
+        // We don't bother invalidating the display info caches here because any changes to the
+        // display info will trigger a cache invalidation inside of LogicalDisplay before we hit
+        // this point.
+        sendDisplayEventFrameRateOverrideLocked(displayId);
+        scheduleTraversalLocked(false);
+    }
+
     private void handleLogicalDisplayRemovedLocked(@NonNull LogicalDisplay display) {
         final int displayId = display.getDisplayIdLocked();
         mDisplayPowerControllers.delete(displayId);
@@ -1146,9 +1262,17 @@ public final class DisplayManagerService extends SystemService {
         mDisplayModeDirector.setShouldAlwaysRespectAppRequestedMode(enabled);
     }
 
-
     boolean shouldAlwaysRespectAppRequestedModeInternal() {
         return mDisplayModeDirector.shouldAlwaysRespectAppRequestedMode();
+    }
+
+    void setRefreshRateSwitchingTypeInternal(@DisplayManager.SwitchingType int newValue) {
+        mDisplayModeDirector.setModeSwitchingType(newValue);
+    }
+
+    @DisplayManager.SwitchingType
+    int getRefreshRateSwitchingTypeInternal() {
+        return mDisplayModeDirector.getModeSwitchingType();
     }
 
     private void setBrightnessConfigurationForUserInternal(
@@ -1554,6 +1678,12 @@ public final class DisplayManagerService extends SystemService {
         mHandler.sendMessage(msg);
     }
 
+    private void sendDisplayEventFrameRateOverrideLocked(int displayId) {
+        Message msg = mHandler.obtainMessage(MSG_DELIVER_DISPLAY_EVENT_FRAME_RATE_OVERRIDE,
+                displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
+        mHandler.sendMessage(msg);
+    }
+
     // Requests that performTraversals be called at a
     // later time to apply changes to surfaces and displays.
     private void scheduleTraversalLocked(boolean inTraversal) {
@@ -1567,7 +1697,7 @@ public final class DisplayManagerService extends SystemService {
 
     // Runs on Handler thread.
     // Delivers display event notifications to callbacks.
-    private void deliverDisplayEvent(int displayId, int event) {
+    private void deliverDisplayEvent(int displayId, ArraySet<Integer> uids, int event) {
         if (DEBUG) {
             Slog.d(TAG, "Delivering display event: displayId="
                     + displayId + ", event=" + event);
@@ -1579,12 +1709,14 @@ public final class DisplayManagerService extends SystemService {
             count = mCallbacks.size();
             mTempCallbacks.clear();
             for (int i = 0; i < count; i++) {
-                mTempCallbacks.add(mCallbacks.valueAt(i));
+                if (uids == null || uids.contains(mCallbacks.valueAt(i).mUid)) {
+                    mTempCallbacks.add(mCallbacks.valueAt(i));
+                }
             }
         }
 
         // After releasing the lock, send the notifications out.
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < mTempCallbacks.size(); i++) {
             mTempCallbacks.get(i).notifyDisplayEventAsync(displayId, event);
         }
         mTempCallbacks.clear();
@@ -1711,6 +1843,11 @@ public final class DisplayManagerService extends SystemService {
         long getDefaultDisplayDelayTimeout() {
             return WAIT_FOR_DEFAULT_DISPLAY_TIMEOUT;
         }
+
+        boolean getAllowNonNativeRefreshRateOverride() {
+            return DisplayProperties
+                    .debug_allow_non_native_refresh_rate_override().orElse(false);
+        }
     }
 
     @VisibleForTesting
@@ -1780,7 +1917,7 @@ public final class DisplayManagerService extends SystemService {
                     break;
 
                 case MSG_DELIVER_DISPLAY_EVENT:
-                    deliverDisplayEvent(msg.arg1, msg.arg2);
+                    deliverDisplayEvent(msg.arg1, null, msg.arg2);
                     break;
 
                 case MSG_REQUEST_TRAVERSAL:
@@ -1807,6 +1944,17 @@ public final class DisplayManagerService extends SystemService {
                 case MSG_LOAD_BRIGHTNESS_CONFIGURATION:
                     loadBrightnessConfiguration();
                     break;
+
+                case MSG_DELIVER_DISPLAY_EVENT_FRAME_RATE_OVERRIDE:
+                    ArraySet<Integer> uids;
+                    synchronized (mSyncRoot) {
+                        int displayId = msg.arg1;
+                        LogicalDisplay display = mLogicalDisplayMapper.getLocked(displayId);
+                        uids = display.getPendingFrameRateOverrideUids();
+                        display.clearPendingFrameRateOverrideUids();
+                    }
+                    deliverDisplayEvent(msg.arg1, uids, msg.arg2);
+                    break;
             }
         }
     }
@@ -1830,6 +1978,10 @@ public final class DisplayManagerService extends SystemService {
                 case LogicalDisplayMapper.LOGICAL_DISPLAY_EVENT_SWAPPED:
                     handleLogicalDisplaySwappedLocked(display);
                     break;
+
+                case LogicalDisplayMapper.LOGICAL_DISPLAY_EVENT_FRAME_RATE_OVERRIDES_CHANGED:
+                    handleLogicalDisplayFrameRateOverridesChangedLocked(display);
+                    break;
             }
         }
 
@@ -1843,12 +1995,14 @@ public final class DisplayManagerService extends SystemService {
 
     private final class CallbackRecord implements DeathRecipient {
         public final int mPid;
+        public final int mUid;
         private final IDisplayManagerCallback mCallback;
 
         public boolean mWifiDisplayScanRequested;
 
-        public CallbackRecord(int pid, IDisplayManagerCallback callback) {
+        CallbackRecord(int pid, int uid, IDisplayManagerCallback callback) {
             mPid = pid;
+            mUid = uid;
             mCallback = callback;
         }
 
@@ -1938,9 +2092,10 @@ public final class DisplayManagerService extends SystemService {
             }
 
             final int callingPid = Binder.getCallingPid();
+            final int callingUid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
             try {
-                registerCallbackInternal(callback, callingPid);
+                registerCallbackInternal(callback, callingPid, callingUid);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -2469,6 +2624,32 @@ public final class DisplayManagerService extends SystemService {
             }
         }
 
+        @Override // Binder call
+        public void setRefreshRateSwitchingType(int newValue) {
+            mContext.enforceCallingOrSelfPermission(
+                    Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE,
+                    "Permission required to modify refresh rate switching type.");
+            final long token = Binder.clearCallingIdentity();
+            try {
+                setRefreshRateSwitchingTypeInternal(newValue);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public int getRefreshRateSwitchingType() {
+            mContext.enforceCallingOrSelfPermission(
+                    Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE,
+                    "Permission required read refresh rate switching type.");
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return getRefreshRateSwitchingTypeInternal();
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
         private boolean validatePackageName(int uid, String packageName) {
             if (packageName != null) {
                 String[] packageNames = mContext.getPackageManager().getPackagesForUid(uid);
@@ -2552,6 +2733,13 @@ public final class DisplayManagerService extends SystemService {
             synchronized (mSyncRoot) {
                 return mDisplayPowerControllers.get(Display.DEFAULT_DISPLAY)
                         .isProximitySensorAvailable();
+            }
+        }
+
+        @Override
+        public int getDisplayGroupId(int displayId) {
+            synchronized (mSyncRoot) {
+                return mLogicalDisplayMapper.getDisplayGroupIdLocked(displayId);
             }
         }
 

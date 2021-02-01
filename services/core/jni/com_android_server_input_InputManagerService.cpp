@@ -97,7 +97,9 @@ static struct {
     jmethodID notifyInputDevicesChanged;
     jmethodID notifySwitch;
     jmethodID notifyInputChannelBroken;
-    jmethodID notifyANR;
+    jmethodID notifyNoFocusedWindowAnr;
+    jmethodID notifyConnectionUnresponsive;
+    jmethodID notifyConnectionResponsive;
     jmethodID notifyFocusChanged;
     jmethodID notifyUntrustedTouch;
     jmethodID filterInputEvent;
@@ -236,25 +238,25 @@ public:
 
     /* --- InputReaderPolicyInterface implementation --- */
 
-    virtual void getReaderConfiguration(InputReaderConfiguration* outConfig);
-    virtual std::shared_ptr<PointerControllerInterface> obtainPointerController(int32_t deviceId);
-    virtual void notifyInputDevicesChanged(const std::vector<InputDeviceInfo>& inputDevices);
-    virtual std::shared_ptr<KeyCharacterMap> getKeyboardLayoutOverlay(
-            const InputDeviceIdentifier& identifier);
-    virtual std::string getDeviceAlias(const InputDeviceIdentifier& identifier);
-    virtual TouchAffineTransformation getTouchAffineTransformation(JNIEnv *env,
-            jfloatArray matrixArr);
-    virtual TouchAffineTransformation getTouchAffineTransformation(
-            const std::string& inputDeviceDescriptor, int32_t surfaceRotation);
+    void getReaderConfiguration(InputReaderConfiguration* outConfig) override;
+    std::shared_ptr<PointerControllerInterface> obtainPointerController(int32_t deviceId) override;
+    void notifyInputDevicesChanged(const std::vector<InputDeviceInfo>& inputDevices) override;
+    std::shared_ptr<KeyCharacterMap> getKeyboardLayoutOverlay(
+            const InputDeviceIdentifier& identifier) override;
+    std::string getDeviceAlias(const InputDeviceIdentifier& identifier) override;
+    TouchAffineTransformation getTouchAffineTransformation(const std::string& inputDeviceDescriptor,
+                                                           int32_t surfaceRotation) override;
+
+    TouchAffineTransformation getTouchAffineTransformation(JNIEnv* env, jfloatArray matrixArr);
 
     /* --- InputDispatcherPolicyInterface implementation --- */
 
     void notifySwitch(nsecs_t when, uint32_t switchValues, uint32_t switchMask,
                       uint32_t policyFlags) override;
     void notifyConfigurationChanged(nsecs_t when) override;
-    std::chrono::nanoseconds notifyAnr(
-            const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle,
-            const sp<IBinder>& token, const std::string& reason) override;
+    void notifyNoFocusedWindowAnr(const std::shared_ptr<InputApplicationHandle>& handle) override;
+    void notifyConnectionUnresponsive(const sp<IBinder>& token, const std::string& reason) override;
+    void notifyConnectionResponsive(const sp<IBinder>& token) override;
     void notifyInputChannelBroken(const sp<IBinder>& token) override;
     void notifyFocusChanged(const sp<IBinder>& oldToken, const sp<IBinder>& newToken) override;
     void notifyUntrustedTouch(const std::string& obscuringPackage) override;
@@ -713,11 +715,10 @@ static jobject getInputApplicationHandleObjLocalRef(
     return handle->getInputApplicationHandleObjLocalRef(env);
 }
 
-std::chrono::nanoseconds NativeInputManager::notifyAnr(
-        const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle,
-        const sp<IBinder>& token, const std::string& reason) {
+void NativeInputManager::notifyNoFocusedWindowAnr(
+        const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle) {
 #if DEBUG_INPUT_DISPATCHER_POLICY
-    ALOGD("notifyANR");
+    ALOGD("notifyNoFocusedWindowAnr");
 #endif
     ATRACE_CALL();
 
@@ -727,17 +728,42 @@ std::chrono::nanoseconds NativeInputManager::notifyAnr(
     jobject inputApplicationHandleObj =
             getInputApplicationHandleObjLocalRef(env, inputApplicationHandle);
 
-    jobject tokenObj = javaObjectForIBinder(env, token);
-    jstring reasonObj = env->NewStringUTF(reason.c_str());
+    env->CallVoidMethod(mServiceObj, gServiceClassInfo.notifyNoFocusedWindowAnr,
+                        inputApplicationHandleObj);
+    checkAndClearExceptionFromCallback(env, "notifyNoFocusedWindowAnr");
+}
 
-    jlong newTimeout = env->CallLongMethod(mServiceObj, gServiceClassInfo.notifyANR,
-                                           inputApplicationHandleObj, tokenObj, reasonObj);
-    if (checkAndClearExceptionFromCallback(env, "notifyANR")) {
-        newTimeout = 0; // abort dispatch
-    } else {
-        assert(newTimeout >= 0);
-    }
-    return std::chrono::nanoseconds(newTimeout);
+void NativeInputManager::notifyConnectionUnresponsive(const sp<IBinder>& token,
+                                                      const std::string& reason) {
+#if DEBUG_INPUT_DISPATCHER_POLICY
+    ALOGD("notifyConnectionUnresponsive");
+#endif
+    ATRACE_CALL();
+
+    JNIEnv* env = jniEnv();
+    ScopedLocalFrame localFrame(env);
+
+    jobject tokenObj = javaObjectForIBinder(env, token);
+    ScopedLocalRef<jstring> reasonObj(env, env->NewStringUTF(reason.c_str()));
+
+    env->CallVoidMethod(mServiceObj, gServiceClassInfo.notifyConnectionUnresponsive, tokenObj,
+                        reasonObj.get());
+    checkAndClearExceptionFromCallback(env, "notifyConnectionUnresponsive");
+}
+
+void NativeInputManager::notifyConnectionResponsive(const sp<IBinder>& token) {
+#if DEBUG_INPUT_DISPATCHER_POLICY
+    ALOGD("notifyConnectionResponsive");
+#endif
+    ATRACE_CALL();
+
+    JNIEnv* env = jniEnv();
+    ScopedLocalFrame localFrame(env);
+
+    jobject tokenObj = javaObjectForIBinder(env, token);
+
+    env->CallVoidMethod(mServiceObj, gServiceClassInfo.notifyConnectionResponsive, tokenObj);
+    checkAndClearExceptionFromCallback(env, "notifyConnectionResponsive");
 }
 
 void NativeInputManager::notifyInputChannelBroken(const sp<IBinder>& token) {
@@ -1909,9 +1935,14 @@ int register_android_server_InputManager(JNIEnv* env) {
     GET_METHOD_ID(gServiceClassInfo.notifyUntrustedTouch, clazz, "notifyUntrustedTouch",
                   "(Ljava/lang/String;)V");
 
-    GET_METHOD_ID(gServiceClassInfo.notifyANR, clazz,
-            "notifyANR",
-            "(Landroid/view/InputApplicationHandle;Landroid/os/IBinder;Ljava/lang/String;)J");
+    GET_METHOD_ID(gServiceClassInfo.notifyNoFocusedWindowAnr, clazz, "notifyNoFocusedWindowAnr",
+                  "(Landroid/view/InputApplicationHandle;)V");
+
+    GET_METHOD_ID(gServiceClassInfo.notifyConnectionUnresponsive, clazz,
+                  "notifyConnectionUnresponsive", "(Landroid/os/IBinder;Ljava/lang/String;)V");
+
+    GET_METHOD_ID(gServiceClassInfo.notifyConnectionResponsive, clazz, "notifyConnectionResponsive",
+                  "(Landroid/os/IBinder;)V");
 
     GET_METHOD_ID(gServiceClassInfo.filterInputEvent, clazz,
             "filterInputEvent", "(Landroid/view/InputEvent;I)Z");

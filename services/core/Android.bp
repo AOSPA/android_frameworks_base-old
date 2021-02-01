@@ -1,7 +1,20 @@
 filegroup {
+    name: "services.core-sources-am-wm",
+    srcs: [
+        "java/com/android/server/am/**/*.java",
+        "java/com/android/server/wm/**/*.java",
+    ],
+    path: "java",
+    visibility: ["//frameworks/base/services"],
+}
+
+filegroup {
     name: "services.core-sources",
     srcs: ["java/**/*.java"],
-    exclude_srcs: [":connectivity-service-srcs"],
+    exclude_srcs: [
+        ":connectivity-service-srcs",
+        ":services.core-sources-am-wm"
+    ],
     path: "java",
     visibility: [
         "//frameworks/base/services",
@@ -13,7 +26,7 @@ genrule {
     name: "services.core.protologsrc",
     srcs: [
         ":protolog-groups",
-        ":services.core-sources",
+        ":services.core-sources-am-wm",
     ],
     tools: ["protologtool"],
     cmd: "$(location protologtool) transform-protolog-calls " +
@@ -23,7 +36,7 @@ genrule {
       "--loggroups-class com.android.internal.protolog.ProtoLogGroup " +
       "--loggroups-jar $(location :protolog-groups) " +
       "--output-srcjar $(out) " +
-      "$(locations :services.core-sources)",
+      "$(locations :services.core-sources-am-wm)",
     out: ["services.core.protolog.srcjar"],
 }
 
@@ -31,7 +44,7 @@ genrule {
     name: "generate-protolog.json",
     srcs: [
         ":protolog-groups",
-        ":services.core-sources",
+        ":services.core-sources-am-wm",
     ],
     tools: ["protologtool"],
     cmd: "$(location protologtool) generate-viewer-config " +
@@ -39,7 +52,7 @@ genrule {
       "--loggroups-class com.android.internal.protolog.ProtoLogGroup " +
       "--loggroups-jar $(location :protolog-groups) " +
       "--viewer-conf $(out) " +
-      "$(locations :services.core-sources)",
+      "$(locations :services.core-sources-am-wm)",
     out: ["services.core.protolog.json"],
 }
 
@@ -61,7 +74,12 @@ genrule {
 
 java_library_static {
     name: "services.core.unboosted",
+    defaults: [
+        "framework-wifi-vendor-hide-access-defaults",
+        "platform_service_defaults",
+    ],
     srcs: [
+        ":services.core-sources",
         ":services.core.protologsrc",
         ":dumpstate_aidl",
         ":framework_native_aidl",
@@ -74,19 +92,17 @@ java_library_static {
         ":platform-compat-config",
         ":display-device-config",
         ":cec-config",
+        ":device-state-config",
         "java/com/android/server/EventLogTags.logtags",
         "java/com/android/server/am/EventLogTags.logtags",
         "java/com/android/server/wm/EventLogTags.logtags",
         "java/com/android/server/policy/EventLogTags.logtags",
     ],
 
-    defaults: [
-        "framework-wifi-vendor-hide-access-defaults",
-    ],
-
     libs: [
         "services.net",
         "android.hardware.light-V2.0-java",
+        "android.hardware.gnss-java",
         "android.hardware.power-java",
         "android.hardware.power-V1.0-java",
         "android.hardware.vibrator-java",
@@ -134,6 +150,7 @@ java_library_static {
         "vendor.qti.hardware.servicetracker-V1.0-java",
         "vendor.qti.hardware.servicetracker-V1.2-java",
     ],
+    javac_shard_size: 50,
 }
 
 java_genrule {
@@ -151,7 +168,6 @@ java_genrule {
 
 java_library {
     name: "services.core",
-    defaults: ["platform_service_defaults"],
     static_libs: ["services.core.priorityboosted"],
 }
 
@@ -162,7 +178,7 @@ java_library_host {
 
 prebuilt_etc {
     name: "gps_debug.conf",
-    src: "java/com/android/server/location/gps_debug.conf",
+    src: "java/com/android/server/location/gnss/gps_debug.conf",
 }
 
 genrule {
@@ -176,6 +192,13 @@ genrule {
 prebuilt_etc {
     name: "protolog.conf.json.gz",
     src: ":services.core.json.gz",
+}
+
+filegroup {
+    name: "services.core-sources-deviceconfig-interface",
+    srcs: [
+         "java/com/android/server/utils/DeviceConfigInterface.java"
+    ],
 }
 
 // TODO: Move connectivity service sources to independent directory.

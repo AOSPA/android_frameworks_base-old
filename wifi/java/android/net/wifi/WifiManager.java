@@ -53,6 +53,7 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.os.WorkSource;
 import android.os.connectivity.WifiActivityEnergyInfo;
+import android.telephony.SubscriptionInfo;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.CloseGuard;
@@ -72,6 +73,7 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1577,7 +1579,7 @@ public class WifiManager {
                             new ArrayList<>(results.keySet()));
             for (WifiConfiguration configuration : wifiConfigurations) {
                 Map<Integer, List<ScanResult>> scanResultsPerNetworkType =
-                        results.get(configuration.getKey());
+                        results.get(configuration.getProfileKey());
                 if (scanResultsPerNetworkType != null) {
                     configs.add(Pair.create(configuration, scanResultsPerNetworkType));
                 }
@@ -2636,6 +2638,12 @@ public class WifiManager {
     /** @hide */
     public static final long WIFI_FEATURE_SAE_PK          = 0x10000000000L; // SAE-PK
 
+    /** @hide */
+    public static final long WIFI_FEATURE_STA_BRIDGED_AP       = 0x20000000000L; // STA + Bridged AP
+
+    /** @hide */
+    public static final long WIFI_FEATURE_BRIDGED_AP           = 0x40000000000L; // Bridged AP
+
     private long getSupportedFeatures() {
         try {
             return mService.getSupportedFeatures();
@@ -2834,6 +2842,40 @@ public class WifiManager {
             throw e.rethrowFromSystemServer();
         }
     }
+
+    /**
+     * Query whether the device supports Station (STA) + Bridged access point (AP)
+     * concurrency or not.
+     *
+     * The bridged AP support means that the device supports AP + AP concurrency with the 2 APs
+     * bridged together.
+     *
+     * See {@link SoftApConfiguration.Builder#setBands(int[])}
+     * or {@link SoftApConfiguration.Builder#setChannels(SparseIntArray)} to configure bridged AP
+     * when the bridged AP supported.
+     *
+     * @return true if this device supports STA + bridged AP concurrency, false otherwise.
+     */
+    public boolean isStaBridgedApConcurrencySupported() {
+        return isFeatureSupported(WIFI_FEATURE_STA_BRIDGED_AP);
+    }
+
+    /**
+     * Query whether the device supports Bridged Access point (AP) concurrency or not.
+     *
+     * The bridged AP support means that the device supports AP + AP concurrency with the 2 APs
+     * bridged together.
+     *
+     * See {@link SoftApConfiguration.Builder#setBands(int[])}
+     * or {@link SoftApConfiguration.Builder#setChannels(SparseIntArray)} to configure bridged AP
+     * when the bridged AP supported.
+     *
+     * @return true if this device supports bridged AP concurrency, false otherwise.
+     */
+    public boolean isBridgedApConcurrencySupported() {
+        return isFeatureSupported(WIFI_FEATURE_BRIDGED_AP);
+    }
+
 
     /**
      * Interface for Wi-Fi activity energy info listener. Should be implemented by applications and
@@ -3256,6 +3298,238 @@ public class WifiManager {
             mService.updateInterfaceIpState(ifaceName, mode);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /* Wi-Fi/Cellular Coex */
+
+    /**
+     * Mandatory coex restriction flag for Wi-Fi Direct.
+     *
+     * @see #setCoexUnsafeChannels(Set, int)
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int COEX_RESTRICTION_WIFI_DIRECT = 0x1 << 0;
+
+    /**
+     * Mandatory coex restriction flag for SoftAP
+     *
+     * @see #setCoexUnsafeChannels(Set, int)
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int COEX_RESTRICTION_SOFTAP = 0x1 << 1;
+
+    /**
+     * Mandatory coex restriction flag for Wi-Fi Aware.
+     *
+     * @see #setCoexUnsafeChannels(Set, int)
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int COEX_RESTRICTION_WIFI_AWARE = 0x1 << 2;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, prefix = {"COEX_RESTRICTION_"}, value = {
+            COEX_RESTRICTION_WIFI_DIRECT,
+            COEX_RESTRICTION_SOFTAP,
+            COEX_RESTRICTION_WIFI_AWARE
+    })
+    public @interface CoexRestriction {}
+
+    /**
+     * Specify the set of {@link CoexUnsafeChannel} to propagate through the framework for
+     * Wi-Fi/Cellular coex channel avoidance if the default algorithm is disabled via overlay
+     * (i.e. config_wifiCoexDefaultAlgorithmEnabled = false). Otherwise do nothing.
+     *
+     * @param unsafeChannels Set of {@link CoexUnsafeChannel} to avoid.
+     * @param restrictions Bitmap of {@link CoexRestriction} specifying the mandatory restricted
+     *                     uses of the specified channels. If any restrictions are set, then the
+     *                     supplied CoexUnsafeChannels will be completely avoided for the
+     *                     specified modes, rather than be avoided with best effort.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WIFI_UPDATE_COEX_UNSAFE_CHANNELS)
+    public void setCoexUnsafeChannels(@NonNull Set<CoexUnsafeChannel> unsafeChannels,
+            int restrictions) {
+        if (unsafeChannels == null) {
+            throw new IllegalArgumentException("unsafeChannels must not be null");
+        }
+        try {
+            mService.setCoexUnsafeChannels(new ArrayList<>(unsafeChannels), restrictions);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the set of current {@link CoexUnsafeChannel} being used for Wi-Fi/Cellular coex
+     * channel avoidance.
+     *
+     * This returns the set calculated by the default algorithm if
+     * config_wifiCoexDefaultAlgorithmEnabled is {@code true}. Otherwise, returns the set supplied
+     * in {@link #setCoexUnsafeChannels(Set, int)}.
+     *
+     * If any {@link CoexRestriction} flags are set in {@link #getCoexRestrictions()}, then the
+     * CoexUnsafeChannels should be totally avoided (i.e. not best effort) for the Wi-Fi modes
+     * specified by the flags.
+     *
+     * @return Set of current CoexUnsafeChannels.
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WIFI_ACCESS_COEX_UNSAFE_CHANNELS)
+    public Set<CoexUnsafeChannel> getCoexUnsafeChannels() {
+        try {
+            return new HashSet<>(mService.getCoexUnsafeChannels());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the current coex restrictions being used for Wi-Fi/Cellular coex
+     * channel avoidance.
+     *
+     * This returns the restrictions calculated by the default algorithm if
+     * config_wifiCoexDefaultAlgorithmEnabled is {@code true}. Otherwise, returns the value supplied
+     * in {@link #setCoexUnsafeChannels(Set, int)}.
+     *
+     * @return int containing a bitwise-OR combination of {@link CoexRestriction}.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WIFI_ACCESS_COEX_UNSAFE_CHANNELS)
+    public int getCoexRestrictions() {
+        try {
+            return mService.getCoexRestrictions();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Registers a CoexCallback to listen on the current CoexUnsafeChannels and restrictions being
+     * used for Wi-Fi/cellular coex channel avoidance.
+     * @param executor Executor to execute listener callback on
+     * @param callback CoexCallback to register
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WIFI_ACCESS_COEX_UNSAFE_CHANNELS)
+    public void registerCoexCallback(
+            @NonNull @CallbackExecutor Executor executor, @NonNull CoexCallback callback) {
+        if (executor == null) throw new IllegalArgumentException("executor must not be null");
+        if (callback == null) throw new IllegalArgumentException("callback must not be null");
+        CoexCallback.CoexCallbackProxy proxy = callback.getProxy();
+        proxy.initProxy(executor, callback);
+        try {
+            mService.registerCoexCallback(proxy);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Unregisters a CoexCallback from listening on the current CoexUnsafeChannels and restrictions
+     * being used for Wi-Fi/cellular coex channel avoidance.
+     * @param callback CoexCallback to unregister
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WIFI_ACCESS_COEX_UNSAFE_CHANNELS)
+    public void unregisterCoexCallback(@NonNull CoexCallback callback) {
+        if (callback == null) throw new IllegalArgumentException("callback must not be null");
+        CoexCallback.CoexCallbackProxy proxy = callback.getProxy();
+        try {
+            mService.unregisterCoexCallback(proxy);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        } finally {
+            proxy.cleanUpProxy();
+        }
+    }
+
+    /**
+     * Abstract callback class for applications to receive updates about current CoexUnsafeChannels
+     * for Wi-Fi/Cellular coex channel avoidance.
+     *
+     * @hide
+     */
+    @SystemApi
+    public abstract static class CoexCallback {
+        private final CoexCallbackProxy mCoexCallbackProxy;
+
+        public CoexCallback() {
+            mCoexCallbackProxy = new CoexCallbackProxy();
+        }
+
+        /*package*/ @NonNull
+        CoexCallbackProxy getProxy() {
+            return mCoexCallbackProxy;
+        }
+
+        /**
+         * Indicates that the current CoexUnsafeChannels or restrictions have changed.
+         * Clients should call {@link #getCoexUnsafeChannels()} and {@link #getCoexRestrictions()}
+         * to get the updated values.
+         */
+        public abstract void onCoexUnsafeChannelsChanged();
+
+        /**
+         * Callback proxy for CoexCallback objects.
+         */
+        private static class CoexCallbackProxy extends ICoexCallback.Stub {
+            private final Object mLock = new Object();
+            @Nullable @GuardedBy("mLock") private Executor mExecutor;
+            @Nullable @GuardedBy("mLock") private CoexCallback mCallback;
+
+            CoexCallbackProxy() {
+                mExecutor = null;
+                mCallback = null;
+            }
+
+            /*package*/ void initProxy(@NonNull Executor executor,
+                    @NonNull CoexCallback callback) {
+                synchronized (mLock) {
+                    mExecutor = executor;
+                    mCallback = callback;
+                }
+            }
+
+            /*package*/ void cleanUpProxy() {
+                synchronized (mLock) {
+                    mExecutor = null;
+                    mCallback = null;
+                }
+            }
+
+            @Override
+            public void onCoexUnsafeChannelsChanged() {
+                Executor executor;
+                CoexCallback callback;
+                synchronized (mLock) {
+                    executor = mExecutor;
+                    callback = mCallback;
+                }
+                if (executor == null || callback == null) {
+                    return;
+                }
+                Binder.clearCallingIdentity();
+                executor.execute(callback::onCoexUnsafeChannelsChanged);
+            }
         }
     }
 
@@ -4438,6 +4712,45 @@ public class WifiManager {
     public void connect(int networkId, @Nullable ActionListener listener) {
         if (networkId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         connectInternal(null, networkId, listener);
+    }
+
+    /**
+     * Temporarily disable autojoin for all currently visible and provisioned (saved, suggested)
+     * wifi networks except merged carrier networks from the provided subscription ID.
+     *
+     * Disabled networks will get automatically re-enabled when they are out of range for a period
+     * of time, or after the maximum disable duration specified in the framework.
+     *
+     * Calling {@link #stopTemporarilyDisablingAllNonCarrierMergedWifi()} will immediately re-enable
+     * autojoin on all disabled networks.
+     *
+     * @param subscriptionId the subscription ID of the carrier whose merged wifi networks won't be
+     *                       disabled {@link android.telephony.SubscriptionInfo#getSubscriptionId()}
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void startTemporarilyDisablingAllNonCarrierMergedWifi(int subscriptionId) {
+        try {
+            mService.startTemporarilyDisablingAllNonCarrierMergedWifi(subscriptionId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Re-enable autojoin for all non carrier merged wifi networks temporarily disconnected by
+     * {@link #startTemporarilyDisablingAllNonCarrierMergedWifi(int)}.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void stopTemporarilyDisablingAllNonCarrierMergedWifi() {
+        try {
+            mService.stopTemporarilyDisablingAllNonCarrierMergedWifi();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -5846,6 +6159,89 @@ public class WifiManager {
     }
 
     /**
+     * Easy Connect Device information maximum allowed length.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EASY_CONNECT_DEVICE_INFO_MAXIMUM_LENGTH = 40;
+
+    /**
+     * Easy Connect Cryptography Curve name: prime256v1
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EASY_CONNECT_CRYPTOGRAPHY_CURVE_PRIME256V1 = 0;
+
+    /**
+     * Easy Connect Cryptography Curve name: secp384r1
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EASY_CONNECT_CRYPTOGRAPHY_CURVE_SECP384R1 = 1;
+
+    /**
+     * Easy Connect Cryptography Curve name: secp521r1
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EASY_CONNECT_CRYPTOGRAPHY_CURVE_SECP521R1 = 2;
+
+
+    /**
+     * Easy Connect Cryptography Curve name: brainpoolP256r1
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EASY_CONNECT_CRYPTOGRAPHY_CURVE_BRAINPOOLP256R1 = 3;
+
+
+    /**
+     * Easy Connect Cryptography Curve name: brainpoolP384r1
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EASY_CONNECT_CRYPTOGRAPHY_CURVE_BRAINPOOLP384R1 = 4;
+
+
+    /**
+     * Easy Connect Cryptography Curve name: brainpoolP512r1
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EASY_CONNECT_CRYPTOGRAPHY_CURVE_BRAINPOOLP512R1 = 5;
+
+    /**
+     * Easy Connect Cryptography Curve name: default
+     * This allows framework to choose manadatory curve prime256v1.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EASY_CONNECT_CRYPTOGRAPHY_CURVE_DEFAULT =
+            EASY_CONNECT_CRYPTOGRAPHY_CURVE_PRIME256V1;
+
+    /** @hide */
+    @IntDef(prefix = {"EASY_CONNECT_CRYPTOGRAPHY_CURVE_"}, value = {
+            EASY_CONNECT_CRYPTOGRAPHY_CURVE_DEFAULT,
+            EASY_CONNECT_CRYPTOGRAPHY_CURVE_PRIME256V1,
+            EASY_CONNECT_CRYPTOGRAPHY_CURVE_SECP384R1,
+            EASY_CONNECT_CRYPTOGRAPHY_CURVE_SECP521R1,
+            EASY_CONNECT_CRYPTOGRAPHY_CURVE_BRAINPOOLP256R1,
+            EASY_CONNECT_CRYPTOGRAPHY_CURVE_BRAINPOOLP384R1,
+            EASY_CONNECT_CRYPTOGRAPHY_CURVE_BRAINPOOLP512R1,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface EasyConnectCryptographyCurve {
+    }
+
+    /**
      * Start Easy Connect (DPP) in Configurator-Initiator role. The current device will initiate
      * Easy Connect bootstrapping with a peer, and configure the peer with the SSID and password of
      * the specified network using the Easy Connect protocol on an encrypted link.
@@ -5894,6 +6290,52 @@ public class WifiManager {
         Binder binder = new Binder();
         try {
             mService.startDppAsEnrolleeInitiator(binder, configuratorUri,
+                    new EasyConnectCallbackProxy(executor, callback));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Start Easy Connect (DPP) in Enrollee-Responder role.
+     * The device will:
+     * 1. Generate a DPP bootstrap URI and return it using the
+     * {@link EasyConnectStatusCallback#onBootstrapUriGenerated(String)} method.
+     * 2. Start DPP as a Responder, waiting for an Initiator device to start the DPP
+     * authentication process.
+     * The caller should use the URI provided in step #1, for instance display it as a QR code
+     * or communicate it in some other way to the initiator device.
+     *
+     * @param deviceInfo      Device specific information to add to the DPP URI. This field allows
+     *                        the users of the configurators to identify the device.
+     *                        Optional - if not provided or in case of an empty string,
+     *                        Info field (I:) will be skipped in the generated DPP URI.
+     *                        Allowed Range of ASCII characters in deviceInfo - %x20-7E.
+     *                        semicolon and space are not allowed.
+     *                        Due to the limitation of maximum allowed characters in QR code,
+     *                        framework limits to a max of
+     *                        {@link #EASY_CONNECT_DEVICE_INFO_MAXIMUM_LENGTH} characters in
+     *                        deviceInfo.
+     *                        Violation of these rules will result in an exception.
+     * @param curve           Elliptic curve cryptography used to generate DPP
+     *                        public/private key pair. If application is not interested in a
+     *                        specific curve, choose default curve
+     *                        {@link #EASY_CONNECT_CRYPTOGRAPHY_CURVE_DEFAULT}.
+     * @param callback        Callback for status updates
+     * @param executor        The Executor on which to run the callback.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD})
+    public void startEasyConnectAsEnrolleeResponder(@Nullable String deviceInfo,
+            @EasyConnectCryptographyCurve int curve,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull EasyConnectStatusCallback callback) {
+        Binder binder = new Binder();
+        try {
+            mService.startDppAsEnrolleeResponder(binder, deviceInfo, curve,
                     new EasyConnectCallbackProxy(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -5972,6 +6414,15 @@ public class WifiManager {
             Binder.clearCallingIdentity();
             mExecutor.execute(() -> {
                 mEasyConnectStatusCallback.onProgress(status);
+            });
+        }
+
+        @Override
+        public void onBootstrapUriGenerated(String uri) {
+            Log.d(TAG, "Easy Connect onBootstrapUriGenerated callback");
+            Binder.clearCallingIdentity();
+            mExecutor.execute(() -> {
+                mEasyConnectStatusCallback.onBootstrapUriGenerated(uri);
             });
         }
     }
@@ -6148,7 +6599,6 @@ public class WifiManager {
                 executor.execute(callback::onScanResultsAvailable);
             }
         }
-
     }
 
     /**
@@ -6642,6 +7092,64 @@ public class WifiManager {
     public boolean isAutoWakeupEnabled() {
         try {
             return mService.isAutoWakeupEnabled();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the state of carrier offload on merged or unmerged networks for specified subscription.
+     *
+     * <p>
+     * When a subscription's carrier network offload is disabled, all network suggestions related to
+     * this subscription will not be considered for auto join.
+     * <p>
+     * If calling app want disable all carrier network offload from a specified subscription, should
+     * call this API twice to disable both merged and unmerged carrier network suggestions.
+     *
+     * @param subscriptionId See {@link SubscriptionInfo#getSubscriptionId()}.
+     * @param merged True for carrier merged network, false otherwise.
+     *               See {@link WifiNetworkSuggestion.Builder#setCarrierMerged(boolean)}
+     * @param enabled True for enable carrier network offload, false otherwise.
+     * @see #isCarrierNetworkOffloadEnabled(int, boolean)
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD})
+    public void setCarrierNetworkOffloadEnabled(int subscriptionId, boolean merged,
+            boolean enabled) {
+        if (!SdkLevel.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mService.setCarrierNetworkOffloadEnabled(subscriptionId, merged, enabled);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the carrier network offload state for merged or unmerged networks for specified
+     * subscription.
+     * @param subscriptionId subscription ID see {@link SubscriptionInfo#getSubscriptionId()}
+     * @param merged True for carrier merged network, false otherwise.
+     *               See {@link WifiNetworkSuggestion.Builder#setCarrierMerged(boolean)}
+     * @return True to indicate that carrier network offload is enabled, false otherwise.
+     * @see #setCarrierNetworkOffloadEnabled(int, boolean, boolean)
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD})
+    public boolean isCarrierNetworkOffloadEnabled(int subscriptionId, boolean merged) {
+        if (!SdkLevel.isAtLeastS()) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mService.isCarrierNetworkOffloadEnabled(subscriptionId, merged);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

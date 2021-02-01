@@ -198,7 +198,7 @@ TEST(RenderNodeDrawable, saveLayerClipAndMatrixRestore) {
                 EXPECT_TRUE(getRecorderMatrix(recorder).isIdentity());
 
                 // note we don't pass SaveFlags::MatrixClip, but matrix and clip will be saved
-                recorder.saveLayer(0, 0, 400, 400, &layerPaint, SaveFlags::ClipToLayer);
+                recorder.saveLayer(0, 0, 400, 400, &layerPaint);
                 ASSERT_EQ(SkRect::MakeLTRB(0, 0, 400, 400), getRecorderClipBounds(recorder));
                 EXPECT_TRUE(getRecorderMatrix(recorder).isIdentity());
 
@@ -206,7 +206,7 @@ TEST(RenderNodeDrawable, saveLayerClipAndMatrixRestore) {
                 ASSERT_EQ(SkRect::MakeLTRB(50, 50, 350, 350), getRecorderClipBounds(recorder));
 
                 recorder.translate(300.0f, 400.0f);
-                EXPECT_EQ(SkMatrix::MakeTrans(300.0f, 400.0f), getRecorderMatrix(recorder));
+                EXPECT_EQ(SkMatrix::Translate(300.0f, 400.0f), getRecorderMatrix(recorder));
 
                 recorder.restore();
                 ASSERT_EQ(SkRect::MakeLTRB(0, 0, 400, 800), getRecorderClipBounds(recorder));
@@ -1107,27 +1107,27 @@ TEST(ReorderBarrierDrawable, testShadowMatrix) {
             EXPECT_EQ(dy, TRANSLATE_Y);
         }
 
-        virtual void didSetMatrix(const SkMatrix& matrix) override {
+        virtual void didSetM44(const SkM44& matrix) override {
             mDrawCounter++;
             // First invocation is EndReorderBarrierDrawable::drawShadow to apply shadow matrix.
             // Second invocation is preparing the matrix for an elevated RenderNodeDrawable.
-            EXPECT_TRUE(matrix.isIdentity());
+            EXPECT_TRUE(matrix == SkM44());
             EXPECT_TRUE(getTotalMatrix().isIdentity());
         }
 
-        virtual void didConcat(const SkMatrix& matrix) override {
+        virtual void didConcat44(const SkM44& matrix) override {
             mDrawCounter++;
             if (mFirstDidConcat) {
                 // First invocation is EndReorderBarrierDrawable::drawShadow to apply shadow matrix.
                 mFirstDidConcat = false;
-                EXPECT_EQ(SkMatrix::MakeTrans(CASTER_X + TRANSLATE_X, CASTER_Y + TRANSLATE_Y),
+                EXPECT_EQ(SkM44::Translate(CASTER_X + TRANSLATE_X, CASTER_Y + TRANSLATE_Y),
                           matrix);
-                EXPECT_EQ(SkMatrix::MakeTrans(CASTER_X + TRANSLATE_X, CASTER_Y + TRANSLATE_Y),
+                EXPECT_EQ(SkMatrix::Translate(CASTER_X + TRANSLATE_X, CASTER_Y + TRANSLATE_Y),
                           getTotalMatrix());
             } else {
                 // Second invocation is preparing the matrix for an elevated RenderNodeDrawable.
-                EXPECT_EQ(SkMatrix::MakeTrans(TRANSLATE_X, TRANSLATE_Y), matrix);
-                EXPECT_EQ(SkMatrix::MakeTrans(TRANSLATE_X, TRANSLATE_Y), getTotalMatrix());
+                EXPECT_EQ(SkM44::Translate(TRANSLATE_X, TRANSLATE_Y), matrix);
+                EXPECT_EQ(SkMatrix::Translate(TRANSLATE_X, TRANSLATE_Y), getTotalMatrix());
             }
         }
 

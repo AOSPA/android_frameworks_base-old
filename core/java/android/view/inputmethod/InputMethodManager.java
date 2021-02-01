@@ -19,12 +19,13 @@ package android.view.inputmethod;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 import static android.util.imetracing.ImeTracing.PROTO_ARG;
-import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodEditorProto.ClientSideProto.DISPLAY_ID;
-import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodEditorProto.ClientSideProto.EDITOR_INFO;
-import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodEditorProto.ClientSideProto.IME_INSETS_SOURCE_CONSUMER;
-import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodEditorProto.ClientSideProto.INPUT_METHOD_MANAGER;
-import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodEditorProto.ClientSideProto.VIEW_ROOT_IMPL;
-import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodEditorProto.ClientsProto.CLIENT;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.DISPLAY_ID;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.EDITOR_INFO;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.IME_INSETS_SOURCE_CONSUMER;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.INPUT_CONNECTION;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.INPUT_CONNECTION_CALL;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.INPUT_METHOD_MANAGER;
+import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.VIEW_ROOT_IMPL;
 import static android.view.inputmethod.InputMethodManagerProto.ACTIVE;
 import static android.view.inputmethod.InputMethodManagerProto.CUR_ID;
 import static android.view.inputmethod.InputMethodManagerProto.FULLSCREEN_MODE;
@@ -88,8 +89,10 @@ import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.autofill.AutofillManager;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.inputmethod.Completable;
 import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
+import com.android.internal.inputmethod.ResultCallbacks;
 import com.android.internal.inputmethod.StartInputFlags;
 import com.android.internal.inputmethod.StartInputReason;
 import com.android.internal.inputmethod.UnbindReason;
@@ -576,7 +579,9 @@ public final class InputMethodManager {
                 @StartInputFlags int startInputFlags, @SoftInputModeFlags int softInputMode,
                 int windowFlags) {
             final View servedView;
-            ImeTracing.getInstance().triggerDump();
+            ImeTracing.getInstance().triggerClientDump(
+                    "InputMethodManager.DelegateImpl#startInput", InputMethodManager.this,
+                    null /* icProto */);
             synchronized (mH) {
                 mCurrentTextBoxAttribute = null;
                 mCompletions = null;
@@ -593,8 +598,32 @@ public final class InputMethodManager {
          */
         @Override
         public void finishInput() {
+            ImeTracing.getInstance().triggerClientDump(
+                    "InputMethodManager.DelegateImpl#finishInput", InputMethodManager.this,
+                    null /* icProto */);
             synchronized (mH) {
                 finishInputLocked();
+            }
+        }
+
+        /**
+         * Used by {@link ImeFocusController} to finish input connection and callback
+         * {@link InputMethodService#onFinishInput()}.
+         *
+         * This method is especially for when ImeFocusController received device screen-off event to
+         * ensure the entire finish input connection and the connection lifecycle callback to
+         * IME can be done for security concern.
+         */
+        @Override
+        public void finishInputAndReportToIme() {
+            synchronized (mH) {
+                finishInputLocked();
+                if (mCurMethod != null) {
+                    try {
+                        mCurMethod.finishInput();
+                    } catch (RemoteException e) {
+                    }
+                }
             }
         }
 
@@ -614,6 +643,10 @@ public final class InputMethodManager {
                 @SoftInputModeFlags int softInputMode, int windowFlags, boolean forceNewFocus) {
             int startInputFlags = getStartInputFlags(focusedView, 0);
             startInputFlags |= StartInputFlags.WINDOW_GAINED_FOCUS;
+
+            ImeTracing.getInstance().triggerClientDump(
+                    "InputMethodManager.DelegateImpl#startInputAsyncOnWindowFocusGain",
+                    InputMethodManager.this, null /* icProto */);
 
             final ImeFocusController controller = getFocusController();
             if (controller == null) {
@@ -644,6 +677,7 @@ public final class InputMethodManager {
                     final int startInputReason =
                             nextFocusHasConnection ? WINDOW_FOCUS_GAIN_REPORT_WITH_CONNECTION
                                     : WINDOW_FOCUS_GAIN_REPORT_WITHOUT_CONNECTION;
+                    final Completable.InputBindResult value = Completable.createInputBindResult();
                     mService.startInputOrWindowGainedFocus(
                             startInputReason, mClient,
                             focusedView.getWindowToken(), startInputFlags, softInputMode,
@@ -651,7 +685,9 @@ public final class InputMethodManager {
                             null,
                             null,
                             0 /* missingMethodFlags */,
-                            mCurRootView.mContext.getApplicationInfo().targetSdkVersion);
+                            mCurRootView.mContext.getApplicationInfo().targetSdkVersion,
+                            ResultCallbacks.of(value));
+                    Completable.getResult(value); // ignore the result
                 } catch (RemoteException e) {
                     throw e.rethrowFromSystemServer();
                 }
@@ -849,12 +885,23 @@ public final class InputMethodManager {
                 case MSG_SET_ACTIVE: {
                     final boolean active = msg.arg1 != 0;
                     final boolean fullscreen = msg.arg2 != 0;
+                    final boolean reportToImeController = msg.obj != null && (boolean) msg.obj;
                     if (DEBUG) {
                         Log.i(TAG, "handleMessage: MSG_SET_ACTIVE " + active + ", was " + mActive);
                     }
                     synchronized (mH) {
                         mActive = active;
                         mFullscreenMode = fullscreen;
+
+                        // Report active state to ImeFocusController to handle IME input
+                        // connection lifecycle callback when it allowed.
+                        final ImeFocusController controller = getFocusController();
+                        final View rootView = mCurRootView != null ? mCurRootView.getView() : null;
+                        if (controller != null && rootView != null && reportToImeController) {
+                            rootView.post(() -> controller.onInteractiveChanged(active));
+                            return;
+                        }
+
                         if (!active) {
                             // Some other client has starting using the IME, so note
                             // that this happened and make sure our own editor's
@@ -910,6 +957,9 @@ public final class InputMethodManager {
                 case MSG_APPLY_IME_VISIBILITY: {
                     synchronized (mH) {
                         if (mImeInsetsConsumer != null) {
+                            ImeTracing.getInstance().triggerClientDump(
+                                    "ImeInsetsSourceConsumer#applyImeVisibility",
+                                    InputMethodManager.this, null /* icProto */);
                             mImeInsetsConsumer.applyImeVisibility(msg.arg1 != 0);
                         }
                     }
@@ -966,9 +1016,9 @@ public final class InputMethodManager {
         private final InputMethodManager mParentInputMethodManager;
         private final WeakReference<View> mServedView;
 
-        ControlledInputConnectionWrapper(Looper mainLooper, InputConnection conn,
+        ControlledInputConnectionWrapper(Looper icLooper, InputConnection conn,
                 InputMethodManager inputMethodManager, View servedView) {
-            super(mainLooper, conn);
+            super(icLooper, conn);
             mParentInputMethodManager = inputMethodManager;
             mServedView = new WeakReference<>(servedView);
         }
@@ -976,6 +1026,11 @@ public final class InputMethodManager {
         @Override
         public boolean isActive() {
             return mParentInputMethodManager.mActive && !isFinished();
+        }
+
+        @Override
+        public InputMethodManager getIMM() {
+            return mParentInputMethodManager;
         }
 
         void deactivate() {
@@ -1013,6 +1068,18 @@ public final class InputMethodManager {
                     + " mParentInputMethodManager.mActive=" + mParentInputMethodManager.mActive
                     + " mServedView=" + mServedView.get()
                     + "}";
+        }
+
+        void dumpDebug(ProtoOutputStream proto, long fieldId) {
+            // Check that the call is initiated in the main thread of the current InputConnection
+            // {@link InputConnection#getHandler} since the messages to IInputConnectionWrapper are
+            // executed on this thread. Otherwise the messages are dispatched to the correct thread
+            // in IInputConnectionWrapper, but this is not wanted while dumpng, for performance
+            // reasons.
+            if (getInputConnection() instanceof DumpableInputConnection && Looper.myLooper()
+                    == getLooper()) {
+                ((DumpableInputConnection) getInputConnection()).dumpDebug(proto, fieldId);
+            }
         }
     }
 
@@ -1061,8 +1128,9 @@ public final class InputMethodManager {
         }
 
         @Override
-        public void setActive(boolean active, boolean fullscreen) {
-            mH.obtainMessage(MSG_SET_ACTIVE, active ? 1 : 0, fullscreen ? 1 : 0).sendToTarget();
+        public void setActive(boolean active, boolean fullscreen, boolean reportToImeController) {
+            mH.obtainMessage(MSG_SET_ACTIVE, active ? 1 : 0, fullscreen ? 1 : 0,
+                    reportToImeController).sendToTarget();
         }
 
         @Override
@@ -1662,7 +1730,8 @@ public final class InputMethodManager {
      * {@link #RESULT_HIDDEN}.
      */
     public boolean showSoftInput(View view, int flags, ResultReceiver resultReceiver) {
-        ImeTracing.getInstance().triggerDump();
+        ImeTracing.getInstance().triggerClientDump("InputMethodManager#showSoftInput", this,
+                null /* icProto */);
         // Re-dispatch if there is a context mismatch.
         final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
         if (fallbackImm != null) {
@@ -1770,7 +1839,8 @@ public final class InputMethodManager {
      */
     public boolean hideSoftInputFromWindow(IBinder windowToken, int flags,
             ResultReceiver resultReceiver) {
-        ImeTracing.getInstance().triggerDump();
+        ImeTracing.getInstance().triggerClientDump("InputMethodManager#hideSoftInputFromWindow",
+                this, null /* icProto */);
         checkFocus();
         synchronized (mH) {
             final View servedView = getServedViewLocked();
@@ -1800,6 +1870,9 @@ public final class InputMethodManager {
      * {@link #HIDE_NOT_ALWAYS} bit set.
      **/
     public void toggleSoftInputFromWindow(IBinder windowToken, int showFlags, int hideFlags) {
+        ImeTracing.getInstance().triggerClientDump(
+                "InputMethodManager#toggleSoftInputFromWindow", InputMethodManager.this,
+                null /* icProto */);
         synchronized (mH) {
             final View servedView = getServedViewLocked();
             if (servedView == null || servedView.getWindowToken() != windowToken) {
@@ -1827,6 +1900,9 @@ public final class InputMethodManager {
      * {@link #HIDE_NOT_ALWAYS} bit set.
      */
     public void toggleSoftInput(int showFlags, int hideFlags) {
+        ImeTracing.getInstance().triggerClientDump(
+                "InputMethodManager#toggleSoftInput", InputMethodManager.this,
+                null /* icProto */);
         if (mCurMethod != null) {
             try {
                 mCurMethod.toggleSoftInput(showFlags, hideFlags);
@@ -1992,10 +2068,13 @@ public final class InputMethodManager {
                 if (DEBUG) Log.v(TAG, "START INPUT: view=" + dumpViewInfo(view) + " ic="
                         + ic + " tba=" + tba + " startInputFlags="
                         + InputMethodDebug.startInputFlagsToString(startInputFlags));
-                res = mService.startInputOrWindowGainedFocus(
+                final Completable.InputBindResult value = Completable.createInputBindResult();
+                mService.startInputOrWindowGainedFocus(
                         startInputReason, mClient, windowGainingFocus, startInputFlags,
                         softInputMode, windowFlags, tba, servedContext, missingMethodFlags,
-                        view.getContext().getApplicationInfo().targetSdkVersion);
+                        view.getContext().getApplicationInfo().targetSdkVersion,
+                        ResultCallbacks.of(value));
+                res = Completable.getResult(value);
                 if (DEBUG) Log.v(TAG, "Starting input: Bind result=" + res);
                 if (res == null) {
                     Log.wtf(TAG, "startInputOrWindowGainedFocus must not return"
@@ -2173,6 +2252,8 @@ public final class InputMethodManager {
      * @hide
      */
     public void notifyImeHidden(IBinder windowToken) {
+        ImeTracing.getInstance().triggerClientDump("InputMethodManager#notifyImeHidden", this,
+                null /* icProto */);
         synchronized (mH) {
             try {
                 if (mCurMethod != null && mCurRootView != null
@@ -3240,7 +3321,7 @@ public final class InputMethodManager {
         for (String arg : args) {
             if (arg.equals(PROTO_ARG)) {
                 final ProtoOutputStream proto = new ProtoOutputStream(fd);
-                dumpProto(proto);
+                dumpDebug(proto, null /* icProto */);
                 proto.flush();
                 return true;
             }
@@ -3249,32 +3330,19 @@ public final class InputMethodManager {
     }
 
     /**
-     * Write the proto dump for all displays associated with this client.
-     *
-     * @param proto The proto stream to which the dumps are written.
-     * @hide
-     */
-    public static void dumpProto(ProtoOutputStream proto) {
-        for (int i = sInstanceMap.size() - 1; i >= 0; i--) {
-            InputMethodManager imm = sInstanceMap.valueAt(i);
-            imm.dumpDebug(proto);
-        }
-    }
-
-    /**
      * Write the proto dump of various client side components to the provided
      * {@link ProtoOutputStream}.
      *
      * @param proto The proto stream to which the dumps are written.
+     * @param icProto {@link InputConnection} call data in proto format.
      * @hide
      */
     @GuardedBy("mH")
-    public void dumpDebug(ProtoOutputStream proto) {
+    public void dumpDebug(ProtoOutputStream proto, ProtoOutputStream icProto) {
         if (mCurMethod == null) {
             return;
         }
 
-        final long clientDumpToken = proto.start(CLIENT);
         proto.write(DISPLAY_ID, mDisplayId);
         final long token = proto.start(INPUT_METHOD_MANAGER);
         synchronized (mH) {
@@ -3292,7 +3360,12 @@ public final class InputMethodManager {
             if (mImeInsetsConsumer != null) {
                 mImeInsetsConsumer.dumpDebug(proto, IME_INSETS_SOURCE_CONSUMER);
             }
+            if (mServedInputConnectionWrapper != null) {
+                mServedInputConnectionWrapper.dumpDebug(proto, INPUT_CONNECTION);
+            }
+            if (icProto != null) {
+                proto.write(INPUT_CONNECTION_CALL, icProto.getBytes());
+            }
         }
-        proto.end(clientDumpToken);
     }
 }

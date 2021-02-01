@@ -27,6 +27,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.window.DisplayAreaOrganizer.FEATURE_DEFAULT_TASK_CONTAINER;
 import static android.window.DisplayAreaOrganizer.FEATURE_FULLSCREEN_MAGNIFICATION;
 import static android.window.DisplayAreaOrganizer.FEATURE_HIDE_DISPLAY_CUTOUT;
+import static android.window.DisplayAreaOrganizer.FEATURE_IME_PLACEHOLDER;
 import static android.window.DisplayAreaOrganizer.FEATURE_ONE_HANDED;
 import static android.window.DisplayAreaOrganizer.FEATURE_WINDOWED_MAGNIFICATION;
 
@@ -34,6 +35,7 @@ import static com.android.server.wm.DisplayAreaPolicyBuilder.Feature;
 import static com.android.server.wm.DisplayAreaPolicyBuilder.HierarchyBuilder;
 
 import android.content.res.Resources;
+import android.os.Bundle;
 import android.text.TextUtils;
 
 import java.util.ArrayList;
@@ -70,6 +72,10 @@ public abstract class DisplayAreaPolicy {
      */
     public abstract void addWindow(WindowToken token);
 
+    /** Gets the {@link DisplayArea} which a {@link WindowToken} is about to be attached to. */
+    public abstract DisplayArea.Tokens getDisplayAreaForWindowToken(int type, Bundle options,
+            boolean ownerCanManageAppTokens, boolean roundedCornerOverlay);
+
     /**
      * Gets the set of {@link DisplayArea} that are created for the given feature to apply to.
      */
@@ -85,7 +91,7 @@ public abstract class DisplayAreaPolicy {
         @Override
         public DisplayAreaPolicy instantiate(WindowManagerService wmService,
                 DisplayContent content, RootDisplayArea root,
-                DisplayArea<? extends WindowContainer> imeContainer) {
+                DisplayArea.Tokens imeContainer) {
             final TaskDisplayArea defaultTaskDisplayArea = new TaskDisplayArea(content, wmService,
                     "DefaultTaskDisplayArea", FEATURE_DEFAULT_TASK_CONTAINER);
             final List<TaskDisplayArea> tdaList = new ArrayList<>();
@@ -94,6 +100,8 @@ public abstract class DisplayAreaPolicy {
             // Define the features that will be supported under the root of the whole logical
             // display. The policy will build the DisplayArea hierarchy based on this.
             HierarchyBuilder rootHierarchy = new HierarchyBuilder(root)
+                    // WindowedMagnification should be on the top so that there is only one surface
+                    // to be magnified.
                     .addFeature(new Feature.Builder(wmService.mPolicy, "WindowedMagnification",
                             FEATURE_WINDOWED_MAGNIFICATION)
                             .upTo(TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY)
@@ -120,6 +128,10 @@ public abstract class DisplayAreaPolicy {
                                     TYPE_INPUT_METHOD_DIALOG, TYPE_MAGNIFICATION_OVERLAY,
                                     TYPE_NAVIGATION_BAR, TYPE_NAVIGATION_BAR_PANEL)
                             .build())
+                    .addFeature(new Feature.Builder(wmService.mPolicy, "ImePlaceholder",
+                            FEATURE_IME_PLACEHOLDER)
+                            .and(TYPE_INPUT_METHOD, TYPE_INPUT_METHOD_DIALOG)
+                            .build())
                     .setImeContainer(imeContainer)
                     .setTaskDisplayAreas(tdaList);
 
@@ -144,7 +156,7 @@ public abstract class DisplayAreaPolicy {
          * @see DisplayAreaPolicy#DisplayAreaPolicy
          */
         DisplayAreaPolicy instantiate(WindowManagerService wmService, DisplayContent content,
-                RootDisplayArea root, DisplayArea<? extends WindowContainer> imeContainer);
+                RootDisplayArea root, DisplayArea.Tokens imeContainer);
 
         /**
          * Instantiates the device-specific {@link Provider}.

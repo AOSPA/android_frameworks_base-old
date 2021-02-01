@@ -27,7 +27,6 @@ import static com.android.server.wm.WindowOrganizerController.CONTROLLABLE_WINDO
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningTaskInfo;
-import android.app.ActivityManager.TaskDescription;
 import android.app.WindowConfiguration;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -52,7 +51,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
 
@@ -480,7 +478,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         // We want to defer the task appear signal until the task is fully created and attached to
         // to the hierarchy so that the complete starting configuration is in the task info we send
         // over to the organizer.
-        final Task task = display.getDefaultTaskDisplayArea().createStack(windowingMode,
+        final Task task = display.getDefaultTaskDisplayArea().createRootTask(windowingMode,
                 ACTIVITY_TYPE_UNDEFINED, false /* onTop */, null /* info */, new Intent(),
                 true /* createdByOrganizer */, true /* deferTaskAppear */, launchCookie);
         task.setDeferTaskAppear(false /* deferTaskAppear */);
@@ -538,18 +536,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         }
         mTmpTaskInfo.configuration.unset();
         task.fillTaskInfo(mTmpTaskInfo);
-        boolean changed = lastInfo == null
-                || mTmpTaskInfo.topActivityType != lastInfo.topActivityType
-                || mTmpTaskInfo.isResizeable != lastInfo.isResizeable
-                || !Objects.equals(
-                        mTmpTaskInfo.letterboxActivityBounds,
-                        lastInfo.letterboxActivityBounds)
-                || !Objects.equals(
-                        mTmpTaskInfo.positionInParent,
-                        lastInfo.positionInParent)
-                || mTmpTaskInfo.pictureInPictureParams != lastInfo.pictureInPictureParams
-                || mTmpTaskInfo.getWindowingMode() != lastInfo.getWindowingMode()
-                || !TaskDescription.equals(mTmpTaskInfo.taskDescription, lastInfo.taskDescription);
+        boolean changed = !mTmpTaskInfo.equalsForTaskOrganizer(lastInfo);
         if (!changed) {
             int cfgChanges = mTmpTaskInfo.configuration.diff(lastInfo.configuration);
             final int winCfgChanges = (cfgChanges & ActivityInfo.CONFIG_WINDOW_CONFIGURATION) != 0
@@ -701,8 +688,8 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
                 }
                 ArrayList<RunningTaskInfo> out = new ArrayList<>();
                 dc.forAllTaskDisplayAreas(taskDisplayArea -> {
-                    for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
-                        final Task task = taskDisplayArea.getStackAt(sNdx);
+                    for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
+                        final Task task = taskDisplayArea.getRootTaskAt(sNdx);
                         if (activityTypes != null
                                 && !ArrayUtils.contains(activityTypes, task.getActivityType())) {
                             continue;

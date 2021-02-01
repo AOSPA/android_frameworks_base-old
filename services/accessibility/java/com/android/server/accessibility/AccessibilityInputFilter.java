@@ -37,6 +37,7 @@ import com.android.server.accessibility.gestures.TouchExplorer;
 import com.android.server.accessibility.magnification.FullScreenMagnificationGestureHandler;
 import com.android.server.accessibility.magnification.MagnificationGestureHandler;
 import com.android.server.accessibility.magnification.WindowMagnificationGestureHandler;
+import com.android.server.accessibility.magnification.WindowMagnificationPromptController;
 import com.android.server.policy.WindowManagerPolicy;
 
 import java.util.ArrayList;
@@ -557,12 +558,14 @@ class AccessibilityInputFilter extends InputFilter implements EventStreamTransfo
         if (mAms.getMagnificationMode(displayId)
                 == Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW) {
             magnificationGestureHandler = new WindowMagnificationGestureHandler(displayContext,
-                    mAms.getWindowMagnificationMgr(), mAms::onMagnificationScaleChanged,
-                    detectControlGestures, triggerable, displayId);
+                    mAms.getWindowMagnificationMgr(), mAms.getMagnificationController(),
+                    detectControlGestures, triggerable,
+                    displayId);
         } else {
             magnificationGestureHandler = new FullScreenMagnificationGestureHandler(displayContext,
-                    mAms.getFullScreenMagnificationController(), mAms::onMagnificationScaleChanged,
-                    detectControlGestures, triggerable, displayId);
+                    mAms.getFullScreenMagnificationController(), mAms.getMagnificationController(),
+                    detectControlGestures, triggerable,
+                    new WindowMagnificationPromptController(displayContext, mUserId), displayId);
         }
         return magnificationGestureHandler;
     }

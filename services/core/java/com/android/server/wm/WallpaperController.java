@@ -148,7 +148,7 @@ class WallpaperController {
                 ? w.mActivityRecord.getAnimatingContainer() : null;
         final boolean keyguardGoingAwayWithWallpaper = (animatingContainer != null
                 && animatingContainer.isAnimating(TRANSITION | PARENTS)
-                && AppTransition.isKeyguardGoingAwayTransit(animatingContainer.mTransit)
+                && AppTransition.isKeyguardGoingAwayTransitOld(animatingContainer.mTransit)
                 && (animatingContainer.mTransitFlags
                 & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER) != 0);
 
@@ -502,7 +502,8 @@ class WallpaperController {
 
     private void findWallpaperTarget() {
         mFindResults.reset();
-        if (mDisplayContent.getDefaultTaskDisplayArea().isStackVisible(WINDOWING_MODE_FREEFORM)) {
+        if (mDisplayContent.getDefaultTaskDisplayArea()
+                .isRootTaskVisible(WINDOWING_MODE_FREEFORM)) {
             // In freeform mode we set the wallpaper as its own target, so we don't need an
             // additional window to make it visible.
             mFindResults.setUseTopWallpaperAsTarget(true);

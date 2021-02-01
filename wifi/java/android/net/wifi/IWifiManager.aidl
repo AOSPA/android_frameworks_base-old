@@ -24,7 +24,9 @@ import android.net.wifi.hotspot2.IProvisioningCallback;
 
 import android.net.DhcpInfo;
 import android.net.Network;
+import android.net.wifi.CoexUnsafeChannel;
 import android.net.wifi.IActionListener;
+import android.net.wifi.ICoexCallback;
 import android.net.wifi.IDppCallback;
 import android.net.wifi.ILocalOnlyHotspotCallback;
 import android.net.wifi.INetworkRequestMatchCallback;
@@ -145,6 +147,16 @@ interface IWifiManager
 
     void updateInterfaceIpState(String ifaceName, int mode);
 
+    void setCoexUnsafeChannels(in List<CoexUnsafeChannel> unsafeChannels, int mandatoryRestrictions);
+
+    List<CoexUnsafeChannel> getCoexUnsafeChannels();
+
+    int getCoexRestrictions();
+
+    void registerCoexCallback(in ICoexCallback callback);
+
+    void unregisterCoexCallback(in ICoexCallback callback);
+
     boolean startSoftAp(in WifiConfiguration wifiConfig, String packageName);
 
     boolean startTetheredHotspot(in SoftApConfiguration softApConfig, String packageName);
@@ -264,6 +276,9 @@ interface IWifiManager
     void startDppAsEnrolleeInitiator(in IBinder binder, in String configuratorUri,
         in IDppCallback callback);
 
+    void startDppAsEnrolleeResponder(in IBinder binder, in String deviceInfo, int curve,
+        in IDppCallback callback);
+
     void stopDppSession();
 
     void updateWifiUsabilityScore(int seqNum, int score, int predictionHorizonSec);
@@ -307,10 +322,17 @@ interface IWifiManager
 
     int getNetworkSuggestionUserApprovalStatus(String packageName);
 
+    void startTemporarilyDisablingAllNonCarrierMergedWifi(int subId);
+
+    void stopTemporarilyDisablingAllNonCarrierMergedWifi();
+
+    void setCarrierNetworkOffloadEnabled(int subscriptionId, boolean merged, boolean enabled);
+
+    boolean isCarrierNetworkOffloadEnabled(int subscriptionId, boolean merged);
+
     int getSoftApWifiStandard();
 
     boolean isVht8ssCapableDevice();
 
     String doDriverCmd(String command);
-
 }

@@ -36,7 +36,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
-import android.util.Slog;
+import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.widget.Toast;
@@ -76,10 +76,11 @@ public class NetworkNotificationManager {
     private static final boolean DBG = true;
 
     // Notification channels used by ConnectivityService mainline module, it should be aligned with
-    // SystemNotificationChannels.
-    public static final String NOTIFICATION_NETWORK_STATUS = "NETWORK_STATUS";
-    public static final String NOTIFICATION_NETWORK_ALERTS = "NETWORK_ALERTS";
-    public static final String NOTIFICATION_VPN = "VPN";
+    // SystemNotificationChannels so the channels are the same as the ones used as the system
+    // server.
+    public static final String NOTIFICATION_CHANNEL_NETWORK_STATUS = "NETWORK_STATUS";
+    public static final String NOTIFICATION_CHANNEL_NETWORK_ALERTS = "NETWORK_ALERTS";
+    public static final String NOTIFICATION_CHANNEL_VPN = "VPN";
 
     // The context is for the current user (system server)
     private final Context mContext;
@@ -175,7 +176,7 @@ public class NetworkNotificationManager {
         final int previousEventId = mNotificationTypeMap.get(id);
         final NotificationType previousNotifyType = NotificationType.getFromId(previousEventId);
         if (priority(previousNotifyType) > priority(notifyType)) {
-            Slog.d(TAG, String.format(
+            Log.d(TAG, String.format(
                     "ignoring notification %s for network %s with existing notification %s",
                     notifyType, id, previousNotifyType));
             return;
@@ -183,7 +184,7 @@ public class NetworkNotificationManager {
         clearNotification(id);
 
         if (DBG) {
-            Slog.d(TAG, String.format(
+            Log.d(TAG, String.format(
                     "showNotification tag=%s event=%s transport=%s name=%s highPriority=%s",
                     tag, nameOf(eventId), getTransportName(transportType), name, highPriority));
         }
@@ -253,7 +254,7 @@ public class NetworkNotificationManager {
             // are sent, but they are not implemented yet.
             return;
         } else {
-            Slog.wtf(TAG, "Unknown notification type " + notifyType + " on network transport "
+            Log.wtf(TAG, "Unknown notification type " + notifyType + " on network transport "
                     + getTransportName(transportType));
             return;
         }
@@ -264,7 +265,7 @@ public class NetworkNotificationManager {
         // the tag.
         final boolean hasPreviousNotification = previousNotifyType != null;
         final String channelId = (highPriority && !hasPreviousNotification)
-                ? NOTIFICATION_NETWORK_ALERTS : NOTIFICATION_NETWORK_STATUS;
+                ? NOTIFICATION_CHANNEL_NETWORK_ALERTS : NOTIFICATION_CHANNEL_NETWORK_STATUS;
         Notification.Builder builder = new Notification.Builder(mContext, channelId)
                 .setWhen(System.currentTimeMillis())
                 .setShowWhen(notifyType == NotificationType.NETWORK_SWITCH)
@@ -294,7 +295,7 @@ public class NetworkNotificationManager {
         try {
             mNotificationManager.notify(tag, eventId, notification);
         } catch (NullPointerException npe) {
-            Slog.d(TAG, "setNotificationVisible: visible notificationManager error", npe);
+            Log.d(TAG, "setNotificationVisible: visible notificationManager error", npe);
         }
     }
 
@@ -317,13 +318,13 @@ public class NetworkNotificationManager {
         final String tag = tagFor(id);
         final int eventId = mNotificationTypeMap.get(id);
         if (DBG) {
-            Slog.d(TAG, String.format("clearing notification tag=%s event=%s", tag,
+            Log.d(TAG, String.format("clearing notification tag=%s event=%s", tag,
                    nameOf(eventId)));
         }
         try {
             mNotificationManager.cancel(tag, eventId);
         } catch (NullPointerException npe) {
-            Slog.d(TAG, String.format(
+            Log.d(TAG, String.format(
                     "failed to clear notification tag=%s event=%s", tag, nameOf(eventId)), npe);
         }
         mNotificationTypeMap.delete(id);

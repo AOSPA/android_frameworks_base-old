@@ -1,1 +1,214 @@
 // Signature format: 2.0
+package android.app.appsearch {
+
+  public final class AppSearchBatchResult<KeyType, ValueType> {
+    method @NonNull public java.util.Map<KeyType,android.app.appsearch.AppSearchResult<ValueType>> getFailures();
+    method @NonNull public java.util.Map<KeyType,ValueType> getSuccesses();
+    method public boolean isSuccess();
+  }
+
+  public final class AppSearchResult<ValueType> {
+    method @Nullable public String getErrorMessage();
+    method public int getResultCode();
+    method @Nullable public ValueType getResultValue();
+    method public boolean isSuccess();
+    field public static final int RESULT_INTERNAL_ERROR = 2; // 0x2
+    field public static final int RESULT_INVALID_ARGUMENT = 3; // 0x3
+    field public static final int RESULT_INVALID_SCHEMA = 7; // 0x7
+    field public static final int RESULT_IO_ERROR = 4; // 0x4
+    field public static final int RESULT_NOT_FOUND = 6; // 0x6
+    field public static final int RESULT_OK = 0; // 0x0
+    field public static final int RESULT_OUT_OF_SPACE = 5; // 0x5
+    field public static final int RESULT_UNKNOWN_ERROR = 1; // 0x1
+  }
+
+  public final class AppSearchSchema {
+    method @NonNull public java.util.List<android.app.appsearch.AppSearchSchema.PropertyConfig> getProperties();
+    method @NonNull public String getSchemaType();
+  }
+
+  public static final class AppSearchSchema.Builder {
+    ctor public AppSearchSchema.Builder(@NonNull String);
+    method @NonNull public android.app.appsearch.AppSearchSchema.Builder addProperty(@NonNull android.app.appsearch.AppSearchSchema.PropertyConfig);
+    method @NonNull public android.app.appsearch.AppSearchSchema build();
+  }
+
+  public static final class AppSearchSchema.PropertyConfig {
+    method public int getCardinality();
+    method public int getDataType();
+    method public int getIndexingType();
+    method @NonNull public String getName();
+    method @Nullable public String getSchemaType();
+    method public int getTokenizerType();
+    field public static final int CARDINALITY_OPTIONAL = 2; // 0x2
+    field public static final int CARDINALITY_REPEATED = 1; // 0x1
+    field public static final int CARDINALITY_REQUIRED = 3; // 0x3
+    field public static final int DATA_TYPE_BOOLEAN = 4; // 0x4
+    field public static final int DATA_TYPE_BYTES = 5; // 0x5
+    field public static final int DATA_TYPE_DOCUMENT = 6; // 0x6
+    field public static final int DATA_TYPE_DOUBLE = 3; // 0x3
+    field public static final int DATA_TYPE_INT64 = 2; // 0x2
+    field public static final int DATA_TYPE_STRING = 1; // 0x1
+    field public static final int INDEXING_TYPE_EXACT_TERMS = 1; // 0x1
+    field public static final int INDEXING_TYPE_NONE = 0; // 0x0
+    field public static final int INDEXING_TYPE_PREFIXES = 2; // 0x2
+    field public static final int TOKENIZER_TYPE_NONE = 0; // 0x0
+    field public static final int TOKENIZER_TYPE_PLAIN = 1; // 0x1
+  }
+
+  public static final class AppSearchSchema.PropertyConfig.Builder {
+    ctor public AppSearchSchema.PropertyConfig.Builder(@NonNull String);
+    method @NonNull public android.app.appsearch.AppSearchSchema.PropertyConfig build();
+    method @NonNull public android.app.appsearch.AppSearchSchema.PropertyConfig.Builder setCardinality(int);
+    method @NonNull public android.app.appsearch.AppSearchSchema.PropertyConfig.Builder setDataType(int);
+    method @NonNull public android.app.appsearch.AppSearchSchema.PropertyConfig.Builder setIndexingType(int);
+    method @NonNull public android.app.appsearch.AppSearchSchema.PropertyConfig.Builder setSchemaType(@NonNull String);
+    method @NonNull public android.app.appsearch.AppSearchSchema.PropertyConfig.Builder setTokenizerType(int);
+  }
+
+  public class GenericDocument {
+    ctor protected GenericDocument(@NonNull android.app.appsearch.GenericDocument);
+    method public long getCreationTimestampMillis();
+    method public static int getMaxIndexedProperties();
+    method @NonNull public String getNamespace();
+    method public boolean getPropertyBoolean(@NonNull String);
+    method @Nullable public boolean[] getPropertyBooleanArray(@NonNull String);
+    method @Nullable public byte[] getPropertyBytes(@NonNull String);
+    method @Nullable public byte[][] getPropertyBytesArray(@NonNull String);
+    method @Nullable public android.app.appsearch.GenericDocument getPropertyDocument(@NonNull String);
+    method @Nullable public android.app.appsearch.GenericDocument[] getPropertyDocumentArray(@NonNull String);
+    method public double getPropertyDouble(@NonNull String);
+    method @Nullable public double[] getPropertyDoubleArray(@NonNull String);
+    method public long getPropertyLong(@NonNull String);
+    method @Nullable public long[] getPropertyLongArray(@NonNull String);
+    method @NonNull public java.util.Set<java.lang.String> getPropertyNames();
+    method @Nullable public String getPropertyString(@NonNull String);
+    method @Nullable public String[] getPropertyStringArray(@NonNull String);
+    method @NonNull public String getSchemaType();
+    method public int getScore();
+    method public long getTtlMillis();
+    method @NonNull public String getUri();
+    field public static final String DEFAULT_NAMESPACE = "";
+  }
+
+  public static class GenericDocument.Builder<BuilderType extends android.app.appsearch.GenericDocument.Builder> {
+    ctor public GenericDocument.Builder(@NonNull String, @NonNull String);
+    method @NonNull public android.app.appsearch.GenericDocument build();
+    method @NonNull public BuilderType setCreationTimestampMillis(long);
+    method @NonNull public BuilderType setNamespace(@NonNull String);
+    method @NonNull public BuilderType setPropertyBoolean(@NonNull String, @NonNull boolean...);
+    method @NonNull public BuilderType setPropertyBytes(@NonNull String, @NonNull byte[]...);
+    method @NonNull public BuilderType setPropertyDocument(@NonNull String, @NonNull android.app.appsearch.GenericDocument...);
+    method @NonNull public BuilderType setPropertyDouble(@NonNull String, @NonNull double...);
+    method @NonNull public BuilderType setPropertyLong(@NonNull String, @NonNull long...);
+    method @NonNull public BuilderType setPropertyString(@NonNull String, @NonNull java.lang.String...);
+    method @NonNull public BuilderType setScore(@IntRange(from=0, to=java.lang.Integer.MAX_VALUE) int);
+    method @NonNull public BuilderType setTtlMillis(long);
+  }
+
+  public final class GetByUriRequest {
+    method @NonNull public String getNamespace();
+    method @NonNull public java.util.Set<java.lang.String> getUris();
+  }
+
+  public static final class GetByUriRequest.Builder {
+    ctor public GetByUriRequest.Builder();
+    method @NonNull public android.app.appsearch.GetByUriRequest.Builder addUri(@NonNull java.lang.String...);
+    method @NonNull public android.app.appsearch.GetByUriRequest.Builder addUri(@NonNull java.util.Collection<java.lang.String>);
+    method @NonNull public android.app.appsearch.GetByUriRequest build();
+    method @NonNull public android.app.appsearch.GetByUriRequest.Builder setNamespace(@NonNull String);
+  }
+
+  public final class PutDocumentsRequest {
+    method @NonNull public java.util.List<android.app.appsearch.GenericDocument> getDocuments();
+  }
+
+  public static final class PutDocumentsRequest.Builder {
+    ctor public PutDocumentsRequest.Builder();
+    method @NonNull public android.app.appsearch.PutDocumentsRequest.Builder addGenericDocument(@NonNull android.app.appsearch.GenericDocument...);
+    method @NonNull public android.app.appsearch.PutDocumentsRequest.Builder addGenericDocument(@NonNull java.util.Collection<android.app.appsearch.GenericDocument>);
+    method @NonNull public android.app.appsearch.PutDocumentsRequest build();
+  }
+
+  public final class RemoveByUriRequest {
+    method @NonNull public String getNamespace();
+    method @NonNull public java.util.Set<java.lang.String> getUris();
+  }
+
+  public static final class RemoveByUriRequest.Builder {
+    ctor public RemoveByUriRequest.Builder();
+    method @NonNull public android.app.appsearch.RemoveByUriRequest.Builder addUri(@NonNull java.lang.String...);
+    method @NonNull public android.app.appsearch.RemoveByUriRequest.Builder addUri(@NonNull java.util.Collection<java.lang.String>);
+    method @NonNull public android.app.appsearch.RemoveByUriRequest build();
+    method @NonNull public android.app.appsearch.RemoveByUriRequest.Builder setNamespace(@NonNull String);
+  }
+
+  public final class SearchResult {
+    method @NonNull public android.app.appsearch.GenericDocument getDocument();
+    method @NonNull public java.util.List<android.app.appsearch.SearchResult.MatchInfo> getMatches();
+  }
+
+  public static final class SearchResult.MatchInfo {
+    method @NonNull public CharSequence getExactMatch();
+    method @NonNull public android.app.appsearch.SearchResult.MatchRange getExactMatchPosition();
+    method @NonNull public String getFullText();
+    method @NonNull public String getPropertyPath();
+    method @NonNull public CharSequence getSnippet();
+    method @NonNull public android.app.appsearch.SearchResult.MatchRange getSnippetPosition();
+  }
+
+  public static final class SearchResult.MatchRange {
+    method public int getEnd();
+    method public int getStart();
+  }
+
+  public final class SearchSpec {
+    method public int getMaxSnippetSize();
+    method @NonNull public java.util.List<java.lang.String> getNamespaces();
+    method public int getOrder();
+    method public int getRankingStrategy();
+    method public int getResultCountPerPage();
+    method @NonNull public java.util.List<java.lang.String> getSchemaTypes();
+    method public int getSnippetCount();
+    method public int getSnippetCountPerProperty();
+    method public int getTermMatch();
+    field public static final int ORDER_ASCENDING = 1; // 0x1
+    field public static final int ORDER_DESCENDING = 0; // 0x0
+    field public static final int RANKING_STRATEGY_CREATION_TIMESTAMP = 2; // 0x2
+    field public static final int RANKING_STRATEGY_DOCUMENT_SCORE = 1; // 0x1
+    field public static final int RANKING_STRATEGY_NONE = 0; // 0x0
+    field public static final int TERM_MATCH_EXACT_ONLY = 1; // 0x1
+    field public static final int TERM_MATCH_PREFIX = 2; // 0x2
+  }
+
+  public static final class SearchSpec.Builder {
+    ctor public SearchSpec.Builder();
+    method @NonNull public android.app.appsearch.SearchSpec.Builder addNamespace(@NonNull java.lang.String...);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder addNamespace(@NonNull java.util.Collection<java.lang.String>);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder addSchemaType(@NonNull java.lang.String...);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder addSchemaType(@NonNull java.util.Collection<java.lang.String>);
+    method @NonNull public android.app.appsearch.SearchSpec build();
+    method @NonNull public android.app.appsearch.SearchSpec.Builder setMaxSnippetSize(@IntRange(from=0, to=android.app.appsearch.SearchSpec.MAX_SNIPPET_SIZE_LIMIT) int);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder setOrder(int);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder setRankingStrategy(int);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder setResultCountPerPage(@IntRange(from=0, to=android.app.appsearch.SearchSpec.MAX_NUM_PER_PAGE) int);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder setSnippetCount(@IntRange(from=0, to=android.app.appsearch.SearchSpec.MAX_SNIPPET_COUNT) int);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder setSnippetCountPerProperty(@IntRange(from=0, to=android.app.appsearch.SearchSpec.MAX_SNIPPET_PER_PROPERTY_COUNT) int);
+    method @NonNull public android.app.appsearch.SearchSpec.Builder setTermMatch(int);
+  }
+
+  public final class SetSchemaRequest {
+    method @NonNull public java.util.Set<android.app.appsearch.AppSearchSchema> getSchemas();
+    method public boolean isForceOverride();
+  }
+
+  public static final class SetSchemaRequest.Builder {
+    ctor public SetSchemaRequest.Builder();
+    method @NonNull public android.app.appsearch.SetSchemaRequest.Builder addSchema(@NonNull android.app.appsearch.AppSearchSchema...);
+    method @NonNull public android.app.appsearch.SetSchemaRequest.Builder addSchema(@NonNull java.util.Collection<android.app.appsearch.AppSearchSchema>);
+    method @NonNull public android.app.appsearch.SetSchemaRequest build();
+    method @NonNull public android.app.appsearch.SetSchemaRequest.Builder setForceOverride(boolean);
+  }
+
+}
+

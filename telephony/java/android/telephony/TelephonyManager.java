@@ -78,6 +78,7 @@ import android.telephony.Annotation.CarrierPrivilegeStatus;
 import android.telephony.Annotation.NetworkType;
 import android.telephony.Annotation.RadioPowerState;
 import android.telephony.Annotation.SimActivationState;
+import android.telephony.Annotation.ThermalMitigationResult;
 import android.telephony.Annotation.UiccAppType;
 import android.telephony.CallForwardingInfo.CallForwardingReason;
 import android.telephony.VisualVoicemailService.VisualVoicemailTask;
@@ -123,6 +124,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -154,6 +156,7 @@ import java.util.function.Consumer;
 public class TelephonyManager {
     private static final String TAG = "TelephonyManager";
 
+    private TelephonyRegistryManager mTelephonyRegistryMgr;
     /**
      * To expand the error codes for {@link TelephonyManager#updateAvailableNetworks} and
      * {@link TelephonyManager#setPreferredOpportunisticDataSubscription}.
@@ -1574,177 +1577,157 @@ public class TelephonyManager {
             "android.telephony.extra.PHONE_IN_ECM_STATE";
 
     /**
-     * <p>Broadcast Action: when data connections get redirected with validation failure.
-     * intended for sim/account status checks and only sent to the specified carrier app
-     * The intent will have the following extra values:</p>
+     * Broadcast action sent when a data connection is redirected with validation failure.
+     *
+     * This action is intended for sim/account status checks and only sent to the carrier apps
+     * specified in the carrier config for the subscription ID that's attached to this intent.
+     *
+     * The intent will have the following extra values:
      * <ul>
-     *   <li>{@link #EXTRA_APN_TYPE}</li><dd>A string with the apn type.</dd>
-     *   <li>{@link #EXTRA_APN_TYPE_INT}</li><dd>A integer with the apn type.</dd>
-     *   <li>{@link #EXTRA_REDIRECTION_URL}</li><dd>redirection url string</dd>
-     *   <li>subId</li><dd>Sub Id which associated the data connection failure.</dd>
+     *   <li>{@link #EXTRA_APN_TYPE}</li><dd>An integer indicating the apn type.</dd>
+     *   <li>{@link #EXTRA_REDIRECTION_URL}</li><dd>A string indicating the redirection url</dd>
+     *   <li>{@link SubscriptionManager#EXTRA_SUBSCRIPTION_INDEX}</li>
+     *          <dd>The subscription ID on which the validation failure happened.</dd>
      * </ul>
      * <p class="note">This is a protected intent that can only be sent by the system.</p>
-     * @hide
      */
-    @SuppressLint("ActionValue")
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CARRIER_SIGNAL_REDIRECTED =
-            "com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED";
+            "android.telephony.action.CARRIER_SIGNAL_REDIRECTED";
 
     /**
-     * <p>Broadcast Action: when data connections setup fails.
-     * intended for sim/account status checks and only sent to the specified carrier app
-     * The intent will have the following extra values:</p>
+     * Broadcast action sent when a data connection setup fails.
+     *
+     * This action is intended for sim/account status checks and only sent to the carrier apps
+     * specified in the carrier config for the subscription ID that's attached to this intent.
+     *
+     * The intent will have the following extra values:
      * <ul>
-     *   <li>{@link #EXTRA_APN_TYPE}</li><dd>A string with the apn type.</dd>
-     *   <li>{@link #EXTRA_APN_TYPE_INT}</li><dd>A integer with the apn type.</dd>
-     *   <li>{@link #EXTRA_ERROR_CODE}</li><dd>A integer with dataFailCause.</dd>
-     *   <li>subId</li><dd>Sub Id which associated the data connection failure.</dd>
+     *   <li>{@link #EXTRA_APN_TYPE}</li><dd>An integer indicating the apn type.</dd>
+     *   <li>{@link #EXTRA_DATA_FAIL_CAUSE}</li><dd>A integer indicating the data fail cause.</dd>
+     *   <li>{@link SubscriptionManager#EXTRA_SUBSCRIPTION_INDEX}</li>
+     *          <dd>The subscription ID on which the data setup failure happened.</dd>
      * </ul>
      * <p class="note">This is a protected intent that can only be sent by the system. </p>
-     * @hide
      */
-    @SuppressLint("ActionValue")
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CARRIER_SIGNAL_REQUEST_NETWORK_FAILED =
-            "com.android.internal.telephony.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED";
+            "android.telephony.action.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED";
 
     /**
-     * <p>Broadcast Action: when pco value is available.
-     * intended for sim/account status checks and only sent to the specified carrier app
+     * Broadcast action sent when a PCO value becomes available from the modem.
+     *
+     * This action is intended for sim/account status checks and only sent to the carrier apps
+     * specified in the carrier config for the subscription ID that's attached to this intent.
+     *
      * The intent will have the following extra values:</p>
      * <ul>
-     *   <li>{@link #EXTRA_APN_TYPE}</li><dd>A string with the apn type.</dd>
-     *   <li>{@link #EXTRA_APN_TYPE_INT}</li><dd>A integer with the apn type.</dd>
-     *   <li>{@link #EXTRA_APN_PROTOCOL}</li><dd>A string with the protocol of the apn connection
-     *      (IP,IPV6, IPV4V6)</dd>
-     *   <li>{@link #EXTRA_APN_PROTOCOL_INT}</li><dd>A integer with the protocol of the apn
-     *      connection (IP,IPV6, IPV4V6)</dd>
-     *   <li>{@link #EXTRA_PCO_ID}</li><dd>An integer indicating the pco id for the data.</dd>
-     *   <li>{@link #EXTRA_PCO_VALUE}</li><dd>A byte array of pco data read from modem.</dd>
-     *   <li>subId</li><dd>Sub Id which associated the data connection.</dd>
+     *   <li>{@link #EXTRA_APN_TYPE}</li><dd>An integer indicating the apn type.</dd>
+     *   <li>{@link #EXTRA_APN_PROTOCOL}</li><dd>An integer indicating the protocol of the apn
+     *      connection</dd>
+     *   <li>{@link #EXTRA_PCO_ID}</li><dd>An integer indicating the PCO id for the data.</dd>
+     *   <li>{@link #EXTRA_PCO_VALUE}</li><dd>A byte array of PCO data read from modem.</dd>
+     *   <li>{@link SubscriptionManager#EXTRA_SUBSCRIPTION_INDEX}</li>
+     *          <dd>The subscription ID for which the PCO info was received.</dd>
      * </ul>
      * <p class="note">This is a protected intent that can only be sent by the system. </p>
-     * @hide
      */
-    @SuppressLint("ActionValue")
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CARRIER_SIGNAL_PCO_VALUE =
-            "com.android.internal.telephony.CARRIER_SIGNAL_PCO_VALUE";
+            "android.telephony.action.CARRIER_SIGNAL_PCO_VALUE";
 
     /**
-     * <p>Broadcast Action: when system default network available/unavailable with
-     * carrier-disabled mobile data. Intended for carrier apps to set/reset carrier actions when
-     * other network becomes system default network, Wi-Fi for example.
+     * Broadcast action sent when the availability of the system default network changes.
+     *
+     * @see ConnectivityManager#registerDefaultNetworkCallback(ConnectivityManager.NetworkCallback)
+     *
+     * This action is intended for carrier apps to set/reset carrier actions. It is only sent to the
+     * carrier apps specified in the carrier config for the subscription ID attached to this intent.
+     *
      * The intent will have the following extra values:</p>
      * <ul>
      *   <li>{@link #EXTRA_DEFAULT_NETWORK_AVAILABLE}</li>
-     *   <dd>A boolean indicates default network available.</dd>
-     *   <li>subId</li><dd>Sub Id which associated the default data.</dd>
+     *   <dd>{@code true} if the default network is now available, {@code false} otherwise.</dd>
+     *   <li>{@link SubscriptionManager#EXTRA_SUBSCRIPTION_INDEX}</li>
+     *          <dd>The subscription ID on which the default network availability changed.</dd>
      * </ul>
      * <p class="note">This is a protected intent that can only be sent by the system. </p>
-     * @hide
      */
-    @SuppressLint("ActionValue")
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CARRIER_SIGNAL_DEFAULT_NETWORK_AVAILABLE =
-            "com.android.internal.telephony.CARRIER_SIGNAL_DEFAULT_NETWORK_AVAILABLE";
+            "android.telephony.action.CARRIER_SIGNAL_DEFAULT_NETWORK_AVAILABLE";
 
     /**
-     * <p>Broadcast Action: when framework reset all carrier actions on sim load or absent.
-     * intended for carrier apps clean up (clear UI e.g.) and only sent to the specified carrier app
+     * Broadcast action sent when carrier apps should reset their internal state.
+     *
+     * Sent when certain events such as turning on/off mobile data, removing the SIM, etc. require
+     * carrier apps to reset their state.
+     *
+     * This action is intended to signal carrier apps to perform cleanup operations. It is only sent
+     * to the carrier apps specified in the carrier config for the subscription ID attached to
+     * this intent.
+     *
      * The intent will have the following extra values:</p>
      * <ul>
-     *   <li>subId</li><dd>Sub Id which associated the data connection failure.</dd>
+     *   <li>{@link SubscriptionManager#EXTRA_SUBSCRIPTION_INDEX}</li>
+     *          <dd>The subscription ID for which state should be reset.</dd>
      * </ul>
      * <p class="note">This is a protected intent that can only be sent by the system.</p>
-     * @hide
      */
-    @SuppressLint("ActionValue")
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CARRIER_SIGNAL_RESET =
-            "com.android.internal.telephony.CARRIER_SIGNAL_RESET";
+            "android.telephony.action.CARRIER_SIGNAL_RESET";
 
-    // CARRIER_SIGNAL_ACTION extra keys
     /**
-     *  An string extra of redirected url upon {@link #ACTION_CARRIER_SIGNAL_REDIRECTED}.
-     *  @hide
+     * String extra containing the redirection URL sent with
+     * {@link #ACTION_CARRIER_SIGNAL_REDIRECTED}.
      */
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_REDIRECTION_URL = "redirectionUrl";
+    public static final String EXTRA_REDIRECTION_URL = "android.telephony.extra.REDIRECTION_URL";
 
     /**
-     *  An integer extra of error code upon {@link #ACTION_CARRIER_SIGNAL_REQUEST_NETWORK_FAILED}.
-     *  Check {@link DataFailCause} for all possible values.
-     *  @hide
-     */
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_ERROR_CODE = "errorCode";
-
-    /**
-     *  An string extra of corresponding apn type upon
-     *  {@link #ACTION_CARRIER_SIGNAL_REQUEST_NETWORK_FAILED},
-     *  {@link #ACTION_CARRIER_SIGNAL_REDIRECTED} and
-     *  {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcasts.
-     *  @deprecated This is kept for backward compatibility reason. Use {@link #EXTRA_APN_TYPE_INT}
-     *  instead.
+     * An integer extra containing the data fail cause.
      *
-     *  @hide
+     * Sent with {@link #ACTION_CARRIER_SIGNAL_REQUEST_NETWORK_FAILED}. See {@link DataFailCause}
+     * for a list of possible values.
      */
-    @Deprecated
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_APN_TYPE = "apnType";
+    public static final String EXTRA_DATA_FAIL_CAUSE = "android.telephony.extra.DATA_FAIL_CAUSE";
 
     /**
-     *  An string integer of corresponding apn type upon
-     *  {@link #ACTION_CARRIER_SIGNAL_REQUEST_NETWORK_FAILED},
-     *  {@link #ACTION_CARRIER_SIGNAL_REDIRECTED} and
-     *  {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcasts.
-     *  Check {@link ApnSetting} TYPE_* for its values.
-     *  @hide
-     */
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_APN_TYPE_INT = "apnTypeInt";
-
-    /**
-     *  An string extra with the protocol of the apn connection (IP,IPV6, IPV4V6) upon
-     *  {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcasts.
-     *  @deprecated This is kept for backward compatibility reason.
-     *  Use {@link #EXTRA_APN_PROTOCOL_INT} instead.
+     * An integer extra containing the APN type.
      *
-     *  @hide
+     * Sent with the  {@link #ACTION_CARRIER_SIGNAL_REQUEST_NETWORK_FAILED},
+     * {@link #ACTION_CARRIER_SIGNAL_REDIRECTED}, and {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE}
+     * broadcasts.
+     * See the {@code TYPE_} constants in {@link ApnSetting} for a list of possible values.
      */
-    @Deprecated
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_APN_PROTOCOL = "apnProto";
+    public static final String EXTRA_APN_TYPE = "android.telephony.extra.APN_TYPE";
 
     /**
-     *  An integer extra with the protocol of the apn connection (IP,IPV6, IPV4V6) upon
-     *  {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcasts.
-     *  Check {@link ApnSetting} PROTOCOL_* for its values.
-     *  @hide
+     * An integer extra containing the protocol of the apn connection.
+     *
+     * Sent with the {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcast.
+     * See the {@code PROTOCOL_*} constants in {@link ApnSetting} for a list of possible values.
      */
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_APN_PROTOCOL_INT = "apnProtoInt";
+    public static final String EXTRA_APN_PROTOCOL = "android.telephony.extra.APN_PROTOCOL";
 
     /**
-     *  An integer extra indicating the pco id for the data upon
-     *  {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcasts.
-     *  @hide
+     * An integer extra indicating the ID for the PCO data.
+     * Sent with the {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcast.
      */
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_PCO_ID = "pcoId";
+    public static final String EXTRA_PCO_ID = "android.telephony.extra.PCO_ID";
 
     /**
-     *  An extra of byte array of pco data read from modem upon
-     *  {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcasts.
-     *  @hide
+     * A byte array extra containing PCO data read from the modem.
+     * Sent with the {@link #ACTION_CARRIER_SIGNAL_PCO_VALUE} broadcast.
      */
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_PCO_VALUE = "pcoValue";
+    public static final String EXTRA_PCO_VALUE = "android.telephony.extra.PCO_VALUE";
 
     /**
-     *  An boolean extra indicating default network available upon
-     *  {@link #ACTION_CARRIER_SIGNAL_DEFAULT_NETWORK_AVAILABLE} broadcasts.
-     *  @hide
+     * A boolean extra indicating the availability of the default network.
+     * Sent with the {@link #ACTION_CARRIER_SIGNAL_DEFAULT_NETWORK_AVAILABLE} broadcast.
      */
-    @SuppressLint("ActionValue")
-    public static final String EXTRA_DEFAULT_NETWORK_AVAILABLE = "defaultNetworkAvailable";
+    public static final String EXTRA_DEFAULT_NETWORK_AVAILABLE =
+            "android.telephony.extra.DEFAULT_NETWORK_AVAILABLE";
 
     /**
      * <p>Broadcast Action: The emergency call state is changed.
@@ -5599,12 +5582,22 @@ public class TelephonyManager {
      * @param events The telephony state(s) of interest to the listener,
      *               as a bitwise-OR combination of {@link PhoneStateListener}
      *               LISTEN_ flags.
-     * @deprecated use {@link #listen(long, PhoneStateListener) instead due to the event number
-     *             limit increased to 64.
+     * @deprecated Use {@link #registerPhoneStateListener(Executor, PhoneStateListener)}.
      */
     @Deprecated
     public void listen(PhoneStateListener listener, int events) {
-        listen(events, listener);
+        boolean notifyNow = getITelephony() != null;
+        mTelephonyRegistryMgr = mContext.getSystemService(TelephonyRegistryManager.class);
+        if (mTelephonyRegistryMgr != null) {
+            if (events != PhoneStateListener.LISTEN_NONE) {
+                mTelephonyRegistryMgr.registerPhoneStateListenerWithEvents(mSubId,
+                        getOpPackageName(), getAttributionTag(), listener, events, notifyNow);
+            } else {
+                unregisterPhoneStateListener(listener);
+            }
+        } else {
+            throw new IllegalStateException("telephony service is null.");
+        }
     }
 
     /**
@@ -5640,18 +5633,21 @@ public class TelephonyManager {
      *               LISTEN_ flags.
      * @param listener The {@link PhoneStateListener} object to register
      *                 (or unregister)
+     * @deprecated Use {@link #registerPhoneStateListener(Executor, PhoneStateListener)}.
      */
+    @Deprecated
     public void listen(long events, @NonNull PhoneStateListener listener) {
-        if (mContext == null) return;
-        boolean notifyNow = (getITelephony() != null);
-        TelephonyRegistryManager telephonyRegistry =
-                (TelephonyRegistryManager)
-                        mContext.getSystemService(Context.TELEPHONY_REGISTRY_SERVICE);
-        if (telephonyRegistry != null) {
-            telephonyRegistry.listenForSubscriber(mSubId, getOpPackageName(), getAttributionTag(),
-                    listener, events, notifyNow);
+        mTelephonyRegistryMgr = mContext.getSystemService(TelephonyRegistryManager.class);
+        if (mTelephonyRegistryMgr != null) {
+            if (events != PhoneStateListener.LISTEN_NONE) {
+                mTelephonyRegistryMgr.registerPhoneStateListenerWithEvents(mSubId,
+                        getOpPackageName(), getAttributionTag(), listener,
+                        Long.valueOf(events).intValue(), getITelephony() != null);
+            } else {
+                unregisterPhoneStateListener(listener);
+            }
         } else {
-            Rlog.w(TAG, "telephony registry not ready.");
+            throw new IllegalStateException("telephony service is null.");
         }
     }
 
@@ -8130,6 +8126,7 @@ public class TelephonyManager {
      *
      * @hide
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public boolean isInEmergencySmsMode() {
         try {
@@ -9488,7 +9485,7 @@ public class TelephonyManager {
     }
 
     /** @hide */
-    @IntDef(flag = true, prefix = { "CDMA_SUBSCRIPTION_" }, value = {
+    @IntDef(prefix = { "CDMA_SUBSCRIPTION_" }, value = {
             CDMA_SUBSCRIPTION_UNKNOWN,
             CDMA_SUBSCRIPTION_RUIM_SIM,
             CDMA_SUBSCRIPTION_NV
@@ -11718,18 +11715,6 @@ public class TelephonyManager {
     }
 
     /**
-     * In this mode, modem will not send specified indications when screen is off.
-     * @hide
-     */
-    public static final int INDICATION_UPDATE_MODE_NORMAL                   = 1;
-
-    /**
-     * In this mode, modem will still send specified indications when screen is off.
-     * @hide
-     */
-    public static final int INDICATION_UPDATE_MODE_IGNORE_SCREEN_OFF        = 2;
-
-    /**
      * The indication for signal strength update.
      * @hide
      */
@@ -12326,23 +12311,15 @@ public class TelephonyManager {
     @NonNull
     public Map<Integer, List<EmergencyNumber>> getEmergencyNumberList(
             @EmergencyServiceCategories int categories) {
-        Map<Integer, List<EmergencyNumber>> emergencyNumberList = new HashMap<>();
+        Map<Integer, List<EmergencyNumber>> emergencyNumberListForCategories = new HashMap<>();
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                emergencyNumberList = telephony.getEmergencyNumberList(
-                        mContext.getOpPackageName(), mContext.getAttributionTag());
-                if (emergencyNumberList != null) {
-                    for (Integer subscriptionId : emergencyNumberList.keySet()) {
-                        List<EmergencyNumber> numberList = emergencyNumberList.get(subscriptionId);
-                        for (EmergencyNumber number : numberList) {
-                            if (!number.isInEmergencyServiceCategories(categories)) {
-                                numberList.remove(number);
-                            }
-                        }
-                    }
-                }
-                return emergencyNumberList;
+                Map<Integer, List<EmergencyNumber>> emergencyNumberList =
+                        telephony.getEmergencyNumberList(mContext.getOpPackageName(),
+                                mContext.getAttributionTag());
+                emergencyNumberListForCategories =
+                        filterEmergencyNumbersByCategories(emergencyNumberList, categories);
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
@@ -12350,7 +12327,34 @@ public class TelephonyManager {
             Log.e(TAG, "getEmergencyNumberList with Categories RemoteException", ex);
             ex.rethrowAsRuntimeException();
         }
-        return emergencyNumberList;
+        return emergencyNumberListForCategories;
+    }
+
+    /**
+     * Filter emergency numbers with categories.
+     *
+     * @hide
+     */
+    @VisibleForTesting
+    public Map<Integer, List<EmergencyNumber>> filterEmergencyNumbersByCategories(
+            Map<Integer, List<EmergencyNumber>> emergencyNumberList,
+                    @EmergencyServiceCategories int categories) {
+        Map<Integer, List<EmergencyNumber>> emergencyNumberListForCategories = new HashMap<>();
+        if (emergencyNumberList != null) {
+            for (Integer subscriptionId : emergencyNumberList.keySet()) {
+                List<EmergencyNumber> allNumbersForSub = emergencyNumberList.get(
+                        subscriptionId);
+                List<EmergencyNumber> numbersForCategoriesPerSub = new ArrayList<>();
+                for (EmergencyNumber number : allNumbersForSub) {
+                    if (number.isInEmergencyServiceCategories(categories)) {
+                        numbersForCategoriesPerSub.add(number);
+                    }
+                }
+                emergencyNumberListForCategories.put(
+                        subscriptionId, numbersForCategoriesPerSub);
+            }
+        }
+        return emergencyNumberListForCategories;
     }
 
     /**
@@ -13203,6 +13207,37 @@ public class TelephonyManager {
                 ex.rethrowAsRuntimeException();
             }
         }
+    }
+
+    /**
+     * Get which bands the modem's background scan is acting on, specified by
+     * {@link #setSystemSelectionChannels}.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
+     * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     *
+     * @return a list of {@link RadioAccessSpecifier}, or an empty list if no bands are specified.
+     * @throws IllegalStateException if the Telephony process is not currently available.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public @NonNull List<RadioAccessSpecifier> getSystemSelectionChannels() {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.getSystemSelectionChannels(getSubId());
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+        return new ArrayList<>();
     }
 
     /**
@@ -14183,5 +14218,207 @@ public class TelephonyManager {
         }
 
         return Collections.emptyList();
+    }
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"RADIO_INTERFACE_CAPABILITY_"},
+            value = {})
+    public @interface RadioInterfaceCapability {}
+
+    /**
+     * Whether the device supports a given capability on the radio interface.
+     *
+     * If the capability is not in the set of radio interface capabilities, false is returned.
+     *
+     * @param capability the name of the capability to check for
+     * @return the availability of the capability
+     *
+     * @hide
+     */
+    public boolean isRadioInterfaceCapabilitySupported(
+            @NonNull @RadioInterfaceCapability String capability) {
+        try {
+            if (capability == null) return false;
+
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.isRadioInterfaceCapabilitySupported(capability);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Indicates that the thermal mitigation request was completed successfully.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int THERMAL_MITIGATION_RESULT_SUCCESS = 0;
+
+    /**
+     * Indicates that the thermal mitigation request was not completed because of a modem error.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int THERMAL_MITIGATION_RESULT_MODEM_ERROR = 1;
+
+    /**
+     * Indicates that the thermal mitigation request was not completed because the modem is not
+     * available.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE = 2;
+
+    /**
+     * Indicates that the thermal mitigation request could not power off the radio due to the device
+     * either being in an active voice call, device pending an emergency call, or any other state
+     * that would dissallow powering off of radio.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int THERMAL_MITIGATION_RESULT_INVALID_STATE = 3;
+
+    /**
+     * Indicates that the thermal mitigation request resulted an unknown error.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int THERMAL_MITIGATION_RESULT_UNKNOWN_ERROR = 4;
+
+    /**
+     * Thermal mitigation request to control functionalities at modem. Thermal mitigation is done
+     * per-subscription. Caller must be sure to bind the TelephonyManager instance to subId by
+     * calling {@link #createForSubscriptionId(int)} if they want thermal mitigation on a specific
+     * subscription Id. Otherwise, TelephonyManager will use the default subscription.
+     *
+     * Calling this does not guarantee that the thermal mitigation action requested was done to
+     * completion. A thermal module should actively monitor the temperature levels and request an
+     * appropriate thermal mitigation action. Every action is assumed to be done 'on top of' the
+     * previous action, where the order of actions from least thermal mitigation to most is as
+     * follows:
+     * <ol>
+     *   <li>{@link ThermalMitigationRequest#THERMAL_MITIGATION_ACTION_DATA_THROTTLING}</li>
+     *   <ol>
+     *      <li>{@link DataThrottlingRequest#DATA_THROTTLING_ACTION_NO_DATA_THROTTLING}</li>
+     *      <li>{@link DataThrottlingRequest#DATA_THROTTLING_ACTION_THROTTLE_SECONDARY_CARRIER}</li>
+     *      <li>{@link DataThrottlingRequest#DATA_THROTTLING_ACTION_THROTTLE_PRIMARY_CARRIER}</li>
+     *   </ol>
+     *   <li>{@link ThermalMitigationRequest#THERMAL_MITIGATION_ACTION_VOICE_ONLY}</li>
+     *   <li>{@link ThermalMitigationRequest#THERMAL_MITIGATION_ACTION_RADIO_OFF}</li>
+     * </ol>
+     *
+     * So, for example, requesting {@link
+     * DataThrottlingRequest#DATA_THROTTLING_ACTION_THROTTLE_PRIMARY_CARRIER} will ensure that the
+     * data on secondary carrier has been disabled before throttling on primary carrier. {@link
+     * ThermalMitigationRequest#THERMAL_MITIGATION_ACTION_VOICE_ONLY} will ensure that data on both
+     * primary and secondary have been disabled. {@link
+     * ThermalMitigationRequest#THERMAL_MITIGATION_ACTION_RADIO_OFF} will ensure that voice is
+     * disabled and that data on both primary and secondary carriers are disabled before turning
+     * radio off. {@link DataThrottlingRequest#DATA_THROTTLING_ACTION_HOLD} is not part of the order
+     * and can be used at any time during data throttling to hold onto the current level of data
+     * throttling.
+     *
+     * @param thermalMitigationRequest Thermal mitigation request. See {@link
+     * ThermalMitigationRequest} for details.
+     *
+     * @throws IllegalStateException if the Telephony process is not currently available.
+     * @throws IllegalArgumentException if the thermalMitigationRequest had invalid parameters.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @ThermalMitigationResult
+    public int sendThermalMitigationRequest(
+            @NonNull ThermalMitigationRequest thermalMitigationRequest) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.sendThermalMitigationRequest(getSubId(), thermalMitigationRequest);
+            }
+            throw new IllegalStateException("telephony service is null.");
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Telephony#thermalMitigationRequest RemoteException", ex);
+            ex.rethrowFromSystemServer();
+        }
+        return THERMAL_MITIGATION_RESULT_UNKNOWN_ERROR;
+    }
+    /**
+     * Registers a listener object to receive notification of changes
+     * in specified telephony states.
+     * <p>
+     * To register a listener, pass a {@link PhoneStateListener} which implements
+     * interfaces of events. For example,
+     * FakeServiceStateChangedListener extends {@link PhoneStateListener} implements
+     * {@link PhoneStateListener.ServiceStateChangedListener}.
+     *
+     * At registration, and when a specified telephony state changes, the telephony manager invokes
+     * the appropriate callback method on the listener object and passes the current (updated)
+     * values.
+     * <p>
+     *
+     * If this TelephonyManager object has been created with {@link #createForSubscriptionId},
+     * applies to the given subId. Otherwise, applies to
+     * {@link SubscriptionManager#getDefaultSubscriptionId()}. To listen events for multiple subIds,
+     * pass a separate listener object to each TelephonyManager object created with
+     * {@link #createForSubscriptionId}.
+     *
+     * Note: if you call this method while in the middle of a binder transaction, you <b>must</b>
+     * call {@link android.os.Binder#clearCallingIdentity()} before calling this method. A
+     * {@link SecurityException} will be thrown otherwise.
+     *
+     * This API should be used sparingly -- large numbers of listeners will cause system
+     * instability. If a process has registered too many listeners without unregistering them, it
+     * may encounter an {@link IllegalStateException} when trying to register more listeners.
+     *
+     * @param executor The executor of where the callback will execute.
+     * @param listener The {@link PhoneStateListener} object to register.
+     */
+    public void registerPhoneStateListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull PhoneStateListener listener) {
+        if (executor == null || listener == null) {
+            throw new IllegalArgumentException("PhoneStateListener and executor must be non-null");
+        }
+        mTelephonyRegistryMgr = (TelephonyRegistryManager)
+                mContext.getSystemService(Context.TELEPHONY_REGISTRY_SERVICE);
+        if (mTelephonyRegistryMgr != null) {
+            mTelephonyRegistryMgr.registerPhoneStateListener(executor, mSubId,
+                    getOpPackageName(), getAttributionTag(), listener, getITelephony() != null);
+        } else {
+            throw new IllegalStateException("telephony service is null.");
+        }
+    }
+
+    /**
+     * Unregister an existing {@link PhoneStateListener}.
+     *
+     * @param listener The {@link PhoneStateListener} object to unregister.
+     */
+    public void unregisterPhoneStateListener(@NonNull PhoneStateListener listener) {
+
+        if (mContext == null) {
+            throw new IllegalStateException("telephony service is null.");
+        }
+
+        mTelephonyRegistryMgr = mContext.getSystemService(TelephonyRegistryManager.class);
+        if (mTelephonyRegistryMgr != null) {
+            mTelephonyRegistryMgr.unregisterPhoneStateListener(mSubId, getOpPackageName(),
+                    getAttributionTag(), listener, getITelephony() != null);
+        } else {
+            throw new IllegalStateException("telephony service is null.");
+        }
     }
 }

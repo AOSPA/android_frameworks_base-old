@@ -17,10 +17,10 @@
 package android.widget;
 
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
-import static android.view.OnReceiveContentListener.Payload.FLAG_CONVERT_TO_PLAIN_TEXT;
-import static android.view.OnReceiveContentListener.Payload.SOURCE_AUTOFILL;
-import static android.view.OnReceiveContentListener.Payload.SOURCE_CLIPBOARD;
-import static android.view.OnReceiveContentListener.Payload.SOURCE_PROCESS_TEXT;
+import static android.view.ContentInfo.FLAG_CONVERT_TO_PLAIN_TEXT;
+import static android.view.ContentInfo.SOURCE_AUTOFILL;
+import static android.view.ContentInfo.SOURCE_CLIPBOARD;
+import static android.view.ContentInfo.SOURCE_PROCESS_TEXT;
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_RENDERING_INFO_KEY;
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_LENGTH;
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX;
@@ -146,6 +146,7 @@ import android.util.TypedValue;
 import android.view.AccessibilityIterators.TextSegmentIterator;
 import android.view.ActionMode;
 import android.view.Choreographer;
+import android.view.ContentInfo;
 import android.view.ContextMenu;
 import android.view.DragEvent;
 import android.view.Gravity;
@@ -154,7 +155,6 @@ import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
-import android.view.OnReceiveContentListener.Payload;
 import android.view.PointerIcon;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -742,8 +742,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private boolean mLocalesChanged = false;
     private int mTextSizeUnit = -1;
 
-    // True if force bold text feature is enabled. This feature makes all text bolder.
-    private boolean mForceBoldTextEnabled;
+    // This is used to reflect the current user preference for changing font weight and making text
+    // more bold.
+    private int mFontWeightAdjustment;
     private Typeface mOriginalTypeface;
 
     // True if setKeyListener() has been explicitly called
@@ -963,6 +964,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @hide
      */
     public static void preloadFontCache() {
+        if (Typeface.ENABLE_LAZY_TYPEFACE_INITIALIZATION) {
+            return;
+        }
         Paint p = new Paint();
         p.setAntiAlias(true);
         // Ensure that the Typeface is loaded here.
@@ -1647,8 +1651,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             attributes.mTypefaceIndex = MONOSPACE;
         }
 
-        mForceBoldTextEnabled = getContext().getResources().getConfiguration().forceBoldText
-                == Configuration.FORCE_BOLD_TEXT_YES;
+        mFontWeightAdjustment = getContext().getResources().getConfiguration().fontWeightAdjustment;
         applyTextAppearance(attributes);
 
         if (isPassword) {
@@ -2151,8 +2154,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 if (result != null) {
                     if (isTextEditable()) {
                         ClipData clip = ClipData.newPlainText("", result);
-                        Payload payload = new Payload.Builder(clip, SOURCE_PROCESS_TEXT).build();
-                        onReceiveContent(payload);
+                        ContentInfo payload =
+                                new ContentInfo.Builder(clip, SOURCE_PROCESS_TEXT).build();
+                        performReceiveContent(payload);
                         if (mEditor != null) {
                             mEditor.refreshTextActionMode();
                         }
@@ -4273,12 +4277,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 invalidate();
             }
         }
-        if (newConfig.forceBoldText == Configuration.FORCE_BOLD_TEXT_YES) {
-            mForceBoldTextEnabled = true;
-            setTypeface(getTypeface());
-        } else  if (newConfig.forceBoldText == Configuration.FORCE_BOLD_TEXT_NO
-                || newConfig.forceBoldText == Configuration.FORCE_BOLD_TEXT_UNDEFINED) {
-            mForceBoldTextEnabled = false;
+        if (mFontWeightAdjustment != newConfig.fontWeightAdjustment) {
+            mFontWeightAdjustment = newConfig.fontWeightAdjustment;
             setTypeface(getTypeface());
         }
     }
@@ -4433,12 +4433,18 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     public void setTypeface(@Nullable Typeface tf) {
         mOriginalTypeface = tf;
-        if (mForceBoldTextEnabled) {
-            int newWeight = tf != null ? tf.getWeight() + 300 : 400;
-            newWeight = Math.min(newWeight, 1000);
-            int typefaceStyle = tf != null ? tf.getStyle() : 0;
-            boolean italic = (typefaceStyle & Typeface.ITALIC) != 0;
-            tf = Typeface.create(tf, newWeight, italic);
+        if (mFontWeightAdjustment != 0
+                && mFontWeightAdjustment != Configuration.FONT_WEIGHT_ADJUSTMENT_UNDEFINED) {
+            if (tf == null) {
+                tf = Typeface.DEFAULT;
+            } else {
+                int newWeight = Math.min(
+                        Math.max(tf.getWeight() + mFontWeightAdjustment, FontStyle.FONT_WEIGHT_MIN),
+                        FontStyle.FONT_WEIGHT_MAX);
+                int typefaceStyle = tf != null ? tf.getStyle() : 0;
+                boolean italic = (typefaceStyle & Typeface.ITALIC) != 0;
+                tf = Typeface.create(tf, newWeight, italic);
+            }
         }
         if (mTextPaint.getTypeface() != tf) {
             mTextPaint.setTypeface(tf);
@@ -11855,8 +11861,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     + " cannot be autofilled into " + this);
             return;
         }
-        final Payload payload = new Payload.Builder(clip, SOURCE_AUTOFILL).build();
-        onReceiveContent(payload);
+        final ContentInfo payload = new ContentInfo.Builder(clip, SOURCE_AUTOFILL).build();
+        performReceiveContent(payload);
     }
 
     @Override
@@ -12922,10 +12928,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (clip == null) {
             return;
         }
-        final Payload payload = new Payload.Builder(clip, SOURCE_CLIPBOARD)
+        final ContentInfo payload = new ContentInfo.Builder(clip, SOURCE_CLIPBOARD)
                 .setFlags(withFormatting ? 0 : FLAG_CONVERT_TO_PLAIN_TEXT)
                 .build();
-        onReceiveContent(payload);
+        performReceiveContent(payload);
         sLastCutCopyOrTextChangedTime = 0;
     }
 
@@ -13726,30 +13732,25 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Receives the given content. Clients wishing to provide custom behavior should configure a
-     * listener via {@link #setOnReceiveContentListener}.
+     * Default {@link TextView} implementation for receiving content. Apps wishing to provide
+     * custom behavior should configure a listener via {@link #setOnReceiveContentListener}.
      *
-     * <p>If a listener is set, invokes the listener. If the listener returns a non-null result,
-     * executes the default platform handling for the portion of the content returned by the
-     * listener.
-     *
-     * <p>If no listener is set, executes the default platform behavior. For non-editable TextViews
-     * the default behavior is a no-op (returns the passed-in content without acting on it). For
-     * editable TextViews the default behavior coerces all content to text and inserts into the
-     * view.
+     * <p>For non-editable TextViews the default behavior is a no-op (returns the passed-in
+     * content without acting on it). For editable TextViews the default behavior coerces all
+     * content to text and inserts into the view.
      *
      * @param payload The content to insert and related metadata.
      *
      * @return The portion of the passed-in content that was not handled (may be all, some, or none
      * of the passed-in content).
      */
+    @Nullable
     @Override
-    public @Nullable Payload onReceiveContent(@NonNull Payload payload) {
-        Payload remaining = super.onReceiveContent(payload);
-        if (remaining != null && mEditor != null) {
-            return mEditor.getDefaultOnReceiveContentListener().onReceiveContent(this, remaining);
+    public ContentInfo onReceiveContent(@NonNull ContentInfo payload) {
+        if (mEditor != null) {
+            return mEditor.getDefaultOnReceiveContentListener().onReceiveContent(this, payload);
         }
-        return remaining;
+        return payload;
     }
 
     private static void logCursor(String location, @Nullable String msgFormat, Object ... msgArgs) {

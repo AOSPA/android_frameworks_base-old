@@ -130,6 +130,13 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     }
 
     /**
+     * Get the height of the logout button.
+     */
+    public int getOwnerInfoHeight() {
+        return mView.getOwnerInfoHeight();
+    }
+
+    /**
      * Set keyguard status view alpha.
      */
     public void setAlpha(float alpha) {
@@ -186,7 +193,7 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     /**
      * Update position of the view with an optional animation
      */
-    public void updatePosition(int x, int y, boolean animate) {
+    public void updatePosition(int x, int y, float scale, boolean animate) {
         PropertyAnimator.setProperty(mView, AnimatableProperty.Y, y, CLOCK_ANIMATION_PROPERTIES,
                 animate);
 
@@ -195,10 +202,12 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             PropertyAnimator.setProperty(mView, AnimatableProperty.X, 0,
                     CLOCK_ANIMATION_PROPERTIES, animate);
 
-            mKeyguardClockSwitchController.updatePosition(x, CLOCK_ANIMATION_PROPERTIES, animate);
+            mKeyguardClockSwitchController.updatePosition(x, scale, CLOCK_ANIMATION_PROPERTIES,
+                    animate);
         } else {
             // reset any prior movement
-            mKeyguardClockSwitchController.updatePosition(0, CLOCK_ANIMATION_PROPERTIES, animate);
+            mKeyguardClockSwitchController.updatePosition(0, 0f, CLOCK_ANIMATION_PROPERTIES,
+                    animate);
 
             PropertyAnimator.setProperty(mView, AnimatableProperty.X, x,
                     CLOCK_ANIMATION_PROPERTIES, animate);
@@ -297,6 +306,15 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             mLockScreenMode = mode;
             mKeyguardClockSwitchController.updateLockScreenMode(mode);
             mKeyguardSliceViewController.updateLockScreenMode(mode);
+            if (mLockScreenMode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_LAYOUT_1) {
+                // align the top of keyguard_status_area with the top of the clock text instead
+                // of the top of the view
+                mKeyguardSliceViewController.updateTopMargin(
+                        mKeyguardClockSwitchController.getClockTextTopPadding());
+            } else {
+                // reset margin
+                mKeyguardSliceViewController.updateTopMargin(0);
+            }
             updateAodIcons();
         }
 
@@ -308,6 +326,11 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         @Override
         public void onTimeZoneChanged(TimeZone timeZone) {
             mKeyguardClockSwitchController.updateTimeZone(timeZone);
+        }
+
+        @Override
+        public void onTimeFormatChanged(String timeFormat) {
+            mKeyguardClockSwitchController.refreshFormat(timeFormat);
         }
 
         @Override

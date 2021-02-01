@@ -564,7 +564,16 @@ public final class SoftApConfiguration implements Parcelable {
         if (!SdkLevel.isAtLeastS()) {
             throw new UnsupportedOperationException();
         }
-        return mChannels;
+        return getChannelsInternal();
+    }
+
+    /**
+     * Internal version bypassing SdkLevel checks
+     * TODO(b/173791707): find a better way to allow Wifi to call its own new S APIs.
+     * @hide
+     */
+    public @NonNull SparseIntArray getChannelsInternal() {
+        return mChannels.clone();
     }
 
     /**
@@ -980,6 +989,9 @@ public final class SoftApConfiguration implements Parcelable {
          * on the requested bands (if possible).
          * <p>
          *
+         * Use {@link WifiManager#isBridgedApConcurrencySupported()} to determine
+         * whether or not concurrent APs are supported.
+         *
          * @param bands Array of the {@link #BandType}.
          * @return Builder for chaining.
          * @throws IllegalArgumentException when more than 2 bands are set or an invalid band type
@@ -1051,6 +1063,9 @@ public final class SoftApConfiguration implements Parcelable {
          * Valid channels are country dependent.
          * The {@link SoftApCapability#getSupportedChannelList(int)} can be used to obtain
          * valid channels in each band.
+         *
+         * Use {@link WifiManager#isBridgedApConcurrencySupported()} to determine
+         * whether or not concurrent APs are supported.
          *
          * <p>
          * If not set, the default for the channel is the special value 0 which has the framework

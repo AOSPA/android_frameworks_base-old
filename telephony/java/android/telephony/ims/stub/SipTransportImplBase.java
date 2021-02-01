@@ -17,6 +17,7 @@
 package android.telephony.ims.stub;
 
 import android.annotation.NonNull;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.os.Binder;
 import android.os.IBinder;
@@ -32,7 +33,6 @@ import android.telephony.ims.aidl.SipDelegateAidlWrapper;
 import android.util.Log;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 
@@ -58,11 +58,11 @@ public class SipTransportImplBase {
 
     private final ISipTransport.Stub mSipTransportImpl = new ISipTransport.Stub() {
         @Override
-        public void createSipDelegate(DelegateRequest request, ISipDelegateStateCallback dc,
-                ISipDelegateMessageCallback mc) {
+        public void createSipDelegate(int subId, DelegateRequest request,
+                ISipDelegateStateCallback dc, ISipDelegateMessageCallback mc) {
             final long token = Binder.clearCallingIdentity();
             try {
-                mBinderExecutor.execute(() -> createSipDelegateInternal(request, dc, mc));
+                mBinderExecutor.execute(() -> createSipDelegateInternal(subId, request, dc, mc));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -99,23 +99,26 @@ public class SipTransportImplBase {
     /**
      * Called by the Telephony framework to request the creation of a new {@link SipDelegate}.
      * <p>
-     * The implementation must call {@link DelegateStateCallback#onCreated(SipDelegate, List)} with
+     * The implementation must call
+     * {@link DelegateStateCallback#onCreated(SipDelegate, java.util.Set)} with
      * the {@link SipDelegate} that is associated with the {@link DelegateRequest}.
      * <p>
      * This method will be called on the Executor specified in
      * {@link SipTransportImplBase#SipTransportImplBase(Executor)}.
      *
+     * @param subscriptionId The subscription ID associated with the requested {@link SipDelegate}.
      * @param request A SIP delegate request containing the parameters that the remote RCS
      * application wishes to use.
      * @param dc A callback back to the remote application to be used to communicate state callbacks
      *           for the SipDelegate.
      * @param mc A callback back to the remote application to be used to send SIP messages to the
      *           remote application and acknowledge the sending of outgoing SIP messages.
-     * @hide
      */
-    public void createSipDelegate(@NonNull DelegateRequest request,
+    // executor used is defined in the constructor.
+    @SuppressLint("ExecutorRegistration")
+    public void createSipDelegate(int subscriptionId, @NonNull DelegateRequest request,
             @NonNull DelegateStateCallback dc, @NonNull DelegateMessageCallback mc) {
-        throw new UnsupportedOperationException("destroySipDelegate not implemented!");
+        throw new UnsupportedOperationException("createSipDelegate not implemented!");
     }
 
     /**
@@ -129,18 +132,17 @@ public class SipTransportImplBase {
      * @param delegate The delegate to be destroyed.
      * @param reason The reason the remote connection to this {@link SipDelegate} is being
      *         destroyed.
-     * @hide
      */
     public void destroySipDelegate(@NonNull SipDelegate delegate,
             @SipDelegateManager.SipDelegateDestroyReason int reason) {
         throw new UnsupportedOperationException("destroySipDelegate not implemented!");
     }
 
-    private void createSipDelegateInternal(DelegateRequest r, ISipDelegateStateCallback cb,
-            ISipDelegateMessageCallback mc) {
+    private void createSipDelegateInternal(int subId, DelegateRequest r,
+            ISipDelegateStateCallback cb, ISipDelegateMessageCallback mc) {
         SipDelegateAidlWrapper wrapper = new SipDelegateAidlWrapper(mBinderExecutor, cb, mc);
         mDelegates.add(wrapper);
-        createSipDelegate(r, wrapper, wrapper);
+        createSipDelegate(subId, r, wrapper, wrapper);
     }
 
     private void destroySipDelegateInternal(ISipDelegate d, int reason) {

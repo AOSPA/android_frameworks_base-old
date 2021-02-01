@@ -17,7 +17,6 @@
 package com.android.systemui.qs;
 
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
-import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 
 import android.content.Context;
 import android.content.res.Configuration;
@@ -62,7 +61,7 @@ public class QSContainerImpl extends FrameLayout {
     private float mQsExpansion;
     private QSCustomizer mQSCustomizer;
     private View mDragHandle;
-    private View mQSPanelContainer;
+    private NonInterceptingScrollView mQSPanelContainer;
 
     private View mBackground;
 
@@ -127,18 +126,12 @@ public class QSContainerImpl extends FrameLayout {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         // QSPanel will show as many rows as it can (up to TileLayout.MAX_ROWS) such that the
         // bottom and footer are inside the screen.
-        Configuration config = getResources().getConfiguration();
-        boolean navBelow = config.smallestScreenWidthDp >= 600
-                || config.orientation != Configuration.ORIENTATION_LANDSCAPE;
         MarginLayoutParams layoutParams = (MarginLayoutParams) mQSPanelContainer.getLayoutParams();
 
         // The footer is pinned to the bottom of QSPanel (same bottoms), therefore we don't need to
         // subtract its height. We do not care if the collapsed notifications fit in the screen.
         int maxQs = getDisplayHeight() - layoutParams.topMargin - layoutParams.bottomMargin
                 - getPaddingBottom();
-        if (navBelow) {
-            maxQs -= getResources().getDimensionPixelSize(R.dimen.navigation_bar_height);
-        }
 
         int padding = mPaddingLeft + mPaddingRight + layoutParams.leftMargin
                 + layoutParams.rightMargin;
@@ -184,7 +177,8 @@ public class QSContainerImpl extends FrameLayout {
         mBackground.setVisibility(mQsDisabled ? View.GONE : View.VISIBLE);
     }
 
-    void updateResources(QSPanelController qsPanelController) {
+    void updateResources(QSPanelController qsPanelController,
+            QuickStatusBarHeaderController quickStatusBarHeaderController) {
         LayoutParams layoutParams = (LayoutParams) mQSPanelContainer.getLayoutParams();
         layoutParams.topMargin = mContext.getResources().getDimensionPixelSize(
                 com.android.internal.R.dimen.quick_qs_offset_height);
@@ -196,7 +190,7 @@ public class QSContainerImpl extends FrameLayout {
         boolean marginsChanged = padding != mContentPadding;
         mContentPadding = padding;
         if (marginsChanged) {
-            updatePaddingsAndMargins(qsPanelController);
+            updatePaddingsAndMargins(qsPanelController, quickStatusBarHeaderController);
         }
     }
 
@@ -217,12 +211,13 @@ public class QSContainerImpl extends FrameLayout {
 
     public void updateExpansion(boolean animate) {
         int height = calculateContainerHeight();
+        int scrollBottom = calculateContainerBottom();
         setBottom(getTop() + height);
-        mQSDetail.setBottom(getTop() + height);
+        mQSDetail.setBottom(getTop() + scrollBottom);
         // Pin the drag handle to the bottom of the panel.
-        mDragHandle.setTranslationY(height - mDragHandle.getHeight());
+        mDragHandle.setTranslationY(scrollBottom - mDragHandle.getHeight());
         mBackground.setTop(mQSPanelContainer.getTop());
-        updateBackgroundBottom(height, animate);
+        updateBackgroundBottom(scrollBottom, animate);
     }
 
     private void updateBackgroundBottom(int height, boolean animated) {
@@ -246,13 +241,23 @@ public class QSContainerImpl extends FrameLayout {
                 + mHeader.getHeight();
     }
 
+    int calculateContainerBottom() {
+        int heightOverride = mHeightOverride != -1 ? mHeightOverride : getMeasuredHeight();
+        return mQSCustomizer.isCustomizing() ? mQSCustomizer.getHeight()
+                : Math.round(mQsExpansion
+                        * (heightOverride + mQSPanelContainer.getScrollRange()
+                                - mQSPanelContainer.getScrollY() - mHeader.getHeight()))
+                        + mHeader.getHeight();
+    }
+
     public void setExpansion(float expansion) {
         mQsExpansion = expansion;
         mDragHandle.setAlpha(1.0f - expansion);
         updateExpansion();
     }
 
-    private void updatePaddingsAndMargins(QSPanelController qsPanelController) {
+    private void updatePaddingsAndMargins(QSPanelController qsPanelController,
+            QuickStatusBarHeaderController quickStatusBarHeaderController) {
         for (int i = 0; i < getChildCount(); i++) {
             View view = getChildAt(i);
             if (view == mQSCustomizer) {
@@ -271,7 +276,7 @@ public class QSContainerImpl extends FrameLayout {
             } else if (view == mHeader) {
                 // The header contains the QQS panel which needs to have special padding, to
                 // visually align them.
-                mHeader.setContentMargins(mContentPadding, mContentPadding);
+                quickStatusBarHeaderController.setContentMargins(mContentPadding, mContentPadding);
             } else {
                 view.setPaddingRelative(
                         mContentPadding,

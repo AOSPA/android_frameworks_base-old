@@ -358,7 +358,7 @@ public final class DisplayManagerGlobal {
                     // listener.
                     DisplayInfo display = getDisplayInfoLocked(displayId);
                     if (display != null) {
-                        float refreshRate = display.getMode().getRefreshRate();
+                        float refreshRate = display.getRefreshRate();
                         // Signal native callbacks if we ever set a refresh rate.
                         nSignalNativeCallbacks(refreshRate);
                     }
@@ -725,6 +725,33 @@ public final class DisplayManagerGlobal {
         }
     }
 
+    /**
+     * Sets the refresh rate switching type.
+     *
+     * @hide
+     */
+    public void setRefreshRateSwitchingType(@DisplayManager.SwitchingType int newValue) {
+        try {
+            mDm.setRefreshRateSwitchingType(newValue);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the refresh rate switching type.
+     *
+     * @hide
+     */
+    @DisplayManager.SwitchingType
+    public int getRefreshRateSwitchingType() {
+        try {
+            return mDm.getRefreshRateSwitchingType();
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
     private final class DisplayManagerCallback extends IDisplayManagerCallback.Stub {
         @Override
         public void onDisplayEvent(int displayId, int event) {
@@ -862,7 +889,7 @@ public final class DisplayManagerGlobal {
             if (display != null) {
                 // We need to tell AChoreographer instances the current refresh rate so that apps
                 // can get it for free once a callback first registers.
-                float refreshRate = display.getMode().getRefreshRate();
+                float refreshRate = display.getRefreshRate();
                 nSignalNativeCallbacks(refreshRate);
             }
         }

@@ -35,6 +35,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
@@ -647,6 +648,8 @@ public class WindowStateTests extends WindowTestsBase {
         win1.mSurfaceControl = mock(SurfaceControl.class);
         win1.mAttrs.surfaceInsets.set(1, 2, 3, 4);
         win1.getFrame().offsetTo(WINDOW_OFFSET, 0);
+        // Simulate layout
+        win1.mRelayoutCalled = true;
         win1.updateSurfacePosition(t);
         win1.getTransformationMatrix(values, matrix);
 
@@ -729,6 +732,39 @@ public class WindowStateTests extends WindowTestsBase {
         assertEquals(0L, handle.dispatchingTimeoutMillis);
         assertEquals(WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL,
                 handle.inputFeatures);
+    }
+
+    @Test
+    public void testHasActiveVisibleWindow() {
+        final int uid = ActivityBuilder.DEFAULT_FAKE_UID;
+        mAtm.mActiveUids.onUidActive(uid, 0 /* any proc state */);
+
+        final WindowState app = createWindow(null, TYPE_APPLICATION, "app", uid);
+        app.mActivityRecord.setVisible(false);
+        app.mActivityRecord.setVisibility(false /* visible */, false /* deferHidingClient */);
+        assertFalse(mAtm.hasActiveVisibleWindow(uid));
+
+        app.mActivityRecord.setVisibility(true /* visible */, false /* deferHidingClient */);
+        assertTrue(mAtm.hasActiveVisibleWindow(uid));
+
+        // Make the activity invisible and add a visible toast. The uid should have no active
+        // visible window because toast can be misused by legacy app to bypass background check.
+        app.mActivityRecord.setVisibility(false /* visible */, false /* deferHidingClient */);
+        final WindowState overlay = createWindow(null, TYPE_APPLICATION_OVERLAY, "overlay", uid);
+        final WindowState toast = createWindow(null, TYPE_TOAST, app.mToken, "toast", uid);
+        toast.onSurfaceShownChanged(true);
+        assertFalse(mAtm.hasActiveVisibleWindow(uid));
+
+        // Though starting window should belong to system. Make sure it is ignored to avoid being
+        // allow-list unexpectedly, see b/129563343.
+        final WindowState starting =
+                createWindow(null, TYPE_APPLICATION_STARTING, app.mToken, "starting", uid);
+        starting.onSurfaceShownChanged(true);
+        assertFalse(mAtm.hasActiveVisibleWindow(uid));
+
+        // Make the application overlay window visible. It should be a valid active visible window.
+        overlay.onSurfaceShownChanged(true);
+        assertTrue(mAtm.hasActiveVisibleWindow(uid));
     }
 
     @UseTestDisplay(addWindows = W_ACTIVITY)
