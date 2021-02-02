@@ -230,13 +230,31 @@ public interface BluetoothProfile {
      * @hide
      */
     public int BROADCAST = 25;
+
+   /**
+     * BC_PROFILE
+     * @hide
+     */
+    public static final int BC_PROFILE = 26;
+
+    /**
+     * PC_PROFILE
+     * @hide
+     */
+    public static final int PC_PROFILE = 27;
+
+   /**
+     * CC_SERVER
+     * @hide
+     */
+    public static final int CC_SERVER = 28;
     /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
      * the largest value assigned to a profile.
      *
      * @hide
      */
-    int MAX_PROFILE_ID = 25;
+    int MAX_PROFILE_ID = 28;
 
     /**
      * Default priority for devices that we try to auto-connect to and
