@@ -19,7 +19,6 @@ package com.android.server.wm;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
@@ -28,14 +27,12 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
-import static android.app.WindowConfiguration.isSplitScreenWindowingMode;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
-import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
 import static com.android.server.wm.ActivityTaskManagerService.TAG_ROOT_TASK;
 import static com.android.server.wm.DisplayContent.alwaysCreateRootTask;
 import static com.android.server.wm.Task.ActivityState.DESTROYED;
@@ -49,24 +46,24 @@ import android.annotation.Nullable;
 import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
-import android.content.pm.ApplicationInfo;
-import android.os.IBinder;
 import android.os.UserHandle;
 import android.util.BoostFramework;
 import android.util.IntArray;
 import android.util.Slog;
 import android.view.SurfaceControl;
+import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -124,8 +121,18 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
 
     private RootWindowContainer mRootWindowContainer;
 
-    // When non-null, new tasks get put into this root task.
-    Task mLaunchRootTask = null;
+    // Launch root tasks by activityType then by windowingMode.
+    static private class LaunchRootTaskDef {
+        Task task;
+        int[] windowingModes;
+        int[] activityTypes;
+
+        boolean contains(int windowingMode, int activityType) {
+            return ArrayUtils.contains(windowingModes, windowingMode)
+                    && ArrayUtils.contains(activityTypes, activityType);
+        }
+    }
+    private final ArrayList<LaunchRootTaskDef> mLaunchRootTasks = new ArrayList<>();
 
     /**
      * A focusable stack that is purposely to be positioned at the top. Although the stack may not
@@ -133,9 +140,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      * target stack properly when there are other focusable always-on-top stacks.
      */
     Task mPreferredTopFocusableRootTask;
-
-    private final RootWindowContainer.FindTaskResult
-            mTmpFindTaskResult = new RootWindowContainer.FindTaskResult();
 
     /**
      * If this is the same as {@link #getFocusedRootTask} then the activity on the top of the
@@ -1003,11 +1007,11 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      * Returns an existing stack compatible with the windowing mode and activity type or creates one
      * if a compatible stack doesn't exist.
      *
-     * @see #getOrCreateRootTask(int, int, boolean, Intent, Task)
+     * @see #getOrCreateRootTask(int, int, boolean, Intent, Task, ActivityOptions)
      */
     Task getOrCreateRootTask(int windowingMode, int activityType, boolean onTop) {
         return getOrCreateRootTask(windowingMode, activityType, onTop, null /* intent */,
-                null /* candidateTask */);
+                null /* candidateTask */, null /* options */);
     }
 
     /**
@@ -1020,7 +1024,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      * @see #createRootTask(int, int, boolean)
      */
     Task getOrCreateRootTask(int windowingMode, int activityType, boolean onTop,
-            Intent intent, Task candidateTask) {
+            Intent intent, Task candidateTask, ActivityOptions options) {
         // Need to pass in a determined windowing mode to see if a new stack should be created,
         // so use its parent's windowing mode if it is undefined.
         if (!alwaysCreateRootTask(
@@ -1033,7 +1037,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         } else if (candidateTask != null) {
             final Task stack = candidateTask;
             final int position = onTop ? POSITION_TOP : POSITION_BOTTOM;
-            Task launchRootTask = updateLaunchRootTask(windowingMode);
+            final Task launchRootTask = getLaunchRootTask(windowingMode, activityType, options);
 
             if (launchRootTask != null) {
                 if (stack.getParent() == null) {
@@ -1054,8 +1058,14 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             }
             return stack;
         }
-        return createRootTask(windowingMode, activityType, onTop, null /*info*/, intent,
-                false /* createdByOrganizer */);
+        return new Task.Builder(mAtmService)
+                .setWindowingMode(windowingMode)
+                .setActivityType(activityType)
+                .setOnTop(onTop)
+                .setParent(this)
+                .setIntent(intent)
+                .setActivityOptions(options)
+                .build();
     }
 
     /**
@@ -1075,7 +1085,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         // it's display's windowing mode.
         windowingMode = validateWindowingMode(windowingMode, r, candidateTask, activityType);
         return getOrCreateRootTask(windowingMode, activityType, onTop, null /* intent */,
-                candidateTask);
+                candidateTask, options);
     }
 
     @VisibleForTesting
@@ -1084,144 +1094,79 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     }
 
     Task createRootTask(int windowingMode, int activityType, boolean onTop) {
-        return createRootTask(windowingMode, activityType, onTop, null /* info */,
-                null /* intent */, false /* createdByOrganizer */);
-    }
-
-    Task createRootTask(int windowingMode, int activityType, boolean onTop, ActivityInfo info,
-            Intent intent, boolean createdByOrganizer) {
-        return createRootTask(windowingMode, activityType, onTop, null /* info */,
-                null /* intent */, false /* createdByOrganizer */, false /* deferTaskAppear */,
-                null /* launchCookie */);
+        return createRootTask(windowingMode, activityType, onTop, null /* activityOptions */);
     }
 
     /**
-     * Creates a stack matching the input windowing mode and activity type on this display.
+     * A convinenit method of creating a root task by providing windowing mode and activity type
+     * on this display.
      *
-     * @param windowingMode      The windowing mode the stack should be created in. If
-     *                           {@link WindowConfiguration#WINDOWING_MODE_UNDEFINED} then the stack
-     *                           will
-     *                           inherit its parent's windowing mode.
-     * @param activityType       The activityType the stack should be created in. If
-     *                           {@link WindowConfiguration#ACTIVITY_TYPE_UNDEFINED} then the stack
-     *                           will
-     *                           be created in {@link WindowConfiguration#ACTIVITY_TYPE_STANDARD}.
-     * @param onTop              If true the stack will be created at the top of the display, else
-     *                           at the bottom.
-     * @param info               The started activity info.
-     * @param intent             The intent that started this task.
-     * @param createdByOrganizer @{code true} if this is created by task organizer, @{code false}
-     *                           otherwise.
-     * @param deferTaskAppear    @{code true} if the task appeared signal should be deferred.
-     * @param launchCookie       Launch cookie used for tracking/association of the task we are
-     *                           creating.
-     * @return The newly created stack.
+     * @param windowingMode      The windowing mode the root task should be created in. If
+     *                           {@link WindowConfiguration#WINDOWING_MODE_UNDEFINED} then the
+     *                           root task will inherit its parent's windowing mode.
+     * @param activityType       The activityType the root task should be created in. If
+     *                           {@link WindowConfiguration#ACTIVITY_TYPE_UNDEFINED} then the
+     *                           root task will be created in
+     *                           {@link WindowConfiguration#ACTIVITY_TYPE_STANDARD}.
+     * @param onTop              If true the root task will be created at the top of the display,
+     *                           else at the bottom.
+     * @param opts               The activity options.
+     * @return The newly created root task.
      */
-    Task createRootTask(int windowingMode, int activityType, boolean onTop, ActivityInfo info,
-            Intent intent, boolean createdByOrganizer, boolean deferTaskAppear,
-            IBinder launchCookie) {
-        if (activityType == ACTIVITY_TYPE_UNDEFINED && !createdByOrganizer) {
-            // Can't have an undefined stack type yet...so re-map to standard. Anyone that wants
-            // anything else should be passing it in anyways...except for the task organizer.
-            activityType = ACTIVITY_TYPE_STANDARD;
-        }
-
-        if (activityType != ACTIVITY_TYPE_STANDARD && activityType != ACTIVITY_TYPE_UNDEFINED) {
-            // For now there can be only one stack of a particular non-standard activity type on a
-            // display. So, get that ignoring whatever windowing mode it is currently in.
-            Task stack = getRootTask(WINDOWING_MODE_UNDEFINED, activityType);
-            if (stack != null) {
-                throw new IllegalArgumentException("Stack=" + stack + " of activityType="
-                        + activityType + " already on display=" + this + ". Can't have multiple.");
-            }
-        }
-
-        if (!isWindowingModeSupported(windowingMode, mAtmService.mSupportsMultiWindow,
-                mAtmService.mSupportsSplitScreenMultiWindow,
-                mAtmService.mSupportsFreeformWindowManagement,
-                mAtmService.mSupportsPictureInPicture, activityType)) {
-            throw new IllegalArgumentException("Can't create stack for unsupported windowingMode="
-                    + windowingMode);
-        }
-
-        if (windowingMode == WINDOWING_MODE_PINNED && getRootPinnedTask() != null) {
-            // Only 1 stack can be PINNED at a time, so dismiss the existing one
-            getRootPinnedTask().dismissPip();
-        }
-
-        final int stackId = getNextRootTaskId();
-        return createRootTaskUnchecked(windowingMode, activityType, stackId, onTop, info, intent,
-                createdByOrganizer, deferTaskAppear, launchCookie);
+    Task createRootTask(int windowingMode, int activityType, boolean onTop, ActivityOptions opts) {
+        return new Task.Builder(mAtmService)
+                .setWindowingMode(windowingMode)
+                .setActivityType(activityType)
+                .setParent(this)
+                .setOnTop(onTop)
+                .setActivityOptions(opts)
+                .build();
     }
 
-    /** @return the root task to create the next task in. */
-    private Task updateLaunchRootTask(int windowingMode) {
-        if (!isSplitScreenWindowingMode(windowingMode)) {
-            // Only split-screen windowing modes can do this currently...
-            return null;
-        }
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowContainer child = mChildren.get(i);
-            if (child.asTaskDisplayArea() != null) {
-                final Task t = child.asTaskDisplayArea().updateLaunchRootTask(windowingMode);
-                if (t != null) {
-                    return t;
-                }
-                continue;
-            }
-
-            final Task t = mChildren.get(i).asTask();
-            if (t == null || !t.mCreatedByOrganizer
-                    || t.getRequestedOverrideWindowingMode() != windowingMode) {
-                continue;
-            }
-            // If not already set, pick a launch root which is not the one we are launching into.
-            if (mLaunchRootTask == null) {
-                for (int j = 0, n = mChildren.size(); j < n; ++j) {
-                    final Task tt = mChildren.get(j).asTask();
-                    if (tt != null && tt.mCreatedByOrganizer && tt != t) {
-                        mLaunchRootTask = tt;
-                        break;
-                    }
-                }
-            }
-            return t;
-        }
-        return mLaunchRootTask;
-    }
-
-    @VisibleForTesting
-    Task createRootTaskUnchecked(int windowingMode, int activityType, int stackId, boolean onTop,
-            ActivityInfo info, Intent intent, boolean createdByOrganizer, boolean deferTaskAppear,
-            IBinder launchCookie) {
-        if (windowingMode == WINDOWING_MODE_PINNED && activityType != ACTIVITY_TYPE_STANDARD) {
-            throw new IllegalArgumentException("Stack with windowing mode cannot with non standard "
-                    + "activity type.");
-        }
-        if (info == null) {
-            info = new ActivityInfo();
-            info.applicationInfo = new ApplicationInfo();
+    // TODO: Also clear when task is removed from system?
+    void setLaunchRootTask(Task rootTask, int[] windowingModes, int[] activityTypes) {
+        if (!rootTask.mCreatedByOrganizer) {
+            throw new IllegalArgumentException(
+                    "Can't set not mCreatedByOrganizer as launch root tr=" + rootTask);
         }
 
-        // Task created by organizer are added as root.
-        Task launchRootTask = createdByOrganizer ? null : updateLaunchRootTask(windowingMode);
-        if (launchRootTask != null) {
-            // Since this stack will be put into a root task, its windowingMode will be inherited.
-            windowingMode = WINDOWING_MODE_UNDEFINED;
+        LaunchRootTaskDef def = null;
+        for (int i = mLaunchRootTasks.size() - 1; i >= 0; --i) {
+            if (mLaunchRootTasks.get(i).task.mTaskId != rootTask.mTaskId) continue;
+            def = mLaunchRootTasks.get(i);
         }
 
-        final Task stack = new Task(mAtmService, stackId, activityType,
-                info, intent, createdByOrganizer, deferTaskAppear, launchCookie);
-        if (launchRootTask != null) {
-            launchRootTask.addChild(stack, onTop ? POSITION_TOP : POSITION_BOTTOM);
-            if (onTop) {
-                positionChildAt(POSITION_TOP, launchRootTask, false /* includingParents */);
-            }
+        if (def != null) {
+            // Remove so we add to the end of the list.
+            mLaunchRootTasks.remove(def);
         } else {
-            addChild(stack, onTop ? POSITION_TOP : POSITION_BOTTOM);
-            stack.setWindowingMode(windowingMode, true /* creating */);
+            def = new LaunchRootTaskDef();
+            def.task = rootTask;
         }
-        return stack;
+
+        def.activityTypes = activityTypes;
+        def.windowingModes = windowingModes;
+        if (!ArrayUtils.isEmpty(windowingModes) || !ArrayUtils.isEmpty(activityTypes)) {
+            mLaunchRootTasks.add(def);
+        }
+    }
+
+    Task getLaunchRootTask(int windowingMode, int activityType, ActivityOptions options) {
+        // Try to use the launch root task in options if available.
+        if (options != null) {
+            final Task launchRootTask = Task.fromWindowContainerToken(options.getLaunchRootTask());
+            // We only allow this for created by organizer tasks.
+            if (launchRootTask != null && launchRootTask.mCreatedByOrganizer) {
+                return launchRootTask;
+            }
+        }
+
+        for (int i = mLaunchRootTasks.size() - 1; i >= 0; --i) {
+            if (mLaunchRootTasks.get(i).contains(windowingMode, activityType)) {
+                return mLaunchRootTasks.get(i).task;
+            }
+        }
+        return null;
     }
 
     /**
@@ -1340,7 +1285,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         }
 
         mLastFocusedRootTask = prevFocusedTask;
-        EventLogTags.writeWmFocusedStack(mRootWindowContainer.mCurrentUser,
+        EventLogTags.writeWmFocusedRootTask(mRootWindowContainer.mCurrentUser,
                 mDisplayContent.mDisplayId,
                 currentFocusedTask == null ? -1 : currentFocusedTask.getRootTaskId(),
                 mLastFocusedRootTask == null ? -1 : mLastFocusedRootTask.getRootTaskId(),
@@ -1441,57 +1386,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         }
     }
 
-    /**
-     * Find task for putting the Activity in.
-     */
-    void findTaskLocked(final ActivityRecord r, final boolean isPreferredDisplayArea,
-            RootWindowContainer.FindTaskResult result) {
-        mTmpFindTaskResult.clear();
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final Task rootTask = mChildren.get(i).asTask();
-            if (rootTask == null) {
-                continue;
-            }
-            if (!r.hasCompatibleActivityType(rootTask) && rootTask.isLeafTask()) {
-                ProtoLog.d(WM_DEBUG_TASKS, "Skipping rootTask: (mismatch activity/rootTask) "
-                        + "%s", rootTask);
-                continue;
-            }
-
-            mTmpFindTaskResult.process(r, rootTask);
-            // It is possible to have tasks in multiple root tasks with the same root affinity, so
-            // we should keep looking after finding an affinity match to see if there is a
-            // better match in another root task. Also, task affinity isn't a good enough reason
-            // to target a display which isn't the source of the intent, so skip any affinity
-            // matches not on the specified display.
-            if (mTmpFindTaskResult.mRecord != null) {
-                if (mTmpFindTaskResult.mIdealMatch) {
-                    if(mTmpFindTaskResult.mRecord.getState() == DESTROYED) {
-                        /*It's a new app launch */
-                        acquireAppLaunchPerfLock(r);
-                    }
-
-                    if(mTmpFindTaskResult.mRecord.getState() == STOPPED) {
-                        /*Warm launch */
-                        acquireUxPerfLock(BoostFramework.UXE_EVENT_SUB_LAUNCH, r.packageName);
-                    }
-                    result.setTo(mTmpFindTaskResult);
-                    return;
-                } else if (isPreferredDisplayArea) {
-                    // Note: since the traversing through the root tasks is top down, the floating
-                    // tasks should always have lower priority than any affinity-matching tasks
-                    // in the fullscreen root tasks
-                    result.setTo(mTmpFindTaskResult);
-                }
-            }
-        }
-
-        /* Acquire perf lock *only* during new app launch */
-        if ((mTmpFindTaskResult.mRecord == null) || (mTmpFindTaskResult.mRecord.getState() == DESTROYED)) {
-            acquireAppLaunchPerfLock(r);
-        }
-    }
-
     void onSplitScreenModeDismissed() {
         // The focused task could be a non-resizeable fullscreen root task that is on top of the
         // other split-screen tasks, therefore had to dismiss split-screen, make sure the current
@@ -1505,7 +1399,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     void onSplitScreenModeDismissed(Task toTop) {
         mAtmService.deferWindowLayout();
         try {
-            mLaunchRootTask = null;
             moveSplitScreenTasksToFullScreen();
         } finally {
             final Task topFullscreenStack = toTop != null
@@ -1556,7 +1449,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      * @param activityType        The activity type under consideration.
      * @return true if the windowing mode is supported.
      */
-    private boolean isWindowingModeSupported(int windowingMode, boolean supportsMultiWindow,
+    static boolean isWindowingModeSupported(int windowingMode, boolean supportsMultiWindow,
             boolean supportsSplitScreen, boolean supportsFreeform, boolean supportsPip,
             int activityType) {
 
@@ -2022,9 +1915,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         // Keep the order from bottom to top.
         int numRootTasks = mChildren.size();
 
-        final boolean splitScreenActivated = toDisplayArea.isSplitScreenModeActivated();
-        final Task splitScreenRoot = splitScreenActivated ? toDisplayArea
-                .getTopRootTaskInWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY) : null;
         for (int i = 0; i < numRootTasks; i++) {
             final WindowContainer child = mChildren.get(i);
             if (child.asTaskDisplayArea() != null) {
@@ -2040,10 +1930,12 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
                     || task.mCreatedByOrganizer) {
                 task.finishAllActivitiesImmediately();
             } else {
-                // Reparent the root task to the root task of secondary-split-screen or display
-                // area.
-                task.reparent(task.supportsSplitScreenWindowingMode() && splitScreenRoot != null
-                        ? splitScreenRoot : toDisplayArea, POSITION_TOP);
+                // Reparent task to corresponding launch root or display area.
+                final WindowContainer launchRoot = task.supportsSplitScreenWindowingMode()
+                        ? toDisplayArea.getLaunchRootTask(
+                                task.getWindowingMode(), task.getActivityType(), null /* options */)
+                        : null;
+                task.reparent(launchRoot == null ? toDisplayArea : launchRoot, POSITION_TOP);
 
                 // Set the windowing mode to undefined by default to let the root task inherited the
                 // windowing mode.
@@ -2055,14 +1947,19 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             i -= numRootTasks - mChildren.size();
             numRootTasks = mChildren.size();
         }
-        if (lastReparentedRootTask != null && splitScreenActivated) {
-            if (!lastReparentedRootTask.supportsSplitScreenWindowingMode()) {
+
+        if (lastReparentedRootTask != null) {
+            if (toDisplayArea.isSplitScreenModeActivated()
+                    && !lastReparentedRootTask.supportsSplitScreenWindowingMode()) {
+                // Dismiss split screen if the last reparented root task doesn't support split mode.
                 mAtmService.getTaskChangeNotificationController()
                         .notifyActivityDismissingDockedStack();
                 toDisplayArea.onSplitScreenModeDismissed(lastReparentedRootTask);
-            } else if (splitScreenRoot != null) {
-                // update focus
-                splitScreenRoot.moveToFront("display-removed");
+            } else if (!lastReparentedRootTask.isRootTask()) {
+                // Update focus when the last reparented root task is not a root task anymore.
+                // (For example, if it has been reparented to a split screen root task, move the
+                // focus to the split root task)
+                lastReparentedRootTask.getRootTask().moveToFront("display-removed");
             }
         }
 
@@ -2072,7 +1969,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     }
 
     /** Whether this task display area can request orientation. */
-    @VisibleForTesting
     boolean canSpecifyOrientation() {
         // Only allow to specify orientation if this TDA is not set to ignore orientation request,
         // and it is the last focused one on this logical display that can request orientation
@@ -2103,7 +1999,20 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         if (mLastFocusedRootTask != null) {
             pw.println(doublePrefix + "mLastFocusedRootTask=" + mLastFocusedRootTask);
         }
+
         final String triplePrefix = doublePrefix + "  ";
+
+        if (mLaunchRootTasks.size() > 0) {
+            pw.println(doublePrefix + "mLaunchRootTasks:");
+            for (int i = mLaunchRootTasks.size() - 1; i >= 0; --i) {
+                final LaunchRootTaskDef def = mLaunchRootTasks.get(i);
+                pw.println(triplePrefix
+                        + Arrays.toString(def.activityTypes) + " "
+                        + Arrays.toString(def.windowingModes) + " "
+                        + " task=" + def.task);
+            }
+        }
+
         pw.println(doublePrefix + "Application tokens in top down Z order:");
         for (int index = getChildCount() - 1; index >= 0; --index) {
             final WindowContainer child = getChildAt(index);

@@ -206,6 +206,11 @@ public final class JobStatus {
     private int standbyBucket;
 
     /**
+     * Whether we've logged an error due to standby bucket mismatch with active uid state.
+     */
+    private boolean mLoggedBucketMismatch;
+
+    /**
      * Debugging: timestamp if we ever defer this job based on standby bucketing, this
      * is when we did so.
      */
@@ -805,6 +810,18 @@ public final class JobStatus {
         }
 
         standbyBucket = newBucket;
+        mLoggedBucketMismatch = false;
+    }
+
+    /**
+     * Log a bucket mismatch if this is the first time for this job.
+     */
+    public void maybeLogBucketMismatch() {
+        if (!mLoggedBucketMismatch) {
+            Slog.wtf(TAG,
+                    "App " + getSourcePackageName() + " became active but still in NEVER bucket");
+            mLoggedBucketMismatch = true;
+        }
     }
 
     // Called only by the standby monitoring code
@@ -1151,6 +1168,11 @@ public final class JobStatus {
         if (setConstraintSatisfied(CONSTRAINT_WITHIN_EXPEDITED_QUOTA, state)) {
             // The constraint was changed. Update the ready flag.
             mReadyWithinExpeditedQuota = state;
+            // DeviceIdleJobsController currently only tracks jobs with the WILL_BE_FOREGROUND flag.
+            // Making it also track requested-expedited jobs would add unnecessary hops since the
+            // controller would then defer to canRunInDoze. Avoid the hops and just update
+            // mReadyNotDozing directly.
+            mReadyNotDozing = isConstraintSatisfied(CONSTRAINT_DEVICE_NOT_DOZING) || canRunInDoze();
             return true;
         }
         return false;

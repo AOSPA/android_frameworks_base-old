@@ -18,7 +18,7 @@ package android.window;
 
 import android.view.SurfaceControl;
 import android.window.TransitionInfo;
-import android.window.WindowContainerTransaction;
+import android.window.TransitionRequestInfo;
 
 /**
  * Implemented by WMShell to initiate and play transition animations.
@@ -55,9 +55,9 @@ oneway interface ITransitionPlayer {
      * Called when something in WMCore requires a transition to play -- for example when an Activity
      * is started in a new Task.
      *
-     * @param type The {@link WindowManager#TransitionType} of the transition to start.
      * @param transitionToken An identifying token for the transition that needs to be started.
      *                        Pass this to {@link IWindowOrganizerController#startTransition}.
+     * @param request Information about this particular request.
      */
-    void requestStartTransition(int type, in IBinder transitionToken);
+    void requestStartTransition(in IBinder transitionToken, in TransitionRequestInfo request);
 }

@@ -32,6 +32,7 @@ import android.content.res.Resources;
 import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.util.Log;
+import android.util.MathUtils;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -68,6 +69,13 @@ public abstract class PanelViewController {
     private static final int INITIAL_OPENING_PEEK_DURATION = 200;
     private static final int PEEK_ANIMATION_DURATION = 360;
     private static final int NO_FIXED_DURATION = -1;
+    private static final long SHADE_OPEN_SPRING_OUT_DURATION = 350L;
+    private static final long SHADE_OPEN_SPRING_BACK_DURATION = 200L;
+    private static final float MIN_OVERSCROLL = -50;
+    private static final float MAX_OVERSCROLL = 30;
+
+    private float mFlingTarget;
+    private float mFlingVelocity;
     protected long mDownTime;
     protected boolean mTouchSlopExceededBeforeDown;
     private float mMinExpandHeight;
@@ -368,7 +376,8 @@ public abstract class PanelViewController {
     protected void startExpandMotion(float newX, float newY, boolean startTracking,
             float expandedHeight) {
         if (!mHandlingPointerUp) {
-            InteractionJankMonitor.getInstance().begin(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
+            InteractionJankMonitor.getInstance().begin(mView,
+                    CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
         }
         mInitialOffsetOnTouch = expandedHeight;
         mInitialTouchY = newY;
@@ -576,14 +585,6 @@ public abstract class PanelViewController {
 
     protected void flingToHeight(float vel, boolean expand, float target,
             float collapseSpeedUpFactor, boolean expandBecauseOfFalsing) {
-        // Hack to make the expand transition look nice when clear all button is visible - we make
-        // the animation only to the last notification, and then jump to the maximum panel height so
-        // clear all just fades in and the decelerating motion is towards the last notification.
-        final boolean clearAllExpandHack = expand &&
-                shouldExpandToTopOfClearAll(getMaxPanelHeight() - getClearAllHeightWithPadding());
-        if (clearAllExpandHack) {
-            target = getMaxPanelHeight() - getClearAllHeightWithPadding();
-        }
         if (target == mExpandedHeight || getOverExpansionAmount() > 0f && expand) {
             InteractionJankMonitor.getInstance().end(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
             notifyExpandingFinished();
@@ -591,13 +592,14 @@ public abstract class PanelViewController {
         }
         mOverExpandedBeforeFling = getOverExpansionAmount() > 0f;
         ValueAnimator animator = createHeightAnimator(target);
+        mFlingTarget = target;
         if (expand) {
             if (expandBecauseOfFalsing && vel < 0) {
                 vel = 0;
             }
             mFlingAnimationUtils.apply(animator, mExpandedHeight, target, vel, mView.getHeight());
             if (vel == 0) {
-                animator.setDuration(350);
+                animator.setDuration(SHADE_OPEN_SPRING_OUT_DURATION);
             }
         } else {
             if (shouldUseDismissingAnimation()) {
@@ -622,6 +624,7 @@ public abstract class PanelViewController {
                 animator.setDuration(mFixedDuration);
             }
         }
+        mFlingVelocity = vel;
         if (mPerf != null) {
             String currentPackage = mView.getContext().getPackageName();
             mPerf.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST, currentPackage, -1, BoostFramework.Scroll.PANEL_VIEW);
@@ -642,38 +645,54 @@ public abstract class PanelViewController {
                 if (mPerf != null) {
                     mPerf.perfLockRelease();
                 }
-                if (clearAllExpandHack && !mCancelled) {
-                    setExpandedHeightInternal(getMaxPanelHeight());
-                }
-                setAnimator(null);
-                if (!mCancelled) {
-                    InteractionJankMonitor.getInstance()
-                            .end(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
-                    notifyExpandingFinished();
+                if (expand && mFlingVelocity > 0) {
+                    // After the shade is flinged open to an overscrolled state, spring back
+                    // the shade by reducing section padding to 0.
+                    springBack();
                 } else {
-                    InteractionJankMonitor.getInstance()
-                            .cancel(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
+                    onFlingEnd(mCancelled);
                 }
-                notifyBarPanelExpansionChanged();
             }
         });
         setAnimator(animator);
         animator.start();
     }
 
-    /**
-     * When expanding, should we expand to the top of clear all and expand immediately?
-     * This will make sure that the animation will stop smoothly at the end of the last notification
-     * before the clear all affordance.
-     *
-     * @param targetHeight the height that we would animate to, right above clear all
-     *
-     * @return true if we can expand to the top of clear all
-     */
-    protected boolean shouldExpandToTopOfClearAll(float targetHeight) {
-        return fullyExpandedClearAllVisible()
-                && mExpandedHeight < targetHeight
-                && !isClearAllVisible();
+    private void springBack() {
+        ValueAnimator animator = ValueAnimator.ofFloat(MAX_OVERSCROLL, 0);
+        animator.addUpdateListener(
+                animation -> {
+                    setSectionPadding((float) animation.getAnimatedValue());
+                    setExpandedHeightInternal(mFlingTarget);
+                });
+        animator.setDuration(SHADE_OPEN_SPRING_BACK_DURATION);
+        animator.setInterpolator(Interpolators.LINEAR);
+        animator.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                mCancelled = true;
+            }
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                onFlingEnd(mCancelled);
+            }
+        });
+        setAnimator(animator);
+        animator.start();
+    }
+
+    private void onFlingEnd(boolean cancelled) {
+        setAnimator(null);
+        if (!cancelled) {
+            InteractionJankMonitor.getInstance()
+                    .end(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
+            notifyExpandingFinished();
+        } else {
+            InteractionJankMonitor.getInstance()
+                    .cancel(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
+        }
+        notifyBarPanelExpansionChanged();
     }
 
     protected abstract boolean shouldUseDismissingAnimation();
@@ -714,10 +733,28 @@ public abstract class PanelViewController {
         setExpandedHeight(currentMaxPanelHeight);
     }
 
+    private float getStackHeightFraction(float height) {
+        final float gestureFraction = height / getMaxPanelHeight();
+        final float stackHeightFraction = Interpolators.ACCELERATE_DECELERATE
+                .getInterpolation(gestureFraction);
+        return stackHeightFraction;
+    }
+
+    // When the shade is flinged open, add space before sections for overscroll effect.
+    private void maybeOverScrollForShadeFlingOpen(float height) {
+        if (!mBar.isShadeOpening() || mFlingVelocity <= 0) {
+            return;
+        }
+        final float padding = MathUtils.lerp(
+                MIN_OVERSCROLL, MAX_OVERSCROLL, getStackHeightFraction(height));
+        setSectionPadding(padding);
+    }
+
     public void setExpandedHeightInternal(float h) {
         if (isNaN(h)) {
             Log.wtf(TAG, "ExpandedHeight set to NaN");
         }
+        maybeOverScrollForShadeFlingOpen(h);
         if (mExpandLatencyTracking && h != 0f) {
             DejankUtils.postAfterTraversal(
                     () -> mLatencyTracker.onActionEnd(LatencyTracker.ACTION_EXPAND_PANEL));
@@ -756,6 +793,10 @@ public abstract class PanelViewController {
      * conflicting gesture (opening QS) is happening
      */
     protected abstract boolean isTrackingBlocked();
+
+    protected abstract void setIsShadeOpening(boolean isShadeOpening);
+
+    protected abstract void setSectionPadding(float padding);
 
     protected abstract void setOverExpansion(float overExpansion, boolean isPixels);
 
@@ -880,7 +921,7 @@ public abstract class PanelViewController {
                             mView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
                             if (mAnimateAfterExpanding) {
                                 notifyExpandingStarted();
-                                InteractionJankMonitor.getInstance().begin(
+                                InteractionJankMonitor.getInstance().begin(mView,
                                         CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
                                 fling(0, true /* expand */);
                             } else {
@@ -1089,11 +1130,6 @@ public abstract class PanelViewController {
     protected abstract boolean fullyExpandedClearAllVisible();
 
     protected abstract boolean isClearAllVisible();
-
-    /**
-     * @return the height of the clear all button, in pixels including padding
-     */
-    protected abstract int getClearAllHeightWithPadding();
 
     public void setHeadsUpManager(HeadsUpManagerPhone headsUpManager) {
         mHeadsUpManager = headsUpManager;

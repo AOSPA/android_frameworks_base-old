@@ -97,6 +97,7 @@ final class ActivityManagerConstants extends ContentObserver {
     static final String KEY_PROCESS_CRASH_COUNT_RESET_INTERVAL =
             "process_crash_count_reset_interval";
     static final String KEY_PROCESS_CRASH_COUNT_LIMIT = "process_crash_count_limit";
+    static final String KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION = "boot_time_temp_allowlist_duration";
 
     private static int DEFAULT_MAX_CACHED_PROCESSES = 32;
     private static final long DEFAULT_BACKGROUND_SETTLE_TIME = 60*1000;
@@ -134,6 +135,7 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final int DEFAULT_MAX_PHANTOM_PROCESSES = 32;
     private static final int DEFAULT_PROCESS_CRASH_COUNT_RESET_INTERVAL = 12 * 60 * 60 * 1000;
     private static final int DEFAULT_PROCESS_CRASH_COUNT_LIMIT = 12;
+    private static final int DEFAULT_BOOT_TIME_TEMP_ALLOWLIST_DURATION = 10 * 1000;
 
 
     // Flag stored in the DeviceConfig API.
@@ -363,23 +365,31 @@ final class ActivityManagerConstants extends ContentObserver {
     // started, the restriction is on while-in-use permissions.)
     volatile boolean mFlagBackgroundFgsStartRestrictionEnabled = true;
 
-    // Indicates whether the foreground service background start restriction is enabled.
+    // Indicates whether the foreground service background start restriction is enabled for
+    // apps targeting S+.
     // When the restriction is enabled, service is not allowed to startForeground from background
     // at all.
-    volatile boolean mFlagFgsStartRestrictionEnabled = false;
+    volatile boolean mFlagFgsStartRestrictionEnabled = true;
 
     // Whether we defer FGS notifications a few seconds following their transition to
     // the foreground state.  Applies only to S+ apps; enabled by default.
     volatile boolean mFlagFgsNotificationDeferralEnabled = true;
 
     // Restrict FGS notification deferral policy to only those apps that target
-    // API version S or higher.  Enabled by default; set to "false" to defer FGS
-    // notifications from legacy apps as well.
-    volatile boolean mFlagFgsNotificationDeferralApiGated = true;
+    // API version S or higher.  Disabled by default; set to "true" to force
+    // legacy app FGS notifications to display immediately in all cases.
+    volatile boolean mFlagFgsNotificationDeferralApiGated = false;
 
     // Time in milliseconds to defer FGS notifications after their transition to
     // the foreground state.
     volatile long mFgsNotificationDeferralInterval = 10_000;
+
+    /*
+     * At boot time, broadcast receiver ACTION_BOOT_COMPLETED, ACTION_LOCKED_BOOT_COMPLETED and
+     * ACTION_PRE_BOOT_COMPLETED are temp allowlisted to start FGS for a duration of time in
+     * milliseconds.
+     */
+    volatile long mBootTimeTempAllowlistDuration = DEFAULT_BOOT_TIME_TEMP_ALLOWLIST_DURATION;
 
     private final ActivityManagerService mService;
     private ContentResolver mResolver;
@@ -573,6 +583,9 @@ final class ActivityManagerConstants extends ContentObserver {
                                 break;
                             case KEY_MAX_PHANTOM_PROCESSES:
                                 updateMaxPhantomProcesses();
+                                break;
+                            case KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION:
+                                updateBootTimeTempAllowListDuration();
                                 break;
                             default:
                                 break;
@@ -848,7 +861,7 @@ final class ActivityManagerConstants extends ContentObserver {
         mFlagFgsStartRestrictionEnabled = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 KEY_DEFAULT_FGS_STARTS_RESTRICTION_ENABLED,
-                /*defaultValue*/ false);
+                /*defaultValue*/ true);
     }
 
     private void updateFgsNotificationDeferralEnable() {
@@ -862,7 +875,7 @@ final class ActivityManagerConstants extends ContentObserver {
         mFlagFgsNotificationDeferralApiGated = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 KEY_DEFERRED_FGS_NOTIFICATIONS_API_GATED,
-                /*default value*/ true);
+                /*default value*/ false);
     }
 
     private void updateFgsNotificationDeferralInterval() {
@@ -885,6 +898,13 @@ final class ActivityManagerConstants extends ContentObserver {
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 KEY_FORCE_BACKGROUND_CHECK_ON_RESTRICTED_APPS,
                 DEFAULT_FORCE_BACKGROUND_CHECK_ON_RESTRICTED_APPS);
+    }
+
+    private void updateBootTimeTempAllowListDuration() {
+        mBootTimeTempAllowlistDuration = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION,
+                DEFAULT_BOOT_TIME_TEMP_ALLOWLIST_DURATION);
     }
 
     private void updateImperceptibleKillExemptions() {
@@ -1086,6 +1106,8 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.println(BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD);
         pw.print("  "); pw.print(KEY_MAX_PHANTOM_PROCESSES); pw.print("=");
         pw.println(MAX_PHANTOM_PROCESSES);
+        pw.print("  "); pw.print(KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION); pw.print("=");
+        pw.println(mBootTimeTempAllowlistDuration);
 
         pw.println();
         if (mOverrideMaxCachedProcesses >= 0) {

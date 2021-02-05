@@ -59,7 +59,8 @@
     <string name="imei" msgid="2157082351232630390">"IMEI"</string>
     <string name="meid" msgid="3291227361605924674">"MEID"</string>
     <string name="ClipMmi" msgid="4110549342447630629">"זיהוי מתקשר של שיחה נכנסת"</string>
-    <string name="ClirMmi" msgid="4702929460236547156">"זיהוי מתקשר בשיחה יוצאת"</string>
+    <!-- no translation found for ClirMmi (6752346475055446417) -->
+    <skip />
     <string name="ColpMmi" msgid="4736462893284419302">"מזהה של קו מחובר"</string>
     <string name="ColrMmi" msgid="5889782479745764278">"הגבלה של מזהה קו מחובר"</string>
     <string name="CfMmi" msgid="8390012691099787178">"העברת שיחות"</string>
@@ -148,6 +149,9 @@
     <string name="wfc_mode_wifi_preferred_summary" msgid="1035175836270943089">"‏שיחה בחיבור Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="4958965609212575619">"שיחה ברשת סלולרית"</string>
     <string name="wfc_mode_wifi_only_summary" msgid="104951993894678665">"‏Wi-Fi בלבד"</string>
+    <!-- no translation found for crossSimFormat_spn (9125246077491634262) -->
+    <skip />
+    <string name="crossSimFormat_spn_cross_sim_calling" msgid="779976494687695991">"‏העברת שיחות בין כרטיסי SIM של <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="cfTemplateNotForwarded" msgid="862202427794270501">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: ללא העברה"</string>
     <string name="cfTemplateForwarded" msgid="9132506315842157860">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g>"</string>
     <string name="cfTemplateForwardedTime" msgid="735042369233323609">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g> כעבור <xliff:g id="TIME_DELAY">{2}</xliff:g> שניות"</string>
@@ -864,7 +868,7 @@
     <string name="lockscreen_transport_prev_description" msgid="2879469521751181478">"הרצועה הקודמת"</string>
     <string name="lockscreen_transport_next_description" msgid="2931509904881099919">"הרצועה הבאה"</string>
     <string name="lockscreen_transport_pause_description" msgid="6705284702135372494">"השהה"</string>
-    <string name="lockscreen_transport_play_description" msgid="106868788691652733">"הפעל"</string>
+    <string name="lockscreen_transport_play_description" msgid="106868788691652733">"הפעלה"</string>
     <string name="lockscreen_transport_stop_description" msgid="1449552232598355348">"הפסק"</string>
     <string name="lockscreen_transport_rew_description" msgid="7680106856221622779">"הרץ אחורה"</string>
     <string name="lockscreen_transport_ffw_description" msgid="4763794746640196772">"הרץ קדימה"</string>
@@ -1852,7 +1856,7 @@
     <string name="battery_saver_description" msgid="6794188153647295212">"‏כדי להאריך את חיי הסוללה, התכונה \'חיסכון בסוללה\':\n\n• מפעילה עיצוב כהה\n• מכבה או מגבילה פעילות ברקע, חלק מהאפקטים החזותיים ותכונות אחרות כמו Ok Google"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"‏כדי לסייע בהפחתת השימוש בנתונים, חוסך הנתונים (Data Saver) מונע מאפליקציות מסוימות שליחה או קבלה של נתונים ברקע. אפליקציה שבה נעשה שימוש כרגע יכולה לגשת לנתונים, אבל בתדירות נמוכה יותר. המשמעות היא, למשל, שתמונות יוצגו רק לאחר שמקישים עליהן."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"להפעיל את חוסך הנתונים?"</string>
-    <string name="data_saver_enable_button" msgid="4399405762586419726">"הפעל"</string>
+    <string name="data_saver_enable_button" msgid="4399405762586419726">"הפעלה"</string>
     <plurals name="zen_mode_duration_minutes_summary" formatted="false" msgid="2877101784123058273">
       <item quantity="two">‏למשך %d דקות (עד <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
       <item quantity="many">‏למשך %1$d דקות (עד <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
@@ -1963,7 +1967,7 @@
     <string name="app_suspended_unsuspend_message" msgid="1665438589450555459">"ביטול ההשהיה של האפליקציה"</string>
     <string name="work_mode_off_title" msgid="5503291976647976560">"להפעיל את פרופיל העבודה?"</string>
     <string name="work_mode_off_message" msgid="8417484421098563803">"אפליקציות העבודה, התראות, נתונים ותכונות נוספות של פרופיל העבודה יופעלו"</string>
-    <string name="work_mode_turn_on" msgid="3662561662475962285">"הפעל"</string>
+    <string name="work_mode_turn_on" msgid="3662561662475962285">"הפעלה"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"האפליקציה לא זמינה"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"האפליקציה <xliff:g id="APP_NAME">%1$s</xliff:g> לא זמינה בשלב זה."</string>
     <string name="deprecated_target_sdk_message" msgid="5203207875657579953">"‏האפליקציה הזו עוצבה לגרסה ישנה יותר של Android וייתכן שלא תפעל כראוי. ניתן לבדוק אם יש עדכונים או ליצור קשר עם המפתח."</string>

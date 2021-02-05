@@ -23,6 +23,10 @@ import android.location.Location;
 import android.location.LocationManager;
 import android.location.LocationProvider;
 import android.location.LocationResult;
+import android.location.provider.ILocationProvider;
+import android.location.provider.ILocationProviderManager;
+import android.location.provider.ProviderProperties;
+import android.location.provider.ProviderRequest;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -32,11 +36,6 @@ import android.os.WorkSource;
 import android.util.Log;
 
 import androidx.annotation.RequiresApi;
-
-import com.android.internal.location.ILocationProvider;
-import com.android.internal.location.ILocationProviderManager;
-import com.android.internal.location.ProviderProperties;
-import com.android.internal.location.ProviderRequest;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -58,7 +57,11 @@ import java.util.List;
  * <p>IMPORTANT: This class is effectively a public API for unbundled
  * applications, and must remain API stable. See README.txt in the root
  * of this package for more information.
+ *
+ * @deprecated This class is not part of the standard API surface - use
+ * {@link android.location.provider.LocationProviderBase} instead.
  */
+@Deprecated
 public abstract class LocationProviderBase {
 
     /**
@@ -90,6 +93,10 @@ public abstract class LocationProviderBase {
      * to provide the best possible Location fix.
      */
     public static final String FUSED_PROVIDER = LocationManager.FUSED_PROVIDER;
+
+    private static final String EXTRA_KEY_COARSE_LOCATION = "coarseLocation";
+    private static final String EXTRA_KEY_NO_GPS_LOCATION = "noGPSLocation";
+    private static final String EXTRA_KEY_INDOOR_PROB = "indoorProbability";
 
     final String mTag;
     @Nullable final String mPackageName;
@@ -257,21 +264,7 @@ public abstract class LocationProviderBase {
     public void reportLocation(LocationResult locationResult) {
         ILocationProviderManager manager = mManager;
         if (manager != null) {
-            locationResult = locationResult.map(location -> {
-                // remove deprecated extras to save on serialization costs
-                Bundle extras = location.getExtras();
-                if (extras != null && (extras.containsKey("noGPSLocation")
-                        || extras.containsKey("coarseLocation"))) {
-                    location = new Location(location);
-                    extras = location.getExtras();
-                    extras.remove("noGPSLocation");
-                    extras.remove("coarseLocation");
-                    if (extras.isEmpty()) {
-                        location.setExtras(null);
-                    }
-                }
-                return location;
-            });
+            locationResult = locationResult.map(this::cleanUpExtras);
 
             try {
                 manager.onReportLocation(locationResult);
@@ -281,6 +274,33 @@ public abstract class LocationProviderBase {
                 Log.w(mTag, e);
             }
         }
+    }
+
+    /**
+     * Remove deprecated/unnecessary extras to save on serialization costs.
+     *
+     * {@link #EXTRA_KEY_NO_GPS_LOCATION} and {@link #EXTRA_KEY_COARSE_LOCATION} are deprecated.
+     *
+     * {@link #EXTRA_KEY_INDOOR_PROB} should only be used in the framework.
+     */
+    private Location cleanUpExtras(Location location) {
+        Bundle extras = location.getExtras();
+        if (extras == null) {
+            return location;
+        }
+        if (extras.containsKey(EXTRA_KEY_NO_GPS_LOCATION)
+                || extras.containsKey(EXTRA_KEY_COARSE_LOCATION)
+                || extras.containsKey(EXTRA_KEY_INDOOR_PROB)) {
+            location = new Location(location);
+            extras = location.getExtras();
+            extras.remove(EXTRA_KEY_NO_GPS_LOCATION);
+            extras.remove(EXTRA_KEY_COARSE_LOCATION);
+            extras.remove(EXTRA_KEY_INDOOR_PROB);
+            if (extras.isEmpty()) {
+                location.setExtras(null);
+            }
+        }
+        return location;
     }
 
     protected void onInit() {
@@ -372,11 +392,7 @@ public abstract class LocationProviderBase {
         public void setLocationProviderManager(ILocationProviderManager manager) {
             synchronized (mBinder) {
                 try {
-                    if (mPackageName != null || mAttributionTag != null) {
-                        manager.onSetIdentity(mPackageName, mAttributionTag);
-                    }
-                    manager.onSetProperties(mProperties);
-                    manager.onSetAllowed(mAllowed);
+                    manager.onInitialize(mAllowed, mProperties, mPackageName, mAttributionTag);
                 } catch (RemoteException e) {
                     throw e.rethrowFromSystemServer();
                 } catch (RuntimeException e) {
@@ -390,8 +406,8 @@ public abstract class LocationProviderBase {
         }
 
         @Override
-        public void setRequest(ProviderRequest request, WorkSource ws) {
-            onSetRequest(new ProviderRequestUnbundled(request), ws);
+        public void setRequest(ProviderRequest request) {
+            onSetRequest(new ProviderRequestUnbundled(request), request.getWorkSource());
         }
 
         @Override

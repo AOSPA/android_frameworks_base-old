@@ -30,6 +30,7 @@ import com.android.systemui.qs.external.CustomTile;
 import com.android.systemui.qs.tiles.AirplaneModeTile;
 import com.android.systemui.qs.tiles.BatterySaverTile;
 import com.android.systemui.qs.tiles.BluetoothTile;
+import com.android.systemui.qs.tiles.CameraToggleTile;
 import com.android.systemui.qs.tiles.CastTile;
 import com.android.systemui.qs.tiles.CellularTile;
 import com.android.systemui.qs.tiles.ColorInversionTile;
@@ -37,7 +38,9 @@ import com.android.systemui.qs.tiles.DataSaverTile;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.FlashlightTile;
 import com.android.systemui.qs.tiles.HotspotTile;
+import com.android.systemui.qs.tiles.InternetTile;
 import com.android.systemui.qs.tiles.LocationTile;
+import com.android.systemui.qs.tiles.MicrophoneToggleTile;
 import com.android.systemui.qs.tiles.NfcTile;
 import com.android.systemui.qs.tiles.NightDisplayTile;
 import com.android.systemui.qs.tiles.ReduceBrightColorsTile;
@@ -48,6 +51,7 @@ import com.android.systemui.qs.tiles.UserTile;
 import com.android.systemui.qs.tiles.WifiTile;
 import com.android.systemui.qs.tiles.WorkModeTile;
 import com.android.systemui.util.leak.GarbageMonitor;
+import com.android.systemui.util.settings.SecureSettings;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
@@ -60,6 +64,7 @@ public class QSFactoryImpl implements QSFactory {
     private static final String TAG = "QSFactory";
 
     private final Provider<WifiTile> mWifiTileProvider;
+    private final Provider<InternetTile> mInternetTileProvider;
     private final Provider<BluetoothTile> mBluetoothTileProvider;
     private final Provider<CellularTile> mCellularTileProvider;
     private final Provider<DndTile> mDndTileProvider;
@@ -80,15 +85,21 @@ public class QSFactoryImpl implements QSFactory {
     private final Provider<UiModeNightTile> mUiModeNightTileProvider;
     private final Provider<ScreenRecordTile> mScreenRecordTileProvider;
     private final Provider<ReduceBrightColorsTile> mReduceBrightColorsTileProvider;
+    private final Provider<CameraToggleTile> mCameraToggleTileProvider;
+    private final Provider<MicrophoneToggleTile> mMicrophoneToggleTileProvider;
 
     private final Lazy<QSHost> mQsHostLazy;
     private final Provider<CustomTile.Builder> mCustomTileBuilderProvider;
 
+    private final boolean mSideLabels;
+
     @Inject
     public QSFactoryImpl(
             Lazy<QSHost> qsHostLazy,
+            SecureSettings settings,
             Provider<CustomTile.Builder> customTileBuilderProvider,
             Provider<WifiTile> wifiTileProvider,
+            Provider<InternetTile> internetTileProvider,
             Provider<BluetoothTile> bluetoothTileProvider,
             Provider<CellularTile> cellularTileProvider,
             Provider<DndTile> dndTileProvider,
@@ -108,11 +119,16 @@ public class QSFactoryImpl implements QSFactory {
             Provider<GarbageMonitor.MemoryTile> memoryTileProvider,
             Provider<UiModeNightTile> uiModeNightTileProvider,
             Provider<ScreenRecordTile> screenRecordTileProvider,
-            Provider<ReduceBrightColorsTile> reduceBrightColorsTileProvider) {
+            Provider<ReduceBrightColorsTile> reduceBrightColorsTileProvider,
+            Provider<CameraToggleTile> cameraToggleTileProvider,
+            Provider<MicrophoneToggleTile> microphoneToggleTileProvider) {
         mQsHostLazy = qsHostLazy;
         mCustomTileBuilderProvider = customTileBuilderProvider;
 
+        mSideLabels = settings.getInt("sysui_side_labels", 0) != 0;
+
         mWifiTileProvider = wifiTileProvider;
+        mInternetTileProvider = internetTileProvider;
         mBluetoothTileProvider = bluetoothTileProvider;
         mCellularTileProvider = cellularTileProvider;
         mDndTileProvider = dndTileProvider;
@@ -133,6 +149,8 @@ public class QSFactoryImpl implements QSFactory {
         mUiModeNightTileProvider = uiModeNightTileProvider;
         mScreenRecordTileProvider = screenRecordTileProvider;
         mReduceBrightColorsTileProvider = reduceBrightColorsTileProvider;
+        mCameraToggleTileProvider = cameraToggleTileProvider;
+        mMicrophoneToggleTileProvider = microphoneToggleTileProvider;
     }
 
     public QSTile createTile(String tileSpec) {
@@ -148,6 +166,8 @@ public class QSFactoryImpl implements QSFactory {
         switch (tileSpec) {
             case "wifi":
                 return mWifiTileProvider.get();
+            case "internet":
+                return mInternetTileProvider.get();
             case "bt":
                 return mBluetoothTileProvider.get();
             case "cell":
@@ -186,6 +206,10 @@ public class QSFactoryImpl implements QSFactory {
                 return mScreenRecordTileProvider.get();
             case "reduce_brightness":
                 return mReduceBrightColorsTileProvider.get();
+            case "cameratoggle":
+                return mCameraToggleTileProvider.get();
+            case "mictoggle":
+                return mMicrophoneToggleTileProvider.get();
         }
 
         // Custom tiles
@@ -212,6 +236,8 @@ public class QSFactoryImpl implements QSFactory {
         QSIconView icon = tile.createTileView(context);
         if (collapsedView) {
             return new QSTileBaseView(context, icon, collapsedView);
+        } else if (mSideLabels) {
+            return new QSTileViewHorizontal(context, icon);
         } else {
             return new com.android.systemui.qs.tileimpl.QSTileView(context, icon);
         }

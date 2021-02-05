@@ -25,7 +25,6 @@ import android.content.ServiceConnection
 import android.net.ConnectivityManager
 import android.net.IDnsResolver
 import android.net.INetd
-import android.net.INetworkPolicyManager
 import android.net.INetworkStatsService
 import android.net.LinkProperties
 import android.net.NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL
@@ -47,8 +46,6 @@ import com.android.server.ConnectivityService
 import com.android.server.LocalServices
 import com.android.server.NetworkAgentWrapper
 import com.android.server.TestNetIdManager
-import com.android.server.connectivity.DefaultNetworkMetrics
-import com.android.server.connectivity.IpConnectivityMetrics
 import com.android.server.connectivity.MockableSystemProperties
 import com.android.server.connectivity.ProxyTracker
 import com.android.server.net.NetworkPolicyManagerInternal
@@ -88,17 +85,11 @@ class ConnectivityServiceIntegrationTest {
     @Mock
     private lateinit var statsService: INetworkStatsService
     @Mock
-    private lateinit var policyManager: INetworkPolicyManager
-    @Mock
     private lateinit var log: IpConnectivityLog
     @Mock
     private lateinit var netd: INetd
     @Mock
     private lateinit var dnsResolver: IDnsResolver
-    @Mock
-    private lateinit var metricsLogger: IpConnectivityMetrics.Logger
-    @Mock
-    private lateinit var defaultMetrics: DefaultNetworkMetrics
     @Spy
     private var context = TestableContext(realContext)
 
@@ -152,7 +143,6 @@ class ConnectivityServiceIntegrationTest {
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
-        doReturn(defaultMetrics).`when`(metricsLogger).defaultNetworkMetrics()
         doNothing().`when`(context).sendStickyBroadcastAsUser(any(), any(), any())
 
         networkStackClient = TestNetworkStackClient(realContext)
@@ -171,12 +161,11 @@ class ConnectivityServiceIntegrationTest {
     }
 
     private inner class TestConnectivityService(deps: Dependencies) : ConnectivityService(
-            context, netManager, statsService, policyManager, dnsResolver, log, netd, deps)
+            context, netManager, statsService, dnsResolver, log, netd, deps)
 
     private fun makeDependencies(): ConnectivityService.Dependencies {
         val deps = spy(ConnectivityService.Dependencies())
         doReturn(networkStackClient).`when`(deps).networkStack
-        doReturn(metricsLogger).`when`(deps).metricsLogger
         doReturn(mock(ProxyTracker::class.java)).`when`(deps).makeProxyTracker(any(), any())
         doReturn(mock(MockableSystemProperties::class.java)).`when`(deps).systemProperties
         doReturn(TestNetIdManager()).`when`(deps).makeNetIdManager()

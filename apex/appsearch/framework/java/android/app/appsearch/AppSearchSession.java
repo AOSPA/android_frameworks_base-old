@@ -22,8 +22,13 @@ import android.annotation.UserIdInt;
 import android.os.Bundle;
 import android.os.ParcelableException;
 import android.os.RemoteException;
+import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.Log;
 
+import com.android.internal.util.Preconditions;
+
+import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,20 +43,30 @@ import java.util.function.Consumer;
  *
  * This class is thread safe.
  */
-public final class AppSearchSession {
+public final class AppSearchSession implements Closeable {
+    private static final String TAG = "AppSearchSession";
+    private final String mPackageName;
     private final String mDatabaseName;
     @UserIdInt
     private final int mUserId;
     private final IAppSearchManager mService;
+    private boolean mIsMutated = false;
+    private boolean mIsClosed = false;
 
+
+    /**
+     * Creates a search session for the client, defined by the {@code userId} and
+     * {@code packageName}.
+     */
     static void createSearchSession(
             @NonNull AppSearchManager.SearchContext searchContext,
             @NonNull IAppSearchManager service,
             @UserIdInt int userId,
+            @NonNull String packageName,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<AppSearchSession>> callback) {
         AppSearchSession searchSession =
-                new AppSearchSession(service, userId, searchContext.mDatabaseName);
+                new AppSearchSession(service, userId, packageName, searchContext.mDatabaseName);
         searchSession.initialize(executor, callback);
     }
 
@@ -79,10 +94,11 @@ public final class AppSearchSession {
     }
 
     private AppSearchSession(@NonNull IAppSearchManager service, @UserIdInt int userId,
-            @NonNull String databaseName) {
-        mDatabaseName = databaseName;
+            @NonNull String packageName, @NonNull String databaseName) {
         mService = service;
         mUserId = userId;
+        mPackageName = packageName;
+        mDatabaseName = databaseName;
     }
 
     /**
@@ -136,7 +152,7 @@ public final class AppSearchSession {
      * Visibility settings for a schema type do not apply or persist across
      * {@link SetSchemaRequest}s.
      *
-     * @param request The schema update request.
+     * @param request  The schema update request.
      * @param executor Executor on which to invoke the callback.
      * @param callback Callback to receive errors resulting from setting the schema. If the
      *                 operation succeeds, the callback will be invoked with {@code null}.
@@ -150,15 +166,28 @@ public final class AppSearchSession {
         Objects.requireNonNull(request);
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         List<Bundle> schemaBundles = new ArrayList<>(request.getSchemas().size());
         for (AppSearchSchema schema : request.getSchemas()) {
             schemaBundles.add(schema.getBundle());
         }
+        Map<String, List<Bundle>> schemasPackageAccessibleBundles =
+                new ArrayMap<>(request.getSchemasVisibleToPackagesInternal().size());
+        for (Map.Entry<String, Set<PackageIdentifier>> entry :
+                request.getSchemasVisibleToPackagesInternal().entrySet()) {
+            List<Bundle> packageIdentifierBundles = new ArrayList<>(entry.getValue().size());
+            for (PackageIdentifier packageIdentifier : entry.getValue()) {
+                packageIdentifierBundles.add(packageIdentifier.getBundle());
+            }
+            schemasPackageAccessibleBundles.put(entry.getKey(), packageIdentifierBundles);
+        }
         try {
             mService.setSchema(
+                    mPackageName,
                     mDatabaseName,
                     schemaBundles,
                     new ArrayList<>(request.getSchemasNotVisibleToSystemUi()),
+                    schemasPackageAccessibleBundles,
                     request.isForceOverride(),
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
@@ -166,6 +195,7 @@ public final class AppSearchSession {
                             executor.execute(() -> callback.accept(result));
                         }
                     });
+            mIsMutated = true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -182,8 +212,10 @@ public final class AppSearchSession {
             @NonNull Consumer<AppSearchResult<Set<AppSearchSchema>>> callback) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         try {
             mService.getSchema(
+                    mPackageName,
                     mDatabaseName,
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
@@ -232,13 +264,14 @@ public final class AppSearchSession {
         Objects.requireNonNull(request);
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         List<GenericDocument> documents = request.getDocuments();
         List<Bundle> documentBundles = new ArrayList<>(documents.size());
         for (int i = 0; i < documents.size(); i++) {
             documentBundles.add(documents.get(i).getBundle());
         }
         try {
-            mService.putDocuments(mDatabaseName, documentBundles, mUserId,
+            mService.putDocuments(mPackageName, mDatabaseName, documentBundles, mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         public void onResult(AppSearchBatchResult result) {
                             executor.execute(() -> callback.onResult(result));
@@ -248,6 +281,7 @@ public final class AppSearchSession {
                             executor.execute(() -> callback.onSystemError(exception.getCause()));
                         }
                     });
+            mIsMutated = true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -256,7 +290,7 @@ public final class AppSearchSession {
     /**
      * Retrieves {@link GenericDocument}s by URI.
      *
-     * @param request {@link GetByUriRequest} containing URIs to be retrieved.
+     * @param request  {@link GetByUriRequest} containing URIs to be retrieved.
      * @param executor Executor on which to invoke the callback.
      * @param callback Callback to receive the pending result of performing this operation. The keys
      *                 of the returned {@link AppSearchBatchResult} are the input URIs. The values
@@ -275,9 +309,15 @@ public final class AppSearchSession {
         Objects.requireNonNull(request);
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         try {
-            mService.getDocuments(mDatabaseName, request.getNamespace(),
-                    new ArrayList<>(request.getUris()), mUserId,
+            mService.getDocuments(
+                    mPackageName,
+                    mDatabaseName,
+                    request.getNamespace(),
+                    new ArrayList<>(request.getUris()),
+                    request.getProjectionsVisibleToPackagesInternal(),
+                    mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         public void onResult(AppSearchBatchResult result) {
                             executor.execute(() -> {
@@ -379,14 +419,60 @@ public final class AppSearchSession {
         Objects.requireNonNull(queryExpression);
         Objects.requireNonNull(searchSpec);
         Objects.requireNonNull(executor);
-        return new SearchResults(mService, mDatabaseName, queryExpression, searchSpec, mUserId,
-                executor);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
+        return new SearchResults(mService, mPackageName, mDatabaseName, queryExpression,
+                searchSpec, mUserId, executor);
+    }
+
+    /**
+     * Reports usage of a particular document by URI and namespace.
+     *
+     * <p>A usage report represents an event in which a user interacted with or viewed a document.
+     *
+     * <p>For each call to {@link #reportUsage}, AppSearch updates usage count and usage recency
+     * metrics for that particular document. These metrics are used for ordering {@link #query}
+     * results by the {@link SearchSpec#RANKING_STRATEGY_USAGE_COUNT} and
+     * {@link SearchSpec#RANKING_STRATEGY_USAGE_LAST_USED_TIMESTAMP} ranking strategies.
+     *
+     * <p>Reporting usage of a document is optional.
+     *
+     * @param request The usage reporting request.
+     * @param executor Executor on which to invoke the callback.
+     * @param callback Callback to receive errors. If the operation succeeds, the callback will be
+     *                 invoked with {@code null}.
+     */
+    @NonNull
+    public void reportUsage(
+            @NonNull ReportUsageRequest request,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<AppSearchResult<Void>> callback) {
+        Objects.requireNonNull(request);
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
+        try {
+            mService.reportUsage(
+                    mPackageName,
+                    mDatabaseName,
+                    request.getNamespace(),
+                    request.getUri(),
+                    request.getUsageTimeMillis(),
+                    mUserId,
+                    new IAppSearchResultCallback.Stub() {
+                        public void onResult(AppSearchResult result) {
+                            executor.execute(() -> callback.accept(result));
+                        }
+                    });
+            mIsMutated = true;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
      * Removes {@link GenericDocument}s from the index by URI.
      *
-     * @param request Request containing URIs to be removed.
+     * @param request  Request containing URIs to be removed.
      * @param executor Executor on which to invoke the callback.
      * @param callback Callback to receive the pending result of performing this operation. The keys
      *                 of the returned {@link AppSearchBatchResult} are the input URIs. The values
@@ -404,8 +490,9 @@ public final class AppSearchSession {
         Objects.requireNonNull(request);
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         try {
-            mService.removeByUri(mDatabaseName, request.getNamespace(),
+            mService.removeByUri(mPackageName, mDatabaseName, request.getNamespace(),
                     new ArrayList<>(request.getUris()), mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         public void onResult(AppSearchBatchResult result) {
@@ -416,6 +503,7 @@ public final class AppSearchSession {
                             executor.execute(() -> callback.onSystemError(exception.getCause()));
                         }
                     });
+            mIsMutated = true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -448,15 +536,34 @@ public final class AppSearchSession {
         Objects.requireNonNull(searchSpec);
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         try {
-            mService.removeByQuery(mDatabaseName, queryExpression, searchSpec.getBundle(), mUserId,
+            mService.removeByQuery(mPackageName, mDatabaseName, queryExpression,
+                    searchSpec.getBundle(), mUserId,
                     new IAppSearchResultCallback.Stub() {
                         public void onResult(AppSearchResult result) {
                             executor.execute(() -> callback.accept(result));
                         }
                     });
+            mIsMutated = true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Closes the {@link AppSearchSession} to persist all schema and document updates, additions,
+     * and deletes to disk.
+     */
+    @Override
+    public void close() {
+        if (mIsMutated && !mIsClosed) {
+            try {
+                mService.persistToDisk(mUserId);
+                mIsClosed = true;
+            } catch (RemoteException e) {
+                Log.e(TAG, "Unable to close the AppSearchSession", e);
+            }
         }
     }
 }

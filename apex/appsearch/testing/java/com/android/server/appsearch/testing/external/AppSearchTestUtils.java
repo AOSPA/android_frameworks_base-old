@@ -17,6 +17,7 @@
 package com.android.server.appsearch.testing;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 
 import android.app.appsearch.AppSearchBatchResult;
 import android.app.appsearch.AppSearchSessionShim;
@@ -25,10 +26,9 @@ import android.app.appsearch.GetByUriRequest;
 import android.app.appsearch.SearchResult;
 import android.app.appsearch.SearchResultsShim;
 
-import junit.framework.AssertionFailedError;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Future;
 
 public class AppSearchTestUtils {
@@ -36,9 +36,9 @@ public class AppSearchTestUtils {
     public static <K, V> AppSearchBatchResult<K, V> checkIsBatchResultSuccess(
             Future<AppSearchBatchResult<K, V>> future) throws Exception {
         AppSearchBatchResult<K, V> result = future.get();
-        if (!result.isSuccess()) {
-            throw new AssertionFailedError("AppSearchBatchResult not successful: " + result);
-        }
+        assertWithMessage("AppSearchBatchResult not successful: " + result)
+                .that(result.isSuccess())
+                .isTrue();
         return result;
     }
 
@@ -54,6 +54,20 @@ public class AppSearchTestUtils {
         assertThat(result.getSuccesses()).hasSize(uris.length);
         assertThat(result.getFailures()).isEmpty();
         List<GenericDocument> list = new ArrayList<>(uris.length);
+        for (String uri : uris) {
+            list.add(result.getSuccesses().get(uri));
+        }
+        return list;
+    }
+
+    public static List<GenericDocument> doGet(AppSearchSessionShim session, GetByUriRequest request)
+            throws Exception {
+        AppSearchBatchResult<String, GenericDocument> result =
+                checkIsBatchResultSuccess(session.getByUri(request));
+        Set<String> uris = request.getUris();
+        assertThat(result.getSuccesses()).hasSize(uris.size());
+        assertThat(result.getFailures()).isEmpty();
+        List<GenericDocument> list = new ArrayList<>(uris.size());
         for (String uri : uris) {
             list.add(result.getSuccesses().get(uri));
         }

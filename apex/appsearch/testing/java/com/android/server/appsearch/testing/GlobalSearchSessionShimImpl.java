@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.app.appsearch.AppSearchManager;
 import android.app.appsearch.AppSearchResult;
 import android.app.appsearch.GlobalSearchSession;
+import android.app.appsearch.GlobalSearchSessionShim;
 import android.app.appsearch.SearchResults;
 import android.app.appsearch.SearchResultsShim;
 import android.app.appsearch.SearchSpec;
@@ -40,12 +41,12 @@ import java.util.concurrent.Executors;
  * a consistent interface.
  * @hide
  */
-public class GlobalSearchSessionShimImpl {
+public class GlobalSearchSessionShimImpl implements GlobalSearchSessionShim {
     private final GlobalSearchSession mGlobalSearchSession;
     private final ExecutorService mExecutor;
 
     @NonNull
-    public static ListenableFuture<GlobalSearchSessionShimImpl> createGlobalSearchSession() {
+    public static ListenableFuture<GlobalSearchSessionShim> createGlobalSearchSession() {
         Context context = ApplicationProvider.getApplicationContext();
         AppSearchManager appSearchManager = context.getSystemService(AppSearchManager.class);
         SettableFuture<AppSearchResult<GlobalSearchSession>> future = SettableFuture.create();
@@ -61,13 +62,20 @@ public class GlobalSearchSessionShimImpl {
             @NonNull GlobalSearchSession session, @NonNull ExecutorService executor) {
         mGlobalSearchSession = Preconditions.checkNotNull(session);
         mExecutor = Preconditions.checkNotNull(executor);
+
     }
 
     @NonNull
+    @Override
     public SearchResultsShim query(
             @NonNull String queryExpression, @NonNull SearchSpec searchSpec) {
         SearchResults searchResults =
                 mGlobalSearchSession.query(queryExpression, searchSpec, mExecutor);
         return new SearchResultsShimImpl(searchResults, mExecutor);
+    }
+
+    @Override
+    public void close() {
+        mGlobalSearchSession.close();
     }
 }

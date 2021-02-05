@@ -16,14 +16,22 @@
 
 package com.android.server.location.timezone;
 
+import static android.app.time.LocationTimeZoneManager.PRIMARY_PROVIDER_NAME;
+import static android.app.time.LocationTimeZoneManager.PROVIDER_MODE_OVERRIDE_DISABLED;
+import static android.app.time.LocationTimeZoneManager.PROVIDER_MODE_OVERRIDE_NONE;
+import static android.app.time.LocationTimeZoneManager.PROVIDER_MODE_OVERRIDE_SIMULATED;
+import static android.app.time.LocationTimeZoneManager.SECONDARY_PROVIDER_NAME;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Binder;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.RemoteCallback;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
-import android.os.SystemProperties;
 import android.service.timezone.TimeZoneProviderService;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
@@ -32,6 +40,7 @@ import android.util.Slog;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.Preconditions;
 import com.android.server.FgThread;
 import com.android.server.SystemService;
 import com.android.server.timezonedetector.TimeZoneDetectorInternal;
@@ -39,7 +48,11 @@ import com.android.server.timezonedetector.TimeZoneDetectorService;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A service class that acts as a container for the {@link LocationTimeZoneProviderController},
@@ -112,11 +125,7 @@ public class LocationTimeZoneManagerService extends Binder {
 
     static final String TAG = "LocationTZDetector";
 
-    static final String PRIMARY_PROVIDER_NAME = "primary";
-    static final String SECONDARY_PROVIDER_NAME = "secondary";
-
-    private static final String SIMULATION_MODE_SYSTEM_PROPERTY_PREFIX =
-            "persist.sys.location_tz_simulation_mode.";
+    private static final long BLOCKING_OP_WAIT_DURATION_MILLIS = Duration.ofSeconds(20).toMillis();
 
     private static final String ATTRIBUTION_TAG = "LocationTimeZoneService";
 
@@ -129,24 +138,40 @@ public class LocationTimeZoneManagerService extends Binder {
     @NonNull private final Context mContext;
 
     /**
-     * The {@link ThreadingDomain} used to supply the {@link android.os.Handler} and shared lock
-     * object used by the controller and related components.
+     * The {@link ThreadingDomain} used to supply the shared lock object used by the controller and
+     * related components.
      *
      * <p>Most operations are executed on the associated handler thread <em>but not all</em>, hence
      * the requirement for additional synchronization using a shared lock.
      */
     @NonNull private final ThreadingDomain mThreadingDomain;
 
+    /** A handler associated with the {@link #mThreadingDomain}. */
+    @NonNull private final Handler mHandler;
+
     /** The shared lock from {@link #mThreadingDomain}. */
     @NonNull private final Object mSharedLock;
 
-    // Lazily initialized. Non-null and effectively final after onSystemThirdPartyAppsCanStart().
+    // Lazily initialized. Can be null if the service has been stopped.
     @GuardedBy("mSharedLock")
     private ControllerImpl mLocationTimeZoneDetectorController;
 
+    // Lazily initialized. Can be null if the service has been stopped.
+    @GuardedBy("mSharedLock")
+    private ControllerEnvironmentImpl mEnvironment;
+
+    @GuardedBy("mSharedLock")
+    @NonNull
+    private String mPrimaryProviderModeOverride = PROVIDER_MODE_OVERRIDE_NONE;
+
+    @GuardedBy("mSharedLock")
+    @NonNull
+    private String mSecondaryProviderModeOverride = PROVIDER_MODE_OVERRIDE_NONE;
+
     LocationTimeZoneManagerService(Context context) {
         mContext = context.createAttributionContext(ATTRIBUTION_TAG);
-        mThreadingDomain = new HandlerThreadingDomain(FgThread.getHandler());
+        mHandler = FgThread.getHandler();
+        mThreadingDomain = new HandlerThreadingDomain(mHandler);
         mSharedLock = mThreadingDomain.getLockObject();
     }
 
@@ -164,35 +189,63 @@ public class LocationTimeZoneManagerService extends Binder {
     }
 
     void onSystemThirdPartyAppsCanStart() {
-        // Called on an arbitrary thread during initialization.
-        synchronized (mSharedLock) {
-            LocationTimeZoneProvider primary = createPrimaryProvider();
-            LocationTimeZoneProvider secondary = createSecondaryProvider();
-            mLocationTimeZoneDetectorController =
-                    new ControllerImpl(mThreadingDomain, primary, secondary);
-            ControllerCallbackImpl callback = new ControllerCallbackImpl(mThreadingDomain);
-            ControllerEnvironmentImpl environment = new ControllerEnvironmentImpl(
-                    mThreadingDomain, mLocationTimeZoneDetectorController);
+        // Called on an arbitrary thread during initialization. We do not want to wait for
+        // completion as it would delay boot.
+        final boolean waitForCompletion = false;
+        startInternal(waitForCompletion);
+    }
 
-            // Initialize the controller on the mThreadingDomain thread: this ensures that the
-            // ThreadingDomain requirements for the controller / environment methods are honored.
-            mThreadingDomain.post(() ->
-                    mLocationTimeZoneDetectorController.initialize(environment, callback));
+    /**
+     * Starts the service during server initialization or during tests after a call to
+     * {@link #stop()}.
+     */
+    void start() {
+        enforceManageTimeZoneDetectorPermission();
+
+        final boolean waitForCompletion = true;
+        startInternal(waitForCompletion);
+    }
+
+    /**
+     * Starts the service during server initialization or during tests after a call to
+     * {@link #stop()}.
+     *
+     * <p>To avoid tests needing to sleep, when {@code waitForCompletion} is {@code true}, this
+     * method will not return until all the system server components have started.
+     */
+    private void startInternal(boolean waitForCompletion) {
+        Runnable runnable = () -> {
+            synchronized (mSharedLock) {
+                if (mLocationTimeZoneDetectorController == null) {
+                    LocationTimeZoneProvider primary = createPrimaryProvider();
+                    LocationTimeZoneProvider secondary = createSecondaryProvider();
+                    mLocationTimeZoneDetectorController =
+                            new ControllerImpl(mThreadingDomain, primary, secondary);
+                    ControllerCallbackImpl callback = new ControllerCallbackImpl(
+                            mThreadingDomain);
+                    mEnvironment = new ControllerEnvironmentImpl(
+                            mThreadingDomain, mLocationTimeZoneDetectorController);
+                    mLocationTimeZoneDetectorController.initialize(mEnvironment, callback);
+                }
+            }
+        };
+        if (waitForCompletion) {
+            mThreadingDomain.postAndWait(runnable, BLOCKING_OP_WAIT_DURATION_MILLIS);
+        } else {
+            mThreadingDomain.post(runnable);
         }
     }
 
     private LocationTimeZoneProvider createPrimaryProvider() {
-        Resources resources = mContext.getResources();
-        if (!resources.getBoolean(R.bool.config_enablePrimaryLocationTimeZoneProvider)) {
-            return new NullLocationTimeZoneProvider(mThreadingDomain, PRIMARY_PROVIDER_NAME);
-        }
-
         LocationTimeZoneProviderProxy proxy;
-        if (isInSimulationMode(PRIMARY_PROVIDER_NAME)) {
+        if (isProviderInSimulationMode(PRIMARY_PROVIDER_NAME)) {
             proxy = new SimulatedLocationTimeZoneProviderProxy(mContext, mThreadingDomain);
+        } else if (isProviderDisabled(PRIMARY_PROVIDER_NAME)) {
+            proxy = new NullLocationTimeZoneProviderProxy(mContext, mThreadingDomain);
         } else {
             proxy = new RealLocationTimeZoneProviderProxy(
                     mContext,
+                    mHandler,
                     mThreadingDomain,
                     PRIMARY_LOCATION_TIME_ZONE_SERVICE_ACTION,
                     R.bool.config_enablePrimaryLocationTimeZoneOverlay,
@@ -203,17 +256,15 @@ public class LocationTimeZoneManagerService extends Binder {
     }
 
     private LocationTimeZoneProvider createSecondaryProvider() {
-        Resources resources = mContext.getResources();
-        if (!resources.getBoolean(R.bool.config_enableSecondaryLocationTimeZoneProvider)) {
-            return new NullLocationTimeZoneProvider(mThreadingDomain, SECONDARY_PROVIDER_NAME);
-        }
-
         LocationTimeZoneProviderProxy proxy;
-        if (isInSimulationMode(SECONDARY_PROVIDER_NAME)) {
+        if (isProviderInSimulationMode(SECONDARY_PROVIDER_NAME)) {
             proxy = new SimulatedLocationTimeZoneProviderProxy(mContext, mThreadingDomain);
+        } else if (isProviderDisabled(SECONDARY_PROVIDER_NAME)) {
+            proxy = new NullLocationTimeZoneProviderProxy(mContext, mThreadingDomain);
         } else {
             proxy = new RealLocationTimeZoneProviderProxy(
                     mContext,
+                    mHandler,
                     mThreadingDomain,
                     SECONDARY_LOCATION_TIME_ZONE_SERVICE_ACTION,
                     R.bool.config_enableSecondaryLocationTimeZoneOverlay,
@@ -223,9 +274,67 @@ public class LocationTimeZoneManagerService extends Binder {
         return new BinderLocationTimeZoneProvider(mThreadingDomain, SECONDARY_PROVIDER_NAME, proxy);
     }
 
-    private boolean isInSimulationMode(String providerName) {
-        return SystemProperties.getBoolean(
-                SIMULATION_MODE_SYSTEM_PROPERTY_PREFIX + providerName, false);
+    /** Used for bug triage and in tests to simulate provider events. */
+    private boolean isProviderInSimulationMode(String providerName) {
+        return isProviderModeOverrideSet(providerName, PROVIDER_MODE_OVERRIDE_SIMULATED);
+    }
+
+    /** Used for bug triage, tests and experiments to remove a provider. */
+    private boolean isProviderDisabled(String providerName) {
+        return !isProviderEnabledInConfig(providerName)
+                || isProviderModeOverrideSet(providerName, PROVIDER_MODE_OVERRIDE_DISABLED);
+    }
+
+    private boolean isProviderEnabledInConfig(String providerName) {
+        int providerEnabledConfigId;
+        switch (providerName) {
+            case PRIMARY_PROVIDER_NAME: {
+                providerEnabledConfigId = R.bool.config_enablePrimaryLocationTimeZoneProvider;
+                break;
+            }
+            case SECONDARY_PROVIDER_NAME: {
+                providerEnabledConfigId = R.bool.config_enableSecondaryLocationTimeZoneProvider;
+                break;
+            }
+            default: {
+                throw new IllegalArgumentException(providerName);
+            }
+        }
+        Resources resources = mContext.getResources();
+        return resources.getBoolean(providerEnabledConfigId);
+    }
+
+    private boolean isProviderModeOverrideSet(@NonNull String providerName, @NonNull String mode) {
+        switch (providerName) {
+            case PRIMARY_PROVIDER_NAME: {
+                return Objects.equals(mPrimaryProviderModeOverride, mode);
+            }
+            case SECONDARY_PROVIDER_NAME: {
+                return Objects.equals(mSecondaryProviderModeOverride, mode);
+            }
+            default: {
+                throw new IllegalArgumentException(providerName);
+            }
+        }
+    }
+
+    /**
+     * Stops the service for tests. To avoid tests needing to sleep, this method will not return
+     * until all the system server components have stopped.
+     */
+    void stop() {
+        enforceManageTimeZoneDetectorPermission();
+
+        mThreadingDomain.postAndWait(() -> {
+            synchronized (mSharedLock) {
+                if (mLocationTimeZoneDetectorController != null) {
+                    mLocationTimeZoneDetectorController.destroy();
+                    mLocationTimeZoneDetectorController = null;
+                    mEnvironment.destroy();
+                    mEnvironment = null;
+                }
+            }
+        }, BLOCKING_OP_WAIT_DURATION_MILLIS);
     }
 
     @Override
@@ -236,20 +345,107 @@ public class LocationTimeZoneManagerService extends Binder {
                 this, in, out, err, args, callback, resultReceiver);
     }
 
-    /**
-     * Asynchronously passes a {@link SimulatedBinderProviderEvent] to the appropriate provider.
-     * The device must be in simulation mode, otherwise an {@link IllegalStateException} will be
-     * thrown.
-     */
-    void simulateBinderProviderEvent(SimulatedBinderProviderEvent event)
-            throws IllegalStateException {
-        if (!isInSimulationMode(event.getProviderName())) {
-            throw new IllegalStateException("Use \"setprop "
-                    + SIMULATION_MODE_SYSTEM_PROPERTY_PREFIX + event.getProviderName()
-                    + " 1\" and reboot before injecting simulated binder events.");
+    /** Sets this service into provider state recording mode for tests. */
+    void setProviderModeOverride(@NonNull String providerName, @NonNull String mode) {
+        enforceManageTimeZoneDetectorPermission();
+
+        Preconditions.checkArgument(
+                PRIMARY_PROVIDER_NAME.equals(providerName)
+                        || SECONDARY_PROVIDER_NAME.equals(providerName));
+        Preconditions.checkArgument(PROVIDER_MODE_OVERRIDE_DISABLED.equals(mode)
+                || PROVIDER_MODE_OVERRIDE_SIMULATED.equals(mode)
+                || PROVIDER_MODE_OVERRIDE_NONE.equals(mode));
+
+        mThreadingDomain.postAndWait(() -> {
+            synchronized (mSharedLock) {
+                switch (providerName) {
+                    case PRIMARY_PROVIDER_NAME: {
+                        mPrimaryProviderModeOverride = mode;
+                        break;
+                    }
+                    case SECONDARY_PROVIDER_NAME: {
+                        mSecondaryProviderModeOverride = mode;
+                        break;
+                    }
+                }
+            }
+        }, BLOCKING_OP_WAIT_DURATION_MILLIS);
+    }
+
+    /** Sets this service into provider state recording mode for tests. */
+    void setProviderStateRecordingEnabled(boolean enabled) {
+        enforceManageTimeZoneDetectorPermission();
+
+        mThreadingDomain.postAndWait(() -> {
+            synchronized (mSharedLock) {
+                if (mLocationTimeZoneDetectorController != null) {
+                    mLocationTimeZoneDetectorController.setProviderStateRecordingEnabled(enabled);
+                }
+            }
+        }, BLOCKING_OP_WAIT_DURATION_MILLIS);
+    }
+
+    /** Returns a snapshot of the current controller state for tests. */
+    @NonNull
+    LocationTimeZoneManagerServiceState getStateForTests() {
+        enforceManageTimeZoneDetectorPermission();
+
+        try {
+            return mThreadingDomain.postAndWait(
+                    () -> {
+                        synchronized (mSharedLock) {
+                            if (mLocationTimeZoneDetectorController == null) {
+                                return null;
+                            }
+                            return mLocationTimeZoneDetectorController.getStateForTests();
+                        }
+                    },
+                    BLOCKING_OP_WAIT_DURATION_MILLIS);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-        mThreadingDomain.post(
-                () -> mLocationTimeZoneDetectorController.simulateBinderProviderEvent(event));
+    }
+
+    /**
+     * Passes a {@link TestCommand} to the specified provider and waits for the response.
+     */
+    @NonNull
+    Bundle handleProviderTestCommand(
+            @NonNull String providerName, @NonNull TestCommand testCommand) {
+        enforceManageTimeZoneDetectorPermission();
+
+        // Because this method blocks and posts work to the threading domain thread, it would cause
+        // a deadlock if it were called by the threading domain thread.
+        mThreadingDomain.assertNotCurrentThread();
+
+        AtomicReference<Bundle> resultReference = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        RemoteCallback remoteCallback = new RemoteCallback(x -> {
+            resultReference.set(x);
+            latch.countDown();
+        });
+
+        mThreadingDomain.post(() -> {
+            synchronized (mSharedLock) {
+                if (mLocationTimeZoneDetectorController == null) {
+                    remoteCallback.sendResult(null);
+                    return;
+                }
+                mLocationTimeZoneDetectorController.handleProviderTestCommand(
+                        providerName, testCommand, remoteCallback);
+            }
+        });
+
+        try {
+            // Wait, but not indefinitely.
+            if (!latch.await(BLOCKING_OP_WAIT_DURATION_MILLIS, TimeUnit.MILLISECONDS)) {
+                throw new RuntimeException("Command did not complete in time");
+            }
+        } catch (InterruptedException e) {
+            throw new AssertionError(e);
+        }
+
+        return resultReference.get();
     }
 
     @Override
@@ -263,7 +459,7 @@ public class LocationTimeZoneManagerService extends Binder {
             ipw.println("LocationTimeZoneManagerService:");
             ipw.increaseIndent();
             if (mLocationTimeZoneDetectorController == null) {
-                ipw.println("{Uninitialized}");
+                ipw.println("{Stopped}");
             } else {
                 mLocationTimeZoneDetectorController.dump(ipw, args);
             }
@@ -278,8 +474,18 @@ public class LocationTimeZoneManagerService extends Binder {
     }
 
     static void warnLog(String msg) {
+        warnLog(msg, null);
+    }
+
+    static void warnLog(String msg, @Nullable Throwable t) {
         if (Log.isLoggable(TAG, Log.WARN)) {
-            Slog.w(TAG, msg);
+            Slog.w(TAG, msg, t);
         }
+    }
+
+    private void enforceManageTimeZoneDetectorPermission() {
+        mContext.enforceCallingPermission(
+                android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION,
+                "manage time and time zone detection");
     }
 }

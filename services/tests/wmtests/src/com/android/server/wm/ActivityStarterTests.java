@@ -487,8 +487,10 @@ public class ActivityStarterTests extends WindowTestsBase {
         final ActivityRecord splitSecondActivity =
                 new ActivityBuilder(mAtm).setCreateTask(true).build();
         final ActivityRecord splitPrimaryActivity = new TaskBuilder(mSupervisor)
-                .setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY).setCreateActivity(true)
-                .build().getTopMostActivity();
+                .setParentTask(splitOrg.mPrimary)
+                .setCreateActivity(true)
+                .build()
+                .getTopMostActivity();
         splitPrimaryActivity.mVisibleRequested = splitSecondActivity.mVisibleRequested = true;
 
         assertEquals(splitOrg.mPrimary, splitPrimaryActivity.getRootTask());
@@ -725,6 +727,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         }
         // caller is instrumenting with background activity starts privileges
         callerApp.setInstrumenting(callerIsInstrumentingWithBackgroundActivityStartPrivileges,
+                callerIsInstrumentingWithBackgroundActivityStartPrivileges ? Process.SHELL_UID : -1,
                 callerIsInstrumentingWithBackgroundActivityStartPrivileges);
         // callingUid is the device owner
         doReturn(isCallingUidDeviceOwner).when(mAtm).isDeviceOwner(callingUid);
