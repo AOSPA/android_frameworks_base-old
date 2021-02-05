@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "01b6143d_c80de435",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 801,
+      "author": {
+        "id": 1000316
+      },
+      "writtenOn": "2021-02-05T22:05:52Z",
+      "side": 1,
+      "message": "Would change to this instead of adding a method imo:\nanimator.translationX(mDialogView.getWidth() / (mVolumePanelOnLeft ? -2.0F : 2.0F));",
+      "revId": "8c210d5ff0f4e0fd7347335ef1880e86ef08b658",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
