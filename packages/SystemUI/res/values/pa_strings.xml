@@ -43,4 +43,6 @@
     <string name="applock_credential">&#160;to unlock</string>
     <string name="applock_unlock">Unlock</string>
 
+    <!-- Data usage info -->
+    <string name="usage_data">used today</string>
 </resources>
