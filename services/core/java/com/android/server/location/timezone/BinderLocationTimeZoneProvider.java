@@ -17,6 +17,7 @@
 package com.android.server.location.timezone;
 
 import static com.android.server.location.timezone.LocationTimeZoneManagerService.debugLog;
+import static com.android.server.location.timezone.LocationTimeZoneProvider.ProviderState.PROVIDER_STATE_DESTROYED;
 import static com.android.server.location.timezone.LocationTimeZoneProvider.ProviderState.PROVIDER_STATE_PERM_FAILED;
 import static com.android.server.location.timezone.LocationTimeZoneProvider.ProviderState.PROVIDER_STATE_STARTED_CERTAIN;
 import static com.android.server.location.timezone.LocationTimeZoneProvider.ProviderState.PROVIDER_STATE_STARTED_INITIALIZING;
@@ -25,8 +26,8 @@ import static com.android.server.location.timezone.LocationTimeZoneProvider.Prov
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.os.RemoteCallback;
 import android.util.IndentingPrintWriter;
-import android.util.Slog;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -71,6 +72,11 @@ class BinderLocationTimeZoneProvider extends LocationTimeZoneProvider {
         });
     }
 
+    @Override
+    void onDestroy() {
+        mProxy.destroy();
+    }
+
     private void handleProviderLost(String reason) {
         mThreadingDomain.assertCurrentThread();
 
@@ -100,11 +106,12 @@ class BinderLocationTimeZoneProvider extends LocationTimeZoneProvider {
                             + ": No state change required, provider is stopped.");
                     break;
                 }
-                case PROVIDER_STATE_PERM_FAILED: {
+                case PROVIDER_STATE_PERM_FAILED:
+                case PROVIDER_STATE_DESTROYED: {
                     debugLog("handleProviderLost reason=" + reason
                             + ", mProviderName=" + mProviderName
                             + ", currentState=" + currentState
-                            + ": No state change required, provider is perm failed.");
+                            + ": No state change required, provider is terminated.");
                     break;
                 }
                 default: {
@@ -132,11 +139,12 @@ class BinderLocationTimeZoneProvider extends LocationTimeZoneProvider {
                             + ", currentState=" + currentState + ": Provider is stopped.");
                     break;
                 }
-                case PROVIDER_STATE_PERM_FAILED: {
+                case PROVIDER_STATE_PERM_FAILED:
+                case PROVIDER_STATE_DESTROYED: {
                     debugLog("handleOnProviderBound"
                             + ", mProviderName=" + mProviderName
                             + ", currentState=" + currentState
-                            + ": No state change required, provider is perm failed.");
+                            + ": No state change required, provider is terminated.");
                     break;
                 }
                 default: {
@@ -161,9 +169,14 @@ class BinderLocationTimeZoneProvider extends LocationTimeZoneProvider {
         mProxy.setRequest(request);
     }
 
+    /**
+     * Passes the supplied test command to the current proxy.
+     */
     @Override
-    void logWarn(String msg) {
-        Slog.w(TAG, msg);
+    void handleTestCommand(@NonNull TestCommand testCommand, @Nullable RemoteCallback callback) {
+        mThreadingDomain.assertCurrentThread();
+
+        mProxy.handleTestCommand(testCommand, callback);
     }
 
     @Override
@@ -195,20 +208,5 @@ class BinderLocationTimeZoneProvider extends LocationTimeZoneProvider {
                     + ", mProxy=" + mProxy
                     + '}';
         }
-    }
-
-    /**
-     * Passes the supplied simulation / testing event to the current proxy iff the proxy is a
-     * {@link SimulatedLocationTimeZoneProviderProxy}. If not, the event is logged but discarded.
-     */
-    void simulateBinderProviderEvent(SimulatedBinderProviderEvent event) {
-        mThreadingDomain.assertCurrentThread();
-
-        if (!(mProxy instanceof SimulatedLocationTimeZoneProviderProxy)) {
-            Slog.w(TAG, mProxy + " is not a " + SimulatedLocationTimeZoneProviderProxy.class
-                    + ", event=" + event);
-            return;
-        }
-        ((SimulatedLocationTimeZoneProviderProxy) mProxy).simulate(event);
     }
 }

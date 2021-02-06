@@ -107,6 +107,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.internal.R;
 import com.android.internal.messages.nano.SystemMessageProto;
+import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.LockscreenCredential;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
@@ -116,7 +117,9 @@ import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.internal.util.collections.Sets;
@@ -205,6 +208,16 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     private static final String PROFILE_OFF_SUSPENSION_TITLE = "suspension_title";
     private static final String PROFILE_OFF_SUSPENSION_TEXT = "suspension_text";
     private static final String PROFILE_OFF_SUSPENSION_SOON_TEXT = "suspension_tomorrow_text";
+
+    @BeforeClass
+    public static void setUpClass() {
+        Notification.DevFlags.sForceDefaults = true;
+    }
+
+    @AfterClass
+    public static void tearDownClass() {
+        Notification.DevFlags.sForceDefaults = false;
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -1616,6 +1629,33 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 )), eq(user));
     }
 
+    @Test
+    public void testRemoveCredentialManagementApp() throws Exception {
+        final String packageName = "com.test.cred.mng";
+        Intent intent = new Intent(Intent.ACTION_PACKAGE_REMOVED);
+        intent.setData(Uri.parse("package:" + packageName));
+        dpms.mReceiver.setPendingResult(
+                new BroadcastReceiver.PendingResult(Activity.RESULT_OK,
+                        "resultData",
+                        /* resultExtras= */ null,
+                        BroadcastReceiver.PendingResult.TYPE_UNREGISTERED,
+                        /* ordered= */ true,
+                        /* sticky= */ false,
+                        /* token= */ null,
+                        CALLER_USER_HANDLE,
+                        /* flags= */ 0));
+        when(getServices().keyChainConnection.getService().hasCredentialManagementApp())
+                .thenReturn(true);
+        when(getServices().keyChainConnection.getService().getCredentialManagementAppPackageName())
+                .thenReturn(packageName);
+
+        dpms.mReceiver.onReceive(mContext, intent);
+
+        flushTasks(dpms);
+        verify(getServices().keyChainConnection.getService()).hasCredentialManagementApp();
+        verify(getServices().keyChainConnection.getService()).removeCredentialManagementApp();
+    }
+
     /**
      * Simple test for delegate set/get and general delegation. Tests verifying that delegated
      * privileges can acually be exercised by a delegate are not covered here.
@@ -2291,6 +2331,32 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     private void assertAccountsAreEqual(List<String> expectedAccounts,
             List<String> actualAccounts) {
         assertThat(actualAccounts).containsExactlyElementsIn(expectedAccounts);
+    }
+
+    @Test
+    public void testSetPermittedInputMethodsWithPOOfOrganizationOwnedDevice()
+            throws Exception {
+        String packageName = "com.google.pkg.one";
+        setupProfileOwner();
+        configureProfileOwnerOfOrgOwnedDevice(admin1, CALLER_USER_HANDLE);
+
+        // Allow all input methods
+        parentDpm.setPermittedInputMethods(admin1, null);
+
+        assertThat(parentDpm.getPermittedInputMethods(admin1)).isNull();
+
+        // Allow only system input methods
+        parentDpm.setPermittedInputMethods(admin1, new ArrayList<>());
+
+        assertThat(parentDpm.getPermittedInputMethods(admin1)).isEmpty();
+
+        // Don't allow specific third party input methods
+        final List<String> inputMethods = Collections.singletonList(packageName);
+
+        assertExpectException(IllegalArgumentException.class, /* messageRegex= */ "Permitted "
+                        + "input methods must allow all input methods or only system input methods "
+                        + "when called on the parent instance of an organization-owned device",
+                () -> parentDpm.setPermittedInputMethods(admin1, inputMethods));
     }
 
     @Test
@@ -5094,6 +5160,54 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
+    public void testGetAggregatedPasswordComplexity_IgnoreProfileRequirement()
+            throws Exception {
+        final int managedProfileUserId = CALLER_USER_HANDLE;
+        final int managedProfileAdminUid =
+                UserHandle.getUid(managedProfileUserId, DpmMockContext.SYSTEM_UID);
+        mContext.binder.callingUid = managedProfileAdminUid;
+        addManagedProfile(admin1, managedProfileAdminUid, admin1, VERSION_CODES.R);
+
+        dpm.setRequiredPasswordComplexity(PASSWORD_COMPLEXITY_HIGH);
+        parentDpm.setRequiredPasswordComplexity(PASSWORD_COMPLEXITY_LOW);
+
+        assertThat(dpms.getAggregatedPasswordComplexityForUser(UserHandle.USER_SYSTEM, true))
+                .isEqualTo(PASSWORD_COMPLEXITY_LOW);
+        assertThat(dpms.getAggregatedPasswordComplexityForUser(UserHandle.USER_SYSTEM, false))
+                .isEqualTo(PASSWORD_COMPLEXITY_HIGH);
+    }
+
+    @Test
+    public void testGetAggregatedPasswordMetrics_IgnoreProfileRequirement()
+            throws Exception {
+        final int managedProfileUserId = CALLER_USER_HANDLE;
+        final int managedProfileAdminUid =
+                UserHandle.getUid(managedProfileUserId, DpmMockContext.SYSTEM_UID);
+        mContext.binder.callingUid = managedProfileAdminUid;
+        addManagedProfile(admin1, managedProfileAdminUid, admin1, VERSION_CODES.R);
+
+        dpm.setPasswordQuality(admin1, DevicePolicyManager.PASSWORD_QUALITY_COMPLEX);
+        dpm.setPasswordMinimumLength(admin1, 8);
+        dpm.setPasswordMinimumLetters(admin1, 1);
+        dpm.setPasswordMinimumNumeric(admin1, 2);
+        dpm.setPasswordMinimumSymbols(admin1, 3);
+
+        parentDpm.setPasswordQuality(admin1, DevicePolicyManager.PASSWORD_QUALITY_SOMETHING);
+
+        PasswordMetrics deviceMetrics =
+                dpms.getPasswordMinimumMetrics(UserHandle.USER_SYSTEM, true);
+        assertThat(deviceMetrics.credType).isEqualTo(LockPatternUtils.CREDENTIAL_TYPE_PATTERN);
+
+        PasswordMetrics allMetrics =
+                dpms.getPasswordMinimumMetrics(UserHandle.USER_SYSTEM, false);
+        assertThat(allMetrics.credType).isEqualTo(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD);
+        assertThat(allMetrics.length).isEqualTo(8);
+        assertThat(allMetrics.letters).isEqualTo(1);
+        assertThat(allMetrics.numeric).isEqualTo(2);
+        assertThat(allMetrics.symbols).isEqualTo(3);
+    }
+
+    @Test
     public void testCanSetPasswordRequirementOnParentPreS() throws Exception {
         final int managedProfileUserId = CALLER_USER_HANDLE;
         final int managedProfileAdminUid =
@@ -6877,6 +6991,35 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         dpm.setRequiredPasswordComplexity(PASSWORD_COMPLEXITY_HIGH);
         assertThat(dpm.getPasswordQuality(admin1)).isEqualTo(
                 DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED);
+    }
+
+    @Test
+    public void testSetRequiredPasswordComplexityFailsWithQualityOnParent() throws Exception {
+        final int managedProfileUserId = CALLER_USER_HANDLE;
+        final int managedProfileAdminUid =
+                UserHandle.getUid(managedProfileUserId, DpmMockContext.SYSTEM_UID);
+        mContext.binder.callingUid = managedProfileAdminUid;
+        addManagedProfile(admin1, managedProfileAdminUid, admin1, VERSION_CODES.R);
+
+        parentDpm.setPasswordQuality(admin1, DevicePolicyManager.PASSWORD_QUALITY_COMPLEX);
+
+        assertThrows(IllegalStateException.class,
+                () -> dpm.setRequiredPasswordComplexity(PASSWORD_COMPLEXITY_HIGH));
+    }
+
+    @Test
+    public void testSetQualityOnParentFailsWithComplexityOnProfile() throws Exception {
+        final int managedProfileUserId = CALLER_USER_HANDLE;
+        final int managedProfileAdminUid =
+                UserHandle.getUid(managedProfileUserId, DpmMockContext.SYSTEM_UID);
+        mContext.binder.callingUid = managedProfileAdminUid;
+        addManagedProfile(admin1, managedProfileAdminUid, admin1, VERSION_CODES.R);
+
+        dpm.setRequiredPasswordComplexity(PASSWORD_COMPLEXITY_HIGH);
+
+        assertThrows(IllegalStateException.class,
+                () -> parentDpm.setPasswordQuality(admin1,
+                        DevicePolicyManager.PASSWORD_QUALITY_COMPLEX));
     }
 
     private void setUserUnlocked(int userHandle, boolean unlocked) {

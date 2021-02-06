@@ -890,6 +890,9 @@ public class Activity extends ContextThemeWrapper
     @UnsupportedAppUsage
     final FragmentController mFragments = FragmentController.createController(new HostCallbacks());
 
+    /** The options for scene transition. */
+    ActivityOptions mPendingOptions;
+
     private static final class ManagedCursor {
         ManagedCursor(Cursor cursor) {
             mCursor = cursor;
@@ -5148,12 +5151,6 @@ public class Activity extends ContextThemeWrapper
      * #checkSelfPermission(String)}.
      * </p>
      * <p>
-     * Calling this API for permissions already granted to your app would show UI
-     * to the user to decide whether the app can still hold these permissions. This
-     * can be useful if the way your app uses data guarded by the permissions
-     * changes significantly.
-     * </p>
-     * <p>
      * You cannot request a permission if your activity sets {@link
      * android.R.styleable#AndroidManifestActivity_noHistory noHistory} to
      * <code>true</code> because in this case the activity would not receive
@@ -7258,7 +7255,7 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Retrieve the ActivityOptions passed in from the launching activity or passed back
+     * Takes the ActivityOptions passed in from the launching activity or passed back
      * from an activity launched by this activity in its call to {@link
      * #convertToTranslucent(TranslucentConversionListener, ActivityOptions)}
      *
@@ -7267,7 +7264,10 @@ public class Activity extends ContextThemeWrapper
      */
     @UnsupportedAppUsage
     ActivityOptions getActivityOptions() {
-        return ActivityOptions.fromBundle(ActivityClient.getInstance().getActivityOptions(mToken));
+        final ActivityOptions options = mPendingOptions;
+        // The option only applies once.
+        mPendingOptions = null;
+        return options;
     }
 
     /**

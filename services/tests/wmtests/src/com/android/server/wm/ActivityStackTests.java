@@ -156,8 +156,10 @@ public class ActivityStackTests extends WindowTestsBase {
         organizer.setMoveToSecondaryOnEnter(false);
 
         // Create primary splitscreen stack.
-        final Task primarySplitScreen = mDefaultTaskDisplayArea.createRootTask(
-                WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        final Task primarySplitScreen = new TaskBuilder(mAtm.mTaskSupervisor)
+                .setParentTask(organizer.mPrimary)
+                .setOnTop(true)
+                .build();
 
         // Assert windowing mode.
         assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, primarySplitScreen.getWindowingMode());
@@ -205,14 +207,15 @@ public class ActivityStackTests extends WindowTestsBase {
     @Test
     public void testSplitScreenMoveToBack() {
         TestSplitOrganizer organizer = new TestSplitOrganizer(mAtm);
-        // Set up split-screen with primary on top and secondary containing the home task below
-        // another stack.
+        // Explicitly reparent task to primary split root to enter split mode, in which implies
+        // primary on top and secondary containing the home task below another stack.
         final Task primaryTask = mDefaultTaskDisplayArea.createRootTask(
-                WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+                WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        final Task secondaryTask = mDefaultTaskDisplayArea.createRootTask(
+                WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         final Task homeRoot = mDefaultTaskDisplayArea.getRootTask(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
-        final Task secondaryTask = mDefaultTaskDisplayArea.createRootTask(
-                WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        primaryTask.reparent(organizer.mPrimary, POSITION_TOP);
         mDefaultTaskDisplayArea.positionChildAt(POSITION_TOP, organizer.mPrimary,
                 false /* includingParents */);
 
@@ -314,11 +317,12 @@ public class ActivityStackTests extends WindowTestsBase {
 
         final RootWindowContainer.FindTaskResult result =
                 new RootWindowContainer.FindTaskResult();
-        result.process(r, task);
+        result.init(r.getActivityType(), r.taskAffinity, r.intent, r.info);
+        result.process(task);
 
         assertEquals(r, task.getTopNonFinishingActivity(false /* includeOverlays */));
         assertEquals(taskOverlay, task.getTopNonFinishingActivity(true /* includeOverlays */));
-        assertNotNull(result.mRecord);
+        assertNotNull(result.mIdealRecord);
     }
 
     @Test
@@ -340,15 +344,17 @@ public class ActivityStackTests extends WindowTestsBase {
         final ActivityRecord r1 = new ActivityBuilder(mAtm).setComponent(
                 target).setTargetActivity(targetActivity).build();
         RootWindowContainer.FindTaskResult result = new RootWindowContainer.FindTaskResult();
-        result.process(r1, parentTask);
-        assertThat(result.mRecord).isNotNull();
+        result.init(r1.getActivityType(), r1.taskAffinity, r1.intent, r1.info);
+        result.process(parentTask);
+        assertThat(result.mIdealRecord).isNotNull();
 
         // Using alias activity to find task.
         final ActivityRecord r2 = new ActivityBuilder(mAtm).setComponent(
                 alias).setTargetActivity(targetActivity).build();
         result = new RootWindowContainer.FindTaskResult();
-        result.process(r2, parentTask);
-        assertThat(result.mRecord).isNotNull();
+        result.init(r2.getActivityType(), r2.taskAffinity, r2.intent, r2.info);
+        result.process(parentTask);
+        assertThat(result.mIdealRecord).isNotNull();
     }
 
     @Test

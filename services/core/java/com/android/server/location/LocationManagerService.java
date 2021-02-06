@@ -26,6 +26,8 @@ import static android.location.LocationManager.FUSED_PROVIDER;
 import static android.location.LocationManager.GPS_PROVIDER;
 import static android.location.LocationManager.NETWORK_PROVIDER;
 import static android.location.LocationRequest.LOW_POWER_EXCEPTIONS;
+import static android.location.provider.LocationProviderBase.ACTION_FUSED_PROVIDER;
+import static android.location.provider.LocationProviderBase.ACTION_NETWORK_PROVIDER;
 
 import static com.android.server.location.LocationPermissions.PERMISSION_COARSE;
 import static com.android.server.location.LocationPermissions.PERMISSION_FINE;
@@ -45,15 +47,15 @@ import android.content.Intent;
 import android.location.Criteria;
 import android.location.GeocoderParams;
 import android.location.Geofence;
+import android.location.GnssAntennaInfo;
 import android.location.GnssCapabilities;
 import android.location.GnssMeasurementCorrections;
 import android.location.GnssMeasurementRequest;
 import android.location.IGeocodeListener;
-import android.location.IGnssAntennaInfoListener;
 import android.location.IGnssMeasurementsListener;
 import android.location.IGnssNavigationMessageListener;
+import android.location.IGnssNmeaListener;
 import android.location.IGnssStatusListener;
-import android.location.IGpsGeofenceHardware;
 import android.location.ILocationCallback;
 import android.location.ILocationListener;
 import android.location.ILocationManager;
@@ -64,6 +66,7 @@ import android.location.LocationManagerInternal;
 import android.location.LocationProvider;
 import android.location.LocationRequest;
 import android.location.LocationTime;
+import android.location.provider.ProviderProperties;
 import android.location.util.identity.CallerIdentity;
 import android.os.Binder;
 import android.os.Bundle;
@@ -80,17 +83,19 @@ import android.util.IndentingPrintWriter;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.location.ProviderProperties;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.location.geofence.GeofenceManager;
 import com.android.server.location.geofence.GeofenceProxy;
+import com.android.server.location.gnss.GnssConfiguration;
 import com.android.server.location.gnss.GnssManagerService;
+import com.android.server.location.gnss.hal.GnssNative;
 import com.android.server.location.injector.AlarmHelper;
 import com.android.server.location.injector.AppForegroundHelper;
 import com.android.server.location.injector.AppOpsHelper;
+import com.android.server.location.injector.EmergencyHelper;
 import com.android.server.location.injector.Injector;
 import com.android.server.location.injector.LocationAttributionHelper;
 import com.android.server.location.injector.LocationEventLog;
@@ -102,6 +107,7 @@ import com.android.server.location.injector.SettingsHelper;
 import com.android.server.location.injector.SystemAlarmHelper;
 import com.android.server.location.injector.SystemAppForegroundHelper;
 import com.android.server.location.injector.SystemAppOpsHelper;
+import com.android.server.location.injector.SystemEmergencyHelper;
 import com.android.server.location.injector.SystemLocationPermissionsHelper;
 import com.android.server.location.injector.SystemLocationPowerSaveModeHelper;
 import com.android.server.location.injector.SystemScreenInteractiveHelper;
@@ -208,11 +214,6 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     public static final String TAG = "LocationManagerService";
     public static final boolean D = Log.isLoggable(TAG, Log.DEBUG);
-
-    private static final String NETWORK_LOCATION_SERVICE_ACTION =
-            "com.android.location.service.v3.NetworkLocationProvider";
-    private static final String FUSED_LOCATION_SERVICE_ACTION =
-            "com.android.location.service.FusedLocationProvider";
 
     private static final String ATTRIBUTION_TAG = "LocationService";
 
@@ -340,7 +341,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         // provider has unfortunate hard dependencies on the network provider
         ProxyLocationProvider networkProvider = ProxyLocationProvider.create(
                 mContext,
-                NETWORK_LOCATION_SERVICE_ACTION,
+                ACTION_NETWORK_PROVIDER,
                 com.android.internal.R.bool.config_enableNetworkLocationOverlay,
                 com.android.internal.R.string.config_networkLocationProviderPackageName);
         if (networkProvider != null) {
@@ -353,13 +354,13 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         // ensure that a fused provider exists which will work in direct boot
         Preconditions.checkState(!mContext.getPackageManager().queryIntentServicesAsUser(
-                new Intent(FUSED_LOCATION_SERVICE_ACTION),
+                new Intent(ACTION_FUSED_PROVIDER),
                 MATCH_DIRECT_BOOT_AWARE | MATCH_SYSTEM_ONLY, UserHandle.USER_SYSTEM).isEmpty(),
                 "Unable to find a direct boot aware fused location provider");
 
         ProxyLocationProvider fusedProvider = ProxyLocationProvider.create(
                 mContext,
-                FUSED_LOCATION_SERVICE_ACTION,
+                ACTION_FUSED_PROVIDER,
                 com.android.internal.R.bool.config_enableFusedLocationOverlay,
                 com.android.internal.R.string.config_fusedLocationProviderPackageName);
         if (fusedProvider != null) {
@@ -372,8 +373,10 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         // initialize gnss last because it has no awareness of boot phases and blindly assumes that
         // all other location providers are loaded at initialization
-        if (GnssManagerService.isGnssSupported()) {
-            mGnssManagerService = new GnssManagerService(mContext, mInjector);
+        if (GnssNative.isSupported()) {
+            GnssConfiguration gnssConfiguration = new GnssConfiguration(mContext);
+            GnssNative gnssNative = GnssNative.create(mInjector, gnssConfiguration);
+            mGnssManagerService = new GnssManagerService(mContext, mInjector, gnssNative);
             mGnssManagerService.onSystemReady();
 
             LocationProviderManager gnssManager = new LocationProviderManager(mContext, mInjector,
@@ -402,13 +405,11 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         // bind to gnss geofence proxy
-        if (GnssManagerService.isGnssSupported()) {
-            IGpsGeofenceHardware gpsGeofenceHardware = mGnssManagerService.getGpsGeofenceProxy();
-            if (gpsGeofenceHardware != null) {
-                GeofenceProxy provider = GeofenceProxy.createAndBind(mContext, gpsGeofenceHardware);
-                if (provider == null) {
-                    Log.e(TAG, "unable to bind to GeofenceProxy");
-                }
+        if (mGnssManagerService != null) {
+            GeofenceProxy provider = GeofenceProxy.createAndBind(mContext,
+                    mGnssManagerService.getGnssGeofenceProxy());
+            if (provider == null) {
+                Log.e(TAG, "unable to bind to GeofenceProxy");
             }
         }
 
@@ -418,16 +419,17 @@ public class LocationManagerService extends ILocationManager.Stub {
         for (String testProviderString : testProviderStrings) {
             String[] fragments = testProviderString.split(",");
             String name = fragments[0].trim();
-            ProviderProperties properties = new ProviderProperties(
-                    Boolean.parseBoolean(fragments[1]) /* requiresNetwork */,
-                    Boolean.parseBoolean(fragments[2]) /* requiresSatellite */,
-                    Boolean.parseBoolean(fragments[3]) /* requiresCell */,
-                    Boolean.parseBoolean(fragments[4]) /* hasMonetaryCost */,
-                    Boolean.parseBoolean(fragments[5]) /* supportsAltitude */,
-                    Boolean.parseBoolean(fragments[6]) /* supportsSpeed */,
-                    Boolean.parseBoolean(fragments[7]) /* supportsBearing */,
-                    Integer.parseInt(fragments[8]) /* powerRequirement */,
-                    Integer.parseInt(fragments[9]) /* accuracy */);
+            ProviderProperties properties = new ProviderProperties.Builder()
+                    .setHasNetworkRequirement(Boolean.parseBoolean(fragments[1]))
+                    .setHasSatelliteRequirement(Boolean.parseBoolean(fragments[2]))
+                    .setHasCellRequirement(Boolean.parseBoolean(fragments[3]))
+                    .setHasMonetaryCost(Boolean.parseBoolean(fragments[4]))
+                    .setHasAltitudeSupport(Boolean.parseBoolean(fragments[5]))
+                    .setHasSpeedSupport(Boolean.parseBoolean(fragments[6]))
+                    .setHasBearingSupport(Boolean.parseBoolean(fragments[7]))
+                    .setPowerUsage(Integer.parseInt(fragments[8]))
+                    .setAccuracy(Integer.parseInt(fragments[9]))
+                    .build();
             getOrAddLocationProviderManager(name).setMockProvider(
                     new MockLocationProvider(properties, CallerIdentity.fromContext(mContext)));
         }
@@ -525,6 +527,11 @@ public class LocationManagerService extends ILocationManager.Stub {
                 unregisterLocationListener(listener);
             }
         }
+    }
+
+    @Override
+    public boolean hasProvider(String provider) {
+        return getLocationProviderManager(provider) != null;
     }
 
     @Override
@@ -812,22 +819,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     @Override
     public LocationTime getGnssTimeMillis() {
-        synchronized (mLock) {
-            LocationProviderManager gpsManager = getLocationProviderManager(GPS_PROVIDER);
-            if (gpsManager == null) {
-                return null;
-            }
-
-            Location location = gpsManager.getLastLocationUnsafe(UserHandle.USER_ALL,
-                    PERMISSION_FINE, false, Long.MAX_VALUE);
-            if (location == null) {
-                return null;
-            }
-
-            long currentNanos = SystemClock.elapsedRealtimeNanos();
-            long deltaMs = NANOSECONDS.toMillis(location.getElapsedRealtimeAgeNanos(currentNanos));
-            return new LocationTime(location.getTime() + deltaMs, currentNanos);
-        }
+        return mLocalService.getGnssTimeMillis();
     }
 
     @Override
@@ -871,6 +863,21 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     @Override
+    public void registerGnssNmeaCallback(IGnssNmeaListener listener, String packageName,
+            String attributionTag) {
+        if (mGnssManagerService != null) {
+            mGnssManagerService.registerGnssNmeaCallback(listener, packageName, attributionTag);
+        }
+    }
+
+    @Override
+    public void unregisterGnssNmeaCallback(IGnssNmeaListener listener) {
+        if (mGnssManagerService != null) {
+            mGnssManagerService.unregisterGnssNmeaCallback(listener);
+        }
+    }
+
+    @Override
     public void addGnssMeasurementsListener(@Nullable GnssMeasurementRequest request,
             IGnssMeasurementsListener listener, String packageName, String attributionTag) {
         if (mGnssManagerService != null) {
@@ -895,24 +902,14 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     @Override
-    public long getGnssCapabilities() {
-        return mGnssManagerService == null ? GnssCapabilities.INVALID_CAPABILITIES
+    public GnssCapabilities getGnssCapabilities() {
+        return mGnssManagerService == null ? new GnssCapabilities.Builder().build()
                 : mGnssManagerService.getGnssCapabilities();
     }
 
     @Override
-    public void addGnssAntennaInfoListener(IGnssAntennaInfoListener listener,
-            String packageName, String attributionTag) {
-        if (mGnssManagerService != null) {
-            mGnssManagerService.addGnssAntennaInfoListener(listener, packageName, attributionTag);
-        }
-    }
-
-    @Override
-    public void removeGnssAntennaInfoListener(IGnssAntennaInfoListener listener) {
-        if (mGnssManagerService != null) {
-            mGnssManagerService.removeGnssAntennaInfoListener(listener);
-        }
+    public List<GnssAntennaInfo> getGnssAntennaInfos() {
+        return mGnssManagerService == null ? null : mGnssManagerService.getGnssAntennaInfos();
     }
 
     @Override
@@ -956,16 +953,16 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     @Override
-    public ProviderProperties getProviderProperties(String providerName) {
-        LocationProviderManager manager = getLocationProviderManager(providerName);
-        if (manager == null) {
-            return null;
-        }
+    public ProviderProperties getProviderProperties(String provider) {
+        LocationProviderManager manager = getLocationProviderManager(provider);
+        Preconditions.checkArgument(manager != null,
+                "provider \"" + provider + "\" does not exist");
         return manager.getProperties();
     }
 
     @Override
-    public boolean isProviderPackage(String provider, String packageName) {
+    public boolean isProviderPackage(@Nullable String provider, String packageName,
+            @Nullable String attributionTag) {
         mContext.enforceCallingOrSelfPermission(permission.READ_DEVICE_CONFIG, null);
 
         for (LocationProviderManager manager : mProviderManagers) {
@@ -976,7 +973,8 @@ public class LocationManagerService extends ILocationManager.Stub {
             if (identity == null) {
                 continue;
             }
-            if (identity.getPackageName().equals(packageName)) {
+            if (identity.getPackageName().equals(packageName) && (attributionTag == null
+                    || Objects.equals(identity.getAttributionTag(), attributionTag))) {
                 return true;
             }
         }
@@ -1180,7 +1178,7 @@ public class LocationManagerService extends ILocationManager.Stub {
     @Override
     public int handleShellCommand(ParcelFileDescriptor in, ParcelFileDescriptor out,
             ParcelFileDescriptor err, String[] args) {
-        return new LocationShellCommand(this).exec(
+        return new LocationShellCommand(mContext, this).exec(
                 this, in.getFileDescriptor(), out.getFileDescriptor(), err.getFileDescriptor(),
                 args);
     }
@@ -1278,13 +1276,17 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         @Override
-        public boolean isProvider(String provider, CallerIdentity identity) {
-            LocationProviderManager manager = getLocationProviderManager(provider);
-            if (manager == null) {
-                return false;
-            } else {
-                return identity.equals(manager.getIdentity());
+        public boolean isProvider(@Nullable String provider, CallerIdentity identity) {
+            for (LocationProviderManager manager : mProviderManagers) {
+                if (provider != null && !provider.equals(manager.getName())) {
+                    continue;
+                }
+                if (identity.equalsIgnoringListenerId(manager.getIdentity())) {
+                    return true;
+                }
             }
+
+            return false;
         }
 
         @Override
@@ -1293,12 +1295,33 @@ public class LocationManagerService extends ILocationManager.Stub {
                 mGnssManagerService.sendNiResponse(notifId, userResponse);
             }
         }
+
+        @Override
+        public @Nullable LocationTime getGnssTimeMillis() {
+            LocationProviderManager gpsManager = getLocationProviderManager(GPS_PROVIDER);
+            if (gpsManager == null) {
+                return null;
+            }
+
+            Location location = gpsManager.getLastLocationUnsafe(UserHandle.USER_ALL,
+                    PERMISSION_FINE, false, Long.MAX_VALUE);
+            if (location == null) {
+                return null;
+            }
+
+            long currentNanos = SystemClock.elapsedRealtimeNanos();
+            long deltaMs = NANOSECONDS.toMillis(
+                    location.getElapsedRealtimeAgeNanos(currentNanos));
+            return new LocationTime(location.getTime() + deltaMs, currentNanos);
+        }
     }
 
     private static class SystemInjector implements Injector {
 
-        private final LocationEventLog mLocationEventLog;
+        private final Context mContext;
+
         private final UserInfoHelper mUserInfoHelper;
+        private final LocationEventLog mLocationEventLog;
         private final AlarmHelper mAlarmHelper;
         private final SystemAppOpsHelper mAppOpsHelper;
         private final SystemLocationPermissionsHelper mLocationPermissionsHelper;
@@ -1309,9 +1332,19 @@ public class LocationManagerService extends ILocationManager.Stub {
         private final LocationAttributionHelper mLocationAttributionHelper;
         private final LocationUsageLogger mLocationUsageLogger;
 
+        // lazily instantiated since they may not always be used
+
+        @GuardedBy("this")
+        private @Nullable SystemEmergencyHelper mEmergencyCallHelper;
+
+        @GuardedBy("this")
+        private boolean mSystemReady;
+
         SystemInjector(Context context, UserInfoHelper userInfoHelper) {
-            mLocationEventLog = new LocationEventLog();
+            mContext = context;
+
             mUserInfoHelper = userInfoHelper;
+            mLocationEventLog = new LocationEventLog();
             mAlarmHelper = new SystemAlarmHelper(context);
             mAppOpsHelper = new SystemAppOpsHelper(context);
             mLocationPermissionsHelper = new SystemLocationPermissionsHelper(context,
@@ -1325,13 +1358,19 @@ public class LocationManagerService extends ILocationManager.Stub {
             mLocationUsageLogger = new LocationUsageLogger();
         }
 
-        void onSystemReady() {
+        synchronized void onSystemReady() {
             mAppOpsHelper.onSystemReady();
             mLocationPermissionsHelper.onSystemReady();
             mSettingsHelper.onSystemReady();
             mAppForegroundHelper.onSystemReady();
             mLocationPowerSaveModeHelper.onSystemReady();
             mScreenInteractiveHelper.onSystemReady();
+
+            if (mEmergencyCallHelper != null) {
+                mEmergencyCallHelper.onSystemReady();
+            }
+
+            mSystemReady = true;
         }
 
         @Override
@@ -1365,11 +1404,6 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         @Override
-        public LocationUsageLogger getLocationUsageLogger() {
-            return mLocationUsageLogger;
-        }
-
-        @Override
         public LocationPowerSaveModeHelper getLocationPowerSaveModeHelper() {
             return mLocationPowerSaveModeHelper;
         }
@@ -1385,8 +1419,25 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         @Override
+        public synchronized EmergencyHelper getEmergencyHelper() {
+            if (mEmergencyCallHelper == null) {
+                mEmergencyCallHelper = new SystemEmergencyHelper(mContext);
+                if (mSystemReady) {
+                    mEmergencyCallHelper.onSystemReady();
+                }
+            }
+
+            return mEmergencyCallHelper;
+        }
+
+        @Override
         public LocationEventLog getLocationEventLog() {
             return mLocationEventLog;
+        }
+
+        @Override
+        public LocationUsageLogger getLocationUsageLogger() {
+            return mLocationUsageLogger;
         }
     }
 }

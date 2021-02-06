@@ -1502,11 +1502,14 @@ public class JobSchedulerService extends com.android.server.SystemService
         mControllers.add(mBatteryController);
         mStorageController = new StorageController(this);
         mControllers.add(mStorageController);
-        mControllers.add(new BackgroundJobsController(this));
+        final BackgroundJobsController backgroundJobsController =
+                new BackgroundJobsController(this);
+        mControllers.add(backgroundJobsController);
         mControllers.add(new ContentObserverController(this));
         mDeviceIdleJobsController = new DeviceIdleJobsController(this);
         mControllers.add(mDeviceIdleJobsController);
-        mQuotaController = new QuotaController(this);
+        mQuotaController =
+                new QuotaController(this, backgroundJobsController, connectivityController);
         mControllers.add(mQuotaController);
         mControllers.add(new ComponentController(this));
 
@@ -1975,9 +1978,12 @@ public class JobSchedulerService extends com.android.server.SystemService
                         JobStatus runNow = (JobStatus) message.obj;
                         // runNow can be null, which is a controller's way of indicating that its
                         // state is such that all ready jobs should be run immediately.
-                        if (runNow != null && isReadyToBeExecutedLocked(runNow)) {
-                            mJobPackageTracker.notePending(runNow);
-                            addOrderedItem(mPendingJobs, runNow, sPendingJobComparator);
+                        if (runNow != null) {
+                            if (!isCurrentlyActiveLocked(runNow)
+                                    && isReadyToBeExecutedLocked(runNow)) {
+                                mJobPackageTracker.notePending(runNow);
+                                addOrderedItem(mPendingJobs, runNow, sPendingJobComparator);
+                            }
                         } else {
                             queueReadyJobsForExecutionLocked();
                         }
@@ -2393,7 +2399,12 @@ public class JobSchedulerService extends com.android.server.SystemService
             return false;
         }
 
-        if (checkIfRestricted(job) != null) {
+        final JobRestriction restriction = checkIfRestricted(job);
+        if (restriction != null) {
+            if (DEBUG) {
+                Slog.v(TAG, "areComponentsInPlaceLocked: " + job.toShortString()
+                        + " restricted due to " + restriction.getReason());
+            }
             return false;
         }
 

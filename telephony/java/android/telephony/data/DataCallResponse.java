@@ -276,9 +276,11 @@ public final class DataCallResponse implements Parcelable {
     }
 
     /**
-     * @return The network suggested data retry duration in milliseconds. {@code Long.MAX_VALUE}
-     * indicates data retry should not occur. {@link #RETRY_DURATION_UNDEFINED} indicates network
-     * did not suggest any retry duration.
+     * @return The network suggested data retry duration in milliseconds as specified in
+     * 3GPP TS 24.302 section 8.2.9.1.  The APN associated to this data call will be throttled for
+     * the specified duration unless {@link DataServiceCallback#onApnUnthrottled} is called.
+     * {@code Long.MAX_VALUE} indicates data retry should not occur.
+     * {@link #RETRY_DURATION_UNDEFINED} indicates network did not suggest any retry duration.
      */
     public long getRetryDurationMillis() {
         return mSuggestedRetryTime;
@@ -422,7 +424,7 @@ public final class DataCallResponse implements Parcelable {
            .append(" mtu=").append(getMtu())
            .append(" mtuV4=").append(getMtuV4())
            .append(" mtuV6=").append(getMtuV6())
-           .append(" handoverFailureMode=").append(getHandoverFailureMode())
+           .append(" handoverFailureMode=").append(failureModeToString(mHandoverFailureMode))
            .append(" pduSessionId=").append(getPduSessionId())
            .append(" defaultQos=").append(mDefaultQos)
            .append(" qosSessions=").append(mQosSessions)

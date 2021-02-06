@@ -575,9 +575,9 @@ public class AudioService extends IAudioService.Stub
 
     // Pre-scale for Bluetooth Absolute Volume
     private float[] mPrescaleAbsoluteVolume = new float[] {
-        0.5f,    // Pre-scale for index 1
-        0.7f,    // Pre-scale for index 2
-        0.85f,   // Pre-scale for index 3
+        0.6f,    // Pre-scale for index 1
+        0.8f,    // Pre-scale for index 2
+        0.9f,   // Pre-scale for index 3
     };
 
     private NotificationManager mNm;
@@ -602,6 +602,9 @@ public class AudioService extends IAudioService.Stub
     private boolean mMicMuteFromRestrictions;
     // caches the value returned by AudioSystem.isMicrophoneMuted()
     private boolean mMicMuteFromSystemCached;
+
+    private boolean mFastScrollSoundEffectsEnabled;
+    private boolean mHomeSoundEffectEnabled;
 
     @GuardedBy("mSettingsLock")
     private int mAssistantUid;
@@ -2198,6 +2201,28 @@ public class AudioService extends IAudioService.Stub
                 caller, Binder.getCallingUid(), hasModifyAudioSettings, VOL_ADJUST_NORMAL);
     }
 
+    public void setFastScrollSoundEffectsEnabled(boolean enabled) {
+        mFastScrollSoundEffectsEnabled = enabled;
+    }
+
+    /**
+     * @return true if the fast scroll sound effects are enabled
+     */
+    public boolean areFastScrollSoundEffectsEnabled() {
+        return mFastScrollSoundEffectsEnabled;
+    }
+
+    public void setHomeSoundEffectEnabled(boolean enabled) {
+        mHomeSoundEffectEnabled = enabled;
+    }
+
+    /**
+     * @return true if the home sound effect is enabled
+     */
+    public boolean isHomeSoundEffectEnabled() {
+        return mHomeSoundEffectEnabled;
+    }
+
     private void adjustSuggestedStreamVolume(int direction, int suggestedStreamType, int flags,
             String callingPackage, String caller, int uid, boolean hasModifyAudioSettings,
             int keyEventMode) {
@@ -3476,8 +3501,6 @@ public class AudioService extends IAudioService.Stub
     /** @see AudioManager#getStreamVolume(int) */
     public int getStreamVolume(int streamType) {
         ensureValidStreamType(streamType);
-        Log.e(TAG, "AudioSystem.getDevicesForStream In AudioService from u/pid"
-                + Binder.getCallingUid() + "/" + Binder.getCallingPid());
         int device = getDeviceForStream(streamType);
         synchronized (VolumeStreamState.class) {
             int index = mStreamStates[streamType].getIndex(device);
@@ -7750,20 +7773,24 @@ public class AudioService extends IAudioService.Stub
 
     private class MyHdmiControlStatusChangeListenerCallback
             implements HdmiControlManager.HdmiControlStatusChangeListener {
-        public void onStatusChange(boolean isCecEnabled, boolean isCecAvailable) {
+        public void onStatusChange(@HdmiControlManager.HdmiCecControl int isCecEnabled,
+                boolean isCecAvailable) {
             synchronized (mHdmiClientLock) {
                 if (mHdmiManager == null) return;
-                updateHdmiCecSinkLocked(isCecEnabled ? isCecAvailable : false);
+                boolean cecEnabled = isCecEnabled == HdmiControlManager.HDMI_CEC_CONTROL_ENABLED;
+                updateHdmiCecSinkLocked(cecEnabled ? isCecAvailable : false);
             }
         }
     };
 
     private class MyHdmiCecVolumeControlFeatureListener
             implements HdmiControlManager.HdmiCecVolumeControlFeatureListener {
-        public void onHdmiCecVolumeControlFeature(boolean enabled) {
+        public void onHdmiCecVolumeControlFeature(
+                @HdmiControlManager.VolumeControl int hdmiCecVolumeControl) {
             synchronized (mHdmiClientLock) {
                 if (mHdmiManager == null) return;
-                mHdmiCecVolumeControlEnabled = enabled;
+                mHdmiCecVolumeControlEnabled =
+                        hdmiCecVolumeControl == HdmiControlManager.VOLUME_CONTROL_ENABLED;
             }
         }
     };
@@ -8481,28 +8508,29 @@ public class AudioService extends IAudioService.Stub
         }
         for (AudioMix mix : policyConfig.getMixes()) {
             // If mix is requesting privileged capture
-            if (mix.getRule().allowPrivilegedPlaybackCapture()) {
-                // then it must have CAPTURE_MEDIA_OUTPUT or CAPTURE_AUDIO_OUTPUT permission
-                requireCaptureAudioOrMediaOutputPerm |= true;
-
-                // and its format must be low quality enough
-                String error = mix.canBeUsedForPrivilegedCapture(mix.getFormat());
-                if (error != null) {
-                    Log.e(TAG, error);
+            if (mix.getRule().allowPrivilegedMediaPlaybackCapture()) {
+                // then its format must be low quality enough
+                String privilegedMediaCaptureError =
+                        mix.canBeUsedForPrivilegedMediaCapture(mix.getFormat());
+                if (privilegedMediaCaptureError != null) {
+                    Log.e(TAG, privilegedMediaCaptureError);
                     return false;
                 }
+                // and it must have CAPTURE_MEDIA_OUTPUT or CAPTURE_AUDIO_OUTPUT permission
+                requireCaptureAudioOrMediaOutputPerm |= true;
 
-                // If mix is trying to excplicitly capture USAGE_VOICE_COMMUNICATION
-                if (mix.containsMatchAttributeRuleForUsage(
-                        AudioAttributes.USAGE_VOICE_COMMUNICATION)) {
-                    // then it must have CAPTURE_USAGE_VOICE_COMMUNICATION_OUTPUT permission
-                    // Note that for UID, USERID or EXCLDUE rules, the capture will be silenced
-                    // in AudioPolicyMix
-                    if (voiceCommunicationCaptureMixes == null) {
-                        voiceCommunicationCaptureMixes = new ArrayList<AudioMix>();
-                    }
-                    voiceCommunicationCaptureMixes.add(mix);
+            }
+            // If mix is trying to explicitly capture USAGE_VOICE_COMMUNICATION
+            if (mix.containsMatchAttributeRuleForUsage(
+                    AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    && (mix.getRouteFlags() == mix.ROUTE_FLAG_LOOP_BACK_RENDER)) {
+                // It must have CAPTURE_USAGE_VOICE_COMMUNICATION_OUTPUT permission
+                // Note that for UID, USERID or EXCLDUE rules, the capture will be silenced
+                // in AudioPolicyMix
+                if (voiceCommunicationCaptureMixes == null) {
+                    voiceCommunicationCaptureMixes = new ArrayList<AudioMix>();
                 }
+                voiceCommunicationCaptureMixes.add(mix);
             }
 
             // If mix is RENDER|LOOPBACK, then an audio MediaProjection is enough
@@ -8525,7 +8553,7 @@ public class AudioService extends IAudioService.Stub
         if (voiceCommunicationCaptureMixes != null && voiceCommunicationCaptureMixes.size() > 0) {
             if (!callerHasPermission(
                     android.Manifest.permission.CAPTURE_VOICE_COMMUNICATION_OUTPUT)) {
-                Log.e(TAG, "Privileged audio capture for voice communication requires "
+                Log.e(TAG, "Audio capture for voice communication requires "
                         + "CAPTURE_VOICE_COMMUNICATION_OUTPUT system permission");
                 return false;
             }
@@ -8960,8 +8988,14 @@ public class AudioService extends IAudioService.Stub
         mPlaybackMonitor.playerAttributes(piid, attr, Binder.getCallingUid());
     }
 
-    public void playerEvent(int piid, int event) {
-        mPlaybackMonitor.playerEvent(piid, event, Binder.getCallingUid());
+    /**
+     * Update player event
+     * @param piid Player id to update
+     * @param event The new player event
+     * @param deviceId The new player device id
+     */
+    public void playerEvent(int piid, int event, int deviceId) {
+        mPlaybackMonitor.playerEvent(piid, event, deviceId, Binder.getCallingUid());
     }
 
     public void playerHasOpPlayAudio(int piid, boolean hasOpPlayAudio) {

@@ -242,6 +242,39 @@ public abstract class NotificationListenerService extends Service {
     public @interface NotificationCancelReason{};
 
     /**
+     * @hide
+     */
+    @IntDef(flag = true, prefix = { "FLAG_FILTER_TYPE_" }, value = {
+            FLAG_FILTER_TYPE_CONVERSATIONS,
+            FLAG_FILTER_TYPE_ALERTING,
+            FLAG_FILTER_TYPE_SILENT,
+            FLAG_FILTER_TYPE_ONGOING
+    })
+    public @interface NotificationFilterTypes {}
+    /**
+     * A flag value indicating that this notification listener can see conversation type
+     * notifications.
+     * @hide
+     */
+    public static final int FLAG_FILTER_TYPE_CONVERSATIONS = 1;
+    /**
+     * A flag value indicating that this notification listener can see altering type notifications.
+     * @hide
+     */
+    public static final int FLAG_FILTER_TYPE_ALERTING = 2;
+    /**
+     * A flag value indicating that this notification listener can see silent type notifications.
+     * @hide
+     */
+    public static final int FLAG_FILTER_TYPE_SILENT = 4;
+    /**
+     * A flag value indicating that this notification listener can see important
+     * ( > {@link NotificationManager#IMPORTANCE_MIN}) ongoing type notifications.
+     * @hide
+     */
+    public static final int FLAG_FILTER_TYPE_ONGOING = 8;
+
+    /**
      * The full trim of the StatusBarNotification including all its features.
      *
      * @hide
@@ -1450,6 +1483,11 @@ public abstract class NotificationListenerService extends Service {
 
         @Override
         public void onActionClicked(String key, Notification.Action action, int source) {
+            // no-op in the listener
+        }
+
+        @Override
+        public void onNotificationClicked(String key) {
             // no-op in the listener
         }
 

@@ -195,13 +195,11 @@ public final class InputManager {
      */
     @BlockUntrustedTouchesMode
     public static final int DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE =
-            BlockUntrustedTouchesMode.PERMISSIVE;
+            BlockUntrustedTouchesMode.BLOCK;
 
     /**
      * Prevent touches from being consumed by apps if these touches passed through a non-trusted
      * window from a different UID and are considered unsafe.
-     *
-     * TODO(b/158002302): Turn the feature on by default
      *
      * @hide
      */

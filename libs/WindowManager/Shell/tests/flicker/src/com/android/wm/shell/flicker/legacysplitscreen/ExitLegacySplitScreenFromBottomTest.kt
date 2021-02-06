@@ -16,22 +16,27 @@
 
 package com.android.wm.shell.flicker.legacysplitscreen
 
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.server.wm.flicker.Flicker
 import com.android.server.wm.flicker.FlickerTestRunner
 import com.android.server.wm.flicker.FlickerTestRunnerFactory
-import com.android.server.wm.flicker.helpers.StandardAppHelper
 import com.android.server.wm.flicker.endRotation
 import com.android.server.wm.flicker.helpers.buildTestTag
 import com.android.server.wm.flicker.helpers.exitSplitScreen
 import com.android.server.wm.flicker.helpers.exitSplitScreenFromBottom
 import com.android.server.wm.flicker.helpers.isInSplitScreen
 import com.android.server.wm.flicker.helpers.launchSplitScreen
+import com.android.server.wm.flicker.helpers.openQuickStepAndClearRecentAppsFromOverview
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+
 import com.android.server.wm.flicker.repetitions
+import com.android.wm.shell.flicker.TEST_APP_SPLITSCREEN_PRIMARY_LABEL
+import com.android.wm.shell.flicker.helpers.SplitScreenHelper
+import com.android.wm.shell.flicker.testapp.Components
 import org.junit.FixMethodOrder
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
@@ -41,6 +46,7 @@ import org.junit.runners.Parameterized
  * Test open app to split screen.
  * To run this test: `atest WMShellFlickerTests:ExitLegacySplitScreenFromBottomTest`
  */
+@Presubmit
 @RequiresDevice
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -53,23 +59,24 @@ class ExitLegacySplitScreenFromBottomTest(
         @JvmStatic
         fun getParams(): Collection<Array<Any>> {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
-            val testApp = StandardAppHelper(instrumentation,
-                    "com.android.wm.shell.flicker.testapp", "SimpleApp")
+            val splitScreenApp = SplitScreenHelper(instrumentation,
+                    TEST_APP_SPLITSCREEN_PRIMARY_LABEL,
+                    Components.SplitScreenActivity())
 
-            // b/161435597 causes the test not to work on 90 degrees
-            return FlickerTestRunnerFactory(instrumentation, listOf(Surface.ROTATION_0))
+            // TODO(b/162923992) Use of multiple segments of flicker spec for testing
+            return FlickerTestRunnerFactory(instrumentation,
+                    listOf(Surface.ROTATION_0, Surface.ROTATION_90))
                     .buildTest { configuration ->
                         withTestName {
-                            buildTestTag("exitSplitScreenFromBottom", testApp,
+                            buildTestTag("exitSplitScreenFromBottom", splitScreenApp,
                                     configuration)
                         }
                         repeat { configuration.repetitions }
                         setup {
-                            test {
-                                device.wakeUpAndGoToHomeScreen()
-                            }
                             eachRun {
-                                testApp.open()
+                                device.wakeUpAndGoToHomeScreen()
+                                device.openQuickStepAndClearRecentAppsFromOverview()
+                                splitScreenApp.launchViaIntent()
                                 device.launchSplitScreen()
                                 device.waitForIdle()
                                 this.setRotation(configuration.endRotation)
@@ -77,12 +84,10 @@ class ExitLegacySplitScreenFromBottomTest(
                         }
                         teardown {
                             eachRun {
-                                testApp.exit()
-                            }
-                            test {
                                 if (device.isInSplitScreen()) {
                                     device.exitSplitScreen()
                                 }
+                                splitScreenApp.exit()
                             }
                         }
                         transitions {
