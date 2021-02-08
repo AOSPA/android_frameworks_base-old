@@ -20,6 +20,8 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringDef;
+import android.annotation.SystemApi;
+import android.os.Process;
 import android.security.KeyStore;
 import android.security.keymaster.KeymasterDefs;
 
@@ -67,6 +69,7 @@ public abstract class KeyProperties {
             PURPOSE_SIGN,
             PURPOSE_VERIFY,
             PURPOSE_WRAP_KEY,
+            PURPOSE_AGREE_KEY,
     })
     public @interface PurposeEnum {}
 
@@ -96,6 +99,11 @@ public abstract class KeyProperties {
     public static final int PURPOSE_WRAP_KEY = 1 << 5;
 
     /**
+     * Purpose of key: creating a shared ECDH secret through key agreement.
+     */
+    public static final int PURPOSE_AGREE_KEY = 1 << 6;
+
+    /**
      * @hide
      */
     public static abstract class Purpose {
@@ -113,6 +121,8 @@ public abstract class KeyProperties {
                     return KeymasterDefs.KM_PURPOSE_VERIFY;
                 case PURPOSE_WRAP_KEY:
                     return KeymasterDefs.KM_PURPOSE_WRAP;
+                case PURPOSE_AGREE_KEY:
+                    return KeymasterDefs.KM_PURPOSE_AGREE_KEY;
                 default:
                     throw new IllegalArgumentException("Unknown purpose: " + purpose);
             }
@@ -130,6 +140,8 @@ public abstract class KeyProperties {
                     return PURPOSE_VERIFY;
                 case KeymasterDefs.KM_PURPOSE_WRAP:
                     return PURPOSE_WRAP_KEY;
+                case KeymasterDefs.KM_PURPOSE_AGREE_KEY:
+                    return PURPOSE_AGREE_KEY;
                 default:
                     throw new IllegalArgumentException("Unknown purpose: " + purpose);
             }
@@ -864,7 +876,16 @@ public abstract class KeyProperties {
      * which it must be configured in SEPolicy.
      * @hide
      */
+    @SystemApi
     public static final int NAMESPACE_APPLICATION = -1;
+
+    /**
+     * The namespace identifier for the WIFI Keystore namespace.
+     * This must be kept in sync with system/sepolicy/private/keystore2_key_contexts
+     * @hide
+     */
+    @SystemApi
+    public static final int NAMESPACE_WIFI = 102;
 
     /**
      * For legacy support, translate namespaces into known UIDs.
@@ -874,6 +895,8 @@ public abstract class KeyProperties {
         switch (namespace) {
             case NAMESPACE_APPLICATION:
                 return KeyStore.UID_SELF;
+            case NAMESPACE_WIFI:
+                return Process.WIFI_UID;
             // TODO Translate WIFI and VPN UIDs once the namespaces are defined.
             //  b/171305388 and b/171305607
             default:
@@ -890,6 +913,8 @@ public abstract class KeyProperties {
         switch (uid) {
             case KeyStore.UID_SELF:
                 return NAMESPACE_APPLICATION;
+            case Process.WIFI_UID:
+                return NAMESPACE_WIFI;
             // TODO Translate WIFI and VPN UIDs once the namespaces are defined.
             //  b/171305388 and b/171305607
             default:
@@ -897,4 +922,9 @@ public abstract class KeyProperties {
                         + uid);
         }
     }
+
+    /**
+     * This value indicates that there is no restriction on the number of times the key can be used.
+     */
+    public static final int UNRESTRICTED_USAGE_COUNT = -1;
 }

@@ -18,7 +18,6 @@ package com.android.internal.os;
 
 import android.content.Context;
 import android.hardware.SensorManager;
-import android.net.ConnectivityManager;
 import android.os.BatteryStats;
 import android.os.BatteryUsageStats;
 import android.os.BatteryUsageStatsQuery;
@@ -57,13 +56,14 @@ public class BatteryUsageStatsProvider {
                 mPowerCalculators.add(new CpuPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new MemoryPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new WakelockPowerCalculator(mPowerProfile));
-                if (!isWifiOnlyDevice(mContext)) {
+                if (!BatteryStatsHelper.checkWifiOnly(mContext)) {
                     mPowerCalculators.add(new MobileRadioPowerCalculator(mPowerProfile));
                 }
                 mPowerCalculators.add(new WifiPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new BluetoothPowerCalculator(mPowerProfile));
-                mPowerCalculators.add(new SensorPowerCalculator(mPowerProfile,
+                mPowerCalculators.add(new SensorPowerCalculator(
                         mContext.getSystemService(SensorManager.class)));
+                mPowerCalculators.add(new GnssPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new CameraPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new FlashlightPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new AudioPowerCalculator(mPowerProfile));
@@ -80,18 +80,10 @@ public class BatteryUsageStatsProvider {
         return mPowerCalculators;
     }
 
-    private static boolean isWifiOnlyDevice(Context context) {
-        ConnectivityManager cm = context.getSystemService(ConnectivityManager.class);
-        if (cm == null) {
-            return false;
-        }
-        return !cm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
-    }
-
     /**
      * Returns a snapshot of battery attribution data.
      */
-    public BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query) {
+    public List<BatteryUsageStats> getBatteryUsageStats(List<BatteryUsageStatsQuery> queries) {
 
         // TODO(b/174186345): instead of BatteryStatsHelper, use PowerCalculators directly.
         final BatteryStatsHelper batteryStatsHelper = new BatteryStatsHelper(mContext,
@@ -108,28 +100,27 @@ public class BatteryUsageStatsProvider {
 
         batteryStatsHelper.refreshStats(BatteryStats.STATS_SINCE_CHARGED, users);
 
+        ArrayList<BatteryUsageStats> results = new ArrayList<>(queries.size());
+        for (int i = 0; i < queries.size(); i++) {
+            results.add(getBatteryUsageStats(queries.get(i), batteryStatsHelper, users));
+        }
+        return results;
+    }
+
+    private BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query,
+            BatteryStatsHelper batteryStatsHelper, SparseArray<UserHandle> users) {
         // TODO(b/174186358): read extra power component number from configuration
         final int customPowerComponentCount = 0;
         final int customTimeComponentCount = 0;
-        final boolean includeModeledComponents =
-                (query.getFlags() & BatteryUsageStatsQuery.FLAG_BATTERY_USAGE_STATS_INCLUDE_MODELED)
-                        != 0;
-
 
         final BatteryUsageStats.Builder batteryUsageStatsBuilder =
-                new BatteryUsageStats.Builder(customPowerComponentCount, customTimeComponentCount,
-                        includeModeledComponents)
+                new BatteryUsageStats.Builder(customPowerComponentCount, customTimeComponentCount)
                         .setDischargePercentage(batteryStatsHelper.getStats().getDischargeAmount(0))
                         .setConsumedPower(batteryStatsHelper.getTotalPower());
 
-        final List<BatterySipper> usageList = batteryStatsHelper.getUsageList();
-        for (int i = 0; i < usageList.size(); i++) {
-            final BatterySipper sipper = usageList.get(i);
-            if (sipper.drainType == BatterySipper.DrainType.APP) {
-                batteryUsageStatsBuilder.getOrCreateUidBatteryConsumerBuilder(sipper.uidObj)
-                        .setPackageWithHighestDrain(sipper.packageWithHighestDrain)
-                        .setConsumedPower(sipper.sumPower());
-            }
+        SparseArray<? extends BatteryStats.Uid> uidStats = mStats.getUidStats();
+        for (int i = uidStats.size() - 1; i >= 0; i--) {
+            batteryUsageStatsBuilder.getOrCreateUidBatteryConsumerBuilder(uidStats.valueAt(i));
         }
 
         final long realtimeUs = SystemClock.elapsedRealtime() * 1000;

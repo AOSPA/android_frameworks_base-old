@@ -152,18 +152,7 @@ public class StubTransaction extends SurfaceControl.Transaction {
     }
 
     @Override
-    public SurfaceControl.Transaction reparentChildren(SurfaceControl sc,
-            SurfaceControl newParent) {
-        return this;
-    }
-
-    @Override
     public SurfaceControl.Transaction reparent(SurfaceControl sc, SurfaceControl newParent) {
-        return this;
-    }
-
-    @Override
-    public SurfaceControl.Transaction detachChildren(SurfaceControl sc) {
         return this;
     }
 
@@ -246,6 +235,12 @@ public class StubTransaction extends SurfaceControl.Transaction {
     @Override
     public SurfaceControl.Transaction setFrameRateSelectionPriority(SurfaceControl sc,
             int priority) {
+        return this;
+    }
+
+    @Override
+    public SurfaceControl.Transaction setFrameRate(SurfaceControl sc, float frameRate,
+            int compatibility) {
         return this;
     }
 

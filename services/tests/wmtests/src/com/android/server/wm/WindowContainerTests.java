@@ -22,6 +22,8 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+import static android.view.WindowManager.TRANSIT_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_CLOSE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.window.DisplayAreaOrganizer.FEATURE_DEFAULT_TASK_CONTAINER;
@@ -64,6 +66,7 @@ import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
+import android.view.WindowManager;
 
 import androidx.test.filters.SmallTest;
 
@@ -903,8 +906,10 @@ public class WindowContainerTests extends WindowTestsBase {
         final RemoteAnimationAdapter adapter = new RemoteAnimationAdapter(
                 new IRemoteAnimationRunner.Stub() {
                     @Override
-                    public void onAnimationStart(RemoteAnimationTarget[] apps,
+                    public void onAnimationStart(@WindowManager.TransitionOldType int transit,
+                            RemoteAnimationTarget[] apps,
                             RemoteAnimationTarget[] wallpapers,
+                            RemoteAnimationTarget[] nonApps,
                             IRemoteAnimationFinishedCallback finishedCallback) {
                         try {
                             finishedCallback.onAnimationFinished();
@@ -976,6 +981,31 @@ public class WindowContainerTests extends WindowTestsBase {
 
         assertEquals(bounds, listener.mConfiguration.windowConfiguration.getBounds());
         assertEquals(200, listener.mConfiguration.densityDpi);
+    }
+
+    @Test
+    public void testFreezeInsetsStateWhenAppTransition() {
+        final Task stack = createTaskStackOnDisplay(mDisplayContent);
+        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
+        final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, activity, "win");
+        task.getDisplayContent().prepareAppTransition(TRANSIT_CLOSE);
+        spyOn(win);
+        doReturn(true).when(task).okToAnimate();
+        ArrayList<WindowContainer> sources = new ArrayList<>();
+        sources.add(activity);
+
+        // Simulate the task applying the exit transition, verify the main window of the task
+        // will be set the frozen insets state.
+        task.applyAnimation(null, TRANSIT_OLD_TASK_CLOSE, false /* enter */,
+                false /* isVoiceInteraction */, sources);
+        verify(win).freezeInsetsState();
+
+        // Simulate the task transition finished, verify the frozen insets state of the window
+        // will be reset.
+        task.onAnimationFinished(ANIMATION_TYPE_APP_TRANSITION,
+                task.mSurfaceAnimator.getAnimation());
+        verify(win).clearFrozenInsetsState();
     }
 
     /* Used so we can gain access to some protected members of the {@link WindowContainer} class */

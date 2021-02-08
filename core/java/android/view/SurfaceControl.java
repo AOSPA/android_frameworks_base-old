@@ -188,11 +188,8 @@ public final class SurfaceControl implements Parcelable {
             IBinder displayToken, int mode);
     private static native void nativeDeferTransactionUntil(long transactionObj, long nativeObject,
             long barrierObject, long frame);
-    private static native void nativeReparentChildren(long transactionObj, long nativeObject,
-            long newParentObject);
     private static native void nativeReparent(long transactionObj, long nativeObject,
             long newParentNativeObject);
-    private static native void nativeSeverChildren(long transactionObj, long nativeObject);
 
     private static native Display.HdrCapabilities nativeGetHdrCapabilities(IBinder displayToken);
 
@@ -340,8 +337,6 @@ public final class SurfaceControl implements Parcelable {
      */
     public long mNativeObject;
     private long mNativeHandle;
-    private boolean mDebugRelease = false;
-    private Throwable mReleaseStack = null;
 
     // TODO: Move width/height to native and fix locking through out.
     private final Object mLock = new Object();
@@ -416,6 +411,15 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public static final int SECURE = 0x00000080;
+
+
+    /**
+     * Queue up BufferStateLayer buffers instead of dropping the oldest buffer when this flag is
+     * set. This blocks the client until all the buffers have been presented. If the buffers
+     * have presentation timestamps, then we may drop buffers.
+     * @hide
+     */
+    public static final int ENABLE_BACKPRESSURE = 0x00000100;
 
     /**
      * Surface creation flag: Creates a surface where color components are interpreted
@@ -592,13 +596,6 @@ public final class SurfaceControl implements Parcelable {
         }
         mNativeObject = nativeObject;
         mNativeHandle = mNativeObject != 0 ? nativeGetHandle(nativeObject) : 0;
-        if (mNativeObject == 0) {
-            if (mDebugRelease) {
-                mReleaseStack = new Throwable("assigned zero nativeObject here");
-            }
-        } else {
-            mReleaseStack = null;
-        }
     }
 
     /**
@@ -609,7 +606,6 @@ public final class SurfaceControl implements Parcelable {
         mWidth = other.mWidth;
         mHeight = other.mHeight;
         mLocalOwnerView = other.mLocalOwnerView;
-        mDebugRelease = other.mDebugRelease;
         assignNativeObject(nativeCopyFromSurfaceControl(other.mNativeObject), callsite);
     }
 
@@ -755,18 +751,22 @@ public final class SurfaceControl implements Parcelable {
     private abstract static class CaptureArgs {
         private final int mPixelFormat;
         private final Rect mSourceCrop = new Rect();
-        private final float mFrameScale;
+        private final float mFrameScaleX;
+        private final float mFrameScaleY;
         private final boolean mCaptureSecureLayers;
         private final boolean mAllowProtected;
         private final long mUid;
+        private final boolean mGrayscale;
 
         private CaptureArgs(Builder<? extends Builder<?>> builder) {
             mPixelFormat = builder.mPixelFormat;
             mSourceCrop.set(builder.mSourceCrop);
-            mFrameScale = builder.mFrameScale;
+            mFrameScaleX = builder.mFrameScaleX;
+            mFrameScaleY = builder.mFrameScaleY;
             mCaptureSecureLayers = builder.mCaptureSecureLayers;
             mAllowProtected = builder.mAllowProtected;
             mUid = builder.mUid;
+            mGrayscale = builder.mGrayscale;
         }
 
         /**
@@ -777,10 +777,12 @@ public final class SurfaceControl implements Parcelable {
         abstract static class Builder<T extends Builder<T>> {
             private int mPixelFormat = PixelFormat.RGBA_8888;
             private final Rect mSourceCrop = new Rect();
-            private float mFrameScale = 1;
+            private float mFrameScaleX = 1;
+            private float mFrameScaleY = 1;
             private boolean mCaptureSecureLayers;
             private boolean mAllowProtected;
             private long mUid = -1;
+            private boolean mGrayscale;
 
             /**
              * The desired pixel format of the returned buffer.
@@ -803,7 +805,18 @@ public final class SurfaceControl implements Parcelable {
              * The desired scale of the returned buffer. The raw screen will be scaled up/down.
              */
             public T setFrameScale(float frameScale) {
-                mFrameScale = frameScale;
+                mFrameScaleX = frameScale;
+                mFrameScaleY = frameScale;
+                return getThis();
+            }
+
+            /**
+             * The desired scale of the returned buffer, allowing separate values for x and y scale.
+             * The raw screen will be scaled up/down.
+             */
+            public T setFrameScale(float frameScaleX, float frameScaleY) {
+                mFrameScaleX = frameScaleX;
+                mFrameScaleY = frameScaleY;
                 return getThis();
             }
 
@@ -835,6 +848,14 @@ public final class SurfaceControl implements Parcelable {
              */
             public T setUid(long uid) {
                 mUid = uid;
+                return getThis();
+            }
+
+            /**
+             * Set whether the screenshot should use grayscale or not.
+             */
+            public T setGrayscale(boolean grayscale) {
+                mGrayscale = grayscale;
                 return getThis();
             }
 
@@ -934,7 +955,7 @@ public final class SurfaceControl implements Parcelable {
     /**
      * The arguments class used to make layer capture requests.
      *
-     * @see #nativeCaptureLayers(LayerCaptureArgs)
+     * @see #nativeCaptureLayers(LayerCaptureArgs, ScreenCaptureListener)
      * @hide
      */
     public static class LayerCaptureArgs extends CaptureArgs {
@@ -1439,7 +1460,6 @@ public final class SurfaceControl implements Parcelable {
         mName = in.readString8();
         mWidth = in.readInt();
         mHeight = in.readInt();
-        mDebugRelease = in.readBoolean();
 
         long object = 0;
         if (in.readInt() != 0) {
@@ -1458,12 +1478,8 @@ public final class SurfaceControl implements Parcelable {
         dest.writeString8(mName);
         dest.writeInt(mWidth);
         dest.writeInt(mHeight);
-        dest.writeBoolean(mDebugRelease);
         if (mNativeObject == 0) {
             dest.writeInt(0);
-            if (mReleaseStack != null) {
-                Log.w(TAG, "Sending invalid " + this + " caused by:", mReleaseStack);
-            }
         } else {
             dest.writeInt(1);
         }
@@ -1472,13 +1488,6 @@ public final class SurfaceControl implements Parcelable {
         if ((flags & Parcelable.PARCELABLE_WRITE_RETURN_VALUE) != 0) {
             release();
         }
-    }
-
-    /**
-     * @hide
-     */
-    public void setDebugRelease(boolean debug) {
-        mDebugRelease = debug;
     }
 
     /**
@@ -1551,9 +1560,6 @@ public final class SurfaceControl implements Parcelable {
             nativeRelease(mNativeObject);
             mNativeObject = 0;
             mNativeHandle = 0;
-            if (mDebugRelease) {
-                mReleaseStack = new Throwable("released here");
-            }
             mCloseGuard.close();
         }
     }
@@ -1569,11 +1575,8 @@ public final class SurfaceControl implements Parcelable {
     }
 
     private void checkNotReleased() {
-        if (mNativeObject == 0) {
-            Log.wtf(TAG, "Invalid " + this + " caused by:", mReleaseStack);
-            throw new NullPointerException(
-                "mNativeObject of " + this + " is null. Have you called release() already?");
-        }
+        if (mNativeObject == 0) throw new NullPointerException(
+                "Invalid " + this + ", mNativeObject is null. Have you called release() already?");
     }
 
     /**
@@ -2421,7 +2424,6 @@ public final class SurfaceControl implements Parcelable {
     public static SurfaceControl mirrorSurface(SurfaceControl mirrorOf) {
         long nativeObj = nativeMirrorSurface(mirrorOf.mNativeObject);
         SurfaceControl sc = new SurfaceControl();
-        sc.mDebugRelease = mirrorOf.mDebugRelease;
         sc.assignNativeObject(nativeObj, "mirrorSurface");
         return sc;
     }
@@ -2969,15 +2971,6 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
-         * @hide
-         */
-        public Transaction reparentChildren(SurfaceControl sc, SurfaceControl newParent) {
-            checkPreconditions(sc);
-            nativeReparentChildren(mNativeObject, sc.mNativeObject, newParent.mNativeObject);
-            return this;
-        }
-
-        /**
          * Re-parents a given layer to a new parent. Children inherit transform (position, scaling)
          * crop, visibility, and Z-ordering from their parents, as if the children were pixels within the
          * parent Surface.
@@ -2997,15 +2990,6 @@ public final class SurfaceControl implements Parcelable {
             }
             nativeReparent(mNativeObject, sc.mNativeObject, otherObject);
             mReparentedSurfaces.put(sc, newParent);
-            return this;
-        }
-
-        /**
-         * @hide
-         */
-        public Transaction detachChildren(SurfaceControl sc) {
-            checkPreconditions(sc);
-            nativeSeverChildren(mNativeObject, sc.mNativeObject);
             return this;
         }
 

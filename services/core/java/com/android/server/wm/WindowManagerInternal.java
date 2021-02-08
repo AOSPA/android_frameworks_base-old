@@ -23,12 +23,15 @@ import android.content.Context;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.display.DisplayManagerInternal;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.view.Display;
 import android.view.IInputFilter;
+import android.view.IRemoteAnimationFinishedCallback;
 import android.view.IWindow;
 import android.view.InputChannel;
 import android.view.MagnificationSpec;
+import android.view.RemoteAnimationTarget;
 import android.view.WindowInfo;
 import android.view.WindowManager.DisplayImePolicy;
 
@@ -44,6 +47,41 @@ import java.util.List;
  * @hide Only for use within the system server.
  */
 public abstract class WindowManagerInternal {
+
+    /**
+     * Interface for accessibility features implemented by AccessibilityController inside
+     * WindowManager.
+     */
+    public interface AccessibilityControllerInternal {
+        /**
+         * Enable the accessibility trace logging.
+         */
+        void startTrace();
+
+        /**
+         * Disable the accessibility trace logging.
+         */
+        void stopTrace();
+
+        /**
+         * Is trace enabled or not.
+         */
+        boolean isEnabled();
+
+        /**
+         * Add an accessibility trace entry.
+         *
+         * @param where A string to identify this log entry, which can be used to filter/search
+         *        through the tracing file.
+         * @param callingParams The parameters for the method to be logged.
+         * @param a11yDump The proto byte array for a11y state when the entry is generated.
+         * @param callingUid The calling uid.
+         * @param stackTrace The stack trace, null if not needed.
+         */
+        void logTrace(
+                String where, String callingParams, byte[] a11yDump, int callingUid,
+                StackTraceElement[] stackTrace);
+    }
 
     /**
      * Interface to receive a callback when the windows reported for
@@ -154,6 +192,21 @@ public abstract class WindowManagerInternal {
     }
 
     /**
+     * An interface to be notified when keyguard exit animation should start.
+     */
+    public interface KeyguardExitAnimationStartListener {
+        /**
+         * Called when keyguard exit animation should start.
+         * @param apps The list of apps to animate.
+         * @param wallpapers The list of wallpapers to animate.
+         * @param finishedCallback The callback to invoke when the animation is finished.
+         */
+        void onAnimationStart(RemoteAnimationTarget[] apps,
+                RemoteAnimationTarget[] wallpapers,
+                IRemoteAnimationFinishedCallback finishedCallback);
+    }
+
+    /**
       * An interface to be notified about hardware keyboard status.
       */
     public interface OnHardKeyboardStatusChangeListener {
@@ -205,6 +258,11 @@ public abstract class WindowManagerInternal {
          */
         default void postCancelDragAndDrop() {}
     }
+
+    /**
+     * Request the interface to access features implemented by AccessibilityController.
+     */
+    public abstract AccessibilityControllerInternal getAccessibilityController();
 
     /**
      * Request that the window manager call
@@ -351,8 +409,10 @@ public abstract class WindowManagerInternal {
      * @param token The token to add.
      * @param type The window type.
      * @param displayId The display to add the token to.
+     * @param options A bundle used to pass window-related options.
      */
-    public abstract void addWindowToken(android.os.IBinder token, int type, int displayId);
+    public abstract void addWindowToken(@NonNull android.os.IBinder token, int type, int displayId,
+            @Nullable Bundle options);
 
     /**
      * Removes a window token.
@@ -370,6 +430,14 @@ public abstract class WindowManagerInternal {
      * @param listener The listener to register.
      */
     public abstract void registerAppTransitionListener(AppTransitionListener listener);
+
+    /**
+     * Registers a listener to be notified to start the keyguard exit animation.
+     *
+     * @param listener The listener to register.
+     */
+    public abstract void registerKeyguardExitAnimationStartListener(
+            KeyguardExitAnimationStartListener listener);
 
     /**
      * Reports that the password for the given user has changed.

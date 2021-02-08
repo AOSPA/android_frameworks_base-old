@@ -17,37 +17,40 @@
 package com.android.server.wm.flicker
 
 import android.platform.helpers.IAppHelper
-import com.android.server.wm.flicker.dsl.EventLogAssertion
-import com.android.server.wm.flicker.dsl.LayersAssertion
-import com.android.server.wm.flicker.dsl.WmAssertion
+import com.android.server.wm.flicker.dsl.EventLogAssertionBuilderLegacy
+import com.android.server.wm.flicker.dsl.LayersAssertionBuilderLegacy
+import com.android.server.wm.flicker.dsl.WmAssertionBuilderLegacy
 import com.android.server.wm.flicker.helpers.WindowUtils
+import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper.Companion.NAV_BAR_LAYER_NAME
+import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper.Companion.NAV_BAR_WINDOW_NAME
+import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper.Companion.STATUS_BAR_LAYER_NAME
+import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper.Companion.STATUS_BAR_WINDOW_NAME
 
-const val NAVIGATION_BAR_WINDOW_TITLE = "NavigationBar"
-const val STATUS_BAR_WINDOW_TITLE = "StatusBar"
+const val APP_PAIR_SPLIT_DIVIDER = "AppPairSplitDivider"
 const val DOCKED_STACK_DIVIDER = "DockedStackDivider"
 const val WALLPAPER_TITLE = "Wallpaper"
 
 @JvmOverloads
-fun WmAssertion.statusBarWindowIsAlwaysVisible(
+fun WmAssertionBuilderLegacy.statusBarWindowIsAlwaysVisible(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
     all("statusBarWindowIsAlwaysVisible", bugId, enabled) {
-        this.showsAboveAppWindow(STATUS_BAR_WINDOW_TITLE)
+        this.showsAboveAppWindow(STATUS_BAR_WINDOW_NAME)
     }
 }
 
 @JvmOverloads
-fun WmAssertion.navBarWindowIsAlwaysVisible(
+fun WmAssertionBuilderLegacy.navBarWindowIsAlwaysVisible(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
     all("navBarWindowIsAlwaysVisible", bugId, enabled) {
-        this.showsAboveAppWindow(NAVIGATION_BAR_WINDOW_TITLE)
+        this.showsAboveAppWindow(NAV_BAR_WINDOW_NAME)
     }
 }
 
-fun WmAssertion.visibleWindowsShownMoreThanOneConsecutiveEntry(
+fun WmAssertionBuilderLegacy.visibleWindowsShownMoreThanOneConsecutiveEntry(
     ignoreWindows: List<String> = emptyList(),
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -57,7 +60,7 @@ fun WmAssertion.visibleWindowsShownMoreThanOneConsecutiveEntry(
     }
 }
 
-fun WmAssertion.launcherReplacesAppWindowAsTopWindow(
+fun WmAssertionBuilderLegacy.launcherReplacesAppWindowAsTopWindow(
     testApp: IAppHelper,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -69,7 +72,7 @@ fun WmAssertion.launcherReplacesAppWindowAsTopWindow(
     }
 }
 
-fun WmAssertion.wallpaperWindowBecomesVisible(
+fun WmAssertionBuilderLegacy.wallpaperWindowBecomesVisible(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
@@ -80,7 +83,7 @@ fun WmAssertion.wallpaperWindowBecomesVisible(
     }
 }
 
-fun WmAssertion.wallpaperWindowBecomesInvisible(
+fun WmAssertionBuilderLegacy.wallpaperWindowBecomesInvisible(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
@@ -91,7 +94,7 @@ fun WmAssertion.wallpaperWindowBecomesInvisible(
     }
 }
 
-fun WmAssertion.appWindowAlwaysVisibleOnTop(
+fun WmAssertionBuilderLegacy.appWindowAlwaysVisibleOnTop(
     packageName: String,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -101,7 +104,7 @@ fun WmAssertion.appWindowAlwaysVisibleOnTop(
     }
 }
 
-fun WmAssertion.appWindowBecomesVisible(
+fun WmAssertionBuilderLegacy.appWindowBecomesVisible(
     appName: String,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -113,8 +116,20 @@ fun WmAssertion.appWindowBecomesVisible(
     }
 }
 
+fun WmAssertionBuilderLegacy.appWindowBecomesInVisible(
+    appName: String,
+    bugId: Int = 0,
+    enabled: Boolean = bugId == 0
+) {
+    all("appWindowBecomesInVisible", bugId, enabled) {
+        this.showsAppWindow(appName)
+                .then()
+                .hidesAppWindow(appName)
+    }
+}
+
 @JvmOverloads
-fun LayersAssertion.noUncoveredRegions(
+fun LayersAssertionBuilderLegacy.noUncoveredRegions(
     beginRotation: Int,
     endRotation: Int = beginRotation,
     allStates: Boolean = true,
@@ -144,49 +159,49 @@ fun LayersAssertion.noUncoveredRegions(
 }
 
 @JvmOverloads
-fun LayersAssertion.navBarLayerIsAlwaysVisible(
+fun LayersAssertionBuilderLegacy.navBarLayerIsAlwaysVisible(
     rotatesScreen: Boolean = false,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
     if (rotatesScreen) {
         all("navBarLayerIsAlwaysVisible", bugId, enabled) {
-            this.showsLayer(NAVIGATION_BAR_WINDOW_TITLE)
+            this.showsLayer(NAV_BAR_LAYER_NAME)
                     .then()
-                    .hidesLayer(NAVIGATION_BAR_WINDOW_TITLE)
+                    .hidesLayer(NAV_BAR_LAYER_NAME)
                     .then()
-                    .showsLayer(NAVIGATION_BAR_WINDOW_TITLE)
+                    .showsLayer(NAV_BAR_LAYER_NAME)
         }
     } else {
         all("navBarLayerIsAlwaysVisible", bugId, enabled) {
-            this.showsLayer(NAVIGATION_BAR_WINDOW_TITLE)
+            this.showsLayer(NAV_BAR_LAYER_NAME)
         }
     }
 }
 
 @JvmOverloads
-fun LayersAssertion.statusBarLayerIsAlwaysVisible(
+fun LayersAssertionBuilderLegacy.statusBarLayerIsAlwaysVisible(
     rotatesScreen: Boolean = false,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
     if (rotatesScreen) {
         all("statusBarLayerIsAlwaysVisible", bugId, enabled) {
-            this.showsLayer(STATUS_BAR_WINDOW_TITLE)
+            this.showsLayer(STATUS_BAR_LAYER_NAME)
                     .then()
-                    hidesLayer(STATUS_BAR_WINDOW_TITLE)
+                    hidesLayer(STATUS_BAR_LAYER_NAME)
                     .then()
-                    .showsLayer(STATUS_BAR_WINDOW_TITLE)
+                    .showsLayer(STATUS_BAR_LAYER_NAME)
         }
     } else {
         all("statusBarLayerIsAlwaysVisible", bugId, enabled) {
-            this.showsLayer(STATUS_BAR_WINDOW_TITLE)
+            this.showsLayer(STATUS_BAR_LAYER_NAME)
         }
     }
 }
 
 @JvmOverloads
-fun LayersAssertion.navBarLayerRotatesAndScales(
+fun LayersAssertionBuilderLegacy.navBarLayerRotatesAndScales(
     beginRotation: Int,
     endRotation: Int = beginRotation,
     bugId: Int = 0,
@@ -196,21 +211,21 @@ fun LayersAssertion.navBarLayerRotatesAndScales(
     val endingPos = WindowUtils.getNavigationBarPosition(endRotation)
 
     start("navBarLayerRotatesAndScales_StartingPos", bugId, enabled) {
-        this.hasVisibleRegion(NAVIGATION_BAR_WINDOW_TITLE, startingPos)
+        this.hasVisibleRegion(NAV_BAR_LAYER_NAME, startingPos)
     }
     end("navBarLayerRotatesAndScales_EndingPost", bugId, enabled) {
-        this.hasVisibleRegion(NAVIGATION_BAR_WINDOW_TITLE, endingPos)
+        this.hasVisibleRegion(NAV_BAR_LAYER_NAME, endingPos)
     }
 
     if (startingPos == endingPos) {
         all("navBarLayerRotatesAndScales", enabled = false, bugId = 167747321) {
-            this.hasVisibleRegion(NAVIGATION_BAR_WINDOW_TITLE, startingPos)
+            this.hasVisibleRegion(NAV_BAR_LAYER_NAME, startingPos)
         }
     }
 }
 
 @JvmOverloads
-fun LayersAssertion.statusBarLayerRotatesScales(
+fun LayersAssertionBuilderLegacy.statusBarLayerRotatesScales(
     beginRotation: Int,
     endRotation: Int = beginRotation,
     bugId: Int = 0,
@@ -220,14 +235,14 @@ fun LayersAssertion.statusBarLayerRotatesScales(
     val endingPos = WindowUtils.getStatusBarPosition(endRotation)
 
     start("statusBarLayerRotatesScales_StartingPos", bugId, enabled) {
-        this.hasVisibleRegion(STATUS_BAR_WINDOW_TITLE, startingPos)
+        this.hasVisibleRegion(STATUS_BAR_LAYER_NAME, startingPos)
     }
     end("statusBarLayerRotatesScales_EndingPos", bugId, enabled) {
-        this.hasVisibleRegion(STATUS_BAR_WINDOW_TITLE, endingPos)
+        this.hasVisibleRegion(STATUS_BAR_LAYER_NAME, endingPos)
     }
 }
 
-fun LayersAssertion.visibleLayersShownMoreThanOneConsecutiveEntry(
+fun LayersAssertionBuilderLegacy.visibleLayersShownMoreThanOneConsecutiveEntry(
     ignoreLayers: List<String> = emptyList(),
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -237,7 +252,7 @@ fun LayersAssertion.visibleLayersShownMoreThanOneConsecutiveEntry(
     }
 }
 
-fun LayersAssertion.appLayerReplacesWallpaperLayer(
+fun LayersAssertionBuilderLegacy.appLayerReplacesWallpaperLayer(
     appName: String,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -249,7 +264,7 @@ fun LayersAssertion.appLayerReplacesWallpaperLayer(
     }
 }
 
-fun LayersAssertion.wallpaperLayerReplacesAppLayer(
+fun LayersAssertionBuilderLegacy.wallpaperLayerReplacesAppLayer(
     testApp: IAppHelper,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -261,7 +276,7 @@ fun LayersAssertion.wallpaperLayerReplacesAppLayer(
     }
 }
 
-fun LayersAssertion.layerAlwaysVisible(
+fun LayersAssertionBuilderLegacy.layerAlwaysVisible(
     packageName: String,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -271,7 +286,7 @@ fun LayersAssertion.layerAlwaysVisible(
     }
 }
 
-fun LayersAssertion.layerBecomesVisible(
+fun LayersAssertionBuilderLegacy.layerBecomesVisible(
     packageName: String,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -283,7 +298,7 @@ fun LayersAssertion.layerBecomesVisible(
     }
 }
 
-fun LayersAssertion.layerBecomesInvisible(
+fun LayersAssertionBuilderLegacy.layerBecomesInvisible(
     packageName: String,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -295,7 +310,7 @@ fun LayersAssertion.layerBecomesInvisible(
     }
 }
 
-fun EventLogAssertion.focusChanges(
+fun EventLogAssertionBuilderLegacy.focusChanges(
     vararg windows: String,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
@@ -305,7 +320,7 @@ fun EventLogAssertion.focusChanges(
     }
 }
 
-fun EventLogAssertion.focusDoesNotChange(
+fun EventLogAssertionBuilderLegacy.focusDoesNotChange(
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {

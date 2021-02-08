@@ -125,7 +125,7 @@ public class CallbackHandlerTest extends SysuiTestCase {
         int subId = 5;
         boolean roaming = true;
         mHandler.setMobileDataIndicators(status, qs, type, qsType, in, out, 0, typeDescription,
-                typeDescriptionHtml, description, wide, subId, roaming);
+                typeDescriptionHtml, description, wide, subId, roaming, true);
         waitForCallbacks();
 
         ArgumentCaptor<IconState> statusArg = ArgumentCaptor.forClass(IconState.class);
@@ -145,7 +145,7 @@ public class CallbackHandlerTest extends SysuiTestCase {
                 outArg.capture(),
                 ArgumentCaptor.forClass(Integer.class).capture(),
                 typeContentArg.capture(), typeContentHtmlArg.capture(),
-                descArg.capture(), wideArg.capture(), subIdArg.capture(), eq(roaming));
+                descArg.capture(), wideArg.capture(), subIdArg.capture(), eq(roaming), eq(true));
         assertEquals(status, statusArg.getValue());
         assertEquals(qs, qsArg.getValue());
         assertEquals(type, (int) typeIconArg.getValue());

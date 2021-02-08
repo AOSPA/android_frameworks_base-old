@@ -18,6 +18,11 @@ package com.android.server.wm;
 
 import static android.os.Build.IS_USER;
 
+import static com.android.server.wm.WindowManagerService.LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND;
+import static com.android.server.wm.WindowManagerService.LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND_FLOATING;
+import static com.android.server.wm.WindowManagerService.LETTERBOX_BACKGROUND_SOLID_COLOR;
+
+import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.ParcelFileDescriptor;
@@ -34,6 +39,7 @@ import com.android.internal.os.ByteTransferPipe;
 import com.android.internal.protolog.ProtoLogImpl;
 import com.android.server.LocalServices;
 import com.android.server.statusbar.StatusBarManagerInternal;
+import com.android.server.wm.WindowManagerService.LetterboxBackgroundType;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -115,6 +121,18 @@ public class WindowManagerShellCommand extends ShellCommand {
                     return runSetTaskLetterboxAspectRatio(pw);
                 case "get-task-letterbox-aspect-ratio":
                     return runGetTaskLetterboxAspectRatio(pw);
+                case "set-letterbox-activity-corners-radius":
+                    return runSetLetterboxActivityCornersRadius(pw);
+                case "get-letterbox-activity-corners-radius":
+                    return runGetLetterboxActivityCornersRadius(pw);
+                case "set-letterbox-background-type":
+                    return runSetLetterboxBackgroundType(pw);
+                case "get-letterbox-background-type":
+                    return runGetLetterboxBackgroundType(pw);
+                case "set-letterbox-background-color":
+                    return runSetLetterboxBackgroundColor(pw);
+                case "get-letterbox-background-color":
+                    return runGetLetterboxBackgroundColor(pw);
                 case "reset":
                     return runReset(pw);
                 default:
@@ -545,6 +563,111 @@ public class WindowManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int runSetLetterboxActivityCornersRadius(PrintWriter pw) throws RemoteException {
+        final int cornersRadius;
+        try {
+            String arg = getNextArgRequired();
+            if ("reset".equals(arg)) {
+                mInternal.resetLetterboxActivityCornersRadius();
+                return 0;
+            }
+            cornersRadius = Integer.parseInt(arg);
+        } catch (NumberFormatException  e) {
+            getErrPrintWriter().println("Error: bad corners radius format " + e);
+            return -1;
+        } catch (IllegalArgumentException  e) {
+            getErrPrintWriter().println(
+                    "Error: 'reset' or corners radius should be provided as an argument " + e);
+            return -1;
+        }
+
+        mInternal.setLetterboxActivityCornersRadius(cornersRadius);
+        return 0;
+    }
+
+    private int runGetLetterboxActivityCornersRadius(PrintWriter pw) throws RemoteException {
+        final int cornersRadius = mInternal.getLetterboxActivityCornersRadius();
+        if (cornersRadius < 0) {
+            pw.println("Letterbox corners radius is not set");
+        } else {
+            pw.println("Letterbox corners radius is " + cornersRadius);
+        }
+        return 0;
+    }
+
+    private int runSetLetterboxBackgroundType(PrintWriter pw) throws RemoteException {
+        @LetterboxBackgroundType final int backgroundType;
+
+        String arg = getNextArgRequired();
+        if ("reset".equals(arg)) {
+            mInternal.resetLetterboxBackgroundType();
+            return 0;
+        }
+        switch (arg) {
+            case "solid_color":
+                backgroundType = LETTERBOX_BACKGROUND_SOLID_COLOR;
+                break;
+            case "app_color_background":
+                backgroundType = LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND;
+                break;
+            case "app_color_background_floating":
+                backgroundType = LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND_FLOATING;
+                break;
+            default:
+                getErrPrintWriter().println(
+                        "Error: 'reset', 'solid_color' or 'app_color_background' should "
+                        + "be provided as an argument");
+                return -1;
+        }
+
+        mInternal.setLetterboxBackgroundType(backgroundType);
+        return 0;
+    }
+
+    private int runGetLetterboxBackgroundType(PrintWriter pw) throws RemoteException {
+        @LetterboxBackgroundType final int backgroundType = mInternal.getLetterboxBackgroundType();
+        switch (backgroundType) {
+            case LETTERBOX_BACKGROUND_SOLID_COLOR:
+                pw.println("Letterbox background type is 'solid_color'");
+                break;
+            case LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND:
+                pw.println("Letterbox background type is 'app_color_background'");
+                break;
+            case LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND_FLOATING:
+                pw.println("Letterbox background type is 'app_color_background_floating'");
+                break;
+            default:
+                throw new AssertionError("Unexpected letterbox background type: " + backgroundType);
+        }
+        return 0;
+    }
+
+    private int runSetLetterboxBackgroundColor(PrintWriter pw) throws RemoteException {
+        final Color color;
+        String arg = getNextArgRequired();
+        try {
+            if ("reset".equals(arg)) {
+                mInternal.resetLetterboxBackgroundColor();
+                return 0;
+            }
+            color = Color.valueOf(Color.parseColor(arg));
+        } catch (IllegalArgumentException  e) {
+            getErrPrintWriter().println(
+                    "Error: 'reset' or color in #RRGGBB format should be provided as "
+                            + "an argument " + e + " but got " + arg);
+            return -1;
+        }
+
+        mInternal.setLetterboxBackgroundColor(color);
+        return 0;
+    }
+
+    private int runGetLetterboxBackgroundColor(PrintWriter pw) throws RemoteException {
+        final Color color = mInternal.getLetterboxBackgroundColor();
+        pw.println("Letterbox background color is " + Integer.toHexString(color.toArgb()));
+        return 0;
+    }
+
     private int runReset(PrintWriter pw) throws RemoteException {
         int displayId = getDisplayId(getNextArg());
 
@@ -571,6 +694,15 @@ public class WindowManagerShellCommand extends ShellCommand {
 
         // set-task-letterbox-aspect-ratio
         mInternal.resetTaskLetterboxAspectRatio();
+
+        // set-letterbox-activity-corners-radius
+        mInternal.resetLetterboxActivityCornersRadius();
+
+        // set-letterbox-background-type
+        mInternal.resetLetterboxBackgroundType();
+
+        // set-letterbox-background-color
+        mInternal.resetLetterboxBackgroundColor();
 
         pw.println("Reset all settings for displayId=" + displayId);
         return 0;
@@ -608,6 +740,21 @@ public class WindowManagerShellCommand extends ShellCommand {
                 + WindowManagerService.MIN_TASK_LETTERBOX_ASPECT_RATIO);
         pw.println("    both it and R.dimen.config_taskLetterboxAspectRatio will be ignored");
         pw.println("    and framework implementation will be used to determine aspect ratio.");
+        pw.println("  set-letterbox-activity-corners-radius [reset|cornersRadius]");
+        pw.println("  get-letterbox-activity-corners-radius");
+        pw.println("    Corners radius for activities in the letterbox mode. If radius < 0,");
+        pw.println("    both it and R.integer.config_letterboxActivityCornersRadius will be");
+        pw.println("    ignored and corners of the activity won't be rounded.");
+        pw.println("  set-letterbox-background-color [reset|colorName|'\\#RRGGBB']");
+        pw.println("  get-letterbox-background-color");
+        pw.println("    Color of letterbox background which is be used when letterbox background");
+        pw.println("    type is 'solid-color'. Use get(set)-letterbox-background-type to check");
+        pw.println("    and control letterbox background type. See Color#parseColor for allowed");
+        pw.println("    color formats (#RRGGBB and some colors by name, e.g. magenta or olive). ");
+        pw.println("  set-letterbox-background-type [reset|solid_color|app_color_background");
+        pw.println("    |app_color_background_floating]");
+        pw.println("  get-letterbox-background-type");
+        pw.println("    Type of background used in the letterbox mode.");
         pw.println("  reset [-d DISPLAY_ID]");
         pw.println("    Reset all override settings.");
         if (!IS_USER) {

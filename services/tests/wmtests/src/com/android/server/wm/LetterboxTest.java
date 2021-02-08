@@ -17,6 +17,9 @@
 package com.android.server.wm;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
@@ -26,6 +29,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
@@ -47,10 +51,14 @@ public class LetterboxTest {
     SurfaceControlMocker mSurfaces;
     SurfaceControl.Transaction mTransaction;
 
+    private boolean mAreCornersRounded = false;
+    private int mColor = Color.BLACK;
+
     @Before
     public void setUp() throws Exception {
         mSurfaces = new SurfaceControlMocker();
-        mLetterbox = new Letterbox(mSurfaces, StubTransaction::new);
+        mLetterbox = new Letterbox(mSurfaces, StubTransaction::new,
+                () -> mAreCornersRounded, () -> Color.valueOf(mColor));
         mTransaction = spy(StubTransaction.class);
     }
 
@@ -64,6 +72,7 @@ public class LetterboxTest {
     private static final int BOTTOM_BAR = 0x2;
     private static final int LEFT_BAR = 0x4;
     private static final int RIGHT_BAR = 0x8;
+
     @Test
     public void testNotIntersectsOrFullyContains_usesGlobalCoordinates() {
         final Rect outer = new Rect(0, 0, 10, 50);
@@ -165,6 +174,57 @@ public class LetterboxTest {
     }
 
     @Test
+    public void testApplySurfaceChanges_setColor() {
+        mLetterbox.layout(new Rect(0, 0, 10, 10), new Rect(0, 1, 10, 10), new Point(1000, 2000));
+        mLetterbox.applySurfaceChanges(mTransaction);
+
+        verify(mTransaction).setColor(mSurfaces.top, new float[]{0, 0, 0});
+
+        mColor = Color.GREEN;
+
+        assertTrue(mLetterbox.needsApplySurfaceChanges());
+
+        mLetterbox.applySurfaceChanges(mTransaction);
+
+        verify(mTransaction).setColor(mSurfaces.top, new float[]{0, 1, 0});
+    }
+
+    @Test
+    public void testApplySurfaceChanges_cornersNotRounded_surfaceBehindNotCreated() {
+        mLetterbox.layout(new Rect(0, 0, 10, 10), new Rect(0, 1, 10, 10), new Point(1000, 2000));
+        mLetterbox.applySurfaceChanges(mTransaction);
+
+        assertNull(mSurfaces.behind);
+    }
+
+    @Test
+    public void testApplySurfaceChanges_cornersRounded_surfaceBehindCreated() {
+        mAreCornersRounded = true;
+        mLetterbox.layout(new Rect(0, 0, 10, 10), new Rect(0, 1, 10, 10), new Point(1000, 2000));
+        mLetterbox.applySurfaceChanges(mTransaction);
+
+        assertNotNull(mSurfaces.behind);
+    }
+
+    @Test
+    public void testIsOverlappingWith_cornersRounded_doesNotCheckSurfaceBehind() {
+        mAreCornersRounded = true;
+        mLetterbox.layout(new Rect(0, 0, 10, 10), new Rect(0, 1, 10, 10), new Point(0, 0));
+        mLetterbox.applySurfaceChanges(mTransaction);
+
+        assertFalse(mLetterbox.isOverlappingWith(new Rect(1, 2, 9, 9)));
+    }
+
+    @Test
+    public void testNotIntersectsOrFullyContains_cornersRounded_doesNotCheckSurfaceBehind() {
+        mAreCornersRounded = true;
+        mLetterbox.layout(new Rect(0, 0, 10, 10), new Rect(0, 1, 10, 10), new Point(0, 0));
+        mLetterbox.applySurfaceChanges(mTransaction);
+
+        assertTrue(mLetterbox.notIntersectsOrFullyContains(new Rect(1, 2, 9, 9)));
+    }
+
+    @Test
     public void testSurfaceOrigin_changeCausesReapply() {
         mLetterbox.layout(new Rect(0, 0, 10, 10), new Rect(0, 1, 10, 10), new Point(1000, 2000));
         mLetterbox.applySurfaceChanges(mTransaction);
@@ -184,6 +244,8 @@ public class LetterboxTest {
         public SurfaceControl right;
         private SurfaceControl.Builder mBottomBuilder;
         public SurfaceControl bottom;
+        private SurfaceControl.Builder mBehindBuilder;
+        public SurfaceControl behind;
 
         @Override
         public SurfaceControl.Builder get() {
@@ -198,6 +260,8 @@ public class LetterboxTest {
                     mRightBuilder = (SurfaceControl.Builder) i.getMock();
                 } else if (((String) i.getArgument(0)).contains("bottom")) {
                     mBottomBuilder = (SurfaceControl.Builder) i.getMock();
+                } else if (((String) i.getArgument(0)).contains("behind")) {
+                    mBehindBuilder = (SurfaceControl.Builder) i.getMock();
                 }
                 return i.getMock();
             });
@@ -212,6 +276,8 @@ public class LetterboxTest {
                     right = control;
                 } else if (i.getMock() == mBottomBuilder) {
                     bottom = control;
+                } else if (i.getMock() == mBehindBuilder) {
+                    behind = control;
                 }
                 return control;
             }).when(builder).build();

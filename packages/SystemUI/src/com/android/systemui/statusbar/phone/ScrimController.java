@@ -47,8 +47,10 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.BlurUtils;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.notification.stack.ViewState;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -61,6 +63,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
@@ -115,15 +118,15 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     public static final float WAKE_SENSOR_SCRIM_ALPHA = 0.6f;
 
     /**
-     * Scrim opacity when bubbles are expanded.
-     */
-    public static final float BUBBLE_SCRIM_ALPHA = 0.6f;
-
-    /**
      * The default scrim under the shade and dialogs.
      * This should not be lower than 0.54, otherwise we won't pass GAR.
      */
     public static final float BUSY_SCRIM_ALPHA = 1f;
+
+    /**
+     * Scrim opacity that can have text on top.
+     */
+    public static final float GAR_SCRIM_ALPHA = 0.6f;
 
     static final int TAG_KEY_ANIM = R.id.scrim;
     private static final int TAG_START_ALPHA = R.id.scrim_alpha_start;
@@ -146,6 +149,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     private final AlarmTimeout mTimeTicker;
     private final KeyguardVisibilityCallback mKeyguardVisibilityCallback;
     private final Handler mHandler;
+    private final Executor mMainExecutor;
     private final BlurUtils mBlurUtils;
 
     private GradientColors mColors;
@@ -199,10 +203,12 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             AlarmManager alarmManager, KeyguardStateController keyguardStateController,
             DelayedWakeLock.Builder delayedWakeLockBuilder, Handler handler,
             KeyguardUpdateMonitor keyguardUpdateMonitor, DockManager dockManager,
-            BlurUtils blurUtils, ConfigurationController configurationController) {
-
+            BlurUtils blurUtils, ConfigurationController configurationController,
+            FeatureFlags featureFlags, @Main Executor mainExecutor) {
         mScrimStateListener = lightBarController::setScrimState;
-        mDefaultScrimAlpha = BUSY_SCRIM_ALPHA;
+        mDefaultScrimAlpha = featureFlags.isShadeOpaque() ? BUSY_SCRIM_ALPHA : GAR_SCRIM_ALPHA;
+        ScrimState.BUBBLE_EXPANDED.setBubbleAlpha(featureFlags.isShadeOpaque()
+                ? BUSY_SCRIM_ALPHA : GAR_SCRIM_ALPHA);
         mBlurUtils = blurUtils;
 
         mKeyguardStateController = keyguardStateController;
@@ -210,6 +216,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mKeyguardVisibilityCallback = new KeyguardVisibilityCallback();
         mHandler = handler;
+        mMainExecutor = mainExecutor;
         mTimeTicker = new AlarmTimeout(alarmManager, this::onHideWallpaperTimeout,
                 "hide_aod_wallpaper", mHandler);
         mWakeLock = delayedWakeLockBuilder.setHandler(mHandler).setTag("Scrims").build();
@@ -255,7 +262,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         updateThemeColors();
 
         if (mScrimBehindChangeRunnable != null) {
-            mScrimBehind.setChangeRunnable(mScrimBehindChangeRunnable);
+            mScrimBehind.setChangeRunnable(mScrimBehindChangeRunnable, mMainExecutor);
             mScrimBehindChangeRunnable = null;
         }
 
@@ -996,7 +1003,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         if (mScrimBehind == null) {
             mScrimBehindChangeRunnable = changeRunnable;
         } else {
-            mScrimBehind.setChangeRunnable(changeRunnable);
+            mScrimBehind.setChangeRunnable(changeRunnable, mMainExecutor);
         }
     }
 

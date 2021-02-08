@@ -92,6 +92,11 @@ public class CompatibilityInfo implements Parcelable {
     private static final int NEEDS_COMPAT_RES = 16;
 
     /**
+     * Set if the application needs to be forcibly downscaled
+     */
+    private static final int HAS_OVERRIDE_SCALING = 32;
+
+    /**
      * The effective screen density we have selected for this application.
      */
     public final int applicationDensity;
@@ -110,6 +115,11 @@ public class CompatibilityInfo implements Parcelable {
     @UnsupportedAppUsage
     public CompatibilityInfo(ApplicationInfo appInfo, int screenLayout, int sw,
             boolean forceCompat) {
+        this(appInfo, screenLayout, sw, forceCompat, 1f);
+    }
+
+    public CompatibilityInfo(ApplicationInfo appInfo, int screenLayout, int sw,
+            boolean forceCompat, float overrideScale) {
         int compatFlags = 0;
 
         if (appInfo.targetSdkVersion < VERSION_CODES.O) {
@@ -297,7 +307,7 @@ public class CompatibilityInfo implements Parcelable {
      */
     @UnsupportedAppUsage
     public boolean isScalingRequired() {
-        return (mCompatibilityFlags&SCALING_REQUIRED) != 0;
+        return (mCompatibilityFlags & (SCALING_REQUIRED | HAS_OVERRIDE_SCALING)) != 0;
     }
     
     @UnsupportedAppUsage
@@ -323,7 +333,7 @@ public class CompatibilityInfo implements Parcelable {
      */
     @UnsupportedAppUsage
     public Translator getTranslator() {
-        return isScalingRequired() ? new Translator() : null;
+        return (mCompatibilityFlags & SCALING_REQUIRED) != 0 ? new Translator() : null;
     }
 
     /**
@@ -524,6 +534,16 @@ public class CompatibilityInfo implements Parcelable {
         if (isScalingRequired()) {
             float invertedRatio = applicationInvertedScale;
             inoutConfig.densityDpi = (int)((inoutConfig.densityDpi * invertedRatio) + .5f);
+            inoutConfig.screenWidthDp = (int) ((inoutConfig.screenWidthDp * invertedRatio) + .5f);
+            inoutConfig.screenHeightDp = (int) ((inoutConfig.screenHeightDp * invertedRatio) + .5f);
+            inoutConfig.smallestScreenWidthDp =
+                    (int) ((inoutConfig.smallestScreenWidthDp * invertedRatio) + .5f);
+            inoutConfig.windowConfiguration.getMaxBounds().scale(invertedRatio);
+            inoutConfig.windowConfiguration.getBounds().scale(invertedRatio);
+            final Rect appBounds = inoutConfig.windowConfiguration.getAppBounds();
+            if (appBounds != null) {
+                appBounds.scale(invertedRatio);
+            }
         }
     }
 

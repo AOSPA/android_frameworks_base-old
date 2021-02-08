@@ -515,6 +515,92 @@ public final class DataManagerTest {
     }
 
     @Test
+    public void testGetConversationReturnsCustomizedConversation() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+
+        NotificationListenerService listenerService =
+                mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
+
+        listenerService.onNotificationPosted(mStatusBarNotification);
+        shortcut.setCached(ShortcutInfo.FLAG_CACHED_NOTIFICATIONS);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+
+        assertThat(mDataManager.getConversation(TEST_PKG_NAME, USER_ID_PRIMARY,
+                TEST_SHORTCUT_ID)).isNotNull();
+
+        listenerService.onNotificationChannelModified(TEST_PKG_NAME, UserHandle.of(USER_ID_PRIMARY),
+                mNotificationChannel, NOTIFICATION_CHANNEL_OR_GROUP_UPDATED);
+
+        ConversationChannel result = mDataManager.getConversation(TEST_PKG_NAME, USER_ID_PRIMARY,
+                TEST_SHORTCUT_ID);
+        assertThat(result).isNotNull();
+        assertThat(result.hasBirthdayToday()).isFalse();
+        assertThat(result.getStatuses()).isEmpty();
+    }
+
+    @Test
+    public void testGetConversation() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+        assertThat(mDataManager.getConversation(TEST_PKG_NAME, USER_ID_PRIMARY,
+            TEST_SHORTCUT_ID)).isNull();
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        shortcut.setCached(ShortcutInfo.FLAG_PINNED);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+        assertThat(mDataManager.getConversation(TEST_PKG_NAME, USER_ID_PRIMARY,
+                TEST_SHORTCUT_ID)).isNotNull();
+        assertThat(mDataManager.getConversation(TEST_PKG_NAME, USER_ID_PRIMARY,
+                TEST_SHORTCUT_ID + "1")).isNull();
+
+        NotificationListenerService listenerService =
+                mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
+        listenerService.onNotificationPosted(mStatusBarNotification);
+        ConversationStatus cs = new ConversationStatus.Builder("id", ACTIVITY_ANNIVERSARY).build();
+        mDataManager.addOrUpdateStatus(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID, cs);
+
+        ConversationChannel result = mDataManager.getConversation(TEST_PKG_NAME, USER_ID_PRIMARY,
+                TEST_SHORTCUT_ID);
+        assertThat(result).isNotNull();
+        assertEquals(shortcut.getId(), result.getShortcutInfo().getId());
+        assertEquals(1, result.getShortcutInfo().getPersons().length);
+        assertEquals(CONTACT_URI, result.getShortcutInfo().getPersons()[0].getUri());
+        assertEquals(mParentNotificationChannel.getId(),
+                result.getParentNotificationChannel().getId());
+        assertEquals(mStatusBarNotification.getPostTime(), result.getLastEventTimestamp());
+        assertTrue(result.hasActiveNotifications());
+        assertFalse(result.hasBirthdayToday());
+        assertThat(result.getStatuses()).containsExactly(cs);
+    }
+
+    @Test
+    public void testGetConversationGetsPersonsData() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        shortcut.setCached(ShortcutInfo.FLAG_PINNED);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+
+        NotificationListenerService listenerService =
+                mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
+        listenerService.onNotificationPosted(mStatusBarNotification);
+
+        ConversationChannel result = mDataManager.getConversation(TEST_PKG_NAME, USER_ID_PRIMARY,
+                TEST_SHORTCUT_ID);
+
+        verify(mShortcutServiceInternal).getShortcuts(
+                anyInt(), anyString(), anyLong(), anyString(), anyList(), any(), any(),
+                mQueryFlagsCaptor.capture(), anyInt(), anyInt(), anyInt());
+        Integer queryFlags = mQueryFlagsCaptor.getValue();
+        assertThat(hasFlag(queryFlags, ShortcutQuery.FLAG_GET_PERSONS_DATA)).isTrue();
+    }
+
+    @Test
     public void testNotificationChannelCreated() {
         mDataManager.onUserUnlocked(USER_ID_PRIMARY);
         mDataManager.onUserUnlocked(USER_ID_SECONDARY);

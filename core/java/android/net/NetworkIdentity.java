@@ -22,10 +22,11 @@ import android.annotation.Nullable;
 import android.content.Context;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.os.Build;
 import android.service.NetworkIdentityProto;
 import android.telephony.Annotation.NetworkType;
 import android.util.proto.ProtoOutputStream;
+
+import com.android.net.module.util.NetworkIdentityUtils;
 
 import java.util.Objects;
 
@@ -90,7 +91,8 @@ public class NetworkIdentity implements Comparable<NetworkIdentity> {
             builder.append(mSubType);
         }
         if (mSubscriberId != null) {
-            builder.append(", subscriberId=").append(scrubSubscriberId(mSubscriberId));
+            builder.append(", subscriberId=")
+                    .append(NetworkIdentityUtils.scrubSubscriberId(mSubscriberId));
         }
         if (mNetworkId != null) {
             builder.append(", networkId=").append(mNetworkId);
@@ -111,7 +113,8 @@ public class NetworkIdentity implements Comparable<NetworkIdentity> {
         // Not dumping mSubType, subtypes are no longer supported.
 
         if (mSubscriberId != null) {
-            proto.write(NetworkIdentityProto.SUBSCRIBER_ID, scrubSubscriberId(mSubscriberId));
+            proto.write(NetworkIdentityProto.SUBSCRIBER_ID,
+                    NetworkIdentityUtils.scrubSubscriberId(mSubscriberId));
         }
         proto.write(NetworkIdentityProto.NETWORK_ID, mNetworkId);
         proto.write(NetworkIdentityProto.ROAMING, mRoaming);
@@ -150,32 +153,6 @@ public class NetworkIdentity implements Comparable<NetworkIdentity> {
     }
 
     /**
-     * Scrub given IMSI on production builds.
-     */
-    public static String scrubSubscriberId(String subscriberId) {
-        if (Build.IS_ENG) {
-            return subscriberId;
-        } else if (subscriberId != null) {
-            // TODO: parse this as MCC+MNC instead of hard-coding
-            return subscriberId.substring(0, Math.min(6, subscriberId.length())) + "...";
-        } else {
-            return "null";
-        }
-    }
-
-    /**
-     * Scrub given IMSI on production builds.
-     */
-    public static String[] scrubSubscriberId(String[] subscriberId) {
-        if (subscriberId == null) return null;
-        final String[] res = new String[subscriberId.length];
-        for (int i = 0; i < res.length; i++) {
-            res[i] = NetworkIdentity.scrubSubscriberId(subscriberId[i]);
-        }
-        return res;
-    }
-
-    /**
      * Build a {@link NetworkIdentity} from the given {@link NetworkState} and {@code subType},
      * assuming that any mobile networks are using the current IMSI. The subType if applicable,
      * should be set as one of the TelephonyManager.NETWORK_TYPE_* constants, or
@@ -195,13 +172,15 @@ public class NetworkIdentity implements Comparable<NetworkIdentity> {
         subscriberId = state.subscriberId;
 
         if (type == TYPE_WIFI) {
-            if (state.networkId != null) {
-                networkId = state.networkId;
-            } else {
-                final WifiManager wifi = (WifiManager) context.getSystemService(
-                        Context.WIFI_SERVICE);
-                final WifiInfo info = wifi.getConnectionInfo();
-                networkId = info != null ? info.getSSID() : null;
+            if (state.networkCapabilities.getSsid() != null) {
+                networkId = state.networkCapabilities.getSsid();
+                if (networkId == null) {
+                    // TODO: Figure out if this code path never runs. If so, remove them.
+                    final WifiManager wifi = (WifiManager) context.getSystemService(
+                            Context.WIFI_SERVICE);
+                    final WifiInfo info = wifi.getConnectionInfo();
+                    networkId = info != null ? info.getSSID() : null;
+                }
             }
         }
 

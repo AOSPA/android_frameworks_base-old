@@ -43,7 +43,10 @@ public abstract class BatteryConsumer {
             POWER_COMPONENT_AUDIO,
             POWER_COMPONENT_VIDEO,
             POWER_COMPONENT_FLASHLIGHT,
+            POWER_COMPONENT_MOBILE_RADIO,
             POWER_COMPONENT_SYSTEM_SERVICES,
+            POWER_COMPONENT_SENSORS,
+            POWER_COMPONENT_GNSS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public static @interface PowerComponent {
@@ -57,22 +60,14 @@ public abstract class BatteryConsumer {
     public static final int POWER_COMPONENT_VIDEO = 5;
     public static final int POWER_COMPONENT_FLASHLIGHT = 6;
     public static final int POWER_COMPONENT_SYSTEM_SERVICES = 7;
+    public static final int POWER_COMPONENT_MOBILE_RADIO = 8;
+    public static final int POWER_COMPONENT_SENSORS = 9;
+    public static final int POWER_COMPONENT_GNSS = 10;
 
-    public static final int POWER_COMPONENT_COUNT = 8;
+    public static final int POWER_COMPONENT_COUNT = 11;
 
     public static final int FIRST_CUSTOM_POWER_COMPONENT_ID = 1000;
     public static final int LAST_CUSTOM_POWER_COMPONENT_ID = 9999;
-
-    /**
-     * Modeled power components are used for testing only.  They are returned if the
-     * {@link BatteryUsageStatsQuery#FLAG_BATTERY_USAGE_STATS_INCLUDE_MODELED} is set.
-     * The modeled power components are retrieved with {@link #getConsumedPowerForCustomComponent}.
-     * The ID of a modeled power component is calculated as
-     * (FIRST_MODELED_POWER_COMPONENT_ID + powerComponentId), e.g.
-     * FIRST_MODELED_POWER_COMPONENT_ID + POWER_COMPONENT_CPU.
-     */
-    public static final int FIRST_MODELED_POWER_COMPONENT_ID = 10000;
-    public static final int LAST_MODELED_POWER_COMPONENT_ID = 19999;
 
     /**
      * Time usage component, describing the particular part of the system
@@ -87,6 +82,9 @@ public abstract class BatteryConsumer {
             TIME_COMPONENT_BLUETOOTH,
             TIME_COMPONENT_CAMERA,
             TIME_COMPONENT_FLASHLIGHT,
+            TIME_COMPONENT_MOBILE_RADIO,
+            TIME_COMPONENT_SENSORS,
+            TIME_COMPONENT_GNSS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public static @interface TimeComponent {
@@ -100,8 +98,11 @@ public abstract class BatteryConsumer {
     public static final int TIME_COMPONENT_AUDIO = 5;
     public static final int TIME_COMPONENT_VIDEO = 6;
     public static final int TIME_COMPONENT_FLASHLIGHT = 7;
+    public static final int TIME_COMPONENT_MOBILE_RADIO = 8;
+    public static final int TIME_COMPONENT_SENSORS = 9;
+    public static final int TIME_COMPONENT_GNSS = 10;
 
-    public static final int TIME_COMPONENT_COUNT = 8;
+    public static final int TIME_COMPONENT_COUNT = 11;
 
     public static final int FIRST_CUSTOM_TIME_COMPONENT_ID = 1000;
     public static final int LAST_CUSTOM_TIME_COMPONENT_ID = 9999;
@@ -170,10 +171,9 @@ public abstract class BatteryConsumer {
     protected abstract static class BaseBuilder<T extends BaseBuilder<?>> {
         final PowerComponents.Builder mPowerComponentsBuilder;
 
-        public BaseBuilder(int customPowerComponentCount, int customTimeComponentCount,
-                boolean includeModeledComponents) {
+        public BaseBuilder(int customPowerComponentCount, int customTimeComponentCount) {
             mPowerComponentsBuilder = new PowerComponents.Builder(customPowerComponentCount,
-                    customTimeComponentCount, includeModeledComponents);
+                    customTimeComponentCount);
         }
 
         /**
@@ -200,16 +200,6 @@ public abstract class BatteryConsumer {
         @NonNull
         public T setConsumedPowerForCustomComponent(int componentId, double componentPower) {
             mPowerComponentsBuilder.setConsumedPowerForCustomComponent(componentId, componentPower);
-            return (T) this;
-        }
-
-        /**
-         * Sets the total amount of power consumed since BatteryStats reset, mAh.
-         */
-        @SuppressWarnings("unchecked")
-        @NonNull
-        public T setConsumedPower(double consumedPower) {
-            mPowerComponentsBuilder.setTotalPowerConsumed(consumedPower);
             return (T) this;
         }
 

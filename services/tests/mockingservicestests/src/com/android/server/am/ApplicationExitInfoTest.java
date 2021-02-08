@@ -164,24 +164,24 @@ public class ApplicationExitInfoTest {
     }
 
     private void updateExitInfo(ProcessRecord app) {
-        ApplicationExitInfo raw = mAppExitInfoTracker.obtainRawRecordLocked(app);
+        ApplicationExitInfo raw = mAppExitInfoTracker.obtainRawRecord(app);
         mAppExitInfoTracker.handleNoteProcessDiedLocked(raw);
-        mAppExitInfoTracker.recycleRawRecordLocked(raw);
+        mAppExitInfoTracker.recycleRawRecord(raw);
     }
 
     private void noteAppKill(ProcessRecord app, int reason, int subReason, String msg) {
-        ApplicationExitInfo raw = mAppExitInfoTracker.obtainRawRecordLocked(app);
+        ApplicationExitInfo raw = mAppExitInfoTracker.obtainRawRecord(app);
         raw.setReason(reason);
         raw.setSubReason(subReason);
         raw.setDescription(msg);
         mAppExitInfoTracker.handleNoteAppKillLocked(raw);
-        mAppExitInfoTracker.recycleRawRecordLocked(raw);
+        mAppExitInfoTracker.recycleRawRecord(raw);
     }
 
     @Test
     public void testApplicationExitInfo() throws Exception {
         mAppExitInfoTracker.clearProcessExitInfo(true);
-        mAppExitInfoTracker.mAppExitInfoLoaded = true;
+        mAppExitInfoTracker.mAppExitInfoLoaded.set(true);
         mAppExitInfoTracker.mProcExitStoreDir = new File(mContext.getFilesDir(),
                 AppExitInfoTracker.APP_EXIT_STORE_DIR);
         assertTrue(FileUtils.createDir(mAppExitInfoTracker.mProcExitStoreDir));
@@ -798,7 +798,7 @@ public class ApplicationExitInfoTest {
         final int traceEnd = 8192;
         createRandomFile(traceFile, traceSize);
         assertEquals(traceSize, traceFile.length());
-        mAppExitInfoTracker.handleLogAnrTrace(app.pid, app.uid, app.getPackageList(),
+        mAppExitInfoTracker.handleLogAnrTrace(app.getPid(), app.uid, app.getPackageList(),
                 traceFile, traceStart, traceEnd);
 
         noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
@@ -991,19 +991,19 @@ public class ApplicationExitInfoTest {
         ApplicationInfo ai = new ApplicationInfo();
         ai.packageName = packageName;
         ProcessRecord app = new ProcessRecord(mAms, ai, processName, uid);
-        app.pid = pid;
+        app.setPid(pid);
         app.info.uid = packageUid;
         if (definingUid != null) {
             final String dummyPackageName = "com.android.test";
             final String dummyClassName = ".Foo";
-            app.hostingRecord = HostingRecord.byAppZygote(new ComponentName(
-                    dummyPackageName, dummyClassName), "", definingUid);
+            app.setHostingRecord(HostingRecord.byAppZygote(new ComponentName(
+                    dummyPackageName, dummyClassName), "", definingUid));
         }
-        app.connectionGroup = connectionGroup;
-        app.setProcState = procState;
-        app.lastMemInfo = spy(new Debug.MemoryInfo());
-        app.lastPss = pss;
-        app.mLastRss = rss;
+        app.mServices.setConnectionGroup(connectionGroup);
+        app.mState.setSetProcState(procState);
+        app.mProfile.setLastMemInfo(spy(new Debug.MemoryInfo()));
+        app.mProfile.setLastPss(pss);
+        app.mProfile.setLastRss(rss);
         return app;
     }
 

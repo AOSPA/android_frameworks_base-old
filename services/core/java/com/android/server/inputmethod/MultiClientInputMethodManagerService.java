@@ -1309,7 +1309,8 @@ public final class MultiClientInputMethodManagerService {
                 final Binder token = new Binder();
                 Binder.withCleanCallingIdentity(
                         PooledLambda.obtainRunnable(WindowManagerInternal::addWindowToken,
-                                mIWindowManagerInternal, token, TYPE_INPUT_METHOD, displayId));
+                                mIWindowManagerInternal, token, TYPE_INPUT_METHOD, displayId,
+                                null /* options */));
                 mPerUserData.mDisplayIdToImeWindowTokenMap.add(new TokenInfo(token, displayId));
                 return token;
             }
@@ -1502,14 +1503,17 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
-        public void removeImeSurface() {
+        public void removeImeSurface(IVoidResultCallback resultCallback) {
             reportNotSupported();
+            CallbackUtils.onResult(resultCallback, () -> { });
         }
 
         @BinderThread
         @Override
-        public void removeImeSurfaceFromWindow(IBinder windowToken) {
+        public void removeImeSurfaceFromWindow(IBinder windowToken,
+                IVoidResultCallback resultCallback) {
             reportNotSupported();
+            CallbackUtils.onResult(resultCallback, () -> { });
         }
 
         @BinderThread
@@ -1815,8 +1819,10 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
-        public void setAdditionalInputMethodSubtypes(String imiId, InputMethodSubtype[] subtypes) {
+        public void setAdditionalInputMethodSubtypes(String imiId, InputMethodSubtype[] subtypes,
+                IVoidResultCallback resultCallback) {
             reportNotSupported();
+            CallbackUtils.onResult(resultCallback, () -> { });
         }
 
         @BinderThread
@@ -1863,7 +1869,9 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
-        public void startProtoDump(byte[] clientProtoDump, int source, String where) {
+        public void startProtoDump(byte[] clientProtoDump, int source, String where,
+                IVoidResultCallback resultCallback) {
+            CallbackUtils.onResult(resultCallback, () -> { });
         }
 
         @BinderThread
@@ -1874,12 +1882,14 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
-        public void startImeTrace() {
+        public void startImeTrace(IVoidResultCallback resultCallback) {
+            CallbackUtils.onResult(resultCallback, () -> { });
         }
 
         @BinderThread
         @Override
-        public void stopImeTrace() {
+        public void stopImeTrace(IVoidResultCallback resultCallback) {
+            CallbackUtils.onResult(resultCallback, () -> { });
         }
     }
 }

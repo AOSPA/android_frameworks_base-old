@@ -110,7 +110,6 @@ import android.os.ServiceManager;
 import android.os.ShellCallback;
 import android.os.ShellCommand;
 import android.os.SystemClock;
-import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -299,45 +298,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
      */
     private static final String ACTION_SHOW_INPUT_METHOD_PICKER =
             "com.android.server.inputmethod.InputMethodManagerService.SHOW_INPUT_METHOD_PICKER";
-
-    /**
-     * Debug flag for overriding runtime {@link SystemProperties}.
-     */
-    @AnyThread
-    private static final class DebugFlag {
-        private static final Object LOCK = new Object();
-        private final String mKey;
-        private final boolean mDefaultValue;
-        @GuardedBy("LOCK")
-        private boolean mValue;
-
-        public DebugFlag(String key, boolean defaultValue) {
-            mKey = key;
-            mDefaultValue = defaultValue;
-            mValue = SystemProperties.getBoolean(key, defaultValue);
-        }
-
-        void refresh() {
-            synchronized (LOCK) {
-                mValue = SystemProperties.getBoolean(mKey, mDefaultValue);
-            }
-        }
-
-        boolean value() {
-            synchronized (LOCK) {
-                return mValue;
-            }
-        }
-    }
-
-    /**
-     * Debug flags that can be overridden using "adb shell setprop <key>"
-     * Note: These flags are cached. To refresh, run "adb shell ime refresh_debug_properties".
-     */
-    private static final class DebugFlags {
-        static final DebugFlag FLAG_OPTIMIZE_START_INPUT =
-                new DebugFlag("debug.optimize_startinput", false);
-    }
 
     @UserIdInt
     private int mLastSwitchUserId;
@@ -2586,7 +2546,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                             + mCurTokenDisplayId);
                 }
                 mIWindowManager.addWindowToken(mCurToken, LayoutParams.TYPE_INPUT_METHOD,
-                        mCurTokenDisplayId);
+                        mCurTokenDisplayId, null /* options */);
             } catch (RemoteException e) {
             }
             return new InputBindResult(
@@ -3687,12 +3647,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     }
                     res = startInputUncheckedLocked(cs, inputContext, missingMethods, attribute,
                             startInputFlags, startInputReason);
-                } else if (!DebugFlags.FLAG_OPTIMIZE_START_INPUT.value()
-                        || (startInputFlags & StartInputFlags.IS_TEXT_EDITOR) != 0) {
+                } else {
                     res = startInputUncheckedLocked(cs, inputContext, missingMethods, attribute,
                             startInputFlags, startInputReason);
-                } else {
-                    res = InputBindResult.NO_EDITOR;
                 }
             } else {
                 res = InputBindResult.NULL_EDITOR_INFO;
@@ -3947,58 +3904,61 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public void setAdditionalInputMethodSubtypes(String imiId, InputMethodSubtype[] subtypes) {
-        // By this IPC call, only a process which shares the same uid with the IME can add
-        // additional input method subtypes to the IME.
-        if (TextUtils.isEmpty(imiId) || subtypes == null) return;
-        final ArrayList<InputMethodSubtype> toBeAdded = new ArrayList<>();
-        for (InputMethodSubtype subtype : subtypes) {
-            if (!toBeAdded.contains(subtype)) {
-                toBeAdded.add(subtype);
-            } else {
-                Slog.w(TAG, "Duplicated subtype definition found: "
-                        + subtype.getLocale() + ", " + subtype.getMode());
+    public void setAdditionalInputMethodSubtypes(String imiId, InputMethodSubtype[] subtypes,
+            IVoidResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            // By this IPC call, only a process which shares the same uid with the IME can add
+            // additional input method subtypes to the IME.
+            if (TextUtils.isEmpty(imiId) || subtypes == null) return;
+            final ArrayList<InputMethodSubtype> toBeAdded = new ArrayList<>();
+            for (InputMethodSubtype subtype : subtypes) {
+                if (!toBeAdded.contains(subtype)) {
+                    toBeAdded.add(subtype);
+                } else {
+                    Slog.w(TAG, "Duplicated subtype definition found: "
+                            + subtype.getLocale() + ", " + subtype.getMode());
+                }
             }
-        }
-        synchronized (mMethodMap) {
-            if (!calledFromValidUserLocked()) {
-                return;
-            }
-            if (!mSystemReady) {
-                return;
-            }
-            final InputMethodInfo imi = mMethodMap.get(imiId);
-            if (imi == null) return;
-            final String[] packageInfos;
-            try {
-                packageInfos = mIPackageManager.getPackagesForUid(Binder.getCallingUid());
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to get package infos");
-                return;
-            }
-            if (packageInfos != null) {
-                final int packageNum = packageInfos.length;
-                for (int i = 0; i < packageNum; ++i) {
-                    if (packageInfos[i].equals(imi.getPackageName())) {
-                        if (subtypes.length > 0) {
-                            mAdditionalSubtypeMap.put(imi.getId(), toBeAdded);
-                        } else {
-                            mAdditionalSubtypeMap.remove(imi.getId());
+            synchronized (mMethodMap) {
+                if (!calledFromValidUserLocked()) {
+                    return;
+                }
+                if (!mSystemReady) {
+                    return;
+                }
+                final InputMethodInfo imi = mMethodMap.get(imiId);
+                if (imi == null) return;
+                final String[] packageInfos;
+                try {
+                    packageInfos = mIPackageManager.getPackagesForUid(Binder.getCallingUid());
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Failed to get package infos");
+                    return;
+                }
+                if (packageInfos != null) {
+                    final int packageNum = packageInfos.length;
+                    for (int i = 0; i < packageNum; ++i) {
+                        if (packageInfos[i].equals(imi.getPackageName())) {
+                            if (subtypes.length > 0) {
+                                mAdditionalSubtypeMap.put(imi.getId(), toBeAdded);
+                            } else {
+                                mAdditionalSubtypeMap.remove(imi.getId());
+                            }
+                            AdditionalSubtypeUtils.save(mAdditionalSubtypeMap, mMethodMap,
+                                    mSettings.getCurrentUserId());
+                            final long ident = Binder.clearCallingIdentity();
+                            try {
+                                buildInputMethodListLocked(false /* resetDefaultEnabledIme */);
+                            } finally {
+                                Binder.restoreCallingIdentity(ident);
+                            }
+                            return;
                         }
-                        AdditionalSubtypeUtils.save(mAdditionalSubtypeMap, mMethodMap,
-                                mSettings.getCurrentUserId());
-                        final long ident = Binder.clearCallingIdentity();
-                        try {
-                            buildInputMethodListLocked(false /* resetDefaultEnabledIme */);
-                        } finally {
-                            Binder.restoreCallingIdentity(ident);
-                        }
-                        return;
                     }
                 }
             }
-        }
-        return;
+            return;
+        });
     }
 
     /**
@@ -4103,16 +4063,21 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public void removeImeSurface() {
-        mContext.enforceCallingPermission(Manifest.permission.INTERNAL_SYSTEM_WINDOW, null);
-        mHandler.sendMessage(mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE));
+    public void removeImeSurface(IVoidResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            mContext.enforceCallingPermission(Manifest.permission.INTERNAL_SYSTEM_WINDOW, null);
+            mHandler.sendMessage(mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE));
+        });
     }
 
     @Override
-    public void removeImeSurfaceFromWindow(IBinder windowToken) {
-        // No permission check, because we'll only execute the request if the calling window is
-        // also the current IME client.
-        mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE_FROM_WINDOW, windowToken).sendToTarget();
+    public void removeImeSurfaceFromWindow(IBinder windowToken,
+            IVoidResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            // No permission check, because we'll only execute the request if the calling window is
+            // also the current IME client.
+            mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE_FROM_WINDOW, windowToken).sendToTarget();
+        });
     }
 
     /**
@@ -4123,48 +4088,52 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     @BinderThread
     @Override
     @GuardedBy("mMethodMap")
-    public void startProtoDump(byte[] protoDump, int source, String where) {
-        if (protoDump == null && source != IME_TRACING_FROM_IMMS) {
-            // Dump not triggered from IMMS, but no proto information provided.
-            return;
-        }
-        ImeTracing tracingInstance = ImeTracing.getInstance();
-        if (!tracingInstance.isAvailable() || !tracingInstance.isEnabled()) {
-            return;
-        }
-
-        ProtoOutputStream proto = new ProtoOutputStream();
-        switch (source) {
-            case ImeTracing.IME_TRACING_FROM_CLIENT:
-                final long client_token = proto.start(InputMethodClientsTraceFileProto.ENTRY);
-                proto.write(InputMethodClientsTraceProto.ELAPSED_REALTIME_NANOS,
-                        SystemClock.elapsedRealtimeNanos());
-                proto.write(InputMethodClientsTraceProto.WHERE, where);
-                proto.write(InputMethodClientsTraceProto.CLIENT, protoDump);
-                proto.end(client_token);
-                break;
-            case ImeTracing.IME_TRACING_FROM_IMS:
-                final long service_token = proto.start(InputMethodServiceTraceFileProto.ENTRY);
-                proto.write(InputMethodServiceTraceProto.ELAPSED_REALTIME_NANOS,
-                        SystemClock.elapsedRealtimeNanos());
-                proto.write(InputMethodServiceTraceProto.WHERE, where);
-                proto.write(InputMethodServiceTraceProto.INPUT_METHOD_SERVICE, protoDump);
-                proto.end(service_token);
-                break;
-            case IME_TRACING_FROM_IMMS:
-                final long managerservice_token =
-                        proto.start(InputMethodManagerServiceTraceFileProto.ENTRY);
-                proto.write(InputMethodManagerServiceTraceProto.ELAPSED_REALTIME_NANOS,
-                        SystemClock.elapsedRealtimeNanos());
-                proto.write(InputMethodManagerServiceTraceProto.WHERE, where);
-                dumpDebug(proto, InputMethodManagerServiceTraceProto.INPUT_METHOD_MANAGER_SERVICE);
-                proto.end(managerservice_token);
-                break;
-            default:
-                // Dump triggered by a source not recognised.
+    public void startProtoDump(byte[] protoDump, int source, String where,
+            IVoidResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            if (protoDump == null && source != IME_TRACING_FROM_IMMS) {
+                // Dump not triggered from IMMS, but no proto information provided.
                 return;
-        }
-        tracingInstance.addToBuffer(proto, source);
+            }
+            ImeTracing tracingInstance = ImeTracing.getInstance();
+            if (!tracingInstance.isAvailable() || !tracingInstance.isEnabled()) {
+                return;
+            }
+
+            ProtoOutputStream proto = new ProtoOutputStream();
+            switch (source) {
+                case ImeTracing.IME_TRACING_FROM_CLIENT:
+                    final long client_token = proto.start(InputMethodClientsTraceFileProto.ENTRY);
+                    proto.write(InputMethodClientsTraceProto.ELAPSED_REALTIME_NANOS,
+                            SystemClock.elapsedRealtimeNanos());
+                    proto.write(InputMethodClientsTraceProto.WHERE, where);
+                    proto.write(InputMethodClientsTraceProto.CLIENT, protoDump);
+                    proto.end(client_token);
+                    break;
+                case ImeTracing.IME_TRACING_FROM_IMS:
+                    final long service_token = proto.start(InputMethodServiceTraceFileProto.ENTRY);
+                    proto.write(InputMethodServiceTraceProto.ELAPSED_REALTIME_NANOS,
+                            SystemClock.elapsedRealtimeNanos());
+                    proto.write(InputMethodServiceTraceProto.WHERE, where);
+                    proto.write(InputMethodServiceTraceProto.INPUT_METHOD_SERVICE, protoDump);
+                    proto.end(service_token);
+                    break;
+                case IME_TRACING_FROM_IMMS:
+                    final long managerservice_token =
+                            proto.start(InputMethodManagerServiceTraceFileProto.ENTRY);
+                    proto.write(InputMethodManagerServiceTraceProto.ELAPSED_REALTIME_NANOS,
+                            SystemClock.elapsedRealtimeNanos());
+                    proto.write(InputMethodManagerServiceTraceProto.WHERE, where);
+                    dumpDebug(proto,
+                            InputMethodManagerServiceTraceProto.INPUT_METHOD_MANAGER_SERVICE);
+                    proto.end(managerservice_token);
+                    break;
+                default:
+                    // Dump triggered by a source not recognised.
+                    return;
+            }
+            tracingInstance.addToBuffer(proto, source);
+        });
     }
 
     @BinderThread
@@ -4175,40 +4144,44 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     @BinderThread
     @Override
-    public void startImeTrace() {
-        ImeTracing.getInstance().startTrace(null /* printwriter */);
-        ArrayMap<IBinder, ClientState> clients;
-        synchronized (mMethodMap) {
-            clients = new ArrayMap<>(mClients);
-        }
-        for (ClientState state : clients.values()) {
-            if (state != null) {
-                try {
-                    state.client.setImeTraceEnabled(true /* enabled */);
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Error while trying to enable ime trace on client window", e);
+    public void startImeTrace(IVoidResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            ImeTracing.getInstance().startTrace(null /* printwriter */);
+            ArrayMap<IBinder, ClientState> clients;
+            synchronized (mMethodMap) {
+                clients = new ArrayMap<>(mClients);
+            }
+            for (ClientState state : clients.values()) {
+                if (state != null) {
+                    try {
+                        state.client.setImeTraceEnabled(true /* enabled */);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Error while trying to enable ime trace on client window", e);
+                    }
                 }
             }
-        }
+        });
     }
 
     @BinderThread
     @Override
-    public void stopImeTrace() {
-        ImeTracing.getInstance().stopTrace(null /* printwriter */);
-        ArrayMap<IBinder, ClientState> clients;
-        synchronized (mMethodMap) {
-            clients = new ArrayMap<>(mClients);
-        }
-        for (ClientState state : clients.values()) {
-            if (state != null) {
-                try {
-                    state.client.setImeTraceEnabled(false /* enabled */);
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Error while trying to disable ime trace on client window", e);
+    public void stopImeTrace(IVoidResultCallback resultCallback) {
+        CallbackUtils.onResult(resultCallback, () -> {
+            ImeTracing.getInstance().stopTrace(null /* printwriter */);
+            ArrayMap<IBinder, ClientState> clients;
+            synchronized (mMethodMap) {
+                clients = new ArrayMap<>(mClients);
+            }
+            for (ClientState state : clients.values()) {
+                if (state != null) {
+                    try {
+                        state.client.setImeTraceEnabled(false /* enabled */);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Error while trying to disable ime trace on client window", e);
+                    }
                 }
             }
-        }
+        });
     }
 
     @GuardedBy("mMethodMap")
@@ -5451,10 +5424,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         @BinderThread
         @ShellCommandResult
         private int onCommandWithSystemIdentity(@Nullable String cmd) {
-            if ("refresh_debug_properties".equals(cmd)) {
-                return refreshDebugProperties();
-            }
-
             if ("get-last-switch-user-id".equals(cmd)) {
                 return mService.getLastSwitchUserId(this);
             }
@@ -5486,13 +5455,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             }
 
             return handleDefaultCommands(cmd);
-        }
-
-        @BinderThread
-        @ShellCommandResult
-        private int refreshDebugProperties() {
-            DebugFlags.FLAG_OPTIMIZE_START_INPUT.refresh();
-            return ShellCommandResult.SUCCESS;
         }
 
         @BinderThread

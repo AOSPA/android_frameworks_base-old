@@ -79,10 +79,8 @@ public final class Display {
 
     private final DisplayManagerGlobal mGlobal;
     private final int mDisplayId;
-    private final int mLayerStack;
     private final int mFlags;
     private final int mType;
-    private final DisplayAddress mAddress;
     private final int mOwnerUid;
     private final String mOwnerPackageName;
     private final Resources mResources;
@@ -121,6 +119,19 @@ public final class Display {
      * Invalid display id.
      */
     public static final int INVALID_DISPLAY = -1;
+
+    /**
+     * The default display group id, which is the display group id of the primary display assuming
+     * there is one.
+     * @hide
+     */
+    public static final int DEFAULT_DISPLAY_GROUP = 0;
+
+    /**
+     * Invalid display group id.
+     * @hide
+     */
+    public static final int INVALID_DISPLAY_GROUP = -1;
 
     /**
      * Display flag: Indicates that the display supports compositing content
@@ -501,10 +512,8 @@ public final class Display {
         mIsValid = true;
 
         // Cache properties that cannot change as long as the display is valid.
-        mLayerStack = displayInfo.layerStack;
         mFlags = displayInfo.flags;
         mType = displayInfo.type;
-        mAddress = displayInfo.address;
         mOwnerUid = displayInfo.ownerUid;
         mOwnerPackageName = displayInfo.ownerPackageName;
     }
@@ -579,7 +588,10 @@ public final class Display {
      * @hide
      */
     public int getLayerStack() {
-        return mLayerStack;
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.layerStack;
+        }
     }
 
     /**
@@ -623,7 +635,10 @@ public final class Display {
      * @hide
      */
     public DisplayAddress getAddress() {
-        return mAddress;
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.address;
+        }
     }
 
     /**
@@ -881,6 +896,32 @@ public final class Display {
             return mMayAdjustByFixedRotation
                     ? getDisplayAdjustments().getDisplayCutout(mDisplayInfo.displayCutout)
                     : mDisplayInfo.displayCutout;
+        }
+    }
+
+    /**
+     * Returns the {@link RoundedCorner} of the given position if there is one.
+     *
+     * @param position the position of the rounded corner on the display.
+     *
+     * @return the rounded corner of the given position. Returns {@code null} if there is none.
+     */
+    @SuppressLint("VisiblySynchronized")
+    @Nullable
+    public RoundedCorner getRoundedCorner(@RoundedCorner.Position int position) {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            RoundedCorners roundedCorners;
+            if (mMayAdjustByFixedRotation) {
+                roundedCorners = getDisplayAdjustments().adjustRoundedCorner(
+                        mDisplayInfo.roundedCorners,
+                        mDisplayInfo.rotation,
+                        mDisplayInfo.logicalWidth,
+                        mDisplayInfo.logicalHeight);
+            } else {
+                roundedCorners = mDisplayInfo.roundedCorners;
+            }
+            return roundedCorners == null ? null : roundedCorners.getRoundedCorner(position);
         }
     }
 
