@@ -28,8 +28,11 @@ android_library {
 
     resource_dirs: ["res"],
 
-    srcs: ["src/**/*.java", "src/**/*.kt"],
-
+    srcs: [
+        "src/**/*.java",
+        ":framework-settingslib-lea-srcs",
+        "src/**/*.kt",
+    ],
     min_sdk_version: "21",
 
 }

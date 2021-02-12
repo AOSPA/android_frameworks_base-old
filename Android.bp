@@ -397,6 +397,7 @@ filegroup {
         ":PacProcessor-aidl-sources",
         ":ProxyHandler-aidl-sources",
         ":net-utils-framework-common-srcs",
+        ":framework-bluetooth-lea-srcs",
 
         // AIDL from frameworks/base/native/
         ":platform-compat-native-aidl",
@@ -416,6 +417,7 @@ filegroup {
         ":libaudioclient_aidl",
         ":libbinder_aidl",
         ":libbluetooth-binder-aidl",
+        ":libbluetooth-binder-aidl-lea",
         ":libcamera_client_aidl",
         ":libcamera_client_framework_aidl",
         ":libupdate_engine_aidl",
