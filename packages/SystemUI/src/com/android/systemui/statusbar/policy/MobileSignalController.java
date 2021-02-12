@@ -75,8 +75,6 @@ import java.io.PrintWriter;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
-import org.codeaurora.internal.NrConfigType;
-import org.codeaurora.internal.NrIconType;
 
 /**
  * Monitors the mobile signal changes and update the SysUI icons.
