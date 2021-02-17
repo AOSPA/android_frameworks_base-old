@@ -7708,8 +7708,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     callCallbackForRequest(event.mNetworkRequestInfo, event.mOldNetwork,
                             ConnectivityManager.CALLBACK_LOST, 0);
                 } else {
-                    event.mOldNetwork.lingerRequest(event.mNetworkRequestInfo.request.requestId, now,
-                                                    mNonDefaultSubscriptionLingerDelayMs);
+                    for (final NetworkRequest req : event.mNetworkRequestInfo.mRequests) {
+                        event.mOldNetwork.lingerRequest(req.requestId, now,
+                                                        mNonDefaultSubscriptionLingerDelayMs);
+                    }
                 }
             }
         }
@@ -7745,17 +7747,20 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         for (final NetworkReassignment.RequestReassignment event :
                 changes.getRequestReassignments()) {
-            if (event.mOldNetwork != null &&
-                satisfiesMobileMultiNetworkDataCheck(
-                       event.mOldNetwork.networkCapabilities,
-                       event.mRequest.request.networkCapabilities) == false &&
-                !event.mOldNetwork.isVPN()) {
-                // Force trigger permission change on non-DDS network to close all live connections
-                try {
-                    mNetd.networkSetPermissionForNetwork(event.mOldNetwork.network.netId,
-                                                         INetd.PERMISSION_NETWORK);
-                } catch (RemoteException e) {
-                    loge("Exception in setNetworkPermission: " + e);
+            for (final NetworkRequest req : event.mNetworkRequestInfo.mRequests) {
+                if (event.mOldNetwork != null &&
+                    satisfiesMobileMultiNetworkDataCheck(
+                           event.mOldNetwork.networkCapabilities,
+                           req.networkCapabilities) == false &&
+                    !event.mOldNetwork.isVPN()) {
+                    // Force trigger permission change on non-DDS network to close all
+                    // live connections
+                    try {
+                        mNetd.networkSetPermissionForNetwork(event.mOldNetwork.network.netId,
+                                                             INetd.PERMISSION_NETWORK);
+                    } catch (RemoteException e) {
+                        loge("Exception in setNetworkPermission: " + e);
+                    }
                 }
             }
         }
