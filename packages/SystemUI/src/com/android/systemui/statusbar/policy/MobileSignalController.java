@@ -364,16 +364,12 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             return;
         }
 
-        try {
-            mImsManager.removeCapabilitiesCallback(mCapabilityCallback);
-            mImsManager.removeRegistrationListener(mImsRegistrationCallback);
-            Log.d(mTag, "removeCapabilitiesCallback " + mCapabilityCallback
-                    + " from " + mImsManager);
-            Log.d(mTag, "removeRegistrationCallback " + mImsRegistrationCallback
-                    + " from " + mImsManager);
-        } catch (ImsException e) {
-            Log.d(mTag, "unable to remove callback.");
-        }
+        mImsManager.removeCapabilitiesCallback(mCapabilityCallback);
+        mImsManager.removeRegistrationListener(mImsRegistrationCallback);
+        Log.d(mTag, "removeCapabilitiesCallback " + mCapabilityCallback
+                + " from " + mImsManager);
+        Log.d(mTag, "removeRegistrationCallback " + mImsRegistrationCallback
+                + " from " + mImsManager);
     }
 
     @Override
