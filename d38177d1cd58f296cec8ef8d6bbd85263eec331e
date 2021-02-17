@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ad61c9b3_2824203c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000649
+      },
+      "writtenOn": "2021-02-17T10:19:10Z",
+      "side": 1,
+      "message": "Fixed vibration for davinci.",
+      "revId": "d38177d1cd58f296cec8ef8d6bbd85263eec331e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
