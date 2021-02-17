@@ -559,6 +559,8 @@ class ProcessRecord implements WindowProcessListener {
 
     @GuardedBy({"mService", "mProcLock"})
     public void makeActive(IApplicationThread thread, ProcessStatsService tracker) {
+        // TODO(b/180501180): Add back this logging message.
+        /*
         String seempStr = "app_uid=" + uid
                             + ",app_pid=" + pid + ",oom_adj=" + curAdj
                             + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
@@ -571,6 +573,7 @@ class ProcessRecord implements WindowProcessListener {
                             + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
                             + ",isDebugging=" + (isDebugging() ? 1 : 0);
         android.util.SeempLog.record_str(386, seempStr);
+        */
         mProfile.onProcessActive(thread, tracker);
         mThread = thread;
         mWindowProcessController.setThread(thread);
@@ -578,6 +581,8 @@ class ProcessRecord implements WindowProcessListener {
 
     @GuardedBy({"mService", "mProcLock"})
     public void makeInactive(ProcessStatsService tracker) {
+        // TODO(b/180501180): Add back this logging message.
+        /*
         String seempStr = "app_uid=" + uid
                             + ",app_pid=" + pid + ",oom_adj=" + curAdj
                             + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
@@ -590,6 +595,7 @@ class ProcessRecord implements WindowProcessListener {
                             + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
                             + ",isDebugging=" + (isDebugging() ? 1 : 0);
         android.util.SeempLog.record_str(387, seempStr);
+        */
         mThread = null;
         mWindowProcessController.setThread(null);
         mProfile.onProcessInactive(tracker);
