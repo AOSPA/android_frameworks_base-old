@@ -48,11 +48,12 @@ fun WmAssertion.navBarWindowIsAlwaysVisible(
 }
 
 fun WmAssertion.visibleWindowsShownMoreThanOneConsecutiveEntry(
+    ignoreWindows: List<String> = emptyList(),
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("visibleWindowShownMoreThanOneConsecutiveEntry", bugId, enabled) {
-        this.visibleWindowsShownMoreThanOneConsecutiveEntry()
+    all("visibleWindowsShownMoreThanOneConsecutiveEntry", bugId, enabled) {
+        this.visibleWindowsShownMoreThanOneConsecutiveEntry(ignoreWindows)
     }
 }
 
@@ -79,13 +80,36 @@ fun WmAssertion.wallpaperWindowBecomesVisible(
     }
 }
 
-fun WmAssertion.windowAlwaysVisible(
+fun WmAssertion.wallpaperWindowBecomesInvisible(
+    bugId: Int = 0,
+    enabled: Boolean = bugId == 0
+) {
+    all("wallpaperWindowBecomesInvisible", bugId, enabled) {
+        this.showsBelowAppWindow("Wallpaper")
+                .then()
+                .hidesBelowAppWindow("Wallpaper")
+    }
+}
+
+fun WmAssertion.appWindowAlwaysVisibleOnTop(
     packageName: String,
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
-    all("windowAlwaysVisible", bugId, enabled) {
+    all("appWindowAlwaysVisibleOnTop", bugId, enabled) {
         this.showsAppWindowOnTop(packageName)
+    }
+}
+
+fun WmAssertion.appWindowBecomesVisible(
+    appName: String,
+    bugId: Int = 0,
+    enabled: Boolean = bugId == 0
+) {
+    all("appWindowBecomesVisible", bugId, enabled) {
+        this.hidesAppWindow(appName)
+                .then()
+                .showsAppWindow(appName)
     }
 }
 
@@ -204,11 +228,24 @@ fun LayersAssertion.statusBarLayerRotatesScales(
 }
 
 fun LayersAssertion.visibleLayersShownMoreThanOneConsecutiveEntry(
+    ignoreLayers: List<String> = emptyList(),
     bugId: Int = 0,
     enabled: Boolean = bugId == 0
 ) {
     all("visibleLayersShownMoreThanOneConsecutiveEntry", bugId, enabled) {
-        this.visibleLayersShownMoreThanOneConsecutiveEntry()
+        this.visibleLayersShownMoreThanOneConsecutiveEntry(ignoreLayers)
+    }
+}
+
+fun LayersAssertion.appLayerReplacesWallpaperLayer(
+    appName: String,
+    bugId: Int = 0,
+    enabled: Boolean = bugId == 0
+) {
+    all("appLayerReplacesWallpaperLayer", bugId, enabled) {
+        this.showsLayer("Wallpaper")
+                .then()
+                .replaceVisibleLayer("Wallpaper", appName)
     }
 }
 
@@ -231,6 +268,30 @@ fun LayersAssertion.layerAlwaysVisible(
 ) {
     all("layerAlwaysVisible", bugId, enabled) {
         this.showsLayer(packageName)
+    }
+}
+
+fun LayersAssertion.layerBecomesVisible(
+    packageName: String,
+    bugId: Int = 0,
+    enabled: Boolean = bugId == 0
+) {
+    all("layerBecomesVisible", bugId, enabled) {
+        this.hidesLayer(packageName)
+                .then()
+                .showsLayer(packageName)
+    }
+}
+
+fun LayersAssertion.layerBecomesInvisible(
+    packageName: String,
+    bugId: Int = 0,
+    enabled: Boolean = bugId == 0
+) {
+    all("layerBecomesInvisible", bugId, enabled) {
+        this.showsLayer(packageName)
+                .then()
+                .hidesLayer(packageName)
     }
 }
 

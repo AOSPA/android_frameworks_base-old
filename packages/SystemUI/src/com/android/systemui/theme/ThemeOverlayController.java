@@ -98,9 +98,9 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
     private WallpaperColors mLockColors;
     private WallpaperColors mSystemColors;
     // Color extracted from wallpaper, NOT the color used on the overlay
-    private int mMainWallpaperColor = Color.TRANSPARENT;
+    protected int mMainWallpaperColor = Color.TRANSPARENT;
     // Color extracted from wallpaper, NOT the color used on the overlay
-    private int mWallpaperAccentColor = Color.TRANSPARENT;
+    protected int mWallpaperAccentColor = Color.TRANSPARENT;
     // Main system color that maps to an overlay color
     private int mSystemOverlayColor = Color.TRANSPARENT;
     // Accent color that maps to an overlay color
@@ -200,31 +200,26 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
     }
 
     private void reevaluateSystemTheme() {
-        if (mLockColors == null && mSystemColors == null) {
-            Log.w(TAG, "Cannot update theme, colors are null");
-            return;
-        }
-        WallpaperColors currentColor =
+        WallpaperColors currentColors =
                 mKeyguardStateController.isShowing() && mLockColors != null
                         ? mLockColors : mSystemColors;
-        int mainColor = currentColor.getPrimaryColor().toArgb();
 
-        //TODO(b/172860591) implement more complex logic for picking accent color.
-        //For now, picking the secondary should be enough.
-        Color accentCandidate = currentColor.getSecondaryColor();
-        if (accentCandidate == null) {
-            accentCandidate = currentColor.getTertiaryColor();
-        }
-        if (accentCandidate == null) {
-            accentCandidate = currentColor.getPrimaryColor();
+        final int mainColor;
+        final int accentCandidate;
+        if (currentColors == null) {
+            mainColor = Color.TRANSPARENT;
+            accentCandidate = Color.TRANSPARENT;
+        } else {
+            mainColor = getDominantColor(currentColors);
+            accentCandidate = getAccentColor(currentColors);
         }
 
-        if (mMainWallpaperColor == mainColor && mWallpaperAccentColor == accentCandidate.toArgb()) {
+        if (mMainWallpaperColor == mainColor && mWallpaperAccentColor == accentCandidate) {
             return;
         }
 
         mMainWallpaperColor = mainColor;
-        mWallpaperAccentColor = accentCandidate.toArgb();
+        mWallpaperAccentColor = accentCandidate;
 
         // Let's compare these colors to our finite set of overlays, and then pick an overlay.
         List<Integer> systemColors = mThemeManager.getAvailableSystemColors();
@@ -244,15 +239,39 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
     }
 
     /**
+     * Return the main theme color from a given {@link WallpaperColors} instance.
+     */
+    protected int getDominantColor(@NonNull WallpaperColors wallpaperColors) {
+        return wallpaperColors.getPrimaryColor().toArgb();
+    }
+
+    protected int getAccentColor(@NonNull WallpaperColors wallpaperColors) {
+        Color accentCandidate = wallpaperColors.getSecondaryColor();
+        if (accentCandidate == null) {
+            accentCandidate = wallpaperColors.getTertiaryColor();
+        }
+        if (accentCandidate == null) {
+            accentCandidate = wallpaperColors.getPrimaryColor();
+        }
+        return accentCandidate.toArgb();
+    }
+
+    /**
      * Given a color and a list of candidates, return the candidate that's the most similar to the
      * given color.
      */
-    private static int getClosest(List<Integer> candidates, int color) {
+    protected int getClosest(List<Integer> candidates, int color) {
         float[] hslMain = new float[3];
         float[] hslCandidate = new float[3];
 
         ColorUtils.RGBToHSL(Color.red(color), Color.green(color), Color.blue(color), hslMain);
         hslMain[0] /= 360f;
+
+        // To close to white or black, let's use the default system theme instead of
+        // applying a colorized one.
+        if (hslMain[2] < 0.05 || hslMain[2] > 0.95) {
+            return Color.TRANSPARENT;
+        }
 
         float minDistance = Float.MAX_VALUE;
         int closestColor = Color.TRANSPARENT;
@@ -281,7 +300,7 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
         final String overlayPackageJson = mSecureSettings.getStringForUser(
                 Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
                 currentUser);
-        if (DEBUG) Log.d(TAG, "updateThemeOverlays: " + overlayPackageJson);
+        if (DEBUG) Log.d(TAG, "updateThemeOverlays. Setting: " + overlayPackageJson);
         boolean hasSystemPalette = false;
         boolean hasAccentColor = false;
         final Map<String, String> categoryToPackage = new ArrayMap<>();
@@ -329,6 +348,10 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
         String colorString = Integer.toHexString(color).toUpperCase();
         while (colorString.length() < 6) {
             colorString = "0" + colorString;
+        }
+        // Remove alpha component
+        if (colorString.length() > 6) {
+            colorString = colorString.substring(colorString.length() - 6);
         }
         return colorString;
     }

@@ -52,19 +52,17 @@ interface IPermissionManager {
 
     int checkUidPermission(String permName, int uid);
 
-    int checkDeviceIdentifierAccess(String packageName, String callingFeatureId, String message, int pid, int uid);
-
     void addOnPermissionsChangeListener(in IOnPermissionsChangeListener listener);
 
     void removeOnPermissionsChangeListener(in IOnPermissionsChangeListener listener);
 
-    List<String> getWhitelistedRestrictedPermissions(String packageName,
+    List<String> getAllowlistedRestrictedPermissions(String packageName,
             int flags, int userId);
 
-    boolean addWhitelistedRestrictedPermission(String packageName, String permName,
+    boolean addAllowlistedRestrictedPermission(String packageName, String permissionName,
             int flags, int userId);
 
-    boolean removeWhitelistedRestrictedPermission(String packageName, String permName,
+    boolean removeAllowlistedRestrictedPermission(String packageName, String permissionName,
             int flags, int userId);
 
     void grantRuntimePermission(String packageName, String permName, int userId);
@@ -72,20 +70,6 @@ interface IPermissionManager {
     void revokeRuntimePermission(String packageName, String permName, int userId, String reason);
 
     void resetRuntimePermissions();
-
-    void grantDefaultPermissionsToEnabledCarrierApps(in String[] packageNames, int userId);
-
-    void grantDefaultPermissionsToEnabledImsServices(in String[] packageNames, int userId);
-
-    void grantDefaultPermissionsToEnabledTelephonyDataServices(
-            in String[] packageNames, int userId);
-
-    void revokeDefaultPermissionsFromDisabledTelephonyDataServices(
-            in String[] packageNames, int userId);
-
-    void grantDefaultPermissionsToActiveLuiApp(in String packageName, int userId);
-
-    void revokeDefaultPermissionsFromLuiApps(in String[] packageNames, int userId);
 
     boolean shouldShowRequestPermissionRationale(String permName,
             String packageName, int userId);
@@ -103,7 +87,7 @@ interface IPermissionManager {
 
     List<String> getAutoRevokeExemptionGrantedPackages(int userId);
 
-    boolean setAutoRevokeWhitelisted(String packageName, boolean whitelisted, int userId);
+    boolean setAutoRevokeExempted(String packageName, boolean exempted, int userId);
 
-    boolean isAutoRevokeWhitelisted(String packageName, int userId);
+    boolean isAutoRevokeExempted(String packageName, int userId);
 }

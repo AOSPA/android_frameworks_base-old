@@ -19,7 +19,6 @@ package com.android.server.am;
 import static android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND;
 import static android.Manifest.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND;
 import static android.Manifest.permission.SYSTEM_ALERT_WINDOW;
-import static android.app.ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST;
 import static android.os.Process.NFC_UID;
@@ -50,6 +49,7 @@ import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.ApplicationExitInfo;
+import android.app.BroadcastOptions;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.Notification;
@@ -173,6 +173,8 @@ public final class ActiveServices {
     public static final int FGS_FEATURE_ALLOWED_BY_SYSTEM_ALERT_WINDOW_PERMISSION = 16;
     public static final int FGS_FEATURE_ALLOWED_BY_FGS_BINDING = 17;
     public static final int FGS_FEATURE_ALLOWED_BY_DEVICE_DEMO_MODE = 18;
+    public static final int FGS_FEATURE_ALLOWED_BY_PROCESS_RECORD = 19;
+    public static final int FGS_FEATURE_ALLOWED_BY_EXEMPTED_PACKAGES = 20;
 
     @IntDef(flag = true, prefix = { "FGS_FEATURE_" }, value = {
             FGS_FEATURE_DENIED,
@@ -192,7 +194,9 @@ public final class ActiveServices {
             FGS_FEATURE_ALLOWED_BY_DEVICE_IDLE_ALLOW_LIST,
             FGS_FEATURE_ALLOWED_BY_SYSTEM_ALERT_WINDOW_PERMISSION,
             FGS_FEATURE_ALLOWED_BY_FGS_BINDING,
-            FGS_FEATURE_ALLOWED_BY_DEVICE_DEMO_MODE
+            FGS_FEATURE_ALLOWED_BY_DEVICE_DEMO_MODE,
+            FGS_FEATURE_ALLOWED_BY_PROCESS_RECORD,
+            FGS_FEATURE_ALLOWED_BY_EXEMPTED_PACKAGES,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface FgsFeatureRetCode {}
@@ -287,12 +291,38 @@ public final class ActiveServices {
     static final long FGS_BG_START_RESTRICTION_CHANGE_ID = 170668199L;
 
     /**
+     * If set to false for a package, the system will *not* exempt it from FGS-BG-start,
+     * even if it's in {#code ActiveServices.sFgsBgStartExemptedPackages}.
+     */
+    @ChangeId
+    static final long FGS_BG_START_USE_EXEMPTION_LIST_CHANGE_ID = 175801883;
+
+    /**
      * If a service can not become foreground service due to BG-FGS-launch restriction or other
      * reasons, throws an IllegalStateException.
      */
     @ChangeId
     @EnabledSince(targetSdkVersion = android.os.Build.VERSION_CODES.S)
     static final long FGS_START_EXCEPTION_CHANGE_ID = 174041399L;
+
+    /**
+     * Special allowlist that contains packages that are allowed to start FGS even if they target S,
+     * without using START_FOREGROUND_SERVICES_FROM_BACKGROUND.
+     *
+     * Note: we exempt FGS starts if either the "callee" or "caller" match any of the emempted
+     * packages. This means:
+     * - Exempted apps could call Context.startForegroundService() for services owned by any other
+     *   apps.
+     * - Any apps could call Context.startForegroundService() for services owned by any exempted
+     *   apps.
+     * And the call would succeed.
+     */
+    private static final ArraySet<String> sFgsBgStartExemptedPackages = new ArraySet<>();
+
+    static {
+        sFgsBgStartExemptedPackages.add("com.google.pixel.exo.bootstrapping"); //STOPSHIP Remove it.
+        sFgsBgStartExemptedPackages.add("com.android.chrome"); // STOPSHIP Remove it.
+    }
 
     final Runnable mLastAnrDumpClearer = new Runnable() {
         @Override public void run() {
@@ -1788,7 +1818,7 @@ public final class ActiveServices {
                         // The service might have been stopped or exited foreground state
                         // in the interval, so we lazy check whether we still need to show
                         // the notification.
-                        if (r.isForeground) {
+                        if (r.isForeground && r.app != null) {
                             r.postNotification();
                         } else if (DEBUG_FOREGROUND_SERVICE) {
                             Slog.d(TAG_SERVICE, "  - service no longer running/fg, ignoring");
@@ -1893,7 +1923,7 @@ public final class ActiveServices {
         private final AppOpsManager.OnOpNotedListener mOpNotedCallback =
                 new AppOpsManager.OnOpNotedListener() {
                     @Override
-                    public void onOpNoted(int op, int uid, String pkgName, int result) {
+                    public void onOpNoted(int op, int uid, String pkgName, int flags, int result) {
                         incrementOpCountIfNeeded(op, uid, result);
                     }
         };
@@ -1901,7 +1931,8 @@ public final class ActiveServices {
         private final AppOpsManager.OnOpStartedListener mOpStartedCallback =
                 new AppOpsManager.OnOpStartedListener() {
                     @Override
-                    public void onOpStarted(int op, int uid, String pkgName, int result) {
+                    public void onOpStarted(int op, int uid, String pkgName, int flags,
+                            int result) {
                         incrementOpCountIfNeeded(op, uid, result);
                     }
         };
@@ -3339,7 +3370,8 @@ public final class ActiveServices {
                         + " for fg-service launch");
             }
             mAm.tempWhitelistUidLocked(r.appInfo.uid,
-                    SERVICE_START_FOREGROUND_TIMEOUT, "fg-service-launch");
+                    SERVICE_START_FOREGROUND_TIMEOUT, "fg-service-launch",
+                    BroadcastOptions.TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED);
         }
 
         if (!mPendingServices.contains(r)) {
@@ -5427,10 +5459,14 @@ public final class ActiveServices {
         if (ret == FGS_FEATURE_DENIED) {
             for (int i = mAm.mProcessList.mLruProcesses.size() - 1; i >= 0; i--) {
                 final ProcessRecord pr = mAm.mProcessList.mLruProcesses.get(i);
-                if (pr.uid == callingUid
-                        && pr.mAllowStartFgsState <= PROCESS_STATE_BOUND_FOREGROUND_SERVICE) {
-                    ret = FGS_FEATURE_ALLOWED_BY_PROC_STATE;
-                    break;
+                if (pr.uid == callingUid) {
+                    if (pr.mAllowStartFgs) {
+                        ret = FGS_FEATURE_ALLOWED_BY_PROCESS_RECORD;
+                        break;
+                    } else if (pr.isAllowedStartFgsState()) {
+                        ret = FGS_FEATURE_ALLOWED_BY_PROC_STATE;
+                        break;
+                    }
                 }
             }
         }
@@ -5469,9 +5505,9 @@ public final class ActiveServices {
         }
 
         if (ret == FGS_FEATURE_DENIED) {
-            if (mAm.mConstants.mFlagFgsStartTempAllowListEnabled
-                    && mAm.isOnDeviceIdleWhitelistLocked(r.appInfo.uid, false)) {
-                // uid is on DeviceIdleController's allowlist.
+            if (mAm.isWhitelistedForFgsStartLocked(callingUid)) {
+                // uid is on DeviceIdleController's user/system allowlist
+                // or AMS's FgsStartTempAllowList.
                 ret = FGS_FEATURE_ALLOWED_BY_DEVICE_IDLE_ALLOW_LIST;
             }
         }
@@ -5479,6 +5515,14 @@ public final class ActiveServices {
         if (ret == FGS_FEATURE_DENIED) {
             if (UserManager.isDeviceInDemoMode(mAm.mContext)) {
                 ret = FGS_FEATURE_ALLOWED_BY_DEVICE_DEMO_MODE;
+            }
+        }
+
+        // NOTE this should always be the last check.
+        if (ret == FGS_FEATURE_DENIED) {
+            if (isPackageExemptedFromFgsRestriction(r.appInfo.packageName, r.appInfo.uid)
+                    || isPackageExemptedFromFgsRestriction(callingPackage, callingUid)) {
+                ret = FGS_FEATURE_ALLOWED_BY_EXEMPTED_PACKAGES;
             }
         }
 
@@ -5497,6 +5541,13 @@ public final class ActiveServices {
         }
 
         return ret;
+    }
+
+    private boolean isPackageExemptedFromFgsRestriction(String packageName, int uid) {
+        if (!sFgsBgStartExemptedPackages.contains(packageName)) {
+            return false;
+        }
+        return CompatChanges.isChangeEnabled(FGS_BG_START_USE_EXEMPTION_LIST_CHANGE_ID, uid);
     }
 
     private static String fgsCodeToString(@FgsFeatureRetCode int code) {
@@ -5537,6 +5588,10 @@ public final class ActiveServices {
                 return "ALLOWED_BY_FGS_BINDING";
             case FGS_FEATURE_ALLOWED_BY_DEVICE_DEMO_MODE:
                 return "ALLOWED_BY_DEVICE_DEMO_MODE";
+            case FGS_FEATURE_ALLOWED_BY_PROCESS_RECORD:
+                return "ALLOWED_BY_PROCESS_RECORD";
+            case FGS_FEATURE_ALLOWED_BY_EXEMPTED_PACKAGES:
+                return "FGS_FEATURE_ALLOWED_BY_EXEMPTED_PACKAGES";
             default:
                 return "";
         }

@@ -18,6 +18,7 @@
 package com.android.server.companion;
 
 import static com.android.internal.util.CollectionUtils.emptyIfNull;
+import static com.android.internal.util.CollectionUtils.find;
 import static com.android.internal.util.CollectionUtils.forEach;
 import static com.android.internal.util.FunctionalUtils.uncheckExceptions;
 import static com.android.internal.util.Preconditions.checkArgument;
@@ -31,11 +32,16 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import android.annotation.CheckResult;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SuppressLint;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
+import android.app.role.RoleManager;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.companion.Association;
 import android.companion.AssociationRequest;
 import android.companion.CompanionDeviceManager;
+import android.companion.DeviceNotAssociatedException;
 import android.companion.ICompanionDeviceDiscoveryService;
 import android.companion.ICompanionDeviceManager;
 import android.companion.IFindDeviceCallback;
@@ -47,6 +53,7 @@ import android.content.pm.FeatureInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.UserInfo;
 import android.net.NetworkPolicyManager;
 import android.os.Binder;
 import android.os.Environment;
@@ -62,6 +69,7 @@ import android.os.ServiceManager;
 import android.os.ShellCallback;
 import android.os.ShellCommand;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.provider.SettingsStringUtil.ComponentNameSet;
 import android.text.BidiFormatter;
@@ -70,6 +78,7 @@ import android.util.AtomicFile;
 import android.util.ExceptionUtils;
 import android.util.Log;
 import android.util.Slog;
+import android.util.SparseArray;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
@@ -116,6 +125,7 @@ import java.util.function.Function;
 //TODO on associate called again after configuration change -> replace old callback with new
 //TODO avoid leaking calling activity in IFindDeviceCallback (see PrintManager#print for example)
 /** @hide */
+@SuppressLint("LongLogTag")
 public class CompanionDeviceManagerService extends SystemService implements Binder.DeathRecipient {
 
     private static final ComponentName SERVICE_TO_BIND_TO = ComponentName.createRelative(
@@ -132,6 +142,8 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     private static final String XML_TAG_ASSOCIATION = "association";
     private static final String XML_ATTR_PACKAGE = "package";
     private static final String XML_ATTR_DEVICE = "device";
+    private static final String XML_ATTR_PROFILE = "profile";
+    private static final String XML_ATTR_PERSISTENT_PROFILE_GRANTS = "persistent_profile_grants";
     private static final String XML_FILE_NAME = "companion_device_manager_associations.xml";
 
     private final CompanionDeviceManagerImpl mImpl;
@@ -139,21 +151,29 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     private PowerWhitelistManager mPowerWhitelistManager;
     private PerUser<ServiceConnector<ICompanionDeviceDiscoveryService>> mServiceConnectors;
     private IAppOpsService mAppOpsManager;
+    private RoleManager mRoleManager;
+    private BluetoothAdapter mBluetoothAdapter;
 
     private IFindDeviceCallback mFindDeviceCallback;
     private AssociationRequest mRequest;
     private String mCallingPackage;
     private AndroidFuture<Association> mOngoingDeviceDiscovery;
 
+    private BluetoothDeviceConnectedListener mBluetoothDeviceConnectedListener =
+            new BluetoothDeviceConnectedListener();
+    private List<String> mCurrentlyConnectedDevices = new ArrayList<>();
+
     private final Object mLock = new Object();
 
+    /** userId -> [association] */
     @GuardedBy("mLock")
-    private @Nullable Set<Association> mCachedAssociations = null;
+    private @Nullable SparseArray<Set<Association>> mCachedAssociations = new SparseArray<>();
 
     public CompanionDeviceManagerService(Context context) {
         super(context);
         mImpl = new CompanionDeviceManagerImpl();
         mPowerWhitelistManager = context.getSystemService(PowerWhitelistManager.class);
+        mRoleManager = context.getSystemService(RoleManager.class);
         mAppOpsManager = IAppOpsService.Stub.asInterface(
                 ServiceManager.getService(Context.APP_OPS_SERVICE));
 
@@ -184,9 +204,9 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             @Override
             public void onPackageModified(String packageName) {
                 int userId = getChangingUserId();
-                if (!ArrayUtils.isEmpty(getAllAssociations(userId, packageName))) {
-                    updateSpecialAccessPermissionForAssociatedPackage(packageName, userId);
-                }
+                forEach(getAllAssociations(userId, packageName), association -> {
+                    updateSpecialAccessPermissionForAssociatedPackage(association);
+                });
             }
 
         }.register(getContext(), FgThread.get().getLooper(), UserHandle.ALL, true);
@@ -195,6 +215,18 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     @Override
     public void onStart() {
         publishBinderService(Context.COMPANION_DEVICE_SERVICE, mImpl);
+    }
+
+    @Override
+    public void onBootPhase(int phase) {
+        if (phase == SystemService.PHASE_SYSTEM_SERVICES_READY) {
+            mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+            if (mBluetoothAdapter != null) {
+                mBluetoothAdapter.registerBluetoothConnectionCallback(
+                        getContext().getMainExecutor(),
+                        mBluetoothDeviceConnectedListener);
+            }
+        }
     }
 
     @Override
@@ -453,6 +485,43 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                     a -> Objects.equals(a.getDeviceMacAddress(), macAddress));
         }
 
+        @Override
+        public void registerDevicePresenceListenerService(
+                String packageName, String deviceAddress)
+                throws RemoteException {
+            checkCanRegisterObserverService(packageName, deviceAddress);
+
+            //TODO(eugenesusla) implement
+        }
+
+        @Override
+        public void unregisterDevicePresenceListenerService(
+                String packageName, String deviceAddress)
+                throws RemoteException {
+            checkCanRegisterObserverService(packageName, deviceAddress);
+
+            //TODO(eugenesusla) implement
+        }
+
+        private void checkCanRegisterObserverService(String packageName, String deviceAddress)
+                throws RemoteException {
+            getContext().enforceCallingOrSelfPermission(
+                    android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE,
+                    "[un]registerDevicePresenceListenerService");
+            checkCallerIsSystemOr(packageName);
+
+            int userId = getCallingUserId();
+            Set<Association> deviceAssociations = CollectionUtils.filter(
+                    getAllAssociations(userId, packageName),
+                    association -> deviceAddress.equals(association.getDeviceMacAddress()));
+
+            if (deviceAssociations.isEmpty()) {
+                throw new RemoteException(new DeviceNotAssociatedException("App " + packageName
+                        + " is not associated with device " + deviceAddress
+                        + " for user " + userId));
+            }
+        }
+
         private void checkCanCallNotificationApi(String callingPackage) throws RemoteException {
             checkCallerIsSystemOr(callingPackage);
             int userId = getCallingUserId();
@@ -495,12 +564,14 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
 
             fout.append("Companion Device Associations:").append('\n');
             synchronized (mLock) {
-                forEach(mCachedAssociations, a -> {
-                    fout.append("  ")
-                            .append("u").append("" + a.getUserId()).append(": ")
-                            .append(a.getPackageName()).append(" - ")
-                            .append(a.getDeviceMacAddress()).append('\n');
-                });
+                for (UserInfo user : getAllUsers()) {
+                    forEach(mCachedAssociations.get(user.id), a -> {
+                        fout.append("  ")
+                                .append("u").append("" + a.getUserId()).append(": ")
+                                .append(a.getPackageName()).append(" - ")
+                                .append(a.getDeviceMacAddress()).append('\n');
+                    });
+                }
             }
         }
     }
@@ -513,32 +584,72 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         return Binder.getCallingUid() == Process.SYSTEM_UID;
     }
 
-    void addAssociation(int userId, String packageName, String deviceAddress) {
-        addAssociation(new Association(userId, deviceAddress, packageName));
-    }
-
     void addAssociation(Association association) {
-        updateSpecialAccessPermissionForAssociatedPackage(
-                association.getPackageName(), association.getUserId());
+        updateSpecialAccessPermissionForAssociatedPackage(association);
         recordAssociation(association);
     }
 
     void removeAssociation(int userId, String pkg, String deviceMacAddress) {
-        updateAssociations(associations -> CollectionUtils.remove(associations,
-                new Association(userId, deviceMacAddress, pkg)));
+        updateAssociations(associations -> CollectionUtils.filter(associations, association -> {
+            boolean notMatch = association.getUserId() != userId
+                    || !Objects.equals(association.getDeviceMacAddress(), deviceMacAddress)
+                    || !Objects.equals(association.getPackageName(), pkg);
+            if (!notMatch) {
+                onAssociationPreRemove(association);
+            }
+            return notMatch;
+        }));
     }
 
-    private void updateSpecialAccessPermissionForAssociatedPackage(String packageName, int userId) {
-        PackageInfo packageInfo = getPackageInfo(packageName, userId);
+    void onAssociationPreRemove(Association association) {
+        String deviceProfile = association.getDeviceProfile();
+        if (deviceProfile != null) {
+            Association otherAssociationWithDeviceProfile = find(
+                    getAllAssociations(association.getUserId()),
+                    a -> !a.equals(association) && deviceProfile.equals(a.getDeviceProfile()));
+            if (otherAssociationWithDeviceProfile != null) {
+                Log.i(LOG_TAG, "Not revoking " + deviceProfile
+                        + " for " + association
+                        + " - profile still present in " + otherAssociationWithDeviceProfile);
+            } else {
+                long identity = Binder.clearCallingIdentity();
+                try {
+                    mRoleManager.removeRoleHolderAsUser(
+                            association.getDeviceProfile(),
+                            association.getPackageName(),
+                            RoleManager.MANAGE_HOLDERS_FLAG_DONT_KILL_APP,
+                            UserHandle.of(association.getUserId()),
+                            getContext().getMainExecutor(),
+                            success -> {
+                                if (!success) {
+                                    Log.e(LOG_TAG, "Failed to revoke device profile role "
+                                            + association.getDeviceProfile()
+                                            + " to " + association.getPackageName()
+                                            + " for user " + association.getUserId());
+                                }
+                            });
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
+
+    private void updateSpecialAccessPermissionForAssociatedPackage(Association association) {
+        PackageInfo packageInfo = getPackageInfo(
+                association.getPackageName(),
+                association.getUserId());
         if (packageInfo == null) {
             return;
         }
 
         Binder.withCleanCallingIdentity(obtainRunnable(CompanionDeviceManagerService::
-                updateSpecialAccessPermissionAsSystem, this, packageInfo).recycleOnUse());
+                updateSpecialAccessPermissionAsSystem, this, association, packageInfo)
+                .recycleOnUse());
     }
 
-    private void updateSpecialAccessPermissionAsSystem(PackageInfo packageInfo) {
+    private void updateSpecialAccessPermissionAsSystem(
+            Association association, PackageInfo packageInfo) {
         if (containsEither(packageInfo.requestedPermissions,
                 android.Manifest.permission.RUN_IN_BACKGROUND,
                 android.Manifest.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND)) {
@@ -561,6 +672,10 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         }
 
         exemptFromAutoRevoke(packageInfo.packageName, packageInfo.applicationInfo.uid);
+
+        if (mCurrentlyConnectedDevices.contains(association.getDeviceMacAddress())) {
+            grantDeviceProfile(association);
+        }
     }
 
     private void exemptFromAutoRevoke(String packageName, int uid) {
@@ -602,10 +717,6 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         updateAssociations(associations -> CollectionUtils.add(associations, association));
     }
 
-    private void recordAssociation(String privilegedPackage, String deviceAddress) {
-        recordAssociation(new Association(getCallingUserId(), deviceAddress, privilegedPackage));
-    }
-
     private void updateAssociations(Function<Set<Association>, Set<Association>> update) {
         updateAssociations(update, getCallingUserId());
     }
@@ -625,7 +736,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             if (DEBUG) {
                 Slog.i(LOG_TAG, "Updating associations: " + old + "  -->  " + associations);
             }
-            mCachedAssociations = Collections.unmodifiableSet(associations);
+            mCachedAssociations.put(userId, Collections.unmodifiableSet(associations));
             BackgroundThread.getHandler().sendMessage(PooledLambda.obtainMessage(
                     CompanionDeviceManagerService::persistAssociations,
                     this, associations, userId));
@@ -651,10 +762,17 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                     xml.startTag(null, XML_TAG_ASSOCIATIONS);
 
                     forEach(associations, association -> {
-                        xml.startTag(null, XML_TAG_ASSOCIATION)
+                        XmlSerializer tag = xml.startTag(null, XML_TAG_ASSOCIATION)
                                 .attribute(null, XML_ATTR_PACKAGE, association.getPackageName())
-                                .attribute(null, XML_ATTR_DEVICE, association.getDeviceMacAddress())
-                                .endTag(null, XML_TAG_ASSOCIATION);
+                                .attribute(null, XML_ATTR_DEVICE,
+                                        association.getDeviceMacAddress());
+                        if (association.getDeviceProfile() != null) {
+                            tag.attribute(null, XML_ATTR_PROFILE, association.getDeviceProfile());
+                            tag.attribute(null, XML_ATTR_PERSISTENT_PROFILE_GRANTS,
+                                    Boolean.toString(
+                                            association.isKeepProfilePrivilegesWhenDeviceAway()));
+                        }
+                        tag.endTag(null, XML_TAG_ASSOCIATION);
                     });
 
                     xml.endTag(null, XML_TAG_ASSOCIATIONS);
@@ -678,15 +796,19 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     @Nullable
     private Set<Association> getAllAssociations(int userId) {
         synchronized (mLock) {
-            if (mCachedAssociations == null) {
-                mCachedAssociations = Collections.unmodifiableSet(
-                        emptyIfNull(readAllAssociations(userId)));
+            if (mCachedAssociations.get(userId) == null) {
+                mCachedAssociations.put(userId, Collections.unmodifiableSet(
+                        emptyIfNull(readAllAssociations(userId))));
                 if (DEBUG) {
                     Slog.i(LOG_TAG, "Read associations from disk: " + mCachedAssociations);
                 }
             }
-            return mCachedAssociations;
+            return mCachedAssociations.get(userId);
         }
+    }
+
+    private List<UserInfo> getAllUsers() {
+        return getContext().getSystemService(UserManager.class).getUsers();
     }
 
     @Nullable
@@ -714,10 +836,15 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                     final String appPackage = parser.getAttributeValue(null, XML_ATTR_PACKAGE);
                     final String deviceAddress = parser.getAttributeValue(null, XML_ATTR_DEVICE);
 
+                    final String profile = parser.getAttributeValue(null, XML_ATTR_PROFILE);
+                    final boolean persistentGrants = Boolean.valueOf(
+                            parser.getAttributeValue(null, XML_ATTR_PERSISTENT_PROFILE_GRANTS));
+
                     if (appPackage == null || deviceAddress == null) continue;
 
                     result = ArrayUtils.add(result,
-                            new Association(userId, deviceAddress, appPackage));
+                            new Association(userId, deviceAddress, appPackage,
+                                    profile, persistentGrants));
                 }
                 return result;
             } catch (XmlPullParserException | IOException e) {
@@ -725,6 +852,46 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                 return null;
             }
         }
+    }
+
+    void onDeviceConnected(String address) {
+        mCurrentlyConnectedDevices.add(address);
+
+        for (UserInfo user : getAllUsers()) {
+            for (Association association : getAllAssociations(user.id)) {
+                if (Objects.equals(address, association.getDeviceMacAddress())) {
+                    if (association.getDeviceProfile() != null) {
+                        Log.i(LOG_TAG, "Granting role " + association.getDeviceProfile()
+                                + " to " + association.getPackageName()
+                                + " due to device connected: " + association.getDeviceMacAddress());
+                        grantDeviceProfile(association);
+                    }
+                }
+            }
+        }
+    }
+
+    private void grantDeviceProfile(Association association) {
+        if (association.getDeviceProfile() != null) {
+            mRoleManager.addRoleHolderAsUser(
+                    association.getDeviceProfile(),
+                    association.getPackageName(),
+                    RoleManager.MANAGE_HOLDERS_FLAG_DONT_KILL_APP,
+                    UserHandle.of(association.getUserId()),
+                    getContext().getMainExecutor(),
+                    success -> {
+                        if (!success) {
+                            Log.e(LOG_TAG, "Failed to grant device profile role "
+                                    + association.getDeviceProfile()
+                                    + " to " + association.getPackageName()
+                                    + " for user " + association.getUserId());
+                        }
+                    });
+        }
+    }
+
+    void onDeviceDisconnected(String address) {
+        mCurrentlyConnectedDevices.remove(address);
     }
 
     private class ShellCmd extends ShellCommand {
@@ -740,25 +907,49 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
 
         @Override
         public int onCommand(String cmd) {
-            switch (cmd) {
-                case "list": {
-                    forEach(
-                            getAllAssociations(getNextArgInt()),
-                            a -> getOutPrintWriter()
-                                    .println(a.getPackageName() + " " + a.getDeviceMacAddress()));
-                } break;
+            try {
+                switch (cmd) {
+                    case "list": {
+                        forEach(
+                                getAllAssociations(getNextArgInt()),
+                                a -> getOutPrintWriter()
+                                        .println(a.getPackageName() + " "
+                                                + a.getDeviceMacAddress()));
+                    }
+                    break;
 
-                case "associate": {
-                    addAssociation(getNextArgInt(), getNextArgRequired(), getNextArgRequired());
-                } break;
+                    case "associate": {
+                        String pkg = getNextArgRequired();
+                        String address = getNextArgRequired();
+                        addAssociation(new Association(getNextArgInt(), address, pkg, null, false));
+                    }
+                    break;
 
-                case "disassociate": {
-                    removeAssociation(getNextArgInt(), getNextArgRequired(), getNextArgRequired());
-                } break;
+                    case "disassociate": {
+                        removeAssociation(getNextArgInt(), getNextArgRequired(),
+                                getNextArgRequired());
+                    }
+                    break;
 
-                default: return handleDefaultCommands(cmd);
+                    case "simulate_connect": {
+                        onDeviceConnected(getNextArgRequired());
+                    }
+                    break;
+
+                    case "simulate_disconnect": {
+                        onDeviceDisconnected(getNextArgRequired());
+                    }
+                    break;
+
+                    default:
+                        return handleDefaultCommands(cmd);
+                }
+                return 0;
+            } catch (Throwable t) {
+                Log.e(LOG_TAG, "Error running a command: $ " + cmd, t);
+                getErrPrintWriter().println(Log.getStackTraceString(t));
+                return 1;
             }
-            return 0;
         }
 
         private int getNextArgInt() {
@@ -771,4 +962,17 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         }
     }
 
+
+    private class BluetoothDeviceConnectedListener
+            extends BluetoothAdapter.BluetoothConnectionCallback {
+        @Override
+        public void onDeviceConnected(BluetoothDevice device) {
+            CompanionDeviceManagerService.this.onDeviceConnected(device.getAddress());
+        }
+
+        @Override
+        public void onDeviceDisconnected(BluetoothDevice device) {
+            CompanionDeviceManagerService.this.onDeviceDisconnected(device.getAddress());
+        }
+    }
 }

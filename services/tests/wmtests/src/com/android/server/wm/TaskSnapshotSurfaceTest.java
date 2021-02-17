@@ -36,9 +36,8 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.eq;
 
-import android.app.ActivityManager;
 import android.app.ActivityManager.TaskDescription;
-import android.app.ActivityManager.TaskSnapshot;
+import android.window.TaskSnapshot;
 import android.content.ComponentName;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -93,8 +92,8 @@ public class TaskSnapshotSurfaceTest extends WindowTestsBase {
                 ACTIVITY_TYPE_STANDARD, new InsetsState());
     }
 
-    private ActivityManager.TaskSnapshot createTaskSnapshot(int width, int height, Point taskSize,
-            Rect contentInsets) {
+    private TaskSnapshot createTaskSnapshot(int width, int height,
+            Point taskSize, Rect contentInsets) {
         final HardwareBuffer buffer = HardwareBuffer.create(width, height, HardwareBuffer.RGBA_8888,
                 1, HardwareBuffer.USAGE_CPU_READ_RARELY);
         return new TaskSnapshot(
@@ -103,7 +102,7 @@ public class TaskSnapshotSurfaceTest extends WindowTestsBase {
                 ColorSpace.get(ColorSpace.Named.SRGB), ORIENTATION_PORTRAIT,
                 Surface.ROTATION_0, taskSize, contentInsets, false,
                 true /* isRealSnapshot */, WINDOWING_MODE_FULLSCREEN,
-                0 /* systemUiVisibility */, false /* isTranslucent */);
+                0 /* systemUiVisibility */, false /* isTranslucent */, false /* hasImeSurface */);
     }
 
     private static TaskDescription createTaskDescription(int background, int statusBar,

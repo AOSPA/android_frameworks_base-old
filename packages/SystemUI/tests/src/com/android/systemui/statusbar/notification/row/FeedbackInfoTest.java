@@ -17,18 +17,17 @@
 package com.android.systemui.statusbar.notification.row;
 
 import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
-import static android.app.NotificationManager.IMPORTANCE_HIGH;
-import static android.app.NotificationManager.IMPORTANCE_LOW;
-import static android.app.NotificationManager.IMPORTANCE_MIN;
-import static android.service.notification.NotificationListenerService.Ranking.RANKING_DEMOTED;
-import static android.service.notification.NotificationListenerService.Ranking.RANKING_PROMOTED;
 import static android.service.notification.NotificationListenerService.Ranking.RANKING_UNCHANGED;
+
+import static com.android.systemui.statusbar.notification.AssistantFeedbackController.STATUS_ALERTED;
+import static com.android.systemui.statusbar.notification.AssistantFeedbackController.STATUS_DEMOTED;
+import static com.android.systemui.statusbar.notification.AssistantFeedbackController.STATUS_PROMOTED;
+import static com.android.systemui.statusbar.notification.AssistantFeedbackController.STATUS_SILENCED;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertTrue;
 
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.eq;
@@ -56,6 +55,7 @@ import android.widget.TextView;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.notification.AssistantFeedbackController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -65,8 +65,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-
-import java.util.concurrent.CountDownLatch;
+import org.mockito.MockitoAnnotations;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -78,18 +77,26 @@ public class FeedbackInfoTest extends SysuiTestCase {
     private FeedbackInfo mFeedbackInfo;
     private final PackageManager mMockPackageManager = mock(PackageManager.class);
     private final NotificationGuts mGutsParent = mock(NotificationGuts.class);
+    private final ExpandableNotificationRow mMockNotificationRow =
+            mock(ExpandableNotificationRow.class);
+    private final AssistantFeedbackController mAssistantFeedbackController =
+            mock(AssistantFeedbackController.class);
     private StatusBarNotification mSbn;
 
     @Mock
     private NotificationEntryManager mNotificationEntryManager;
     @Mock
     private IStatusBarService mStatusBarService;
+    @Mock
+    private NotificationGutsManager mNotificationGutsManager;
 
     @Before
     public void setUp() throws Exception {
+        MockitoAnnotations.initMocks(this);
 
         mDependency.injectTestDependency(NotificationEntryManager.class, mNotificationEntryManager);
         mDependency.injectTestDependency(IStatusBarService.class, mStatusBarService);
+        mDependency.injectTestDependency(NotificationGutsManager.class, mNotificationGutsManager);
 
         // Inflate the layout
         final LayoutInflater layoutInflater = LayoutInflater.from(mContext);
@@ -108,13 +115,14 @@ public class FeedbackInfoTest extends SysuiTestCase {
 
         mSbn = new StatusBarNotification(TEST_PACKAGE_NAME, TEST_PACKAGE_NAME, 0, null, TEST_UID, 0,
                 new Notification(), UserHandle.CURRENT, null, 0);
+
     }
 
     @Test
     public void testBindNotification_SetsTextApplicationName() {
         when(mMockPackageManager.getApplicationLabel(any())).thenReturn("App Name");
         mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(),
-                mock(AssistantFeedbackController.class));
+                mMockNotificationRow, mAssistantFeedbackController);
         final TextView textView = mFeedbackInfo.findViewById(R.id.pkg_name);
         assertTrue(textView.getText().toString().contains("App Name"));
     }
@@ -125,66 +133,84 @@ public class FeedbackInfoTest extends SysuiTestCase {
         when(mMockPackageManager.getApplicationIcon(any(ApplicationInfo.class)))
                 .thenReturn(iconDrawable);
         mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(),
-                mock(AssistantFeedbackController.class));
+                mMockNotificationRow, mAssistantFeedbackController);
         final ImageView iconView = mFeedbackInfo.findViewById(R.id.pkg_icon);
         assertEquals(iconDrawable, iconView.getDrawable());
     }
 
     @Test
-    public void testOk() {
-        final CountDownLatch latch = new CountDownLatch(1);
-        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(),
-                mock(AssistantFeedbackController.class));
-
-        final View okButton = mFeedbackInfo.findViewById(R.id.ok);
-        okButton.performClick();
-        assertEquals(1, latch.getCount());
-        verify(mGutsParent, times(1)).closeControls(any(), anyBoolean());
-    }
-
-    @Test
     public void testPrompt_silenced() {
-        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(IMPORTANCE_DEFAULT,
-                IMPORTANCE_LOW, RANKING_UNCHANGED), mock(AssistantFeedbackController.class));
+        when(mAssistantFeedbackController.getFeedbackStatus(any(NotificationEntry.class)))
+                .thenReturn(STATUS_SILENCED);
+        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(), mMockNotificationRow,
+                mAssistantFeedbackController);
         TextView prompt = mFeedbackInfo.findViewById(R.id.prompt);
-        assertEquals("This notification was silenced by the system. Was this correct?",
-                prompt.getText());
+        assertEquals("This notification was automatically demoted to Silent by the system. "
+                        + "Was this correct?", prompt.getText().toString());
     }
 
     @Test
-    public void testPrompt_promoted_importance() {
-        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(IMPORTANCE_DEFAULT,
-                IMPORTANCE_HIGH, RANKING_UNCHANGED), mock(AssistantFeedbackController.class));
+    public void testPrompt_promoted() {
+        when(mAssistantFeedbackController.getFeedbackStatus(any(NotificationEntry.class)))
+                .thenReturn(STATUS_PROMOTED);
+        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(), mMockNotificationRow,
+                mAssistantFeedbackController);
         TextView prompt = mFeedbackInfo.findViewById(R.id.prompt);
-        assertEquals("This notification was promoted by the system. Was this correct?",
-                prompt.getText());
+        assertEquals("This notification was automatically ranked higher in your shade. "
+                        + "Was this correct?", prompt.getText().toString());
     }
 
     @Test
-    public void testPrompt_promoted_ranking() {
-        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(IMPORTANCE_DEFAULT,
-                IMPORTANCE_DEFAULT, RANKING_PROMOTED), mock(AssistantFeedbackController.class));
+    public void testPrompt_alerted() {
+        when(mAssistantFeedbackController.getFeedbackStatus(any(NotificationEntry.class)))
+                .thenReturn(STATUS_ALERTED);
+        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(), mMockNotificationRow,
+                mAssistantFeedbackController);
         TextView prompt = mFeedbackInfo.findViewById(R.id.prompt);
-        assertEquals("This notification was promoted by the system. Was this correct?",
-                prompt.getText());
+        assertEquals("This notification was automatically promoted to Default by the system. "
+                        + "Was this correct?",
+                prompt.getText().toString());
     }
 
     @Test
-    public void testPrompt_demoted_importance() {
-        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(IMPORTANCE_LOW,
-                IMPORTANCE_MIN, RANKING_UNCHANGED), mock(AssistantFeedbackController.class));
+    public void testPrompt_demoted() {
+        when(mAssistantFeedbackController.getFeedbackStatus(any(NotificationEntry.class)))
+                .thenReturn(STATUS_DEMOTED);
+        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(), mMockNotificationRow,
+                mAssistantFeedbackController);
         TextView prompt = mFeedbackInfo.findViewById(R.id.prompt);
-        assertEquals("This notification was demoted by the system. Was this correct?",
-                prompt.getText());
+        assertEquals("This notification was automatically ranked lower in your shade. "
+                        + "Was this correct?", prompt.getText().toString());
     }
 
     @Test
-    public void testPrompt_demoted_ranking() {
-        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(IMPORTANCE_DEFAULT,
-                IMPORTANCE_DEFAULT, RANKING_DEMOTED), mock(AssistantFeedbackController.class));
-        TextView prompt = mFeedbackInfo.findViewById(R.id.prompt);
-        assertEquals("This notification was demoted by the system. Was this correct?",
-                prompt.getText());
+    public void testPositiveFeedback() {
+        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(), mMockNotificationRow,
+                mAssistantFeedbackController);
+
+        final View yes = mFeedbackInfo.findViewById(R.id.yes);
+        yes.performClick();
+        verify(mGutsParent, times(1)).closeControls(yes, false);
+    }
+
+    @Test
+    public void testNegativeFeedback() {
+        when(mNotificationGutsManager.openGuts(
+                any(View.class),
+                anyInt(),
+                anyInt(),
+                any(NotificationMenuRowPlugin.MenuItem.class)))
+                .thenReturn(true);
+
+        mFeedbackInfo.bindGuts(mMockPackageManager, mSbn, getEntry(), mMockNotificationRow,
+                mAssistantFeedbackController);
+
+        final View no = mFeedbackInfo.findViewById(R.id.no);
+        no.performClick();
+        verify(mGutsParent, times(1)).closeControls(no, false);
+        verify(mNotificationGutsManager, times(1)).openGuts(
+                eq(mMockNotificationRow), eq(0), eq(0),
+                any());
     }
 
     private NotificationEntry getEntry(int oldImportance, int newImportance,

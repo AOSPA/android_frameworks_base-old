@@ -181,6 +181,8 @@ java_sdk_library {
     api_lint: {
         enabled: false,
     },
+    // TODO: remove this
+    unsafe_ignore_missing_latest_api: true,
 }
 
 filegroup {
@@ -618,6 +620,7 @@ cc_test {
         "tests/unit/LayerUpdateQueueTests.cpp",
         "tests/unit/LinearAllocatorTests.cpp",
         "tests/unit/MatrixTests.cpp",
+        "tests/unit/OpBufferTests.cpp",
         "tests/unit/PathInterpolatorTests.cpp",
         "tests/unit/RenderNodeDrawableTests.cpp",
         "tests/unit/RenderNodeTests.cpp",
@@ -672,6 +675,7 @@ cc_benchmark {
 
     srcs: [
         "tests/microbench/main.cpp",
+        "tests/microbench/CanvasOpBench.cpp",
         "tests/microbench/DisplayListCanvasBench.cpp",
         "tests/microbench/LinearAllocatorBench.cpp",
         "tests/microbench/PathParserBench.cpp",

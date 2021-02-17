@@ -27,7 +27,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Process;
 import android.os.UserHandle;
-import android.permission.PermissionManager;
+import android.permission.LegacyPermissionManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -244,7 +244,9 @@ public final class TelephonyPermissions {
      * <ul>
      *   <li>return true: if the caller has the READ_PRIVILEGED_PHONE_STATE permission, the calling
      *       package passes a DevicePolicyManager Device Owner / Profile Owner device identifier
-     *       access check, or the calling package has carrier privileges on any active subscription.
+     *       access check, or the calling package has carrier privileges on any active
+     *       subscription, or the calling package has the {@link
+     *       Manifest.permission#USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER} appop permission.
      *   <li>throw SecurityException: if the caller does not meet any of the requirements and is
      *       targeting Q or is targeting pre-Q and does not have the READ_PHONE_STATE permission
      *       or carrier privileges of any active subscription.
@@ -256,6 +258,10 @@ public final class TelephonyPermissions {
      */
     public static boolean checkCallingOrSelfReadDeviceIdentifiers(Context context, int subId,
             String callingPackage, @Nullable String callingFeatureId, String message) {
+        if (checkCallingOrSelfUseIccAuthWithDeviceIdentifier(context, callingPackage,
+                callingFeatureId, message)) {
+            return true;
+        }
         return checkPrivilegedReadPermissionOrCarrierPrivilegePermission(
                 context, subId, callingPackage, callingFeatureId, message, true);
     }
@@ -267,7 +273,9 @@ public final class TelephonyPermissions {
      * <ul>
      *   <li>return true: if the caller has the READ_PRIVILEGED_PHONE_STATE permission, the calling
      *       package passes a DevicePolicyManager Device Owner / Profile Owner device identifier
-     *       access check, or the calling package has carrier privileges on specified subscription.
+     *       access check, or the calling package has carrier privileges on specified subscription,
+     *       or the calling package has the {@link
+     *       Manifest.permission#USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER} appop permission.
      *   <li>throw SecurityException: if the caller does not meet any of the requirements and is
      *       targeting Q or is targeting pre-Q and does not have the READ_PHONE_STATE permission.
      *   <li>return false: if the caller is targeting pre-Q and does have the READ_PHONE_STATE
@@ -278,6 +286,10 @@ public final class TelephonyPermissions {
      */
     public static boolean checkCallingOrSelfReadSubscriberIdentifiers(Context context, int subId,
             String callingPackage, @Nullable String callingFeatureId, String message) {
+        if (checkCallingOrSelfUseIccAuthWithDeviceIdentifier(context, callingPackage,
+                callingFeatureId, message)) {
+            return true;
+        }
         return checkPrivilegedReadPermissionOrCarrierPrivilegePermission(
                 context, subId, callingPackage, callingFeatureId, message, false);
     }
@@ -315,8 +327,8 @@ public final class TelephonyPermissions {
             return true;
         }
 
-        PermissionManager permissionManager = (PermissionManager) context.getSystemService(
-                Context.PERMISSION_SERVICE);
+        LegacyPermissionManager permissionManager = (LegacyPermissionManager)
+                context.getSystemService(Context.LEGACY_PERMISSION_SERVICE);
         if (permissionManager.checkDeviceIdentifierAccess(callingPackage, message, callingFeatureId,
                 pid, uid) == PackageManager.PERMISSION_GRANTED) {
             return true;
@@ -382,6 +394,40 @@ public final class TelephonyPermissions {
         }
         throw new SecurityException(message + ": The user " + uid
                 + " does not meet the requirements to access device identifiers.");
+    }
+
+    /**
+     * Check whether the caller (or self, if not processing an IPC) has {@link
+     * Manifest.permission#USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER} AppOp permission.
+     *
+     * <p>With the permission, the caller can access device/subscriber identifiers and use ICC
+     * authentication like EAP-AKA.
+     */
+    public static boolean checkCallingOrSelfUseIccAuthWithDeviceIdentifier(Context context,
+            String callingPackage, String callingFeatureId, String message) {
+        // The implementation follows PermissionChecker.checkAppOpPermission, but it cannot be
+        // used directly: because it uses noteProxyOpNoThrow which requires the phone process
+        // having the permission, which doesn't make sense since phone process is the ower of
+        // data/action.
+        // Cannot perform appop check if the calling package is null
+        if (callingPackage == null) {
+            return false;
+        }
+        int callingUid = Binder.getCallingUid();
+        AppOpsManager appOps = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
+        int opMode = appOps.noteOpNoThrow(AppOpsManager.OPSTR_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER,
+                callingUid, callingPackage, callingFeatureId, message);
+        switch (opMode) {
+            case AppOpsManager.MODE_ALLOWED:
+            case AppOpsManager.MODE_FOREGROUND:
+                return true;
+            case AppOpsManager.MODE_DEFAULT:
+                return context.checkCallingOrSelfPermission(
+                            Manifest.permission.USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER)
+                        == PERMISSION_GRANTED;
+            default:
+                return false;
+        }
     }
 
     /**
@@ -650,5 +696,24 @@ public final class TelephonyPermissions {
         }
 
         throw new SecurityException(message + ": Only shell user can call it");
+    }
+
+    /**
+     * Returns the target SDK version number for a given package name.
+     *
+     * This call MUST be invoked before clearing the calling UID.
+     *
+     * @return target SDK if the package is found or INT_MAX.
+     */
+    public static int getTargetSdk(Context c, String packageName) {
+        try {
+            final ApplicationInfo ai = c.getPackageManager().getApplicationInfoAsUser(
+                    packageName, 0, UserHandle.getUserHandleForUid(Binder.getCallingUid()));
+            if (ai != null) return ai.targetSdkVersion;
+        } catch (PackageManager.NameNotFoundException unexpected) {
+            Log.e(LOG_TAG, "Failed to get package info for pkg="
+                    + packageName + ", uid=" + Binder.getCallingUid());
+        }
+        return Integer.MAX_VALUE;
     }
 }

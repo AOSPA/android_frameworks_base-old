@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS Xidməti"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Sensor Bildiriş Xidməti"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Alaqaranlıq Xidməti"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"Saat Qurşağı Aşkarlayıcısı (Bağlantı yoxdur)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Cihazınız təmizlənəcəkdir"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Admin tətbiqini istifadə etmək mümkün deyil. Cihaz indi təmizlənəcək.\n\nSualınız varsa, təşkilatın admini ilə əlaqə saxlayın."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"Çap <xliff:g id="OWNER_APP">%s</xliff:g> tərəfindən deaktiv edildi."</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB əlaqə"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"Tətbiq işləyir"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"Batareyadan istifadə edən tətbiqlər"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"Böyütmə"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> batareyadan istifadə edir"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> tətbiq batareyadan istifadə edir"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"Batareya və data istifadəsi haqqında ətraflı məlumat üçün klikləyin"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"Tətbiqə MMS mesajlarını qəbul və emal üçün imkan verir. Bu o deməkdir ki, bu tətbiq sizə göstərmədən cihazınıza göndərilən mesajları silə bilər."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"Şəbəkə yayımı mesajlarını yönləndirin"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"Tətbiqə şəbəkə yayım mesajlarını əldə edildiyi anda yönləndirmək üçün şəbəkə yayımı moduluna bağlanmaq icazəsi verir. Şəbəkə yayımı bəzi məkanlarda olan fövqəladə hadisələrlə bağlı Sizi xəbərdar etmək üçün qəbul edilir. Zərərli tətbiqlər fövqəladə şəbəkə yayımı əldə edildiyi zaman cihazın performansına və əməliyyatına müdaxilə edə bilər."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"Davam edən zəngləri idarə edin"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"Tətbiqə cihazınızda davam edən zənglər haqqında məlumatları görmək və bu zəngləri idarə etmək imkanı verir."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"mobil yayım mesajlarını oxuyur"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"Tətbiqə telefonunuz tərəfindən alınmış yayım mesajlarını oxuma icazəsi verir. Telefon yayımı bəzi məkanlarda olan fövqəladə hadisələrlə bağlı sizi xəbərdar etmək üçün qəbul edilir. Zərərli tətbiqlər təcili mobil yayım qəbul edildiyi zaman telefonunun performansına və əməliyyatına müdaxilə edə bilər."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"abunə olunmuş xəbərləri oxuyur"</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofon"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"ekrandakı digər tətbiqlərdə göstərin"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"Rəy bildirin"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"Bu bildiriş Defolt ayara keçirilib. Rəy bildirmək üçün toxunun."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Bu bildiriş Səssiz rejimə keçirilib. Rəy bildirmək üçün toxunun."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Bu bildiriş yuxarı sıraya keçirilib. Rəy bildirmək üçün toxunun."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Bu bildiriş aşağı sıraya keçirilib. Rəy bildirmək üçün toxunun."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Rejim üçün məlumat bildirişi"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Batareya həmişəki vaxtdan əvvəl bitə bilər"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Enerjiyə Qənaət rejimi batareya istifadəsinin müddətini artırmaq üçün aktiv edilir"</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"Yeni: Pəncərə Böyüdücüsü"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"İndi ekranı qismən və ya tam şəkildə böyüdə bilərsiniz"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"Ayarlarda aktiv edin"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"Qapadın"</string>
 </resources>

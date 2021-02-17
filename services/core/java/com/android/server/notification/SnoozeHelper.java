@@ -469,7 +469,7 @@ public class SnoozeHelper {
                         .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                         .putExtra(EXTRA_KEY, key)
                         .putExtra(EXTRA_USER_ID, userId),
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
     public void scheduleRepostsForPersistedNotifications(long currentTime) {

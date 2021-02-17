@@ -56,7 +56,7 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
 
     private static final String TAG = "QSTileBaseView";
     private static final int ICON_MASK_ID = com.android.internal.R.string.config_icon_mask;
-    private final H mHandler = new H();
+    protected final Handler mHandler = new H();
     private final int[] mLocInScreen = new int[2];
     private final FrameLayout mIconFrame;
     protected QSIconView mIcon;
@@ -133,7 +133,7 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
 
         mColorActive = Utils.getColorAttrDefaultColor(context, android.R.attr.colorAccent);
         mColorDisabled = Utils.getDisabled(context,
-                Utils.getColorAttrDefaultColor(context, android.R.attr.textColorTertiary));
+                Utils.getColorAttrDefaultColor(context, android.R.attr.colorControlActivated));
         mColorInactive = Utils.getColorAttrDefaultColor(context, android.R.attr.textColorSecondary);
 
         setPadding(0, 0, 0, 0);

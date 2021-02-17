@@ -29,9 +29,19 @@ public final class UidBatteryConsumer extends BatteryConsumer implements Parcela
     private final int mUid;
     @Nullable
     private final String mPackageWithHighestDrain;
+    private boolean mSystemComponent;
 
     public int getUid() {
         return mUid;
+    }
+
+    /**
+     * Returns true if this battery consumer is considered to be a part of the operating
+     * system itself. For example, the UidBatteryConsumer with the UID {@link Process#BLUETOOTH_UID}
+     * is a system component.
+     */
+    public boolean isSystemComponent() {
+        return mSystemComponent;
     }
 
     @Nullable
@@ -42,6 +52,7 @@ public final class UidBatteryConsumer extends BatteryConsumer implements Parcela
     private UidBatteryConsumer(@NonNull Builder builder) {
         super(builder.mPowerComponentsBuilder.build());
         mUid = builder.mUid;
+        mSystemComponent = builder.mSystemComponent;
         mPackageWithHighestDrain = builder.mPackageWithHighestDrain;
     }
 
@@ -80,14 +91,25 @@ public final class UidBatteryConsumer extends BatteryConsumer implements Parcela
     /**
      * Builder for UidBatteryConsumer.
      */
-    public static final class Builder {
-        private final PowerComponents.Builder mPowerComponentsBuilder;
+    public static final class Builder extends BaseBuilder<Builder> {
+        private final BatteryStats.Uid mBatteryStatsUid;
         private final int mUid;
         private String mPackageWithHighestDrain;
+        private boolean mSystemComponent;
 
-        public Builder(int customPowerComponentCount, int uid) {
-            mPowerComponentsBuilder = new PowerComponents.Builder(customPowerComponentCount);
-            mUid = uid;
+        public Builder(int customPowerComponentCount, int customTimeComponentCount,
+                boolean includeModeledComponents, BatteryStats.Uid batteryStatsUid) {
+            super(customPowerComponentCount, customTimeComponentCount, includeModeledComponents);
+            mBatteryStatsUid = batteryStatsUid;
+            mUid = batteryStatsUid.getUid();
+        }
+
+        public BatteryStats.Uid getBatteryStatsUid() {
+            return mBatteryStatsUid;
+        }
+
+        public int getUid() {
+            return mUid;
         }
 
         /**
@@ -99,40 +121,6 @@ public final class UidBatteryConsumer extends BatteryConsumer implements Parcela
         }
 
         /**
-         * Sets the amount of drain attributed to the specified drain type, e.g. CPU, WiFi etc.
-         *
-         * @param componentId    The ID of the power component, e.g.
-         * {@link BatteryConsumer#POWER_COMPONENT_CPU}.
-         * @param componentPower Amount of consumed power in mAh.
-         */
-        @NonNull
-        public Builder setConsumedPower(@PowerComponent int componentId, double componentPower) {
-            mPowerComponentsBuilder.setConsumedPower(componentId, componentPower);
-            return this;
-        }
-
-        /**
-         * Sets the amount of drain attributed to the specified custom drain type.
-         *
-         * @param componentId    The ID of the custom power component.
-         * @param componentPower Amount of consumed power in mAh.
-         */
-        @NonNull
-        public Builder setConsumedPowerForCustomComponent(int componentId, double componentPower) {
-            mPowerComponentsBuilder.setConsumedPowerForCustomComponent(componentId, componentPower);
-            return this;
-        }
-
-        /**
-         * Sets the amount of power consumed since BatteryStats reset, mAh.
-         */
-        @NonNull
-        public Builder setConsumedPower(double consumedPower) {
-            mPowerComponentsBuilder.setTotalPowerConsumed(consumedPower);
-            return this;
-        }
-
-        /**
          * Sets the name of the package owned by this UID that consumed the highest amount
          * of power since BatteryStats reset.
          */
@@ -140,6 +128,15 @@ public final class UidBatteryConsumer extends BatteryConsumer implements Parcela
         public Builder setPackageWithHighestDrain(@Nullable String packageName) {
             mPackageWithHighestDrain = packageName;
             return this;
+        }
+
+        /**
+         * Marks the UidBatteryConsumer as part of the system. For example,
+         * the UidBatteryConsumer with the UID {@link Process#BLUETOOTH_UID} is considered
+         * as a system component.
+         */
+        public void setSystemComponent(boolean systemComponent) {
+            mSystemComponent = systemComponent;
         }
     }
 }

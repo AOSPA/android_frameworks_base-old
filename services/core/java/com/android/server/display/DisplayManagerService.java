@@ -411,7 +411,7 @@ public final class DisplayManagerService extends SystemService {
         mUiHandler = UiThread.getHandler();
         mDisplayDeviceRepo = new DisplayDeviceRepository(mSyncRoot, mPersistentDataStore);
         mLogicalDisplayMapper = new LogicalDisplayMapper(context, mDisplayDeviceRepo,
-                new LogicalDisplayListener(), mPersistentDataStore);
+                new LogicalDisplayListener());
         mDisplayModeDirector = new DisplayModeDirector(context, mHandler);
         Resources resources = mContext.getResources();
         mDefaultDisplayDefaultColorMode = mContext.getResources().getInteger(

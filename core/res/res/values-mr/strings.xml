@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS सेवा"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"सेन्सर सूचना सेवा"</string>
     <string name="twilight_service" msgid="8964898045693187224">"ट्वायलाइट सेवा"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"टाइम झोन डिटेक्टर (कनेक्टिव्हिटी नाही)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"तुमचे डिव्हाइस मिटविले जाईल"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"प्रशासक अ‍ॅप वापरता येणार नाही. तुमचे डिव्हाइस आता साफ केले जाईल.\n\nतुम्हाला कुठलेही प्रश्न असल्यास, तुमच्या संस्थेच्या प्रशासकाशी संपर्क साधा."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g> नी प्रिंट करणे बंद केले आहे."</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB कनेक्‍शन"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"APP चालत आहे"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"बॅटरी लवकर संपवणारी अ‍ॅप्स"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"मॅग्निफिकेशन"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> बॅटरी वापरत आहे"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> अ‍ॅप्स बॅटरी वापरत आहेत"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"बॅटरी आणि डेटा वापराच्‍या तपशीलांसाठी टॅप करा"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"MMS मेसेज प्राप्त करण्यास आणि त्यावर प्रक्रिया करण्यास अ‍ॅप ला अनुमती देते. म्हणजेच अ‍ॅप आपल्या डिव्हाइसवर पाठविलेले मेसेज तुम्हाला न दर्शवता त्यांचे परीक्षण करू किंवा ते हटवू शकतो."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"सेल प्रसारण मेसेज फॉरवर्ड करा"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"सेल प्रसारण मेसेज मिळाल्यानंतर ते फॉरवर्ड करण्यासाठी ॲपला सेल प्रसारण मॉड्यूलमध्ये प्रतिबद्ध करण्याची अनुमती देते. काही स्थानांमध्ये तुम्हाला आणीबाणीच्या परिस्थीतींची चेतावणी देण्यासाठी सेल प्रसारण सूचना वितरित केल्या जातात. दुर्भावनापूर्ण अ‍ॅप्स आणीबाणी सेल प्रसारण मिळवतात तेव्हा ती तुमच्या डिव्हाइसच्या परफॉर्मन्समध्ये किंवा कामामध्ये कदाचित व्यत्यय आणू शकतात."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"सुरू असलेले कॉल व्यवस्थापित करा"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"ॲपला तुमच्या डिव्हाइसवर सुरू असलेल्या कॉलचे तपशील पाहण्याची आणि या कॉलना नियंत्रित करण्याची अनुमती द्या."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"सेल प्रसारण मेसेज वाचा"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"आपल्या डिव्हाइसद्वारे प्राप्त केलेले सेल प्रसारण मेसेज वाचण्यासाठी अ‍ॅप ला अनुमती देते. काही स्थानांमध्ये तुम्हाला आणीबाणीच्या परिस्थितीची चेतावणी देण्यासाठी सेल प्रसारण सूचना वितरीत केल्या जातात. आणीबाणी सेल प्रसारण प्राप्त होते तेव्हा आपल्या डिव्हाइसच्या कार्यप्रदर्शनात किंवा कार्यात दुर्भावनापूर्ण अ‍ॅप्स व्यत्यय आणू शकतात."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"सदस्यता घेतलेली फीड वाचा"</string>
@@ -2007,6 +2009,14 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"मायक्रोफोन"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"तुमच्‍या स्‍क्रीनवर इतर ॲप्‍सवर डिस्‍प्‍ले करत आहे"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"फीडबॅक द्या"</string>
+    <!-- no translation found for notification_feedback_indicator_alerted (6552871804121942099) -->
+    <skip />
+    <!-- no translation found for notification_feedback_indicator_silenced (3799442124723177262) -->
+    <skip />
+    <!-- no translation found for notification_feedback_indicator_promoted (9030204303764698640) -->
+    <skip />
+    <!-- no translation found for notification_feedback_indicator_demoted (8880309924296450875) -->
+    <skip />
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"दिनक्रम मोडची माहिती सूचना"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"चार्जिंगची सामान्य पातळी गाठेपर्यंत कदाचित बॅटरी संपू शकते"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"बॅटरी लाइफ वाढवण्यासाठी बॅटरी सेव्हर सुरू केला आहे"</string>
@@ -2190,12 +2200,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"नवीन: विंडो मॅग्निफायर"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"आता स्क्रीन अंशतः किंवा पूर्ण मॅग्निफाय करू शकता"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"सेटिंग्ज मध्ये सुरू करा"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"डिसमिस करा"</string>
 </resources>

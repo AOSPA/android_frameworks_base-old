@@ -363,6 +363,7 @@ interface IActivityManager {
     boolean killProcessesBelowForeground(in String reason);
     @UnsupportedAppUsage
     UserInfo getCurrentUser();
+    int getCurrentUserId();
     // This is not public because you need to be very careful in how you
     // manage your activity to make sure it is always the uid you expect.
     @UnsupportedAppUsage
@@ -542,14 +543,6 @@ interface IActivityManager {
     /** Cancels the window transitions for the given task. */
     @UnsupportedAppUsage
     void cancelTaskWindowTransition(int taskId);
-    /**
-     * @param taskId the id of the task to retrieve the sAutoapshots for
-     * @param isLowResolution if set, if the snapshot needs to be loaded from disk, this will load
-     *                          a reduced resolution of it, which is much faster
-     * @return a graphic buffer representing a screenshot of a task
-     */
-    @UnsupportedAppUsage
-    ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution);
     void scheduleApplicationInfoChanged(in List<String> packageNames, int userId);
     void setPersistentVrThread(int tid);
 

@@ -367,7 +367,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks, OnRootTaskOrderChan
                         // type being disturbed if the visibility is updated after setting the next
                         // transition (the target activity will be one of closing apps).
                         if (!controller.shouldDeferCancelWithScreenshot()
-                                && !targetStack.isFocusedStackOnDisplay()) {
+                                && !targetStack.isFocusedRootTaskOnDisplay()) {
                             targetStack.ensureActivitiesVisible(null /* starting */,
                                     0 /* starting */, false /* preserveWindows */);
                         }
@@ -413,9 +413,10 @@ class RecentsAnimation implements RecentsAnimationCallbacks, OnRootTaskOrderChan
 
     @Override
     public void onRootTaskOrderChanged(Task rootTask) {
-        ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS, "onStackOrderChanged(): stack=%s", rootTask);
-        if (mDefaultTaskDisplayArea.getIndexOf(rootTask) == -1 || !rootTask.shouldBeVisible(null)) {
-            // The stack is not visible, so ignore this change
+        ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS, "onRootTaskOrderChanged(): rootTask=%s", rootTask);
+        if (mDefaultTaskDisplayArea.getRootTask(t -> t == rootTask) == null
+                || !rootTask.shouldBeVisible(null)) {
+            // The root task is not visible, so ignore this change
             return;
         }
         final RecentsAnimationController controller =
@@ -468,14 +469,8 @@ class RecentsAnimation implements RecentsAnimationCallbacks, OnRootTaskOrderChan
      * @return The top stack that is not always-on-top.
      */
     private Task getTopNonAlwaysOnTopStack() {
-        for (int i = mDefaultTaskDisplayArea.getRootTaskCount() - 1; i >= 0; i--) {
-            final Task s = mDefaultTaskDisplayArea.getRootTaskAt(i);
-            if (s.getWindowConfiguration().isAlwaysOnTop()) {
-                continue;
-            }
-            return s;
-        }
-        return null;
+        return mDefaultTaskDisplayArea.getRootTask(task ->
+                !task.getWindowConfiguration().isAlwaysOnTop());
     }
 
     /**

@@ -49,6 +49,7 @@ import android.util.AttributeSet;
 import android.util.FloatProperty;
 import android.util.Log;
 import android.util.MathUtils;
+import android.util.Pair;
 import android.util.Property;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -649,6 +650,11 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         boolean beforeN = mEntry.targetSdk < Build.VERSION_CODES.N;
         boolean beforeP = mEntry.targetSdk < Build.VERSION_CODES.P;
         boolean beforeS = mEntry.targetSdk < Build.VERSION_CODES.S;
+        if (Notification.DevFlags.shouldBackportSNotifRules(mContext.getContentResolver())) {
+            // When back-porting S rules, if an app targets P/Q/R then enforce the new S rule on
+            // that notification.  If it's before P though, we still want to enforce legacy rules.
+            beforeS = beforeP;
+        }
         int smallHeight;
 
         View expandedView = layout.getExpandedChild();
@@ -1432,7 +1438,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         dismiss(fromAccessibility);
         if (mEntry.isClearable()) {
             if (mOnUserInteractionCallback != null) {
-                mOnUserInteractionCallback.onDismiss(mEntry, REASON_CANCEL);
+                mOnUserInteractionCallback.onDismiss(mEntry, REASON_CANCEL,
+                        mOnUserInteractionCallback.getGroupSummaryToDismiss(mEntry));
             }
         }
     }
@@ -1672,12 +1679,12 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         requestLayout();
     }
 
-    public void showFeedbackIcon(boolean show) {
+    public void showFeedbackIcon(boolean show, Pair<Integer, Integer> resIds) {
         if (mIsSummaryWithChildren) {
-            mChildrenContainer.showFeedbackIcon(show);
+            mChildrenContainer.showFeedbackIcon(show, resIds);
         }
-        mPrivateLayout.showFeedbackIcon(show);
-        mPublicLayout.showFeedbackIcon(show);
+        mPrivateLayout.showFeedbackIcon(show, resIds);
+        mPublicLayout.showFeedbackIcon(show, resIds);
     }
 
     /** Sets the last time the notification being displayed audibly alerted the user. */

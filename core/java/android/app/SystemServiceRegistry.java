@@ -32,6 +32,7 @@ import android.app.job.JobSchedulerFrameworkInitializer;
 import android.app.prediction.AppPredictionManager;
 import android.app.role.RoleControllerManager;
 import android.app.role.RoleManager;
+import android.app.search.SearchUiManager;
 import android.app.slice.SliceManager;
 import android.app.time.TimeManager;
 import android.app.timedetector.TimeDetector;
@@ -63,7 +64,6 @@ import android.content.pm.CrossProfileApps;
 import android.content.pm.DataLoaderManager;
 import android.content.pm.ICrossProfileApps;
 import android.content.pm.IDataLoaderManager;
-import android.content.pm.IPackageManager;
 import android.content.pm.IShortcutService;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
@@ -104,8 +104,8 @@ import android.location.ILocationManager;
 import android.location.LocationManager;
 import android.media.AudioManager;
 import android.media.MediaFrameworkInitializer;
+import android.media.MediaFrameworkPlatformInitializer;
 import android.media.MediaRouter;
-import android.media.MediaTranscodeManager;
 import android.media.midi.IMidiManager;
 import android.media.midi.MidiManager;
 import android.media.musicrecognition.IMusicRecognitionManager;
@@ -118,7 +118,6 @@ import android.media.tv.tunerresourcemanager.ITunerResourceManager;
 import android.media.tv.tunerresourcemanager.TunerResourceManager;
 import android.net.ConnectivityDiagnosticsManager;
 import android.net.ConnectivityManager;
-import android.net.ConnectivityThread;
 import android.net.EthernetManager;
 import android.net.IConnectivityManager;
 import android.net.IEthernetManager;
@@ -176,6 +175,7 @@ import android.os.image.IDynamicSystemService;
 import android.os.incremental.IIncrementalService;
 import android.os.incremental.IncrementalManager;
 import android.os.storage.StorageManager;
+import android.permission.LegacyPermissionManager;
 import android.permission.PermissionControllerManager;
 import android.permission.PermissionManager;
 import android.print.IPrintManager;
@@ -311,15 +311,6 @@ public final class SystemServiceRegistry {
             public AudioManager createService(ContextImpl ctx) {
                 return new AudioManager(ctx);
             }});
-
-        registerService(Context.MEDIA_TRANSCODING_SERVICE, MediaTranscodeManager.class,
-                new CachedServiceFetcher<MediaTranscodeManager>() {
-                    @Override
-                    public MediaTranscodeManager createService(ContextImpl ctx)
-                            throws ServiceNotFoundException {
-                        return new MediaTranscodeManager(ctx);
-                    }
-                });
 
         registerService(Context.MEDIA_ROUTER_SERVICE, MediaRouter.class,
                 new CachedServiceFetcher<MediaRouter>() {
@@ -781,8 +772,7 @@ public final class SystemServiceRegistry {
             public LowpanManager createService(ContextImpl ctx) throws ServiceNotFoundException {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.LOWPAN_SERVICE);
                 ILowpanManager service = ILowpanManager.Stub.asInterface(b);
-                return new LowpanManager(ctx.getOuterContext(), service,
-                        ConnectivityThread.getInstanceLooper());
+                return new LowpanManager(ctx.getOuterContext(), service);
             }});
 
         registerService(Context.ETHERNET_SERVICE, EthernetManager.class,
@@ -1174,6 +1164,16 @@ public final class SystemServiceRegistry {
                 return null;
             }});
 
+        registerService(Context.SEARCH_UI_SERVICE, SearchUiManager.class,
+            new CachedServiceFetcher<SearchUiManager>() {
+                @Override
+                public SearchUiManager createService(ContextImpl ctx)
+                    throws ServiceNotFoundException {
+                    IBinder b = ServiceManager.getService(Context.SEARCH_UI_SERVICE);
+                    return b == null ? null : new SearchUiManager(ctx);
+                }
+            });
+
         registerService(Context.APP_PREDICTION_SERVICE, AppPredictionManager.class,
                 new CachedServiceFetcher<AppPredictionManager>() {
             @Override
@@ -1264,8 +1264,15 @@ public final class SystemServiceRegistry {
                     @Override
                     public PermissionManager createService(ContextImpl ctx)
                             throws ServiceNotFoundException {
-                        IPackageManager packageManager = AppGlobals.getPackageManager();
-                        return new PermissionManager(ctx.getOuterContext(), packageManager);
+                        return new PermissionManager(ctx.getOuterContext());
+                    }});
+
+        registerService(Context.LEGACY_PERMISSION_SERVICE, LegacyPermissionManager.class,
+                new CachedServiceFetcher<LegacyPermissionManager>() {
+                    @Override
+                    public LegacyPermissionManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new LegacyPermissionManager();
                     }});
 
         registerService(Context.PERMISSION_CONTROLLER_SERVICE, PermissionControllerManager.class,
@@ -1385,6 +1392,7 @@ public final class SystemServiceRegistry {
             WifiFrameworkInitializer.registerServiceWrappers();
             StatsFrameworkInitializer.registerServiceWrappers();
             RollbackManagerFrameworkInitializer.initialize();
+            MediaFrameworkPlatformInitializer.registerServiceWrappers();
             MediaFrameworkInitializer.registerServiceWrappers();
         } finally {
             // If any of the above code throws, we're in a pretty bad shape and the process

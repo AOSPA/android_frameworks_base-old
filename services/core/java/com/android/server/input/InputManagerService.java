@@ -41,16 +41,19 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayViewport;
 import android.hardware.input.IInputDevicesChangedListener;
 import android.hardware.input.IInputManager;
+import android.hardware.input.IInputSensorEventListener;
 import android.hardware.input.ITabletModeChangedListener;
 import android.hardware.input.InputDeviceIdentifier;
 import android.hardware.input.InputManager;
 import android.hardware.input.InputManagerInternal;
 import android.hardware.input.InputManagerInternal.LidSwitchCallback;
+import android.hardware.input.InputSensorInfo;
 import android.hardware.input.KeyboardLayout;
 import android.hardware.input.TouchCalibration;
 import android.media.AudioManager;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.CombinedVibrationEffect;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
@@ -116,6 +119,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -180,12 +184,24 @@ public class InputManagerService extends IInputManager.Stub
     private final List<TabletModeChangedListenerRecord> mTempTabletModeChangedListenersToNotify =
             new ArrayList<>();
 
+    private final Object mSensorEventLock = new Object();
+    // List of currently registered sensor event listeners by process id
+    @GuardedBy("mSensorEventLock")
+    private final SparseArray<SensorEventListenerRecord> mSensorEventListeners =
+            new SparseArray<>();
+    private final List<SensorEventListenerRecord> mSensorEventListenersToNotify =
+            new ArrayList<>();
+    private final List<SensorEventListenerRecord> mSensorAccuracyListenersToNotify =
+            new ArrayList<>();
+
     // Persistent data store.  Must be locked each time during use.
     private final PersistentDataStore mDataStore = new PersistentDataStore();
 
     // List of currently registered input devices changed listeners by process id.
     private Object mInputDevicesLock = new Object();
+    @GuardedBy("mInputDevicesLock")
     private boolean mInputDevicesChangedPending; // guarded by mInputDevicesLock
+    @GuardedBy("mInputDevicesLock")
     private InputDevice[] mInputDevices = new InputDevice[0];
     private final SparseArray<InputDevicesChangedListenerRecord> mInputDevicesChangedListeners =
             new SparseArray<InputDevicesChangedListenerRecord>(); // guarded by mInputDevicesLock
@@ -203,7 +219,12 @@ public class InputManagerService extends IInputManager.Stub
     private int mNextVibratorTokenValue;
 
     // State for lid switch
+    // Lock for the lid switch state. Held when triggering callbacks to guarantee lid switch events
+    // are delivered in order. For ex, when a new lid switch callback is registered the lock is held
+    // while the callback is processing the initial lid switch event which guarantees that any
+    // events that occur at the same time are delivered after the callback has returned.
     private final Object mLidSwitchLock = new Object();
+    @GuardedBy("mLidSwitchLock")
     private List<LidSwitchCallback> mLidSwitchCallbacks = new ArrayList<>();
 
     // State for the currently installed input filter.
@@ -238,7 +259,7 @@ public class InputManagerService extends IInputManager.Stub
             int deviceId, int sourceMask, int[] keyCodes, boolean[] keyExists);
     private static native InputChannel nativeCreateInputChannel(long ptr, String name);
     private static native InputChannel nativeCreateInputMonitor(long ptr, int displayId,
-            boolean isGestureMonitor, String name);
+            boolean isGestureMonitor, String name, int pid);
     private static native void nativeRemoveInputChannel(long ptr, IBinder connectionToken);
     private static native void nativePilferPointers(long ptr, IBinder token);
     private static native void nativeSetInputFilterEnabled(long ptr, boolean enable);
@@ -264,7 +285,11 @@ public class InputManagerService extends IInputManager.Stub
     private static native void nativeReloadCalibration(long ptr);
     private static native void nativeVibrate(long ptr, int deviceId, long[] pattern,
             int[] amplitudes, int repeat, int token);
+    private static native void nativeVibrateCombined(long ptr, int deviceId, long[] pattern,
+            SparseArray<int[]> amplitudes, int repeat, int token);
     private static native void nativeCancelVibrate(long ptr, int deviceId, int token);
+    private static native boolean nativeIsVibrating(long ptr, int deviceId);
+    private static native int[] nativeGetVibratorIds(long ptr, int deviceId);
     private static native void nativeReloadKeyboardLayouts(long ptr);
     private static native void nativeReloadDeviceAliases(long ptr);
     private static native String nativeDump(long ptr);
@@ -275,10 +300,16 @@ public class InputManagerService extends IInputManager.Stub
     private static native void nativeSetPointerIconType(long ptr, int iconId);
     private static native void nativeReloadPointerIcons(long ptr);
     private static native void nativeSetCustomPointerIcon(long ptr, PointerIcon icon);
-    private static native void nativeSetPointerCapture(long ptr, boolean detached);
+    private static native void nativeRequestPointerCapture(long ptr, IBinder windowToken,
+            boolean enabled);
     private static native boolean nativeCanDispatchToDisplay(long ptr, int deviceId, int displayId);
     private static native void nativeNotifyPortAssociationsChanged(long ptr);
     private static native void nativeSetMotionClassifierEnabled(long ptr, boolean enabled);
+    private static native InputSensorInfo[] nativeGetSensorList(long ptr, int deviceId);
+    private static native boolean nativeFlushSensor(long ptr, int deviceId, int sensorType);
+    private static native boolean nativeEnableSensor(long ptr, int deviceId, int sensorType,
+            int samplingPeriodUs, int maxBatchReportLatencyUs);
+    private static native void nativeDisableSensor(long ptr, int deviceId, int sensorType);
 
     // Maximum number of milliseconds to wait for input event injection.
     private static final int INJECTION_TIMEOUT_MILLIS = 30 * 1000;
@@ -343,9 +374,6 @@ public class InputManagerService extends IInputManager.Stub
     public static final int SW_CAMERA_LENS_COVER_BIT = 1 << SW_CAMERA_LENS_COVER;
     public static final int SW_MUTE_DEVICE_BIT = 1 << SW_MUTE_DEVICE;
 
-    /** Indicates an open state for the lid switch. */
-    public static final int SW_STATE_LID_OPEN = 0;
-
     /** Whether to use the dev/input/event or uevent subsystem for the audio jack. */
     final boolean mUseDevInputEventForAudioJack;
 
@@ -381,13 +409,18 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     void registerLidSwitchCallbackInternal(@NonNull LidSwitchCallback callback) {
-        boolean lidOpen;
         synchronized (mLidSwitchLock) {
             mLidSwitchCallbacks.add(callback);
-            lidOpen = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY, SW_LID)
-                    == SW_STATE_LID_OPEN;
+
+            // Skip triggering the initial callback if the system is not yet ready as the switch
+            // state will be reported as KEY_STATE_UNKNOWN. The callback will be triggered in
+            // systemRunning().
+            if (mSystemReady) {
+                boolean lidOpen = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY, SW_LID)
+                        == KEY_STATE_UP;
+                callback.notifyLidSwitchChanged(0 /* whenNanos */, lidOpen);
+            }
         }
-        callback.notifyLidSwitchChanged(0 /* whenNanos */, lidOpen);
     }
 
     void unregisterLidSwitchCallbackInternal(@NonNull LidSwitchCallback callback) {
@@ -435,7 +468,18 @@ public class InputManagerService extends IInputManager.Stub
         }
         mNotificationManager = (NotificationManager)mContext.getSystemService(
                 Context.NOTIFICATION_SERVICE);
-        mSystemReady = true;
+
+        synchronized (mLidSwitchLock) {
+            mSystemReady = true;
+
+            // Send the initial lid switch state to any callback registered before the system was
+            // ready.
+            int switchState = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY, SW_LID);
+            for (int i = 0; i < mLidSwitchCallbacks.size(); i++) {
+                LidSwitchCallback callback = mLidSwitchCallbacks.get(i);
+                callback.notifyLidSwitchChanged(0 /* whenNanos */, switchState == KEY_STATE_UP);
+            }
+        }
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
         filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
@@ -563,7 +607,7 @@ public class InputManagerService extends IInputManager.Stub
         }
 
         return nativeCreateInputMonitor(mPtr, displayId, false /* isGestureMonitor */,
-                inputChannelName);
+                inputChannelName, Binder.getCallingPid());
     }
 
     /**
@@ -591,7 +635,7 @@ public class InputManagerService extends IInputManager.Stub
         final long ident = Binder.clearCallingIdentity();
         try {
             InputChannel inputChannel = nativeCreateInputMonitor(
-                    mPtr, displayId, true /*isGestureMonitor*/, inputChannelName);
+                    mPtr, displayId, true /*isGestureMonitor*/, inputChannelName, pid);
             InputMonitorHost host = new InputMonitorHost(inputChannel.getToken());
             synchronized (mGestureMonitorPidsLock) {
                 mGestureMonitorPidsByToken.put(inputChannel.getToken(), pid);
@@ -1588,12 +1632,12 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     @Override
-    public void requestPointerCapture(IBinder windowToken, boolean enabled) {
-        boolean requestConfigurationRefresh =
-                mWindowManagerCallbacks.requestPointerCapture(windowToken, enabled);
-        if (requestConfigurationRefresh) {
-            nativeSetPointerCapture(mPtr, enabled);
+    public void requestPointerCapture(IBinder inputChannelToken, boolean enabled) {
+        if (inputChannelToken == null) {
+            return;
         }
+
+        nativeRequestPointerCapture(mPtr, inputChannelToken, enabled);
     }
 
     public void setInputDispatchMode(boolean enabled, boolean frozen) {
@@ -1801,43 +1845,57 @@ public class InputManagerService extends IInputManager.Stub
         return result;
     }
 
-    // Binder call
-    @Override
-    public void vibrate(int deviceId, VibrationEffect effect, IBinder token) {
-        long[] pattern;
-        int[] amplitudes;
-        int repeat;
-        if (effect instanceof VibrationEffect.OneShot) {
-            VibrationEffect.OneShot oneShot = (VibrationEffect.OneShot) effect;
-            pattern = new long[] { 0, oneShot.getDuration() };
-            int amplitude = oneShot.getAmplitude();
-            // android framework uses DEFAULT_AMPLITUDE to signal that the vibration
-            // should use some built-in default value, denoted here as DEFAULT_VIBRATION_MAGNITUDE
-            if (amplitude == VibrationEffect.DEFAULT_AMPLITUDE) {
-                amplitude = DEFAULT_VIBRATION_MAGNITUDE;
-            }
-            amplitudes = new int[] { 0, amplitude };
-            repeat = -1;
-        } else if (effect instanceof VibrationEffect.Waveform) {
-            VibrationEffect.Waveform waveform = (VibrationEffect.Waveform) effect;
-            pattern = waveform.getTimings();
-            amplitudes = waveform.getAmplitudes();
-            for (int i = 0; i < amplitudes.length; i++) {
-                if (amplitudes[i] == VibrationEffect.DEFAULT_AMPLITUDE) {
-                    amplitudes[i] = DEFAULT_VIBRATION_MAGNITUDE;
+    private static class VibrationInfo {
+        private long[] mPattern = new long[0];
+        private int[] mAmplitudes = new int[0];
+        private int mRepeat = -1;
+
+        public long[] getPattern() {
+            return mPattern;
+        }
+
+        public int[] getAmplitudes() {
+            return mAmplitudes;
+        }
+
+        public int getRepeatIndex() {
+            return mRepeat;
+        }
+
+        VibrationInfo(VibrationEffect effect) {
+            if (effect instanceof VibrationEffect.OneShot) {
+                VibrationEffect.OneShot oneShot = (VibrationEffect.OneShot) effect;
+                mPattern = new long[] { 0, oneShot.getDuration() };
+                int amplitude = oneShot.getAmplitude();
+                // android framework uses DEFAULT_AMPLITUDE to signal that the vibration
+                // should use some built-in default value, denoted here as
+                // DEFAULT_VIBRATION_MAGNITUDE
+                if (amplitude == VibrationEffect.DEFAULT_AMPLITUDE) {
+                    amplitude = DEFAULT_VIBRATION_MAGNITUDE;
                 }
+                mAmplitudes = new int[] { 0, amplitude };
+                mRepeat = -1;
+            } else if (effect instanceof VibrationEffect.Waveform) {
+                VibrationEffect.Waveform waveform = (VibrationEffect.Waveform) effect;
+                mPattern = waveform.getTimings();
+                mAmplitudes = waveform.getAmplitudes();
+                for (int i = 0; i < mAmplitudes.length; i++) {
+                    if (mAmplitudes[i] == VibrationEffect.DEFAULT_AMPLITUDE) {
+                        mAmplitudes[i] = DEFAULT_VIBRATION_MAGNITUDE;
+                    }
+                }
+                mRepeat = waveform.getRepeatIndex();
+                if (mRepeat >= mPattern.length) {
+                    throw new ArrayIndexOutOfBoundsException();
+                }
+            } else {
+                // TODO: Add support for prebaked effects
+                Slog.w(TAG, "Pre-baked effects aren't supported on input devices");
             }
-            repeat = waveform.getRepeatIndex();
-        } else {
-            // TODO: Add support for prebaked effects
-            Log.w(TAG, "Pre-baked effects aren't supported on input devices");
-            return;
         }
+    }
 
-        if (repeat >= pattern.length) {
-            throw new ArrayIndexOutOfBoundsException();
-        }
-
+    private VibratorToken getVibratorToken(int deviceId, IBinder token) {
         VibratorToken v;
         synchronized (mVibratorLock) {
             v = mVibratorTokens.get(token);
@@ -1852,9 +1910,70 @@ public class InputManagerService extends IInputManager.Stub
                 mVibratorTokens.put(token, v);
             }
         }
+        return v;
+    }
+
+    // Binder call
+    @Override
+    public void vibrate(int deviceId, VibrationEffect effect, IBinder token) {
+        VibrationInfo info = new VibrationInfo(effect);
+        VibratorToken v = getVibratorToken(deviceId, token);
         synchronized (v) {
             v.mVibrating = true;
-            nativeVibrate(mPtr, deviceId, pattern, amplitudes, repeat, v.mTokenValue);
+            nativeVibrate(mPtr, deviceId, info.getPattern(), info.getAmplitudes(),
+                    info.getRepeatIndex(), v.mTokenValue);
+        }
+    }
+
+    // Binder call
+    @Override
+    public int[] getVibratorIds(int deviceId) {
+        return nativeGetVibratorIds(mPtr, deviceId);
+    }
+
+    // Binder call
+    @Override
+    public boolean isVibrating(int deviceId) {
+        return nativeIsVibrating(mPtr, deviceId);
+    }
+
+    // Binder call
+    @Override
+    public void vibrateCombined(int deviceId, CombinedVibrationEffect effect, IBinder token) {
+        VibratorToken v = getVibratorToken(deviceId, token);
+        synchronized (v) {
+            if (!(effect instanceof CombinedVibrationEffect.Mono)
+                    && !(effect instanceof CombinedVibrationEffect.Stereo)) {
+                Slog.e(TAG, "Only Mono and Stereo effects are supported");
+                return;
+            }
+
+            v.mVibrating = true;
+            if (effect instanceof CombinedVibrationEffect.Mono) {
+                CombinedVibrationEffect.Mono mono = (CombinedVibrationEffect.Mono) effect;
+                VibrationInfo info = new VibrationInfo(mono.getEffect());
+                nativeVibrate(mPtr, deviceId, info.getPattern(), info.getAmplitudes(),
+                        info.getRepeatIndex(), v.mTokenValue);
+            } else if (effect instanceof CombinedVibrationEffect.Stereo) {
+                CombinedVibrationEffect.Stereo stereo = (CombinedVibrationEffect.Stereo) effect;
+                SparseArray<VibrationEffect> effects = stereo.getEffects();
+                long[] pattern = new long[0];
+                int repeat = Integer.MIN_VALUE;
+                SparseArray<int[]> amplitudes = new SparseArray<int[]>(effects.size());
+                for (int i = 0; i < effects.size(); i++) {
+                    VibrationInfo info = new VibrationInfo(effects.valueAt(i));
+                    // Pattern of all effects should be same
+                    if (pattern.length == 0) {
+                        pattern = info.getPattern();
+                    }
+                    if (repeat == Integer.MIN_VALUE) {
+                        repeat = info.getRepeatIndex();
+                    }
+                    amplitudes.put(effects.keyAt(i), info.getAmplitudes());
+                }
+                nativeVibrateCombined(mPtr, deviceId, pattern, amplitudes, repeat,
+                        v.mTokenValue);
+            }
         }
     }
 
@@ -1943,6 +2062,97 @@ public class InputManagerService extends IInputManager.Stub
             mRuntimeAssociations.remove(inputPort);
         }
         nativeNotifyPortAssociationsChanged(mPtr);
+    }
+
+    @Override // Binder call
+    public InputSensorInfo[] getSensorList(int deviceId) {
+        InputSensorInfo[] sensors = nativeGetSensorList(mPtr, deviceId);
+        return sensors;
+    }
+
+    @Override // Binder call
+    public boolean registerSensorListener(IInputSensorEventListener listener) {
+        if (DEBUG) {
+            Slog.d(TAG, "registerSensorListener: listener=" + listener + " callingPid="
+                    + Binder.getCallingPid());
+        }
+        if (listener == null) {
+            Slog.e(TAG, "listener must not be null");
+            return false;
+        }
+
+        synchronized (mInputDevicesLock) {
+            int callingPid = Binder.getCallingPid();
+            if (mSensorEventListeners.get(callingPid) != null) {
+                Slog.e(TAG, "The calling process " + callingPid + " has already "
+                        + "registered an InputSensorEventListener.");
+                return false;
+            }
+
+            SensorEventListenerRecord record =
+                    new SensorEventListenerRecord(callingPid, listener);
+            try {
+                IBinder binder = listener.asBinder();
+                binder.linkToDeath(record, 0);
+            } catch (RemoteException ex) {
+                // give up
+                throw new RuntimeException(ex);
+            }
+
+            mSensorEventListeners.put(callingPid, record);
+        }
+        return true;
+    }
+
+    @Override // Binder call
+    public void unregisterSensorListener(IInputSensorEventListener listener) {
+        if (DEBUG) {
+            Slog.d(TAG, "unregisterSensorListener: listener=" + listener + " callingPid="
+                    + Binder.getCallingPid());
+        }
+
+        if (listener == null) {
+            throw new IllegalArgumentException("listener must not be null");
+        }
+
+        synchronized (mInputDevicesLock) {
+            int callingPid = Binder.getCallingPid();
+            if (mSensorEventListeners.get(callingPid) != null) {
+                SensorEventListenerRecord record = mSensorEventListeners.get(callingPid);
+                if (record.getListener().asBinder() != listener.asBinder()) {
+                    throw new IllegalArgumentException("listener is not registered");
+                }
+                mSensorEventListeners.remove(callingPid);
+            }
+        }
+    }
+
+    @Override // Binder call
+    public boolean flushSensor(int deviceId, int sensorType) {
+        synchronized (mInputDevicesLock) {
+            int callingPid = Binder.getCallingPid();
+            SensorEventListenerRecord listener = mSensorEventListeners.get(callingPid);
+            if (listener != null) {
+                return nativeFlushSensor(mPtr, deviceId, sensorType);
+            }
+            return false;
+        }
+    }
+
+    @Override // Binder call
+    public boolean enableSensor(int deviceId, int sensorType, int samplingPeriodUs,
+            int maxBatchReportLatencyUs) {
+        synchronized (mInputDevicesLock) {
+            return nativeEnableSensor(mPtr, deviceId, sensorType, samplingPeriodUs,
+                    maxBatchReportLatencyUs);
+        }
+    }
+
+    @Override // Binder call
+    public void disableSensor(int deviceId, int sensorType) {
+        synchronized (mInputDevicesLock) {
+            nativeDisableSensor(mPtr, deviceId, sensorType);
+        }
     }
 
     @Override
@@ -2045,14 +2255,13 @@ public class InputManagerService extends IInputManager.Stub
 
         if ((switchMask & SW_LID_BIT) != 0) {
             final boolean lidOpen = ((switchValues & SW_LID_BIT) == 0);
-
-            ArrayList<LidSwitchCallback> callbacksCopy;
             synchronized (mLidSwitchLock) {
-                callbacksCopy = new ArrayList<>(mLidSwitchCallbacks);
-            }
-            for (int i = 0; i < callbacksCopy.size(); i++) {
-                LidSwitchCallback callbacks = callbacksCopy.get(i);
-                callbacks.notifyLidSwitchChanged(whenNanos, lidOpen);
+                if (mSystemReady) {
+                    for (int i = 0; i < mLidSwitchCallbacks.size(); i++) {
+                        LidSwitchCallback callbacks = mLidSwitchCallbacks.get(i);
+                        callbacks.notifyLidSwitchChanged(whenNanos, lidOpen);
+                    }
+                }
             }
         }
 
@@ -2092,11 +2301,7 @@ public class InputManagerService extends IInputManager.Stub
 
     // Native callback
     private void notifyFocusChanged(IBinder oldToken, IBinder newToken) {
-        final boolean requestConfigurationRefresh =
-                mWindowManagerCallbacks.notifyFocusChanged(oldToken, newToken);
-        if (requestConfigurationRefresh) {
-            nativeSetPointerCapture(mPtr, false);
-        }
+        mWindowManagerCallbacks.notifyFocusChanged(oldToken, newToken);
     }
 
     // Native callback
@@ -2144,6 +2349,46 @@ public class InputManagerService extends IInputManager.Stub
         }
         // If we couldn't find a gesture monitor for this token, it's a window
         mWindowManagerCallbacks.notifyWindowResponsive(token);
+    }
+
+    // Native callback.
+    private void notifySensorEvent(int deviceId, int sensorType, int accuracy, long timestamp,
+            float[] values) {
+        if (DEBUG) {
+            Slog.d(TAG, "notifySensorEvent: deviceId=" + deviceId + " sensorType="
+                    + sensorType + " values=" + Arrays.toString(values));
+        }
+        mSensorEventListenersToNotify.clear();
+        final int numListeners;
+        synchronized (mSensorEventLock) {
+            numListeners = mSensorEventListeners.size();
+            for (int i = 0; i < numListeners; i++) {
+                mSensorEventListenersToNotify.add(
+                        mSensorEventListeners.valueAt(i));
+            }
+        }
+        for (int i = 0; i < numListeners; i++) {
+            mSensorEventListenersToNotify.get(i).notifySensorEvent(deviceId, sensorType,
+                    accuracy, timestamp, values);
+        }
+        mSensorEventListenersToNotify.clear();
+    }
+
+    // Native callback.
+    private void notifySensorAccuracy(int deviceId, int sensorType, int accuracy) {
+        mSensorAccuracyListenersToNotify.clear();
+        final int numListeners;
+        synchronized (mSensorEventLock) {
+            numListeners = mSensorEventListeners.size();
+            for (int i = 0; i < numListeners; i++) {
+                mSensorAccuracyListenersToNotify.add(mSensorEventListeners.valueAt(i));
+            }
+        }
+        for (int i = 0; i < numListeners; i++) {
+            mSensorAccuracyListenersToNotify.get(i).notifySensorAccuracy(
+                    deviceId, sensorType, accuracy);
+        }
+        mSensorAccuracyListenersToNotify.clear();
     }
 
     // Native callback.
@@ -2494,17 +2739,8 @@ public class InputManagerService extends IInputManager.Stub
 
         /**
          * Called when the focused window has changed.
-         *
-         * @return true if we want to request a configuration refresh.
          */
-        boolean notifyFocusChanged(IBinder oldToken, IBinder newToken);
-
-        /**
-         * Called by the client to request pointer capture.
-         *
-         * @return true if we want to request a configuration refresh.
-         */
-        boolean requestPointerCapture(IBinder windowToken, boolean enabled);
+        void notifyFocusChanged(IBinder oldToken, IBinder newToken);
     }
 
     /**
@@ -2682,6 +2918,56 @@ public class InputManagerService extends IInputManager.Stub
             } catch (RemoteException ex) {
                 Slog.w(TAG, "Failed to notify process " + mPid +
                         " that tablet mode changed, assuming it died.", ex);
+                binderDied();
+            }
+        }
+    }
+
+    private void onSensorEventListenerDied(int pid) {
+        synchronized (mSensorEventLock) {
+            mSensorEventListeners.remove(pid);
+        }
+    }
+
+    private final class SensorEventListenerRecord implements DeathRecipient {
+        private final int mPid;
+        private final IInputSensorEventListener mListener;
+
+        SensorEventListenerRecord(int pid, IInputSensorEventListener listener) {
+            mPid = pid;
+            mListener = listener;
+        }
+
+        @Override
+        public void binderDied() {
+            if (DEBUG) {
+                Slog.d(TAG, "Sensor event listener for pid " + mPid + " died.");
+            }
+            onSensorEventListenerDied(mPid);
+        }
+
+        public IInputSensorEventListener getListener() {
+            return mListener;
+        }
+
+        public void notifySensorEvent(int deviceId, int sensorType, int accuracy, long timestamp,
+                float[] values) {
+            try {
+                mListener.onInputSensorChanged(deviceId, sensorType, accuracy, timestamp,
+                        values);
+            } catch (RemoteException ex) {
+                Slog.w(TAG, "Failed to notify process " + mPid
+                        + " that sensor event notified, assuming it died.", ex);
+                binderDied();
+            }
+        }
+
+        public void notifySensorAccuracy(int deviceId, int sensorType, int accuracy) {
+            try {
+                mListener.onInputSensorAccuracyChanged(deviceId, sensorType, accuracy);
+            } catch (RemoteException ex) {
+                Slog.w(TAG, "Failed to notify process " + mPid
+                        + " that sensor accuracy notified, assuming it died.", ex);
                 binderDied();
             }
         }

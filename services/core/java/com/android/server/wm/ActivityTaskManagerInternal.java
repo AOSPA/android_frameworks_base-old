@@ -19,7 +19,6 @@ package com.android.server.wm;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
-import android.app.ActivityManager;
 import android.app.AppProtoEnums;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
@@ -34,6 +33,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.proto.ProtoOutputStream;
+import android.window.TaskSnapshot;
 
 import com.android.internal.app.IVoiceInteractor;
 import com.android.server.am.PendingIntentRecord;
@@ -386,6 +386,10 @@ public abstract class ActivityTaskManagerInternal {
     public abstract void clearPendingResultForActivity(
             IBinder activityToken, WeakReference<PendingIntentRecord> pir);
 
+    /** Returns the component name of the activity token. */
+    @Nullable
+    public abstract ComponentName getActivityName(IBinder activityToken);
+
     /**
      * @return the activity token and IApplicationThread for the top activity in the task or null
      * if there isn't a top activity with a valid process.
@@ -548,7 +552,7 @@ public abstract class ActivityTaskManagerInternal {
      * <p>Warning! this may restore the snapshot from disk so can block, don't call in a latency
      * sensitive environment.
      */
-    public abstract ActivityManager.TaskSnapshot getTaskSnapshotBlocking(int taskId,
+    public abstract TaskSnapshot getTaskSnapshotBlocking(int taskId,
             boolean isLowResolution);
 
     /** Returns true if uid is considered foreground for activity start purposes. */

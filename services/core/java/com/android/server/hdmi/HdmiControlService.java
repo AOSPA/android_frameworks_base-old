@@ -66,6 +66,8 @@ import android.os.Looper;
 import android.os.PowerManager;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
+import android.os.ShellCallback;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -813,7 +815,7 @@ public class HdmiControlService extends SystemService {
                                 // with system.
                                 HdmiDeviceInfo deviceInfo = createDeviceInfo(logicalAddress,
                                         deviceType,
-                                        HdmiControlManager.POWER_STATUS_ON);
+                                        HdmiControlManager.POWER_STATUS_ON, getCecVersion());
                                 localDevice.setDeviceInfo(deviceInfo);
                                 mHdmiCecNetwork.addLocalDevice(deviceType, localDevice);
                                 mCecController.addLogicalAddress(logicalAddress);
@@ -1222,11 +1224,12 @@ public class HdmiControlService extends SystemService {
         }
     }
 
-    private HdmiDeviceInfo createDeviceInfo(int logicalAddress, int deviceType, int powerStatus) {
+    private HdmiDeviceInfo createDeviceInfo(int logicalAddress, int deviceType, int powerStatus,
+            int cecVersion) {
         String displayName = readStringSetting(Global.DEVICE_NAME, Build.MODEL);
         return new HdmiDeviceInfo(logicalAddress,
                 getPhysicalAddress(), pathToPortId(getPhysicalAddress()), deviceType,
-                getVendorId(), displayName, powerStatus);
+                getVendorId(), displayName, powerStatus, cecVersion);
     }
 
     // Set the display name in HdmiDeviceInfo of the current devices to content provided by
@@ -1240,7 +1243,7 @@ public class HdmiControlService extends SystemService {
             device.setDeviceInfo(new HdmiDeviceInfo(
                     deviceInfo.getLogicalAddress(), deviceInfo.getPhysicalAddress(),
                     deviceInfo.getPortId(), deviceInfo.getDeviceType(), deviceInfo.getVendorId(),
-                    newDisplayName, deviceInfo.getDevicePowerStatus()));
+                    newDisplayName, deviceInfo.getDevicePowerStatus(), deviceInfo.getCecVersion()));
             sendCecCommand(HdmiCecMessageBuilder.buildSetOsdNameCommand(
                     device.mAddress, Constants.ADDR_TV, newDisplayName));
         }
@@ -1649,6 +1652,12 @@ public class HdmiControlService extends SystemService {
                     HdmiControlService.this.toggleAndFollowTvPower();
                 }
             });
+        }
+
+        @Override
+        public boolean shouldHandleTvPowerKey() {
+            enforceAccessPermission();
+            return HdmiControlService.this.shouldHandleTvPowerKey();
         }
 
         @Override
@@ -2142,6 +2151,16 @@ public class HdmiControlService extends SystemService {
         }
 
         @Override
+        public void onShellCommand(@Nullable FileDescriptor in, @Nullable FileDescriptor out,
+                @Nullable FileDescriptor err, String[] args,
+                @Nullable ShellCallback callback, ResultReceiver resultReceiver)
+                throws RemoteException {
+            enforceAccessPermission();
+            new HdmiControlShellCommand(this)
+                    .exec(this, in, out, err, args, callback, resultReceiver);
+        }
+
+        @Override
         protected void dump(FileDescriptor fd, final PrintWriter writer, String[] args) {
             if (!DumpUtils.checkDumpPermission(getContext(), TAG, writer)) return;
             final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
@@ -2331,6 +2350,24 @@ public class HdmiControlService extends SystemService {
             return;
         }
         source.toggleAndFollowTvPower();
+    }
+
+    @VisibleForTesting
+    protected boolean shouldHandleTvPowerKey() {
+        if (isTvDevice()) {
+            return false;
+        }
+        String powerControlMode = getHdmiCecConfig().getStringValue(
+                HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE);
+        if (powerControlMode.equals(HdmiControlManager.POWER_CONTROL_MODE_NONE)) {
+            return false;
+        }
+        int hdmiCecEnabled = getHdmiCecConfig().getIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_ENABLED);
+        if (hdmiCecEnabled != HdmiControlManager.HDMI_CEC_CONTROL_ENABLED) {
+            return false;
+        }
+        return true;
     }
 
     @ServiceThreadOnly

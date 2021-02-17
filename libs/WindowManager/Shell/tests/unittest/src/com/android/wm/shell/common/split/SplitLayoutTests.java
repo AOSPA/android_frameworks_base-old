@@ -58,7 +58,7 @@ public class SplitLayoutTests extends ShellTestCase {
                 mContext,
                 getConfiguration(false),
                 mLayoutChangeListener,
-                mRootLeash);
+                b -> b.setParent(mRootLeash));
     }
 
     @Test
@@ -69,24 +69,28 @@ public class SplitLayoutTests extends ShellTestCase {
     }
 
     @Test
-    public void testUpdateDividePosition() {
-        mSplitLayout.updateDividePosition(anyInt());
+    public void testUpdateDivideBounds() {
+        mSplitLayout.updateDivideBounds(anyInt());
         verify(mLayoutChangeListener).onBoundsChanging(any(SplitLayout.class));
     }
 
     @Test
-    public void testSetSnapTarget() {
-        DividerSnapAlgorithm.SnapTarget snapTarget = getSnapTarget(0,
-                DividerSnapAlgorithm.SnapTarget.FLAG_NONE);
-        mSplitLayout.setSnapTarget(snapTarget);
+    public void testSetDividePosition() {
+        mSplitLayout.setDividePosition(anyInt());
         verify(mLayoutChangeListener).onBoundsChanged(any(SplitLayout.class));
+    }
 
+    @Test
+    @UiThreadTest
+    public void testSnapToDismissTarget() {
         // verify it callbacks properly when the snap target indicates dismissing split.
-        snapTarget = getSnapTarget(0, DividerSnapAlgorithm.SnapTarget.FLAG_DISMISS_START);
-        mSplitLayout.setSnapTarget(snapTarget);
+        DividerSnapAlgorithm.SnapTarget snapTarget = getSnapTarget(0 /* position */,
+                DividerSnapAlgorithm.SnapTarget.FLAG_DISMISS_START);
+        mSplitLayout.snapToTarget(0 /* currentPosition */, snapTarget);
         verify(mLayoutChangeListener).onSnappedToDismiss(eq(false));
-        snapTarget = getSnapTarget(0, DividerSnapAlgorithm.SnapTarget.FLAG_DISMISS_END);
-        mSplitLayout.setSnapTarget(snapTarget);
+        snapTarget = getSnapTarget(0 /* position */,
+                DividerSnapAlgorithm.SnapTarget.FLAG_DISMISS_END);
+        mSplitLayout.snapToTarget(0 /* currentPosition */, snapTarget);
         verify(mLayoutChangeListener).onSnappedToDismiss(eq(true));
     }
 

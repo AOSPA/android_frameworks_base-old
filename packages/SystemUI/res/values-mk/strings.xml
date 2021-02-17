@@ -83,8 +83,9 @@
     <string name="screenshot_saved_title" msgid="8893267638659083153">"Сликата од екранот е зачувана"</string>
     <string name="screenshot_saved_text" msgid="7778833104901642442">"Допрете за да ја видите сликата од екранот"</string>
     <string name="screenshot_failed_title" msgid="3259148215671936891">"Не може да се зачува слика од екранот"</string>
+    <string name="screenshot_failed_to_save_user_locked_text" msgid="6156607948256936920">"Уредот мора да биде отклучен за да може да се зачува слика од екранот"</string>
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Повторно обидете се да направите слика од екранот"</string>
-    <string name="screenshot_failed_to_save_text" msgid="8344173457344027501">"Сликата од екранот не може да се зачува поради ограничена меморија"</string>
+    <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Не може да се зачува слика од екранот"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Апликацијата или вашата организација не дозволува снимање слики од екранот"</string>
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Измени"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Изменете ја сликата од екранот"</string>
@@ -186,16 +187,6 @@
     <string name="accessibility_battery_three_bars" msgid="118341923832368291">"Батерија три цртички."</string>
     <string name="accessibility_battery_full" msgid="1480463938961288494">"Батеријата е полна."</string>
     <string name="accessibility_battery_unknown" msgid="1807789554617976440">"Процентот на батеријата е непознат."</string>
-    <string name="accessibility_no_phone" msgid="8828412144430247025">"Нема сигнал."</string>
-    <string name="accessibility_phone_one_bar" msgid="8786055123727785588">"Телефон една цртичка.."</string>
-    <string name="accessibility_phone_two_bars" msgid="3316909612598670674">"Телефон две цртички."</string>
-    <string name="accessibility_phone_three_bars" msgid="5670937367300884534">"Телефон три цртички."</string>
-    <string name="accessibility_phone_signal_full" msgid="1103449569988869971">"Сигналот за телефон е исполнет."</string>
-    <string name="accessibility_no_data" msgid="2124768255213392359">"Нема податоци."</string>
-    <string name="accessibility_data_one_bar" msgid="3226985124149387055">"Податоци една цртичка."</string>
-    <string name="accessibility_data_two_bars" msgid="4576231688545173059">"Сигналот за податоци е на две цртички."</string>
-    <string name="accessibility_data_three_bars" msgid="3036562180893930325">"Податоци три цртички."</string>
-    <string name="accessibility_data_signal_full" msgid="283507058258113551">"Сигналот за податоци е исполнет."</string>
     <string name="accessibility_wifi_name" msgid="4863440268606851734">"Поврзано со <xliff:g id="WIFI">%s</xliff:g>."</string>
     <string name="accessibility_bluetooth_name" msgid="7300973230214067678">"Поврзано со <xliff:g id="BLUETOOTH">%s</xliff:g>."</string>
     <string name="accessibility_cast_name" msgid="7344437925388773685">"Поврзано со <xliff:g id="CAST">%s</xliff:g>."</string>
@@ -204,8 +195,6 @@
     <string name="accessibility_wimax_two_bars" msgid="7335485192390018939">"WiMAX две цртички."</string>
     <string name="accessibility_wimax_three_bars" msgid="2773714362377629938">"WiMAX три цртички."</string>
     <string name="accessibility_wimax_signal_full" msgid="3101861561730624315">"Полн сигнал на WiMAX."</string>
-    <string name="accessibility_ethernet_disconnected" msgid="2097190491174968655">"Етернетот е исклучен."</string>
-    <string name="accessibility_ethernet_connected" msgid="3988347636883115213">"Етернетот е поврзан."</string>
     <string name="accessibility_no_signal" msgid="1115622734914921920">"Нема сигнал."</string>
     <string name="accessibility_not_connected" msgid="4061305616351042142">"Не е поврзана"</string>
     <string name="accessibility_zero_bars" msgid="1364823964848784827">"Нула цртички."</string>
@@ -217,30 +206,17 @@
     <string name="accessibility_desc_off" msgid="8055389500285421408">"Исклучено."</string>
     <string name="accessibility_desc_connected" msgid="3082590384032624233">"Поврзано."</string>
     <string name="accessibility_desc_connecting" msgid="8011433412112903614">"Се поврзува."</string>
-    <string name="data_connection_gprs" msgid="2752584037409568435">"GPRS"</string>
     <string name="data_connection_hspa" msgid="6096234094857660873">"HSPA"</string>
-    <string name="data_connection_3g" msgid="1215807817895516914">"3G"</string>
-    <string name="data_connection_3_5g" msgid="4097346596394846450">"H"</string>
-    <string name="data_connection_3_5g_plus" msgid="8938598386721354697">"H+"</string>
-    <string name="data_connection_4g" msgid="5770196771037980730">"4G"</string>
-    <string name="data_connection_4g_plus" msgid="780615287092000279">"4G+"</string>
-    <string name="data_connection_lte" msgid="557021044282539923">"LTE"</string>
-    <string name="data_connection_lte_plus" msgid="4799302403782283178">"LTE+"</string>
-    <string name="data_connection_cdma" msgid="7678457855627313518">"1X"</string>
     <string name="data_connection_roaming" msgid="375650836665414797">"Роаминг"</string>
-    <string name="data_connection_edge" msgid="6316755666481405762">"EDGE"</string>
     <string name="accessibility_data_connection_wifi" msgid="4422160347472742434">"Wi-Fi"</string>
     <string name="accessibility_no_sim" msgid="1140839832913084973">"Нема SIM картичка."</string>
     <string name="accessibility_cell_data" msgid="172950885786007392">"Мобилен интернет"</string>
     <string name="accessibility_cell_data_on" msgid="691666434519443162">"Мобилниот интернет е вклучен"</string>
-    <string name="cell_data_off_content_description" msgid="9165555931499878044">"Мобилниот интернет е исклучен"</string>
-    <string name="not_default_data_content_description" msgid="6757881730711522517">"Не е поставен да користи интернет"</string>
     <string name="cell_data_off" msgid="4886198950247099526">"Исклучено"</string>
     <string name="accessibility_bluetooth_tether" msgid="6327291292208790599">"Се поврзува со Bluetooth."</string>
     <string name="accessibility_airplane_mode" msgid="1899529214045998505">"Авионски режим."</string>
     <string name="accessibility_vpn_on" msgid="8037549696057288731">"VPN е вклучена."</string>
     <string name="accessibility_no_sims" msgid="5711270400476534667">"Нема SIM-картичка"</string>
-    <string name="carrier_network_change_mode" msgid="5174141476991149918">"Променување на мрежата на операторот"</string>
     <string name="accessibility_battery_details" msgid="6184390274150865789">"Отвори ги деталите за батеријата"</string>
     <string name="accessibility_battery_level" msgid="5143715405241138822">"Батерија <xliff:g id="NUMBER">%d</xliff:g> проценти."</string>
     <string name="accessibility_battery_level_with_estimate" msgid="4843119982547599452">"Батерија <xliff:g id="PERCENTAGE">%1$s</xliff:g> отсто, уште околу <xliff:g id="TIME">%2$s</xliff:g> според вашето користење"</string>
@@ -572,7 +548,7 @@
     <string name="monitoring_description_network_logging" msgid="577305979174002252">"Вашиот администратор вклучил евиденција на мрежата, што подразбира следење на сообраќајот на вашиот уред.\n\nЗа повеќе информации, контактирајте со администраторот."</string>
     <string name="monitoring_description_vpn" msgid="1685428000684586870">"Дозволивте апликацијата да постави поврзување преку ВПН.\n\nАпликацијата може да го следи уредот и активноста на мрежата, вклучувајќи ги е-пораките, апликациите и веб-локациите."</string>
     <string name="monitoring_description_vpn_profile_owned" msgid="4964237035412372751">"<xliff:g id="ORGANIZATION">%1$s</xliff:g> управува со вашиот работен профил.\n\nАдминистратор е во можност да ја следи вашата активност на мрежата, вклучувајќи ги е-пораките, апликациите и веб-локациите.\n\nЗа повеќе информации, контактирајте со администраторот.\n\nYИсто така, поврзани сте на VPN којашто може да ја следи вашата активност на мрежата."</string>
-    <string name="monitoring_description_parental_controls" msgid="8184693528917051626">"Родителот управува со уредов. Родителот може да прегледува и управува со податоците, како што се апликациите што ги користите, вашата локација и време поминато на уредот."</string>
+    <string name="monitoring_description_parental_controls" msgid="8184693528917051626">"Родителот управува со уредов. Родителот може да прегледува и управува со податоците, како што се апликациите што ги користиш, твојата локација и времето поминато на уредот."</string>
     <string name="legacy_vpn_name" msgid="4174223520162559145">"ВПН"</string>
     <string name="monitoring_description_app" msgid="376868879287922929">"Поврзани сте на <xliff:g id="APPLICATION">%1$s</xliff:g>, што може да ја следи вашата активност на мрежата, заедно со е-пораките, апликациите и веб-сајтовите."</string>
     <string name="monitoring_description_app_personal" msgid="1970094872688265987">"Поврзани сте на <xliff:g id="APPLICATION">%1$s</xliff:g>, којашто може да ја следи вашата лична активност на мрежата, вклучувајќи ги е-пораките, апликациите и веб-локациите."</string>
@@ -722,6 +698,10 @@
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Може да ѕвони или вибрира во зависност од поставките на телефонот Стандардно, разговорите од <xliff:g id="APP_NAME">%1$s</xliff:g> се во балончиња."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Ви го задржува вниманието со лебдечка кратенка на содржинава."</string>
     <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Дозволете системот да определи дали известувањево треба да испушти звук или да вибрира"</string>
+    <string name="notification_channel_summary_automatic_alerted" msgid="954166812246932240">"&lt;b&gt;Статус:&lt;/b&gt; поставено на „Стандардно“"</string>
+    <string name="notification_channel_summary_automatic_silenced" msgid="7403004439649872047">"&lt;b&gt;Статус:&lt;/b&gt; намалено на „Тивко“"</string>
+    <string name="notification_channel_summary_automatic_promoted" msgid="1301710305149590426">"&lt;b&gt;Статус:&lt;/b&gt; рангирано повисоко"</string>
+    <string name="notification_channel_summary_automatic_demoted" msgid="1831303964660807700">"&lt;b&gt;Статус:&lt;/b&gt; рангирано пониско"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Се појавува на горниот дел од секцијата на разговорот во вид на лебдечко меурче, покажувајќи ја профилната слика на заклучениот екран"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Поставки"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Приоритетно"</string>
@@ -740,9 +720,10 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Апликацијава се прикажува врз други апликации на вашиот екран и ги користи микрофонот и камерата."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Поставки"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"Во ред"</string>
-    <string name="feedback_silenced" msgid="5382212321253328247">"Системот го стиши известувањево."</string>
-    <string name="feedback_promoted" msgid="8075757485407091976">"Системот ја зголеми приоритетноста на известувањево."</string>
-    <string name="feedback_demoted" msgid="5848066008939031913">"Системот ја намали приоритетноста на известувањево."</string>
+    <string name="feedback_alerted" msgid="5192459808484271208">"Известувањево беше автоматски &lt;b&gt;поставено на „Стандардно“&lt;/b&gt; од страна на системот."</string>
+    <string name="feedback_silenced" msgid="9116540317466126457">"Известувањево беше автоматски &lt;b&gt;намалено на „Тивко“&lt;/b&gt; од страна на системот."</string>
+    <string name="feedback_promoted" msgid="2125562787759780807">"Известувањево беше автоматски &lt;b&gt;рангирано повисоко&lt;/b&gt; во нијансите за известувања."</string>
+    <string name="feedback_demoted" msgid="951884763467110604">"Известувањево беше автоматски &lt;b&gt;рангирано пониско&lt;/b&gt; во нијансите за известувања."</string>
     <string name="feedback_prompt" msgid="2278631214125128281">"Дали ова беше точно?"</string>
     <string name="feedback_response" msgid="4671729244976641339">"Фала за повратните информации!"</string>
     <string name="feedback_ok" msgid="6481426753298857144">"Во ред"</string>

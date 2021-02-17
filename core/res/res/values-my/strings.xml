@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS ဝန်ဆောင်မှု"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"အာရုံခံကိရိယာ အကြောင်းကြားချက် ဝန်ဆောင်မှု"</string>
     <string name="twilight_service" msgid="8964898045693187224">"နေဝင်ဆည်းဆာ ဝန်ဆောင်မှု"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"ဒေသစံတော်ချိန် ရှာဖွေစနစ် (ချိတ်ဆက်နိုင်မှု မလိုပါ)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"သင့်ကိရိယာအား ပယ်ဖျက်လိမ့်မည်"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"စီမံခန့်ခွဲမှု အက်ပ်ကို သုံး၍မရပါ။ သင်၏ စက်ပစ္စည်းအတွင်းရှိ အရာများကို ဖျက်လိုက်ပါမည်\n\nမေးစရာများရှိပါက သင့်အဖွဲ့အစည်း၏ စီမံခန့်ခွဲသူကို ဆက်သွယ်ပါ။"</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g> က ပုံနှိပ်ထုတ်ယူခြင်းကို ပိတ်ထားသည်။"</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB ချိတ်ဆက်မှု"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"APP လုပ်ဆောင်နေသည်"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"အက်ပ်များက ဘက်ထရီကုန်စေသည်"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"ချဲ့ခြင်း"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> က ဘက်ထရီကို အသုံးပြုနေသည်"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"အက်ပ် <xliff:g id="NUMBER">%1$d</xliff:g> ခုက ဘက်ထရီကို အသုံးပြုနေသည်"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"ဘက်ထရီနှင့် ဒေတာအသုံးပြုမှု အသေးစိတ်ကို ကြည့်ရန် တို့ပါ"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"အပလီကေးရှင်းအား ရုပ်သံစာများ လက်ခံခြင်း၊ ဆောင်ရွက်ခြင်း ခွင့်ပြုပါ။ ဤခွင့်ပြုချက်တွင် အပလီကေးရှင်းအနေဖြင့် သင် လက်ခံရရှိသော စာများအား သင့်အား မပြပဲစောင့်ကြည့်ခွင့်နှင့် ဖျက်ပစ်ခွင့်များ ပါဝင်ပါသည်။"</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"စာတို ဖြန့်ဝေခြင်းစနစ်သုံး မက်ဆေ့ဂျ်များကို ထပ်ဆင့်ပို့ခြင်း"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"စာတို ဖြန့်ဝေခြင်းစနစ် မော်ဂျူးကိုပေါင်းရန် အက်ပ်များအား ခွင့်ပြုသည်။ ၎င်းမှာ စာတို ဖြန့်ဝေခြင်းစနစ်သုံး မက်ဆေ့ဂျ်များကို လက်ခံရရှိသည့်အတိုင်း ထပ်ဆင့်ပို့ရန် ဖြစ်သည်။ အချို့တည်နေရာများတွင် သင့်အား အရေးပေါ်အခြေအနေများကို သတိပေးရန် စာတို ဖြန့်ဝေခြင်းစနစ်သုံး သတိပေးချက်များကို ပေးပို့သည်။ အရေးပေါ် စာတို ဖြန့်ဝေခြင်းကို ရရှိသည့်အခါ သံသယဖြစ်နိုင်ဖွယ်ရှိသည့် အက်ပ်များက သင့်စက်၏ စွမ်းဆောင်ရည်နှင့် အော်ပရေးရှင်းတို့ကို အနှောင့်အယှက်ပေးနိုင်သည်။"</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"လက်ရှိခေါ်ဆိုမှုများကို စီမံခြင်း"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"သင့်စက်ပစ္စည်းပေါ်ရှိ လက်ရှိခေါ်ဆိုမှုများအကြောင်း အသေးစိတ်များကို ကြည့်ရှုရန်နှင့် ဤခေါ်ဆိုမှုများကို ထိန်းချုပ်ရန် အက်ပ်အား ခွင့်ပြုသည်။"</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"စာတိုများ ဖြန့်ဝေခြင်းစနစ်အား ဖတ်ခြင်း"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"အပလီကေးရှင်းကို သင်၏ စက်ပစ္စည်းမှ လက်ခံရရှိသော အများလွှင့်ထုတ်ချက်များကို ဖတ်ရန် ခွင့်ပြုသည်။  အများလွှင့်ထုတ်ချက်များသည် အရေးပေါ်အခြေအနေများကို သင့်အား သတိပေးရန် အချို့ နေရာများတွင် ပို့ပေးသည်။ အရေးပေါ်သတိပေးချက် ထုတ်လွှင့်ချက်ကို လက်ခံရရှိချိန်တွင်အန္တရာယ် ဖြစ်စေနိုင်သော အပလီကေးရှင်းများသည် သင့်စက်ပစ္စည်း၏ လုပ်ငန်းလည်ပတ်မှုနှင့် စွမ်းဆောင်မှုကို ဝင်စွက်ဖက်နိုင်သည်။"</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"အမည်သွင်းထားသောဖိဖ့်များကို ဖတ်ခြင်း"</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"မိုက်ခရိုဖုန်း"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"သင့်မျက်နှာပြင်ပေါ်ရှိ အခြားအက်ပ်များပေါ်တွင် ပြသခြင်း"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"အကြံပြုချက် ပေးရန်"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"ဤအကြောင်းကြားချက်ကို \'မူရင်း\' သို့ ချိန်ညှိထားသည်။ အကြံပြုချက်ပေးရန် တို့ပါ။"</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"ဤအကြောင်းကြားချက်ကို \'အသံတိတ်ခြင်း\' သို့ ပြန်ချိန်ညှိထားသည်။ အကြံပြုချက်ပေးရန် တို့ပါ။"</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"ဤအကြောင်းကြားချက်ကို အဆင့်တိုးထားသည်။ အကြံပြုချက်ပေးရန် တို့ပါ။"</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"ဤအကြောင်းကြားချက်ကို အဆင့်လျှော့ထားသည်။ အကြံပြုချက်ပေးရန် တို့ပါ။"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"ပုံမှန်မုဒ်အတွက် အချက်အလက်ပြသည့် အကြောင်းကြားချက်"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"ပုံမှန်အားသွင်းမှုမပြုလုပ်မီ ဘက်ထရီကုန်သွားနိုင်သည်"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"ဘက်ထရီသက်တမ်းကို တိုးမြှင့်ရန် \'ဘက်ထရီအားထိန်း\' စတင်ပြီးပါပြီ"</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"အသစ်- ဝင်းဒိုးမှန်ဘီလူး"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"ဖန်သားပြင် တစ်စိတ်တစ်ပိုင်း (သို့) တစ်ခုလုံး ချဲ့နိုင်ပါပြီ"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"\'ဆက်တင်များ\' တွင် ဖွင့်ရန်"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"ပယ်ရန်"</string>
 </resources>

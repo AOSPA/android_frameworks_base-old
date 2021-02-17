@@ -22,6 +22,7 @@ import android.app.Notification;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.util.ArraySet;
+import android.util.Pair;
 import android.view.NotificationHeaderView;
 import android.view.NotificationTopLineView;
 import android.view.View;
@@ -29,6 +30,7 @@ import android.view.ViewGroup;
 import android.view.ViewGroup.MarginLayoutParams;
 import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -131,8 +133,14 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
 
     /** Shows or hides feedback indicator */
     @Override
-    public void showFeedbackIcon(boolean show) {
+    public void showFeedbackIcon(boolean show, Pair<Integer, Integer> resIds) {
         mFeedbackIcon.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) {
+            if (mFeedbackIcon instanceof ImageButton) {
+                ((ImageButton) mFeedbackIcon).setImageResource(resIds.first);
+            }
+            mFeedbackIcon.setContentDescription(mView.getContext().getString(resIds.second));
+        }
     }
 
     @Override

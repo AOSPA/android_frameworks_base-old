@@ -1166,8 +1166,21 @@ public class AppOpsManager {
     public static final int OP_MANAGE_CREDENTIALS = AppProtoEnums.APP_OP_MANAGE_CREDENTIALS;
 
     /** @hide */
+    public static final int OP_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER =
+            AppProtoEnums.APP_OP_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER;
+
+    /**
+     * App output audio is being recorded
+     *
+     * @hide
+     */
+    // TODO: Add as AppProtoEnums
+    public static final int OP_RECORD_AUDIO_OUTPUT = 106;
+
+
+    /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 105;
+    public static final int _NUM_OP = 107;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1525,6 +1538,21 @@ public class AppOpsManager {
      */
     public static final String OPSTR_MANAGE_CREDENTIALS = "android:manage_credentials";
 
+    /**
+     * Allows to read device identifiers and use ICC based authentication like EAP-AKA.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String OPSTR_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER =
+            "android:use_icc_auth_with_device_identifier";
+    /**
+     * App output audio is being recorded
+     *
+     * @hide
+     */
+    public static final String OPSTR_RECORD_AUDIO_OUTPUT = "android:record_audio_output";
+
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
     /** Should not collect noting of this app-op in {@link #sAppOpsToNote} */
@@ -1604,6 +1632,7 @@ public class AppOpsManager {
             OP_INTERACT_ACROSS_PROFILES,
             OP_LOADER_USAGE_STATS,
             OP_MANAGE_ONGOING_CALLS,
+            OP_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER,
     };
 
     /**
@@ -1720,6 +1749,8 @@ public class AppOpsManager {
             OP_RECORD_AUDIO_HOTWORD,            // RECORD_AUDIO_HOTWORD
             OP_MANAGE_ONGOING_CALLS,            // MANAGE_ONGOING_CALLS
             OP_MANAGE_CREDENTIALS,              // MANAGE_CREDENTIALS
+            OP_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
+            OP_RECORD_AUDIO_OUTPUT,             // RECORD_AUDIO_OUTPUT
     };
 
     /**
@@ -1831,6 +1862,8 @@ public class AppOpsManager {
             OPSTR_RECORD_AUDIO_HOTWORD,
             OPSTR_MANAGE_ONGOING_CALLS,
             OPSTR_MANAGE_CREDENTIALS,
+            OPSTR_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER,
+            OPSTR_RECORD_AUDIO_OUTPUT,
     };
 
     /**
@@ -1943,6 +1976,8 @@ public class AppOpsManager {
             "RECORD_AUDIO_HOTWORD",
             "MANAGE_ONGOING_CALLS",
             "MANAGE_CREDENTIALS",
+            "USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER",
+            "RECORD_AUDIO_OUTPUT",
     };
 
     /**
@@ -2056,6 +2091,8 @@ public class AppOpsManager {
             null, // no permission for OP_RECORD_AUDIO_HOTWORD
             Manifest.permission.MANAGE_ONGOING_CALLS,
             null, // no permission for OP_MANAGE_CREDENTIALS
+            Manifest.permission.USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER,
+            null, // no permission for OP_RECORD_AUDIO_OUTPUT
     };
 
     /**
@@ -2169,6 +2206,8 @@ public class AppOpsManager {
             null, // RECORD_AUDIO_HOTWORD
             null, // MANAGE_ONGOING_CALLS
             null, // MANAGE_CREDENTIALS
+            null, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
+            null, // RECORD_AUDIO_OUTPUT
     };
 
     /**
@@ -2281,6 +2320,8 @@ public class AppOpsManager {
             null, // RECORD_AUDIO_HOTWORD
             null, // MANAGE_ONGOING_CALLS
             null, // MANAGE_CREDENTIALS
+            null, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
+            null, // RECORD_AUDIO_OUTPUT
     };
 
     /**
@@ -2392,6 +2433,8 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // OP_RECORD_AUDIO_HOTWORD
             AppOpsManager.MODE_DEFAULT, // MANAGE_ONGOING_CALLS
             AppOpsManager.MODE_DEFAULT, // MANAGE_CREDENTIALS
+            AppOpsManager.MODE_DEFAULT, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
+            AppOpsManager.MODE_ALLOWED, // RECORD_AUDIO_OUTPUT
     };
 
     /**
@@ -2507,6 +2550,8 @@ public class AppOpsManager {
             false, // RECORD_AUDIO_HOTWORD
             true, // MANAGE_ONGOING_CALLS
             false, // MANAGE_CREDENTIALS
+            true, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
+            false, // RECORD_AUDIO_OUTPUT
     };
 
     /**
@@ -6489,9 +6534,10 @@ public class AppOpsManager {
          * @param code The op code.
          * @param uid The UID performing the operation.
          * @param packageName The package performing the operation.
+         * @param flags The flags of this op
          * @param result The result of the note.
          */
-        void onOpNoted(int code, int uid, String packageName, int result);
+        void onOpNoted(int code, int uid, String packageName, @OpFlags int flags, @Mode int result);
     }
 
     /**
@@ -6528,9 +6574,10 @@ public class AppOpsManager {
          * @param op The op code.
          * @param uid The UID performing the operation.
          * @param packageName The package performing the operation.
+         * @param flags The flags of this op
          * @param result The result of the start.
          */
-        void onOpStarted(int op, int uid, String packageName, int result);
+        void onOpStarted(int op, int uid, String packageName, @OpFlags int flags, @Mode int result);
     }
 
     AppOpsManager(Context context, IAppOpsService service) {
@@ -7113,8 +7160,8 @@ public class AppOpsManager {
              }
              cb = new IAppOpsStartedCallback.Stub() {
                  @Override
-                 public void opStarted(int op, int uid, String packageName, int mode) {
-                     callback.onOpStarted(op, uid, packageName, mode);
+                 public void opStarted(int op, int uid, String packageName, int flags, int mode) {
+                     callback.onOpStarted(op, uid, packageName, flags, mode);
                  }
              };
              mStartedWatchers.put(callback, cb);
@@ -7180,8 +7227,8 @@ public class AppOpsManager {
             }
             cb = new IAppOpsNotedCallback.Stub() {
                 @Override
-                public void opNoted(int op, int uid, String packageName, int mode) {
-                    callback.onOpNoted(op, uid, packageName, mode);
+                public void opNoted(int op, int uid, String packageName, int flags, int mode) {
+                    callback.onOpNoted(op, uid, packageName, flags, mode);
                 }
             };
             mNotedWatchers.put(callback, cb);

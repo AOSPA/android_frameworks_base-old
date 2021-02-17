@@ -174,6 +174,7 @@ import android.app.ProfilerInfo;
 import android.app.WaitResult;
 import android.app.backup.BackupManager.OperationType;
 import android.app.backup.IBackupManager;
+import android.app.compat.CompatChanges;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageEvents.Event;
 import android.app.usage.UsageStatsManager;
@@ -1114,6 +1115,11 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     final PendingTempWhitelists mPendingTempWhitelist = new PendingTempWhitelists(this);
+
+    /**
+     * The temp-allowlist that is allowed to start FGS from background.
+     */
+    final FgsStartTempAllowList mFgsStartTempAllowList = new FgsStartTempAllowList();
 
     /**
      * Information about and control over application operations
@@ -5586,6 +5592,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                 || mPendingTempWhitelist.indexOfKey(uid) >= 0;
     }
 
+    boolean isWhitelistedForFgsStartLocked(int uid) {
+        final int appId = UserHandle.getAppId(uid);
+        return Arrays.binarySearch(mDeviceIdleExceptIdleWhitelist, appId) >= 0
+                || mFgsStartTempAllowList.isAllowed(uid);
+    }
+
     /**
      * @return whitelist tag for a uid from mPendingTempWhitelist, null if not currently on
      * the whitelist
@@ -5736,11 +5748,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public void setTaskResizeable(int taskId, int resizeableMode) {
         mActivityTaskManager.setTaskResizeable(taskId, resizeableMode);
-    }
-
-    @Override
-    public ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution) {
-        return mActivityTaskManager.getTaskSnapshot(taskId, isLowResolution);
     }
 
     @Override
@@ -11316,6 +11323,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // set on ION VMAs, therefore consider the entire ION heap as used kernel memory
                 kernelUsed += ionHeap;
             }
+            final long gpuUsage = Debug.getGpuTotalUsageKb();
+            if (gpuUsage >= 0) {
+                pw.print("      GPU: "); pw.println(stringifyKBSize(gpuUsage));
+            }
             final long lostRAM = memInfo.getTotalSizeKb()
                     - (ss[INDEX_TOTAL_PSS] - ss[INDEX_TOTAL_SWAP_PSS])
                     - memInfo.getFreeSizeKb() - memInfo.getCachedSizeKb()
@@ -12109,6 +12120,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             // Note: mapped ION memory is not accounted in PSS due to VM_PFNMAP flag being
             // set on ION VMAs, therefore consider the entire ION heap as used kernel memory
             kernelUsed += ionHeap;
+        }
+        final long gpuUsage = Debug.getGpuTotalUsageKb();
+        if (gpuUsage >= 0) {
+            memInfoBuilder.append("       GPU: ");
+            memInfoBuilder.append(stringifyKBSize(gpuUsage));
+            memInfoBuilder.append("\n");
         }
         memInfoBuilder.append("  Used RAM: ");
         memInfoBuilder.append(stringifyKBSize(
@@ -13800,6 +13817,37 @@ public class ActivityManagerService extends IActivityManager.Stub
                     forceStopPackageLocked(packageName, -1, false, true, true,
                             false, false, userId, "package unstartable");
                     break;
+                case Intent.ACTION_CLOSE_SYSTEM_DIALOGS:
+                    if (!canCloseSystemDialogs(callingPid, callingUid, callerApp)) {
+                        // The app can't close system dialogs, throw only if it targets S+
+                        if (CompatChanges.isChangeEnabled(
+                                ActivityManager.LOCK_DOWN_CLOSE_SYSTEM_DIALOGS, callingUid)) {
+                            throw new SecurityException(
+                                    "Permission Denial: " + Intent.ACTION_CLOSE_SYSTEM_DIALOGS
+                                            + " broadcast from " + callerPackage + " (pid="
+                                            + callingPid + ", uid=" + callingUid + ")"
+                                            + " requires "
+                                            + permission.BROADCAST_CLOSE_SYSTEM_DIALOGS + ".");
+                        } else if (CompatChanges.isChangeEnabled(
+                                ActivityManager.DROP_CLOSE_SYSTEM_DIALOGS, callingUid)) {
+                            Slog.w(TAG, "Permission Denial: " + intent.getAction()
+                                    + " broadcast from " + callerPackage + " (pid=" + callingPid
+                                    + ", uid=" + callingUid + ")"
+                                    + " requires "
+                                    + permission.BROADCAST_CLOSE_SYSTEM_DIALOGS
+                                    + ", dropping broadcast.");
+                            // Returning success seems to be the pattern here
+                            return ActivityManager.BROADCAST_SUCCESS;
+                        } else {
+                            Slog.w(TAG, intent.getAction()
+                                    + " broadcast from " + callerPackage + " (pid=" + callingPid
+                                    + ", uid=" + callingUid + ")"
+                                    + " will require  "
+                                    + permission.BROADCAST_CLOSE_SYSTEM_DIALOGS
+                                    + " in future builds.");
+                        }
+                    }
+                    break;
             }
 
             if (Intent.ACTION_PACKAGE_ADDED.equals(action) ||
@@ -14090,6 +14138,32 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         return ActivityManager.BROADCAST_SUCCESS;
+    }
+
+    private boolean canCloseSystemDialogs(int pid, int uid, @Nullable ProcessRecord callerApp) {
+        if (checkPermission(permission.BROADCAST_CLOSE_SYSTEM_DIALOGS, pid, uid)
+                == PERMISSION_GRANTED) {
+            return true;
+        }
+        if (callerApp == null) {
+            synchronized (mPidsSelfLocked) {
+                callerApp = mPidsSelfLocked.get(pid);
+            }
+        }
+        // Check if the instrumentation of the process has the permission. This covers the usual
+        // test started from the shell (which has the permission) case. This is needed for apps
+        // targeting SDK level < S but we are also allowing for targetSdk S+ as a convenience to
+        // avoid breaking a bunch of existing tests and asking them to adopt shell permissions to do
+        // this.
+        if (callerApp != null) {
+            ActiveInstrumentation instrumentation = callerApp.getActiveInstrumentation();
+            if (instrumentation != null && checkPermission(
+                    permission.BROADCAST_CLOSE_SYSTEM_DIALOGS, -1, instrumentation.mSourceUid)
+                    == PERMISSION_GRANTED) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -14697,11 +14771,11 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public int getLaunchedFromUid(IBinder activityToken) {
-        return mActivityTaskManager.getLaunchedFromUid(activityToken);
+        return ActivityClient.getInstance().getLaunchedFromUid(activityToken);
     }
 
     public String getLaunchedFromPackage(IBinder activityToken) {
-        return mActivityTaskManager.getLaunchedFromPackage(activityToken);
+        return ActivityClient.getInstance().getLaunchedFromPackage(activityToken);
     }
 
     // =========================================================
@@ -15424,17 +15498,22 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
-        tempWhitelistUidLocked(targetUid, duration, tag);
+        tempWhitelistUidLocked(targetUid, duration, tag,
+                BroadcastOptions.TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED);
     }
 
     /**
      * Whitelists {@code targetUid} to temporarily bypass Power Save mode.
      */
     @GuardedBy("this")
-    void tempWhitelistUidLocked(int targetUid, long duration, String tag) {
+    void tempWhitelistUidLocked(int targetUid, long duration, String tag, int type) {
         mPendingTempWhitelist.put(targetUid, new PendingTempWhitelist(targetUid, duration, tag));
         setUidTempWhitelistStateLocked(targetUid, true);
         mUiHandler.obtainMessage(PUSH_TEMP_WHITELIST_UI_MSG).sendToTarget();
+
+        if (type == BroadcastOptions.TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED) {
+            mFgsStartTempAllowList.add(targetUid, duration);
+        }
     }
 
     void pushTempWhitelist() {
@@ -15786,6 +15865,11 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public UserInfo getCurrentUser() {
         return mUserController.getCurrentUser();
+    }
+
+    @Override
+    public @UserIdInt int getCurrentUserId() {
+        return mUserController.getCurrentUserIdChecked();
     }
 
     String getStartedUserState(int userId) {
@@ -16411,7 +16495,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             final ActivityClient ac = ActivityClient.getInstance();
             return new ActivityPresentationInfo(ac.getTaskForActivity(token,
                     /*onlyRoot=*/ false), ac.getDisplayId(token),
-                    mActivityTaskManager.getActivityClassForToken(token));
+                    mAtmInternal.getActivityName(token));
         }
 
         @Override
@@ -17314,8 +17398,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                     throw new SecurityException("Shell can delegate permissions only "
                             + "to one instrumentation at a time");
                 }
-                delegate.setPermissions(permissions);
-                return;
             }
 
             final int instrCount = mActiveInstrumentation.size();
@@ -17358,7 +17440,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private class ShellDelegate implements CheckOpsDelegate {
         private final int mTargetUid;
-        private @Nullable String[] mPermissions;
+        @Nullable
+        private final String[] mPermissions;
 
         ShellDelegate(int targetUid, @Nullable String[] permissions) {
             mTargetUid = targetUid;
@@ -17369,19 +17452,15 @@ public class ActivityManagerService extends IActivityManager.Stub
             return mTargetUid;
         }
 
-        void setPermissions(@Nullable String[] permissions) {
-            mPermissions = permissions;
-            PackageManager.invalidatePackageInfoCache();
-        }
-
         @Override
         public int checkOperation(int code, int uid, String packageName, boolean raw,
                 QuadFunction<Integer, Integer, String, Boolean, Integer> superImpl) {
             if (uid == mTargetUid && isTargetOp(code)) {
+                final int shellUid = UserHandle.getUid(UserHandle.getUserId(uid),
+                        Process.SHELL_UID);
                 final long identity = Binder.clearCallingIdentity();
                 try {
-                    return superImpl.apply(code, Process.SHELL_UID,
-                            "com.android.shell", raw);
+                    return superImpl.apply(code, shellUid, "com.android.shell", raw);
                 } finally {
                     Binder.restoreCallingIdentity(identity);
                 }
@@ -17393,10 +17472,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         public int checkAudioOperation(int code, int usage, int uid, String packageName,
                 QuadFunction<Integer, Integer, Integer, String, Integer> superImpl) {
             if (uid == mTargetUid && isTargetOp(code)) {
+                final int shellUid = UserHandle.getUid(UserHandle.getUserId(uid),
+                        Process.SHELL_UID);
                 final long identity = Binder.clearCallingIdentity();
                 try {
-                    return superImpl.apply(code, usage, Process.SHELL_UID,
-                            "com.android.shell");
+                    return superImpl.apply(code, usage, shellUid, "com.android.shell");
                 } finally {
                     Binder.restoreCallingIdentity(identity);
                 }
@@ -17411,9 +17491,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 @NonNull HeptFunction<Integer, Integer, String, String, Boolean, String, Boolean,
                         Integer> superImpl) {
             if (uid == mTargetUid && isTargetOp(code)) {
+                final int shellUid = UserHandle.getUid(UserHandle.getUserId(uid),
+                        Process.SHELL_UID);
                 final long identity = Binder.clearCallingIdentity();
                 try {
-                    return superImpl.apply(code, Process.SHELL_UID, "com.android.shell", featureId,
+                    return superImpl.apply(code, shellUid, "com.android.shell", featureId,
                             shouldCollectAsyncNotedOp, message, shouldCollectMessage);
                 } finally {
                     Binder.restoreCallingIdentity(identity);

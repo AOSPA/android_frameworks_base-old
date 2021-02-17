@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS 서비스"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"센서 알림 서비스"</string>
     <string name="twilight_service" msgid="8964898045693187224">"새벽 서비스"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"시간대 감지(연결되지 않음)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"기기가 삭제됩니다."</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"관리자 앱을 사용할 수 없습니다. 곧 기기가 삭제됩니다.\n\n궁금한 점이 있으면 조직의 관리자에게 문의하세요."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g>에 의해 사용 중지되었습니다."</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB 연결"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"실행 중인 앱"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"배터리를 소모하는 앱"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"확대"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g>에서 배터리 사용 중"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"앱 <xliff:g id="NUMBER">%1$d</xliff:g>개에서 배터리 사용 중"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"탭하여 배터리 및 데이터 사용량 확인"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"앱이 MMS 메시지를 수신하고 처리할 수 있도록 허용합니다. 앱이 사용자에게 표시하지 않고 기기로 전송된 메시지를 확인 또는 삭제할 수도 있습니다."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"셀 브로드캐스트 메시지 전달"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"셀 브로드캐스트 메시지를 수신하자마자 전달하기 위해 앱이 셀 브로드캐스트 모듈에 연결하도록 허용합니다. 비상 상황임을 알리기 위해 일부 지역에서 셀 브로드캐스트 경고가 전달됩니다. 비상 셀 브로드캐스트를 수신할 때 악성 앱이 기기의 성능이나 작동을 방해할 수 있습니다."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"진행 중인 전화 관리"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"앱에서 기기의 진행 중인 전화에 관한 세부정보를 확인하고 전화를 제어하도록 허용합니다."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"셀 브로드캐스트 메시지 읽기"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"앱이 기기가 수신한 셀 브로드캐스트 메시지를 읽을 수 있도록 합니다. 비상 상황임을 알리기 위해 일부 지역에서 셀 브로드캐스트 경고가 전달됩니다. 비상 셀 브로드캐스트를 수신할 때 악성 앱이 기기의 성능이나 작동을 방해할 수 있습니다."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"가입된 피드 읽기"</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"마이크"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"화면에서 다른 앱 위에 표시"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"의견 보내기"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"이 알림의 중요도가 기본으로 상향되었습니다. 의견을 보내려면 탭하세요."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"이 알림의 중요도가 무음으로 하향되었습니다. 의견을 보내려면 탭하세요."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"이전에 이 알림의 중요도는 더 높았습니다. 의견을 보내려면 탭하세요."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"이전에 이 알림의 중요도는 더 낮았습니다. 의견을 보내려면 탭하세요."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"루틴 모드 정보 알림"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"평소에 충전하는 시간 전에 배터리가 소진될 수 있습니다."</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"배터리 수명을 연장하기 위해 배터리 세이버가 활성화되었습니다."</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"새로운 기능: 창 돋보기"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"이제 화면 일부 또는 전체를 확대할 수 있습니다."</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"설정에서 사용 설정"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"닫기"</string>
 </resources>

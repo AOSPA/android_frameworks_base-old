@@ -201,7 +201,6 @@ import com.android.internal.view.BaseSurfaceHolder;
 import com.android.internal.view.RootViewSurfaceTaker;
 import com.android.internal.view.SurfaceCallbackHelper;
 
-import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -241,6 +240,7 @@ public final class ViewRootImpl implements ViewParent,
     private static final boolean DEBUG_KEEP_SCREEN_ON = false || LOCAL_LOGV;
     private static final boolean DEBUG_CONTENT_CAPTURE = false || LOCAL_LOGV;
     private static final boolean DEBUG_SCROLL_CAPTURE = false || LOCAL_LOGV;
+    private static final boolean DEBUG_BLAST = false || LOCAL_LOGV;
 
     /**
      * Set to false if we do not want to use the multi threaded renderer even though
@@ -583,9 +583,6 @@ public final class ViewRootImpl implements ViewParent,
             = new ViewTreeObserver.InternalInsetsInfo();
 
     private WindowInsets mLastWindowInsets;
-    private final Rect mSystemInsetsCache = new Rect();
-    private final Rect mVisibleInsetsCache = new Rect();
-    private final Rect mStableInsetsCache = new Rect();
 
     // Insets types hidden by legacy window flags or system UI flags.
     private @InsetsType int mTypesHiddenByFlags = 0;
@@ -726,6 +723,11 @@ public final class ViewRootImpl implements ViewParent,
     //  We use this to make sure we don't send the WM transactions from an internal BLAST sync
     // (e.g. SurfaceView)
     private boolean mSendNextFrameToWm = false;
+
+    // Keeps track of whether a traverse was triggered while the UI thread was paused. This can
+    // occur when the client is waiting on another process to submit the transaction that contains
+    // the buffer. The UI thread needs to wait on the callback before it can submit another buffer.
+    private boolean mRequestedTraverseWhilePaused = false;
 
     private HashSet<ScrollCaptureCallback> mRootScrollCaptureCallbacks;
 
@@ -1533,7 +1535,7 @@ public final class ViewRootImpl implements ViewParent,
         mForceNextWindowRelayout = forceNextWindowRelayout;
         mPendingAlwaysConsumeSystemBars = args.argi2 != 0;
 
-        if (msg == MSG_RESIZED_REPORT) {
+        if (msg == MSG_RESIZED_REPORT && !mSendNextFrameToWm) {
             reportNextDraw();
         }
 
@@ -2343,9 +2345,9 @@ public final class ViewRootImpl implements ViewParent,
                     (mWindowAttributes.systemUiVisibility
                             | mWindowAttributes.subtreeSystemUiVisibility));
 
-            mSystemInsetsCache.set(mLastWindowInsets.getSystemWindowInsets().toRect());
-            mStableInsetsCache.set(mLastWindowInsets.getStableInsets().toRect());
-            mVisibleInsetsCache.set(mInsetsController.calculateVisibleInsets(
+            mAttachInfo.mContentInsets.set(mLastWindowInsets.getSystemWindowInsets().toRect());
+            mAttachInfo.mStableInsets.set(mLastWindowInsets.getStableInsets().toRect());
+            mAttachInfo.mVisibleInsets.set(mInsetsController.calculateVisibleInsets(
                     mWindowAttributes.softInputMode));
         }
         return mLastWindowInsets;
@@ -2411,8 +2413,26 @@ public final class ViewRootImpl implements ViewParent,
             host.debug();
         }
 
-        if (host == null || !mAdded)
+        if (host == null || !mAdded) {
             return;
+        }
+
+        // This is to ensure we don't end up queueing new frames while waiting on a previous frame
+        // to get latched. This can happen when there's been a sync request for this window. The
+        // frame could be in a transaction that's passed to different processes to ensure
+        // synchronization. It continues to block until ViewRootImpl receives a callback that the
+        // transaction containing the buffer has been sent to SurfaceFlinger. Once we receive, that
+        // signal, we know it's safe to start queuing new buffers.
+        //
+        // When the callback is invoked, it will trigger a traversal request if
+        // mRequestedTraverseWhilePaused is set so there's no need to attempt a retry here.
+        if (mSendNextFrameToWm) {
+            if (DEBUG_BLAST) {
+                Log.w(mTag, "Can't perform draw while waiting for a transaction complete");
+            }
+            mRequestedTraverseWhilePaused = true;
+            return;
+        }
 
         mIsInTraversal = true;
         mWillDrawSoon = true;
@@ -2848,7 +2868,7 @@ public final class ViewRootImpl implements ViewParent,
                                         && mWinFrame.height() == mPendingBackDropFrame.height();
                         // TODO: Need cutout?
                         startDragResizing(mPendingBackDropFrame, !backdropSizeMatchesFrame,
-                                mSystemInsetsCache, mStableInsetsCache, mResizeMode);
+                                mAttachInfo.mContentInsets, mAttachInfo.mStableInsets, mResizeMode);
                     } else {
                         // We shouldn't come here, but if we come we should end the resize.
                         endDragResizing();
@@ -3154,6 +3174,9 @@ public final class ViewRootImpl implements ViewParent,
             reportNextDraw();
         }
         if ((relayoutResult & WindowManagerGlobal.RELAYOUT_RES_BLAST_SYNC) != 0) {
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "Relayout called with blastSync");
+            }
             reportNextDraw();
             setUseBLASTSyncTransaction();
             mSendNextFrameToWm = true;
@@ -3819,6 +3842,9 @@ public final class ViewRootImpl implements ViewParent,
         mDrawsNeededToReport--;
         if (mDrawsNeededToReport == 0) {
             reportDrawFinished();
+        } else if (DEBUG_BLAST) {
+            Log.d(mTag, "pendingDrawFinished. Waiting on draw reported mDrawsNeededToReport="
+                    + mDrawsNeededToReport);
         }
     }
 
@@ -3828,6 +3854,9 @@ public final class ViewRootImpl implements ViewParent,
 
     private void reportDrawFinished() {
         try {
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "reportDrawFinished");
+            }
             mDrawsNeededToReport = 0;
             mWindowSession.finishDrawing(mWindow, mSurfaceChangedTransaction);
         } catch (RemoteException e) {
@@ -3843,6 +3872,9 @@ public final class ViewRootImpl implements ViewParent,
         return frameNr -> {
             mBlurRegionAggregator.dispatchBlurTransactionIfNeeded(frameNr);
 
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "Received frameCompleteCallback frameNum=" + frameNr);
+            }
             // Use a new transaction here since mRtBLASTSyncTransaction can only be accessed by
             // the render thread and mSurfaceChangedTransaction can only be accessed by the UI
             // thread. The temporary transaction is used so mRtBLASTSyncTransaction can be merged
@@ -3876,6 +3908,13 @@ public final class ViewRootImpl implements ViewParent,
                         || (commitCallbacks != null && commitCallbacks.size() > 0)
                         || mBlurRegionAggregator.hasRegions();
         if (needFrameCompleteCallback) {
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "Creating frameCompleteCallback"
+                        + " mNextDrawUseBLASTSyncTransaction=" + mNextDrawUseBLASTSyncTransaction
+                        + " mReportNextDraw=" + mReportNextDraw
+                        + " commitCallbacks size="
+                        + (commitCallbacks == null ? 0 : commitCallbacks.size()));
+            }
             mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(
                     createFrameCompleteCallback(mAttachInfo.mHandler, mReportNextDraw,
                             commitCallbacks));
@@ -3887,27 +3926,61 @@ public final class ViewRootImpl implements ViewParent,
     /**
      * The callback will run on a worker thread pool from the render thread.
      */
-    private HardwareRenderer.FrameDrawingCallback createFrameDrawingCallback() {
+    private HardwareRenderer.FrameDrawingCallback createFrameDrawingCallback(
+            boolean addTransactionComplete) {
         return frame -> {
-            mRtNextFrameReportedConsumeWithBlast = true;
-            if (mBlastBufferQueue != null) {
-                // We don't need to synchronize mRtBLASTSyncTransaction here since it's not
-                // being modified and only sent to BlastBufferQueue.
-                mBlastBufferQueue.setNextTransaction(mRtBLASTSyncTransaction);
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "Received frameDrawingCallback frameNum=" + frame + "."
+                        + " Creating transactionCompleteCallback=" + addTransactionComplete);
             }
+            mRtNextFrameReportedConsumeWithBlast = true;
+            if (mBlastBufferQueue == null) {
+                return;
+            }
+
+            // We don't need to synchronize mRtBLASTSyncTransaction here since it's not
+            // being modified and only sent to BlastBufferQueue.
+            mBlastBufferQueue.setNextTransaction(mRtBLASTSyncTransaction);
+            if (!addTransactionComplete) {
+                return;
+            }
+
+            mBlastBufferQueue.setTransactionCompleteCallback(frame, frameNumber -> {
+                if (DEBUG_BLAST) {
+                    Log.d(mTag, "Received transactionCompleteCallback frameNum=" + frame);
+                }
+                mHandler.postAtFrontOfQueue(() -> {
+                    mSendNextFrameToWm = false;
+                    if (DEBUG_BLAST) {
+                        Log.d(mTag, "Scheduling a traversal=" + mRequestedTraverseWhilePaused
+                                + " due to a previous skipped traversal.");
+                    }
+                    if (mRequestedTraverseWhilePaused) {
+                        mRequestedTraverseWhilePaused = false;
+                        scheduleTraversals();
+                    }
+                });
+            });
         };
     }
 
     private void addFrameCallbackIfNeeded() {
-        // Frame callbacks will always occur after submitting draw requests and before
-        // the draw actually occurs. This will ensure that we set the next transaction
-        // for the frame that's about to get drawn and not on a previous frame that.
-        //
-        // This is thread safe since mRtNextFrameReportConsumeWithBlast will only be
-        // modified in onFrameDraw and then again in onFrameComplete. This is to ensure the
-        // next frame completed should be reported with the blast sync transaction.
+        if (DEBUG_BLAST) {
+            if (mNextDrawUseBLASTSyncTransaction || mReportNextDraw) {
+                Log.d(mTag, "Creating frameDrawingCallback mNextDrawUseBLASTSyncTransaction="
+                        + mNextDrawUseBLASTSyncTransaction + " mReportNextDraw=" + mReportNextDraw);
+            }
+        }
+
         if (mNextDrawUseBLASTSyncTransaction) {
-            registerRtFrameCallback(createFrameDrawingCallback());
+            // Frame callbacks will always occur after submitting draw requests and before
+            // the draw actually occurs. This will ensure that we set the next transaction
+            // for the frame that's about to get drawn and not on a previous frame that.
+            //
+            // This is thread safe since mRtNextFrameReportConsumeWithBlast will only be
+            // modified in onFrameDraw and then again in onFrameComplete. This is to ensure the
+            // next frame completed should be reported with the blast sync transaction.
+            registerRtFrameCallback(createFrameDrawingCallback(mSendNextFrameToWm));
             mNextDrawUseBLASTSyncTransaction = false;
         } else if (mReportNextDraw) {
             registerRtFrameCallback(frame -> {
@@ -4480,8 +4553,8 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     boolean scrollToRectOrFocus(Rect rectangle, boolean immediate) {
-        final Rect ci = mSystemInsetsCache;
-        final Rect vi = mVisibleInsetsCache;
+        final Rect ci = mAttachInfo.mContentInsets;
+        final Rect vi = mAttachInfo.mVisibleInsets;
         int scrollY = 0;
         boolean handled = false;
 
@@ -4673,7 +4746,12 @@ public final class ViewRootImpl implements ViewParent,
         if (mPointerCapture == enabled) {
             return;
         }
-        InputManager.getInstance().requestPointerCapture(mAttachInfo.mWindowToken, enabled);
+        final IBinder inputToken = getInputToken();
+        if (inputToken == null) {
+            Log.e(mTag, "No input channel to request Pointer Capture.");
+            return;
+        }
+        InputManager.getInstance().requestPointerCapture(inputToken, enabled);
     }
 
     private void handlePointerCaptureChanged(boolean hasCapture) {
@@ -7583,7 +7661,7 @@ public final class ViewRootImpl implements ViewParent,
         // XXX This is really broken, and probably all needs to be done
         // in the window manager, and we need to know more about whether
         // we want the area behind or in front of the IME.
-        final Rect insets = mVisibleInsetsCache;
+        final Rect insets = mAttachInfo.mVisibleInsets;
         outFrame.left += insets.left;
         outFrame.top += insets.top;
         outFrame.right -= insets.right;
@@ -7698,12 +7776,18 @@ public final class ViewRootImpl implements ViewParent,
         mImeFocusController.dumpDebug(proto, IME_FOCUS_CONTROLLER);
     }
 
-    public void dump(String prefix, FileDescriptor fd, PrintWriter writer, String[] args) {
+    /**
+     * Dump information about this ViewRootImpl
+     * @param prefix the prefix that will be prepended to each line of the produced output
+     * @param writer the writer that will receive the resulting text
+     */
+    public void dump(String prefix, PrintWriter writer) {
         String innerPrefix = prefix + "  ";
         writer.println(prefix + "ViewRoot:");
         writer.println(innerPrefix + "mAdded=" + mAdded);
         writer.println(innerPrefix + "mRemoved=" + mRemoved);
         writer.println(innerPrefix + "mStopped=" + mStopped);
+        writer.println(innerPrefix + "mPausedForTransition=" + mPausedForTransition);
         writer.println(innerPrefix + "mConsumeBatchedInputScheduled="
                 + mConsumeBatchedInputScheduled);
         writer.println(innerPrefix + "mConsumeBatchedInputImmediatelyScheduled="
@@ -7718,6 +7802,12 @@ public final class ViewRootImpl implements ViewParent,
         writer.println(innerPrefix + "mIsAmbientMode="  + mIsAmbientMode);
         writer.println(innerPrefix + "mUnbufferedInputSource="
                 + Integer.toHexString(mUnbufferedInputSource));
+        if (mAttachInfo != null) {
+            writer.print(innerPrefix + "mAttachInfo= ");
+            mAttachInfo.dump(innerPrefix, writer);
+        } else {
+            writer.println(innerPrefix + "mAttachInfo=<null>");
+        }
 
         mFirstInputStage.dump(innerPrefix, writer);
 
@@ -7921,7 +8011,7 @@ public final class ViewRootImpl implements ViewParent,
             synchronized (mWindowCallbacks) {
                 for (int i = mWindowCallbacks.size() - 1; i >= 0; i--) {
                     mWindowCallbacks.get(i).onWindowSizeIsChanging(backDropFrame, fullscreen,
-                            mVisibleInsetsCache, mStableInsetsCache);
+                            mAttachInfo.mVisibleInsets, mAttachInfo.mStableInsets);
                 }
             }
         }
@@ -8382,6 +8472,11 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
+        public void onPointerCaptureEvent(boolean pointerCaptureEnabled) {
+            dispatchPointerCaptureChanged(pointerCaptureEnabled);
+        }
+
+        @Override
         public void dispose() {
             unscheduleConsumeBatchedInput();
             super.dispose();
@@ -8656,7 +8751,7 @@ public final class ViewRootImpl implements ViewParent,
                 MSG_REQUEST_KEYBOARD_SHORTCUTS, deviceId, 0, receiver).sendToTarget();
     }
 
-    public void dispatchPointerCaptureChanged(boolean on) {
+    private void dispatchPointerCaptureChanged(boolean on) {
         final int what = MSG_POINTER_CAPTURE_CHANGED;
         mHandler.removeMessages(what);
         Message msg = mHandler.obtainMessage(what);
@@ -9429,14 +9524,6 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void dispatchPointerCaptureChanged(boolean hasCapture) {
-            final ViewRootImpl viewAncestor = mViewAncestor.get();
-            if (viewAncestor != null) {
-                viewAncestor.dispatchPointerCaptureChanged(hasCapture);
-            }
-        }
-
-        @Override
         public void requestScrollCapture(IScrollCaptureCallbacks callbacks) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
@@ -9955,7 +10042,6 @@ public final class ViewRootImpl implements ViewParent,
     private void finishBLASTSyncOnRT(boolean apply, Transaction t) {
         // This is safe to modify on the render thread since the only other place it's modified
         // is on the UI thread when the render thread is paused.
-        mSendNextFrameToWm = false;
         if (mRtNextFrameReportedConsumeWithBlast) {
             mRtNextFrameReportedConsumeWithBlast = false;
 
@@ -10039,5 +10125,15 @@ public final class ViewRootImpl implements ViewParent,
 
     int getSurfaceSequenceId() {
         return mSurfaceSequenceId;
+    }
+
+    /**
+     * Merges the transaction passed in with the next transaction in BLASTBufferQueue. This ensures
+     * you can add transactions to the upcoming frame.
+     */
+    void mergeWithNextTransaction(Transaction t, long frameNumber) {
+        if (mBlastBufferQueue != null) {
+            mBlastBufferQueue.mergeWithNextTransaction(t, frameNumber);
+        }
     }
 }

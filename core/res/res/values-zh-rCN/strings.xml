@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS 服务"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"传感器通知服务"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Twilight 服务"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"时区检测器（无网络连接）"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"系统将清空您的设备"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"无法使用管理应用，系统现在将清空您的设备。\n\n如有疑问，请与您所在单位的管理员联系。"</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"“<xliff:g id="OWNER_APP">%s</xliff:g>”已停用打印功能。"</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB 连接"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"应用正在运行中"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"消耗电量的应用"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"放大功能"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g>正在消耗电量"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> 个应用正在消耗电量"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"点按即可详细了解电量和流量消耗情况"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"允许该应用接收和处理彩信。这就意味着，该应用可能会监视发送到您设备的彩信，或删除发送到您设备的彩信而不向您显示。"</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"转发小区广播消息"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"允许应用绑定到小区广播模块，以便及时转发收到的小区广播消息。小区广播消息是在某些地区发送的、用于发布紧急情况警告的提醒信息。恶意应用可能会在您的设备收到紧急小区广播时干扰设备的性能或操作。"</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"管理正在进行的通话"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"允许应用查看有关设备上正在进行的通话的详细信息并控制这些通话。"</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"读取小区广播消息"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"允许应用读取您的设备收到的小区广播消息。小区广播消息是在某些地区发送的、用于发布紧急情况警告的提醒信息。恶意应用可能会在您收到小区紧急广播时干扰您设备的性能或操作。"</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"读取订阅的供稿"</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"麦克风"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"显示在屏幕上其他应用的上层"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"提供反馈"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"系统已将此通知的重要性提升为“默认”。点按即可提供反馈。"</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"系统已将此通知的重要性降低为“静音”。点按即可提供反馈。"</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"系统已提升此通知的重要性。点按即可提供反馈。"</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"系统已降低此通知的重要性。点按即可提供反馈。"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"日常安排模式信息通知"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"电池电量可能会在您平时的充电时间之前耗尽"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"已启用省电模式以延长电池续航时间"</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"新功能：窗口放大镜"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"您现在可以放大屏幕上的部分或所有内容"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"在“设置”中开启"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"关闭"</string>
 </resources>

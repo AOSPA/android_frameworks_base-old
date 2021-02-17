@@ -654,10 +654,9 @@
          The default is false. -->
     <bool name="config_lidControlsSleep">false</bool>
 
-    <!-- Indicate whether closing the lid causes the device to enter the folded state which means
-         to get a smaller screen and opening the lid causes the device to enter the unfolded state
-         which means to get a larger screen. -->
-    <bool name="config_lidControlsDisplayFold">false</bool>
+    <!-- The device state (supplied by DeviceStateManager) that should be treated as folded by the
+         display fold controller. Default is DeviceStateManager.INVALID_DEVICE_STATE. -->
+    <integer name="config_foldedDeviceState">-1</integer>
 
     <!-- Indicate the display area rect for foldable devices in folded state. -->
     <string name="config_foldedArea"></string>
@@ -3309,6 +3308,10 @@
          is non-interactive. -->
     <bool name="config_cameraDoubleTapPowerGestureEnabled">true</bool>
 
+    <!-- Allow the gesture to quick tap the power button multiple times to start the emergency sos
+         experience while the device is non-interactive. -->
+    <bool name="config_emergencyGestureEnabled">true</bool>
+
     <!-- Allow the gesture power + volume up to change the ringer mode while the device
          is interactive. -->
     <bool name="config_volumeHushGestureEnabled">true</bool>
@@ -3743,6 +3746,16 @@
          Example: "com.android.contentsuggestions/.ContentSuggestionsService"
     -->
     <string name="config_defaultContentSuggestionsService" translatable="false"></string>
+
+    <!-- The package name for the system's search ui service.
+     This service returns search results when provided with an input string.
+
+     This service must be trusted, as it can be activated without explicit consent of the user.
+     If no service with the specified name exists on the device, on device search wil be
+     disabled.
+     Example: "com.android.intelliegence/.SearchUiService"
+-->
+    <string name="config_defaultSearchUiService" translatable="false"></string>
 
     <string name="config_defaultMusicRecognitionService" translatable="false"></string>
 
@@ -4589,6 +4602,9 @@
     <!-- Indicates that default fitness tracker app needs to request sensor and location permissions. -->
     <bool name="config_trackerAppNeedsPermissions">false</bool>
 
-  <!-- Component with platform query permissions for AppSearch -->
-    <string name="config_defaultAppSearchPlatformQuerierComponent" translatable="false"></string>
+    <!-- Package with global data query permissions for AppSearch -->
+    <string name="config_globalAppSearchDataQuerierPackage" translatable="false"></string>
+
+    <!-- If true, attach the navigation bar to the app during app transition -->
+    <bool name="config_attachNavBarToAppDuringTransition">false</bool>
 </resources>

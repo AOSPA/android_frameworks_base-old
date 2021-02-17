@@ -215,6 +215,27 @@ public class SpellChecker implements SpellCheckerSessionListener {
         spellCheck();
     }
 
+    void onPerformSpellCheck() {
+        final int selectionStart = mTextView.getSelectionStart();
+        final int selectionEnd = mTextView.getSelectionEnd();
+        final int selectionRangeStart;
+        final int selectionRangeEnd;
+        if (selectionStart < selectionEnd) {
+            selectionRangeStart = selectionStart;
+            selectionRangeEnd = selectionEnd;
+        } else {
+            selectionRangeStart = selectionEnd;
+            selectionRangeEnd = selectionStart;
+        }
+        // Expand the range so that it (hopefully) includes the current sentence.
+        final int start = Math.max(0, selectionRangeStart - MIN_SENTENCE_LENGTH);
+        final int end = Math.min(mTextView.length(), selectionRangeEnd + MIN_SENTENCE_LENGTH);
+        if (DBG) {
+            Log.d(TAG, "performSpellCheckAroundSelection: " + start + ", " + end);
+        }
+        spellCheck(start, end);
+    }
+
     public void spellCheck(int start, int end) {
         if (DBG) {
             Log.d(TAG, "Start spell-checking: " + start + ", " + end);
@@ -456,6 +477,8 @@ public class SpellChecker implements SpellCheckerSessionListener {
         mTextView.postDelayed(mSpellRunnable, SPELL_PAUSE_DURATION);
     }
 
+    // When calling this method, RESULT_ATTR_LOOKS_LIKE_TYPO or RESULT_ATTR_LOOKS_LIKE_GRAMMAR_ERROR
+    // (or both) should be set in suggestionsInfo.
     private void createMisspelledSuggestionSpan(Editable editable, SuggestionsInfo suggestionsInfo,
             SpellCheckSpan spellCheckSpan, int offset, int length) {
         final int spellCheckSpanStart = editable.getSpanStart(spellCheckSpan);
@@ -485,7 +508,10 @@ public class SpellChecker implements SpellCheckerSessionListener {
         }
 
         final int suggestionsAttrs = suggestionsInfo.getSuggestionsAttributes();
-        int flags = SuggestionSpan.FLAG_EASY_CORRECT;
+        int flags = 0;
+        if ((suggestionsAttrs & SuggestionsInfo.RESULT_ATTR_DONT_SHOW_UI_FOR_SUGGESTIONS) == 0) {
+            flags |= SuggestionSpan.FLAG_EASY_CORRECT;
+        }
         if ((suggestionsAttrs & SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO) != 0) {
             flags |= SuggestionSpan.FLAG_MISSPELLED;
         }

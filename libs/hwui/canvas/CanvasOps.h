@@ -26,6 +26,7 @@
 #include <hwui/Bitmap.h>
 #include <log/log.h>
 #include "CanvasProperty.h"
+#include "Points.h"
 
 #include "CanvasOpTypes.h"
 #include "Layer.h"
@@ -166,6 +167,22 @@ struct CanvasOp<CanvasOpType::DrawPoint> {
 };
 
 template <>
+struct CanvasOp<CanvasOpType::DrawPoints> {
+    size_t count;
+    SkPaint paint;
+    sk_sp<Points> points;
+    void draw(SkCanvas* canvas) const {
+        canvas->drawPoints(
+            SkCanvas::kPoints_PointMode,
+            count,
+            points->data(),
+            paint
+        );
+    }
+    ASSERT_DRAWABLE()
+};
+
+template <>
 struct CanvasOp<CanvasOpType::DrawRect> {
     SkRect rect;
     SkPaint paint;
@@ -264,6 +281,22 @@ struct CanvasOp<CanvasOpType::DrawLine> {
 };
 
 template<>
+struct CanvasOp<CanvasOpType::DrawLines> {
+    size_t count;
+    SkPaint paint;
+    sk_sp<Points> points;
+    void draw(SkCanvas* canvas) const {
+        canvas->drawPoints(
+            SkCanvas::kLines_PointMode,
+            count,
+            points->data(),
+            paint
+        );
+    }
+    ASSERT_DRAWABLE()
+};
+
+template<>
 struct CanvasOp<CanvasOpType::DrawVertices> {
     sk_sp<SkVertices> vertices;
     SkBlendMode mode;
@@ -277,7 +310,7 @@ struct CanvasOp<CanvasOpType::DrawVertices> {
 template<>
 struct CanvasOp<CanvasOpType::DrawImage> {
 
-    CanvasOp<CanvasOpType::DrawImageRect>(
+    CanvasOp(
         const sk_sp<Bitmap>& bitmap,
         float left,
         float top,
@@ -303,7 +336,7 @@ struct CanvasOp<CanvasOpType::DrawImage> {
 template<>
 struct CanvasOp<CanvasOpType::DrawImageRect> {
 
-    CanvasOp<CanvasOpType::DrawImageRect>(
+    CanvasOp(
         const sk_sp<Bitmap>& bitmap,
         SkRect src,
         SkRect dst,
@@ -334,7 +367,7 @@ struct CanvasOp<CanvasOpType::DrawImageRect> {
 template<>
 struct CanvasOp<CanvasOpType::DrawImageLattice> {
 
-    CanvasOp<CanvasOpType::DrawImageLattice>(
+    CanvasOp(
         const sk_sp<Bitmap>& bitmap,
         SkRect dst,
         SkCanvas::Lattice lattice,

@@ -47,7 +47,7 @@ import android.location.GeocoderParams;
 import android.location.Geofence;
 import android.location.GnssCapabilities;
 import android.location.GnssMeasurementCorrections;
-import android.location.GnssRequest;
+import android.location.GnssMeasurementRequest;
 import android.location.IGeocodeListener;
 import android.location.IGnssAntennaInfoListener;
 import android.location.IGnssMeasurementsListener;
@@ -57,6 +57,7 @@ import android.location.IGpsGeofenceHardware;
 import android.location.ILocationCallback;
 import android.location.ILocationListener;
 import android.location.ILocationManager;
+import android.location.LastLocationRequest;
 import android.location.Location;
 import android.location.LocationManager;
 import android.location.LocationManagerInternal;
@@ -530,9 +531,6 @@ public class LocationManagerService extends ILocationManager.Stub {
     public List<String> getAllProviders() {
         ArrayList<String> providers = new ArrayList<>(mProviderManagers.size());
         for (LocationProviderManager manager : mProviderManagers) {
-            if (FUSED_PROVIDER.equals(manager.getName())) {
-                continue;
-            }
             providers.add(manager.getName());
         }
         return providers;
@@ -549,9 +547,6 @@ public class LocationManagerService extends ILocationManager.Stub {
             ArrayList<String> providers = new ArrayList<>(mProviderManagers.size());
             for (LocationProviderManager manager : mProviderManagers) {
                 String name = manager.getName();
-                if (FUSED_PROVIDER.equals(name)) {
-                    continue;
-                }
                 if (enabledOnly && !manager.isEnabled(UserHandle.getCallingUserId())) {
                     continue;
                 }
@@ -576,7 +571,9 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         if (!providers.isEmpty()) {
-            if (providers.contains(GPS_PROVIDER)) {
+            if (providers.contains(FUSED_PROVIDER)) {
+                return FUSED_PROVIDER;
+            } else if (providers.contains(GPS_PROVIDER)) {
                 return GPS_PROVIDER;
             } else if (providers.contains(NETWORK_PROVIDER)) {
                 return NETWORK_PROVIDER;
@@ -598,6 +595,30 @@ public class LocationManagerService extends ILocationManager.Stub {
     public String[] getIgnoreSettingsWhitelist() {
         return mInjector.getSettingsHelper().getIgnoreSettingsPackageWhitelist().toArray(
                 new String[0]);
+    }
+
+    @Nullable
+    @Override
+    public ICancellationSignal getCurrentLocation(String provider, LocationRequest request,
+            ILocationCallback consumer, String packageName, String attributionTag,
+            String listenerId) {
+        CallerIdentity identity = CallerIdentity.fromBinder(mContext, packageName, attributionTag,
+                listenerId);
+        int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
+                identity.getPid());
+        LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
+                PERMISSION_COARSE);
+
+        // clients in the system process must have an attribution tag set
+        Preconditions.checkState(identity.getPid() != Process.myPid() || attributionTag != null);
+
+        request = validateLocationRequest(request, identity);
+
+        LocationProviderManager manager = getLocationProviderManager(provider);
+        Preconditions.checkArgument(manager != null,
+                "provider \"" + provider + "\" does not exist");
+
+        return manager.getCurrentLocation(request, identity, permissionLevel, consumer);
     }
 
     @Override
@@ -753,7 +774,8 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     @Override
-    public Location getLastLocation(String provider, String packageName, String attributionTag) {
+    public Location getLastLocation(String provider, LastLocationRequest request,
+            String packageName, String attributionTag) {
         CallerIdentity identity = CallerIdentity.fromBinder(mContext, packageName, attributionTag);
         int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
                 identity.getPid());
@@ -763,36 +785,29 @@ public class LocationManagerService extends ILocationManager.Stub {
         // clients in the system process must have an attribution tag set
         Preconditions.checkArgument(identity.getPid() != Process.myPid() || attributionTag != null);
 
+        request = validateLastLocationRequest(request);
+
         LocationProviderManager manager = getLocationProviderManager(provider);
         if (manager == null) {
             return null;
         }
 
-        return manager.getLastLocation(identity, permissionLevel, false);
+        return manager.getLastLocation(request, identity, permissionLevel);
     }
 
-    @Nullable
-    @Override
-    public ICancellationSignal getCurrentLocation(String provider, LocationRequest request,
-            ILocationCallback consumer, String packageName, String attributionTag,
-            String listenerId) {
-        CallerIdentity identity = CallerIdentity.fromBinder(mContext, packageName, attributionTag,
-                listenerId);
-        int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
-                identity.getPid());
-        LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
-                PERMISSION_COARSE);
+    private LastLocationRequest validateLastLocationRequest(LastLocationRequest request) {
+        if (request.isHiddenFromAppOps()) {
+            mContext.enforceCallingOrSelfPermission(
+                    permission.UPDATE_APP_OPS_STATS,
+                    "hiding from app ops requires " + permission.UPDATE_APP_OPS_STATS);
+        }
+        if (request.isLocationSettingsIgnored()) {
+            mContext.enforceCallingOrSelfPermission(
+                    permission.WRITE_SECURE_SETTINGS,
+                    "ignoring location settings requires " + permission.WRITE_SECURE_SETTINGS);
+        }
 
-        // clients in the system process must have an attribution tag set
-        Preconditions.checkState(identity.getPid() != Process.myPid() || attributionTag != null);
-
-        request = validateLocationRequest(request, identity);
-
-        LocationProviderManager manager = getLocationProviderManager(provider);
-        Preconditions.checkArgument(manager != null,
-                "provider \"" + provider + "\" does not exist");
-
-        return manager.getCurrentLocation(request, identity, permissionLevel, consumer);
+        return request;
     }
 
     @Override
@@ -856,7 +871,7 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     @Override
-    public void addGnssMeasurementsListener(@Nullable GnssRequest request,
+    public void addGnssMeasurementsListener(@Nullable GnssMeasurementRequest request,
             IGnssMeasurementsListener listener, String packageName, String attributionTag) {
         if (mGnssManagerService != null) {
             mGnssManagerService.addGnssMeasurementsListener(request, listener, packageName,
@@ -1039,10 +1054,6 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     @Override
     public boolean isProviderEnabledForUser(String provider, int userId) {
-        // fused provider is accessed indirectly via criteria rather than the provider-based APIs,
-        // so we discourage its use
-        if (FUSED_PROVIDER.equals(provider)) return false;
-
         return mLocalService.isProviderEnabledForUser(provider, userId);
     }
 

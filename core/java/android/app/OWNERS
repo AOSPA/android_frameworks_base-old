@@ -1,0 +1,34 @@
+
+# Remain no owner because multiple modules may touch this file.
+per-file ContextImpl.java = *
+
+# ActivityThread
+per-file ActivityThread.java = file:/services/core/java/com/android/server/am/OWNERS
+per-file ActivityThread.java = file:/services/core/java/com/android/server/wm/OWNERS
+
+# Alarm
+per-file *Alarm* = file:/apex/jobscheduler/OWNERS
+
+# AppOps
+per-file *AppOp* = file:/core/java/android/permission/OWNERS
+
+# Notification
+per-file *Notification* = file:/packages/SystemUI/OWNERS
+
+# ResourcesManager
+per-file ResourcesManager = rtmitchell@google.com, toddke@google.com
+
+# Wallpaper
+per-file *Wallpaper* = file:/core/java/android/service/wallpaper/OWNERS
+
+# WindowManager
+per-file *Activity* = file:/services/core/java/com/android/server/wm/OWNERS
+per-file ClientTransactionHandler.java = file:/services/core/java/com/android/server/wm/OWNERS
+per-file Fragment.java = file:/services/core/java/com/android/server/wm/OWNERS
+per-file *Task* = file:/services/core/java/com/android/server/wm/OWNERS
+per-file Window* = file:/services/core/java/com/android/server/wm/OWNERS
+
+# TODO(b/174932174): determine the ownership of KeyguardManager.java
+
+# Zygote
+per-file *Zygote* = file:/ZYGOTE_OWNERS

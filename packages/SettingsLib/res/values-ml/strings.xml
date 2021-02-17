@@ -145,7 +145,7 @@
     <string name="data_usage_ota" msgid="7984667793701597001">"സിസ്‌റ്റം അപ്‌ഡേറ്റുകൾ"</string>
     <string name="tether_settings_title_usb" msgid="3728686573430917722">"USB ടെതറിംഗ്"</string>
     <string name="tether_settings_title_wifi" msgid="4803402057533895526">"പോർട്ടബിൾ ഹോട്ട്സ്‌പോട്ട്"</string>
-    <string name="tether_settings_title_bluetooth" msgid="916519902721399656">"ബ്ലൂടൂത്ത് ടെതറിംഗ്"</string>
+    <string name="tether_settings_title_bluetooth" msgid="916519902721399656">"Bluetooth ടെതറിംഗ്"</string>
     <string name="tether_settings_title_usb_bluetooth" msgid="1727111807207577322">"ടെതറിംഗ്"</string>
     <string name="tether_settings_title_all" msgid="8910259483383010470">"ടെതറിംഗും പോർട്ടബിൾ ഹോട്ട്സ്‌പോട്ടും"</string>
     <string name="managed_user_title" msgid="449081789742645723">"എല്ലാ ഔദ്യോഗിക ആപ്‌സും"</string>
@@ -400,8 +400,9 @@
     <string name="inactive_app_active_summary" msgid="8047630990208722344">"സജീവം. മാറ്റുന്നതിന് ടാപ്പുചെയ്യുക."</string>
     <string name="standby_bucket_summary" msgid="5128193447550429600">"ആപ്പ് സ്‌റ്റാൻഡ്‌ബൈ നില:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
     <string name="transcode_settings_title" msgid="2581975870429850549">"മീഡിയ ട്രാൻസ്കോഡ് ചെയ്യൽ ക്രമീകരണം"</string>
-    <string name="transcode_enable_all" msgid="9102460144086871903">"ട്രാൻസ്കോഡ് ചെയ്യൽ പ്രവർത്തനരഹിതമാക്കുക"</string>
-    <string name="transcode_skip_apps" msgid="8249721984597390142">"ആപ്പുകൾക്കായി ട്രാൻസ്കോഡ് ചെയ്യുന്നത് പ്രവർത്തനക്ഷമമാക്കുക"</string>
+    <string name="transcode_user_control" msgid="6176368544817731314">"ട്രാൻസ്കോഡ് ചെയ്യൽ ഡിഫോൾട്ടുകൾ അസാധുവാക്കുക"</string>
+    <string name="transcode_enable_all" msgid="2411165920039166710">"ട്രാൻസ്കോഡ് ചെയ്യൽ പ്രവർത്തനക്ഷമമാക്കുക"</string>
+    <string name="transcode_default" msgid="3784803084573509491">"ആപ്പുകൾ ആധുനിക ഫോർമാറ്റുകളെ പിന്തുണയ്ക്കുമെന്ന് കരുതുക"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"പ്രവർത്തിക്കുന്ന സേവനങ്ങൾ"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"നിലവിൽ പ്രവർത്തിക്കുന്ന സേവനങ്ങൾ കാണുക, നിയന്ത്രിക്കുക"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"WebView നടപ്പാക്കൽ"</string>
@@ -449,7 +450,7 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="7415639699283965818">"പൂർണ്ണമായി ചാർജാവാൻ <xliff:g id="TIME">%1$s</xliff:g> ശേഷിക്കുന്നു"</string>
     <string name="power_charging_duration" msgid="5005740040558984057">"<xliff:g id="LEVEL">%1$s</xliff:g> - പൂർണ്ണമായി ചാർജാവാൻ <xliff:g id="TIME">%2$s</xliff:g>"</string>
-    <string name="power_charging_limited" msgid="5902301801611726210">"<xliff:g id="LEVEL">%1$s</xliff:g> - ബാറ്ററി താൽക്കാലം പരിമിതപ്പെടുത്തി"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - ബാറ്ററി നില ഒപ്റ്റിമൈസ് ചെയ്യുന്നു"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"അജ്ഞാതം"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"ചാർജ് ചെയ്യുന്നു"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"അതിവേഗ ചാർജിംഗ്"</string>
@@ -564,4 +565,29 @@
     <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"വയേർഡ് ഹെഡ്ഫോൺ"</string>
     <string name="wifi_hotspot_switch_on_text" msgid="9212273118217786155">"ഓണാണ്"</string>
     <string name="wifi_hotspot_switch_off_text" msgid="7245567251496959764">"ഓഫാണ്"</string>
+    <string name="carrier_network_change_mode" msgid="4257621815706644026">"കാരിയർ നെറ്റ്‌വർക്ക് മാറ്റൽ"</string>
+    <string name="data_connection_3g" msgid="931852552688157407">"3G"</string>
+    <string name="data_connection_edge" msgid="4625509456544797637">"EDG"</string>
+    <string name="data_connection_cdma" msgid="9098161966701934334">"1X"</string>
+    <string name="data_connection_gprs" msgid="1251945769006770189">"GPRS"</string>
+    <string name="data_connection_3_5g" msgid="4298721462047921400">"H"</string>
+    <string name="data_connection_3_5g_plus" msgid="6683055858295918170">"H+"</string>
+    <string name="data_connection_4g" msgid="2581705503356752044">"4G"</string>
+    <string name="data_connection_4g_plus" msgid="5194902328408751020">"4G+"</string>
+    <string name="data_connection_lte" msgid="7675461204366364124">"LTE"</string>
+    <string name="data_connection_lte_plus" msgid="6643158654804916653">"LTE+"</string>
+    <string name="cell_data_off_content_description" msgid="2280700839891636498">"മൊബൈൽ ഡാറ്റ ഓഫാണ്"</string>
+    <string name="not_default_data_content_description" msgid="6517068332106592887">"ഡാറ്റ ഉപയോഗിക്കുന്നതിന് സജ്ജീകരിച്ചിട്ടില്ല"</string>
+    <string name="accessibility_no_phone" msgid="2687419663127582503">"ഫോൺ സിഗ്‌നൽ ഒന്നുമില്ല."</string>
+    <string name="accessibility_phone_one_bar" msgid="5719721147018970063">"ഫോണിൽ ഒരു ബാർ."</string>
+    <string name="accessibility_phone_two_bars" msgid="2531458337458953263">"ഫോണിൽ രണ്ട് ബാർ."</string>
+    <string name="accessibility_phone_three_bars" msgid="1523967995996696619">"ഫോണിൽ മൂന്ന് ബാർ."</string>
+    <string name="accessibility_phone_signal_full" msgid="4302338883816077134">"ഫോൺ സിഗ്‌നൽ പൂർണ്ണമാണ്."</string>
+    <string name="accessibility_no_data" msgid="4563181886936931008">"ഡാറ്റാ സിഗ്‌നൽ ഒന്നുമില്ല."</string>
+    <string name="accessibility_data_one_bar" msgid="6892888138070752480">"ഡാറ്റ ഒരു ബാർ."</string>
+    <string name="accessibility_data_two_bars" msgid="9202641507241802499">"ഡാറ്റ രണ്ട് ബാറുകൾ."</string>
+    <string name="accessibility_data_three_bars" msgid="2813876214466722413">"ഡാറ്റ മൂന്ന് ബാർ."</string>
+    <string name="accessibility_data_signal_full" msgid="1808301899314382337">"ഡാറ്റ സിഗ്‌നൽ പൂർണ്ണമാണ്."</string>
+    <string name="accessibility_ethernet_disconnected" msgid="2832501530856497489">"ഇതർനെറ്റ് വിച്ഛേദിച്ചു."</string>
+    <string name="accessibility_ethernet_connected" msgid="2093872142317190618">"ഇതർനെറ്റ് കണക്റ്റുചെയ്‌തു."</string>
 </resources>

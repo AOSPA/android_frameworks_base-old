@@ -25,6 +25,8 @@ import static com.android.server.hdmi.Constants.ADDR_UNREGISTERED;
 import static com.android.server.hdmi.Constants.MESSAGE_DEVICE_VENDOR_ID;
 import static com.android.server.hdmi.Constants.MESSAGE_REPORT_PHYSICAL_ADDRESS;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
@@ -110,6 +112,7 @@ public class HdmiCecLocalDeviceTest {
     private HdmiCecMessageValidator mMessageValidator;
     private static byte[] param;
     private boolean mStandbyMessageReceived;
+    private boolean mWakeupMessageReceived;
     private boolean isControlEnabled;
     private int mPowerStatus;
 
@@ -129,8 +132,20 @@ public class HdmiCecLocalDeviceTest {
                     }
 
                     @Override
+                    boolean isPowerStandbyOrTransient() {
+                        return mPowerStatus == HdmiControlManager.POWER_STATUS_STANDBY
+                                || mPowerStatus
+                                == HdmiControlManager.POWER_STATUS_TRANSIENT_TO_STANDBY;
+                    }
+
+                    @Override
                     void standby() {
                         mStandbyMessageReceived = true;
+                    }
+
+                    @Override
+                    void wakeUp() {
+                        mWakeupMessageReceived = true;
                     }
                 };
         mHdmiControlService.setIoLooper(mTestLooper.getLooper());
@@ -263,5 +278,110 @@ public class HdmiCecLocalDeviceTest {
                         HdmiCecKeycode.CEC_KEYCODE_MUTE));
 
         assertFalse(result);
+    }
+
+    @Test
+    public void handleCecVersion_isHandled() {
+        boolean result = mHdmiLocalDevice.onMessage(
+                HdmiCecMessageBuilder.buildCecVersion(ADDR_PLAYBACK_1, mHdmiLocalDevice.mAddress,
+                        HdmiControlManager.HDMI_CEC_VERSION_1_4_B));
+
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void handleUserControlPressed_power_localDeviceInStandby_shouldTurnOn() {
+        mPowerStatus = HdmiControlManager.POWER_STATUS_STANDBY;
+        boolean result = mHdmiLocalDevice.handleUserControlPressed(
+                HdmiCecMessageBuilder.buildUserControlPressed(ADDR_TV, ADDR_PLAYBACK_1,
+                        HdmiCecKeycode.CEC_KEYCODE_POWER));
+
+        assertThat(result).isTrue();
+        assertThat(mWakeupMessageReceived).isTrue();
+        assertThat(mStandbyMessageReceived).isFalse();
+    }
+
+    @Test
+    public void handleUserControlPressed_power_localDeviceOn_shouldNotChangePowerStatus() {
+        mPowerStatus = HdmiControlManager.POWER_STATUS_ON;
+        boolean result = mHdmiLocalDevice.handleUserControlPressed(
+                HdmiCecMessageBuilder.buildUserControlPressed(ADDR_TV, ADDR_PLAYBACK_1,
+                        HdmiCecKeycode.CEC_KEYCODE_POWER));
+
+        assertThat(result).isTrue();
+        assertThat(mWakeupMessageReceived).isFalse();
+        assertThat(mStandbyMessageReceived).isFalse();
+    }
+
+    @Test
+    public void handleUserControlPressed_powerToggleFunction_localDeviceInStandby_shouldTurnOn() {
+        mPowerStatus = HdmiControlManager.POWER_STATUS_STANDBY;
+        boolean result = mHdmiLocalDevice.handleUserControlPressed(
+                HdmiCecMessageBuilder.buildUserControlPressed(ADDR_TV, ADDR_PLAYBACK_1,
+                        HdmiCecKeycode.CEC_KEYCODE_POWER_TOGGLE_FUNCTION));
+
+        assertThat(result).isTrue();
+        assertThat(mWakeupMessageReceived).isTrue();
+        assertThat(mStandbyMessageReceived).isFalse();
+    }
+
+    @Test
+    public void handleUserControlPressed_powerToggleFunction_localDeviceOn_shouldTurnOff() {
+        mPowerStatus = HdmiControlManager.POWER_STATUS_ON;
+        boolean result = mHdmiLocalDevice.handleUserControlPressed(
+                HdmiCecMessageBuilder.buildUserControlPressed(ADDR_TV, ADDR_PLAYBACK_1,
+                        HdmiCecKeycode.CEC_KEYCODE_POWER_TOGGLE_FUNCTION));
+
+        assertThat(result).isTrue();
+        assertThat(mWakeupMessageReceived).isFalse();
+        assertThat(mStandbyMessageReceived).isTrue();
+    }
+
+    @Test
+    public void handleUserControlPressed_powerOnFunction_localDeviceInStandby_shouldTurnOn() {
+        mPowerStatus = HdmiControlManager.POWER_STATUS_STANDBY;
+        boolean result = mHdmiLocalDevice.handleUserControlPressed(
+                HdmiCecMessageBuilder.buildUserControlPressed(ADDR_TV, ADDR_PLAYBACK_1,
+                        HdmiCecKeycode.CEC_KEYCODE_POWER_ON_FUNCTION));
+
+        assertThat(result).isTrue();
+        assertThat(mWakeupMessageReceived).isTrue();
+        assertThat(mStandbyMessageReceived).isFalse();
+    }
+
+    @Test
+    public void handleUserControlPressed_powerOnFunction_localDeviceOn_noPowerStatusChange() {
+        mPowerStatus = HdmiControlManager.POWER_STATUS_ON;
+        boolean result = mHdmiLocalDevice.handleUserControlPressed(
+                HdmiCecMessageBuilder.buildUserControlPressed(ADDR_TV, ADDR_PLAYBACK_1,
+                        HdmiCecKeycode.CEC_KEYCODE_POWER_ON_FUNCTION));
+
+        assertThat(result).isTrue();
+        assertThat(mWakeupMessageReceived).isFalse();
+        assertThat(mStandbyMessageReceived).isFalse();
+    }
+
+    @Test
+    public void handleUserControlPressed_powerOffFunction_localDeviceStandby_noPowerStatusChange() {
+        mPowerStatus = HdmiControlManager.POWER_STATUS_STANDBY;
+        boolean result = mHdmiLocalDevice.handleUserControlPressed(
+                HdmiCecMessageBuilder.buildUserControlPressed(ADDR_TV, ADDR_PLAYBACK_1,
+                        HdmiCecKeycode.CEC_KEYCODE_POWER_OFF_FUNCTION));
+
+        assertThat(result).isTrue();
+        assertThat(mWakeupMessageReceived).isFalse();
+        assertThat(mStandbyMessageReceived).isFalse();
+    }
+
+    @Test
+    public void handleUserControlPressed_powerOffFunction_localDeviceOn_shouldTurnOff() {
+        mPowerStatus = HdmiControlManager.POWER_STATUS_ON;
+        boolean result = mHdmiLocalDevice.handleUserControlPressed(
+                HdmiCecMessageBuilder.buildUserControlPressed(ADDR_TV, ADDR_PLAYBACK_1,
+                        HdmiCecKeycode.CEC_KEYCODE_POWER_OFF_FUNCTION));
+
+        assertThat(result).isTrue();
+        assertThat(mWakeupMessageReceived).isFalse();
+        assertThat(mStandbyMessageReceived).isTrue();
     }
 }

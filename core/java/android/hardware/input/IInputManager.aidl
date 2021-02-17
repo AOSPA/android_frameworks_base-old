@@ -22,6 +22,9 @@ import android.hardware.input.KeyboardLayout;
 import android.hardware.input.IInputDevicesChangedListener;
 import android.hardware.input.ITabletModeChangedListener;
 import android.hardware.input.TouchCalibration;
+import android.os.CombinedVibrationEffect;
+import android.hardware.input.IInputSensorEventListener;
+import android.hardware.input.InputSensorInfo;
 import android.os.IBinder;
 import android.os.VibrationEffect;
 import android.view.InputDevice;
@@ -85,12 +88,15 @@ interface IInputManager {
 
     // Input device vibrator control.
     void vibrate(int deviceId, in VibrationEffect effect, IBinder token);
+    void vibrateCombined(int deviceId, in CombinedVibrationEffect effect, IBinder token);
     void cancelVibrate(int deviceId, IBinder token);
+    int[] getVibratorIds(int deviceId);
+    boolean isVibrating(int deviceId);
 
     void setPointerIconType(int typeId);
     void setCustomPointerIcon(in PointerIcon icon);
 
-    void requestPointerCapture(IBinder windowToken, boolean enabled);
+    oneway void requestPointerCapture(IBinder inputChannelToken, boolean enabled);
 
     /** Create an input monitor for gestures. */
     InputMonitor monitorGestureInput(String name, int displayId);
@@ -101,4 +107,17 @@ interface IInputManager {
     // Remove the runtime association between the input port and the display port. Any existing
     // static association for the cleared input port will be restored.
     void removePortAssociation(in String inputPort);
+
+    InputSensorInfo[] getSensorList(int deviceId);
+
+    boolean registerSensorListener(IInputSensorEventListener listener);
+
+    void unregisterSensorListener(IInputSensorEventListener listener);
+
+    boolean enableSensor(int deviceId, int sensorType, int samplingPeriodUs,
+                int maxBatchReportLatencyUs);
+
+    void disableSensor(int deviceId, int sensorType);
+
+    boolean flushSensor(int deviceId, int sensorType);
 }

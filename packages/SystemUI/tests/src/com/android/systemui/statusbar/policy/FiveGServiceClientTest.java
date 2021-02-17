@@ -45,9 +45,9 @@ import org.junit.runner.RunWith;
 
 import static junit.framework.Assert.assertEquals;
 
+import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
-import com.android.systemui.statusbar.policy.TelephonyIcons;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -137,7 +137,7 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
 
     private void verifyIcon(int resIcon) {
         FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        int dataType = fiveGState.getIconGroup().mDataType;
+        int dataType = fiveGState.getIconGroup().dataType;
         assertEquals(dataType, resIcon);
     }
 

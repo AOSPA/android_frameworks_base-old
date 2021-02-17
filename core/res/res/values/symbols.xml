@@ -1452,6 +1452,10 @@
   <java-symbol type="drawable" name="ic_mic" />
   <java-symbol type="drawable" name="ic_alert_window_layer" />
   <java-symbol type="drawable" name="ic_feedback_indicator" />
+  <java-symbol type="drawable" name="ic_feedback_alerted" />
+  <java-symbol type="drawable" name="ic_feedback_silenced" />
+  <java-symbol type="drawable" name="ic_feedback_uprank" />
+  <java-symbol type="drawable" name="ic_feedback_downrank" />
 
   <java-symbol type="drawable" name="ic_account_circle" />
   <java-symbol type="color" name="user_icon_1" />
@@ -2266,6 +2270,10 @@
   <java-symbol type="string" name="ext_media_move_success_message" />
   <java-symbol type="string" name="ext_media_move_failure_title" />
   <java-symbol type="string" name="ext_media_move_failure_message" />
+  <java-symbol type="string" name="notification_feedback_indicator_alerted" />
+  <java-symbol type="string" name="notification_feedback_indicator_silenced" />
+  <java-symbol type="string" name="notification_feedback_indicator_promoted" />
+  <java-symbol type="string" name="notification_feedback_indicator_demoted" />
   <java-symbol type="style" name="Animation.RecentApplications" />
   <java-symbol type="integer" name="dock_enter_exit_duration" />
   <java-symbol type="bool" name="config_battery_percentage_setting_available" />
@@ -2841,6 +2849,7 @@
   <java-symbol type="bool" name="config_cameraDoubleTapPowerGestureEnabled" />
   <java-symbol type="integer" name="config_cameraLiftTriggerSensorType" />
   <java-symbol type="string" name="config_cameraLiftTriggerSensorStringType" />
+  <java-symbol type="bool" name="config_emergencyGestureEnabled" />
   <java-symbol type="bool" name="config_volumeHushGestureEnabled" />
 
   <java-symbol type="drawable" name="platlogo_m" />
@@ -3490,6 +3499,7 @@
   <java-symbol type="string" name="config_defaultAugmentedAutofillService" />
   <java-symbol type="string" name="config_defaultAppPredictionService" />
   <java-symbol type="string" name="config_defaultContentSuggestionsService" />
+  <java-symbol type="string" name="config_defaultSearchUiService" />
   <java-symbol type="string" name="config_defaultMusicRecognitionService" />
   <java-symbol type="string" name="config_defaultAttentionService" />
   <java-symbol type="string" name="config_defaultSystemCaptionsService" />
@@ -3727,7 +3737,7 @@
   <java-symbol type="string" name="config_customCountryDetector" />
 
   <!-- For Foldables -->
-  <java-symbol type="bool" name="config_lidControlsDisplayFold" />
+  <java-symbol type="integer" name="config_foldedDeviceState" />
   <java-symbol type="string" name="config_foldedArea" />
 
   <java-symbol type="array" name="config_disableApksUnlessMatchedSku_apk_list" />
@@ -4141,11 +4151,13 @@
 
   <java-symbol type="bool" name="config_trackerAppNeedsPermissions"/>
 
-  <!-- Component with platform query permissions for AppSearch -->
-  <java-symbol type="string" name="config_defaultAppSearchPlatformQuerierComponent" />
+  <!-- Package with global data query permissions for AppSearch -->
+  <java-symbol type="string" name="config_globalAppSearchDataQuerierPackage" />
 
   <!-- Color used by the accessibility focus rectangle -->
   <java-symbol type="color" name="accessibility_focus_highlight_color" />
   <!-- Width of the outline stroke used by the accessibility focus rectangle -->
   <java-symbol type="dimen" name="accessibility_focus_highlight_stroke_width" />
+
+  <java-symbol type="bool" name="config_attachNavBarToAppDuringTransition" />
 </resources>

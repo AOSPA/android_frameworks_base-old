@@ -22,6 +22,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_POINTER;
 import static android.view.WindowManager.LayoutParams.TYPE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
@@ -40,6 +41,7 @@ import static com.android.server.wm.DisplayAreaPolicyBuilder.Feature;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertThrows;
@@ -100,6 +102,7 @@ public class DisplayAreaPolicyBuilderTest {
         mRoot = new SurfacelessDisplayAreaRoot(mWms);
         mImeContainer = new DisplayArea.Tokens(mWms, ABOVE_TASKS, "ImeContainer");
         mDisplayContent = mock(DisplayContent.class);
+        doReturn(true).when(mDisplayContent).isTrusted();
         mDefaultTaskDisplayArea = new TaskDisplayArea(mDisplayContent, mWms, "Tasks",
                 FEATURE_DEFAULT_TASK_CONTAINER);
         mTaskDisplayAreaList = new ArrayList<>();
@@ -667,6 +670,15 @@ public class DisplayAreaPolicyBuilderTest {
         assertThat(token2.isDescendantOf(mGroupRoot2)).isTrue();
     }
 
+    @Test
+    public void testFeatureNotThrowArrayIndexOutOfBoundsException() {
+        final Feature feature1 = new Feature.Builder(mWms.mPolicy, "feature1",
+                FEATURE_VENDOR_FIRST + 5)
+                .all()
+                .except(TYPE_POINTER)
+                .build();
+    }
+
     private static Resources resourcesWithProvider(String provider) {
         Resources mock = mock(Resources.class);
         when(mock.getString(
@@ -690,7 +702,7 @@ public class DisplayAreaPolicyBuilderTest {
     private Map<DisplayArea<?>, Set<Integer>> calculateZSets(
             DisplayAreaPolicyBuilder.Result policy,
             DisplayArea.Tokens ime,
-            DisplayArea<Task> tasks) {
+            TaskDisplayArea taskDisplayArea) {
         Map<DisplayArea<?>, Set<Integer>> zSets = new HashMap<>();
         int[] types = {TYPE_STATUS_BAR, TYPE_NAVIGATION_BAR, TYPE_PRESENTATION,
                 TYPE_APPLICATION_OVERLAY};
@@ -698,7 +710,7 @@ public class DisplayAreaPolicyBuilderTest {
             WindowToken token = tokenOfType(type);
             recordLayer(policy.findAreaForToken(token), token.getWindowLayerFromType(), zSets);
         }
-        recordLayer(tasks, APPLICATION_LAYER, zSets);
+        recordLayer(taskDisplayArea, APPLICATION_LAYER, zSets);
         recordLayer(ime, mPolicy.getWindowLayerFromTypeLw(TYPE_INPUT_METHOD), zSets);
         return zSets;
     }

@@ -74,6 +74,7 @@ import android.view.Display;
 import android.view.SurfaceControl;
 import android.window.ITaskOrganizer;
 import android.window.IWindowContainerTransactionCallback;
+import android.window.StartingWindowInfo;
 import android.window.TaskAppearedInfo;
 import android.window.WindowContainerTransaction;
 
@@ -340,7 +341,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
     @Test
     public void testSetActivityWindowingMode() {
         final ActivityRecord record = makePipableActivity();
-        final Task stack = record.getStack();
+        final Task stack = record.getRootTask();
         final WindowContainerTransaction t = new WindowContainerTransaction();
 
         t.setWindowingMode(stack.mRemoteToken.toWindowContainerToken(), WINDOWING_MODE_PINNED);
@@ -506,12 +507,12 @@ public class WindowOrganizerTests extends WindowTestsBase {
     public void testTileAddRemoveChild() {
         ITaskOrganizer listener = new ITaskOrganizer.Stub() {
             @Override
-            public void addStartingWindow(ActivityManager.RunningTaskInfo info, IBinder appToken) {
+            public void addStartingWindow(StartingWindowInfo info, IBinder appToken) {
 
             }
 
             @Override
-            public void removeStartingWindow(ActivityManager.RunningTaskInfo info) { }
+            public void removeStartingWindow(int taskId) { }
 
             @Override
             public void onTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) { }
@@ -571,12 +572,12 @@ public class WindowOrganizerTests extends WindowTestsBase {
         final boolean[] called = {false};
         ITaskOrganizer listener = new ITaskOrganizer.Stub() {
             @Override
-            public void addStartingWindow(ActivityManager.RunningTaskInfo info, IBinder appToken) {
+            public void addStartingWindow(StartingWindowInfo info, IBinder appToken) {
 
             }
 
             @Override
-            public void removeStartingWindow(ActivityManager.RunningTaskInfo info) { }
+            public void removeStartingWindow(int taskId) { }
 
             @Override
             public void onTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) { }
@@ -642,12 +643,12 @@ public class WindowOrganizerTests extends WindowTestsBase {
         final ArrayMap<IBinder, RunningTaskInfo> lastReportedTiles = new ArrayMap<>();
         ITaskOrganizer listener = new ITaskOrganizer.Stub() {
             @Override
-            public void addStartingWindow(ActivityManager.RunningTaskInfo info, IBinder appToken) {
+            public void addStartingWindow(StartingWindowInfo info, IBinder appToken) {
 
             }
 
             @Override
-            public void removeStartingWindow(ActivityManager.RunningTaskInfo info) { }
+            public void removeStartingWindow(int taskId) { }
 
             @Override
             public void onTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) { }
@@ -741,11 +742,10 @@ public class WindowOrganizerTests extends WindowTestsBase {
     }
 
     private List<Task> getTasksCreatedByOrganizer(DisplayContent dc) {
-        ArrayList<Task> out = new ArrayList<>();
-        dc.forAllTaskDisplayAreas(taskDisplayArea -> {
-            for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                final Task t = taskDisplayArea.getRootTaskAt(sNdx);
-                if (t.mCreatedByOrganizer) out.add(t);
+        final ArrayList<Task> out = new ArrayList<>();
+        dc.forAllRootTasks(task -> {
+            if (task.mCreatedByOrganizer) {
+                out.add(task);
             }
         });
         return out;
@@ -787,9 +787,9 @@ public class WindowOrganizerTests extends WindowTestsBase {
         RunningTaskInfo mInfo;
 
         @Override
-        public void addStartingWindow(ActivityManager.RunningTaskInfo info, IBinder appToken) { }
+        public void addStartingWindow(StartingWindowInfo info, IBinder appToken) { }
         @Override
-        public void removeStartingWindow(ActivityManager.RunningTaskInfo info) { }
+        public void removeStartingWindow(int taskId) { }
         @Override
         public void onTaskAppeared(RunningTaskInfo info, SurfaceControl leash) {
             mInfo = info;

@@ -199,6 +199,7 @@
     <string name="gnss_service" msgid="8907781262179951385">"GNSS-service"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Service voor sensormeldingen"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Service voor schemering"</string>
+    <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"Tijdzonedetector (Geen verbinding)"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Je apparaat wordt gewist"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"De beheer-app kan niet worden gebruikt. Je apparaat wordt nu gewist.\n\nNeem contact op met de beheerder van je organisatie als je vragen hebt."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"Afdrukken uitgeschakeld door <xliff:g id="OWNER_APP">%s</xliff:g>."</string>
@@ -287,8 +288,7 @@
     <string name="notification_channel_usb" msgid="1528280969406244896">"USB-verbinding"</string>
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"App actief"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"Apps die de batterij gebruiken"</string>
-    <!-- no translation found for notification_channel_accessibility_magnification (1707913872219798098) -->
-    <skip />
+    <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"Vergroting"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> gebruikt de batterij"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> apps gebruiken de batterij"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"Tik voor batterij- en datagebruik"</string>
@@ -353,6 +353,8 @@
     <string name="permdesc_receiveMms" msgid="958102423732219710">"Hiermee kan de app MMS-berichten ontvangen en verwerken. Dit betekent dat de app berichten die naar je apparaat zijn verzonden, kan bijhouden of verwijderen zonder deze aan u weer te geven."</string>
     <string name="permlab_bindCellBroadcastService" msgid="586746677002040651">"Cell broadcast-berichten doorsturen"</string>
     <string name="permdesc_bindCellBroadcastService" msgid="6540910200973641606">"Hiermee kan de app de module voor cell broadcasts binden om cell broadcast-berichten door te sturen als die worden ontvangen. Cell broadcast-waarschuwingen worden op bepaalde locaties verzonden om je te waarschuwen voor noodsituaties. Schadelijke apps kunnen de prestaties of verwerking van je apparaat verstoren als een bericht met een noodmelding wordt ontvangen."</string>
+    <string name="permlab_manageOngoingCalls" msgid="281244770664231782">"Actieve gesprekken beheren"</string>
+    <string name="permdesc_manageOngoingCalls" msgid="7003138133829915265">"Hiermee kan een app informatie over actieve gesprekken op je apparaat bekijken en deze gesprekken beheren."</string>
     <string name="permlab_readCellBroadcasts" msgid="5869884450872137693">"infodienstberichten lezen"</string>
     <string name="permdesc_readCellBroadcasts" msgid="672513437331980168">"Toestaan dat de app infodienstberichten leest die worden ontvangen op je apparaat. Infodienstberichten worden verzonden naar bepaalde locaties om u te waarschjeen voor noodsituaties. Schadelijke apps kunnen de prestaties of verwerking van je apparaat verstoren wanneer een infodienstbericht wordt ontvangen."</string>
     <string name="permlab_subscribedFeedsRead" msgid="217624769238425461">"Geabonneerde feeds lezen"</string>
@@ -963,7 +965,7 @@
     <string name="permdesc_readHistoryBookmarks" msgid="2323799501008967852">"Hiermee kan de app de geschiedenis lezen van alle URL\'s die in de systeemeigen browser zijn bezocht, en alle bookmarks in de systeemeigen browser. Let op: deze rechten kunnen niet worden geforceerd door andere browsers of andere apps met internetmogelijkheden."</string>
     <string name="permlab_writeHistoryBookmarks" msgid="6090259925187986937">"webbookmarks en -geschiedenis schrijven"</string>
     <string name="permdesc_writeHistoryBookmarks" product="tablet" msgid="573341025292489065">"Hiermee kan de app de webgeschiedenis wijzigen in de systeemeigen browser en de bookmarks die zijn opgeslagen op je tablet. Deze rechten kunnen niet worden geforceerd door andere browsers of andere apps met internetmogelijkheden."</string>
-    <string name="permdesc_writeHistoryBookmarks" product="tv" msgid="88642768580408561">"Hiermee kan de app de browsergeschiedenis of opgeslagen bookmarks bewerken op je Android TV-apparaat. Hierdoor kan de app mogelijk browsergegevens wissen of aanpassen. Opmerking: Dit recht kan niet worden afgedwongen door andere browsers of andere apps met internetmogelijkheden."</string>
+    <string name="permdesc_writeHistoryBookmarks" product="tv" msgid="88642768580408561">"Hiermee kan de app de browsergeschiedenis of opgeslagen bookmarks bewerken op je Android TV-apparaat. Hierdoor kan de app mogelijk browsegegevens wissen of aanpassen. Opmerking: Dit recht kan niet worden afgedwongen door andere browsers of andere apps met internetmogelijkheden."</string>
     <string name="permdesc_writeHistoryBookmarks" product="default" msgid="2245203087160913652">"Hiermee kan de app de webgeschiedenis wijzigen in de systeemeigen browser en de bookmarks die zijn opgeslagen op je telefoon. Deze rechten kunnen niet worden geforceerd door andere browsers of andere apps met internetmogelijkheden."</string>
     <string name="permlab_setAlarm" msgid="1158001610254173567">"een wekker instellen"</string>
     <string name="permdesc_setAlarm" msgid="2185033720060109640">"Hiermee kan de app een wekker instellen in een geïnstalleerde wekker-app. Deze functie wordt door sommige wekker-apps niet geïmplementeerd."</string>
@@ -2007,6 +2009,10 @@
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Microfoon"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"wordt weergegeven vóór andere apps op je scherm"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"Feedback geven"</string>
+    <string name="notification_feedback_indicator_alerted" msgid="6552871804121942099">"Deze melding is opgeschaald naar Standaard. Tik om feedback te geven."</string>
+    <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Deze melding is verlaagd naar Stil. Tik om feedback te geven."</string>
+    <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Deze melding is hoger geclassificeerd. Tik om feedback te geven."</string>
+    <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Deze melding is lager geclassificeerd. Tik om feedback te geven."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Informatiemelding voor routinemodus"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"De batterij raakt mogelijk leeg voordat deze normaal gesproken wordt opgeladen"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Batterijbesparing is geactiveerd om de batterijduur te verlengen"</string>
@@ -2190,12 +2196,8 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <!-- no translation found for window_magnification_prompt_title (8197528399699536320) -->
-    <skip />
-    <!-- no translation found for window_magnification_prompt_content (4166711383253283838) -->
-    <skip />
-    <!-- no translation found for turn_on_magnification_settings_action (8521433346684847700) -->
-    <skip />
-    <!-- no translation found for dismiss_action (1728820550388704784) -->
-    <skip />
+    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"Nieuw: Venstervergroting"</string>
+    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"Je kunt je scherm nu (gedeeltelijk) vergroten"</string>
+    <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"Inschakelen in Instellingen"</string>
+    <string name="dismiss_action" msgid="1728820550388704784">"Sluiten"</string>
 </resources>

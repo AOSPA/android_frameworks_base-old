@@ -84,6 +84,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.window.ITaskOrganizer;
+import android.window.StartingWindowInfo;
 
 import com.android.internal.util.ArrayUtils;
 import com.android.server.AttributeCache;
@@ -360,6 +361,33 @@ class WindowTestsBase extends SystemServiceTestsBase {
         for (WindowState win : windows) {
             win.mWinAnimator.mDrawState = HAS_DRAWN;
         }
+    }
+
+    /**
+     * Gets the order of the given {@link Task} as its z-order in the hierarchy below this TDA.
+     * The Task can be a direct child of a child TaskDisplayArea. {@code -1} if not found.
+     */
+    static int getTaskIndexOf(TaskDisplayArea taskDisplayArea, Task task) {
+        int index = 0;
+        final int childCount = taskDisplayArea.getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            final WindowContainer wc = taskDisplayArea.getChildAt(i);
+            if (wc.asTask() != null) {
+                if (wc.asTask() == task) {
+                    return index;
+                }
+                index++;
+            } else {
+                final TaskDisplayArea tda = wc.asTaskDisplayArea();
+                final int subIndex = getTaskIndexOf(tda, task);
+                if (subIndex > -1) {
+                    return index + subIndex;
+                } else {
+                    index += tda.getRootTaskCount();
+                }
+            }
+        }
+        return -1;
     }
 
     /** Creates a {@link TaskDisplayArea} right above the default one. */
@@ -1044,6 +1072,9 @@ class WindowTestsBase extends SystemServiceTestsBase {
             spyOn(task);
             task.mUserId = mUserId;
             Task rootTask = task.getRootTask();
+            if (task != rootTask && !Mockito.mockingDetails(rootTask).isSpy()) {
+                spyOn(rootTask);
+            }
             doNothing().when(rootTask).startActivityLocked(
                     any(), any(), anyBoolean(), anyBoolean(), any());
 
@@ -1090,10 +1121,10 @@ class WindowTestsBase extends SystemServiceTestsBase {
             mMoveToSecondaryOnEnter = move;
         }
         @Override
-        public void addStartingWindow(ActivityManager.RunningTaskInfo info, IBinder appToken) {
+        public void addStartingWindow(StartingWindowInfo info, IBinder appToken) {
         }
         @Override
-        public void removeStartingWindow(ActivityManager.RunningTaskInfo info) {
+        public void removeStartingWindow(int taskId) {
         }
         @Override
         public void onTaskAppeared(ActivityManager.RunningTaskInfo info, SurfaceControl leash) {
@@ -1121,12 +1152,9 @@ class WindowTestsBase extends SystemServiceTestsBase {
             mService.mTaskOrganizerController.setLaunchRoot(mDisplayId,
                     mSecondary.mRemoteToken.toWindowContainerToken());
             DisplayContent dc = mService.mRootWindowContainer.getDisplayContent(mDisplayId);
-            dc.forAllTaskDisplayAreas(taskDisplayArea -> {
-                for (int sNdx = taskDisplayArea.getRootTaskCount() - 1; sNdx >= 0; --sNdx) {
-                    final Task stack = taskDisplayArea.getRootTaskAt(sNdx);
-                    if (!WindowConfiguration.isSplitScreenWindowingMode(stack.getWindowingMode())) {
-                        stack.reparent(mSecondary, POSITION_BOTTOM);
-                    }
+            dc.forAllRootTasks(rootTask -> {
+                if (!WindowConfiguration.isSplitScreenWindowingMode(rootTask.getWindowingMode())) {
+                    rootTask.reparent(mSecondary, POSITION_BOTTOM);
                 }
             });
         }

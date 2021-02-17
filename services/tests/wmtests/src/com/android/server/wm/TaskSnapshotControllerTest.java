@@ -30,8 +30,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import android.app.ActivityManager;
 import android.app.WindowConfiguration;
 import android.content.ComponentName;
 import android.content.res.Configuration;
@@ -42,6 +45,7 @@ import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.platform.test.annotations.Presubmit;
 import android.util.ArraySet;
+import android.window.TaskSnapshot;
 
 import androidx.test.filters.SmallTest;
 
@@ -143,8 +147,8 @@ public class TaskSnapshotControllerTest extends WindowTestsBase {
         final Point taskSize = new Point(5, 6);
 
         try {
-            ActivityManager.TaskSnapshot.Builder builder =
-                    new ActivityManager.TaskSnapshot.Builder();
+            TaskSnapshot.Builder builder =
+                    new TaskSnapshot.Builder();
             builder.setId(id);
             builder.setTopActivityComponent(activityComponent);
             builder.setAppearance(appearance);
@@ -161,7 +165,7 @@ public class TaskSnapshotControllerTest extends WindowTestsBase {
             // Not part of TaskSnapshot itself, used in screenshot process
             assertEquals(pixelFormat, builder.getPixelFormat());
 
-            ActivityManager.TaskSnapshot snapshot = builder.build();
+            TaskSnapshot snapshot = builder.build();
             assertEquals(id, snapshot.getId());
             assertEquals(activityComponent, snapshot.getTopActivityComponent());
             assertEquals(appearance, snapshot.getAppearance());
@@ -183,6 +187,53 @@ public class TaskSnapshotControllerTest extends WindowTestsBase {
         }
     }
 
+    @UseTestDisplay(addWindows = {W_ACTIVITY, W_INPUT_METHOD})
+    @Test
+    public void testCreateTaskSnapshotWithExcludingIme() {
+        Task task = mAppWindow.mActivityRecord.getTask();
+        spyOn(task);
+        spyOn(mDisplayContent);
+        when(task.getDisplayContent().isImeAttachedToApp()).thenReturn(false);
+        // Intentionally set the SurfaceControl of input method window as null.
+        mDisplayContent.mInputMethodWindow.setSurfaceControl(null);
+        // Verify no NPE happens when calling createTaskSnapshot.
+        try {
+            final TaskSnapshot.Builder builder = new TaskSnapshot.Builder();
+            mWm.mTaskSnapshotController.createTaskSnapshot(mAppWindow.mActivityRecord.getTask(),
+                    1f /* scaleFraction */, PixelFormat.UNKNOWN, null /* outTaskSize */, builder);
+        } catch (NullPointerException e) {
+            fail("There should be no exception when calling createTaskSnapshot");
+        }
+    }
+
+    @UseTestDisplay(addWindows = {W_ACTIVITY, W_INPUT_METHOD})
+    @Test
+    public void testCreateTaskSnapshotWithIncludingIme() {
+        Task task = mAppWindow.mActivityRecord.getTask();
+        spyOn(task);
+        spyOn(mDisplayContent);
+        spyOn(mDisplayContent.mInputMethodWindow);
+        when(task.getDisplayContent().isImeAttachedToApp()).thenReturn(true);
+        // Intentionally set the IME window is in drawn state.
+        doReturn(true).when(mDisplayContent.mInputMethodWindow).isDrawn();
+        // Verify no NPE happens when calling createTaskSnapshot.
+        try {
+            final TaskSnapshot.Builder builder = new TaskSnapshot.Builder();
+            spyOn(builder);
+            mWm.mTaskSnapshotController.createTaskSnapshot(
+                    mAppWindow.mActivityRecord.getTask(), 1f /* scaleFraction */,
+                    PixelFormat.UNKNOWN, null /* outTaskSize */, builder);
+            // Verify the builder should includes IME surface.
+            verify(builder).setHasImeSurface(eq(true));
+            builder.setColorSpace(ColorSpace.get(ColorSpace.Named.SRGB));
+            builder.setTaskSize(new Point(100, 100));
+            final TaskSnapshot snapshot = builder.build();
+            assertTrue(snapshot.hasImeSurface());
+        } catch (NullPointerException e) {
+            fail("There should be no exception when calling createTaskSnapshot");
+        }
+    }
+
     @UseTestDisplay(addWindows = W_ACTIVITY)
     @Test
     public void testPrepareTaskSnapshot() {
@@ -191,8 +242,8 @@ public class TaskSnapshotControllerTest extends WindowTestsBase {
         doReturn(true).when(mAppWindow.mWinAnimator).getShown();
         doReturn(true).when(mAppWindow.mActivityRecord).isSurfaceShowing();
 
-        final ActivityManager.TaskSnapshot.Builder builder =
-                new ActivityManager.TaskSnapshot.Builder();
+        final TaskSnapshot.Builder builder =
+                new TaskSnapshot.Builder();
         boolean success = mWm.mTaskSnapshotController.prepareTaskSnapshot(
                 mAppWindow.mActivityRecord.getTask(), PixelFormat.UNKNOWN, builder);
 

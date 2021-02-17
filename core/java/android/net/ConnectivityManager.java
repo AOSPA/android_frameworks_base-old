@@ -61,6 +61,7 @@ import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseIntArray;
 
+import com.android.connectivity.aidl.INetworkAgent;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.Protocol;
@@ -2108,17 +2109,6 @@ public class ConnectivityManager {
         // ignored
     }
 
-    /** {@hide} */
-    @Deprecated
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public NetworkQuotaInfo getActiveNetworkQuotaInfo() {
-        try {
-            return mService.getActiveNetworkQuotaInfo();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
     /**
      * @hide
      * @deprecated Talk to TelephonyManager directly
@@ -3163,9 +3153,9 @@ public class ConnectivityManager {
     }
 
     /**
-     * Set sign in error notification to visible or in visible
+     * Set sign in error notification to visible or invisible
      *
-     * {@hide}
+     * @hide
      * @deprecated Doesn't properly deal with multiple connected networks of the same type.
      */
     @Deprecated
@@ -3298,9 +3288,9 @@ public class ConnectivityManager {
     @RequiresPermission(anyOf = {
             NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
             android.Manifest.permission.NETWORK_FACTORY})
-    public Network registerNetworkAgent(Messenger messenger, NetworkInfo ni, LinkProperties lp,
+    public Network registerNetworkAgent(INetworkAgent na, NetworkInfo ni, LinkProperties lp,
             NetworkCapabilities nc, int score, NetworkAgentConfig config) {
-        return registerNetworkAgent(messenger, ni, lp, nc, score, config, NetworkProvider.ID_NONE);
+        return registerNetworkAgent(na, ni, lp, nc, score, config, NetworkProvider.ID_NONE);
     }
 
     /**
@@ -3311,10 +3301,10 @@ public class ConnectivityManager {
     @RequiresPermission(anyOf = {
             NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
             android.Manifest.permission.NETWORK_FACTORY})
-    public Network registerNetworkAgent(Messenger messenger, NetworkInfo ni, LinkProperties lp,
+    public Network registerNetworkAgent(INetworkAgent na, NetworkInfo ni, LinkProperties lp,
             NetworkCapabilities nc, int score, NetworkAgentConfig config, int providerId) {
         try {
-            return mService.registerNetworkAgent(messenger, ni, lp, nc, score, config, providerId);
+            return mService.registerNetworkAgent(na, ni, lp, nc, score, config, providerId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

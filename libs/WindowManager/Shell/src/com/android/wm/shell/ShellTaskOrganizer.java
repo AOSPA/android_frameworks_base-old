@@ -31,23 +31,19 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.util.ArrayMap;
 import android.util.Log;
-import android.util.Slog;
 import android.util.SparseArray;
 import android.view.SurfaceControl;
 import android.window.ITaskOrganizerController;
+import android.window.StartingWindowInfo;
 import android.window.TaskAppearedInfo;
 import android.window.TaskOrganizer;
 
-import androidx.annotation.BinderThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.common.ShellExecutor;
-import com.android.wm.shell.common.SyncTransactionQueue;
-import com.android.wm.shell.common.TransactionPool;
-import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.startingsurface.StartingSurfaceDrawer;
 
 import java.io.PrintWriter;
@@ -67,14 +63,12 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     public static final int TASK_LISTENER_TYPE_FULLSCREEN = -2;
     public static final int TASK_LISTENER_TYPE_MULTI_WINDOW = -3;
     public static final int TASK_LISTENER_TYPE_PIP = -4;
-    public static final int TASK_LISTENER_TYPE_LETTERBOX = -5;
 
     @IntDef(prefix = {"TASK_LISTENER_TYPE_"}, value = {
             TASK_LISTENER_TYPE_UNDEFINED,
             TASK_LISTENER_TYPE_FULLSCREEN,
             TASK_LISTENER_TYPE_MULTI_WINDOW,
             TASK_LISTENER_TYPE_PIP,
-            TASK_LISTENER_TYPE_LETTERBOX,
     })
     public @interface TaskListenerType {}
 
@@ -105,28 +99,21 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     /** @see #setPendingLaunchCookieListener */
     private final ArrayMap<IBinder, TaskListener> mLaunchCookieToListener = new ArrayMap<>();
 
-    // TODO(shell-transitions): move to a more "global" Shell location as this isn't only for Tasks
-    private final Transitions mTransitions;
-
     private final Object mLock = new Object();
     private final StartingSurfaceDrawer mStartingSurfaceDrawer;
 
-    public ShellTaskOrganizer(SyncTransactionQueue syncQueue, TransactionPool transactionPool,
-            ShellExecutor mainExecutor, ShellExecutor animExecutor, Context context) {
-        this(null, syncQueue, transactionPool, mainExecutor, animExecutor, context);
+    public ShellTaskOrganizer(ShellExecutor mainExecutor, Context context) {
+        this(null, mainExecutor, context);
     }
 
     @VisibleForTesting
-    ShellTaskOrganizer(ITaskOrganizerController taskOrganizerController,
-            SyncTransactionQueue syncQueue, TransactionPool transactionPool,
-            ShellExecutor mainExecutor, ShellExecutor animExecutor, Context context) {
+    ShellTaskOrganizer(ITaskOrganizerController taskOrganizerController, ShellExecutor mainExecutor,
+            Context context) {
         super(taskOrganizerController, mainExecutor);
-        mTransitions = new Transitions(this, transactionPool, mainExecutor, animExecutor);
-        if (Transitions.ENABLE_SHELL_TRANSITIONS) mTransitions.register(this);
         // TODO(b/131727939) temporarily live here, the starting surface drawer should be controlled
         //  by a controller, that class should be create while porting
         //  ActivityRecord#addStartingWindow to WMShell.
-        mStartingSurfaceDrawer = new StartingSurfaceDrawer(context);
+        mStartingSurfaceDrawer = new StartingSurfaceDrawer(context, mainExecutor);
     }
 
     @Override
@@ -243,13 +230,13 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     }
 
     @Override
-    public void addStartingWindow(RunningTaskInfo taskInfo, IBinder appToken) {
-        mStartingSurfaceDrawer.addStartingWindow(taskInfo, appToken);
+    public void addStartingWindow(StartingWindowInfo info, IBinder appToken) {
+        mStartingSurfaceDrawer.addStartingWindow(info, appToken);
     }
 
     @Override
-    public void removeStartingWindow(RunningTaskInfo taskInfo) {
-        mStartingSurfaceDrawer.removeStartingWindow(taskInfo);
+    public void removeStartingWindow(int taskId) {
+        mStartingSurfaceDrawer.removeStartingWindow(taskId);
     }
 
     @Override
@@ -275,6 +262,12 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         synchronized (mLock) {
             ProtoLog.v(WM_SHELL_TASK_ORG, "Task info changed taskId=%d", taskInfo.taskId);
             final TaskAppearedInfo data = mTasks.get(taskInfo.taskId);
+            if (data == null) {
+                // TODO(b/171749427): It means onTaskInfoChanged send before onTaskAppeared or
+                //  after onTaskVanished, it should be fixed in controller side.
+                return;
+            }
+
             final TaskListener oldListener = getTaskListener(data.getTaskInfo());
             final TaskListener newListener = getTaskListener(taskInfo);
             mTasks.put(taskInfo.taskId, new TaskAppearedInfo(taskInfo, data.getLeash()));
@@ -377,9 +370,7 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     static @TaskListenerType int taskInfoToTaskListenerType(RunningTaskInfo runningTaskInfo) {
         switch (runningTaskInfo.getWindowingMode()) {
             case WINDOWING_MODE_FULLSCREEN:
-                return runningTaskInfo.letterboxActivityBounds != null
-                        ? TASK_LISTENER_TYPE_LETTERBOX
-                        : TASK_LISTENER_TYPE_FULLSCREEN;
+                return TASK_LISTENER_TYPE_FULLSCREEN;
             case WINDOWING_MODE_MULTI_WINDOW:
                 return TASK_LISTENER_TYPE_MULTI_WINDOW;
             case WINDOWING_MODE_PINNED:
@@ -395,8 +386,6 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         switch (type) {
             case TASK_LISTENER_TYPE_FULLSCREEN:
                 return "TASK_LISTENER_TYPE_FULLSCREEN";
-            case TASK_LISTENER_TYPE_LETTERBOX:
-                return "TASK_LISTENER_TYPE_LETTERBOX";
             case TASK_LISTENER_TYPE_MULTI_WINDOW:
                 return "TASK_LISTENER_TYPE_MULTI_WINDOW";
             case TASK_LISTENER_TYPE_PIP:

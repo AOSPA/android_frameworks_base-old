@@ -34,9 +34,11 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.dagger.WMSingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.wm.shell.FullscreenTaskListener;
+import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellCommandHandler;
 import com.android.wm.shell.ShellInit;
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.Transitions;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.apppairs.AppPairs;
 import com.android.wm.shell.bubbles.BubbleController;
@@ -56,8 +58,6 @@ import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
-import com.android.wm.shell.letterbox.LetterboxConfigController;
-import com.android.wm.shell.letterbox.LetterboxTaskListener;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedController;
 import com.android.wm.shell.pip.Pip;
@@ -66,7 +66,7 @@ import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
 import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.phone.PipAppOpsListener;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
-import com.android.wm.shell.splitscreen.SplitScreen;
+import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -170,17 +170,17 @@ public abstract class WMShellBaseModule {
     static ShellInit provideShellInit(DisplayImeController displayImeController,
             DragAndDropController dragAndDropController,
             ShellTaskOrganizer shellTaskOrganizer,
-            Optional<SplitScreen> splitScreenOptional,
+            Optional<LegacySplitScreen> legacySplitScreenOptional,
             Optional<AppPairs> appPairsOptional,
-            LetterboxTaskListener letterboxTaskListener,
-            FullscreenTaskListener fullscreenTaskListener) {
+            FullscreenTaskListener fullscreenTaskListener,
+            Transitions transitions) {
         return new ShellInit(displayImeController,
                 dragAndDropController,
                 shellTaskOrganizer,
-                splitScreenOptional,
+                legacySplitScreenOptional,
                 appPairsOptional,
-                letterboxTaskListener,
-                fullscreenTaskListener);
+                fullscreenTaskListener,
+                transitions);
     }
 
     /**
@@ -191,15 +191,13 @@ public abstract class WMShellBaseModule {
     @Provides
     static Optional<ShellCommandHandler> provideShellCommandHandler(
             ShellTaskOrganizer shellTaskOrganizer,
-            Optional<SplitScreen> splitScreenOptional,
+            Optional<LegacySplitScreen> legacySplitScreenOptional,
             Optional<Pip> pipOptional,
             Optional<OneHanded> oneHandedOptional,
             Optional<HideDisplayCutout> hideDisplayCutout,
-            Optional<AppPairs> appPairsOptional,
-            LetterboxConfigController letterboxConfigController) {
-        return Optional.of(new ShellCommandHandler(shellTaskOrganizer, splitScreenOptional,
-                pipOptional, oneHandedOptional, hideDisplayCutout, appPairsOptional,
-                letterboxConfigController));
+            Optional<AppPairs> appPairsOptional) {
+        return Optional.of(new ShellCommandHandler(shellTaskOrganizer, legacySplitScreenOptional,
+                pipOptional, oneHandedOptional, hideDisplayCutout, appPairsOptional));
     }
 
     @WMSingleton
@@ -278,12 +276,16 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static ShellTaskOrganizer provideShellTaskOrganizer(SyncTransactionQueue syncQueue,
-            @ShellMainThread ShellExecutor shellMainExecutor,
-            @ShellAnimationThread ShellExecutor shellAnimationExecutor,
-            TransactionPool transactionPool, Context context) {
-        return new ShellTaskOrganizer(syncQueue, transactionPool, shellMainExecutor,
-                shellAnimationExecutor, context);
+    static ShellTaskOrganizer provideShellTaskOrganizer(@ShellMainThread ShellExecutor mainExecutor,
+            Context context) {
+        return new ShellTaskOrganizer(mainExecutor, context);
+    }
+
+    @WMSingleton
+    @Provides
+    static RootTaskDisplayAreaOrganizer provideRootTaskDisplayAreaOrganizer(
+            @ShellMainThread ShellExecutor mainExecutor, Context context) {
+        return new RootTaskDisplayAreaOrganizer(mainExecutor);
     }
 
     @WMSingleton
@@ -293,7 +295,7 @@ public abstract class WMShellBaseModule {
     }
 
     @BindsOptionalOf
-    abstract SplitScreen optionalSplitScreen();
+    abstract LegacySplitScreen optionalLegacySplitScreen();
 
     @BindsOptionalOf
     abstract AppPairs optionalAppPairs();
@@ -317,16 +319,18 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Optional<OneHanded> provideOneHandedController(Context context,
-            DisplayController displayController, TaskStackListenerImpl taskStackListener) {
+            DisplayController displayController, TaskStackListenerImpl taskStackListener,
+            @ShellMainThread ShellExecutor mainExecutor) {
         return Optional.ofNullable(OneHandedController.create(context, displayController,
-                taskStackListener));
+                taskStackListener, mainExecutor));
     }
 
     @WMSingleton
     @Provides
     static Optional<HideDisplayCutout> provideHideDisplayCutoutController(Context context,
-            DisplayController displayController) {
-        return Optional.ofNullable(HideDisplayCutoutController.create(context, displayController));
+            DisplayController displayController, @ShellMainThread ShellExecutor mainExecutor) {
+        return Optional.ofNullable(
+                HideDisplayCutoutController.create(context, displayController, mainExecutor));
     }
 
     @WMSingleton
@@ -338,16 +342,9 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static LetterboxTaskListener provideLetterboxTaskListener(
-            SyncTransactionQueue syncQueue,
-            LetterboxConfigController letterboxConfigController,
-            WindowManager windowManager) {
-        return new LetterboxTaskListener(syncQueue, letterboxConfigController, windowManager);
-    }
-
-    @WMSingleton
-    @Provides
-    static LetterboxConfigController provideLetterboxConfigController(Context context) {
-        return new LetterboxConfigController(context);
+    static Transitions provideTransitions(ShellTaskOrganizer organizer, TransactionPool pool,
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellAnimationThread ShellExecutor animExecutor) {
+        return new Transitions(organizer, pool, mainExecutor, animExecutor);
     }
 }

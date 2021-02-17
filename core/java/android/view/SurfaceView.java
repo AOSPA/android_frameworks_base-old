@@ -232,6 +232,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     private final Matrix mTmpMatrix = new Matrix();
 
     SurfaceControlViewHost.SurfacePackage mSurfacePackage;
+    private final boolean mUseBlastSync = false;
 
     /**
      * Returns {@code true} if buffers should be submitted via blast
@@ -456,18 +457,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                                 Log.d(TAG, System.identityHashCode(this)
                                         + " updateSurfaceAlpha RT: set alpha=" + alpha);
                             }
-                            if (useBLAST) {
-                                synchronized (viewRoot.getBlastTransactionLock()) {
-                                    viewRoot.getBLASTSyncTransaction()
-                                            .setAlpha(mSurfaceControl, alpha);
-                                }
-                            } else {
-                                Transaction t = new SurfaceControl.Transaction();
-                                t.setAlpha(mSurfaceControl, alpha);
-                                t.deferTransactionUntil(mSurfaceControl,
-                                        viewRoot.getSurfaceControl(), frame);
-                                t.apply();
-                            }
+                            mRtTransaction.setAlpha(mSurfaceControl, alpha);
+                            applyRtTransaction(frame);
                         }
                         // It's possible that mSurfaceControl is released in the UI thread before
                         // the transaction completes. If that happens, an exception is thrown, which
@@ -817,17 +808,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                         return;
                     }
 
-                    if (useBLAST) {
-                        synchronized (viewRoot.getBlastTransactionLock()) {
-                            updateRelativeZ(viewRoot.getBLASTSyncTransaction());
-                        }
-                    } else {
-                        final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-                        updateRelativeZ(t);
-                        t.deferTransactionUntil(mSurfaceControl,
-                                viewRoot.getSurfaceControl(), frame);
-                        t.apply();
-                    }
+                    updateRelativeZ(mRtTransaction);
+                    applyRtTransaction(frame);
                 }
                 // It's possible that mSurfaceControl is released in the UI thread before
                 // the transaction completes. If that happens, an exception is thrown, which
@@ -946,7 +928,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     private boolean performSurfaceTransaction(ViewRootImpl viewRoot, Translator translator,
-        boolean creating, boolean sizeChanged, boolean needBLASTSync) {
+            boolean creating, boolean sizeChanged) {
         boolean realSizeChanged = false;
 
         mSurfaceLock.lock();
@@ -1009,8 +991,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     mTmpTransaction.setWindowCrop(mSurfaceControl, mSurfaceWidth,
                             mSurfaceHeight);
                 }
-            } else if (needBLASTSync) {
-                viewRoot.setUseBLASTSyncTransaction();
             }
             mTmpTransaction.setCornerRadius(mSurfaceControl, mCornerRadius);
             if (sizeChanged && !creating) {
@@ -1128,11 +1108,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     return;
                 }
 
-                final boolean needBLASTSync =
-                    (layoutSizeChanged || positionChanged || visibleChanged) &&
-                        useBLASTSync(viewRoot);
                 final boolean realSizeChanged = performSurfaceTransaction(viewRoot,
-                    translator, creating, sizeChanged, needBLASTSync);
+                        translator, creating, sizeChanged);
                 final boolean redrawNeeded = sizeChanged || creating ||
                     (mVisible && !mDrawFinished);
 
@@ -1370,13 +1347,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     private void applySurfaceTransforms(SurfaceControl surface, SurfaceControl.Transaction t,
-            Rect position, long frameNumber) {
-        final ViewRootImpl viewRoot = getViewRootImpl();
-        if (frameNumber > 0 && viewRoot != null && !useBLASTSync(viewRoot)) {
-            t.deferTransactionUntil(surface, viewRoot.getSurfaceControl(),
-                    frameNumber);
-        }
-
+            Rect position) {
         onSetSurfacePositionAndScaleRT(t, surface,
                 position.left /*positionLeft*/,
                 position.top /*positionTop*/,
@@ -1397,24 +1368,29 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         return mRTLastReportedPosition;
     }
 
-    private void setParentSpaceRectangle(Transaction t, Rect position, long frameNumber) {
-        final ViewRootImpl viewRoot = getViewRootImpl();
-        applySurfaceTransforms(mSurfaceControl, t, position, frameNumber);
-        applyChildSurfaceTransaction_renderWorker(t, viewRoot.mSurface, frameNumber);
-    }
-
     private void setParentSpaceRectangle(Rect position, long frameNumber) {
         final ViewRootImpl viewRoot = getViewRootImpl();
-        final boolean useBLAST = useBLASTSync(viewRoot);
+        applySurfaceTransforms(mSurfaceControl, mRtTransaction, position);
+        applyChildSurfaceTransaction_renderWorker(mRtTransaction, viewRoot.mSurface, frameNumber);
+        applyRtTransaction(frameNumber);
+    }
 
+    private void applyRtTransaction(long frameNumber) {
+        final ViewRootImpl viewRoot = getViewRootImpl();
+        boolean useBLAST = viewRoot != null && useBLASTSync(viewRoot);
         if (useBLAST) {
-            synchronized (viewRoot.getBlastTransactionLock()) {
-                setParentSpaceRectangle(viewRoot.getBLASTSyncTransaction(), position, frameNumber);
-            }
-        } else {
-            setParentSpaceRectangle(mRtTransaction, position, frameNumber);
-            mRtTransaction.apply();
+            // If we are using BLAST, merge the transaction with the viewroot buffer transaction.
+            viewRoot.mergeWithNextTransaction(mRtTransaction, frameNumber);
+            return;
         }
+
+        // Otherwise if the if the ViewRoot is not null, use deferred transaction instead.
+        if (frameNumber > 0 && viewRoot != null && viewRoot.mSurface.isValid()
+                && mSurfaceControl != null) {
+            mRtTransaction.deferTransactionUntil(mSurfaceControl,
+                    viewRoot.getSurfaceControl(), frameNumber);
+        }
+        mRtTransaction.apply();
     }
 
     private Rect mRTLastReportedPosition = new Rect();
@@ -1463,8 +1439,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
         @Override
         public void positionLost(long frameNumber) {
-            final ViewRootImpl viewRoot = getViewRootImpl();
-            boolean useBLAST = viewRoot != null && useBLASTSync(viewRoot);
             if (DEBUG) {
                 Log.d(TAG, String.format("%d windowPositionLost, frameNr = %d",
                         System.identityHashCode(this), frameNumber));
@@ -1480,30 +1454,20 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
              * need to hold the lock here.
              */
             synchronized (mSurfaceControlLock) {
-                if (useBLAST) {
-                    synchronized (viewRoot.getBlastTransactionLock()) {
-                        viewRoot.getBLASTSyncTransaction().hide(mSurfaceControl);
-                        if (mRtReleaseSurfaces) {
-                            mRtReleaseSurfaces = false;
-                            releaseSurfaces(viewRoot.getBLASTSyncTransaction());
-                        }
-                    }
-                } else {
-                    if (frameNumber > 0 && viewRoot != null && viewRoot.mSurface.isValid()) {
-                        mRtTransaction.deferTransactionUntil(mSurfaceControl,
-                                viewRoot.getSurfaceControl(), frameNumber);
-                    }
-                    mRtTransaction.hide(mSurfaceControl);
-                    if (mRtReleaseSurfaces) {
-                        mRtReleaseSurfaces = false;
-                        releaseSurfaces(mRtTransaction);
-                    }
-                    // If we aren't using BLAST, we apply the transaction locally, otherwise we let
-                    // the ViewRoot apply it for us.
-                    // If the ViewRoot is null, we behave as if we aren't using BLAST so we need to
-                    // apply the transaction.
-                    mRtTransaction.apply();
+                final ViewRootImpl viewRoot = getViewRootImpl();
+                boolean deferTransaction = frameNumber > 0 && viewRoot != null
+                        && viewRoot.mSurface.isValid() && !useBLASTSync(viewRoot);
+                if (deferTransaction) {
+                    mRtTransaction.deferTransactionUntil(mSurfaceControl,
+                            viewRoot.getSurfaceControl(), frameNumber);
                 }
+
+                mRtTransaction.hide(mSurfaceControl);
+                if (mRtReleaseSurfaces) {
+                    mRtReleaseSurfaces = false;
+                    releaseSurfaces(mRtTransaction);
+                }
+                applyRtTransaction(frameNumber);
                 mRtHandlingPositionUpdates = false;
             }
         }
@@ -1942,6 +1906,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     private boolean useBLASTSync(ViewRootImpl viewRoot) {
-        return viewRoot.useBLAST() && mUseBlastAdapter;
+        return viewRoot.useBLAST() && mUseBlastAdapter && mUseBlastSync;
     }
 }
