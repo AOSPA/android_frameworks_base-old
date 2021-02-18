@@ -7703,6 +7703,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
             if (null != event.mNewNetwork) {
                 notifyNetworkAvailable(event.mNewNetwork, event.mNetworkRequestInfo);
+            } else if (event.mOldNetwork == null) {
+                // TODO(b/180619668): Find and fix the cause of a null event.mOldNetwork.
+                // Both cases in the following else { } block fail if event.mOldNetwork is null:
+                //   - callCallbackForRequest() expects @NonNull event.mOldNetwork
+                //   - event.mOldNetwork.lingerRequest cannot run on a null object
+                if (VDBG) {
+                  log("ConnectivityService::applyNetworkReassignment() event.mOldNetwork is null");
+                }
             } else {
                 if (satisfiesMobileNetworkDataCheck(event.mOldNetwork.networkCapabilities)) {
                     callCallbackForRequest(event.mNetworkRequestInfo, event.mOldNetwork,
