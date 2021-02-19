@@ -37,6 +37,7 @@ import android.annotation.TestApi;
 import android.annotation.UiContext;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.GameManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.VrManager;
@@ -64,7 +65,6 @@ import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.StatFs;
-import android.os.StrictMode;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
@@ -75,6 +75,7 @@ import android.view.Display;
 import android.view.DisplayAdjustments;
 import android.view.View;
 import android.view.ViewDebug;
+import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams.WindowType;
 import android.view.autofill.AutofillManager.AutofillClient;
@@ -2625,6 +2626,36 @@ public abstract class Context {
     public abstract void sendStickyBroadcast(@RequiresPermission Intent intent);
 
     /**
+     * <p>Perform a {@link #sendBroadcast(Intent)} that is "sticky," meaning the
+     * Intent you are sending stays around after the broadcast is complete,
+     * so that others can quickly retrieve that data through the return
+     * value of {@link #registerReceiver(BroadcastReceiver, IntentFilter)}.  In
+     * all other ways, this behaves the same as
+     * {@link #sendBroadcast(Intent)}.
+     *
+     * @deprecated Sticky broadcasts should not be used.  They provide no security (anyone
+     * can access them), no protection (anyone can modify them), and many other problems.
+     * The recommended pattern is to use a non-sticky broadcast to report that <em>something</em>
+     * has changed, with another mechanism for apps to retrieve the current value whenever
+     * desired.
+     *
+     * @param intent The Intent to broadcast; all receivers matching this
+     * Intent will receive the broadcast, and the Intent will be held to
+     * be re-broadcast to future receivers.
+     * @param options (optional) Additional sending options, generated from a
+     * {@link android.app.BroadcastOptions}.
+     *
+     * @see #sendBroadcast(Intent)
+     * @see #sendStickyOrderedBroadcast(Intent, BroadcastReceiver, Handler, int, String, Bundle)
+     */
+    @Deprecated
+    @RequiresPermission(android.Manifest.permission.BROADCAST_STICKY)
+    public void sendStickyBroadcast(@RequiresPermission @NonNull Intent intent,
+            @Nullable Bundle options) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * <p>Version of {@link #sendStickyBroadcast} that allows you to
      * receive data back from the broadcast.  This is accomplished by
      * supplying your own BroadcastReceiver when calling, which will be
@@ -3545,7 +3576,9 @@ public abstract class Context {
             LIGHTS_SERVICE,
             //@hide: PEOPLE_SERVICE,
             //@hide: DEVICE_STATE_SERVICE,
+            //@hide: SPEECH_RECOGNITION_SERVICE,
             UWB_SERVICE,
+            MEDIA_METRICS_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -4340,6 +4373,16 @@ public abstract class Context {
     public static final String BIOMETRIC_SERVICE = "biometric";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.media.MediaCommunicationManager}
+     * for managing {@link android.media.MediaSession2}.
+     *
+     * @see #getSystemService(String)
+     * @see android.media.MediaCommunicationManager
+     */
+    public static final String MEDIA_COMMUNICATION_SERVICE = "media_communication";
+
+    /**
      * Use with {@link #getSystemService} to retrieve a
      * {@link android.media.MediaRouter} for controlling and managing
      * routing of media.
@@ -4448,6 +4491,18 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.graphics.fonts.FontManager} for font services.
+     *
+     * @see #getSystemService(String)
+     * @see android.graphics.fonts.FontManager
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final String FONT_SERVICE = "font";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link com.android.server.attention.AttentionManagerService} for attention services.
      *
      * @see #getSystemService(String)
@@ -4455,6 +4510,16 @@ public abstract class Context {
      * @hide
      */
     public static final String ATTENTION_SERVICE = "attention";
+
+    /**
+     * Official published name of the (internal) rotation resolver service.
+     *
+     * // TODO(b/178151184): change it back to rotation resolver before S release.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String ROTATION_RESOLVER_SERVICE = "resolver";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4562,6 +4627,18 @@ public abstract class Context {
     public static final String SEARCH_UI_SERVICE = "search_ui";
 
     /**
+     * Used for getting the smartspace service.
+     *
+     * <p><b>NOTE: </b> this service is optional; callers of
+     * {@code Context.getSystemServiceName(SMARTSPACE_SERVICE)} should check for {@code null}.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    @SystemApi
+    public static final String SMARTSPACE_SERVICE = "smartspace";
+
+    /**
      * Use with {@link #getSystemService(String)} to access the
      * {@link com.android.server.voiceinteraction.SoundTriggerService}.
      *
@@ -4613,6 +4690,17 @@ public abstract class Context {
      * @hide
      */
     public static final String PERMISSION_CONTROLLER_SERVICE = "permission_controller";
+
+    /**
+     * Use with {@link #getSystemService(String) to retrieve an
+     * {@link android.apphibernation.AppHibernationManager}} for
+     * communicating with the hibernation service.
+     * @hide
+     *
+     * @see #getSystemService(String)
+     */
+    @SystemApi
+    public static final String APP_HIBERNATION_SERVICE = "app_hibernation";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
@@ -5336,6 +5424,43 @@ public abstract class Context {
     public static final String DEVICE_STATE_SERVICE = "device_state";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.media.metrics.MediaMetricsManager} for interacting with media metrics
+     * on the device.
+     *
+     * @see #getSystemService(String)
+     * @see android.media.metrics.MediaMetricsManager
+     */
+    public static final String MEDIA_METRICS_SERVICE = "media_metrics";
+
+    /**
+     * Use with {@link #getSystemService(String)} to access system speech recognition service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+    */
+    public static final String SPEECH_RECOGNITION_SERVICE = "speech_recognition";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link GameManager}.
+     *
+     * @see #getSystemService(String)
+     *
+     * @hide
+     */
+    public static final String GAME_SERVICE = "game";
+
+    /**
+     * Use with {@link #getSystemService(String)} to access domain verification service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @SystemApi
+    public static final String DOMAIN_VERIFICATION_SERVICE = "domain_verification";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
@@ -5889,9 +6014,14 @@ public abstract class Context {
             throws PackageManager.NameNotFoundException;
 
     /**
-     * Get the user associated with this context
+     * Get the user associated with this context.
+     *
+     * @return the user associated with this context
+     *
      * @hide
      */
+    @NonNull
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     @TestApi
     public UserHandle getUser() {
         return android.os.Process.myUserHandle();
@@ -5981,18 +6111,19 @@ public abstract class Context {
      *
      * // WindowManager.LayoutParams initialization
      * ...
+     * // The types used in addView and createWindowContext must match.
      * mParams.type = TYPE_APPLICATION_OVERLAY;
      * ...
      *
-     * mWindowContext.getSystemService(WindowManager.class).addView(overlayView, mParams);
+     * windowContext.getSystemService(WindowManager.class).addView(overlayView, mParams);
      * </pre>
      *
      * <p>
-     * This context's configuration and resources are adjusted to a display area where the windows
-     * with provided type will be added. <b>Note that all windows associated with the same context
-     * will have an affinity and can only be moved together between different displays or areas on a
-     * display.</b> If there is a need to add different window types, or non-associated windows,
-     * separate Contexts should be used.
+     * This context's configuration and resources are adjusted to an area of the display where
+     * the windows with provided type will be added. <b>Note that all windows associated with the
+     * same context will have an affinity and can only be moved together between different displays
+     * or areas on a display.</b> If there is a need to add different window types, or
+     * non-associated windows, separate Contexts should be used.
      * </p>
      * <p>
      * Creating a window context is an expensive operation. Misuse of this API may lead to a huge
@@ -6000,7 +6131,43 @@ public abstract class Context {
      * An approach is to create one window context with specific window type and display and
      * use it everywhere it's needed.
      * </p>
+     * <p>
+     * After {@link Build.VERSION_CODES#S}, window context provides the capability to receive
+     * configuration changes for existing token by overriding the
+     * {@link android.view.WindowManager.LayoutParams#token token} of the
+     * {@link android.view.WindowManager.LayoutParams} passed in
+     * {@link WindowManager#addView(View, LayoutParams)}. This is useful when an application needs
+     * to attach its window to an existing activity for window token sharing use-case.
+     * </p>
+     * <p>
+     * Note that the window context in {@link Build.VERSION_CODES#R} didn't have this
+     * capability. This is a no-op for the window context in {@link Build.VERSION_CODES#R}.
+     * </p>
+     * Below is sample code to <b>attach an existing token to a window context:</b>
+     * <pre class="prettyprint">
+     * final DisplayManager dm = anyContext.getSystemService(DisplayManager.class);
+     * final Display primaryDisplay = dm.getDisplay(DEFAULT_DISPLAY);
+     * final Context windowContext = anyContext.createWindowContext(primaryDisplay,
+     *         TYPE_APPLICATION, null);
      *
+     * // Get an existing token.
+     * final IBinder existingToken = activity.getWindow().getAttributes().token;
+     *
+     * // The types used in addView() and createWindowContext() must match.
+     * final WindowManager.LayoutParams params = new WindowManager.LayoutParams(TYPE_APPLICATION);
+     * params.token = existingToken;
+     *
+     * // After WindowManager#addView(), the server side will extract the provided token from
+     * // LayoutParams#token (existingToken in the sample code), and switch to propagate
+     * // configuration changes from the node associated with the provided token.
+     * windowContext.getSystemService(WindowManager.class).addView(overlayView, mParams);
+     * </pre>
+     * <p>
+     * Note that using {@link android.app.Application} or {@link android.app.Service} context for
+     * UI-related queries may result in layout or continuity issues on devices with variable screen
+     * sizes (e.g. foldables) or in multi-window modes, since these non-UI contexts may not reflect
+     * the {@link Configuration} changes for the visual container.
+     * </p>
      * @param type Window type in {@link WindowManager.LayoutParams}
      * @param options A bundle used to pass window-related options
      * @return A {@link Context} that can be used to create
@@ -6012,9 +6179,7 @@ public abstract class Context {
      * @see #LAYOUT_INFLATER_SERVICE
      * @see #WALLPAPER_SERVICE
      * @throws UnsupportedOperationException if this {@link Context} does not attach to a display,
-     * such as {@link android.app.Application Application} or {@link android.app.Service Service},
-     * or the current number of window contexts without adding any view by
-     * {@link WindowManager#addView} <b>exceeds five</b>.
+     * such as {@link android.app.Application Application} or {@link android.app.Service Service}.
      */
     @UiContext
     @NonNull
@@ -6047,6 +6212,7 @@ public abstract class Context {
     @UiContext
     @NonNull
     public Context createWindowContext(@NonNull Display display, @WindowType int type,
+            @SuppressLint("NullableCollection")
             @Nullable Bundle options) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
@@ -6390,7 +6556,7 @@ public abstract class Context {
      * {@link WindowManager}, {@link android.view.LayoutInflater LayoutInflater} or
      * {@link android.app.WallpaperManager WallpaperManager}. Accessing UI components from non-UI
      * contexts throws {@link android.os.strictmode.Violation} if
-     * {@link StrictMode.VmPolicy.Builder#detectIncorrectContextUse()} is enabled.
+     * {@link android.os.StrictMode.VmPolicy.Builder#detectIncorrectContextUse()} is enabled.
      * <p>
      * Examples of UI contexts are
      * an {@link android.app.Activity Activity}, a context created from
@@ -6400,7 +6566,7 @@ public abstract class Context {
      *
      * @see #getDisplay()
      * @see #getSystemService(String)
-     * @see StrictMode.VmPolicy.Builder#detectIncorrectContextUse()
+     * @see android.os.StrictMode.VmPolicy.Builder#detectIncorrectContextUse()
      */
     public static boolean isUiContext(@NonNull Context context) {
         return context.isUiContext();

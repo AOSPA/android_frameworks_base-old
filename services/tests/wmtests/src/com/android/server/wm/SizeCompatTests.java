@@ -16,15 +16,17 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+import static android.view.Surface.ROTATION_180;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
-import static android.view.SurfaceProto.ROTATION_180;
+import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
@@ -35,6 +37,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.Task.ActivityState.STOPPED;
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -49,14 +52,12 @@ import static org.mockito.Mockito.doCallRealMethod;
 
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
-import android.app.TaskStackListener;
 import android.app.WindowConfiguration;
 import android.compat.testing.PlatformCompatChangeRule;
 import android.content.ComponentName;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Rect;
-import android.os.IBinder;
 import android.platform.test.annotations.Presubmit;
 import android.view.WindowManager;
 
@@ -68,8 +69,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
-
-import java.util.ArrayList;
 
 /**
  * Tests for Size Compatibility mode.
@@ -109,7 +108,7 @@ public class SizeCompatTests extends WindowTestsBase {
         final Rect originalOverrideBounds = new Rect(mActivity.getBounds());
         resizeDisplay(mTask.mDisplayContent, 600, 1200);
         // The visible activity should recompute configuration according to the last parent bounds.
-        mAtm.restartActivityProcessIfVisible(mActivity.appToken);
+        mAtm.mActivityClientController.restartActivityProcessIfVisible(mActivity.appToken);
 
         assertEquals(Task.ActivityState.RESTARTING_PROCESS, mActivity.getState());
         assertNotEquals(originalOverrideBounds, mActivity.getBounds());
@@ -476,46 +475,43 @@ public class SizeCompatTests extends WindowTestsBase {
     }
 
     /**
-     * Ensures that {@link TaskStackListener} can receive callback about the activity in size
+     * Ensures that {@link TaskOrganizerController} can receive callback about the activity in size
      * compatibility mode.
      */
     @Test
-    public void testHandleActivitySizeCompatMode() {
+    public void testHandleActivitySizeCompatModeChanged() {
         setUpDisplaySizeWithApp(1000, 2000);
+        doReturn(true).when(mTask).isOrganized();
         ActivityRecord activity = mActivity;
-        activity.setState(Task.ActivityState.RESUMED, "testHandleActivitySizeCompatMode");
+        activity.setState(Task.ActivityState.RESUMED, "testHandleActivitySizeCompatModeChanged");
         prepareUnresizable(mActivity, -1.f /* maxAspect */, SCREEN_ORIENTATION_PORTRAIT);
         assertFitted();
-
-        final ArrayList<IBinder> compatTokens = new ArrayList<>();
-        mAtm.getTaskChangeNotificationController().registerTaskStackListener(
-                new TaskStackListener() {
-                    @Override
-                    public void onSizeCompatModeActivityChanged(int displayId,
-                            IBinder activityToken) {
-                        compatTokens.add(activityToken);
-                    }
-                });
 
         // Resize the display so that the activity exercises size-compat mode.
         resizeDisplay(mTask.mDisplayContent, 1000, 2500);
 
         // Expect the exact token when the activity is in size compatibility mode.
-        assertEquals(1, compatTokens.size());
-        assertEquals(activity.appToken, compatTokens.get(0));
+        verify(mTask).onSizeCompatActivityChanged();
+        ActivityManager.RunningTaskInfo taskInfo = mTask.getTaskInfo();
 
-        compatTokens.clear();
+        assertEquals(mActivity.appToken, taskInfo.topActivityToken);
+        assertTrue(taskInfo.topActivityInSizeCompat);
+
         // Make the activity resizable again by restarting it
+        clearInvocations(mTask);
         activity.info.resizeMode = RESIZE_MODE_RESIZEABLE;
         activity.mVisibleRequested = true;
         activity.restartProcessIfVisible();
         // The full lifecycle isn't hooked up so manually set state to resumed
-        activity.setState(Task.ActivityState.RESUMED, "testHandleActivitySizeCompatMode");
+        activity.setState(Task.ActivityState.RESUMED, "testHandleActivitySizeCompatModeChanged");
         mTask.mDisplayContent.handleActivitySizeCompatModeIfNeeded(activity);
 
         // Expect null token when switching to non-size-compat mode activity.
-        assertEquals(1, compatTokens.size());
-        assertEquals(null, compatTokens.get(0));
+        verify(mTask).onSizeCompatActivityChanged();
+        taskInfo = mTask.getTaskInfo();
+
+        assertEquals(mActivity.appToken, taskInfo.topActivityToken);
+        assertFalse(taskInfo.topActivityInSizeCompat);
     }
 
     @Test
@@ -600,12 +596,11 @@ public class SizeCompatTests extends WindowTestsBase {
         assertEquals(new Rect(mActivity.getBounds().left, 0, dh - mActivity.getBounds().right, 0),
                 mActivity.getLetterboxInsets());
 
-        final BarController statusBarController =
-                mActivity.mDisplayContent.getDisplayPolicy().getStatusBarController();
+        final DisplayPolicy displayPolicy = mActivity.mDisplayContent.getDisplayPolicy();
         // The activity doesn't fill the display, so the letterbox of the rotated activity is
         // overlapped with the rotated content frame of status bar. Hence the status bar shouldn't
         // be transparent.
-        assertFalse(statusBarController.isTransparentAllowed(w));
+        assertFalse(displayPolicy.isFullyTransparentAllowed(w, TYPE_STATUS_BAR));
 
         // Make the activity fill the display.
         prepareUnresizable(mActivity, 10 /* maxAspect */, SCREEN_ORIENTATION_LANDSCAPE);
@@ -615,7 +610,7 @@ public class SizeCompatTests extends WindowTestsBase {
 
         // The letterbox should only cover the notch area, so status bar can be transparent.
         assertEquals(new Rect(notchHeight, 0, 0, 0), mActivity.getLetterboxInsets());
-        assertTrue(statusBarController.isTransparentAllowed(w));
+        assertTrue(displayPolicy.isFullyTransparentAllowed(w, TYPE_STATUS_BAR));
     }
 
     @Test
@@ -905,6 +900,57 @@ public class SizeCompatTests extends WindowTestsBase {
         assertEquals(1000, activityBounds.height());
     }
 
+    @Test
+    public void testSupportsNonResizableInSplitScreen() {
+        // Support non resizable in multi window
+        mAtm.mSupportsNonResizableMultiWindow = true;
+        setUpDisplaySizeWithApp(1000, 2800);
+        final TestSplitOrganizer organizer =
+                new TestSplitOrganizer(mAtm, mActivity.getDisplayContent());
+
+        // Non-resizable landscape activity
+        prepareUnresizable(mActivity, SCREEN_ORIENTATION_LANDSCAPE);
+        final Rect originalBounds = new Rect(mActivity.getBounds());
+
+        // Move activity to split screen
+        mTask.reparent(organizer.mPrimary, POSITION_TOP,
+                false /*moveParents*/, "test");
+        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, mTask.getWindowingMode());
+        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, mActivity.getWindowingMode());
+
+        // Non-resizable activity in size compat mode
+        assertScaled();
+        assertEquals(originalBounds,
+                mActivity.getConfiguration().windowConfiguration.getBounds());
+
+        // Recompute the natural configuration of the non-resizable activity and the split screen.
+        mActivity.clearSizeCompatMode();
+
+        // Draw letterbox.
+        mActivity.setVisible(false);
+        mActivity.mDisplayContent.prepareAppTransition(WindowManager.TRANSIT_OPEN);
+        mActivity.mDisplayContent.mOpeningApps.add(mActivity);
+        addWindowToActivity(mActivity);
+        mActivity.mRootWindowContainer.performSurfacePlacement();
+
+        // Split screen is also in portrait [1000,1400], so Task should be in letterbox, and
+        // activity fills task.
+        assertEquals(ORIENTATION_LANDSCAPE, mTask.getConfiguration().orientation);
+        assertEquals(ORIENTATION_LANDSCAPE, mActivity.getConfiguration().orientation);
+        assertFitted();
+        assertTrue(mTask.isTaskLetterboxed());
+
+        // Letterbox should fill the gap between the split screen and the letterboxed task.
+        final Rect primarySplitBounds = new Rect(organizer.mPrimary.getBounds());
+        final Rect letterboxedTaskBounds = new Rect(mTask.getBounds());
+        assertTrue(primarySplitBounds.contains(letterboxedTaskBounds));
+        assertEquals(new Rect(letterboxedTaskBounds.left - primarySplitBounds.left,
+                letterboxedTaskBounds.top - primarySplitBounds.top,
+                primarySplitBounds.right - letterboxedTaskBounds.right,
+                primarySplitBounds.bottom - letterboxedTaskBounds.bottom),
+                mActivity.getLetterboxInsets());
+    }
+
     private static WindowState addWindowToActivity(ActivityRecord activity) {
         final WindowManager.LayoutParams params = new WindowManager.LayoutParams();
         params.type = WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
@@ -924,9 +970,9 @@ public class SizeCompatTests extends WindowTestsBase {
         displayPolicy.onConfigurationChanged();
 
         final TestWindowToken token = createTestWindowToken(
-                WindowManager.LayoutParams.TYPE_STATUS_BAR, displayContent);
+                TYPE_STATUS_BAR, displayContent);
         final WindowManager.LayoutParams attrs =
-                new WindowManager.LayoutParams(WindowManager.LayoutParams.TYPE_STATUS_BAR);
+                new WindowManager.LayoutParams(TYPE_STATUS_BAR);
         attrs.gravity = android.view.Gravity.TOP;
         attrs.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
@@ -939,8 +985,7 @@ public class SizeCompatTests extends WindowTestsBase {
                         com.android.internal.R.dimen.status_bar_height));
 
         displayPolicy.addWindowLw(statusBar, attrs);
-        displayPolicy.beginLayoutLw(displayContent.mDisplayFrames,
-                displayContent.getConfiguration().uiMode);
+        displayPolicy.layoutWindowLw(statusBar, null, displayContent.mDisplayFrames);
     }
 
     static void prepareUnresizable(ActivityRecord activity, int screenOrientation) {

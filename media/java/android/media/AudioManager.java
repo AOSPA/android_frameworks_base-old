@@ -5675,8 +5675,12 @@ public class AudioManager {
     public boolean setAdditionalOutputDeviceDelay(
             @NonNull AudioDeviceInfo device, @IntRange(from = 0) long delayMillis) {
         Objects.requireNonNull(device);
-        // Implement the setter in r-dev or r-tv-dev as needed.
-        return false;
+        try {
+            return getService().setAdditionalOutputDeviceDelay(
+                new AudioDeviceAttributes(device), delayMillis);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -5691,8 +5695,11 @@ public class AudioManager {
     @IntRange(from = 0)
     public long getAdditionalOutputDeviceDelay(@NonNull AudioDeviceInfo device) {
         Objects.requireNonNull(device);
-        // Implement the getter in r-dev or r-tv-dev as needed.
-        return 0;
+        try {
+            return getService().getAdditionalOutputDeviceDelay(new AudioDeviceAttributes(device));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -5709,8 +5716,12 @@ public class AudioManager {
     @IntRange(from = 0)
     public long getMaxAdditionalOutputDeviceDelay(@NonNull AudioDeviceInfo device) {
         Objects.requireNonNull(device);
-        // Implement the getter in r-dev or r-tv-dev as needed.
-        return 0;
+        try {
+            return getService().getMaxAdditionalOutputDeviceDelay(
+                    new AudioDeviceAttributes(device));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**

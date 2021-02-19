@@ -22,6 +22,7 @@ import static com.android.server.power.batterysaver.BatterySaverPolicy.POLICY_LE
 import static com.google.common.truth.Truth.assertThat;
 
 import android.content.Context;
+import android.os.BatterySaverPolicyConfig;
 import android.os.PowerManager;
 import android.os.PowerManager.ServiceType;
 import android.os.PowerSaveState;
@@ -48,10 +49,12 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
     private static final int GPS_MODE = 0; // LOCATION_MODE_NO_CHANGE
     private static final int DEFAULT_GPS_MODE =
             PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF;
+    private static final int SOUND_TRIGGER_MODE = 0; // SOUND_TRIGGER_MODE_ALL_ENABLED
+    private static final int DEFAULT_SOUND_TRIGGER_MODE =
+            PowerManager.SOUND_TRIGGER_MODE_CRITICAL_ONLY;
     private static final String BATTERY_SAVER_CONSTANTS = "disable_vibration=true,"
             + "advertise_is_enabled=true,"
             + "disable_animation=false,"
-            + "disable_soundtrigger=true,"
             + "enable_firewall=true,"
             + "enable_datasaver=true,"
             + "enable_brightness_adjustment=false,"
@@ -59,6 +62,7 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
             + "defer_full_backup=true,"
             + "defer_keyvalue_backup=false,"
             + "location_mode=0," // LOCATION_MODE_NO_CHANGE
+            + "soundtrigger_mode=0," // SOUND_TRIGGER_MODE_ALL_ENABLE
             + "enable_night_mode=false,"
             + "enable_quick_doze=true";
     private static final String BATTERY_SAVER_INCORRECT_CONSTANTS = "vi*,!=,,true";
@@ -125,6 +129,11 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
     @SmallTest
     public void testGetBatterySaverPolicy_PolicySound_DefaultValueCorrect() {
         testServiceDefaultValue_On(ServiceType.SOUND);
+
+        mBatterySaverPolicy.setPolicyLevel(POLICY_LEVEL_FULL);
+        PowerSaveState stateOn =
+                mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.SOUND);
+        assertThat(stateOn.soundTriggerMode).isEqualTo(DEFAULT_SOUND_TRIGGER_MODE);
     }
 
     @SmallTest
@@ -211,6 +220,7 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         final PowerSaveState soundState =
                 mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.SOUND);
         assertThat(soundState.batterySaverEnabled).isTrue();
+        assertThat(soundState.soundTriggerMode).isEqualTo(SOUND_TRIGGER_MODE);
 
         final PowerSaveState networkState = mBatterySaverPolicy.getBatterySaverPolicy(
                 ServiceType.NETWORK_FIREWALL);
@@ -408,7 +418,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         + "," + BatterySaverPolicy.KEY_DISABLE_AOD + "=true"
                         + "," + BatterySaverPolicy.KEY_DISABLE_LAUNCH_BOOST + "=true"
                         + "," + BatterySaverPolicy.KEY_DISABLE_OPTIONAL_SENSORS + "=true"
-                        + "," + BatterySaverPolicy.KEY_DISABLE_SOUNDTRIGGER + "=true"
                         + "," + BatterySaverPolicy.KEY_DISABLE_VIBRATION + "=true"
                         + "," + BatterySaverPolicy.KEY_ENABLE_BRIGHTNESS_ADJUSTMENT + "=true"
                         + "," + BatterySaverPolicy.KEY_ENABLE_DATASAVER + "=true"
@@ -418,7 +427,9 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         + "," + BatterySaverPolicy.KEY_FORCE_ALL_APPS_STANDBY + "=true"
                         + "," + BatterySaverPolicy.KEY_FORCE_BACKGROUND_CHECK + "=true"
                         + "," + BatterySaverPolicy.KEY_LOCATION_MODE
-                        + "=" + PowerManager.LOCATION_MODE_FOREGROUND_ONLY,
+                        + "=" + PowerManager.LOCATION_MODE_FOREGROUND_ONLY
+                        + "," + BatterySaverPolicy.KEY_SOUNDTRIGGER_MODE
+                        + "=" + PowerManager.SOUND_TRIGGER_MODE_CRITICAL_ONLY,
                 "",
                 new DeviceConfig.Properties.Builder(DeviceConfig.NAMESPACE_BATTERY_SAVER)
                         .setFloat(BatterySaverPolicy.KEY_ADJUST_BRIGHTNESS_FACTOR, .5f)
@@ -429,7 +440,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_AOD, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_LAUNCH_BOOST, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_OPTIONAL_SENSORS, false)
-                        .setBoolean(BatterySaverPolicy.KEY_DISABLE_SOUNDTRIGGER, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_VIBRATION, false)
                         .setBoolean(BatterySaverPolicy.KEY_ENABLE_BRIGHTNESS_ADJUSTMENT, false)
                         .setBoolean(BatterySaverPolicy.KEY_ENABLE_DATASAVER, false)
@@ -440,6 +450,8 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         .setBoolean(BatterySaverPolicy.KEY_FORCE_BACKGROUND_CHECK, false)
                         .setInt(BatterySaverPolicy.KEY_LOCATION_MODE,
                                 PowerManager.LOCATION_MODE_THROTTLE_REQUESTS_WHEN_SCREEN_OFF)
+                        .setInt(BatterySaverPolicy.KEY_SOUNDTRIGGER_MODE,
+                                PowerManager.SOUND_TRIGGER_MODE_ALL_DISABLED)
                         .build(),
                 null);
         assertEquals(.1f, policy.adjustBrightnessFactor);
@@ -450,7 +462,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         assertTrue(policy.disableAod);
         assertTrue(policy.disableLaunchBoost);
         assertTrue(policy.disableOptionalSensors);
-        assertTrue(policy.disableSoundTrigger);
         assertTrue(policy.disableVibration);
         assertTrue(policy.enableAdjustBrightness);
         assertTrue(policy.enableDataSaver);
@@ -460,6 +471,7 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         assertTrue(policy.forceAllAppsStandby);
         assertTrue(policy.forceBackgroundCheck);
         assertEquals(PowerManager.LOCATION_MODE_FOREGROUND_ONLY, policy.locationMode);
+        assertEquals(PowerManager.SOUND_TRIGGER_MODE_CRITICAL_ONLY, policy.soundTriggerMode);
     }
 
     public void testDeviceConfigOverridesDefaults() {
@@ -474,7 +486,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_AOD, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_LAUNCH_BOOST, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_OPTIONAL_SENSORS, false)
-                        .setBoolean(BatterySaverPolicy.KEY_DISABLE_SOUNDTRIGGER, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_VIBRATION, false)
                         .setBoolean(BatterySaverPolicy.KEY_ENABLE_BRIGHTNESS_ADJUSTMENT, false)
                         .setBoolean(BatterySaverPolicy.KEY_ENABLE_DATASAVER, false)
@@ -485,6 +496,8 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         .setBoolean(BatterySaverPolicy.KEY_FORCE_BACKGROUND_CHECK, false)
                         .setInt(BatterySaverPolicy.KEY_LOCATION_MODE,
                                 PowerManager.LOCATION_MODE_THROTTLE_REQUESTS_WHEN_SCREEN_OFF)
+                        .setInt(BatterySaverPolicy.KEY_SOUNDTRIGGER_MODE,
+                                PowerManager.SOUND_TRIGGER_MODE_ALL_DISABLED)
                         .build(),
                 null);
         assertEquals(.5f, policy.adjustBrightnessFactor);
@@ -495,7 +508,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         assertFalse(policy.disableAod);
         assertFalse(policy.disableLaunchBoost);
         assertFalse(policy.disableOptionalSensors);
-        assertFalse(policy.disableSoundTrigger);
         assertFalse(policy.disableVibration);
         assertFalse(policy.enableAdjustBrightness);
         assertFalse(policy.enableDataSaver);
@@ -506,6 +518,8 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         assertFalse(policy.forceBackgroundCheck);
         assertEquals(PowerManager.LOCATION_MODE_THROTTLE_REQUESTS_WHEN_SCREEN_OFF,
                 policy.locationMode);
+        assertEquals(PowerManager.SOUND_TRIGGER_MODE_ALL_DISABLED,
+                policy.soundTriggerMode);
     }
 
     public void testDeviceConfig_AdaptiveValues() {
@@ -521,7 +535,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_AOD, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_LAUNCH_BOOST, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_OPTIONAL_SENSORS, false)
-                        .setBoolean(BatterySaverPolicy.KEY_DISABLE_SOUNDTRIGGER, false)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_VIBRATION, false)
                         .setBoolean(BatterySaverPolicy.KEY_ENABLE_BRIGHTNESS_ADJUSTMENT, false)
                         .setBoolean(BatterySaverPolicy.KEY_ENABLE_DATASAVER, false)
@@ -532,6 +545,8 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         .setBoolean(BatterySaverPolicy.KEY_FORCE_BACKGROUND_CHECK, false)
                         .setInt(BatterySaverPolicy.KEY_LOCATION_MODE,
                                 PowerManager.LOCATION_MODE_THROTTLE_REQUESTS_WHEN_SCREEN_OFF)
+                        .setInt(BatterySaverPolicy.KEY_SOUNDTRIGGER_MODE,
+                                PowerManager.SOUND_TRIGGER_MODE_ALL_DISABLED)
                         .setFloat(BatterySaverPolicy.KEY_ADJUST_BRIGHTNESS_FACTOR + adaptiveSuffix,
                                 .9f)
                         .setBoolean(BatterySaverPolicy.KEY_ADVERTISE_IS_ENABLED + adaptiveSuffix,
@@ -546,8 +561,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                         .setBoolean(
                                 BatterySaverPolicy.KEY_DISABLE_OPTIONAL_SENSORS + adaptiveSuffix,
                                 true)
-                        .setBoolean(BatterySaverPolicy.KEY_DISABLE_SOUNDTRIGGER + adaptiveSuffix,
-                                true)
                         .setBoolean(BatterySaverPolicy.KEY_DISABLE_VIBRATION + adaptiveSuffix, true)
                         .setBoolean(BatterySaverPolicy.KEY_ENABLE_BRIGHTNESS_ADJUSTMENT
                                         + adaptiveSuffix, true)
@@ -561,6 +574,8 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
                                 true)
                         .setInt(BatterySaverPolicy.KEY_LOCATION_MODE + adaptiveSuffix,
                                 PowerManager.LOCATION_MODE_FOREGROUND_ONLY)
+                        .setInt(BatterySaverPolicy.KEY_SOUNDTRIGGER_MODE + adaptiveSuffix,
+                                PowerManager.SOUND_TRIGGER_MODE_CRITICAL_ONLY)
                         .build(), adaptiveSuffix);
         assertEquals(.9f, policy.adjustBrightnessFactor);
         assertTrue(policy.advertiseIsEnabled);
@@ -570,7 +585,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         assertTrue(policy.disableAod);
         assertTrue(policy.disableLaunchBoost);
         assertTrue(policy.disableOptionalSensors);
-        assertTrue(policy.disableSoundTrigger);
         assertTrue(policy.disableVibration);
         assertTrue(policy.enableAdjustBrightness);
         assertTrue(policy.enableDataSaver);
@@ -580,5 +594,38 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         assertTrue(policy.forceAllAppsStandby);
         assertTrue(policy.forceBackgroundCheck);
         assertEquals(PowerManager.LOCATION_MODE_FOREGROUND_ONLY, policy.locationMode);
+        assertEquals(PowerManager.SOUND_TRIGGER_MODE_CRITICAL_ONLY, policy.soundTriggerMode);
+    }
+
+    public void testSetFullPolicy_overridesSettingsAndDeviceConfig_clearOnFullExit() {
+        mDeviceSpecificConfigResId = R.string.config_batterySaverDeviceSpecificConfig_1;
+        mMockGlobalSettings.put(Global.BATTERY_SAVER_CONSTANTS,
+                "location_mode=" + PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF);
+        mMockGlobalSettings.put(Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS, "");
+
+        mBatterySaverPolicy.onChange();
+        assertThat(mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.LOCATION).locationMode)
+                .isEqualTo(PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF);
+
+        Policy currentFullPolicy = mBatterySaverPolicy.getPolicyLocked(POLICY_LEVEL_FULL);
+        BatterySaverPolicyConfig currentFullPolicyConfig = currentFullPolicy.toConfig();
+        BatterySaverPolicyConfig newFullPolicyConfig =
+                new BatterySaverPolicyConfig.Builder(currentFullPolicyConfig)
+                        .setLocationMode(PowerManager.LOCATION_MODE_FOREGROUND_ONLY)
+                        .build();
+        mBatterySaverPolicy.setFullPolicyLocked(Policy.fromConfig(newFullPolicyConfig));
+        assertThat(mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.LOCATION).locationMode)
+                .isEqualTo(PowerManager.LOCATION_MODE_FOREGROUND_ONLY);
+
+        // Any policy settings set through #setFullPolicy will be cleared when exiting full policy.
+        // Default policy settings will be used on the next full policy mode enter unless
+        // #setFullPolicy is called again.
+        mBatterySaverPolicy.setPolicyLevel(POLICY_LEVEL_OFF);
+        assertThat(mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.LOCATION).locationMode)
+                .isEqualTo(PowerManager.LOCATION_MODE_NO_CHANGE);
+
+        mBatterySaverPolicy.setPolicyLevel(POLICY_LEVEL_FULL);
+        assertThat(mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.LOCATION).locationMode)
+                .isEqualTo(PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF);
     }
 }

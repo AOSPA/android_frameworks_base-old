@@ -57,6 +57,7 @@ public class SecureSettingsValidators {
         VALIDATORS.put(
                 Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.ADAPTIVE_SLEEP, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Secure.CAMERA_AUTOROTATE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.AUTOFILL_SERVICE, NULLABLE_COMPONENT_NAME_VALIDATOR);
         VALIDATORS.put(
                 Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE,
@@ -278,5 +279,6 @@ public class SecureSettingsValidators {
                 new DiscreteValueValidator(new String[] {"0", "1"}));
         VALIDATORS.put(Secure.ACCESSIBILITY_FLOATING_MENU_OPACITY,
                 new InclusiveFloatRangeValidator(0.0f, 1.0f));
+        VALIDATORS.put(Secure.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED, BOOLEAN_VALIDATOR);
     }
 }

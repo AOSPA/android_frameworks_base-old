@@ -140,7 +140,7 @@ public class RecentsAnimationController implements DeathRecipient {
 
     private boolean mLinkedToDeathOfRunner;
 
-    // Whether to try to defer canceling from a stack order change until the next transition
+    // Whether to try to defer canceling from a root task order change until the next transition
     private boolean mRequestDeferCancelUntilNextTransition;
     // Whether to actually defer canceling until the next transition
     private boolean mCancelOnNextTransitionStart;
@@ -282,6 +282,25 @@ public class RecentsAnimationController implements DeathRecipient {
                             task.setCanAffectSystemUiFlags(behindSystemBars);
                         }
                     }
+                    if (!behindSystemBars) {
+                        // Make sure to update the correct IME parent in case that the IME parent
+                        // may be computed as display layer when re-layout window happens during
+                        // rotation but there is intermediate state that the bounds of task and
+                        // the IME target's activity is not the same during rotating.
+                        mDisplayContent.updateImeParent();
+
+                        // Hiding IME if IME window is not attached to app.
+                        // Since some windowing mode is not proper to snapshot Task with IME window
+                        // while the app transitioning to the next task (e.g. split-screen mode)
+                        if (!mDisplayContent.isImeAttachedToApp()) {
+                            final InputMethodManagerInternal inputMethodManagerInternal =
+                                    LocalServices.getService(InputMethodManagerInternal.class);
+                            if (inputMethodManagerInternal != null) {
+                                inputMethodManagerInternal.hideCurrentInputMethod(
+                                        SoftInputShowHideReason.HIDE_RECENTS_ANIMATION);
+                            }
+                        }
+                    }
                     mService.mWindowPlacerLocked.requestTraversal();
                 }
             } finally {
@@ -299,7 +318,6 @@ public class RecentsAnimationController implements DeathRecipient {
                     if (mCanceled) {
                         return;
                     }
-
                     mInputConsumerEnabled = enabled;
                     final InputMonitor inputMonitor = mDisplayContent.getInputMonitor();
                     inputMonitor.updateInputWindowsLw(true /*force*/);
@@ -310,34 +328,9 @@ public class RecentsAnimationController implements DeathRecipient {
             }
         }
 
+        // TODO(b/166736352): Remove this method without the need to expose to launcher.
         @Override
-        public void hideCurrentInputMethod() {
-            final long token = Binder.clearCallingIdentity();
-            try {
-                synchronized (mService.getWindowManagerLock()) {
-                    // Make sure to update the correct IME parent in case that the IME parent may
-                    // be computed as display layer when re-layout window happens during rotation
-                    // but there is intermediate state that the bounds of task and the IME
-                    // target's activity is not the same during rotating.
-                    mDisplayContent.updateImeParent();
-
-                    // Ignore hiding IME if IME window is attached to app.
-                    // Since we would like to snapshot Task with IME window while transitioning
-                    // to recents.
-                    if (mDisplayContent.isImeAttachedToApp()) {
-                        return;
-                    }
-                }
-                final InputMethodManagerInternal inputMethodManagerInternal =
-                        LocalServices.getService(InputMethodManagerInternal.class);
-                if (inputMethodManagerInternal != null) {
-                    inputMethodManagerInternal.hideCurrentInputMethod(
-                            SoftInputShowHideReason.HIDE_RECENTS_ANIMATION);
-                }
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-        }
+        public void hideCurrentInputMethod() { }
 
         @Override
         public void setDeferCancelUntilNextTransition(boolean defer, boolean screenshot) {
@@ -412,13 +405,13 @@ public class RecentsAnimationController implements DeathRecipient {
         // TODO(b/153090560): Support Recents on multiple task display areas
         final ArrayList<Task> visibleTasks = mDisplayContent.getDefaultTaskDisplayArea()
                 .getVisibleTasks();
-        final Task targetStack = mDisplayContent.getDefaultTaskDisplayArea()
+        final Task targetRootTask = mDisplayContent.getDefaultTaskDisplayArea()
                 .getRootTask(WINDOWING_MODE_UNDEFINED, targetActivityType);
-        if (targetStack != null) {
+        if (targetRootTask != null) {
             final PooledConsumer c = PooledLambda.obtainConsumer((t, outList) ->
 	            { if (!outList.contains(t)) outList.add(t); }, PooledLambda.__(Task.class),
                     visibleTasks);
-            targetStack.forAllLeafTasks(c, true /* traverseTopToBottom */);
+            targetRootTask.forAllLeafTasks(c, true /* traverseTopToBottom */);
             c.recycle();
         }
 
@@ -428,7 +421,10 @@ public class RecentsAnimationController implements DeathRecipient {
             if (skipAnimation(task)) {
                 continue;
             }
-            addAnimation(task, !recentTaskIds.get(task.mTaskId));
+            addAnimation(task, !recentTaskIds.get(task.mTaskId), false /* hidden */,
+                    (type, anim) -> task.forAllWindows(win -> {
+                        win.onAnimationFinished(type, anim);
+                    }, true /* traverseTopToBottom */));
         }
 
         // Skip the animation if there is nothing to animate
@@ -727,7 +723,7 @@ public class RecentsAnimationController implements DeathRecipient {
     }
 
     void cancelAnimationWithScreenshot(boolean screenshot) {
-        cancelAnimation(REORDER_KEEP_IN_PLACE, screenshot, "stackOrderChanged");
+        cancelAnimation(REORDER_KEEP_IN_PLACE, screenshot, "rootTaskOrderChanged");
     }
 
     private void cancelAnimation(@ReorderMode int reorderMode, boolean screenshot, String reason) {
@@ -770,7 +766,7 @@ public class RecentsAnimationController implements DeathRecipient {
     /**
      * Cancel recents animation when the next app transition starts.
      * <p>
-     * When we cancel the recents animation due to a stack order change, we can't just cancel it
+     * When we cancel the recents animation due to a root task order change, we can't just cancel it
      * immediately as it would lead to a flicker in Launcher if we just remove the task from the
      * leash. Instead we screenshot the previous task and replace the child of the leash with the
      * screenshot, so that Launcher can still control the leash lifecycle & make the next app
@@ -782,9 +778,9 @@ public class RecentsAnimationController implements DeathRecipient {
 
     /**
      * Requests that we attempt to defer the cancel until the next app transition if we are
-     * canceling from a stack order change.  If {@param screenshot} is specified, then the system
-     * will replace the contents of the leash with a screenshot, which must be cleaned up when the
-     * runner calls cleanUpScreenshot().
+     * canceling from a root task order change.  If {@param screenshot} is specified, then the
+     * system will replace the contents of the leash with a screenshot, which must be cleaned up
+     * when the runner calls cleanUpScreenshot().
      */
     void setDeferredCancel(boolean defer, boolean screenshot) {
         mRequestDeferCancelUntilNextTransition = defer;
@@ -792,7 +788,7 @@ public class RecentsAnimationController implements DeathRecipient {
     }
 
     /**
-     * @return Whether we should defer the cancel from a stack order change until the next app
+     * @return Whether we should defer the cancel from a root task order change until the next app
      * transition.
      */
     boolean shouldDeferCancelUntilNextTransition() {
@@ -800,7 +796,7 @@ public class RecentsAnimationController implements DeathRecipient {
     }
 
     /**
-     * @return Whether we should both defer the cancel from a stack order change until the next
+     * @return Whether we should both defer the cancel from a root task order change until the next
      * app transition, and also that the deferred cancel should replace the contents of the leash
      * with a screenshot.
      */
@@ -1084,6 +1080,7 @@ public class RecentsAnimationController implements DeathRecipient {
                         .setPosition(taskSurface, mFinishBounds.left, mFinishBounds.top)
                         .setWindowCrop(taskSurface, mFinishBounds.width(), mFinishBounds.height())
                         .apply();
+                mTask.mLastRecentsAnimationBounds.set(mFinishBounds);
                 mFinishBounds.setEmpty();
             } else if (!mTask.isAttached()) {
                 // Apply the task's pending transaction in case it is detached and its transaction
@@ -1100,7 +1097,7 @@ public class RecentsAnimationController implements DeathRecipient {
         @Override
         public void startAnimation(SurfaceControl animationLeash, Transaction t,
                 @AnimationType int type, OnAnimationFinishedCallback finishCallback) {
-            // Restore position and stack crop until client has a chance to modify it.
+            // Restore position and root task crop until client has a chance to modify it.
             t.setPosition(animationLeash, mLocalBounds.left, mLocalBounds.top);
             mTmpRect.set(mLocalBounds);
             mTmpRect.offsetTo(0, 0);

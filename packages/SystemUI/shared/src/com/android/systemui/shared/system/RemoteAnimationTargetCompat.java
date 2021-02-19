@@ -34,6 +34,7 @@ public class RemoteAnimationTargetCompat {
 
     public static final int MODE_OPENING = RemoteAnimationTarget.MODE_OPENING;
     public static final int MODE_CLOSING = RemoteAnimationTarget.MODE_CLOSING;
+    public static final int MODE_CHANGING = RemoteAnimationTarget.MODE_CHANGING;
     public final int mode;
 
     public static final int ACTIVITY_TYPE_UNDEFINED = WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
@@ -117,9 +118,9 @@ public class RemoteAnimationTargetCompat {
     }
 
     public static RemoteAnimationTargetCompat[] wrap(RemoteAnimationTarget[] apps) {
-        final RemoteAnimationTargetCompat[] appsCompat =
-                new RemoteAnimationTargetCompat[apps != null ? apps.length : 0];
-        for (int i = 0; i < apps.length; i++) {
+        final int length = apps != null ? apps.length : 0;
+        final RemoteAnimationTargetCompat[] appsCompat = new RemoteAnimationTargetCompat[length];
+        for (int i = 0; i < length; i++) {
             appsCompat[i] = new RemoteAnimationTargetCompat(apps[i]);
         }
         return appsCompat;

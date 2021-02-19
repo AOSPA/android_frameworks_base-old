@@ -147,13 +147,13 @@ public class FaceService extends SystemService implements BiometricServiceCallba
         }
 
         @Override
-        public byte[] dumpSensorServiceStateProto(int sensorId) {
+        public byte[] dumpSensorServiceStateProto(int sensorId, boolean clearSchedulerBuffer) {
             Utils.checkPermission(getContext(), USE_BIOMETRIC_INTERNAL);
 
             final ProtoOutputStream proto = new ProtoOutputStream();
             final ServiceProvider provider = getProviderForSensor(sensorId);
             if (provider != null) {
-                provider.dumpProtoState(sensorId, proto);
+                provider.dumpProtoState(sensorId, proto, clearSchedulerBuffer);
             }
             proto.flush();
             return proto.getBytes();
@@ -218,7 +218,7 @@ public class FaceService extends SystemService implements BiometricServiceCallba
         @Override // Binder call
         public void enroll(int userId, final IBinder token, final byte[] hardwareAuthToken,
                 final IFaceServiceReceiver receiver, final String opPackageName,
-                final int[] disabledFeatures, Surface surface) {
+                final int[] disabledFeatures, Surface surface, boolean debugConsent) {
             Utils.checkPermission(getContext(), MANAGE_BIOMETRIC);
 
             final Pair<Integer, ServiceProvider> provider = getSingleProvider();
@@ -229,7 +229,7 @@ public class FaceService extends SystemService implements BiometricServiceCallba
 
             provider.second.scheduleEnroll(provider.first, token, hardwareAuthToken, userId,
                     receiver, opPackageName, disabledFeatures,
-                    convertSurfaceToNativeHandle(surface));
+                    convertSurfaceToNativeHandle(surface), debugConsent);
         }
 
         @Override // Binder call
@@ -405,7 +405,7 @@ public class FaceService extends SystemService implements BiometricServiceCallba
                     final ProtoOutputStream proto = new ProtoOutputStream(fd);
                     for (ServiceProvider provider : mServiceProviders) {
                         for (FaceSensorPropertiesInternal props : provider.getSensorProperties()) {
-                            provider.dumpProtoState(props.sensorId, proto);
+                            provider.dumpProtoState(props.sensorId, proto, false);
                         }
                     }
                     proto.flush();

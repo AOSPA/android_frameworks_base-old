@@ -79,6 +79,7 @@ import com.android.wm.shell.bubbles.animation.ExpandedAnimationController;
 import com.android.wm.shell.bubbles.animation.PhysicsAnimationLayout;
 import com.android.wm.shell.bubbles.animation.StackAnimationController;
 import com.android.wm.shell.common.FloatingContentCoordinator;
+import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.magnetictarget.MagnetizedObject;
 
 import java.io.FileDescriptor;
@@ -147,7 +148,7 @@ public class BubbleStackView extends FrameLayout
      * Handler to use for all delayed animations - this way, we can easily cancel them before
      * starting a new animation.
      */
-    private final Handler mDelayedAnimationHandler = new Handler();
+    private final ShellExecutor mDelayedAnimationExecutor;
 
     /**
      * Interface to synchronize {@link View} state and the screen.
@@ -311,7 +312,7 @@ public class BubbleStackView extends FrameLayout
         }
     }
 
-    private BubbleController.BubbleExpandListener mExpandListener;
+    private Bubbles.BubbleExpandListener mExpandListener;
 
     /** Callback to run when we want to unbubble the given notification's conversation. */
     private Consumer<String> mUnbubbleConversationCallback;
@@ -647,10 +648,12 @@ public class BubbleStackView extends FrameLayout
                 } else {
                     // Fling the stack to the edge, and save whether or not it's going to end up on
                     // the left side of the screen.
+                    final boolean oldOnLeft = mStackOnLeftOrWillBe;
                     mStackOnLeftOrWillBe =
                             mStackAnimationController.flingStackThenSpringToEdge(
                                     viewInitialX + dx, velX, velY) <= 0;
-                    updateBubbleIcons();
+                    final boolean updateForCollapsedStack = oldOnLeft != mStackOnLeftOrWillBe;
+                    updateBadgesAndZOrder(updateForCollapsedStack);
                     logBubbleEvent(null /* no bubble associated with bubble stack move */,
                             FrameworkStatsLog.BUBBLE_UICHANGED__ACTION__STACK_MOVED);
                 }
@@ -732,9 +735,11 @@ public class BubbleStackView extends FrameLayout
     @SuppressLint("ClickableViewAccessibility")
     public BubbleStackView(Context context, BubbleController bubbleController,
             BubbleData data, @Nullable SurfaceSynchronizer synchronizer,
-            FloatingContentCoordinator floatingContentCoordinator) {
+            FloatingContentCoordinator floatingContentCoordinator,
+            ShellExecutor mainExecutor) {
         super(context);
 
+        mDelayedAnimationExecutor = mainExecutor;
         mBubbleController = bubbleController;
         mBubbleData = data;
 
@@ -1364,7 +1369,7 @@ public class BubbleStackView extends FrameLayout
     /**
      * Sets the listener to notify when the bubble stack is expanded.
      */
-    public void setExpandListener(BubbleController.BubbleExpandListener listener) {
+    public void setExpandListener(Bubbles.BubbleExpandListener listener) {
         mExpandListener = listener;
     }
 
@@ -1473,6 +1478,9 @@ public class BubbleStackView extends FrameLayout
      * Update bubble order and pointer position.
      */
     public void updateBubbleOrder(List<Bubble> bubbles) {
+        if (isExpansionAnimating()) {
+            return;
+        }
         final Runnable reorder = () -> {
             for (int i = 0; i < bubbles.size(); i++) {
                 Bubble bubble = bubbles.get(i);
@@ -1481,7 +1489,7 @@ public class BubbleStackView extends FrameLayout
         };
         if (mIsExpanded) {
             reorder.run();
-            updateBubbleIcons();
+            updateBadgesAndZOrder(false /* setBadgeForCollapsedStack */);
         } else {
             List<View> bubbleViews = bubbles.stream()
                     .map(b -> b.getIconView()).collect(Collectors.toList());
@@ -1657,6 +1665,7 @@ public class BubbleStackView extends FrameLayout
         }
         beforeExpandedViewAnimation();
 
+        updateBadgesAndZOrder(false /* setBadgeForCollapsedStack */);
         mBubbleContainer.setActiveController(mExpandedAnimationController);
         updateOverflowVisibility();
         updatePointerPosition();
@@ -1732,7 +1741,7 @@ public class BubbleStackView extends FrameLayout
             mExpandedBubble.getExpandedView().setSurfaceZOrderedOnTop(false);
         }
 
-        mDelayedAnimationHandler.postDelayed(() -> {
+        mDelayedAnimationExecutor.executeDelayed(() -> {
             PhysicsAnimator.getInstance(mExpandedViewContainerMatrix).cancel();
             PhysicsAnimator.getInstance(mExpandedViewContainerMatrix)
                     .spring(AnimatableScaleMatrix.SCALE_X,
@@ -1789,10 +1798,12 @@ public class BubbleStackView extends FrameLayout
 
         final long startDelay =
                 (long) (ExpandedAnimationController.EXPAND_COLLAPSE_TARGET_ANIM_DURATION * 0.6f);
-        mDelayedAnimationHandler.postDelayed(() -> mExpandedAnimationController.collapseBackToStack(
-                mStackAnimationController.getStackPositionAlongNearestHorizontalEdge()
-                /* collapseTo */,
-                () -> mBubbleContainer.setActiveController(mStackAnimationController)), startDelay);
+        mDelayedAnimationExecutor.executeDelayed(() -> {
+            mExpandedAnimationController.collapseBackToStack(
+                    mStackAnimationController.getStackPositionAlongNearestHorizontalEdge()
+                    /* collapseTo */,
+                    () -> mBubbleContainer.setActiveController(mStackAnimationController));
+        }, startDelay);
 
         if (mTaskbarScrim.getVisibility() == VISIBLE) {
             mTaskbarScrim.animate().alpha(0f).start();
@@ -1868,7 +1879,7 @@ public class BubbleStackView extends FrameLayout
                                 mExpandedBubble));
                     }
                     updateOverflowVisibility();
-
+                    updateBadgesAndZOrder(true /* setBadgeForCollapsedStack */);
                     afterExpandedViewAnimation();
                     if (previouslySelected != null) {
                         previouslySelected.setContentVisibility(false);
@@ -1943,7 +1954,7 @@ public class BubbleStackView extends FrameLayout
 
         mExpandedViewContainer.setAnimationMatrix(mExpandedViewContainerMatrix);
 
-        mDelayedAnimationHandler.postDelayed(() -> {
+        mDelayedAnimationExecutor.executeDelayed(() -> {
             if (!mIsExpanded) {
                 mIsBubbleSwitchAnimating = false;
                 return;
@@ -1976,7 +1987,7 @@ public class BubbleStackView extends FrameLayout
      * animating flags for those animations.
      */
     private void cancelDelayedExpandCollapseSwitchAnimations() {
-        mDelayedAnimationHandler.removeCallbacksAndMessages(null);
+        mDelayedAnimationExecutor.removeAllCallbacks();
 
         mIsExpansionAnimating = false;
         mIsBubbleSwitchAnimating = false;
@@ -2616,27 +2627,27 @@ public class BubbleStackView extends FrameLayout
         }
 
         mStackOnLeftOrWillBe = mStackAnimationController.isStackOnLeftSide();
-        updateBubbleIcons();
     }
 
     /**
      * Sets the appropriate Z-order, badge, and dot position for each bubble in the stack.
      * Animate dot and badge changes.
      */
-    private void updateBubbleIcons() {
+    private void updateBadgesAndZOrder(boolean setBadgeForCollapsedStack) {
         int bubbleCount = getBubbleCount();
         for (int i = 0; i < bubbleCount; i++) {
             BadgedImageView bv = (BadgedImageView) mBubbleContainer.getChildAt(i);
             bv.setZ((mMaxBubbles * mBubbleElevation) - i);
-
             if (mIsExpanded) {
                 // If we're not displaying vertically, we always show the badge on the left.
                 boolean onLeft = mPositioner.showBubblesVertically() && !mStackOnLeftOrWillBe;
                 bv.showDotAndBadge(onLeft);
-            } else if (i == 0) {
-                bv.showDotAndBadge(!mStackOnLeftOrWillBe);
-            } else {
-                bv.hideDotAndBadge(!mStackOnLeftOrWillBe);
+            } else if (setBadgeForCollapsedStack) {
+                if (i == 0) {
+                    bv.showDotAndBadge(!mStackOnLeftOrWillBe);
+                } else {
+                    bv.hideDotAndBadge(!mStackOnLeftOrWillBe);
+                }
             }
         }
     }
@@ -2725,9 +2736,13 @@ public class BubbleStackView extends FrameLayout
      * @param action the user interaction enum.
      */
     private void logBubbleEvent(@Nullable BubbleViewProvider provider, int action) {
+        final String packageName =
+                (provider != null && provider instanceof Bubble)
+                    ? ((Bubble) provider).getPackageName()
+                    : "null";
         mBubbleData.logBubbleEvent(provider,
                 action,
-                mContext.getApplicationInfo().packageName,
+                packageName,
                 getBubbleCount(),
                 getBubbleIndex(provider),
                 getNormalizedXPosition(),

@@ -36,6 +36,8 @@ import android.view.DisplayInfo;
 
 import com.android.wm.shell.R;
 import com.android.wm.shell.WindowManagerShellWrapper;
+import com.android.wm.shell.common.DisplayLayout;
+import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.TaskStackListenerCallback;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.pip.PinnedStackListenerForwarder;
@@ -44,6 +46,7 @@ import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipTaskOrganizer;
+import com.android.wm.shell.pip.PipTransitionController;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -51,7 +54,7 @@ import java.lang.annotation.RetentionPolicy;
 /**
  * Manages the picture-in-picture (PIP) UI and states.
  */
-public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallback,
+public class TvPipController implements PipTransitionController.PipTransitionCallback,
         TvPipMenuController.Delegate, TvPipNotificationController.Delegate {
     private static final String TAG = "TvPipController";
     static final boolean DEBUG = true;
@@ -90,26 +93,58 @@ public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallb
     private final PipMediaController mPipMediaController;
     private final TvPipNotificationController mPipNotificationController;
     private final TvPipMenuController mTvPipMenuController;
+    private final ShellExecutor mMainExecutor;
+    private final TvPipImpl mImpl = new TvPipImpl();
 
     private @State int mState = STATE_NO_PIP;
     private int mPinnedTaskId = NONEXISTENT_TASK_ID;
 
     private int mResizeAnimationDuration;
 
-    public TvPipController(
+    public static Pip create(
             Context context,
             PipBoundsState pipBoundsState,
             PipBoundsAlgorithm pipBoundsAlgorithm,
             PipTaskOrganizer pipTaskOrganizer,
+            PipTransitionController pipTransitionController,
             TvPipMenuController tvPipMenuController,
             PipMediaController pipMediaController,
             TvPipNotificationController pipNotificationController,
             TaskStackListenerImpl taskStackListener,
-            WindowManagerShellWrapper wmShell) {
+            WindowManagerShellWrapper wmShell,
+            ShellExecutor mainExecutor) {
+        return new TvPipController(
+                context,
+                pipBoundsState,
+                pipBoundsAlgorithm,
+                pipTaskOrganizer,
+                pipTransitionController,
+                tvPipMenuController,
+                pipMediaController,
+                pipNotificationController,
+                taskStackListener,
+                wmShell,
+                mainExecutor).mImpl;
+    }
+
+    private TvPipController(
+            Context context,
+            PipBoundsState pipBoundsState,
+            PipBoundsAlgorithm pipBoundsAlgorithm,
+            PipTaskOrganizer pipTaskOrganizer,
+            PipTransitionController pipTransitionController,
+            TvPipMenuController tvPipMenuController,
+            PipMediaController pipMediaController,
+            TvPipNotificationController pipNotificationController,
+            TaskStackListenerImpl taskStackListener,
+            WindowManagerShellWrapper wmShell,
+            ShellExecutor mainExecutor) {
         mContext = context;
+        mMainExecutor = mainExecutor;
 
         mPipBoundsState = pipBoundsState;
-        mPipBoundsState.setDisplayInfo(getDisplayInfo());
+        mPipBoundsState.setDisplayId(context.getDisplayId());
+        mPipBoundsState.setDisplayLayout(new DisplayLayout(context, context.getDisplay()));
         mPipBoundsAlgorithm = pipBoundsAlgorithm;
 
         mPipMediaController = pipMediaController;
@@ -121,7 +156,7 @@ public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallb
         mTvPipMenuController.setDelegate(this);
 
         mPipTaskOrganizer = pipTaskOrganizer;
-        mPipTaskOrganizer.registerPipTransitionCallback(this);
+        pipTransitionController.registerPipTransitionCallback(this);
 
         loadConfigurations();
 
@@ -129,8 +164,7 @@ public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallb
         registerWmShellPinnedStackListener(wmShell);
     }
 
-    @Override
-    public void onConfigurationChanged(Configuration newConfig) {
+    private void onConfigurationChanged(Configuration newConfig) {
         if (DEBUG) Log.d(TAG, "onConfigurationChanged(), state=" + stateToName(mState));
 
         if (isPipShown()) {
@@ -145,8 +179,7 @@ public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallb
     /**
      * Returns {@code true} if Pip is shown.
      */
-    @Override
-    public boolean isPipShown() {
+    private boolean isPipShown() {
         return mState != STATE_NO_PIP;
     }
 
@@ -211,8 +244,7 @@ public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallb
      * @param state the to determine the Pip bounds. IMPORTANT: should always match the current
      *              state of the Controller.
      */
-    @Override
-    public void resizePinnedStack(@State int state) {
+    private void resizePinnedStack(@State int state) {
         if (state != mState) {
             throw new IllegalArgumentException("The passed state should match the current state!");
         }
@@ -240,8 +272,7 @@ public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallb
         mPipTaskOrganizer.scheduleAnimateResizePip(newBounds, mResizeAnimationDuration, null);
     }
 
-    @Override
-    public void registerSessionListenerForCurrentUser() {
+    private void registerSessionListenerForCurrentUser() {
         mPipMediaController.registerSessionListenerForCurrentUser();
     }
 
@@ -275,17 +306,17 @@ public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallb
     }
 
     @Override
-    public void onPipTransitionStarted(ComponentName activity, int direction, Rect pipBounds) {
+    public void onPipTransitionStarted(int direction, Rect pipBounds) {
         if (DEBUG) Log.d(TAG, "onPipTransition_Started(), state=" + stateToName(mState));
     }
 
     @Override
-    public void onPipTransitionCanceled(ComponentName activity, int direction) {
+    public void onPipTransitionCanceled(int direction) {
         if (DEBUG) Log.d(TAG, "onPipTransition_Canceled(), state=" + stateToName(mState));
     }
 
     @Override
-    public void onPipTransitionFinished(ComponentName activity, int direction) {
+    public void onPipTransitionFinished(int direction) {
         if (DEBUG) Log.d(TAG, "onPipTransition_Finished(), state=" + stateToName(mState));
 
         if (mState == STATE_PIP_MENU) {
@@ -416,6 +447,22 @@ public class TvPipController implements Pip, PipTaskOrganizer.PipTransitionCallb
             default:
                 // This can't happen.
                 throw new IllegalArgumentException("Unknown state " + state);
+        }
+    }
+
+    private class TvPipImpl implements Pip {
+        @Override
+        public void onConfigurationChanged(Configuration newConfig) {
+            mMainExecutor.execute(() -> {
+                TvPipController.this.onConfigurationChanged(newConfig);
+            });
+        }
+
+        @Override
+        public void registerSessionListenerForCurrentUser() {
+            mMainExecutor.execute(() -> {
+                TvPipController.this.registerSessionListenerForCurrentUser();
+            });
         }
     }
 }

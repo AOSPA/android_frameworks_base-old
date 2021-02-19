@@ -71,6 +71,9 @@ final class LogicalDisplay {
 
     private final int mDisplayId;
     private final int mLayerStack;
+
+    private int mDisplayGroupId = Display.INVALID_DISPLAY_GROUP;
+
     /**
      * Override information set by the window manager. Will be reported instead of {@link #mInfo}
      * if not null.
@@ -192,6 +195,7 @@ final class LogicalDisplay {
                 info.logicalDensityDpi = mOverrideDisplayInfo.logicalDensityDpi;
                 info.physicalXDpi = mOverrideDisplayInfo.physicalXDpi;
                 info.physicalYDpi = mOverrideDisplayInfo.physicalYDpi;
+                info.roundedCorners = mOverrideDisplayInfo.roundedCorners;
             }
             mInfo.set(info);
         }
@@ -262,6 +266,19 @@ final class LogicalDisplay {
      */
     public boolean isValidLocked() {
         return mPrimaryDisplayDevice != null;
+    }
+
+    /**
+     * Updates the {@link DisplayGroup} to which the logical display belongs.
+     *
+     * @param groupId Identifier for the {@link DisplayGroup}.
+     */
+    public void updateDisplayGroupIdLocked(int groupId) {
+        if (groupId != mDisplayGroupId) {
+            mDisplayGroupId = groupId;
+            mBaseDisplayInfo.displayGroupId = groupId;
+            mInfo.set(null);
+        }
     }
 
     /**
@@ -365,10 +382,12 @@ final class LogicalDisplay {
                     (deviceInfo.flags & DisplayDeviceInfo.FLAG_MASK_DISPLAY_CUTOUT) != 0;
             mBaseDisplayInfo.displayCutout = maskCutout ? null : deviceInfo.displayCutout;
             mBaseDisplayInfo.displayId = mDisplayId;
+            mBaseDisplayInfo.displayGroupId = mDisplayGroupId;
             updateFrameRateOverrides(deviceInfo);
             mBaseDisplayInfo.brightnessMinimum = deviceInfo.brightnessMinimum;
             mBaseDisplayInfo.brightnessMaximum = deviceInfo.brightnessMaximum;
             mBaseDisplayInfo.brightnessDefault = deviceInfo.brightnessDefault;
+            mBaseDisplayInfo.roundedCorners = deviceInfo.roundedCorners;
             mPrimaryDisplayDeviceInfo = deviceInfo;
             mInfo.set(null);
         }

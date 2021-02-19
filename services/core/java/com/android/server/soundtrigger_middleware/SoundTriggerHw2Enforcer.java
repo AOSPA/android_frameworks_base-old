@@ -130,12 +130,14 @@ public class SoundTriggerHw2Enforcer implements ISoundTriggerHw2 {
     @Override
     public void startRecognition(int modelHandle, RecognitionConfig config, Callback callback,
             int cookie) {
+        // It is possible that an event will be sent before the HAL returns from the
+        // startRecognition call, thus it is important to set the state to active before the call.
+        synchronized (mModelStates) {
+            mModelStates.replace(modelHandle, true);
+        }
         try {
             mUnderlying.startRecognition(modelHandle, config, new CallbackEnforcer(callback),
                     cookie);
-            synchronized (mModelStates) {
-                mModelStates.replace(modelHandle, true);
-            }
         } catch (RuntimeException e) {
             throw handleException(e);
         }

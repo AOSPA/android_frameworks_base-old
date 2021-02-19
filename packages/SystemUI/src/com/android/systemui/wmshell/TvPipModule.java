@@ -17,24 +17,31 @@
 package com.android.systemui.wmshell;
 
 import android.content.Context;
+import android.os.Handler;
 
 import com.android.systemui.dagger.WMSingleton;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayController;
+import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SystemWindows;
 import com.android.wm.shell.common.TaskStackListenerImpl;
+import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.pip.Pip;
+import com.android.wm.shell.pip.PipAnimationController;
 import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
 import com.android.wm.shell.pip.PipTaskOrganizer;
+import com.android.wm.shell.pip.PipTransitionController;
 import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.tv.TvPipController;
 import com.android.wm.shell.pip.tv.TvPipMenuController;
 import com.android.wm.shell.pip.tv.TvPipNotificationController;
+import com.android.wm.shell.pip.tv.TvPipTransition;
+import com.android.wm.shell.transition.Transitions;
 
 import java.util.Optional;
 
@@ -55,20 +62,24 @@ public abstract class TvPipModule {
             PipTaskOrganizer pipTaskOrganizer,
             TvPipMenuController tvPipMenuController,
             PipMediaController pipMediaController,
+            PipTransitionController pipTransitionController,
             TvPipNotificationController tvPipNotificationController,
             TaskStackListenerImpl taskStackListener,
-            WindowManagerShellWrapper windowManagerShellWrapper) {
+            WindowManagerShellWrapper windowManagerShellWrapper,
+            @ShellMainThread ShellExecutor mainExecutor) {
         return Optional.of(
-                new TvPipController(
+                TvPipController.create(
                         context,
                         pipBoundsState,
                         pipBoundsAlgorithm,
                         pipTaskOrganizer,
+                        pipTransitionController,
                         tvPipMenuController,
                         pipMediaController,
                         tvPipNotificationController,
                         taskStackListener,
-                        windowManagerShellWrapper));
+                        windowManagerShellWrapper,
+                        mainExecutor));
     }
 
     @WMSingleton
@@ -84,21 +95,43 @@ public abstract class TvPipModule {
         return new PipBoundsState(context);
     }
 
+    // Handler needed for loadDrawableAsync() in PipControlsViewController
+    @WMSingleton
+    @Provides
+    static PipTransitionController provideTvPipTransition(
+            Transitions transitions, ShellTaskOrganizer shellTaskOrganizer,
+            PipAnimationController pipAnimationController, PipBoundsAlgorithm pipBoundsAlgorithm,
+            PipBoundsState pipBoundsState, TvPipMenuController pipMenuController) {
+        return new TvPipTransition(pipBoundsState, pipMenuController,
+                pipBoundsAlgorithm, pipAnimationController, transitions, shellTaskOrganizer);
+    }
+
     @WMSingleton
     @Provides
     static TvPipMenuController providesTvPipMenuController(
             Context context,
             PipBoundsState pipBoundsState,
             SystemWindows systemWindows,
-            PipMediaController pipMediaController) {
-        return new TvPipMenuController(context, pipBoundsState, systemWindows, pipMediaController);
+            PipMediaController pipMediaController,
+            @ShellMainThread Handler mainHandler) {
+        return new TvPipMenuController(context, pipBoundsState, systemWindows, pipMediaController,
+                mainHandler);
+    }
+
+    // Handler needed for registerReceiverForAllUsers()
+    @WMSingleton
+    @Provides
+    static TvPipNotificationController provideTvPipNotificationController(Context context,
+            PipMediaController pipMediaController,
+            @ShellMainThread Handler mainHandler) {
+        return new TvPipNotificationController(context, pipMediaController, mainHandler);
     }
 
     @WMSingleton
     @Provides
-    static TvPipNotificationController provideTvPipNotificationController(Context context,
-            PipMediaController pipMediaController) {
-        return new TvPipNotificationController(context, pipMediaController);
+    static PipAnimationController providePipAnimationController(PipSurfaceTransactionHelper
+            pipSurfaceTransactionHelper) {
+        return new PipAnimationController(pipSurfaceTransactionHelper);
     }
 
     @WMSingleton
@@ -107,11 +140,15 @@ public abstract class TvPipModule {
             TvPipMenuController tvPipMenuController,
             PipBoundsState pipBoundsState,
             PipBoundsAlgorithm pipBoundsAlgorithm,
+            PipAnimationController pipAnimationController,
+            PipTransitionController pipTransitionController,
             PipSurfaceTransactionHelper pipSurfaceTransactionHelper,
             Optional<LegacySplitScreen> splitScreenOptional, DisplayController displayController,
-            PipUiEventLogger pipUiEventLogger, ShellTaskOrganizer shellTaskOrganizer) {
+            PipUiEventLogger pipUiEventLogger, ShellTaskOrganizer shellTaskOrganizer,
+            @ShellMainThread ShellExecutor mainExecutor) {
         return new PipTaskOrganizer(context, pipBoundsState, pipBoundsAlgorithm,
-                tvPipMenuController, pipSurfaceTransactionHelper, splitScreenOptional,
-                displayController, pipUiEventLogger, shellTaskOrganizer);
+                tvPipMenuController, pipAnimationController, pipSurfaceTransactionHelper,
+                pipTransitionController, splitScreenOptional, displayController, pipUiEventLogger,
+                shellTaskOrganizer, mainExecutor);
     }
 }

@@ -74,7 +74,6 @@ import android.os.ICancellationSignal;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.os.RemoteException;
-import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.os.WorkSource.WorkChain;
@@ -1309,10 +1308,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 return null;
             }
 
-            long currentNanos = SystemClock.elapsedRealtimeNanos();
-            long deltaMs = NANOSECONDS.toMillis(
-                    location.getElapsedRealtimeAgeNanos(currentNanos));
-            return new LocationTime(location.getTime() + deltaMs, currentNanos);
+            return new LocationTime(location.getTime(), location.getElapsedRealtimeNanos());
         }
     }
 

@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
+import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.InsetsState.ITYPE_CAPTION_BAR;
@@ -74,7 +75,7 @@ class InsetsStateController {
     private final ArraySet<InsetsControlTarget> mPendingControlChanged = new ArraySet<>();
 
     private final Consumer<WindowState> mDispatchInsetsChanged = w -> {
-        if (w.isVisible()) {
+        if (w.isReadyToDispatchInsetsState()) {
             w.notifyInsetsChanged();
         }
     };
@@ -119,6 +120,7 @@ class InsetsStateController {
         final @InternalInsetsType int type = provider != null
                 ? provider.getSource().getType() : ITYPE_INVALID;
         return getInsetsForTarget(type, target.getWindowingMode(), target.isAlwaysOnTop(),
+                target.getFrozenInsetsState() != null ? target.getFrozenInsetsState() :
                 target.mAboveInsetsState);
     }
 
@@ -217,6 +219,9 @@ class InsetsStateController {
             state.removeSource(ITYPE_STATUS_BAR);
             state.removeSource(ITYPE_NAVIGATION_BAR);
             state.removeSource(ITYPE_EXTRA_NAVIGATION_BAR);
+            if (windowingMode == WINDOWING_MODE_PINNED) {
+                state.removeSource(ITYPE_IME);
+            }
         }
 
         return state;
@@ -303,13 +308,13 @@ class InsetsStateController {
     /**
      * Computes insets state of the insets provider window in the display frames.
      *
-     * @param state The output state.
      * @param win The owner window of insets provider.
      * @param displayFrames The display frames to create insets source.
      * @param windowFrames The specified frames to represent the owner window.
      */
-    void computeSimulatedState(InsetsState state, WindowState win, DisplayFrames displayFrames,
+    void computeSimulatedState(WindowState win, DisplayFrames displayFrames,
             WindowFrames windowFrames) {
+        final InsetsState state = displayFrames.mInsetsState;
         for (int i = mProviders.size() - 1; i >= 0; i--) {
             final InsetsSourceProvider provider = mProviders.valueAt(i);
             if (provider.mWin == win) {

@@ -61,13 +61,16 @@ import com.android.keyguard.dagger.KeyguardStatusViewComponent;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.biometrics.AuthController;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.classifier.FalsingManagerFake;
+import com.android.systemui.controls.dagger.ControlsComponent;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.media.MediaHierarchyManager;
 import com.android.systemui.qs.QSDetailDisplayer;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.KeyguardAffordanceView;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShelfController;
@@ -80,6 +83,7 @@ import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
+import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.NotificationRoundnessManager;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
@@ -202,7 +206,16 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     private ScrimController mScrimController;
     @Mock
     private MediaDataManager mMediaDataManager;
-
+    @Mock
+    private FeatureFlags mFeatureFlags;
+    @Mock
+    private ControlsComponent mControlsComponent;
+    @Mock
+    private BroadcastDispatcher mBroadcastDispatcher;
+    @Mock
+    private NotificationsQuickSettingsContainer mNotificationContainerParent;
+    @Mock
+    private AmbientState mAmbientState;
     private NotificationPanelViewController mNotificationPanelViewController;
     private View.AccessibilityDelegate mAccessibiltyDelegate;
 
@@ -217,6 +230,8 @@ public class NotificationPanelViewTest extends SysuiTestCase {
         when(mResources.getDisplayMetrics()).thenReturn(mDisplayMetrics);
         mDisplayMetrics.density = 100;
         when(mResources.getBoolean(R.bool.config_enableNotificationShadeDrag)).thenReturn(true);
+        when(mResources.getDimensionPixelSize(R.dimen.qs_panel_width)).thenReturn(400);
+        when(mResources.getDimensionPixelSize(R.dimen.notification_panel_width)).thenReturn(400);
         when(mView.getContext()).thenReturn(getContext());
         when(mView.findViewById(R.id.keyguard_header)).thenReturn(mKeyguardStatusBar);
         when(mView.findViewById(R.id.keyguard_clock_container)).thenReturn(mKeyguardClockSwitch);
@@ -235,6 +250,8 @@ public class NotificationPanelViewTest extends SysuiTestCase {
         when(mView.findViewById(R.id.keyguard_status_view))
                 .thenReturn(mock(KeyguardStatusView.class));
         when(mView.findViewById(R.id.keyguard_header)).thenReturn(mKeyguardStatusBar);
+        when(mView.findViewById(R.id.notification_container_parent))
+                .thenReturn(mNotificationContainerParent);
         FlingAnimationUtils.Builder flingAnimationUtilsBuilder = new FlingAnimationUtils.Builder(
                 mDisplayMetrics);
 
@@ -262,6 +279,11 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 .thenReturn(mKeyguardClockSwitchController);
         when(mKeyguardStatusViewComponent.getKeyguardStatusViewController())
                 .thenReturn(mKeyguardStatusViewController);
+        when(mQsFrame.getLayoutParams()).thenReturn(
+                new ViewGroup.LayoutParams(600, 400));
+        when(mNotificationStackScrollLayoutController.getLayoutParams()).thenReturn(
+                new ViewGroup.LayoutParams(600, 400));
+
         mNotificationPanelViewController = new NotificationPanelViewController(mView,
                 mResources,
                 mLayoutInflater,
@@ -282,7 +304,11 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 mAuthController,
                 new QSDetailDisplayer(),
                 mScrimController,
-                mMediaDataManager);
+                mMediaDataManager,
+                mAmbientState,
+                mFeatureFlags,
+                mControlsComponent,
+                mBroadcastDispatcher);
         mNotificationPanelViewController.initDependencies(
                 mStatusBar,
                 mNotificationShelfController);
@@ -395,6 +421,25 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 null);
 
         verify(mStatusBarKeyguardViewManager).showBouncer(true);
+    }
+
+    @Test
+    public void testAllChildrenOfNotificationContainer_haveIds() {
+        when(mNotificationContainerParent.getChildCount()).thenReturn(2);
+        when(mResources.getBoolean(R.bool.config_use_split_notification_shade)).thenReturn(true);
+        when(mFeatureFlags.isTwoColumnNotificationShadeEnabled()).thenReturn(true);
+
+        View view1 = new View(mContext);
+        view1.setId(1);
+        when(mNotificationContainerParent.getChildAt(0)).thenReturn(view1);
+
+        View view2 = mock(View.class);
+        when(mNotificationContainerParent.getChildAt(1)).thenReturn(view2);
+
+        mNotificationPanelViewController.updateResources();
+
+        assertThat(mNotificationContainerParent.getChildAt(0).getId()).isEqualTo(1);
+        assertThat(mNotificationContainerParent.getChildAt(1).getId()).isNotEqualTo(View.NO_ID);
     }
 
     private void onTouchEvent(MotionEvent ev) {

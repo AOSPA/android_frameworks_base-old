@@ -32,6 +32,7 @@ import static com.android.server.audio.AudioEventLogger.Event.ALOGW;
 
 import android.Manifest;
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -166,6 +167,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -173,6 +175,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 /**
@@ -300,6 +303,7 @@ public class AudioService extends IAudioService.Stub
     private static final int MSG_STREAM_DEVICES_CHANGED = 32;
     private static final int MSG_UPDATE_VOLUME_STATES_FOR_DEVICE = 33;
     private static final int MSG_REINIT_VOLUMES = 34;
+    private static final int MSG_UPDATE_A11Y_SERVICE_UIDS = 35;
     // start of messages handled under wakelock
     //   these messages can only be queued, i.e. sent with queueMsgUnderWakeLock(),
     //   and not with sendMsg(..., ..., SENDMSG_QUEUE, ...)
@@ -562,6 +566,119 @@ public class AudioService extends IAudioService.Stub
 
     private boolean mDockAudioMediaEnabled = true;
 
+    /**
+     * RestorableParameters is a thread-safe class used to store a
+     * first-in first-out history of parameters for replay / restoration.
+     *
+     * The idealized implementation of restoration would have a list of setting methods and
+     * values to be called for restoration.  Explicitly managing such setters and
+     * values would be tedious - a simpler method is to store the values and the
+     * method implicitly by lambda capture (the values must be immutable or synchronization
+     * needs to be taken).
+     *
+     * We provide queueRestoreWithRemovalIfTrue() to allow
+     * the caller to provide a BooleanSupplier lambda, which conveniently packages
+     * the setter and its parameters needed for restoration.  If during restoration,
+     * the BooleanSupplier returns true, e.g. on error, it is removed from the mMap
+     * so as not to be called on a subsequent restore.
+     *
+     * We provide a setParameters() method as an example helper method.
+     */
+    private static class RestorableParameters {
+        /**
+         * Sets a parameter and queues for restoration if successful.
+         *
+         * @param id a string handle associated with this parameter.
+         * @param parameter the actual parameter string.
+         * @return the result of AudioSystem.setParameters
+         */
+        public int setParameters(@NonNull String id, @NonNull String parameter) {
+            Objects.requireNonNull(id, "id must not be null");
+            Objects.requireNonNull(parameter, "parameter must not be null");
+            synchronized (mMap) {
+                final int status = AudioSystem.setParameters(parameter);
+                if (status == AudioSystem.AUDIO_STATUS_OK) { // Java uses recursive mutexes.
+                    queueRestoreWithRemovalIfTrue(id, () -> { // remove me if set fails.
+                        return AudioSystem.setParameters(parameter) != AudioSystem.AUDIO_STATUS_OK;
+                    });
+                }
+                // Implementation detail: We do not mMap.remove(id); on failure.
+                return status;
+            }
+        }
+
+        /**
+         * Queues a restore method which is executed on restoreAll().
+         *
+         * If the supplier null, the id is removed from the restore map.
+         *
+         * Note: When the BooleanSupplier restore method is executed
+         * during restoreAll, if it returns true, it is removed from the
+         * restore map.
+         *
+         * @param id a unique tag associated with the restore method.
+         * @param supplier is a BooleanSupplier lambda.
+         */
+        public void queueRestoreWithRemovalIfTrue(
+                @NonNull String id, @Nullable BooleanSupplier supplier) {
+            Objects.requireNonNull(id, "id must not be null");
+            synchronized (mMap) {
+                if (supplier != null) {
+                    mMap.put(id, supplier);
+                } else {
+                    mMap.remove(id);
+                }
+            }
+        }
+
+        /**
+         * Restore all parameters
+         *
+         * During restoration after audioserver death, any BooleanSupplier that returns
+         * true, for example on parameter restoration error, will be removed from mMap
+         * so as not to be executed on a subsequent restoreAll().
+         */
+        public void restoreAll() {
+            synchronized (mMap) {
+                // Note: removing from values() also removes from the backing map.
+                // TODO: Consider catching exceptions?
+                mMap.values().removeIf(v -> {
+                    return v.getAsBoolean(); // this iterates the setters().
+                });
+            }
+        }
+
+        /**
+         * mMap is a LinkedHashMap<Key, Value> of parameters restored by restore().
+         * The Key is a unique id tag for identification.
+         * The Value is a lambda expression which returns true if the entry is to
+         *     be removed.
+         *
+         * 1) For memory limitation purposes, mMap keeps the latest MAX_ENTRIES
+         *    accessed in the map.
+         * 2) Parameters are restored in order of queuing, first in first out,
+         *    from earliest to latest.
+         */
+        @GuardedBy("mMap")
+        private Map</* @NonNull */ String, /* @NonNull */ BooleanSupplier> mMap =
+                new LinkedHashMap<>() {
+            // TODO: do we need this memory limitation?
+            private static final int MAX_ENTRIES = 1000;  // limit our memory for now.
+            @Override
+            protected boolean removeEldestEntry(Map.Entry eldest) {
+                if (size() <= MAX_ENTRIES) return false;
+                Log.w(TAG, "Parameter map exceeds "
+                        + MAX_ENTRIES + " removing " + eldest.getKey()); // don't silently remove.
+                return true;
+            }
+        };
+    }
+
+    // We currently have one instance for mRestorableParameters used for
+    // setAdditionalOutputDeviceDelay().  Other methods requiring restoration could share this
+    // or use their own instance.
+    private RestorableParameters mRestorableParameters = new RestorableParameters();
+
     private int mDockState = Intent.EXTRA_DOCK_STATE_UNDOCKED;
 
     // Used when safe volume warning message display is requested by setStreamVolume(). In this
@@ -586,8 +703,9 @@ public class AudioService extends IAudioService.Stub
     private long mLoweredFromNormalToVibrateTime;
 
     // Array of Uids of valid accessibility services to check if caller is one of them
-    private int[] mAccessibilityServiceUids;
     private final Object mAccessibilityServiceUidsLock = new Object();
+    @GuardedBy("mAccessibilityServiceUidsLock")
+    private int[] mAccessibilityServiceUids;
 
     // Uid of the active input method service to check if caller is the one or not.
     private int mInputMethodServiceUid = android.os.Process.INVALID_UID;
@@ -963,7 +1081,6 @@ public class AudioService extends IAudioService.Stub
 
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_HDMI_CEC)) {
             synchronized (mHdmiClientLock) {
-                mHdmiCecSink = false;
                 mHdmiManager = mContext.getSystemService(HdmiControlManager.class);
                 if (mHdmiManager != null) {
                     mHdmiManager.addHdmiControlStatusChangeListener(
@@ -1118,6 +1235,9 @@ public class AudioService extends IAudioService.Stub
         if (mMonitorRotation) {
             RotationHelper.updateOrientation();
         }
+
+        // Restore setParameters and other queued setters.
+        mRestorableParameters.restoreAll();
 
         synchronized (mSettingsLock) {
             final int forDock = mDockAudioMediaEnabled ?
@@ -1392,7 +1512,8 @@ public class AudioService extends IAudioService.Stub
             if (isPlatformTelevision()) {
                 synchronized (mHdmiClientLock) {
                     if (mHdmiManager != null && mHdmiPlaybackClient != null) {
-                        updateHdmiCecSinkLocked(mHdmiCecSink | false);
+                        updateHdmiCecSinkLocked(
+                                mFullVolumeDevices.contains(AudioSystem.DEVICE_OUT_HDMI));
                     }
                 }
             }
@@ -1402,7 +1523,8 @@ public class AudioService extends IAudioService.Stub
             if (isPlatformTelevision()) {
                 synchronized (mHdmiClientLock) {
                     if (mHdmiManager != null) {
-                        updateHdmiCecSinkLocked(mHdmiCecSink | false);
+                        updateHdmiCecSinkLocked(
+                                mFullVolumeDevices.contains(AudioSystem.DEVICE_OUT_HDMI));
                     }
                 }
             }
@@ -2194,11 +2316,9 @@ public class AudioService extends IAudioService.Stub
     /** @see AudioManager#adjustVolume(int, int) */
     public void adjustSuggestedStreamVolume(int direction, int suggestedStreamType, int flags,
             String callingPackage, String caller) {
-        boolean hasModifyAudioSettings =
-                mContext.checkCallingPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS)
-                == PackageManager.PERMISSION_GRANTED;
         adjustSuggestedStreamVolume(direction, suggestedStreamType, flags, callingPackage,
-                caller, Binder.getCallingUid(), hasModifyAudioSettings, VOL_ADJUST_NORMAL);
+                caller, Binder.getCallingUid(), callingHasAudioSettingsPermission(),
+                VOL_ADJUST_NORMAL);
     }
 
     public void setFastScrollSoundEffectsEnabled(boolean enabled) {
@@ -2329,13 +2449,12 @@ public class AudioService extends IAudioService.Stub
                     + "CHANGE_ACCESSIBILITY_VOLUME / callingPackage=" + callingPackage);
             return;
         }
-        final boolean hasModifyAudioSettings =
-                mContext.checkCallingPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS)
-                        == PackageManager.PERMISSION_GRANTED;
+
         sVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_ADJUST_STREAM_VOL, streamType,
                 direction/*val1*/, flags/*val2*/, callingPackage));
         adjustStreamVolume(streamType, direction, flags, callingPackage, callingPackage,
-                Binder.getCallingUid(), hasModifyAudioSettings, VOL_ADJUST_NORMAL);
+                Binder.getCallingUid(), callingHasAudioSettingsPermission(),
+                VOL_ADJUST_NORMAL);
     }
 
     protected void adjustStreamVolume(int streamType, int direction, int flags,
@@ -2559,8 +2678,7 @@ public class AudioService extends IAudioService.Stub
         if (adjustVolume) {
             synchronized (mHdmiClientLock) {
                 if (mHdmiManager != null) {
-                    // mHdmiCecSink true => mHdmiPlaybackClient != null
-                    if (mHdmiCecSink
+                    if (mHdmiPlaybackClient != null
                             && mHdmiCecVolumeControlEnabled
                             && streamTypeAlias == AudioSystem.STREAM_MUSIC
                             // vol change on a full volume device
@@ -2855,13 +2973,11 @@ public class AudioService extends IAudioService.Stub
                     + " MODIFY_AUDIO_ROUTING  callingPackage=" + callingPackage);
             return;
         }
-        final boolean hasModifyAudioSettings =
-                mContext.checkCallingOrSelfPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS)
-                        == PackageManager.PERMISSION_GRANTED;
+
         sVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_SET_STREAM_VOL, streamType,
                 index/*val1*/, flags/*val2*/, callingPackage));
         setStreamVolume(streamType, index, flags, callingPackage, callingPackage,
-                Binder.getCallingUid(), hasModifyAudioSettings);
+                Binder.getCallingUid(), callingOrSelfHasAudioSettingsPermission());
     }
 
     private boolean canChangeAccessibilityVolume() {
@@ -3529,8 +3645,7 @@ public class AudioService extends IAudioService.Stub
         ensureValidStreamType(streamType);
         final boolean isPrivileged =
                 Binder.getCallingUid() == Process.SYSTEM_UID
-                 || (mContext.checkCallingPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS)
-                        == PackageManager.PERMISSION_GRANTED)
+                 || callingHasAudioSettingsPermission()
                  || (mContext.checkCallingPermission(Manifest.permission.MODIFY_AUDIO_ROUTING)
                         == PackageManager.PERMISSION_GRANTED);
         return (mStreamStates[streamType].getMinIndex(isPrivileged) + 5) / 10;
@@ -4276,13 +4391,10 @@ public class AudioService extends IAudioService.Stub
             throw new SecurityException("Should only be called from system process");
         }
 
-        final boolean hasModifyAudioSettings =
-                mContext.checkPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS, pid, uid)
-                        == PackageManager.PERMISSION_GRANTED;
         // direction and stream type swap here because the public
         // adjustSuggested has a different order than the other methods.
         adjustSuggestedStreamVolume(direction, streamType, flags, packageName, packageName, uid,
-                hasModifyAudioSettings, VOL_ADJUST_NORMAL);
+                hasAudioSettingsPermission(uid, pid), VOL_ADJUST_NORMAL);
     }
 
     /** @see AudioManager#adjustStreamVolumeForUid(int, int, int, String, int, int, int) */
@@ -4300,11 +4412,9 @@ public class AudioService extends IAudioService.Stub
                     new StringBuilder(packageName).append(" uid:").append(uid)
                     .toString()));
         }
-        final boolean hasModifyAudioSettings =
-                mContext.checkPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS, pid, uid)
-                        == PackageManager.PERMISSION_GRANTED;
+
         adjustStreamVolume(streamType, direction, flags, packageName, packageName, uid,
-                hasModifyAudioSettings, VOL_ADJUST_NORMAL);
+                hasAudioSettingsPermission(uid, pid), VOL_ADJUST_NORMAL);
     }
 
     /** @see AudioManager#setStreamVolumeForUid(int, int, int, String, int, int, int) */
@@ -4316,11 +4426,8 @@ public class AudioService extends IAudioService.Stub
             throw new SecurityException("Should only be called from system process");
         }
 
-        final boolean hasModifyAudioSettings =
-                mContext.checkPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS, pid, uid)
-                        == PackageManager.PERMISSION_GRANTED;
         setStreamVolume(streamType, index, flags, packageName, packageName, uid,
-                hasModifyAudioSettings);
+                hasAudioSettingsPermission(uid, pid));
     }
 
     //==========================================================================================
@@ -5303,8 +5410,7 @@ public class AudioService extends IAudioService.Stub
     }
 
     boolean checkAudioSettingsPermission(String method) {
-        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS)
-                == PackageManager.PERMISSION_GRANTED) {
+        if (callingOrSelfHasAudioSettingsPermission()) {
             return true;
         }
         String msg = "Audio Settings Permission Denial: " + method + " from pid="
@@ -5312,6 +5418,21 @@ public class AudioService extends IAudioService.Stub
                 + ", uid=" + Binder.getCallingUid();
         Log.w(TAG, msg);
         return false;
+    }
+
+    private boolean callingOrSelfHasAudioSettingsPermission() {
+        return mContext.checkCallingOrSelfPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean callingHasAudioSettingsPermission() {
+        return mContext.checkCallingPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasAudioSettingsPermission(int uid, int pid) {
+        return mContext.checkPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS, pid, uid)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     /**
@@ -5620,7 +5741,9 @@ public class AudioService extends IAudioService.Stub
                 profile, suppressNoisyIntent, a2dpVolume);
     }
 
-    /*package*/ void setMusicMute(boolean mute) {
+    /** only public for mocking/spying, do not call outside of AudioService */
+    @VisibleForTesting
+    public void setMusicMute(boolean mute) {
         mStreamStates[AudioSystem.STREAM_MUSIC].muteInternally(mute);
     }
 
@@ -7011,6 +7134,10 @@ public class AudioService extends IAudioService.Stub
                 case MSG_REINIT_VOLUMES:
                     onReinitVolumes((String) msg.obj);
                     break;
+                case MSG_UPDATE_A11Y_SERVICE_UIDS:
+                    onUpdateAccessibilityServiceUids();
+                    break;
+
             }
         }
     }
@@ -7121,7 +7248,9 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
-    /*package*/ void checkMusicActive(int deviceType, String caller) {
+    /** only public for mocking/spying, do not call outside of AudioService */
+    @VisibleForTesting
+    public void checkMusicActive(int deviceType, String caller) {
         if (mSafeMediaVolumeDevices.contains(deviceType)) {
             sendMsg(mAudioHandler,
                     MSG_CHECK_MUSIC_ACTIVE,
@@ -7751,9 +7880,8 @@ public class AudioService extends IAudioService.Stub
 
     @GuardedBy("mHdmiClientLock")
     private void updateHdmiCecSinkLocked(boolean hdmiCecSink) {
-        mHdmiCecSink = hdmiCecSink;
         if (!hasDeviceVolumeBehavior(AudioSystem.DEVICE_OUT_HDMI)) {
-            if (mHdmiCecSink) {
+            if (hdmiCecSink) {
                 if (DEBUG_VOL) {
                     Log.d(TAG, "CEC sink: setting HDMI as full vol device");
                 }
@@ -7811,9 +7939,6 @@ public class AudioService extends IAudioService.Stub
     // Set only when device is a set-top box.
     @GuardedBy("mHdmiClientLock")
     private HdmiPlaybackClient mHdmiPlaybackClient;
-    // true if we are a set-top box, an HDMI sink is connected and it supports CEC.
-    @GuardedBy("mHdmiClientLock")
-    private boolean mHdmiCecSink;
     // Set only when device is an audio system.
     @GuardedBy("mHdmiClientLock")
     private HdmiAudioSystemClient mHdmiAudioSystemClient;
@@ -8068,7 +8193,6 @@ public class AudioService extends IAudioService.Stub
         pw.print("  mFixedVolumeDevices="); pw.println(dumpDeviceTypes(mFixedVolumeDevices));
         pw.print("  mFullVolumeDevices="); pw.println(dumpDeviceTypes(mFullVolumeDevices));
         pw.print("  mExtVolumeController="); pw.println(mExtVolumeController);
-        pw.print("  mHdmiCecSink="); pw.println(mHdmiCecSink);
         pw.print("  mHdmiAudioSystemClient="); pw.println(mHdmiAudioSystemClient);
         pw.print("  mHdmiPlaybackClient="); pw.println(mHdmiPlaybackClient);
         pw.print("  mHdmiTvClient="); pw.println(mHdmiTvClient);
@@ -8079,7 +8203,10 @@ public class AudioService extends IAudioService.Stub
                         + " FromRestrictions=" + mMicMuteFromRestrictions
                         + " FromApi=" + mMicMuteFromApi
                         + " from system=" + mMicMuteFromSystemCached);
+        pw.print("\n  mAssistantUid="); pw.println(mAssistantUid);
+        pw.print("  mCurrentImeUid="); pw.println(mCurrentImeUid);
         pw.print("  mMonitorRotation="); pw.println(mMonitorRotation);
+        dumpAccessibilityServiceUids(pw);
 
         dumpAudioPolicies(pw);
         mDynPolicyLogger.dump(pw);
@@ -8109,6 +8236,19 @@ public class AudioService extends IAudioService.Stub
         synchronized (mSupportedSystemUsagesLock) {
             for (int i = 0; i < mSupportedSystemUsages.length; i++) {
                 pw.printf("\t%s\n", AudioAttributes.usageToString(mSupportedSystemUsages[i]));
+            }
+        }
+    }
+
+    private void dumpAccessibilityServiceUids(PrintWriter pw) {
+        synchronized (mSupportedSystemUsagesLock) {
+            if (mAccessibilityServiceUids != null && mAccessibilityServiceUids.length > 0) {
+                pw.println("  Accessibility service Uids:");
+                for (int uid : mAccessibilityServiceUids) {
+                    pw.println("  - " + uid);
+                }
+            } else {
+                pw.println("  No accessibility service Uids.");
             }
         }
     }
@@ -8416,7 +8556,8 @@ public class AudioService extends IAudioService.Stub
                         mAccessibilityServiceUids = uids.toArray();
                     }
                 }
-                AudioSystem.setA11yServicesUids(mAccessibilityServiceUids);
+                sendMsg(mAudioHandler, MSG_UPDATE_A11Y_SERVICE_UIDS, SENDMSG_REPLACE,
+                        0, 0, null, 0);
             }
         }
 
@@ -8432,6 +8573,14 @@ public class AudioService extends IAudioService.Stub
                 }
             }
         }
+    }
+
+    private void onUpdateAccessibilityServiceUids() {
+        int[] accessibilityServiceUids;
+        synchronized (mAccessibilityServiceUidsLock) {
+            accessibilityServiceUids = mAccessibilityServiceUids;
+        }
+        AudioSystem.setA11yServicesUids(accessibilityServiceUids);
     }
 
     //==========================================================================================
@@ -9567,6 +9716,92 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    /**
+     * @hide
+     * Sets an additional audio output device delay in milliseconds.
+     *
+     * The additional output delay is a request to the output device to
+     * delay audio presentation (generally with respect to video presentation for better
+     * synchronization).
+     * It may not be supported by all output devices,
+     * and typically increases the audio latency by the amount of additional
+     * audio delay requested.
+     *
+     * If additional audio delay is supported by an audio output device,
+     * it is expected to be supported for all output streams (and configurations)
+     * opened on that device.
+     *
+     * @param deviceType
+     * @param address
+     * @param delayMillis delay in milliseconds desired.  This should be in range of {@code 0}
+     *     to the value returned by {@link #getMaxAdditionalOutputDeviceDelay()}.
+     * @return true if successful, false if the device does not support output device delay
+     *     or the delay is not in range of {@link #getMaxAdditionalOutputDeviceDelay()}.
+     */
+    @Override
+    //@RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public boolean setAdditionalOutputDeviceDelay(
+            @NonNull AudioDeviceAttributes device, @IntRange(from = 0) long delayMillis) {
+        Objects.requireNonNull(device, "device must not be null");
+        enforceModifyAudioRoutingPermission();
+        final String getterKey = "additional_output_device_delay="
+                + device.getInternalType() + "," + device.getAddress(); // "getter" key as an id.
+        final String setterKey = getterKey + "," + delayMillis;     // append the delay for setter
+        return mRestorableParameters.setParameters(getterKey, setterKey)
+                == AudioSystem.AUDIO_STATUS_OK;
+    }
+
+    /**
+     * @hide
+     * Returns the current additional audio output device delay in milliseconds.
+     *
+     * @param deviceType
+     * @param address
+     * @return the additional output device delay. This is a non-negative number.
+     *     {@code 0} is returned if unsupported.
+     */
+    @Override
+    @IntRange(from = 0)
+    public long getAdditionalOutputDeviceDelay(@NonNull AudioDeviceAttributes device) {
+        Objects.requireNonNull(device, "device must not be null");
+        final String key = "additional_output_device_delay";
+        final String reply = AudioSystem.getParameters(
+                key + "=" + device.getInternalType() + "," + device.getAddress());
+        long delayMillis;
+        try {
+            delayMillis = Long.parseLong(reply.substring(key.length() + 1));
+        } catch (NullPointerException e) {
+            delayMillis = 0;
+        }
+        return delayMillis;
+    }
+
+    /**
+     * @hide
+     * Returns the maximum additional audio output device delay in milliseconds.
+     *
+     * @param deviceType
+     * @param address
+     * @return the maximum output device delay in milliseconds that can be set.
+     *     This is a non-negative number
+     *     representing the additional audio delay supported for the device.
+     *     {@code 0} is returned if unsupported.
+     */
+    @Override
+    @IntRange(from = 0)
+    public long getMaxAdditionalOutputDeviceDelay(@NonNull AudioDeviceAttributes device) {
+        Objects.requireNonNull(device, "device must not be null");
+        final String key = "max_additional_output_device_delay";
+        final String reply = AudioSystem.getParameters(
+                key + "=" + device.getInternalType() + "," + device.getAddress());
+        long delayMillis;
+        try {
+            delayMillis = Long.parseLong(reply.substring(key.length() + 1));
+        } catch (NullPointerException e) {
+            delayMillis = 0;
+        }
+        return delayMillis;
+    }
 
     //======================
     // misc

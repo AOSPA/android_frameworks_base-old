@@ -18,20 +18,17 @@ package com.android.wm.shell.pip;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
 import android.app.PictureInPictureParams;
 import android.content.ComponentName;
 import android.content.pm.ActivityInfo;
-import android.graphics.Rect;
 import android.os.RemoteException;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
@@ -43,9 +40,11 @@ import android.window.WindowContainerToken;
 
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.ShellTestCase;
+import com.android.wm.shell.TestShellExecutor;
 import com.android.wm.shell.common.DisplayController;
-import com.android.wm.shell.pip.phone.PhonePipMenuController;
+import com.android.wm.shell.common.DisplayLayout;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
+import com.android.wm.shell.pip.phone.PhonePipMenuController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -65,13 +64,17 @@ public class PipTaskOrganizerTest extends ShellTestCase {
     private PipTaskOrganizer mSpiedPipTaskOrganizer;
 
     @Mock private DisplayController mMockdDisplayController;
-    @Mock private PipBoundsAlgorithm mMockPipBoundsAlgorithm;
+
     @Mock private PhonePipMenuController mMockPhonePipMenuController;
+    @Mock private PipAnimationController mMockPipAnimationController;
+    @Mock private PipTransitionController mMockPipTransitionController;
     @Mock private PipSurfaceTransactionHelper mMockPipSurfaceTransactionHelper;
     @Mock private PipUiEventLogger mMockPipUiEventLogger;
     @Mock private Optional<LegacySplitScreen> mMockOptionalSplitScreen;
     @Mock private ShellTaskOrganizer mMockShellTaskOrganizer;
+    private TestShellExecutor mMainExecutor;
     private PipBoundsState mPipBoundsState;
+    private PipBoundsAlgorithm mPipBoundsAlgorithm;
 
     private ComponentName mComponent1;
     private ComponentName mComponent2;
@@ -82,10 +85,14 @@ public class PipTaskOrganizerTest extends ShellTestCase {
         mComponent1 = new ComponentName(mContext, "component1");
         mComponent2 = new ComponentName(mContext, "component2");
         mPipBoundsState = new PipBoundsState(mContext);
+        mPipBoundsAlgorithm = new PipBoundsAlgorithm(mContext, mPipBoundsState);
+        mMainExecutor = new TestShellExecutor();
         mSpiedPipTaskOrganizer = spy(new PipTaskOrganizer(mContext, mPipBoundsState,
-                mMockPipBoundsAlgorithm, mMockPhonePipMenuController,
-                mMockPipSurfaceTransactionHelper, mMockOptionalSplitScreen, mMockdDisplayController,
-                mMockPipUiEventLogger, mMockShellTaskOrganizer));
+                mPipBoundsAlgorithm, mMockPhonePipMenuController,
+                mMockPipAnimationController, mMockPipSurfaceTransactionHelper,
+                mMockPipTransitionController, mMockOptionalSplitScreen, mMockdDisplayController,
+                mMockPipUiEventLogger, mMockShellTaskOrganizer, mMainExecutor));
+        mMainExecutor.flushAll();
         preparePipTaskOrg();
     }
 
@@ -110,7 +117,7 @@ public class PipTaskOrganizerTest extends ShellTestCase {
 
     @Test
     public void startSwipePipToHome_updatesLastPipComponentName() {
-        mSpiedPipTaskOrganizer.startSwipePipToHome(mComponent1, null, null);
+        mSpiedPipTaskOrganizer.startSwipePipToHome(mComponent1, null, createPipParams(null));
 
         assertEquals(mComponent1, mPipBoundsState.getLastPipComponentName());
     }
@@ -119,7 +126,8 @@ public class PipTaskOrganizerTest extends ShellTestCase {
     public void startSwipePipToHome_updatesOverrideMinSize() {
         final Size minSize = new Size(100, 80);
 
-        mSpiedPipTaskOrganizer.startSwipePipToHome(mComponent1, createActivityInfo(minSize), null);
+        mSpiedPipTaskOrganizer.startSwipePipToHome(mComponent1, createActivityInfo(minSize),
+                createPipParams(null));
 
         assertEquals(minSize, mPipBoundsState.getOverrideMinSize());
     }
@@ -191,11 +199,8 @@ public class PipTaskOrganizerTest extends ShellTestCase {
 
     private void preparePipTaskOrg() {
         final DisplayInfo info = new DisplayInfo();
-        mPipBoundsState.setDisplayInfo(info);
-        when(mMockPipBoundsAlgorithm.getEntryDestinationBounds()).thenReturn(new Rect());
-        when(mMockPipBoundsAlgorithm.getAdjustedDestinationBounds(any(), anyFloat()))
-                .thenReturn(new Rect());
-        mPipBoundsState.setDisplayInfo(info);
+        mPipBoundsState.setDisplayLayout(new DisplayLayout(info,
+                mContext.getResources(), true, true));
         mSpiedPipTaskOrganizer.setOneShotAnimationType(PipAnimationController.ANIM_TYPE_ALPHA);
         doNothing().when(mSpiedPipTaskOrganizer).enterPipWithAlphaAnimation(any(), anyLong());
         doNothing().when(mSpiedPipTaskOrganizer).scheduleAnimateResizePip(any(), anyInt(), any());

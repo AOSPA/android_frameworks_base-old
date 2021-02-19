@@ -115,7 +115,6 @@ import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.graphics.RenderNode;
-import android.graphics.drawable.BackgroundBlurDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.display.DisplayManager;
@@ -139,6 +138,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.sysprop.DisplayProperties;
 import android.util.AndroidRuntimeException;
+import android.util.ArraySet;
 import android.util.BoostFramework.ScrollOptimizer;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
@@ -159,6 +159,7 @@ import android.view.View.AttachInfo;
 import android.view.View.FocusDirection;
 import android.view.View.MeasureSpec;
 import android.view.Window.OnContentApplyWindowInsetsListener;
+import android.view.WindowInsets.Side.InsetsSide;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
@@ -188,6 +189,7 @@ import android.window.ClientWindowFrames;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
 import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.os.SomeArgs;
@@ -314,7 +316,7 @@ public final class ViewRootImpl implements ViewParent,
      * In that case we receive a call back from {@link ActivityThread} and this flag is used to
      * preserve the initial value.
      *
-     * @see #performConfigurationChange(Configuration, Configuration, boolean, int)
+     * @see #performConfigurationChange(MergedConfiguration, boolean, int)
      */
     private boolean mForceNextConfigUpdate;
 
@@ -667,16 +669,10 @@ public final class ViewRootImpl implements ViewParent,
 
     private ScrollCaptureConnection mScrollCaptureConnection;
 
+    private boolean mIsSurfaceOpaque;
+
     private final BackgroundBlurDrawable.Aggregator mBlurRegionAggregator =
             new BackgroundBlurDrawable.Aggregator(this);
-
-    /**
-     * @return {@link BackgroundBlurDrawable.Aggregator} for this instance.
-     */
-    @NonNull
-    public BackgroundBlurDrawable.Aggregator getBlurRegionAggregator() {
-        return mBlurRegionAggregator;
-    }
 
     /**
      * @return {@link ImeFocusController} for this instance.
@@ -934,6 +930,33 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    // TODO(b/161810301): Make this private after window layout is moved to the client side.
+    public static void computeWindowBounds(WindowManager.LayoutParams attrs, InsetsState state,
+            Rect displayFrame, Rect outBounds) {
+        final @InsetsType int typesToFit = attrs.getFitInsetsTypes();
+        final @InsetsSide int sidesToFit = attrs.getFitInsetsSides();
+        final ArraySet<Integer> types = InsetsState.toInternalType(typesToFit);
+        final Rect df = displayFrame;
+        Insets insets = Insets.of(0, 0, 0, 0);
+        for (int i = types.size() - 1; i >= 0; i--) {
+            final InsetsSource source = state.peekSource(types.valueAt(i));
+            if (source == null) {
+                continue;
+            }
+            insets = Insets.max(insets, source.calculateInsets(
+                    df, attrs.isFitInsetsIgnoringVisibility()));
+        }
+        final int left = (sidesToFit & WindowInsets.Side.LEFT) != 0 ? insets.left : 0;
+        final int top = (sidesToFit & WindowInsets.Side.TOP) != 0 ? insets.top : 0;
+        final int right = (sidesToFit & WindowInsets.Side.RIGHT) != 0 ? insets.right : 0;
+        final int bottom = (sidesToFit & WindowInsets.Side.BOTTOM) != 0 ? insets.bottom : 0;
+        outBounds.set(df.left + left, df.top + top, df.right - right, df.bottom - bottom);
+    }
+
+    private Configuration getConfiguration() {
+        return mContext.getResources().getConfiguration();
+    }
+
     /**
      * We have one child
      */
@@ -1065,18 +1088,15 @@ public final class ViewRootImpl implements ViewParent,
                     controlInsetsForCompatibility(mWindowAttributes);
                     res = mWindowSession.addToDisplayAsUser(mWindow, mWindowAttributes,
                             getHostVisibility(), mDisplay.getDisplayId(), userId,
-                            mInsetsController.getRequestedVisibility(), mTmpFrames.frame,
-                            inputChannel, mTempInsets, mTempControls);
+                            mInsetsController.getRequestedVisibility(), inputChannel, mTempInsets,
+                            mTempControls);
                     if (mTranslator != null) {
-                        mTranslator.translateRectInScreenToAppWindow(mTmpFrames.frame);
                         mTranslator.translateInsetsStateInScreenToAppWindow(mTempInsets);
                     }
-                    setFrame(mTmpFrames.frame);
                 } catch (RemoteException e) {
                     mAdded = false;
                     mView = null;
                     mAttachInfo.mRootView = null;
-                    inputChannel = null;
                     mFallbackEventHandler.setView(null);
                     unscheduleTraversals();
                     setAccessibilityFocus(null, null);
@@ -1092,6 +1112,9 @@ public final class ViewRootImpl implements ViewParent,
                 mPendingAlwaysConsumeSystemBars = mAttachInfo.mAlwaysConsumeSystemBars;
                 mInsetsController.onStateChanged(mTempInsets);
                 mInsetsController.onControlsChanged(mTempControls);
+                computeWindowBounds(mWindowAttributes, mInsetsController.getState(),
+                        getConfiguration().windowConfiguration.getBounds(), mTmpFrames.frame);
+                setFrame(mTmpFrames.frame);
                 if (DEBUG_LAYOUT) Log.v(mTag, "Added window " + mWindow);
                 if (res < WindowManagerGlobal.ADD_OKAY) {
                     mAttachInfo.mRootView = null;
@@ -1365,7 +1388,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private int getNightMode() {
-        return mContext.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
     }
 
     private void updateForceDarkMode() {
@@ -1854,20 +1877,22 @@ public final class ViewRootImpl implements ViewParent,
        return mBoundsLayer;
     }
 
-    Surface getOrCreateBLASTSurface(int width, int height) {
+    Surface getOrCreateBLASTSurface(int width, int height,
+            @Nullable WindowManager.LayoutParams params) {
         if (!mSurfaceControl.isValid()) {
             return null;
         }
 
+        int format = params == null ? PixelFormat.TRANSLUCENT : params.format;
         Surface ret = null;
         if (mBlastBufferQueue == null) {
-            mBlastBufferQueue = new BLASTBufferQueue(mTag,
-                    mSurfaceControl, width, height, mEnableTripleBuffering);
+            mBlastBufferQueue = new BLASTBufferQueue(mTag, mSurfaceControl, width, height,
+                    format, mEnableTripleBuffering);
             // We only return the Surface the first time, as otherwise
             // it hasn't changed and there is no need to update.
             ret = mBlastBufferQueue.createSurface();
         } else {
-            mBlastBufferQueue.update(mSurfaceControl, width, height);
+            mBlastBufferQueue.update(mSurfaceControl, width, height, format);
         }
 
         return ret;
@@ -2339,7 +2364,7 @@ public final class ViewRootImpl implements ViewParent,
 
     /* package */ WindowInsets getWindowInsets(boolean forceConstruct) {
         if (mLastWindowInsets == null || forceConstruct) {
-            final Configuration config = mContext.getResources().getConfiguration();
+            final Configuration config = getConfiguration();
             mLastWindowInsets = mInsetsController.calculateInsets(
                     config.isScreenRound(), mAttachInfo.mAlwaysConsumeSystemBars,
                     mWindowAttributes.type, config.windowConfiguration.getWindowingMode(),
@@ -2475,7 +2500,7 @@ public final class ViewRootImpl implements ViewParent,
             mFullRedrawNeeded = true;
             mLayoutRequested = true;
 
-            final Configuration config = mContext.getResources().getConfiguration();
+            final Configuration config = getConfiguration();
             if (shouldUseDisplaySize(lp)) {
                 // NOTE -- system code, won't try to do compat mode.
                 Point size = new Point();
@@ -2716,6 +2741,14 @@ public final class ViewRootImpl implements ViewParent,
                     mViewFrameInfo.flags |= FrameInfo.FLAG_WINDOW_LAYOUT_CHANGED;
                 }
                 relayoutResult = relayoutWindow(params, viewVisibility, insetsPending);
+                final boolean freeformResizing = (relayoutResult
+                        & WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_FREEFORM) != 0;
+                final boolean dockedResizing = (relayoutResult
+                        & WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED) != 0;
+                final boolean dragResizing = freeformResizing || dockedResizing;
+                if (mSurfaceControl.isValid()) {
+                    updateOpacity(params, dragResizing);
+                }
 
                 if (DEBUG_LAYOUT) Log.v(mTag, "relayout: frame=" + frame.toShortString()
                         + " surface=" + mSurface);
@@ -2840,11 +2873,6 @@ public final class ViewRootImpl implements ViewParent,
                     notifySurfaceReplaced();
                 }
 
-                final boolean freeformResizing = (relayoutResult
-                        & WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_FREEFORM) != 0;
-                final boolean dockedResizing = (relayoutResult
-                        & WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED) != 0;
-                final boolean dragResizing = freeformResizing || dockedResizing;
                 if (mDragResizing != dragResizing) {
                     if (dragResizing) {
                         mResizeMode = freeformResizing
@@ -4765,7 +4793,7 @@ public final class ViewRootImpl implements ViewParent,
         }
         // TODO: Centralize this sanitization? Why do we let setting bad modes?
         // Alternatively, can we just let HWUI figure it out? Do we need to care here?
-        if (!mContext.getResources().getConfiguration().isScreenWideColorGamut()) {
+        if (!getConfiguration().isScreenWideColorGamut()) {
             colorMode = ActivityInfo.COLOR_MODE_DEFAULT;
         }
         mAttachInfo.mThreadedRenderer.setColorMode(colorMode);
@@ -7616,8 +7644,8 @@ public final class ViewRootImpl implements ViewParent,
             if (!useBLAST()) {
                 mSurface.copyFrom(mSurfaceControl);
             } else {
-                final Surface blastSurface = getOrCreateBLASTSurface(mSurfaceSize.x,
-                    mSurfaceSize.y);
+                final Surface blastSurface = getOrCreateBLASTSurface(mSurfaceSize.x, mSurfaceSize.y,
+                        params);
                 // If blastSurface == null that means it hasn't changed since the last time we
                 // called. In this situation, avoid calling transferFrom as we would then
                 // inc the generation ID and cause EGL resources to be recreated.
@@ -7644,6 +7672,29 @@ public final class ViewRootImpl implements ViewParent,
         mInsetsController.onStateChanged(mTempInsets);
         mInsetsController.onControlsChanged(mTempControls);
         return relayoutResult;
+    }
+
+    private void updateOpacity(@Nullable WindowManager.LayoutParams params, boolean dragResizing) {
+        boolean opaque = false;
+        if (params != null && !PixelFormat.formatHasAlpha(params.format)
+                // Don't make surface with surfaceInsets opaque as they display a
+                // translucent shadow.
+                && params.surfaceInsets.left == 0
+                && params.surfaceInsets.top == 0
+                && params.surfaceInsets.right == 0
+                && params.surfaceInsets.bottom == 0
+                // Don't make surface opaque when resizing to reduce the amount of
+                // artifacts shown in areas the app isn't drawing content to.
+                && !dragResizing) {
+            opaque = true;
+        }
+
+        if (mIsSurfaceOpaque == opaque) {
+            return;
+        }
+
+        mTransaction.setOpaque(mSurfaceControl, opaque).apply();
+        mIsSurfaceOpaque = opaque;
     }
 
     private void setFrame(Rect frame) {
@@ -10061,6 +10112,13 @@ public final class ViewRootImpl implements ViewParent,
             transaction.deferTransactionUntil(surfaceControl, surfaceControl, frameNumber);
             transaction.apply();
         }
+    }
+
+    /**
+     * Creates a background blur drawable for the backing {@link Surface}.
+     */
+    public BackgroundBlurDrawable createBackgroundBlurDrawable() {
+        return mBlurRegionAggregator.createBackgroundBlurDrawable(mContext);
     }
 
     @Override

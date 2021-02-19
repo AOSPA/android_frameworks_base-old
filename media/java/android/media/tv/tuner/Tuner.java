@@ -22,8 +22,8 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
-import android.app.ActivityManager;
 import android.content.Context;
 import android.hardware.tv.tuner.V1_0.Constants;
 import android.media.tv.TvInputService;
@@ -54,6 +54,7 @@ import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.Looper;
 import android.os.Message;
+import android.os.Process;
 import android.util.Log;
 
 import com.android.internal.util.FrameworkStatsLog;
@@ -64,6 +65,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -244,6 +246,8 @@ public class Tuner implements AutoCloseable  {
     private static final int MSG_ON_FILTER_STATUS = 3;
     private static final int MSG_ON_LNB_EVENT = 4;
 
+    private static final int FILTER_CLEANUP_THRESHOLD = 256;
+
     /** @hide */
     @IntDef(prefix = "DVR_TYPE_", value = {DVR_TYPE_RECORD, DVR_TYPE_PLAYBACK})
     @Retention(RetentionPolicy.SOURCE)
@@ -352,7 +356,7 @@ public class Tuner implements AutoCloseable  {
                 profile, new HandlerExecutor(mHandler), mResourceListener, clientId);
         mClientId = clientId[0];
 
-        mUserId = ActivityManager.getCurrentUser();
+        mUserId = Process.myUid();
     }
 
     /**
@@ -1017,6 +1021,7 @@ public class Tuner implements AutoCloseable  {
      * failed.
      */
     @Nullable
+    @SuppressLint("NullableCollection")
     public List<FrontendInfo> getAvailableFrontendInfos() {
         FrontendInfo[] feInfoList = getFrontendInfoListInternal();
         if (feInfoList == null) {
@@ -1206,6 +1211,15 @@ public class Tuner implements AutoCloseable  {
             synchronized (mFilters) {
                 WeakReference<Filter> weakFilter = new WeakReference<Filter>(filter);
                 mFilters.add(weakFilter);
+                if (mFilters.size() > FILTER_CLEANUP_THRESHOLD) {
+                    Iterator<WeakReference<Filter>> iterator = mFilters.iterator();
+                    while (iterator.hasNext()) {
+                        WeakReference<Filter> wFilter = iterator.next();
+                        if (wFilter.get() == null) {
+                            iterator.remove();
+                        }
+                    }
+                }
             }
         }
         return filter;

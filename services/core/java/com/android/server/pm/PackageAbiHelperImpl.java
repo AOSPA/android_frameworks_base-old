@@ -16,8 +16,9 @@
 
 package com.android.server.pm;
 
+import static android.content.pm.PackageManager.INSTALL_FAILED_CPU_ABI_INCOMPATIBLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
-import static android.content.pm.PackageParser.isApkFile;
+import static android.content.pm.parsing.ApkLiteParseUtils.isApkFile;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.os.incremental.IncrementalManager.isIncrementalPath;
 
@@ -407,8 +408,14 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
                 boolean needsRenderScriptOverride = false;
                 if (Build.SUPPORTED_64_BIT_ABIS.length > 0 && cpuAbiOverride == null
                         && NativeLibraryHelper.hasRenderscriptBitcode(handle)) {
-                    abiList = Build.SUPPORTED_32_BIT_ABIS;
-                    needsRenderScriptOverride = true;
+                    if (Build.SUPPORTED_32_BIT_ABIS.length > 0) {
+                        abiList = Build.SUPPORTED_32_BIT_ABIS;
+                        needsRenderScriptOverride = true;
+                    } else {
+                        throw new PackageManagerException(
+                                INSTALL_FAILED_CPU_ABI_INCOMPATIBLE,
+                                "Apks with renderscript are not supported on 64-bit only devices");
+                    }
                 }
 
                 final int copyRet;

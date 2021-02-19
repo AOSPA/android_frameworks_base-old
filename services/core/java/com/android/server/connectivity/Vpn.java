@@ -51,6 +51,7 @@ import android.net.DnsResolver;
 import android.net.INetd;
 import android.net.INetworkManagementEventObserver;
 import android.net.Ikev2VpnProfile;
+import android.net.InetAddresses;
 import android.net.IpPrefix;
 import android.net.IpSecManager;
 import android.net.IpSecManager.IpSecTunnelInterface;
@@ -70,6 +71,7 @@ import android.net.NetworkRequest;
 import android.net.RouteInfo;
 import android.net.UidRange;
 import android.net.UidRangeParcel;
+import android.net.UnderlyingNetworkInfo;
 import android.net.VpnManager;
 import android.net.VpnService;
 import android.net.ipsec.ike.ChildSessionCallback;
@@ -109,8 +111,8 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.net.LegacyVpnInfo;
 import com.android.internal.net.VpnConfig;
-import com.android.internal.net.VpnInfo;
 import com.android.internal.net.VpnProfile;
+import com.android.net.module.util.NetworkStackConstants;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
 import com.android.server.net.BaseNetworkObserver;
@@ -203,6 +205,7 @@ public class Vpn {
     protected final NetworkCapabilities mNetworkCapabilities;
     private final SystemServices mSystemServices;
     private final Ikev2SessionCreator mIkev2SessionCreator;
+    private final UserManager mUserManager;
 
     /**
      * Whether to keep the connection active after rebooting, or upgrading or reinstalling. This
@@ -277,6 +280,10 @@ public class Vpn {
             return LocalServices.getService(DeviceIdleInternal.class);
         }
 
+        public PendingIntent getIntentForStatusPanel(Context context) {
+            return VpnConfig.getIntentForStatusPanel(context);
+        }
+
         public void sendArgumentsToDaemon(
                 final String daemon, final LocalSocket socket, final String[] arguments,
                 final RetryScheduler retryScheduler) throws IOException, InterruptedException {
@@ -327,7 +334,7 @@ public class Vpn {
         public InetAddress resolve(final String endpoint)
                 throws ExecutionException, InterruptedException {
             try {
-                return InetAddress.parseNumericAddress(endpoint);
+                return InetAddresses.parseNumericAddress(endpoint);
             } catch (IllegalArgumentException e) {
                 // Endpoint is not numeric : fall through and resolve
             }
@@ -405,6 +412,7 @@ public class Vpn {
         mLooper = looper;
         mSystemServices = systemServices;
         mIkev2SessionCreator = ikev2SessionCreator;
+        mUserManager = mContext.getSystemService(UserManager.class);
 
         mPackage = VpnConfig.LEGACY_VPN;
         mOwnerUID = getAppUid(mPackage, mUserId);
@@ -426,6 +434,7 @@ public class Vpn {
         mNetworkCapabilities = new NetworkCapabilities();
         mNetworkCapabilities.addTransportType(NetworkCapabilities.TRANSPORT_VPN);
         mNetworkCapabilities.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN);
+        mNetworkCapabilities.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED);
 
         loadAlwaysOnPackage(keyStore);
     }
@@ -1118,7 +1127,7 @@ public class Vpn {
 
         if (mConfig.dnsServers != null) {
             for (String dnsServer : mConfig.dnsServers) {
-                InetAddress address = InetAddress.parseNumericAddress(dnsServer);
+                InetAddress address = InetAddresses.parseNumericAddress(dnsServer);
                 lp.addDnsServer(address);
                 allowIPv4 |= address instanceof Inet4Address;
                 allowIPv6 |= address instanceof Inet6Address;
@@ -1128,10 +1137,12 @@ public class Vpn {
         lp.setHttpProxy(mConfig.proxyInfo);
 
         if (!allowIPv4) {
-            lp.addRoute(new RouteInfo(new IpPrefix(Inet4Address.ANY, 0), RTN_UNREACHABLE));
+            lp.addRoute(new RouteInfo(new IpPrefix(
+                    NetworkStackConstants.IPV4_ADDR_ANY, 0), RTN_UNREACHABLE));
         }
         if (!allowIPv6) {
-            lp.addRoute(new RouteInfo(new IpPrefix(Inet6Address.ANY, 0), RTN_UNREACHABLE));
+            lp.addRoute(new RouteInfo(new IpPrefix(
+                    NetworkStackConstants.IPV6_ADDR_ANY, 0), RTN_UNREACHABLE));
         }
 
         // Concatenate search domains into a string.
@@ -1430,7 +1441,7 @@ public class Vpn {
             final long token = Binder.clearCallingIdentity();
             List<UserInfo> users;
             try {
-                users = UserManager.get(mContext).getAliveUsers();
+                users = mUserManager.getAliveUsers();
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1514,7 +1525,7 @@ public class Vpn {
      */
     public void onUserAdded(int userId) {
         // If the user is restricted tie them to the parent user's VPN
-        UserInfo user = UserManager.get(mContext).getUserInfo(userId);
+        UserInfo user = mUserManager.getUserInfo(userId);
         if (user.isRestricted() && user.restrictedProfileParentId == mUserId) {
             synchronized(Vpn.this) {
                 final Set<UidRange> existingRanges = mNetworkCapabilities.getUids();
@@ -1542,7 +1553,7 @@ public class Vpn {
      */
     public void onUserRemoved(int userId) {
         // clean up if restricted
-        UserInfo user = UserManager.get(mContext).getUserInfo(userId);
+        UserInfo user = mUserManager.getUserInfo(userId);
         if (user.isRestricted() && user.restrictedProfileParentId == mUserId) {
             synchronized(Vpn.this) {
                 final Set<UidRange> existingRanges = mNetworkCapabilities.getUids();
@@ -1767,7 +1778,7 @@ public class Vpn {
     private void prepareStatusIntent() {
         final long token = Binder.clearCallingIdentity();
         try {
-            mStatusIntent = VpnConfig.getIntentForStatusPanel(mContext);
+            mStatusIntent = mDeps.getIntentForStatusPanel(mContext);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -1816,18 +1827,15 @@ public class Vpn {
     }
 
     /**
-     * This method should only be called by ConnectivityService because it doesn't
-     * have enough data to fill VpnInfo.primaryUnderlyingIface field.
+     * This method should not be called if underlying interfaces field is needed, because it doesn't
+     * have enough data to fill VpnInfo.underlyingIfaces field.
      */
-    public synchronized VpnInfo getVpnInfo() {
+    public synchronized UnderlyingNetworkInfo getUnderlyingNetworkInfo() {
         if (!isRunningLocked()) {
             return null;
         }
 
-        VpnInfo info = new VpnInfo();
-        info.ownerUid = mOwnerUID;
-        info.vpnIface = mInterface;
-        return info;
+        return new UnderlyingNetworkInfo(mOwnerUID, mInterface, new ArrayList<>());
     }
 
     public synchronized boolean appliesToUid(int uid) {
@@ -1970,8 +1978,7 @@ public class Vpn {
 
     private void enforceNotRestrictedUser() {
         Binder.withCleanCallingIdentity(() -> {
-            final UserManager mgr = UserManager.get(mContext);
-            final UserInfo user = mgr.getUserInfo(mUserId);
+            final UserInfo user = mUserManager.getUserInfo(mUserId);
 
             if (user.isRestricted()) {
                 throw new SecurityException("Restricted users cannot configure VPNs");
@@ -1984,30 +1991,30 @@ public class Vpn {
      * secondary thread to perform connection work, returning quickly.
      *
      * Should only be called to respond to Binder requests as this enforces caller permission. Use
-     * {@link #startLegacyVpnPrivileged(VpnProfile, KeyStore, LinkProperties)} to skip the
+     * {@link #startLegacyVpnPrivileged(VpnProfile, KeyStore, Network, LinkProperties)} to skip the
      * permission check only when the caller is trusted (or the call is initiated by the system).
      */
-    public void startLegacyVpn(VpnProfile profile, KeyStore keyStore, LinkProperties egress) {
+    public void startLegacyVpn(VpnProfile profile, KeyStore keyStore, @Nullable Network underlying,
+            LinkProperties egress) {
         enforceControlPermission();
         final long token = Binder.clearCallingIdentity();
         try {
-            startLegacyVpnPrivileged(profile, keyStore, egress);
+            startLegacyVpnPrivileged(profile, keyStore, underlying, egress);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
     }
 
     /**
-     * Like {@link #startLegacyVpn(VpnProfile, KeyStore, LinkProperties)}, but does not check
-     * permissions under the assumption that the caller is the system.
+     * Like {@link #startLegacyVpn(VpnProfile, KeyStore, Network, LinkProperties)}, but does not
+     * check permissions under the assumption that the caller is the system.
      *
      * Callers are responsible for checking permissions if needed.
      */
     public void startLegacyVpnPrivileged(VpnProfile profile, KeyStore keyStore,
-            LinkProperties egress) {
-        UserManager mgr = UserManager.get(mContext);
-        UserInfo user = mgr.getUserInfo(mUserId);
-        if (user.isRestricted() || mgr.hasUserRestriction(UserManager.DISALLOW_CONFIG_VPN,
+            @Nullable Network underlying, @NonNull LinkProperties egress) {
+        UserInfo user = mUserManager.getUserInfo(mUserId);
+        if (user.isRestricted() || mUserManager.hasUserRestriction(UserManager.DISALLOW_CONFIG_VPN,
                     new UserHandle(mUserId))) {
             throw new SecurityException("Restricted users cannot establish VPNs");
         }
@@ -2130,6 +2137,9 @@ public class Vpn {
         config.session = profile.name;
         config.isMetered = false;
         config.proxyInfo = profile.proxy;
+        if (underlying != null) {
+            config.underlyingNetworks = new Network[] { underlying };
+        }
 
         config.addLegacyRoutes(profile.routes);
         if (!profile.dnsServers.isEmpty()) {

@@ -18,25 +18,42 @@ package com.android.server;
 
 import static com.android.server.vcn.TelephonySubscriptionTracker.TelephonySubscriptionSnapshot;
 import static com.android.server.vcn.TelephonySubscriptionTracker.TelephonySubscriptionTrackerCallback;
+import static com.android.server.vcn.VcnTestUtils.setupSystemService;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.NetworkCapabilities;
+import android.net.NetworkCapabilities.Transport;
+import android.net.TelephonyNetworkSpecifier;
+import android.net.vcn.IVcnUnderlyingNetworkPolicyListener;
 import android.net.vcn.VcnConfig;
 import android.net.vcn.VcnConfigTest;
+import android.net.vcn.VcnUnderlyingNetworkPolicy;
+import android.net.wifi.WifiInfo;
+import android.os.IBinder;
 import android.os.ParcelUuid;
 import android.os.PersistableBundle;
 import android.os.Process;
@@ -49,12 +66,14 @@ import android.telephony.TelephonyManager;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.server.VcnManagementService.VcnSafemodeCallback;
 import com.android.server.vcn.TelephonySubscriptionTracker;
 import com.android.server.vcn.Vcn;
 import com.android.server.vcn.VcnContext;
 import com.android.server.vcn.VcnNetworkProvider;
 import com.android.server.vcn.util.PersistableBundleUtils;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -124,14 +143,26 @@ public class VcnManagementServiceTest {
     private final TelephonySubscriptionTracker mSubscriptionTracker =
             mock(TelephonySubscriptionTracker.class);
 
+    private final ArgumentCaptor<VcnSafemodeCallback> mSafemodeCallbackCaptor =
+            ArgumentCaptor.forClass(VcnSafemodeCallback.class);
+
     private final VcnManagementService mVcnMgmtSvc;
 
+    private final IVcnUnderlyingNetworkPolicyListener mMockPolicyListener =
+            mock(IVcnUnderlyingNetworkPolicyListener.class);
+    private final IBinder mMockIBinder = mock(IBinder.class);
+
     public VcnManagementServiceTest() throws Exception {
-        setupSystemService(mConnMgr, Context.CONNECTIVITY_SERVICE, ConnectivityManager.class);
-        setupSystemService(mTelMgr, Context.TELEPHONY_SERVICE, TelephonyManager.class);
         setupSystemService(
-                mSubMgr, Context.TELEPHONY_SUBSCRIPTION_SERVICE, SubscriptionManager.class);
-        setupSystemService(mAppOpsMgr, Context.APP_OPS_SERVICE, AppOpsManager.class);
+                mMockContext, mConnMgr, Context.CONNECTIVITY_SERVICE, ConnectivityManager.class);
+        setupSystemService(
+                mMockContext, mTelMgr, Context.TELEPHONY_SERVICE, TelephonyManager.class);
+        setupSystemService(
+                mMockContext,
+                mSubMgr,
+                Context.TELEPHONY_SUBSCRIPTION_SERVICE,
+                SubscriptionManager.class);
+        setupSystemService(mMockContext, mAppOpsMgr, Context.APP_OPS_SERVICE, AppOpsManager.class);
 
         doReturn(TEST_PACKAGE_NAME).when(mMockContext).getOpPackageName();
 
@@ -157,7 +188,7 @@ public class VcnManagementServiceTest {
         doAnswer((invocation) -> {
             // Mock-within a doAnswer is safe, because it doesn't actually run nested.
             return mock(Vcn.class);
-        }).when(mMockDeps).newVcn(any(), any(), any());
+        }).when(mMockDeps).newVcn(any(), any(), any(), any(), any());
 
         final PersistableBundle bundle =
                 PersistableBundleUtils.fromMap(
@@ -169,13 +200,18 @@ public class VcnManagementServiceTest {
         setupMockedCarrierPrivilege(true);
         mVcnMgmtSvc = new VcnManagementService(mMockContext, mMockDeps);
 
+        doReturn(mMockIBinder).when(mMockPolicyListener).asBinder();
+
         // Make sure the profiles are loaded.
         mTestLooper.dispatchAll();
     }
 
-    private void setupSystemService(Object service, String name, Class<?> serviceClass) {
-        doReturn(name).when(mMockContext).getSystemServiceName(serviceClass);
-        doReturn(service).when(mMockContext).getSystemService(name);
+    @Before
+    public void setUp() {
+        doNothing()
+                .when(mMockContext)
+                .enforceCallingOrSelfPermission(
+                        eq(android.Manifest.permission.NETWORK_FACTORY), any());
     }
 
     private void setupMockedCarrierPrivilege(boolean isPrivileged) {
@@ -225,7 +261,14 @@ public class VcnManagementServiceTest {
         verify(mConfigReadWriteHelper).readFromDisk();
     }
 
-    private void triggerSubscriptionTrackerCallback(Set<ParcelUuid> activeSubscriptionGroups) {
+    private TelephonySubscriptionSnapshot triggerSubscriptionTrackerCbAndGetSnapshot(
+            Set<ParcelUuid> activeSubscriptionGroups) {
+        return triggerSubscriptionTrackerCbAndGetSnapshot(
+                activeSubscriptionGroups, Collections.emptyMap());
+    }
+
+    private TelephonySubscriptionSnapshot triggerSubscriptionTrackerCbAndGetSnapshot(
+            Set<ParcelUuid> activeSubscriptionGroups, Map<Integer, ParcelUuid> subIdToGroupMap) {
         final TelephonySubscriptionSnapshot snapshot = mock(TelephonySubscriptionSnapshot.class);
         doReturn(activeSubscriptionGroups).when(snapshot).getActiveSubscriptionGroups();
 
@@ -239,8 +282,14 @@ public class VcnManagementServiceTest {
                         argThat(val -> activeSubscriptionGroups.contains(val)),
                         eq(TEST_PACKAGE_NAME));
 
+        doAnswer(invocation -> {
+            return subIdToGroupMap.get(invocation.getArgument(0));
+        }).when(snapshot).getGroupForSubId(anyInt());
+
         final TelephonySubscriptionTrackerCallback cb = getTelephonySubscriptionTrackerCallback();
         cb.onNewSnapshot(snapshot);
+
+        return snapshot;
     }
 
     private TelephonySubscriptionTrackerCallback getTelephonySubscriptionTrackerCallback() {
@@ -259,21 +308,25 @@ public class VcnManagementServiceTest {
 
     @Test
     public void testTelephonyNetworkTrackerCallbackStartsInstances() throws Exception {
-        triggerSubscriptionTrackerCallback(Collections.singleton(TEST_UUID_1));
-        verify(mMockDeps).newVcn(eq(mVcnContext), eq(TEST_UUID_1), eq(TEST_VCN_CONFIG));
+        TelephonySubscriptionSnapshot snapshot =
+                triggerSubscriptionTrackerCbAndGetSnapshot(Collections.singleton(TEST_UUID_1));
+        verify(mMockDeps)
+                .newVcn(eq(mVcnContext), eq(TEST_UUID_1), eq(TEST_VCN_CONFIG), eq(snapshot), any());
     }
 
     @Test
     public void testTelephonyNetworkTrackerCallbackStopsInstances() throws Exception {
         final TelephonySubscriptionTrackerCallback cb = getTelephonySubscriptionTrackerCallback();
         final Vcn vcn = startAndGetVcnInstance(TEST_UUID_2);
+        mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
 
-        triggerSubscriptionTrackerCallback(Collections.emptySet());
+        triggerSubscriptionTrackerCbAndGetSnapshot(Collections.emptySet());
 
         // Verify teardown after delay
         mTestLooper.moveTimeForward(VcnManagementService.CARRIER_PRIVILEGES_LOST_TEARDOWN_DELAY_MS);
         mTestLooper.dispatchAll();
         verify(vcn).teardownAsynchronously();
+        verify(mMockPolicyListener).onPolicyChanged();
     }
 
     @Test
@@ -283,13 +336,13 @@ public class VcnManagementServiceTest {
         final Vcn vcn = startAndGetVcnInstance(TEST_UUID_2);
 
         // Simulate SIM unloaded
-        triggerSubscriptionTrackerCallback(Collections.emptySet());
+        triggerSubscriptionTrackerCbAndGetSnapshot(Collections.emptySet());
 
         // Simulate new SIM loaded right during teardown delay.
         mTestLooper.moveTimeForward(
                 VcnManagementService.CARRIER_PRIVILEGES_LOST_TEARDOWN_DELAY_MS / 2);
         mTestLooper.dispatchAll();
-        triggerSubscriptionTrackerCallback(Collections.singleton(TEST_UUID_2));
+        triggerSubscriptionTrackerCbAndGetSnapshot(Collections.singleton(TEST_UUID_2));
 
         // Verify that even after the full timeout duration, the VCN instance is not torn down
         mTestLooper.moveTimeForward(VcnManagementService.CARRIER_PRIVILEGES_LOST_TEARDOWN_DELAY_MS);
@@ -303,7 +356,7 @@ public class VcnManagementServiceTest {
         final Vcn oldInstance = startAndGetVcnInstance(TEST_UUID_2);
 
         // Simulate SIM unloaded
-        triggerSubscriptionTrackerCallback(Collections.emptySet());
+        triggerSubscriptionTrackerCbAndGetSnapshot(Collections.emptySet());
 
         // Config cleared, SIM reloaded & config re-added right before teardown delay, staring new
         // vcnInstance.
@@ -344,6 +397,7 @@ public class VcnManagementServiceTest {
             mVcnMgmtSvc.setVcnConfig(TEST_UUID_1, TEST_VCN_CONFIG, TEST_PACKAGE_NAME);
             fail("Expected security exception for non system user");
         } catch (SecurityException expected) {
+            verify(mMockPolicyListener, never()).onPolicyChanged();
         }
     }
 
@@ -355,6 +409,7 @@ public class VcnManagementServiceTest {
             mVcnMgmtSvc.setVcnConfig(TEST_UUID_1, TEST_VCN_CONFIG, TEST_PACKAGE_NAME);
             fail("Expected security exception for missing carrier privileges");
         } catch (SecurityException expected) {
+            verify(mMockPolicyListener, never()).onPolicyChanged();
         }
     }
 
@@ -364,6 +419,7 @@ public class VcnManagementServiceTest {
             mVcnMgmtSvc.setVcnConfig(TEST_UUID_1, TEST_VCN_CONFIG, "IncorrectPackage");
             fail("Expected exception due to mismatched packages in config and method call");
         } catch (IllegalArgumentException expected) {
+            verify(mMockPolicyListener, never()).onPolicyChanged();
         }
     }
 
@@ -428,7 +484,13 @@ public class VcnManagementServiceTest {
         verify(mConfigReadWriteHelper).writeToDisk(any(PersistableBundle.class));
 
         // Verify Vcn is started
-        verify(mMockDeps).newVcn(eq(mVcnContext), eq(TEST_UUID_2), eq(TEST_VCN_CONFIG));
+        verify(mMockDeps)
+                .newVcn(
+                        eq(mVcnContext),
+                        eq(TEST_UUID_2),
+                        eq(TEST_VCN_CONFIG),
+                        eq(TelephonySubscriptionSnapshot.EMPTY_SNAPSHOT),
+                        any());
 
         // Verify Vcn is updated if it was previously started
         mVcnMgmtSvc.setVcnConfig(TEST_UUID_2, TEST_VCN_CONFIG, TEST_PACKAGE_NAME);
@@ -437,5 +499,165 @@ public class VcnManagementServiceTest {
         // Verify Vcn is stopped if it was already started
         mVcnMgmtSvc.clearVcnConfig(TEST_UUID_2);
         verify(vcnInstance).teardownAsynchronously();
+    }
+
+    @Test
+    public void testAddVcnUnderlyingNetworkPolicyListener() throws Exception {
+        mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
+
+        verify(mMockIBinder).linkToDeath(any(), anyInt());
+    }
+
+    @Test(expected = SecurityException.class)
+    public void testAddVcnUnderlyingNetworkPolicyListenerInvalidPermission() {
+        doThrow(new SecurityException())
+                .when(mMockContext)
+                .enforceCallingOrSelfPermission(
+                        eq(android.Manifest.permission.NETWORK_FACTORY), any());
+
+        mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
+    }
+
+    @Test
+    public void testRemoveVcnUnderlyingNetworkPolicyListener() {
+        mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
+
+        mVcnMgmtSvc.removeVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
+    }
+
+    @Test
+    public void testRemoveVcnUnderlyingNetworkPolicyListenerNeverRegistered() {
+        mVcnMgmtSvc.removeVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
+    }
+
+    private void setUpVcnSubscription(int subId, ParcelUuid subGroup) {
+        mVcnMgmtSvc.setVcnConfig(subGroup, TEST_VCN_CONFIG, TEST_PACKAGE_NAME);
+
+        triggerSubscriptionTrackerCbAndGetSnapshot(
+                Collections.singleton(subGroup), Collections.singletonMap(subId, subGroup));
+    }
+
+    private void verifyMergedNetworkCapabilitiesIsVcnManaged(
+            NetworkCapabilities mergedCapabilities, @Transport int transportType) {
+        assertTrue(mergedCapabilities.hasTransport(transportType));
+        assertFalse(
+                mergedCapabilities.hasCapability(
+                        NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED));
+    }
+
+    @Test
+    public void testGetUnderlyingNetworkPolicyCellular() throws Exception {
+        setUpVcnSubscription(TEST_SUBSCRIPTION_ID, TEST_UUID_2);
+
+        NetworkCapabilities nc =
+                new NetworkCapabilities.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+                        .setNetworkSpecifier(new TelephonyNetworkSpecifier(TEST_SUBSCRIPTION_ID))
+                        .build();
+
+        VcnUnderlyingNetworkPolicy policy =
+                mVcnMgmtSvc.getUnderlyingNetworkPolicy(nc, new LinkProperties());
+
+        assertFalse(policy.isTeardownRequested());
+        verifyMergedNetworkCapabilitiesIsVcnManaged(
+                policy.getMergedNetworkCapabilities(), NetworkCapabilities.TRANSPORT_CELLULAR);
+    }
+
+    @Test
+    public void testGetUnderlyingNetworkPolicyWifi() throws Exception {
+        setUpVcnSubscription(TEST_SUBSCRIPTION_ID, TEST_UUID_2);
+
+        WifiInfo wifiInfo = mock(WifiInfo.class);
+        when(wifiInfo.makeCopy(anyBoolean())).thenReturn(wifiInfo);
+        when(mMockDeps.getSubIdForWifiInfo(eq(wifiInfo))).thenReturn(TEST_SUBSCRIPTION_ID);
+        NetworkCapabilities nc =
+                new NetworkCapabilities.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                        .setTransportInfo(wifiInfo)
+                        .build();
+
+        VcnUnderlyingNetworkPolicy policy =
+                mVcnMgmtSvc.getUnderlyingNetworkPolicy(nc, new LinkProperties());
+
+        assertFalse(policy.isTeardownRequested());
+        verifyMergedNetworkCapabilitiesIsVcnManaged(
+                policy.getMergedNetworkCapabilities(), NetworkCapabilities.TRANSPORT_WIFI);
+    }
+
+    @Test
+    public void testGetUnderlyingNetworkPolicyNonVcnNetwork() throws Exception {
+        NetworkCapabilities nc =
+                new NetworkCapabilities.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+                        .setNetworkSpecifier(new TelephonyNetworkSpecifier(TEST_SUBSCRIPTION_ID))
+                        .build();
+
+        VcnUnderlyingNetworkPolicy policy =
+                mVcnMgmtSvc.getUnderlyingNetworkPolicy(nc, new LinkProperties());
+
+        assertFalse(policy.isTeardownRequested());
+        assertEquals(nc, policy.getMergedNetworkCapabilities());
+    }
+
+    @Test(expected = SecurityException.class)
+    public void testGetUnderlyingNetworkPolicyInvalidPermission() {
+        doThrow(new SecurityException())
+                .when(mMockContext)
+                .enforceCallingOrSelfPermission(
+                        eq(android.Manifest.permission.NETWORK_FACTORY), any());
+
+        mVcnMgmtSvc.getUnderlyingNetworkPolicy(new NetworkCapabilities(), new LinkProperties());
+    }
+
+    @Test
+    public void testSubscriptionSnapshotUpdateNotifiesVcn() {
+        mVcnMgmtSvc.setVcnConfig(TEST_UUID_2, TEST_VCN_CONFIG, TEST_PACKAGE_NAME);
+        final Map<ParcelUuid, Vcn> vcnInstances = mVcnMgmtSvc.getAllVcns();
+        final Vcn vcnInstance = vcnInstances.get(TEST_UUID_2);
+
+        TelephonySubscriptionSnapshot snapshot =
+                triggerSubscriptionTrackerCbAndGetSnapshot(Collections.singleton(TEST_UUID_2));
+
+        verify(vcnInstance).updateSubscriptionSnapshot(eq(snapshot));
+    }
+
+    @Test
+    public void testAddNewVcnUpdatesPolicyListener() throws Exception {
+        mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
+
+        mVcnMgmtSvc.setVcnConfig(TEST_UUID_2, TEST_VCN_CONFIG, TEST_PACKAGE_NAME);
+
+        verify(mMockPolicyListener).onPolicyChanged();
+    }
+
+    @Test
+    public void testRemoveVcnUpdatesPolicyListener() throws Exception {
+        mVcnMgmtSvc.setVcnConfig(TEST_UUID_2, TEST_VCN_CONFIG, TEST_PACKAGE_NAME);
+        mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
+
+        mVcnMgmtSvc.clearVcnConfig(TEST_UUID_2);
+
+        verify(mMockPolicyListener).onPolicyChanged();
+    }
+
+    @Test
+    public void testVcnSafemodeCallbackOnEnteredSafemode() throws Exception {
+        TelephonySubscriptionSnapshot snapshot =
+                triggerSubscriptionTrackerCbAndGetSnapshot(Collections.singleton(TEST_UUID_1));
+        verify(mMockDeps)
+                .newVcn(
+                        eq(mVcnContext),
+                        eq(TEST_UUID_1),
+                        eq(TEST_VCN_CONFIG),
+                        eq(snapshot),
+                        mSafemodeCallbackCaptor.capture());
+
+        mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
+
+        VcnSafemodeCallback safemodeCallback = mSafemodeCallbackCaptor.getValue();
+        safemodeCallback.onEnteredSafemode();
+
+        assertFalse(mVcnMgmtSvc.getAllVcns().get(TEST_UUID_1).isActive());
+        verify(mMockPolicyListener).onPolicyChanged();
     }
 }

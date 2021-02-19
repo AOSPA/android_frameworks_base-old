@@ -553,6 +553,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM,
                 GlobalSettingsProto.Development.ENABLE_SIZECOMPAT_FREEFORM);
+        dumpSetting(s, p,
+                Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW,
+                GlobalSettingsProto.Development.ENABLE_NON_RESIZABLE_MULTI_WINDOW);
         p.end(developmentToken);
 
         final long deviceToken = p.start(GlobalSettingsProto.DEVICE);
@@ -1825,6 +1828,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.ACCESSIBILITY_FLOATING_MENU_OPACITY,
                 SecureSettingsProto.Accessibility.ACCESSIBILITY_FLOATING_MENU_OPACITY);
+        dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED,
+                SecureSettingsProto.Accessibility.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED);
         p.end(accessibilityToken);
 
         final long adaptiveSleepToken = p.start(SecureSettingsProto.ADAPTIVE_SLEEP);
@@ -1965,6 +1971,12 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.BLUETOOTH_ON_WHILE_DRIVING,
                 SecureSettingsProto.BLUETOOTH_ON_WHILE_DRIVING);
+
+        final long smartAutoRotateToken = p.start(SecureSettingsProto.CAMERA_AUTOROTATE);
+        dumpSetting(s, p,
+                Settings.Secure.CAMERA_AUTOROTATE,
+                SecureSettingsProto.CameraAutorotate.ENABLED);
+        p.end(smartAutoRotateToken);
 
         final long cameraToken = p.start(SecureSettingsProto.CAMERA);
         dumpSetting(s, p,

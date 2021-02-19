@@ -221,7 +221,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
             int qsType, boolean activityIn, boolean activityOut, int volteIcon,
             CharSequence typeContentDescription,
             CharSequence typeContentDescriptionHtml, CharSequence description,
-            boolean isWide, int subId, boolean roaming) {
+            boolean isWide, int subId, boolean roaming, boolean showTriangle) {
         if (DEBUG) {
             Log.d(TAG, "setMobileDataIndicators: "
                     + "statusIcon = " + (statusIcon == null ? "" : statusIcon.toString()) + ","
@@ -235,7 +235,8 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
                     + "description = " + description + ","
                     + "isWide = " + isWide + ","
                     + "subId = " + subId + ","
-                    + "roaming = " + roaming);
+                    + "roaming = " + roaming + ","
+                    + "showTriangle = " + showTriangle);
         }
         MobileIconState state = getState(subId);
         if (state == null) {
@@ -250,6 +251,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
         state.typeId = statusType;
         state.contentDescription = statusIcon.contentDescription;
         state.typeContentDescription = typeContentDescription;
+        state.showTriangle = showTriangle;
         state.roaming = roaming;
         state.activityIn = activityIn && mActivityEnabled;
         state.activityOut = activityOut && mActivityEnabled;
@@ -315,11 +317,23 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
 
         mIconController.removeAllIconsForSlot(mSlotMobile);
         mMobileStates.clear();
+        List<NoCallingIconState> noCallingStates = new ArrayList<NoCallingIconState>();
+        noCallingStates.addAll(mNoCallingStates);
         mNoCallingStates.clear();
         final int n = subs.size();
         for (int i = 0; i < n; i++) {
             mMobileStates.add(new MobileIconState(subs.get(i).getSubscriptionId()));
-            mNoCallingStates.add(new NoCallingIconState(subs.get(i).getSubscriptionId()));
+            boolean isNewSub = true;
+            for (NoCallingIconState state : noCallingStates) {
+                if (state.subId == subs.get(i).getSubscriptionId()) {
+                    mNoCallingStates.add(state);
+                    isNewSub = false;
+                    break;
+                }
+            }
+            if (isNewSub) {
+                mNoCallingStates.add(new NoCallingIconState(subs.get(i).getSubscriptionId()));
+            }
         }
     }
 
@@ -552,6 +566,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
         public int subId;
         public int strengthId;
         public int typeId;
+        public boolean showTriangle;
         public boolean roaming;
         public boolean needsLeadingPadding;
         public CharSequence typeContentDescription;
@@ -571,21 +586,22 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
                 return false;
             }
             MobileIconState that = (MobileIconState) o;
-            return subId == that.subId &&
-                    strengthId == that.strengthId &&
-                    typeId == that.typeId &&
-                    roaming == that.roaming &&
-                    needsLeadingPadding == that.needsLeadingPadding &&
-                    Objects.equals(typeContentDescription, that.typeContentDescription) &&
-                    volteId == that.volteId;
+            return subId == that.subId
+                    && strengthId == that.strengthId
+                    && typeId == that.typeId
+                    && showTriangle == that.showTriangle
+                    && roaming == that.roaming
+                    && needsLeadingPadding == that.needsLeadingPadding
+                    && Objects.equals(typeContentDescription, that.typeContentDescription)
+                    && volteId == that.volteId;
         }
 
         @Override
         public int hashCode() {
 
             return Objects
-                    .hash(super.hashCode(), subId, strengthId, typeId, roaming, needsLeadingPadding,
-                            typeContentDescription);
+                    .hash(super.hashCode(), subId, strengthId, typeId, showTriangle, roaming,
+                            needsLeadingPadding, typeContentDescription);
         }
 
         public MobileIconState copy() {
@@ -599,6 +615,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
             other.subId = subId;
             other.strengthId = strengthId;
             other.typeId = typeId;
+            other.showTriangle = showTriangle;
             other.roaming = roaming;
             other.needsLeadingPadding = needsLeadingPadding;
             other.typeContentDescription = typeContentDescription;
@@ -617,8 +634,9 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
         }
 
         @Override public String toString() {
-            return "MobileIconState(subId=" + subId + ", strengthId=" + strengthId + ", roaming="
-                    + roaming + ", typeId=" + typeId + ", volteId=" + volteId
+            return "MobileIconState(subId=" + subId + ", strengthId=" + strengthId
+                    + ", showTriangle=" + showTriangle + ", roaming=" + roaming
+                    + ", typeId=" + typeId + ", volteId=" + volteId
                     + ", visible=" + visible + ")";
         }
     }

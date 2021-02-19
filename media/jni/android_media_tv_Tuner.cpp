@@ -1458,7 +1458,7 @@ int JTuner::tune(const FrontendSettings& settings, const FrontendSettingsExt1_1&
         ALOGE("frontend is not initialized");
         return (int)Result::INVALID_STATE;
     }
-    return (int) mFeClient->tune(settings,settingsExt1_1);
+    return (int) mFeClient->tune(settings, settingsExt1_1);
 }
 
 int JTuner::stopTune() {
@@ -3786,7 +3786,7 @@ static jint android_media_tv_Tuner_read_filter_fmq(
         jniThrowRuntimeException(env, "Failed to GetByteArrayElements");
         return -1;
     }
-    int realReadSize = filterClient->read(reinterpret_cast<uint8_t*>(dst) + offset, size);
+    int realReadSize = filterClient->read(reinterpret_cast<int8_t*>(dst) + offset, size);
     env->ReleaseByteArrayElements(buffer, dst, 0);
     return (jint) realReadSize;
 }
@@ -4116,7 +4116,7 @@ static jlong android_media_tv_Tuner_read_dvr_from_array(
         ALOGD("Failed to GetByteArrayElements");
         return -1;
     }
-    long realSize = dvrClient->readFromBuffer(reinterpret_cast<unsigned char*>(src) + offset, size);
+    long realSize = dvrClient->readFromBuffer(reinterpret_cast<signed char*>(src) + offset, size);
     env->ReleaseByteArrayElements(buffer, src, 0);
     return (jlong) realSize;
 
@@ -4149,7 +4149,7 @@ static jlong android_media_tv_Tuner_write_dvr_to_array(
         return -1;
     }
 
-    long realSize = dvrClient->writeToBuffer(reinterpret_cast<unsigned char*>(dst) + offset, size);
+    long realSize = dvrClient->writeToBuffer(reinterpret_cast<signed char*>(dst) + offset, size);
     env->ReleaseByteArrayElements(buffer, dst, 0);
     return (jlong) realSize;
 }

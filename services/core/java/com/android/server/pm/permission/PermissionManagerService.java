@@ -3356,11 +3356,12 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         //     - or its signing certificate was rotated from the source package's certificate
         //     - or its signing certificate is a previous signing certificate of the defining
         //       package, and the defining package still trusts the old certificate for permissions
+        //     - or it shares a common signing certificate in its lineage with the defining package,
+        //       and the defining package still trusts the old certificate for permissions
         //     - or it shares the above relationships with the system package
         final PackageParser.SigningDetails sourceSigningDetails =
                 getSourcePackageSigningDetails(bp);
-        return pkg.getSigningDetails().hasAncestorOrSelf(sourceSigningDetails)
-                || sourceSigningDetails.checkCapability(
+        return sourceSigningDetails.hasCommonSignerWithCapability(
                         pkg.getSigningDetails(),
                         PackageParser.SigningDetails.CertCapabilities.PERMISSION)
                 || pkg.getSigningDetails().hasAncestorOrSelf(systemPackage.getSigningDetails())
@@ -3965,8 +3966,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             if (!usedPermissions.contains(permissionState.getName())) {
                 Permission bp = mRegistry.getPermission(permissionState.getName());
                 if (bp != null) {
-                    if (uidState.removePermissionState(bp.getName())
-                            && permissionState.isRuntime()) {
+                    if (uidState.removePermissionState(bp.getName()) && bp.isRuntime()) {
                         runtimePermissionChanged = true;
                     }
                 }
@@ -4548,13 +4548,15 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         return userState.getUidState(appId);
     }
 
-    private void removeUidState(@AppIdInt int appId, @UserIdInt int userId) {
+    private void removeUidStateAndResetPackageInstallPermissionsFixed(@AppIdInt int appId,
+            @NonNull String packageName, @UserIdInt int userId) {
         synchronized (mLock) {
             final UserPermissionState userState = mState.getUserState(userId);
             if (userState == null) {
                 return;
             }
             userState.removeUidState(appId);
+            userState.setInstallPermissionsFixed(packageName, false);
         }
     }
 
@@ -4573,9 +4575,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                     uidState.reset();
                     uidState.setMissing(legacyState.isMissing(userId));
                     readLegacyPermissionStatesLocked(uidState,
-                            legacyState.getInstallPermissionStates());
-                    readLegacyPermissionStatesLocked(uidState,
-                            legacyState.getRuntimePermissionStates(userId));
+                            legacyState.getPermissionStates(userId));
                 }
             }
         });
@@ -4634,12 +4634,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
                         final LegacyPermissionState.PermissionState legacyPermissionState =
                                 new LegacyPermissionState.PermissionState(permissionState.getName(),
+                                        permissionState.getPermission().isRuntime(),
                                         permissionState.isGranted(), permissionState.getFlags());
-                        if (permissionState.isRuntime()) {
-                            legacyState.putRuntimePermissionState(legacyPermissionState, userId);
-                        } else {
-                            legacyState.putInstallPermissionState(legacyPermissionState);
-                        }
+                        legacyState.putPermissionState(legacyPermissionState, userId);
                     }
                 }
             }
@@ -4834,7 +4831,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
         updatePermissions(packageName, null);
         if (sharedUserPkgs.isEmpty()) {
-            removeUidState(appId, userId);
+            removeUidStateAndResetPackageInstallPermissionsFixed(appId, packageName, userId);
         } else {
             // Remove permissions associated with package. Since runtime
             // permissions are per user we have to kill the removed package
@@ -4904,12 +4901,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
                     final LegacyPermissionState.PermissionState legacyPermissionState =
                             new LegacyPermissionState.PermissionState(permissionState.getName(),
+                                    permissionState.getPermission().isRuntime(),
                                     permissionState.isGranted(), permissionState.getFlags());
-                    if (permissionState.isRuntime()) {
-                        legacyState.putRuntimePermissionState(legacyPermissionState, userId);
-                    } else if (userId == UserHandle.USER_SYSTEM) {
-                        legacyState.putInstallPermissionState(legacyPermissionState);
-                    }
+                    legacyState.putPermissionState(legacyPermissionState, userId);
                 }
             }
         }

@@ -344,10 +344,8 @@
     <string name="quick_settings_ime_label" msgid="3351174938144332051">"Метод на внес"</string>
     <string name="quick_settings_location_label" msgid="2621868789013389163">"Локација"</string>
     <string name="quick_settings_location_off_label" msgid="7923929131443915919">"Исклучи локација"</string>
-    <!-- no translation found for quick_settings_camera_label (1367149596242401934) -->
-    <skip />
-    <!-- no translation found for quick_settings_mic_label (8245831073612564953) -->
-    <skip />
+    <string name="quick_settings_camera_label" msgid="1367149596242401934">"Блокирај камера"</string>
+    <string name="quick_settings_mic_label" msgid="8245831073612564953">"Исклучи звук на микрофонот"</string>
     <string name="quick_settings_media_device_label" msgid="8034019242363789941">"Медиумски уред"</string>
     <string name="quick_settings_rssi_label" msgid="3397615415140356701">"RSSI"</string>
     <string name="quick_settings_rssi_emergency_only" msgid="7499207215265078598">"Само итни повици"</string>
@@ -418,6 +416,8 @@
     <string name="quick_settings_screen_record_label" msgid="1594046461509776676">"Снимање екран"</string>
     <string name="quick_settings_screen_record_start" msgid="1574725369331638985">"Започни"</string>
     <string name="quick_settings_screen_record_stop" msgid="8087348522976412119">"Сопри"</string>
+    <string name="sensor_privacy_start_use_mic_dialog_content" msgid="8643239110815357707">"За да продолжи, на &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; ѝ е потребен пристап до микрофонот на уредот."</string>
+    <string name="sensor_privacy_start_use_camera_dialog_content" msgid="7773612142162829116">"За да продолжи, на &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; ѝ е потребен пристап до камерата на уредот."</string>
     <string name="media_seamless_remote_device" msgid="177033467332920464">"Уред"</string>
     <string name="recents_swipe_up_onboarding" msgid="2820265886420993995">"Повлечете нагоре за да се префрлите од една на друга апликација"</string>
     <string name="recents_quick_scrub_onboarding" msgid="765934300283514912">"Повлечете надесно за брзо префрлање меѓу апликациите"</string>
@@ -440,6 +440,7 @@
     <string name="notification_tap_again" msgid="4477318164947497249">"Допрете повторно за да се отвори"</string>
     <string name="keyguard_unlock" msgid="8031975796351361601">"Повлечете за да отворите"</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Повлечете нагоре за да се обидете повторно"</string>
+    <string name="require_unlock_for_nfc" msgid="1305686454823018831">"Отклучете за да користите NFC"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"Уредов е во сопственост на организацијата"</string>
     <string name="do_disclosure_with_name" msgid="2091641464065004091">"Уредов е во сопственост на <xliff:g id="ORGANIZATION_NAME">%s</xliff:g>"</string>
     <string name="phone_hint" msgid="6682125338461375925">"Повлечете од иконата за телефонот"</string>
@@ -966,6 +967,11 @@
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Апликациите користат <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" и "</string>
+    <string name="ongoing_privacy_dialog_using_op" msgid="4125175620929701569">"<xliff:g id="APPLICATION_NAME">%1$s</xliff:g> користи <xliff:g id="APP_OPP_NAME">%2$s</xliff:g>"</string>
+    <string name="ongoing_privacy_dialog_recent_op" msgid="4255923947334262404">"<xliff:g id="APPLICATION_NAME">%1$s</xliff:g> користеше <xliff:g id="APP_OPP_NAME">%2$s</xliff:g> неодамна"</string>
+    <string name="ongoing_privacy_dialog_enterprise" msgid="4082735415905550729">"(претпријатие)"</string>
+    <string name="ongoing_privacy_dialog_phonecall" msgid="3526223335298089311">"Телефонски повик"</string>
+    <string name="ongoing_privacy_dialog_attribution_text" msgid="9186683306719924646">"(преку <xliff:g id="ATTRIBUTION">%s</xliff:g>)"</string>
     <string name="privacy_type_camera" msgid="7974051382167078332">"камера"</string>
     <string name="privacy_type_location" msgid="7991481648444066703">"локација"</string>
     <string name="privacy_type_microphone" msgid="9136763906797732428">"микрофон"</string>

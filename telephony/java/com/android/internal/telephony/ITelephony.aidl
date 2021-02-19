@@ -44,6 +44,7 @@ import android.telephony.ICellInfoCallback;
 import android.telephony.ModemActivityInfo;
 import android.telephony.NeighboringCellInfo;
 import android.telephony.NetworkScanRequest;
+import android.telephony.PhoneCapability;
 import android.telephony.PhoneNumberRange;
 import android.telephony.RadioAccessFamily;
 import android.telephony.RadioAccessSpecifier;
@@ -797,24 +798,15 @@ interface ITelephony {
      * @return {@code true} on success; {@code false} on any failure.
      */
     boolean rebootModem(int slotIndex);
-    /*
-     * Get the calculated preferred network type.
-     * Used for device configuration by some CDMA operators.
-     * @param callingPackage The package making the call.
-     * @param callingFeatureId The feature in the package.
-     *
-     * @return the calculated preferred network type, defined in RILConstants.java.
-     */
-    int getCalculatedPreferredNetworkType(String callingPackage, String callingFeatureId);
 
     /*
-     * Get the preferred network type.
+     * Get the allowed network type.
      * Used for device configuration by some CDMA operators.
      *
      * @param subId the id of the subscription to query.
-     * @return the preferred network type, defined in RILConstants.java.
+     * @return the allowed network type bitmask, defined in RILConstants.java.
      */
-    int getPreferredNetworkType(int subId);
+    int getAllowedNetworkTypesBitmask(int subId);
 
     /**
      * Check whether DUN APN is required for tethering with subId.
@@ -940,23 +932,6 @@ interface ITelephony {
             int subId, in OperatorInfo operatorInfo, boolean persisSelection);
 
     /**
-     * Get the allowed network types that store in the telephony provider.
-     *
-     * @param subId the id of the subscription.
-     * @return allowedNetworkTypes the allowed network types.
-     */
-    long getAllowedNetworkTypes(int subId);
-
-    /**
-     * Set the allowed network types.
-     *
-     * @param subId the id of the subscription.
-     * @param allowedNetworkTypes the allowed network types.
-     * @return true on success; false on any failure.
-     */
-    boolean setAllowedNetworkTypes(int subId, long allowedNetworkTypes);
-
-    /**
      * Get the allowed network types for certain reason.
      *
      * @param subId the id of the subscription.
@@ -964,16 +939,6 @@ interface ITelephony {
      * @return allowedNetworkTypes the allowed network types.
      */
     long getAllowedNetworkTypesForReason(int subId, int reason);
-
-    /**
-     * Get the effective allowed network types on the device. This API will
-     * return an intersection of allowed network types for all reasons,
-     * including the configuration done through setAllowedNetworkTypes
-     *
-     * @param subId the id of the subscription.
-     * @return allowedNetworkTypes the allowed network types.
-     */
-     long getEffectiveAllowedNetworkTypes(int subId);
 
     /**
      * Set the allowed network types and provide the reason triggering the allowed network change.
@@ -984,16 +949,6 @@ interface ITelephony {
      * @return true on success; false on any failure.
      */
     boolean setAllowedNetworkTypesForReason(int subId, int reason, long allowedNetworkTypes);
-
-    /**
-     * Set the preferred network type.
-     * Used for device configuration by some CDMA operators.
-     *
-     * @param subId the id of the subscription to update.
-     * @param networkType the preferred network type, defined in RILConstants.java.
-     * @return true on success; false on any failure.
-     */
-    boolean setPreferredNetworkType(int subId, int networkType);
 
     /**
      * Get the user enabled state of Mobile Data.
@@ -2217,7 +2172,7 @@ interface ITelephony {
      */
     String getMmsUAProfUrl(int subId);
 
-    void setMobileDataPolicyEnabledStatus(int subscriptionId, int policy, boolean enabled);
+    void setMobileDataPolicyEnabled(int subscriptionId, int policy, boolean enabled);
 
     boolean isMobileDataPolicyEnabled(int subscriptionId, int policy);
 
@@ -2380,6 +2335,11 @@ interface ITelephony {
     boolean setCarrierSingleRegistrationEnabledOverride(int subId, String enabled);
 
     /**
+     * Sends a device to device message; only for use through shell.
+     */
+    void sendDeviceToDeviceMessage(int message, int value);
+
+    /**
      * Gets the config of RCS VoLTE single registration enabled for the carrier/subscription.
      */
     boolean getCarrierSingleRegistrationEnabled(int subId);
@@ -2389,6 +2349,26 @@ interface ITelephony {
      *  their mobile plan.
      */
     String getMobileProvisioningUrl();
+
+    /*
+     * Remove the EAB contacts from the EAB database.
+     */
+    int removeContactFromEab(int subId, String contacts);
+
+    /**
+     * Get the EAB contact from the EAB database.
+     */
+    String getContactFromEab(String contact);
+
+    /*
+     * Check whether the device supports RCS User Capability Exchange or not.
+     */
+    boolean getDeviceUceEnabled();
+
+    /*
+     * Set the device supports RCS User Capability Exchange.
+     */
+     void setDeviceUceEnabled(boolean isEnabled);
 
     /**
      * Set a SignalStrengthUpdateRequest to receive notification when Signal Strength breach the
@@ -2402,4 +2382,9 @@ interface ITelephony {
      */
     void clearSignalStrengthUpdateRequest(int subId, in SignalStrengthUpdateRequest request,
             String callingPackage);
+
+    /**
+     * Gets the current phone capability.
+     */
+    PhoneCapability getPhoneCapability();
 }

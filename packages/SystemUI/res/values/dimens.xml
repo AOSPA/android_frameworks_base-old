@@ -155,7 +155,7 @@
     <dimen name="notification_max_heads_up_height_increased">188dp</dimen>
 
     <!-- Side padding on the lockscreen on the side of notifications -->
-    <dimen name="notification_side_paddings">16dp</dimen>
+    <dimen name="notification_side_paddings">4dp</dimen>
 
     <!-- padding between the heads up and the statusbar -->
     <dimen name="heads_up_status_bar_padding">8dp</dimen>
@@ -177,7 +177,10 @@
     <dimen name="notification_min_interaction_height">40dp</dimen>
 
     <!-- Radius for notifications corners without adjacent notifications -->
-    <dimen name="notification_corner_radius">28dp</dimen>
+    <dimen name="notification_corner_radius">8dp</dimen>
+
+    <!-- Radius for notifications corners with adjacent notifications -->
+    <dimen name="notification_corner_radius_small">0dp</dimen>
 
     <!-- the padding of the shelf icon container -->
     <dimen name="shelf_icon_container_padding">13dp</dimen>
@@ -342,6 +345,7 @@
     <dimen name="screenshot_action_chip_padding_end">16dp</dimen>
     <dimen name="screenshot_action_chip_text_size">14sp</dimen>
     <dimen name="screenshot_dismissal_height_delta">80dp</dimen>
+    <dimen name="screenshot_crop_handle_thickness">3dp</dimen>
 
 
     <!-- The width of the view containing navigation buttons -->
@@ -619,7 +623,7 @@
     <dimen name="z_distance_between_notifications">0.5dp</dimen>
 
     <!-- The height of the divider between the individual notifications. -->
-    <dimen name="notification_divider_height">2dp</dimen>
+    <dimen name="notification_divider_height">1dp</dimen>
 
     <!-- The corner radius of the shadow behind the notification. -->
     <dimen name="notification_shadow_radius">0dp</dimen>
@@ -632,7 +636,7 @@
     <dimen name="notification_children_container_divider_height">0.5dp</dimen>
 
     <!-- The horizontal margin of the content in the notification shade -->
-    <dimen name="notification_shade_content_margin_horizontal">16dp</dimen>
+    <dimen name="notification_shade_content_margin_horizontal">4dp</dimen>
 
     <!-- The top margin for the notification children container in its non-expanded form. -->
     <dimen name="notification_children_container_margin_top">
@@ -1113,6 +1117,9 @@
     <!-- Y translation for credential contents when animating in -->
     <dimen name="biometric_dialog_credential_translation_offset">60dp</dimen>
 
+    <!-- UDFPS enrollment progress bar thickness -->
+    <dimen name="udfps_enroll_progress_thickness">12dp</dimen>
+
     <!-- Wireless Charging Animation values -->
     <dimen name="wireless_charging_dots_radius_start">0dp</dimen>
     <dimen name="wireless_charging_dots_radius_end">4dp</dimen>
@@ -1173,6 +1180,16 @@
     <dimen name="ongoing_appops_chip_icon_size">@dimen/status_bar_icon_drawing_size</dimen>
     <!-- Radius of Ongoing App Ops chip corners -->
     <dimen name="ongoing_appops_chip_bg_corner_radius">16dp</dimen>
+
+    <dimen name="ongoing_appops_dialog_bg_corner_radius">@dimen/notification_corner_radius</dimen>
+
+    <dimen name="ongoing_appops_dialog_side_margins">@dimen/notification_shade_content_margin_horizontal</dimen>
+
+    <dimen name="ongoing_appops_dialog_circle_size">32dp</dimen>
+
+    <dimen name="ongoing_appops_dialog_icon_size">20dp</dimen>
+
+    <dimen name="ongoing_appops_dialog_side_padding">16dp</dimen>
 
     <!-- Size of the RAT type for CellularTile -->
     <dimen name="celltile_rat_type_size">10sp</dimen>
@@ -1246,6 +1263,7 @@
 
     <!-- Home Controls activity view detail panel-->
     <dimen name="controls_activity_view_top_offset">100dp</dimen>
+    <dimen name="controls_activity_view_side_offset">12dp</dimen>
     <dimen name="controls_activity_view_text_size">17sp</dimen>
     <dimen name="controls_activity_view_corner_radius">@*android:dimen/config_bottomDialogCornerRadius</dimen>
 
@@ -1320,4 +1338,12 @@
     <dimen name="people_space_widget_radius">24dp</dimen>
     <dimen name="people_space_widget_round_radius">100dp</dimen>
     <dimen name="people_space_widget_background_padding">6dp</dimen>
+
+    <dimen name="rounded_slider_height">48dp</dimen>
+    <!-- rounded_slider_height / 2 -->
+    <dimen name="rounded_slider_corner_radius">24dp</dimen>
+    <!-- rounded_slider_height / 2 -->
+    <dimen name="rounded_slider_icon_size">24dp</dimen>
+    <!-- rounded_slider_icon_size / 2 -->
+    <dimen name="rounded_slider_icon_inset">12dp</dimen>
 </resources>

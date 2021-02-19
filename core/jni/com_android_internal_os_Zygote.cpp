@@ -70,7 +70,6 @@
 #include <bionic/malloc.h>
 #include <bionic/mte.h>
 #include <cutils/fs.h>
-#include <cutils/memory.h>
 #include <cutils/multiuser.h>
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
@@ -343,6 +342,7 @@ enum RuntimeFlags : uint32_t {
     GWP_ASAN_LEVEL_NEVER = 0 << 21,
     GWP_ASAN_LEVEL_LOTTERY = 1 << 21,
     GWP_ASAN_LEVEL_ALWAYS = 2 << 21,
+    NATIVE_HEAP_ZERO_INIT = 1 << 23,
 };
 
 enum UnsolicitedZygoteMessageTypes : uint32_t {
@@ -631,13 +631,6 @@ static void PreApplicationInit() {
 
   // Set the jemalloc decay time to 1.
   mallopt(M_DECAY_TIME, 1);
-
-  // Avoid potentially expensive memory mitigations, mostly meant for system
-  // processes, in apps. These may cause app compat problems, use more memory,
-  // or reduce performance. While it would be nice to have them for apps,
-  // we will have to wait until they are proven out, have more efficient
-  // hardware, and/or apply them only to new applications.
-  process_disable_memory_mitigations();
 
   void *mBelugaHandle = nullptr;
   void (*mBeluga)() = nullptr;
@@ -1808,8 +1801,21 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
       break;
   }
   mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, heap_tagging_level);
+
   // Now that we've used the flag, clear it so that we don't pass unknown flags to the ART runtime.
   runtime_flags &= ~RuntimeFlags::MEMORY_TAG_LEVEL_MASK;
+
+  // Avoid heap zero initialization for applications without MTE. Zero init may
+  // cause app compat problems, use more memory, or reduce performance. While it
+  // would be nice to have them for apps, we will have to wait until they are
+  // proven out, have more efficient hardware, and/or apply them only to new
+  // applications.
+  if (!(runtime_flags & RuntimeFlags::NATIVE_HEAP_ZERO_INIT)) {
+    mallopt(M_BIONIC_ZERO_INIT, 0);
+  }
+
+  // Now that we've used the flag, clear it so that we don't pass unknown flags to the ART runtime.
+  runtime_flags &= ~RuntimeFlags::NATIVE_HEAP_ZERO_INIT;
 
   bool forceEnableGwpAsan = false;
   switch (runtime_flags & RuntimeFlags::GWP_ASAN_LEVEL_MASK) {

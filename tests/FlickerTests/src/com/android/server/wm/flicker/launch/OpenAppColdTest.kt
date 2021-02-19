@@ -20,12 +20,10 @@ import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.Flicker
 import com.android.server.wm.flicker.FlickerTestRunnerFactory
 import com.android.server.wm.flicker.FlickerTestRunner
 import com.android.server.wm.flicker.endRotation
 import com.android.server.wm.flicker.focusChanges
-import com.android.server.wm.flicker.helpers.StandardAppHelper
 import com.android.server.wm.flicker.helpers.buildTestTag
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
@@ -42,6 +40,8 @@ import com.android.server.wm.flicker.visibleWindowsShownMoreThanOneConsecutiveEn
 import com.android.server.wm.flicker.visibleLayersShownMoreThanOneConsecutiveEntry
 import com.android.server.wm.flicker.wallpaperWindowBecomesInvisible
 import com.android.server.wm.flicker.appLayerReplacesWallpaperLayer
+import com.android.server.wm.flicker.helpers.SimpleAppHelper
+import com.android.server.wm.flicker.helpers.isRotated
 import org.junit.FixMethodOrder
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
@@ -56,19 +56,17 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class OpenAppColdTest(
-    testName: String,
-    flickerSpec: Flicker
-) : FlickerTestRunner(testName, flickerSpec) {
+    testSpec: FlickerTestRunnerFactory.TestSpec
+) : FlickerTestRunner(testSpec) {
     companion object {
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): List<Array<Any>> {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
-            val testApp = StandardAppHelper(instrumentation,
-                "com.android.server.wm.flicker.testapp", "SimpleApp")
-            return FlickerTestRunnerFactory(instrumentation)
-                .buildTest { configuration ->
-                    withTag { buildTestTag("openAppCold", testApp, configuration) }
+            val testApp = SimpleAppHelper(instrumentation)
+            return FlickerTestRunnerFactory.getInstance()
+                .buildTest(instrumentation) { configuration ->
+                    withTestName { buildTestTag("openAppCold", testApp, configuration) }
                     repeat { configuration.repetitions }
                     setup {
                         test {
@@ -80,10 +78,12 @@ class OpenAppColdTest(
                     }
                     transitions {
                         testApp.open()
+                        wmHelper.waitForFullScreenApp(testApp.component)
                     }
                     teardown {
                         eachRun {
                             testApp.exit()
+                            wmHelper.waitForAppTransitionIdle()
                             this.setRotation(Surface.ROTATION_0)
                         }
                     }
@@ -99,15 +99,16 @@ class OpenAppColdTest(
 
                         layersTrace {
                             // During testing the launcher is always in portrait mode
-                            noUncoveredRegions(Surface.ROTATION_0, configuration.endRotation,
-                                bugId = 141361128)
+                            noUncoveredRegions(Surface.ROTATION_0, configuration.endRotation)
                             navBarLayerRotatesAndScales(Surface.ROTATION_0,
-                                configuration.endRotation)
+                                configuration.endRotation,
+                                enabled = !configuration.startRotation.isRotated())
                             statusBarLayerRotatesScales(Surface.ROTATION_0,
-                                configuration.endRotation)
-                            navBarLayerIsAlwaysVisible(enabled = false)
-                            statusBarLayerIsAlwaysVisible(enabled = false)
-                            visibleLayersShownMoreThanOneConsecutiveEntry()
+                                configuration.endRotation,
+                                enabled = !configuration.startRotation.isRotated())
+                            navBarLayerIsAlwaysVisible()
+                            statusBarLayerIsAlwaysVisible()
+                            visibleLayersShownMoreThanOneConsecutiveEntry(enabled = false)
 
                             appLayerReplacesWallpaperLayer(testApp.`package`)
                         }
