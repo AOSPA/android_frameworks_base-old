@@ -164,7 +164,7 @@ public class WindowAnimator {
 
                 dc.checkAppWindowsReadyToShow();
                 if (accessibilityController != null) {
-                    accessibilityController.drawMagnifiedRegionBorderIfNeededLocked(displayId,
+                    accessibilityController.drawMagnifiedRegionBorderIfNeeded(displayId,
                             mTransaction);
                 }
             }
@@ -219,8 +219,6 @@ public class WindowAnimator {
             mService.mRoot.removeReplacedWindows();
             mRemoveReplacedWindows = false;
         }
-
-        mService.destroyPreservedSurfaceLocked();
 
         mService.mAtmService.mTaskOrganizerController.dispatchPendingEvents();
         executeAfterPrepareSurfacesRunnables();

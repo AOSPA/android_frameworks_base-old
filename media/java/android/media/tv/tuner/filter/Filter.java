@@ -209,7 +209,7 @@ public class Filter implements AutoCloseable {
             prefix = "MONITOR_EVENT_",
             value = {MONITOR_EVENT_SCRAMBLING_STATUS, MONITOR_EVENT_IP_CID_CHANGE})
     @Retention(RetentionPolicy.SOURCE)
-    public @interface MonitorEventTypeMask {}
+    public @interface MonitorEventMask {}
 
     /**
      * Monitor scrambling status change.
@@ -239,7 +239,7 @@ public class Filter implements AutoCloseable {
             int type, int subType, FilterConfiguration settings);
     private native int nativeGetId();
     private native long nativeGetId64Bit();
-    private native int nativeConfigureMonitorEvent(int monitorEventTypesMask);
+    private native int nativeConfigureMonitorEvent(int monitorEventMask);
     private native int nativeSetDataSource(Filter source);
     private native int nativeStartFilter();
     private native int nativeStopFilter();
@@ -283,6 +283,12 @@ public class Filter implements AutoCloseable {
 
     /**
      * Configures the filter.
+     *
+     * <p>Recofiguring must happen after stopping the filter.
+     *
+     * <p>When stopping, reconfiguring and restarting the filter, the client should discard all
+     * coming events until it receives {@link RestartEvent} through {@link FilterCallback} to avoid
+     * using the events from the previous configuration.
      *
      * @param config the configuration of the filter.
      * @return result status of the operation.
@@ -344,19 +350,19 @@ public class Filter implements AutoCloseable {
      * will cause no-op. Use {@link TunerVersionChecker#getTunerVersion()} to get the version
      * information.
      *
-     * @param monitorEventTypesMask Types of event to be monitored. Set corresponding bit to
-     *                              monitor it. Reset to stop monitoring.
+     * @param monitorEventMask Types of event to be monitored. Set corresponding bit to
+     *                         monitor it. Reset to stop monitoring.
      * @return result status of the operation.
      */
     @Result
-    public int configureMonitorEvent(@MonitorEventTypeMask int monitorEventTypesMask) {
+    public int setMonitorEventMask(@MonitorEventMask int monitorEventMask) {
         synchronized (mLock) {
             TunerUtils.checkResourceState(TAG, mIsClosed);
             if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
-                    TunerVersionChecker.TUNER_VERSION_1_1, "configureMonitorEvent")) {
+                    TunerVersionChecker.TUNER_VERSION_1_1, "setMonitorEventMask")) {
                 return Tuner.RESULT_UNAVAILABLE;
             }
-            return nativeConfigureMonitorEvent(monitorEventTypesMask);
+            return nativeConfigureMonitorEvent(monitorEventMask);
         }
     }
 
@@ -393,6 +399,10 @@ public class Filter implements AutoCloseable {
      *
      * <p>Does nothing if the filter is already started.
      *
+     * <p>When stopping, reconfiguring and restarting the filter, the client should discard all
+     * coming events until it receives {@link RestartEvent} through {@link FilterCallback} to avoid
+     * using the events from the previous configuration.
+     *
      * @return result status of the operation.
      */
     @Result
@@ -408,6 +418,12 @@ public class Filter implements AutoCloseable {
      * Stops filtering data.
      *
      * <p>Does nothing if the filter is stopped or not started.
+     *
+     * <p>Filter must be stopped to reconfigure.
+     *
+     * <p>When stopping, reconfiguring and restarting the filter, the client should discard all
+     * coming events until it receives {@link RestartEvent} through {@link FilterCallback} to avoid
+     * using the events from the previous configuration.
      *
      * @return result status of the operation.
      */

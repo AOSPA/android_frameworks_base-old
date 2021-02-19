@@ -20,12 +20,14 @@ import static android.hardware.camera2.CameraAccessException.CAMERA_IN_USE;
 import static com.android.internal.util.function.pooled.PooledLambda.obtainRunnable;
 
 import android.annotation.NonNull;
+import android.content.Context;
 import android.hardware.ICameraService;
 import android.app.ActivityThread;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraExtensionSession;
 import android.hardware.camera2.CameraOfflineSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CaptureFailure;
@@ -35,6 +37,7 @@ import android.hardware.camera2.ICameraDeviceCallbacks;
 import android.hardware.camera2.ICameraDeviceUser;
 import android.hardware.camera2.ICameraOfflineSession;
 import android.hardware.camera2.TotalCaptureResult;
+import android.hardware.camera2.params.ExtensionSessionConfiguration;
 import android.hardware.camera2.params.InputConfiguration;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
@@ -115,6 +118,7 @@ public class CameraDeviceImpl extends CameraDevice
     private final String mCameraId;
     private final CameraCharacteristics mCharacteristics;
     private final int mTotalPartialCount;
+    private final Context mContext;
 
     private static final long NANO_PER_SECOND = 1000000000; //ns
 
@@ -132,6 +136,7 @@ public class CameraDeviceImpl extends CameraDevice
     private FrameNumberTracker mFrameNumberTracker = new FrameNumberTracker();
 
     private CameraCaptureSessionCore mCurrentSession;
+    private CameraExtensionSessionImpl mCurrentExtensionSession;
     private int mNextSessionId = 0;
 
     private final int mAppTargetSdkVersion;
@@ -256,7 +261,8 @@ public class CameraDeviceImpl extends CameraDevice
     };
 
     public CameraDeviceImpl(String cameraId, StateCallback callback, Executor executor,
-                        CameraCharacteristics characteristics, int appTargetSdkVersion) {
+                        CameraCharacteristics characteristics, int appTargetSdkVersion,
+                        Context ctx) {
         if (cameraId == null || callback == null || executor == null || characteristics == null) {
             throw new IllegalArgumentException("Null argument given");
         }
@@ -265,6 +271,7 @@ public class CameraDeviceImpl extends CameraDevice
         mDeviceExecutor = executor;
         mCharacteristics = characteristics;
         mAppTargetSdkVersion = appTargetSdkVersion;
+        mContext = ctx;
 
         final int MAX_TAG_LEN = 23;
         String tag = String.format("CameraDevice-JV-%s", mCameraId);
@@ -1334,6 +1341,10 @@ public class CameraDeviceImpl extends CameraDevice
                 mRemoteDevice.unlinkToDeath(this, /*flags*/0);
             }
 
+            if (mCurrentExtensionSession != null) {
+                mCurrentExtensionSession.release();
+                mCurrentExtensionSession = null;
+            }
             // Only want to fire the onClosed callback once;
             // either a normal close where the remote device is valid
             // or a close after a startup error (no remote device but in error state)
@@ -2337,6 +2348,18 @@ public class CameraDeviceImpl extends CameraDevice
         synchronized(mInterfaceLock) {
             checkIfCameraClosedOrInError();
             return mRemoteDevice.getGlobalAudioRestriction();
+        }
+    }
+
+    @Override
+    public void createExtensionSession(ExtensionSessionConfiguration extensionConfiguration)
+            throws CameraAccessException {
+        try {
+            mCurrentExtensionSession = CameraExtensionSessionImpl.createCameraExtensionSession(this,
+                    mContext,
+                    extensionConfiguration);
+        } catch (RemoteException e) {
+            throw new CameraAccessException(CameraAccessException.CAMERA_ERROR);
         }
     }
 }

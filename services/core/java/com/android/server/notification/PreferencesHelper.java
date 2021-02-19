@@ -23,8 +23,8 @@ import static android.app.NotificationManager.BUBBLE_PREFERENCE_ALL;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_NONE;
 import static android.app.NotificationManager.IMPORTANCE_NONE;
 import static android.app.NotificationManager.IMPORTANCE_UNSPECIFIED;
+import static android.util.StatsLog.ANNOTATION_ID_IS_UID;
 
-import static com.android.internal.util.FrameworkStatsLog.ANNOTATION_ID_IS_UID;
 import static com.android.internal.util.FrameworkStatsLog.PACKAGE_NOTIFICATION_CHANNEL_GROUP_PREFERENCES;
 import static com.android.internal.util.FrameworkStatsLog.PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES;
 import static com.android.internal.util.FrameworkStatsLog.PACKAGE_NOTIFICATION_PREFERENCES;
@@ -1419,8 +1419,10 @@ public class PreferencesHelper implements RankingConfig {
                             conversation.setPkg(p.pkg);
                             conversation.setUid(p.uid);
                             conversation.setNotificationChannel(nc);
-                            conversation.setParentChannelLabel(
-                                    p.channels.get(nc.getParentChannelId()).getName());
+                            NotificationChannel parent = p.channels.get(nc.getParentChannelId());
+                            conversation.setParentChannelLabel(parent == null
+                                    ? null
+                                    : parent.getName());
                             boolean blockedByGroup = false;
                             if (nc.getGroup() != null) {
                                 NotificationChannelGroup group = p.groups.get(nc.getGroup());

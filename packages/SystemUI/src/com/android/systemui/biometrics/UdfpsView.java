@@ -16,83 +16,57 @@
 
 package com.android.systemui.biometrics;
 
-import static com.android.systemui.doze.util.BurnInHelperKt.getBurnInOffset;
+import static com.android.systemui.statusbar.StatusBarState.FULLSCREEN_USER_SWITCHER;
+import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
+import static com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.drawable.Drawable;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
-import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.util.MathUtils;
-import android.view.Surface;
+import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewTreeObserver;
+import android.widget.FrameLayout;
 
-import com.android.internal.graphics.ColorUtils;
-import com.android.settingslib.Utils;
 import com.android.systemui.R;
 import com.android.systemui.doze.DozeReceiver;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.phone.StatusBar;
 
 /**
- * A full screen view with a configurable illumination dot and scrim.
+ * A view containing 1) A SurfaceView for HBM, and 2) A normal drawable view for all other
+ * animations.
  */
-public class UdfpsView extends View implements DozeReceiver,
-        StatusBarStateController.StateListener {
+public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIlluminator,
+        StatusBarStateController.StateListener, StatusBar.ExpansionChangedListener {
     private static final String TAG = "UdfpsView";
-
-    // Values in pixels.
-    private static final float SENSOR_SHADOW_RADIUS = 2.0f;
-    private static final float SENSOR_OUTLINE_WIDTH = 2.0f;
 
     private static final int DEBUG_TEXT_SIZE_PX = 32;
 
-    @NonNull private final Rect mScrimRect;
-    @NonNull private final Paint mScrimPaint;
+    @NonNull private final UdfpsSurfaceView mHbmSurfaceView;
+    @NonNull private final UdfpsAnimationView mAnimationView;
+    @NonNull private final RectF mSensorRect;
     @NonNull private final Paint mDebugTextPaint;
 
-    @NonNull private final RectF mSensorRect;
-    @NonNull private final Paint mSensorPaint;
-    private final float mSensorTouchAreaCoefficient;
-    private final int mMaxBurnInOffsetX;
-    private final int mMaxBurnInOffsetY;
-
-    // Stores rounded up values from mSensorRect. Necessary for APIs that only take Rect (not RecF).
-    @NonNull private final Rect mTouchableRegion;
-    // mInsetsListener is used to set the touchable region for our window. Our window covers the
-    // whole screen, and by default its touchable region is the whole screen. We use
-    // mInsetsListener to restrict the touchable region and allow the touches outside of the sensor
-    // to propagate to the rest of the UI.
-    @NonNull private final ViewTreeObserver.OnComputeInternalInsetsListener mInsetsListener;
-    @NonNull private final Drawable mFingerprintDrawable;
+    @Nullable private UdfpsProgressBar mProgressBar;
 
     // Used to obtain the sensor location.
     @NonNull private FingerprintSensorPropertiesInternal mSensorProps;
 
-    // AOD anti-burn-in offsets
-    private float mInterpolatedDarkAmount;
-    private float mBurnInOffsetX;
-    private float mBurnInOffsetY;
-
-    private int mShowReason;
-    private boolean mShowScrimAndDot;
-    private boolean mIsHbmSupported;
+    private final float mSensorTouchAreaCoefficient;
     @Nullable private String mDebugMessage;
-
-    // Runnable that will be run after the illumination dot and scrim are shown.
-    // The runnable is reset to null after it's executed once.
-    @Nullable private Runnable mRunAfterShowingScrimAndDot;
+    private boolean mIlluminationRequested;
+    private int mStatusBarState;
+    private boolean mNotificationShadeExpanded;
+    @Nullable private UdfpsEnrollHelper mEnrollHelper;
 
     public UdfpsView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -110,121 +84,86 @@ public class UdfpsView extends View implements DozeReceiver,
             a.recycle();
         }
 
-        mMaxBurnInOffsetX = getResources()
-                .getDimensionPixelSize(R.dimen.udfps_burn_in_offset_x);
-        mMaxBurnInOffsetY = getResources()
-                .getDimensionPixelSize(R.dimen.udfps_burn_in_offset_y);
+        // Inflate UdfpsSurfaceView
+        final LayoutInflater inflater = LayoutInflater.from(context);
+        mHbmSurfaceView = (UdfpsSurfaceView) inflater.inflate(R.layout.udfps_surface_view,
+                null, false);
+        addView(mHbmSurfaceView);
+        mHbmSurfaceView.setVisibility(View.INVISIBLE);
 
-        mScrimRect = new Rect();
-        mScrimPaint = new Paint(0 /* flags */);
-        mScrimPaint.setColor(Color.BLACK);
+        // Inflate UdfpsAnimationView
+        mAnimationView = (UdfpsAnimationView) inflater.inflate(R.layout.udfps_animation_view,
+                null, false);
+        mAnimationView.setParent(this);
+        addView(mAnimationView);
 
         mSensorRect = new RectF();
-        mSensorPaint = new Paint(0 /* flags */);
-        mSensorPaint.setAntiAlias(true);
-        mSensorPaint.setColor(Color.WHITE);
-        mSensorPaint.setShadowLayer(SENSOR_SHADOW_RADIUS, 0, 0, Color.BLACK);
-        mSensorPaint.setStyle(Paint.Style.FILL);
 
         mDebugTextPaint = new Paint();
         mDebugTextPaint.setAntiAlias(true);
         mDebugTextPaint.setColor(Color.BLUE);
         mDebugTextPaint.setTextSize(DEBUG_TEXT_SIZE_PX);
 
-        mFingerprintDrawable = getResources().getDrawable(R.drawable.ic_fingerprint, null);
-
-        mTouchableRegion = new Rect();
-        // When the device is rotated, it's important that mTouchableRegion is updated before
-        // this listener is called. This listener is usually called shortly after onLayout.
-        mInsetsListener = internalInsetsInfo -> {
-            internalInsetsInfo.setTouchableInsets(
-                    ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
-            internalInsetsInfo.touchableRegion.set(mTouchableRegion);
-        };
-
-        mShowScrimAndDot = false;
+        mIlluminationRequested = false;
     }
 
     void setSensorProperties(@NonNull FingerprintSensorPropertiesInternal properties) {
         mSensorProps = properties;
     }
 
-    /**
-     * @param reason See {@link android.hardware.fingerprint.IUdfpsOverlayController}
-     */
-    void setShowReason(int reason) {
-        mShowReason = reason;
+    void setExtras(@Nullable UdfpsAnimation animation, @Nullable UdfpsEnrollHelper enrollHelper) {
+        mAnimationView.setAnimation(animation);
+        mEnrollHelper = enrollHelper;
+
+        if (enrollHelper != null) {
+            mEnrollHelper.updateProgress(mProgressBar);
+            mProgressBar.setVisibility(enrollHelper.shouldShowProgressBar()
+                    ? View.VISIBLE : View.GONE);
+        } else {
+            mProgressBar.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public void setHbmCallback(@Nullable HbmCallback callback) {
+        mHbmSurfaceView.setHbmCallback(callback);
     }
 
     @Override
     public void dozeTimeTick() {
-        updateAodPositionAndColor();
+        mAnimationView.dozeTimeTick();
     }
 
     @Override
-    public void onDozeAmountChanged(float linear, float eased) {
-        mInterpolatedDarkAmount = eased;
-        updateAodPositionAndColor();
+    public void onExpandedChanged(boolean isExpanded) {
+        mNotificationShadeExpanded = isExpanded;
     }
 
-    private void updateAodPositionAndColor() {
-        mBurnInOffsetX = MathUtils.lerp(0f,
-                getBurnInOffset(mMaxBurnInOffsetX * 2, true /* xAxis */)
-                        - mMaxBurnInOffsetX,
-                mInterpolatedDarkAmount);
-        mBurnInOffsetY = MathUtils.lerp(0f,
-                getBurnInOffset(mMaxBurnInOffsetY * 2, false /* xAxis */)
-                        - 0.5f * mMaxBurnInOffsetY,
-                mInterpolatedDarkAmount);
-        updateColor();
-        postInvalidate();
+    @Override
+    public void onStateChanged(int newState) {
+        mStatusBarState = newState;
     }
 
-    // The "h" and "w" are the display's height and width relative to its current rotation.
-    private void updateSensorRect(int h, int w) {
-        // mSensorProps coordinates assume portrait mode.
-        mSensorRect.set(mSensorProps.sensorLocationX - mSensorProps.sensorRadius,
-                mSensorProps.sensorLocationY - mSensorProps.sensorRadius,
-                mSensorProps.sensorLocationX + mSensorProps.sensorRadius,
-                mSensorProps.sensorLocationY + mSensorProps.sensorRadius);
+    @Override
+    public void onExpansionChanged(float expansion, boolean expanded) {
+        mAnimationView.onExpansionChanged(expansion, expanded);
+    }
 
-        // Transform mSensorRect if the device is in landscape mode.
-        switch (mContext.getDisplay().getRotation()) {
-            case Surface.ROTATION_90:
-                mSensorRect.set(mSensorRect.top, h - mSensorRect.right, mSensorRect.bottom,
-                        h - mSensorRect.left);
-                break;
-            case Surface.ROTATION_270:
-                mSensorRect.set(w - mSensorRect.bottom, mSensorRect.left, w - mSensorRect.top,
-                        mSensorRect.right);
-                break;
-            default:
-                // Do nothing to stay in portrait mode.
-        }
-
-        int margin =  (int) (mSensorRect.bottom - mSensorRect.top) / 5;
-        mFingerprintDrawable.setBounds(
-                (int) mSensorRect.left + margin,
-                (int) mSensorRect.top + margin,
-                (int) mSensorRect.right - margin,
-                (int) mSensorRect.bottom - margin);
+    @Override
+    protected void onFinishInflate() {
+        mProgressBar = findViewById(R.id.progress_bar);
     }
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        // Always re-compute the layout regardless of whether "changed" is true. It is usually false
-        // when the device goes from landscape to seascape and vice versa, but mSensorRect and
-        // its dependencies need to be recalculated to stay at the same physical location on the
-        // screen.
-        final int w = getLayoutParams().width;
-        final int h = getLayoutParams().height;
-        mScrimRect.set(0 /* left */, 0 /* top */, w, h);
-        updateSensorRect(h, w);
-        // Update mTouchableRegion with the rounded up values from mSensorRect. After "onLayout"
-        // is finished, mTouchableRegion will be used by mInsetsListener to compute the touch
-        // insets.
-        mSensorRect.roundOut(mTouchableRegion);
+        mSensorRect.set(0 + mAnimationView.getPaddingX(),
+                0 + mAnimationView.getPaddingY(),
+                2 * mSensorProps.sensorRadius + mAnimationView.getPaddingX(),
+                2 * mSensorProps.sensorRadius + mAnimationView.getPaddingY());
+
+        mHbmSurfaceView.onSensorRectUpdated(new RectF(mSensorRect));
+        mAnimationView.onSensorRectUpdated(new RectF(mSensorRect));
     }
 
     @Override
@@ -233,64 +172,22 @@ public class UdfpsView extends View implements DozeReceiver,
         Log.v(TAG, "onAttachedToWindow");
 
         // Retrieve the colors each time, since it depends on day/night mode
-        updateColor();
-
-        getViewTreeObserver().addOnComputeInternalInsetsListener(mInsetsListener);
-    }
-
-    private void updateColor() {
-        if (mShowReason == IUdfpsOverlayController.REASON_AUTH) {
-            final int lockScreenIconColor = Utils.getColorAttrDefaultColor(mContext,
-                    com.android.systemui.R.attr.wallpaperTextColor);
-            final int ambientDisplayIconColor = Color.WHITE;
-            mFingerprintDrawable.setTint(ColorUtils.blendARGB(lockScreenIconColor,
-                    ambientDisplayIconColor, mInterpolatedDarkAmount));
-        } else if (mShowReason == IUdfpsOverlayController.REASON_ENROLL) {
-            mFingerprintDrawable.setTint(mContext.getColor(R.color.udfps_enroll_icon));
-        }
+        mAnimationView.updateColor();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         Log.v(TAG, "onDetachedFromWindow");
-        getViewTreeObserver().removeOnComputeInternalInsetsListener(mInsetsListener);
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-
-        if (mShowScrimAndDot && mIsHbmSupported) {
-            // Only draw the scrim if HBM is supported.
-            canvas.drawRect(mScrimRect, mScrimPaint);
-        }
-
-        // Translation should affect everything but the scrim.
-        canvas.save();
-        canvas.translate(mBurnInOffsetX, mBurnInOffsetY);
-        if (!TextUtils.isEmpty(mDebugMessage)) {
-            canvas.drawText(mDebugMessage, 0, 160, mDebugTextPaint);
-        }
-
-        if (mShowScrimAndDot) {
-            // draw dot (white circle)
-            canvas.drawOval(mSensorRect, mSensorPaint);
-        } else {
-            final boolean isNightMode = (getResources().getConfiguration().uiMode
-                    & Configuration.UI_MODE_NIGHT_YES) != 0;
-            if (mShowReason == IUdfpsOverlayController.REASON_ENROLL && !isNightMode) {
-                canvas.drawOval(mSensorRect, mSensorPaint);
+        if (!mIlluminationRequested) {
+            if (!TextUtils.isEmpty(mDebugMessage)) {
+                canvas.drawText(mDebugMessage, 0, 160, mDebugTextPaint);
             }
-            // draw fingerprint icon
-            mFingerprintDrawable.draw(canvas);
-        }
-
-        canvas.restore();
-
-        if (mShowScrimAndDot && mRunAfterShowingScrimAndDot != null) {
-            post(mRunAfterShowingScrimAndDot);
-            mRunAfterShowingScrimAndDot = null;
         }
     }
 
@@ -298,17 +195,9 @@ public class UdfpsView extends View implements DozeReceiver,
         return new RectF(mSensorRect);
     }
 
-    void setHbmSupported(boolean value) {
-        mIsHbmSupported = value;
-    }
-
     void setDebugMessage(String message) {
         mDebugMessage = message;
         postInvalidate();
-    }
-
-    void setRunAfterShowingScrimAndDot(Runnable runnable) {
-        mRunAfterShowingScrimAndDot = runnable;
     }
 
     boolean isValidTouch(float x, float y, float pressure) {
@@ -322,24 +211,49 @@ public class UdfpsView extends View implements DozeReceiver,
         return x > (cx - rx * mSensorTouchAreaCoefficient)
                 && x < (cx + rx * mSensorTouchAreaCoefficient)
                 && y > (cy - ry * mSensorTouchAreaCoefficient)
-                && y < (cy + ry * mSensorTouchAreaCoefficient);
+                && y < (cy + ry * mSensorTouchAreaCoefficient)
+                && !shouldPauseAuth();
     }
 
-    void setScrimAlpha(int alpha) {
-        mScrimPaint.setAlpha(alpha);
+    /**
+     * States where UDFPS should temporarily not be authenticating. Instead of completely stopping
+     * authentication which would cause the UDFPS icons to abruptly disappear, do it here by not
+     * sending onFingerDown and smoothly animating away.
+     */
+    boolean shouldPauseAuth() {
+        return (mNotificationShadeExpanded && mStatusBarState != KEYGUARD)
+                || mStatusBarState == SHADE_LOCKED
+                || mStatusBarState == FULLSCREEN_USER_SWITCHER;
     }
 
-    boolean isShowScrimAndDot() {
-        return mShowScrimAndDot;
+    boolean isIlluminationRequested() {
+        return mIlluminationRequested;
     }
 
-    void showScrimAndDot() {
-        mShowScrimAndDot = true;
-        invalidate();
+    /**
+     * @param onIlluminatedRunnable Runs when the first illumination frame reaches the panel.
+     */
+    @Override
+    public void startIllumination(@Nullable Runnable onIlluminatedRunnable) {
+        mIlluminationRequested = true;
+        mAnimationView.setVisibility(View.INVISIBLE);
+        mHbmSurfaceView.setVisibility(View.VISIBLE);
+        mHbmSurfaceView.startIllumination(onIlluminatedRunnable);
     }
 
-    void hideScrimAndDot() {
-        mShowScrimAndDot = false;
-        invalidate();
+    @Override
+    public void stopIllumination() {
+        mIlluminationRequested = false;
+        mAnimationView.setVisibility(View.VISIBLE);
+        mHbmSurfaceView.setVisibility(View.INVISIBLE);
+        mHbmSurfaceView.stopIllumination();
+    }
+
+    void onEnrollmentProgress(int remaining) {
+        mEnrollHelper.onEnrollmentProgress(remaining, mProgressBar);
+    }
+
+    void onEnrollmentHelp() {
+
     }
 }

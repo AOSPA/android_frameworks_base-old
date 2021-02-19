@@ -28,6 +28,7 @@ import androidx.test.runner.AndroidJUnit4;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 @RunWith(AndroidJUnit4.class)
@@ -39,6 +40,12 @@ public class VcnGatewayConnectionConfigTest {
                 NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_MMS
             };
     public static final int[] UNDERLYING_CAPS = new int[] {NetworkCapabilities.NET_CAPABILITY_DUN};
+
+    static {
+        Arrays.sort(EXPOSED_CAPS);
+        Arrays.sort(UNDERLYING_CAPS);
+    }
+
     public static final long[] RETRY_INTERVALS_MS =
             new long[] {
                 TimeUnit.SECONDS.toMillis(5),
@@ -52,12 +59,17 @@ public class VcnGatewayConnectionConfigTest {
 
     // Public for use in VcnGatewayConnectionTest
     public static VcnGatewayConnectionConfig buildTestConfig() {
+        return buildTestConfigWithExposedCaps(EXPOSED_CAPS);
+    }
+
+    // Public for use in VcnGatewayConnectionTest
+    public static VcnGatewayConnectionConfig buildTestConfigWithExposedCaps(int... exposedCaps) {
         final VcnGatewayConnectionConfig.Builder builder =
                 new VcnGatewayConnectionConfig.Builder()
                         .setRetryInterval(RETRY_INTERVALS_MS)
                         .setMaxMtu(MAX_MTU);
 
-        for (int caps : EXPOSED_CAPS) {
+        for (int caps : exposedCaps) {
             builder.addExposedCapability(caps);
         }
 
@@ -124,12 +136,13 @@ public class VcnGatewayConnectionConfigTest {
     public void testBuilderAndGetters() {
         final VcnGatewayConnectionConfig config = buildTestConfig();
 
-        for (int cap : EXPOSED_CAPS) {
-            config.hasExposedCapability(cap);
-        }
-        for (int cap : UNDERLYING_CAPS) {
-            config.requiresUnderlyingCapability(cap);
-        }
+        int[] exposedCaps = config.getExposedCapabilities();
+        Arrays.sort(exposedCaps);
+        assertArrayEquals(EXPOSED_CAPS, exposedCaps);
+
+        int[] underlyingCaps = config.getRequiredUnderlyingCapabilities();
+        Arrays.sort(underlyingCaps);
+        assertArrayEquals(UNDERLYING_CAPS, underlyingCaps);
 
         assertArrayEquals(RETRY_INTERVALS_MS, config.getRetryIntervalsMs());
         assertEquals(MAX_MTU, config.getMaxMtu());

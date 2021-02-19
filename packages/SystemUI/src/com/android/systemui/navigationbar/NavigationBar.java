@@ -28,6 +28,7 @@ import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.containsType;
 import static android.view.WindowInsetsController.APPEARANCE_LOW_PROFILE_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_OPAQUE_NAVIGATION_BARS;
+import static android.view.WindowInsetsController.APPEARANCE_SEMI_TRANSPARENT_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
@@ -544,6 +545,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         }
         mNavigationBarView.setNavigationIconHints(mNavigationIconHints);
         mNavigationBarView.setWindowVisible(isNavBarWindowVisible());
+        mNavigationBarView.setBehavior(mBehavior);
         mSplitScreenOptional.ifPresent(mNavigationBarView::registerDockedListener);
         mPipOptional.ifPresent(mNavigationBarView::registerPipExclusionBoundsChangeListener);
 
@@ -664,7 +666,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     }
 
     private void initSecondaryHomeHandleForRotation() {
-        if (!canShowSecondaryHandle()) {
+        if (mNavBarMode != NAV_BAR_MODE_GESTURAL) {
             return;
         }
 
@@ -918,6 +920,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         }
         if (mBehavior != behavior) {
             mBehavior = behavior;
+            if (mNavigationBarView != null) {
+                mNavigationBarView.setBehavior(behavior);
+            }
             updateSystemUiStateFlags(-1);
         }
     }
@@ -994,6 +999,8 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
             return MODE_LIGHTS_OUT_TRANSPARENT;
         } else if ((appearance & APPEARANCE_OPAQUE_NAVIGATION_BARS) != 0) {
             return MODE_OPAQUE;
+        } else if ((appearance & APPEARANCE_SEMI_TRANSPARENT_NAVIGATION_BARS) != 0) {
+            return MODE_SEMI_TRANSPARENT;
         } else {
             return MODE_TRANSPARENT;
         }
@@ -1517,7 +1524,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     }
 
     private boolean canShowSecondaryHandle() {
-        return mNavBarMode == NAV_BAR_MODE_GESTURAL;
+        return mNavBarMode == NAV_BAR_MODE_GESTURAL && mOrientationHandle != null;
     }
 
     private final Consumer<Integer> mRotationWatcher = rotation -> {

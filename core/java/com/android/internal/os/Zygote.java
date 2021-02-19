@@ -103,7 +103,7 @@ public final class Zygote {
      */
     public static final int PROFILE_FROM_SHELL = 1 << 15;
 
-    /*
+    /**
      * Enable using the ART app image startup cache
      */
     public static final int USE_APP_IMAGE_STARTUP_CACHE = 1 << 16;
@@ -116,14 +116,9 @@ public final class Zygote {
      */
     public static final int DEBUG_IGNORE_APP_SIGNAL_HANDLER = 1 << 17;
 
-    /**
-     * Disable runtime access to {@link android.annotation.TestApi} annotated members.
-     *
-     * <p>This only takes effect if Hidden API access restrictions are enabled as well.
-     */
-    public static final int DISABLE_TEST_API_ENFORCEMENT_POLICY = 1 << 18;
-
     public static final int MEMORY_TAG_LEVEL_MASK = (1 << 19) | (1 << 20);
+
+    public static final int MEMORY_TAG_LEVEL_NONE = 0;
     /**
      * Enable pointer tagging in this process.
      * Tags are checked during memory deallocation, but not on access.
@@ -167,7 +162,12 @@ public final class Zygote {
      * GWP-ASan is activated unconditionally (but still, only a small subset of
      * allocations is protected).
      */
-    public static final int GWP_ASAN_LEVEL_ALWAYS = 2 << 21;
+    public static final int GWP_ASAN_LEVEL_ALWAYS = 1 << 22;
+
+    /**
+     * Enable automatic zero-initialization of native heap memory allocations.
+     */
+    public static final int NATIVE_HEAP_ZERO_INIT = 1 << 23;
 
     /** No external storage should be mounted. */
     public static final int MOUNT_EXTERNAL_NONE = IVold.REMOUNT_MODE_NONE;

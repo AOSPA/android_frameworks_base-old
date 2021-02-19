@@ -26,6 +26,7 @@ import android.app.admin.SystemUpdatePolicy;
 import android.app.admin.PasswordMetrics;
 import android.app.admin.FactoryResetProtectionPolicy;
 import android.app.admin.ManagedProfileProvisioningParams;
+import android.app.admin.FullyManagedDeviceProvisioningParams;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -490,10 +491,14 @@ interface IDevicePolicyManager {
     void setManagedProfileMaximumTimeOff(in ComponentName admin, long timeoutMs);
     boolean canProfileOwnerResetPasswordWhenLocked(int userId);
 
-    void setNextOperationSafety(int operation, boolean safe);
+    void setNextOperationSafety(int operation, int reason);
 
     String getEnrollmentSpecificId(String callerPackage);
     void setOrganizationIdForUser(in String callerPackage, in String enterpriseId, int userId);
 
-    UserHandle createAndProvisionManagedProfile(in ManagedProfileProvisioningParams provisioningParams);
+    UserHandle createAndProvisionManagedProfile(in ManagedProfileProvisioningParams provisioningParams, in String callerPackage);
+    void provisionFullyManagedDevice(in FullyManagedDeviceProvisioningParams provisioningParams, in String callerPackage);
+
+    void resetDefaultCrossProfileIntentFilters(int userId);
+    boolean canAdminGrantSensorsPermissionsForUser(int userId);
 }

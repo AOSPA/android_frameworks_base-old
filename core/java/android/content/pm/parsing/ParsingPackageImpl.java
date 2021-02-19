@@ -102,6 +102,8 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
     public static ForInternedStringValueMap sForInternedStringValueMap =
             Parcelling.Cache.getOrCreate(ForInternedStringValueMap.class);
     public static ForStringSet sForStringSet = Parcelling.Cache.getOrCreate(ForStringSet.class);
+    public static ForInternedStringSet sForInternedStringSet =
+            Parcelling.Cache.getOrCreate(ForInternedStringSet.class);
     protected static ParsedIntentInfo.StringPairListParceler sForIntentInfoPairs =
             Parcelling.Cache.getOrCreate(ParsedIntentInfo.StringPairListParceler.class);
 
@@ -333,7 +335,7 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
 
     private int fullBackupContent;
     private int iconRes;
-    private int installLocation = PackageParser.PARSE_DEFAULT_INSTALL_LOCATION;
+    private int installLocation = ParsingPackageUtils.PARSE_DEFAULT_INSTALL_LOCATION;
     private int labelRes;
     private int largestWidthLimitDp;
     private int logo;
@@ -378,6 +380,11 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
     private int autoRevokePermissions;
 
     protected int gwpAsanMode;
+    protected int memtagMode;
+
+    @Nullable
+    @DataClass.ParcelWith(ForBoolean.class)
+    private Boolean nativeHeapZeroInit;
 
     // TODO(chiuwinson): Non-null
     @Nullable
@@ -1011,7 +1018,8 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
         // TODO(b/135203078): See ParsingPackageImpl#getHiddenApiEnforcementPolicy
 //        appInfo.mHiddenApiPolicy
 //        appInfo.hiddenUntilInstalled
-        appInfo.icon = (PackageParser.sUseRoundIcon && roundIconRes != 0) ? roundIconRes : iconRes;
+        appInfo.icon =
+                (ParsingPackageUtils.sUseRoundIcon && roundIconRes != 0) ? roundIconRes : iconRes;
         appInfo.iconRes = iconRes;
         appInfo.roundIconRes = roundIconRes;
         appInfo.installLocation = installLocation;
@@ -1055,6 +1063,8 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
         appInfo.volumeUuid = volumeUuid;
         appInfo.zygotePreloadName = zygotePreloadName;
         appInfo.setGwpAsanMode(gwpAsanMode);
+        appInfo.setMemtagMode(memtagMode);
+        appInfo.setNativeHeapZeroInit(nativeHeapZeroInit);
         appInfo.setBaseCodePath(mBaseApkPath);
         appInfo.setBaseResourcePath(mBaseApkPath);
         appInfo.setCodePath(mPath);
@@ -1143,6 +1153,7 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
         dest.writeString(this.mPath);
         dest.writeParcelableList(this.queriesIntents, flags);
         sForInternedStringList.parcel(this.queriesPackages, dest, flags);
+        sForInternedStringSet.parcel(this.queriesProviders, dest, flags);
         dest.writeString(this.appComponentFactory);
         dest.writeString(this.backupAgentName);
         dest.writeInt(this.banner);
@@ -1186,6 +1197,8 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
         dest.writeSparseIntArray(this.minExtensionVersions);
         dest.writeLong(this.mBooleans);
         dest.writeMap(this.mProperties);
+        dest.writeInt(this.memtagMode);
+        sForBoolean.parcel(this.nativeHeapZeroInit, dest, flags);
     }
 
     public ParsingPackageImpl(Parcel in) {
@@ -1261,6 +1274,7 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
         this.mPath = in.readString();
         this.queriesIntents = in.createTypedArrayList(Intent.CREATOR);
         this.queriesPackages = sForInternedStringList.unparcel(in);
+        this.queriesProviders = sForInternedStringSet.unparcel(in);
         this.appComponentFactory = in.readString();
         this.backupAgentName = in.readString();
         this.banner = in.readInt();
@@ -1305,6 +1319,8 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
         this.minExtensionVersions = in.readSparseIntArray();
         this.mBooleans = in.readLong();
         this.mProperties = in.createTypedArrayMap(Property.CREATOR);
+        this.memtagMode = in.readInt();
+        this.nativeHeapZeroInit = sForBoolean.unparcel(in);
         assignDerivedFields();
     }
 
@@ -2057,6 +2073,17 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
     }
 
     @Override
+    public int getMemtagMode() {
+        return memtagMode;
+    }
+
+    @Nullable
+    @Override
+    public Boolean isNativeHeapZeroInit() {
+        return nativeHeapZeroInit;
+    }
+
+    @Override
     public boolean isPartiallyDirectBootAware() {
         return getBoolean(Booleans.PARTIALLY_DIRECT_BOOT_AWARE);
     }
@@ -2484,6 +2511,18 @@ public class ParsingPackageImpl implements ParsingPackage, Parcelable {
     @Override
     public ParsingPackageImpl setGwpAsanMode(int value) {
         gwpAsanMode = value;
+        return this;
+    }
+
+    @Override
+    public ParsingPackageImpl setMemtagMode(int value) {
+        memtagMode = value;
+        return this;
+    }
+
+    @Override
+    public ParsingPackageImpl setNativeHeapZeroInit(@Nullable Boolean value) {
+        nativeHeapZeroInit = value;
         return this;
     }
 

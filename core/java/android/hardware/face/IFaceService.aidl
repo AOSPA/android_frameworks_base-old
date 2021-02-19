@@ -35,7 +35,7 @@ interface IFaceService {
     ITestSession createTestSession(int sensorId, String opPackageName);
 
     // Requests a proto dump of the specified sensor
-    byte[] dumpSensorServiceStateProto(int sensorId);
+    byte[] dumpSensorServiceStateProto(int sensorId, boolean clearSchedulerBuffer);
 
     // Retrieve static sensor properties for all face sensors
     List<FaceSensorPropertiesInternal> getSensorPropertiesInternal(String opPackageName);
@@ -74,7 +74,7 @@ interface IFaceService {
 
     // Start face enrollment
     void enroll(int userId, IBinder token, in byte [] hardwareAuthToken, IFaceServiceReceiver receiver,
-            String opPackageName, in int [] disabledFeatures, in Surface surface);
+            String opPackageName, in int [] disabledFeatures, in Surface surface, boolean debugConsent);
 
     // Start remote face enrollment
     void enrollRemotely(int userId, IBinder token, in byte [] hardwareAuthToken, IFaceServiceReceiver receiver,

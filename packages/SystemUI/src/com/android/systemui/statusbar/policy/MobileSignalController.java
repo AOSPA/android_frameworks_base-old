@@ -362,16 +362,12 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             return;
         }
 
-        try {
-            mImsManager.removeCapabilitiesCallback(mCapabilityCallback);
-            mImsManager.removeRegistrationListener(mImsRegistrationCallback);
-            Log.d(mTag, "removeCapabilitiesCallback " + mCapabilityCallback
-                    + " from " + mImsManager);
-            Log.d(mTag, "removeRegistrationCallback " + mImsRegistrationCallback
-                    + " from " + mImsManager);
-        } catch (ImsException e) {
-            Log.d(mTag, "unable to remove callback.");
-        }
+        mImsManager.removeCapabilitiesCallback(mCapabilityCallback);
+        mImsManager.removeRegistrationListener(mImsRegistrationCallback);
+        Log.d(mTag, "removeCapabilitiesCallback " + mCapabilityCallback
+                + " from " + mImsManager);
+        Log.d(mTag, "removeRegistrationCallback " + mImsRegistrationCallback
+                + " from " + mImsManager);
     }
 
     @Override
@@ -420,14 +416,16 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                     && !mCurrentState.carrierNetworkChangeMode
                     && mCurrentState.activityOut;
             showDataIcon &= mCurrentState.dataSim && mCurrentState.isDefault;
+            boolean showTriangle = showDataIcon && !mCurrentState.airplaneMode;
+            int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon) ? icons.dataType : 0;
+            showDataIcon |= mCurrentState.roaming;
             IconState statusIcon = new IconState(showDataIcon && !mCurrentState.airplaneMode,
                     getCurrentIconId(), contentDescription);
-            int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon) ? icons.dataType : 0;
             int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
             callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, qsTypeIcon,
                     activityIn, activityOut, volteIcon, dataContentDescription, dataContentDescriptionHtml,
                     description, icons.isWide, mSubscriptionInfo.getSubscriptionId(),
-                    mCurrentState.roaming);
+                    mCurrentState.roaming, showTriangle);
         } else {
             boolean showDataIcon = mCurrentState.dataConnected || dataDisabled;
             IconState statusIcon = new IconState(
@@ -481,10 +479,11 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                         + " volteIcon=" + volteIcon
                         + " mConfig.showVowifiIcon=" + mConfig.showVowifiIcon);
             }
+            boolean showTriangle = mCurrentState.enabled && !mCurrentState.airplaneMode;
             callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, qsTypeIcon,
                     activityIn, activityOut, volteIcon, dataContentDescription, dataContentDescriptionHtml,
                     description, icons.isWide, mSubscriptionInfo.getSubscriptionId(),
-                    mCurrentState.roaming);
+                    mCurrentState.roaming, showTriangle);
         }
     }
 

@@ -28,6 +28,8 @@ import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.common.ICancellationSignal;
 import android.hardware.biometrics.face.IFace;
 import android.hardware.biometrics.face.ISession;
+import android.hardware.face.FaceAuthenticationFrame;
+import android.hardware.face.FaceDataFrame;
 import android.hardware.face.FaceManager;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -67,11 +69,11 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
             @NonNull ClientMonitorCallbackConverter listener, int targetUserId, long operationId,
             boolean restricted, String owner, int cookie, boolean requireConfirmation, int sensorId,
             boolean isStrongBiometric, int statsClient, @NonNull UsageStats usageStats,
-            @NonNull LockoutCache lockoutCache) {
+            @NonNull LockoutCache lockoutCache, boolean isKeyguard) {
         super(context, lazyDaemon, token, listener, targetUserId, operationId, restricted,
                 owner, cookie, requireConfirmation, sensorId, isStrongBiometric,
                 BiometricsProtoEnums.MODALITY_FACE, statsClient, null /* taskStackListener */,
-                lockoutCache);
+                lockoutCache, isKeyguard);
         mUsageStats = usageStats;
         mLockoutCache = lockoutCache;
         mNotificationManager = context.getSystemService(NotificationManager.class);
@@ -191,6 +193,17 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
 
         final boolean shouldSend = shouldSend(acquireInfo, vendorCode);
         onAcquiredInternal(acquireInfo, vendorCode, shouldSend);
+    }
+
+    /**
+     * Called each time a new frame is received during face authentication.
+     *
+     * @param frame Information about the current frame.
+     */
+    public void onAuthenticationFrame(@NonNull FaceAuthenticationFrame frame) {
+        // TODO(b/178414967): Send additional frame data to the client callback.
+        final FaceDataFrame data = frame.getData();
+        onAcquired(data.getAcquiredInfo(), data.getVendorCode());
     }
 
     @Override public void onLockoutTimed(long durationMillis) {

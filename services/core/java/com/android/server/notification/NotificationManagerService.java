@@ -377,7 +377,8 @@ public class NotificationManagerService extends SystemService {
 
     static final String[] DEFAULT_ALLOWED_ADJUSTMENTS = new String[] {
             Adjustment.KEY_CONTEXTUAL_ACTIONS,
-            Adjustment.KEY_TEXT_REPLIES};
+            Adjustment.KEY_TEXT_REPLIES,
+            Adjustment.KEY_NOT_CONVERSATION};
 
     static final String[] NON_BLOCKABLE_DEFAULT_ROLES = new String[] {
             RoleManager.ROLE_DIALER,
@@ -2313,6 +2314,13 @@ public class NotificationManagerService extends SystemService {
                     } else if ("false".equals(value)) {
                         mAssistants.disallowAdjustmentType(Adjustment.KEY_RANKING_SCORE);
                     }
+                } else if (SystemUiDeviceConfigFlags.ENABLE_NAS_NOT_CONVERSATION.equals(name)) {
+                    String value = properties.getString(name, null);
+                    if ("true".equals(value)) {
+                        mAssistants.allowAdjustmentType(Adjustment.KEY_NOT_CONVERSATION);
+                    } else if ("false".equals(value)) {
+                        mAssistants.disallowAdjustmentType(Adjustment.KEY_NOT_CONVERSATION);
+                    }
                 }
             }
         };
@@ -3033,7 +3041,8 @@ public class NotificationManagerService extends SystemService {
                         }
 
                         Binder windowToken = new Binder();
-                        mWindowManagerInternal.addWindowToken(windowToken, TYPE_TOAST, displayId);
+                        mWindowManagerInternal.addWindowToken(windowToken, TYPE_TOAST, displayId,
+                                null /* options */);
                         record = getToastRecord(callingUid, callingPid, pkg, isSystemToast, token,
                                 text, callback, duration, windowToken, displayId, textCallback);
                         mToastQueue.add(record);
@@ -9302,21 +9311,30 @@ public class NotificationManagerService extends SystemService {
                 Slog.v(TAG, "onNotificationEnqueuedLocked() called with: r = [" + r + "]");
             }
             final StatusBarNotification sbn = r.getSbn();
-            notifyAssistantLocked(
-                    sbn,
-                    r.getNotificationType(),
-                    true /* sameUserOnly */,
-                    (assistant, sbnHolder) -> {
-                        try {
-                            if (debug) {
-                                Slog.v(TAG,
-                                        "calling onNotificationEnqueuedWithChannel " + sbnHolder);
-                            }
-                            assistant.onNotificationEnqueuedWithChannel(sbnHolder, r.getChannel());
-                        } catch (RemoteException ex) {
-                            Slog.e(TAG, "unable to notify assistant (enqueued): " + assistant, ex);
+
+            for (final ManagedServiceInfo info : NotificationAssistants.this.getServices()) {
+                boolean sbnVisible = isVisibleToListener(
+                        sbn, r.getNotificationType(), info)
+                        && info.isSameUser(r.getUserId());
+                if (sbnVisible) {
+                    TrimCache trimCache = new TrimCache(sbn);
+                    final INotificationListener assistant = (INotificationListener) info.service;
+                    final StatusBarNotification sbnToPost = trimCache.ForListener(info);
+                    final StatusBarNotificationHolder sbnHolder =
+                            new StatusBarNotificationHolder(sbnToPost);
+                    try {
+                        if (debug) {
+                            Slog.v(TAG,
+                                    "calling onNotificationEnqueuedWithChannel " + sbnHolder);
                         }
-                    });
+                        final NotificationRankingUpdate update = makeRankingUpdateLocked(info);
+                        assistant.onNotificationEnqueuedWithChannel(sbnHolder, r.getChannel(),
+                                update);
+                    } catch (RemoteException ex) {
+                        Slog.e(TAG, "unable to notify assistant (enqueued): " + assistant, ex);
+                    }
+                }
+            }
         }
 
         @GuardedBy("mNotificationLock")
@@ -10496,7 +10514,7 @@ public class NotificationManagerService extends SystemService {
 
         private void toast(String message) {
             mUiHandler.post(() ->
-                    Toast.makeText(getUiContext(), message + "\nSee go/s-trampolines.",
+                    Toast.makeText(getUiContext(), message + "\nSee g.co/dev/trampolines.",
                             Toast.LENGTH_LONG).show());
         }
     }

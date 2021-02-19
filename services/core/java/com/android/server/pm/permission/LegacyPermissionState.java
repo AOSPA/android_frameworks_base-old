@@ -19,7 +19,6 @@ package com.android.server.pm.permission;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
-import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -105,28 +104,34 @@ public final class LegacyPermissionState {
     }
 
     /**
-     * Put a install permission state.
+     * Get the permission state for a permission and a user.
      *
-     * @param permissionState the permission state
+     * @param permissionName the permission name
+     * @param userId the user ID
+     * @return the permission state
+     *
+     * @hide
      */
-    public void putInstallPermissionState(@NonNull PermissionState permissionState) {
-        putPermissionState(permissionState, UserHandle.USER_ALL);
+    @Nullable
+    public PermissionState getPermissionState(@NonNull String permissionName,
+            @UserIdInt int userId) {
+        checkUserId(userId);
+        UserState userState = mUserStates.get(userId);
+        if (userState == null) {
+            return null;
+        }
+        return userState.getPermissionState(permissionName);
     }
 
     /**
-     * Put a runtime permission state for a user.
+     * Put a permission state for a user.
      *
      * @param permissionState the permission state
      * @param userId the user ID
      */
-    public void putRuntimePermissionState(@NonNull PermissionState permissionState,
+    public void putPermissionState(@NonNull PermissionState permissionState,
             @UserIdInt int userId) {
         checkUserId(userId);
-        putPermissionState(permissionState, userId);
-    }
-
-    private void putPermissionState(@NonNull PermissionState permissionState,
-            @UserIdInt int userId) {
         UserState userState = mUserStates.get(userId);
         if (userState == null) {
             userState = new UserState();
@@ -157,29 +162,14 @@ public final class LegacyPermissionState {
     }
 
     /**
-     * Get all the install permission states.
-     *
-     * @return the install permission states
-     */
-    @NonNull
-    public Collection<PermissionState> getInstallPermissionStates() {
-        return getPermissionStates(UserHandle.USER_ALL);
-    }
-
-    /**
-     * Get all the runtime permission states for a user.
+     * Get all the permission states for a user.
      *
      * @param userId the user ID
-     * @return the runtime permission states
+     * @return the permission states
      */
     @NonNull
-    public Collection<PermissionState> getRuntimePermissionStates(@UserIdInt int userId) {
+    public Collection<PermissionState> getPermissionStates(@UserIdInt int userId) {
         checkUserId(userId);
-        return getPermissionStates(userId);
-    }
-
-    @NonNull
-    private Collection<PermissionState> getPermissionStates(@UserIdInt int userId) {
         final UserState userState = mUserStates.get(userId);
         if (userState == null) {
             return Collections.emptyList();
@@ -265,6 +255,8 @@ public final class LegacyPermissionState {
         @NonNull
         private final String mName;
 
+        private final boolean mRuntime;
+
         private final boolean mGranted;
 
         private final int mFlags;
@@ -273,17 +265,20 @@ public final class LegacyPermissionState {
          * Create a new instance of this class.
          *
          * @param name the name of the permission
+         * @param runtime whether the permission is runtime
          * @param granted whether the permission is granted
          * @param flags the permission flags
          */
-        public PermissionState(@NonNull String name, boolean granted, int flags) {
+        public PermissionState(@NonNull String name, boolean runtime, boolean granted, int flags) {
             mName = name;
+            mRuntime = runtime;
             mGranted = granted;
             mFlags = flags;
         }
 
         private PermissionState(@NonNull PermissionState other) {
             mName = other.mName;
+            mRuntime = other.mRuntime;
             mGranted = other.mGranted;
             mFlags = other.mFlags;
         }
@@ -296,6 +291,15 @@ public final class LegacyPermissionState {
         @NonNull
         public String getName() {
             return mName;
+        }
+
+        /**
+         * Get whether the permission is a runtime permission.
+         *
+         * @return whether the permission is a runtime permission.
+         */
+        public boolean isRuntime() {
+            return mRuntime;
         }
 
         /**
@@ -316,6 +320,26 @@ public final class LegacyPermissionState {
         @NonNull
         public int getFlags() {
             return mFlags;
+        }
+
+        @Override
+        public boolean equals(@Nullable Object object) {
+            if (this == object) {
+                return true;
+            }
+            if (object == null || getClass() != object.getClass()) {
+                return false;
+            }
+            PermissionState that = (PermissionState) object;
+            return mRuntime == that.mRuntime
+                    && mGranted == that.mGranted
+                    && mFlags == that.mFlags
+                    && Objects.equals(mName, that.mName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mName, mRuntime, mGranted, mFlags);
         }
     }
 }

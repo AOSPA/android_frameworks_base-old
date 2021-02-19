@@ -27,6 +27,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.FeatureFlagUtils;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -67,7 +68,6 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
         LayoutInflater inflater = LayoutInflater.from(context);
         StatusBarMobileView v = (StatusBarMobileView)
                 inflater.inflate(R.layout.status_bar_mobile_signal_group, null);
-
         v.setSlot(slot);
         v.init();
         v.setVisibleState(STATE_ICON);
@@ -107,7 +107,11 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
         mMobileGroup = findViewById(R.id.mobile_group);
         mMobile = findViewById(R.id.mobile_signal);
         mMobileType = findViewById(R.id.mobile_type);
-        mMobileRoaming = findViewById(R.id.mobile_roaming);
+        if (FeatureFlagUtils.isEnabled(getContext(), FeatureFlagUtils.SETTINGS_PROVIDER_MODEL)) {
+            mMobileRoaming = findViewById(R.id.mobile_roaming_large);
+        } else {
+            mMobileRoaming = findViewById(R.id.mobile_roaming);
+        }
         mMobileRoamingSpace = findViewById(R.id.mobile_roaming_space);
         mIn = findViewById(R.id.mobile_in);
         mOut = findViewById(R.id.mobile_out);
@@ -181,7 +185,7 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
         } else {
             mMobileType.setVisibility(View.GONE);
         }
-
+        mMobile.setVisibility(mState.showTriangle ? View.VISIBLE : View.GONE);
         mMobileRoaming.setVisibility(mState.roaming ? View.VISIBLE : View.GONE);
         mMobileRoamingSpace.setVisibility(mState.roaming ? View.VISIBLE : View.GONE);
         mIn.setVisibility(mState.activityIn ? View.VISIBLE : View.GONE);
@@ -221,6 +225,7 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
             }
         }
 
+        mMobile.setVisibility(state.showTriangle ? View.VISIBLE : View.GONE);
         mMobileRoaming.setVisibility(state.roaming ? View.VISIBLE : View.GONE);
         mMobileRoamingSpace.setVisibility(state.roaming ? View.VISIBLE : View.GONE);
         mIn.setVisibility(state.activityIn ? View.VISIBLE : View.GONE);
@@ -239,7 +244,8 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
 
         needsLayout |= state.roaming != mState.roaming
                 || state.activityIn != mState.activityIn
-                || state.activityOut != mState.activityOut;
+                || state.activityOut != mState.activityOut
+                || state.showTriangle != mState.showTriangle;
 
         mState = state;
         return needsLayout;

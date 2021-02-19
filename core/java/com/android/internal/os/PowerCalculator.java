@@ -102,7 +102,7 @@ public abstract class PowerCalculator {
 
         // TODO(b/175156498): Temporary code during the transition from BatterySippers to
         //  BatteryConsumers.
-        UidBatteryConsumer.Builder builder = new UidBatteryConsumer.Builder(0, 0, false, u);
+        UidBatteryConsumer.Builder builder = new UidBatteryConsumer.Builder(0, 0, u);
         calculateApp(builder, u, rawRealtimeUs, rawUptimeUs, BatteryUsageStatsQuery.DEFAULT);
         final UidBatteryConsumer uidBatteryConsumer = builder.build();
         app.cpuPowerMah = uidBatteryConsumer.getConsumedPower(
@@ -161,5 +161,11 @@ public abstract class PowerCalculator {
 
         // Use English locale because this is never used in UI (only in checkin and dump).
         return String.format(Locale.ENGLISH, format, power);
+    }
+
+    static double mAhToUJ(long energyUJ) {
+        // TODO(b/173765509): Convert properly. This is mJ / V * (h/3600s) = mAh with V = 3.7 fixed.
+        //                    Leaving for later since desired units of energy have yet to be decided
+        return energyUJ / 1000.0 / 3.7  / 3600;
     }
 }

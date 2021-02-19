@@ -16,7 +16,9 @@
 package com.android.server.devicepolicy;
 
 import android.annotation.NonNull;
+import android.annotation.UserIdInt;
 import android.app.admin.DevicePolicySafetyChecker;
+import android.app.admin.FullyManagedDeviceProvisioningParams;
 import android.app.admin.IDevicePolicyManager;
 import android.app.admin.ManagedProfileProvisioningParams;
 import android.content.ComponentName;
@@ -121,8 +123,18 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
             @NonNull String callerPackage, @NonNull String enterpriseId, int userId) {}
 
     public UserHandle createAndProvisionManagedProfile(
-            @NonNull ManagedProfileProvisioningParams provisioningParams) {
+            @NonNull ManagedProfileProvisioningParams provisioningParams, String callerPackage) {
         return null;
+    }
+
+    public void provisionFullyManagedDevice(
+            FullyManagedDeviceProvisioningParams provisioningParams, String callerPackage) {
+    }
+
+    public void resetDefaultCrossProfileIntentFilters(@UserIdInt int userId) {}
+
+    public boolean canAdminGrantSensorsPermissionsForUser(int userId) {
+        return false;
     }
 
     public List<String> getKeyPairGrants(String callerPackage, String alias) {

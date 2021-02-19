@@ -23,15 +23,17 @@ import android.os.RemoteException;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Pair;
-import android.view.IRemoteAnimationFinishedCallback;
 import android.view.SurfaceControl;
 import android.window.IRemoteTransition;
+import android.window.IRemoteTransitionFinishedCallback;
 import android.window.TransitionFilter;
 import android.window.TransitionInfo;
 import android.window.TransitionRequestInfo;
 import android.window.WindowContainerTransaction;
 
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.common.ShellExecutor;
+import com.android.wm.shell.protolog.ShellProtoLogGroup;
 
 import java.util.ArrayList;
 
@@ -54,7 +56,7 @@ public class RemoteTransitionHandler implements Transitions.TransitionHandler {
     }
 
     void addFiltered(TransitionFilter filter, IRemoteTransition remote) {
-        mFilters.add(new Pair<TransitionFilter, IRemoteTransition>(filter, remote));
+        mFilters.add(new Pair<>(filter, remote));
     }
 
     void removeFiltered(IRemoteTransition remote) {
@@ -67,32 +69,41 @@ public class RemoteTransitionHandler implements Transitions.TransitionHandler {
 
     @Override
     public boolean startAnimation(@NonNull IBinder transition, @NonNull TransitionInfo info,
-            @NonNull SurfaceControl.Transaction t, @NonNull Runnable finishCallback) {
+            @NonNull SurfaceControl.Transaction t,
+            @NonNull Transitions.TransitionFinishCallback finishCallback) {
         IRemoteTransition pendingRemote = mPendingRemotes.remove(transition);
         if (pendingRemote == null) {
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "Transition %s doesn't have "
+                    + "explicit remote, search filters for match for %s", transition, info);
             // If no explicit remote, search filters until one matches
             for (int i = mFilters.size() - 1; i >= 0; --i) {
+                ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, " Checking filter %s",
+                        mFilters.get(i));
                 if (mFilters.get(i).first.matches(info)) {
                     pendingRemote = mFilters.get(i).second;
                     break;
                 }
             }
         }
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, " Delegate animation for %s to %s",
+                transition, pendingRemote);
 
         if (pendingRemote == null) return false;
 
         final IRemoteTransition remote = pendingRemote;
         final IBinder.DeathRecipient remoteDied = () -> {
             Log.e(Transitions.TAG, "Remote transition died, finishing");
-            mMainExecutor.execute(finishCallback);
+            mMainExecutor.execute(
+                    () -> finishCallback.onTransitionFinished(null /* wct */, null /* wctCB */));
         };
-        IRemoteAnimationFinishedCallback cb = new IRemoteAnimationFinishedCallback.Stub() {
+        IRemoteTransitionFinishedCallback cb = new IRemoteTransitionFinishedCallback.Stub() {
             @Override
-            public void onAnimationFinished() throws RemoteException {
+            public void onTransitionFinished(WindowContainerTransaction wct) {
                 if (remote.asBinder() != null) {
                     remote.asBinder().unlinkToDeath(remoteDied, 0 /* flags */);
                 }
-                mMainExecutor.execute(finishCallback);
+                mMainExecutor.execute(
+                        () -> finishCallback.onTransitionFinished(wct, null /* wctCB */));
             }
         };
         try {
@@ -101,8 +112,12 @@ public class RemoteTransitionHandler implements Transitions.TransitionHandler {
             }
             remote.startAnimation(info, t, cb);
         } catch (RemoteException e) {
+            if (remote.asBinder() != null) {
+                remote.asBinder().unlinkToDeath(remoteDied, 0 /* flags */);
+            }
             Log.e(Transitions.TAG, "Error running remote transition.", e);
-            mMainExecutor.execute(finishCallback);
+            mMainExecutor.execute(
+                    () -> finishCallback.onTransitionFinished(null /* wct */, null /* wctCB */));
         }
         return true;
     }
@@ -114,6 +129,8 @@ public class RemoteTransitionHandler implements Transitions.TransitionHandler {
         IRemoteTransition remote = request.getRemoteTransition();
         if (remote == null) return null;
         mPendingRemotes.put(transition, remote);
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "RemoteTransition directly requested"
+                + " for %s: %s", transition, remote);
         return new WindowContainerTransaction();
     }
 }

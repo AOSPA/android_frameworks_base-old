@@ -21,7 +21,6 @@ import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.Flicker
 import com.android.server.wm.flicker.FlickerTestRunner
 import com.android.server.wm.flicker.FlickerTestRunnerFactory
 import com.android.server.wm.flicker.helpers.ImeAppHelper
@@ -35,6 +34,7 @@ import com.android.server.wm.flicker.visibleWindowsShownMoreThanOneConsecutiveEn
 import com.android.server.wm.flicker.visibleLayersShownMoreThanOneConsecutiveEntry
 import com.android.server.wm.flicker.noUncoveredRegions
 import com.android.server.wm.flicker.appWindowAlwaysVisibleOnTop
+import com.android.server.wm.flicker.helpers.isRotated
 import com.android.server.wm.flicker.layerAlwaysVisible
 import com.android.server.wm.flicker.repetitions
 import com.android.server.wm.flicker.startRotation
@@ -56,33 +56,31 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @FlakyTest(bugId = 178015460)
 class OpenImeWindowTest(
-    testName: String,
-    flickerSpec: Flicker
-) : FlickerTestRunner(testName, flickerSpec) {
+    testSpec: FlickerTestRunnerFactory.TestSpec
+) : FlickerTestRunner(testSpec) {
     companion object {
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): List<Array<Any>> {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
             val testApp = ImeAppHelper(instrumentation)
-
-            return FlickerTestRunnerFactory(instrumentation)
-                .buildTest { configuration ->
-                    withTestName { buildTestTag("openIme", testApp, configuration) }
+            return FlickerTestRunnerFactory.getInstance()
+                .buildTest(instrumentation, repetitions = 5) { configuration ->
+                    withTestName { buildTestTag("openIme", configuration) }
                     repeat { configuration.repetitions }
                     setup {
                         test {
                             device.wakeUpAndGoToHomeScreen()
+                            testApp.launchViaIntent(wmHelper)
                             this.setRotation(configuration.startRotation)
-                            testApp.open()
                         }
                     }
                     transitions {
-                        testApp.openIME(device)
+                        testApp.openIME(device, wmHelper)
                     }
                     teardown {
                         eachRun {
-                            testApp.closeIME(device)
+                            testApp.closeIME(device, wmHelper)
                         }
                         test {
                             testApp.exit()
@@ -103,8 +101,10 @@ class OpenImeWindowTest(
                             navBarLayerIsAlwaysVisible()
                             statusBarLayerIsAlwaysVisible()
                             noUncoveredRegions(configuration.startRotation)
-                            navBarLayerRotatesAndScales(configuration.startRotation)
-                            statusBarLayerRotatesScales(configuration.startRotation)
+                            navBarLayerRotatesAndScales(configuration.startRotation,
+                                enabled = !configuration.startRotation.isRotated())
+                            statusBarLayerRotatesScales(configuration.startRotation,
+                                enabled = !configuration.startRotation.isRotated())
                             visibleLayersShownMoreThanOneConsecutiveEntry()
 
                             imeLayerBecomesVisible()

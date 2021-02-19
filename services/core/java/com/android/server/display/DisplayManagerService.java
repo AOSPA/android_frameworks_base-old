@@ -182,8 +182,8 @@ public final class DisplayManagerService extends SystemService {
     private static final String FORCE_WIFI_DISPLAY_ENABLE = "persist.debug.wfd.enable";
 
     private static final String PROP_DEFAULT_DISPLAY_TOP_INSET = "persist.sys.displayinset.top";
-
     private static final long WAIT_FOR_DEFAULT_DISPLAY_TIMEOUT = 10000;
+    private static final float THRESHOLD_FOR_REFRESH_RATES_DIVIDERS = 0.1f;
 
     private static final int MSG_REGISTER_DEFAULT_DISPLAY_ADAPTERS = 1;
     private static final int MSG_REGISTER_ADDITIONAL_DISPLAY_ADAPTERS = 2;
@@ -250,44 +250,30 @@ public final class DisplayManagerService extends SystemService {
 
     /** {@link DisplayBlanker} used by all {@link DisplayPowerController}s. */
     private final DisplayBlanker mDisplayBlanker = new DisplayBlanker() {
-        // Synchronized to avoid race conditions when updating multiple display states.
         @Override
-        public synchronized void requestDisplayState(int displayId, int state, float brightness) {
-            boolean allInactive = true;
-            boolean allOff = true;
-            final boolean stateChanged;
+        public void requestDisplayState(int displayId, int state, float brightness) {
+            // TODO (b/168210494): Stop applying default display state to all displays.
+            if (displayId != Display.DEFAULT_DISPLAY) {
+                return;
+            }
+            final int[] displayIds;
             synchronized (mSyncRoot) {
-                final int index = mDisplayStates.indexOfKey(displayId);
-                final int newState = mDisplayStates.valueAt(index);
-                stateChanged = index == -1 || state != newState;
-                if (stateChanged) {
-                    final int size = mDisplayStates.size();
-                    for (int i = 0; i < size; i++) {
-                        final int displayState = i == index ? newState : state;
-                        if (displayState != Display.STATE_OFF) {
-                            allOff = false;
-                        }
-                        if (Display.isActiveState(displayState)) {
-                            allInactive = false;
-                        }
-                        if (!allOff && !allInactive) {
-                            break;
-                        }
-                    }
-                }
+                displayIds = mLogicalDisplayMapper.getDisplayIdsLocked();
             }
 
             // The order of operations is important for legacy reasons.
             if (state == Display.STATE_OFF) {
-                requestDisplayStateInternal(displayId, state, brightness);
+                for (int id : displayIds) {
+                    requestDisplayStateInternal(id, state, brightness);
+                }
             }
 
-            if (stateChanged) {
-                mDisplayPowerCallbacks.onDisplayStateChange(allInactive, allOff);
-            }
+            mDisplayPowerCallbacks.onDisplayStateChange(state);
 
             if (state != Display.STATE_OFF) {
-                requestDisplayStateInternal(displayId, state, brightness);
+                for (int id : displayIds) {
+                    requestDisplayStateInternal(id, state, brightness);
+                }
             }
         }
     };
@@ -386,7 +372,7 @@ public final class DisplayManagerService extends SystemService {
 
     private final boolean mAllowNonNativeRefreshRateOverride;
 
-    private static final float THRESHOLD_FOR_REFRESH_RATES_DIVIDERS = 0.1f;
+    private final BrightnessSynchronizer mBrightnessSynchronizer;
 
     /**
      * Applications use {@link android.view.Display#getRefreshRate} and
@@ -430,6 +416,7 @@ public final class DisplayManagerService extends SystemService {
         mLogicalDisplayMapper = new LogicalDisplayMapper(context, mDisplayDeviceRepo,
                 new LogicalDisplayListener());
         mDisplayModeDirector = new DisplayModeDirector(context, mHandler);
+        mBrightnessSynchronizer = new BrightnessSynchronizer(mContext);
         Resources resources = mContext.getResources();
         mDefaultDisplayDefaultColorMode = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_defaultDisplayDefaultColorMode);
@@ -536,8 +523,8 @@ public final class DisplayManagerService extends SystemService {
 
             DeviceStateManager deviceStateManager =
                     mContext.getSystemService(DeviceStateManager.class);
-            deviceStateManager.registerDeviceStateListener(new DeviceStateListener(),
-                    new HandlerExecutor(mHandler));
+            deviceStateManager.addDeviceStateListener(new HandlerExecutor(mHandler),
+                    new DeviceStateListener());
 
             scheduleTraversalLocked(false);
         }
@@ -565,6 +552,7 @@ public final class DisplayManagerService extends SystemService {
         mHandler.sendEmptyMessage(MSG_REGISTER_ADDITIONAL_DISPLAY_ADAPTERS);
 
         mSettingsObserver = new SettingsObserver();
+        mBrightnessSynchronizer.startSynchronizing();
     }
 
     @VisibleForTesting
@@ -1181,7 +1169,7 @@ public final class DisplayManagerService extends SystemService {
 
     private void handleLogicalDisplayRemovedLocked(@NonNull LogicalDisplay display) {
         final int displayId = display.getDisplayIdLocked();
-        mDisplayPowerControllers.removeReturnOld(displayId).stop();
+        mDisplayPowerControllers.delete(displayId);
         mDisplayStates.delete(displayId);
         mDisplayBrightnesses.delete(displayId);
         DisplayManagerGlobal.invalidateLocalDisplayInfoCaches();
@@ -1386,7 +1374,7 @@ public final class DisplayManagerService extends SystemService {
                 // Scan supported modes returned by display.getInfo() to find a mode with the same
                 // size as the default display mode but with the specified refresh rate instead.
                 requestedModeId = display.getDisplayInfoLocked().findDefaultModeByRefreshRate(
-                        requestedRefreshRate);
+                        requestedRefreshRate).getModeId();
             }
             mDisplayModeDirector.getAppRequestObserver().setAppRequestedMode(
                     displayId, requestedModeId);
@@ -1563,6 +1551,14 @@ public final class DisplayManagerService extends SystemService {
                     Display.DEFAULT_DISPLAY);
             if (displayPowerController != null) {
                 displayPowerController.setDisplayWhiteBalanceLoggingEnabled(enabled);
+            }
+        }
+    }
+
+    void setDisplayModeDirectorLoggingEnabled(boolean enabled) {
+        synchronized (mSyncRoot) {
+            if (mDisplayModeDirector != null) {
+                mDisplayModeDirector.setLoggingEnabled(enabled);
             }
         }
     }
@@ -2787,22 +2783,8 @@ public final class DisplayManagerService extends SystemService {
         public boolean requestPowerState(int groupId, DisplayPowerRequest request,
                 boolean waitForNegativeProximity) {
             synchronized (mSyncRoot) {
-                final DisplayGroup displayGroup = mLogicalDisplayMapper.getDisplayGroupLocked(
-                        groupId);
-                if (displayGroup == null) {
-                    return true;
-                }
-
-                final int size = displayGroup.getSizeLocked();
-                boolean ready = true;
-                for (int i = 0; i < size; i++) {
-                    final DisplayPowerController displayPowerController =
-                            mDisplayPowerControllers.get(displayGroup.getIdLocked(i));
-                    ready &= displayPowerController.requestPowerState(request,
-                            waitForNegativeProximity);
-                }
-
-                return ready;
+                return mDisplayPowerControllers.get(Display.DEFAULT_DISPLAY)
+                        .requestPowerState(request, waitForNegativeProximity);
             }
         }
 
@@ -2811,6 +2793,13 @@ public final class DisplayManagerService extends SystemService {
             synchronized (mSyncRoot) {
                 return mDisplayPowerControllers.get(Display.DEFAULT_DISPLAY)
                         .isProximitySensorAvailable();
+            }
+        }
+
+        @Override
+        public int getDisplayGroupId(int displayId) {
+            synchronized (mSyncRoot) {
+                return mLogicalDisplayMapper.getDisplayGroupIdLocked(displayId);
             }
         }
 
