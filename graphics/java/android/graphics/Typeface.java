@@ -1346,6 +1346,19 @@ public class Typeface {
         }
     }
 
+    static {
+        // Preload Roboto-Regular.ttf in Zygote for improving app launch performance.
+        // TODO: add new attribute to fonts.xml to preload fonts in Zygote.
+        preloadFontFile("/system/fonts/Roboto-Regular.ttf");
+    }
+
+    private static void preloadFontFile(String filePath) {
+        File file = new File(filePath);
+        if (file.exists()) {
+            nativeWarmUpCache(filePath);
+        }
+    }
+
     /** @hide */
     @VisibleForTesting
     public static void destroySystemFontMap() {
@@ -1414,6 +1427,16 @@ public class Typeface {
         return Arrays.binarySearch(mSupportedAxes, axis) >= 0;
     }
 
+    /** @hide */
+    public List<FontFamily> getFallback() {
+        ArrayList<FontFamily> families = new ArrayList<>();
+        int familySize = nativeGetFamilySize(native_instance);
+        for (int i = 0; i < familySize; ++i) {
+            families.add(new FontFamily(nativeGetFamily(native_instance, i)));
+        }
+        return families;
+    }
+
     private static native long nativeCreateFromTypeface(long native_instance, int style);
     private static native long nativeCreateFromTypefaceWithExactStyle(
             long native_instance, int weight, boolean italic);
@@ -1439,6 +1462,13 @@ public class Typeface {
     @CriticalNative
     private static native long nativeGetReleaseFunc();
 
+    @CriticalNative
+    private static native int nativeGetFamilySize(long naitvePtr);
+
+    @CriticalNative
+    private static native long nativeGetFamily(long nativePtr, int index);
+
+
     private static native void nativeRegisterGenericFamily(String str, long nativePtr);
 
     private static native int nativeWriteTypefaces(
@@ -1447,4 +1477,6 @@ public class Typeface {
     private static native @Nullable long[] nativeReadTypefaces(@NonNull ByteBuffer buffer);
 
     private static native void nativeForceSetStaticFinalField(String fieldName, Typeface typeface);
+
+    private static native void nativeWarmUpCache(String fileName);
 }

@@ -762,12 +762,14 @@ public final class NetworkCapabilities implements Parcelable {
         final int originalSignalStrength = mSignalStrength;
         final int originalOwnerUid = getOwnerUid();
         final int[] originalAdministratorUids = getAdministratorUids();
+        final TransportInfo originalTransportInfo = getTransportInfo();
         clearAll();
         mTransportTypes = (originalTransportTypes & TEST_NETWORKS_ALLOWED_TRANSPORTS)
                 | (1 << TRANSPORT_TEST);
         mNetworkCapabilities = originalCapabilities & TEST_NETWORKS_ALLOWED_CAPABILITIES;
         mNetworkSpecifier = originalSpecifier;
         mSignalStrength = originalSignalStrength;
+        mTransportInfo = originalTransportInfo;
 
         // Only retain the owner and administrator UIDs if they match the app registering the remote
         // caller that registered the network.
@@ -2083,9 +2085,10 @@ public final class NetworkCapabilities implements Parcelable {
     /**
      * Check if private dns is broken.
      *
-     * @return {@code true} if {@code mPrivateDnsBroken} is set when private DNS is broken.
+     * @return {@code true} if private DNS is broken on this network.
      * @hide
      */
+    @SystemApi
     public boolean isPrivateDnsBroken() {
         return mPrivateDnsBroken;
     }
@@ -2324,6 +2327,17 @@ public final class NetworkCapabilities implements Parcelable {
         @NonNull
         public Builder removeCapability(@NetCapability final int capability) {
             mCaps.setCapability(capability, false);
+            return this;
+        }
+
+        /**
+         * Completely clears the contents of this object, removing even the capabilities that are
+         * set by default when the object is constructed.
+         * @return this builder
+         */
+        @NonNull
+        public Builder clearAll() {
+            mCaps.clearAll();
             return this;
         }
 

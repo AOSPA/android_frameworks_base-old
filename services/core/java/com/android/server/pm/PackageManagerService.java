@@ -234,6 +234,7 @@ import android.content.pm.VersionedPackage;
 import android.content.pm.dex.ArtManager;
 import android.content.pm.dex.DexMetadataHelper;
 import android.content.pm.dex.IArtManager;
+import android.content.pm.overlay.OverlayPaths;
 import android.content.pm.parsing.ApkLiteParseUtils;
 import android.content.pm.parsing.PackageLite;
 import android.content.pm.parsing.ParsingPackageUtils;
@@ -389,6 +390,7 @@ import com.android.server.pm.permission.PermissionManagerService;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
 import com.android.server.pm.verify.domain.DomainVerificationService;
+import com.android.server.pm.verify.domain.DomainVerificationUtils;
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxy;
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxyV1;
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxyV2;
@@ -461,6 +463,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -779,17 +782,18 @@ public class PackageManagerService extends IPackageManager.Stub
     // Compilation reasons.
     public static final int REASON_UNKNOWN = -1;
     public static final int REASON_FIRST_BOOT = 0;
-    public static final int REASON_BOOT = 1;
-    public static final int REASON_INSTALL = 2;
-    public static final int REASON_INSTALL_FAST = 3;
-    public static final int REASON_INSTALL_BULK = 4;
-    public static final int REASON_INSTALL_BULK_SECONDARY = 5;
-    public static final int REASON_INSTALL_BULK_DOWNGRADED = 6;
-    public static final int REASON_INSTALL_BULK_SECONDARY_DOWNGRADED = 7;
-    public static final int REASON_BACKGROUND_DEXOPT = 8;
-    public static final int REASON_AB_OTA = 9;
-    public static final int REASON_INACTIVE_PACKAGE_DOWNGRADE = 10;
-    public static final int REASON_SHARED = 11;
+    public static final int REASON_BOOT_AFTER_OTA = 1;
+    public static final int REASON_POST_BOOT = 2;
+    public static final int REASON_INSTALL = 3;
+    public static final int REASON_INSTALL_FAST = 4;
+    public static final int REASON_INSTALL_BULK = 5;
+    public static final int REASON_INSTALL_BULK_SECONDARY = 6;
+    public static final int REASON_INSTALL_BULK_DOWNGRADED = 7;
+    public static final int REASON_INSTALL_BULK_SECONDARY_DOWNGRADED = 8;
+    public static final int REASON_BACKGROUND_DEXOPT = 9;
+    public static final int REASON_AB_OTA = 10;
+    public static final int REASON_INACTIVE_PACKAGE_DOWNGRADE = 11;
+    public static final int REASON_SHARED = 12;
 
     public static final int REASON_LAST = REASON_SHARED;
 
@@ -1750,6 +1754,11 @@ public class PackageManagerService extends IPackageManager.Stub
         public AndroidPackage getPackage(@NonNull String packageName) {
             return getPackageLocked(packageName);
         }
+
+        @Override
+        public boolean filterAppAccess(String packageName, int callingUid, int userId) {
+            return mPmInternal.filterAppAccess(packageName, callingUid, userId);
+        }
     }
 
     /**
@@ -2581,49 +2590,58 @@ public class PackageManagerService extends IPackageManager.Stub
                 Intent intent, int matchFlags, List<ResolveInfo> candidates,
                 CrossProfileDomainInfo xpDomainInfo, int userId, boolean debug) {
             final ArrayList<ResolveInfo> result = new ArrayList<>();
-            final ArrayList<ResolveInfo> alwaysList = new ArrayList<>();
-            final ArrayList<ResolveInfo> undefinedList = new ArrayList<>();
             final ArrayList<ResolveInfo> matchAllList = new ArrayList<>();
-            final int count = candidates.size();
-            // First, try to use linked apps. Partition the candidates into four lists:
-            // one for the final results, one for the "do not use ever", one for "undefined status"
-            // and finally one for "browser app type".
-            for (int n=0; n<count; n++) {
-                ResolveInfo info = candidates.get(n);
-                String packageName = info.activityInfo.packageName;
-                PackageSetting ps = mSettings.getPackageLPr(packageName);
-                if (ps != null) {
-                    // Add to the special match all list (Browser use case)
-                    if (info.handleAllWebDataURI) {
-                        matchAllList.add(info);
-                        continue;
-                    }
+            final ArrayList<ResolveInfo> undefinedList = new ArrayList<>();
 
-                    boolean isAlways = mDomainVerificationManager
-                            .isApprovedForDomain(ps, intent, userId);
-                    if (isAlways) {
-                        alwaysList.add(info);
-                    } else {
-                        undefinedList.add(info);
-                    }
-                    continue;
+            final int count = candidates.size();
+            // First, try to use approved apps.
+            for (int n = 0; n < count; n++) {
+                ResolveInfo info = candidates.get(n);
+                // Add to the special match all list (Browser use case)
+                if (info.handleAllWebDataURI) {
+                    matchAllList.add(info);
+                } else {
+                    undefinedList.add(info);
                 }
             }
 
             // We'll want to include browser possibilities in a few cases
             boolean includeBrowser = false;
 
-            // First try to add the "always" resolution(s) for the current user, if any
-            if (alwaysList.size() > 0) {
-                result.addAll(alwaysList);
-            } else {
-                // Add all undefined apps as we want them to appear in the disambiguation dialog.
+            if (!DomainVerificationUtils.isDomainVerificationIntent(intent)) {
                 result.addAll(undefinedList);
                 // Maybe add one for the other profile.
-                if (xpDomainInfo != null && xpDomainInfo.wereAnyDomainsVerificationApproved) {
+                if (xpDomainInfo != null && xpDomainInfo.highestApprovalLevel
+                        > DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE) {
                     result.add(xpDomainInfo.resolveInfo);
                 }
                 includeBrowser = true;
+            } else {
+                Pair<List<ResolveInfo>, Integer> infosAndLevel = mDomainVerificationManager
+                        .filterToApprovedApp(intent, undefinedList, userId,
+                                mSettings::getPackageLPr);
+                List<ResolveInfo> approvedInfos = infosAndLevel.first;
+                Integer highestApproval = infosAndLevel.second;
+
+                // If no apps are approved for the domain, resolve only to browsers
+                if (approvedInfos.isEmpty()) {
+                    // If the other profile has a result, include that and delegate to
+                    // ResolveActivity
+                    if (xpDomainInfo != null && xpDomainInfo.highestApprovalLevel
+                            > DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE) {
+                        result.add(xpDomainInfo.resolveInfo);
+                    } else {
+                        includeBrowser = true;
+                    }
+                } else {
+                    result.addAll(approvedInfos);
+
+                    // If the other profile has an app that's of equal or higher approval, add it
+                    if (xpDomainInfo != null
+                            && xpDomainInfo.highestApprovalLevel >= highestApproval) {
+                        result.add(xpDomainInfo.resolveInfo);
+                    }
+                }
             }
 
             if (includeBrowser) {
@@ -2671,9 +2689,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
                 }
 
-                // If there is nothing selected, add all candidates and remove the ones that the
-                //user
-                // has explicitly put into the INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_NEVER state
+                // If there is nothing selected, add all candidates
                 if (result.size() == 0) {
                     result.addAll(candidates);
                 }
@@ -2775,10 +2791,12 @@ public class PackageManagerService extends IPackageManager.Stub
                             sourceUserId, parentUserId);
                 }
 
-                result.wereAnyDomainsVerificationApproved |= mDomainVerificationManager
-                        .isApprovedForDomain(ps, intent, riTargetUser.targetUserId);
+                result.highestApprovalLevel = Math.max(mDomainVerificationManager
+                        .approvalLevelForDomain(ps, intent, riTargetUser.targetUserId),
+                        result.highestApprovalLevel);
             }
-            if (result != null && !result.wereAnyDomainsVerificationApproved) {
+            if (result != null && result.highestApprovalLevel
+                    <= DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE) {
                 return null;
             }
             return result;
@@ -3021,9 +3039,10 @@ public class PackageManagerService extends IPackageManager.Stub
                     final String packageName = info.activityInfo.packageName;
                     final PackageSetting ps = mSettings.getPackageLPr(packageName);
                     if (ps.getInstantApp(userId)) {
-                        if (mDomainVerificationManager.isApprovedForDomain(ps, intent, userId)) {
+                        if (hasAnyDomainApproval(mDomainVerificationManager, ps, intent,
+                                userId)) {
                             if (DEBUG_INSTANT) {
-                                Slog.v(TAG, "Instant app approvd for intent; pkg: "
+                                Slog.v(TAG, "Instant app approved for intent; pkg: "
                                         + packageName);
                             }
                             localInstantApp = info;
@@ -3619,8 +3638,6 @@ public class PackageManagerService extends IPackageManager.Stub
             final boolean isCallerInstantApp = getInstantAppPackageName(callingUid) != null;
             final int userId = UserHandle.getUserId(uid);
             final int appId = UserHandle.getAppId(uid);
-            enforceCrossUserPermission(callingUid, userId,
-                    /* requireFullPermission */ false, /* checkShell */ false, "getPackagesForUid");
             return getPackagesForUidInternalBody(callingUid, userId, appId, isCallerInstantApp);
         }
 
@@ -3950,7 +3967,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (ps != null) {
                     // only check domain verification status if the app is not a browser
                     if (!info.handleAllWebDataURI) {
-                        if (mDomainVerificationManager.isApprovedForDomain(ps, intent, userId)) {
+                        if (hasAnyDomainApproval(mDomainVerificationManager, ps, intent,
+                                userId)) {
                             if (DEBUG_INSTANT) {
                                 Slog.v(TAG, "DENY instant app;" + " pkg: " + packageName
                                         + ", approved");
@@ -5766,8 +5784,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 (i, pm) -> new ViewCompiler(i.getInstallLock(), i.getInstaller()),
                 (i, pm) -> (IncrementalManager)
                         i.getContext().getSystemService(Context.INCREMENTAL_SERVICE),
-                (i, pm) -> new DefaultAppProvider(() -> context.getSystemService(
-                        RoleManager.class)),
+                (i, pm) -> new DefaultAppProvider(() -> context.getSystemService(RoleManager.class),
+                        () -> LocalServices.getService(UserManagerInternal.class)),
                 (i, pm) -> new DisplayMetrics(),
                 (i, pm) -> new PackageParser2(pm.mSeparateProcesses, pm.mOnlyCore,
                         i.getDisplayMetrics(), pm.mCacheDir,
@@ -5943,6 +5961,21 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
+    // Link watchables to the class
+    private void registerObserver() {
+        mPackages.registerObserver(mWatcher);
+        mSharedLibraries.registerObserver(mWatcher);
+        mStaticLibsByDeclaringPackage.registerObserver(mWatcher);
+        mInstrumentation.registerObserver(mWatcher);
+        mWebInstantAppsDisabled.registerObserver(mWatcher);
+        mAppsFilter.registerObserver(mWatcher);
+        mInstantAppRegistry.registerObserver(mWatcher);
+        mSettings.registerObserver(mWatcher);
+        // If neither "build" attribute is true then this may be a mockito test, and verification
+        // can fail as a false positive.
+        Watchable.verifyWatchedAttributes(this, mWatcher, !(mIsEngBuild || mIsUserDebugBuild));
+    }
+
     /**
      * A extremely minimal constructor designed to start up a PackageManagerService instance for
      * testing.
@@ -6027,15 +6060,7 @@ public class PackageManagerService extends IPackageManager.Stub
         sSnapshotCorked = true;
         mLiveComputer = createLiveComputer();
         mSnapshotComputer = mLiveComputer;
-
-        // Link up the watchers
-        mPackages.registerObserver(mWatcher);
-        mSharedLibraries.registerObserver(mWatcher);
-        mStaticLibsByDeclaringPackage.registerObserver(mWatcher);
-        mInstrumentation.registerObserver(mWatcher);
-        mWebInstantAppsDisabled.registerObserver(mWatcher);
-        mAppsFilter.registerObserver(mWatcher);
-        Watchable.verifyWatchedAttributes(this, mWatcher);
+        registerObserver();
 
         mPackages.putAll(testParams.packages);
         mEnableFreeCacheV2 = testParams.enableFreeCacheV2;
@@ -6189,15 +6214,6 @@ public class PackageManagerService extends IPackageManager.Stub
         mDomainVerificationManager = injector.getDomainVerificationManagerInternal();
         mDomainVerificationManager.setConnection(mDomainVerificationConnection);
 
-        // Link up the watchers
-        mPackages.registerObserver(mWatcher);
-        mSharedLibraries.registerObserver(mWatcher);
-        mStaticLibsByDeclaringPackage.registerObserver(mWatcher);
-        mInstrumentation.registerObserver(mWatcher);
-        mWebInstantAppsDisabled.registerObserver(mWatcher);
-        mAppsFilter.registerObserver(mWatcher);
-        Watchable.verifyWatchedAttributes(this, mWatcher);
-
         // Create the computer as soon as the state objects have been installed.  The
         // cached computer is the same as the live computer until the end of the
         // constructor, at which time the invalidation method updates it.  The cache is
@@ -6206,6 +6222,7 @@ public class PackageManagerService extends IPackageManager.Stub
         sSnapshotCorked = true;
         mLiveComputer = createLiveComputer();
         mSnapshotComputer = mLiveComputer;
+        registerObserver();
 
         // CHECKSTYLE:OFF IndentationCheck
         synchronized (mInstallLock) {
@@ -8975,7 +8992,6 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public List<String> getAllPackages() {
-        enforceSystemOrRootOrShell("getAllPackages is limited to privileged callers");
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
         synchronized (mLock) {
@@ -9398,8 +9414,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     if (ri.activityInfo.applicationInfo.isInstantApp()) {
                         final String packageName = ri.activityInfo.packageName;
                         final PackageSetting ps = mSettings.getPackageLPr(packageName);
-                        if (ps != null && mDomainVerificationManager
-                                .isApprovedForDomain(ps, intent, userId)) {
+                        if (ps != null && hasAnyDomainApproval(mDomainVerificationManager, ps,
+                                intent, userId)) {
                             return ri;
                         }
                     }
@@ -9446,6 +9462,19 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
         return null;
+    }
+
+    /**
+     * Do NOT use for intent resolution filtering. That should be done with
+     * {@link DomainVerificationManagerInternal#filterToApprovedApp(Intent, List, int, Function)}.
+     *
+     * @return if the package is approved at any non-zero level for the domain in the intent
+     */
+    private static boolean hasAnyDomainApproval(
+            @NonNull DomainVerificationManagerInternal manager, @NonNull PackageSetting pkgSetting,
+            @NonNull Intent intent, @UserIdInt int userId) {
+        return manager.approvalLevelForDomain(pkgSetting, intent, userId)
+                > DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE;
     }
 
     /**
@@ -9891,7 +9920,7 @@ public class PackageManagerService extends IPackageManager.Stub
     private static class CrossProfileDomainInfo {
         /* ResolveInfo for IntentForwarderActivity to send the intent to the other profile */
         ResolveInfo resolveInfo;
-        boolean wereAnyDomainsVerificationApproved;
+        int highestApprovalLevel = DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE;
     }
 
     private CrossProfileDomainInfo getCrossProfileDomainPreferredLpr(Intent intent,
@@ -11667,10 +11696,7 @@ public class PackageManagerService extends IPackageManager.Stub
         //       first boot, as they do not have profile data.
         boolean causeFirstBoot = isFirstBoot() || mIsPreNUpgrade;
 
-        // We need to re-extract after a pruned cache, as AoT-ed files will be out of date.
-        boolean causePrunedCache = VMRuntime.didPruneDalvikCache();
-
-        if (!causeUpgrade && !causeFirstBoot && !causePrunedCache) {
+        if (!causeUpgrade && !causeFirstBoot) {
             return;
         }
 
@@ -11687,7 +11713,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         final long startTime = System.nanoTime();
         final int[] stats = performDexOptUpgrade(pkgs, mIsPreNUpgrade /* showDialog */,
-                    causeFirstBoot ? REASON_FIRST_BOOT : REASON_BOOT,
+                    causeFirstBoot ? REASON_FIRST_BOOT : REASON_BOOT_AFTER_OTA,
                     false /* bootComplete */);
 
         final int elapsedTimeSeconds =
@@ -16192,8 +16218,7 @@ public class PackageManagerService extends IPackageManager.Stub
     @Deprecated
     @Override
     public boolean updateIntentVerificationStatus(String packageName, int status, int userId) {
-        mDomainVerificationManager.setLegacyUserState(packageName, userId, status);
-        return true;
+        return mDomainVerificationManager.setLegacyUserState(packageName, userId, status);
     }
 
     @Deprecated
@@ -18188,11 +18213,8 @@ public class PackageManagerService extends IPackageManager.Stub
                             if (libPs == null) {
                                 continue;
                             }
-                            final String[] overlayPaths = libPs.getOverlayPaths(currentUserId);
-                            if (overlayPaths != null) {
-                                ps.setOverlayPathsForLibrary(sharedLib.getName(),
-                                        Arrays.asList(overlayPaths), currentUserId);
-                            }
+                            ps.setOverlayPathsForLibrary(sharedLib.getName(),
+                                    libPs.getOverlayPaths(currentUserId), currentUserId);
                         }
                     }
                 }
@@ -24018,7 +24040,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 writer.println("Domain verification status:");
                 writer.increaseIndent();
                 try {
-                    mDomainVerificationManager.printState(writer, packageName, UserHandle.USER_ALL);
+                    mDomainVerificationManager.printState(writer, packageName, UserHandle.USER_ALL,
+                            mSettings::getPackageLPr);
                 } catch (PackageManager.NameNotFoundException e) {
                     pw.println("Failure printing domain verification information");
                     Slog.e(TAG, "Failure printing domain verification information", e);
@@ -26004,6 +26027,17 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
+        public boolean isPackageDebuggable(String packageName) throws RemoteException {
+            int callingUser = UserHandle.getCallingUserId();
+            ApplicationInfo appInfo = getApplicationInfo(packageName, 0, callingUser);
+            if (appInfo != null) {
+                return (0 != (appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE));
+            }
+
+            throw new RemoteException("Couldn't get debug flag for package " + packageName);
+        }
+
+        @Override
         public boolean[] isAudioPlaybackCaptureAllowed(String[] packageNames)
                 throws RemoteException {
             int callingUser = UserHandle.getUserId(Binder.getCallingUid());
@@ -26033,6 +26067,13 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         public String getModuleMetadataPackageName() throws RemoteException {
             return PackageManagerService.this.mModuleInfoProvider.getPackageName();
+        }
+
+        @Override
+        public boolean hasSha256SigningCertificate(String packageName, byte[] certificate)
+                throws RemoteException {
+            return PackageManagerService.this.hasSigningCertificate(
+                packageName, certificate, CERT_INPUT_SHA256);
         }
     }
 
@@ -26291,30 +26332,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public void setKeepUninstalledPackages(final List<String> packageList) {
-            Preconditions.checkNotNull(packageList);
-            List<String> removedFromList = null;
-            synchronized (mLock) {
-                if (mKeepUninstalledPackages != null) {
-                    final int packagesCount = mKeepUninstalledPackages.size();
-                    for (int i = 0; i < packagesCount; i++) {
-                        String oldPackage = mKeepUninstalledPackages.get(i);
-                        if (packageList != null && packageList.contains(oldPackage)) {
-                            continue;
-                        }
-                        if (removedFromList == null) {
-                            removedFromList = new ArrayList<>();
-                        }
-                        removedFromList.add(oldPackage);
-                    }
-                }
-                mKeepUninstalledPackages = new ArrayList<>(packageList);
-                if (removedFromList != null) {
-                    final int removedCount = removedFromList.size();
-                    for (int i = 0; i < removedCount; i++) {
-                        deletePackageIfUnusedLPr(removedFromList.get(i));
-                    }
-                }
-            }
+            PackageManagerService.this.setKeepUninstalledPackagesInternal(packageList);
         }
 
         @Override
@@ -26701,34 +26719,19 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public boolean setEnabledOverlayPackages(int userId, @NonNull String targetPackageName,
-                @Nullable List<String> overlayPackageNames,
-                @NonNull Collection<String> outUpdatedPackageNames) {
+                @Nullable OverlayPaths overlayPaths,
+                @NonNull Set<String> outUpdatedPackageNames) {
+            boolean modified = false;
             synchronized (mLock) {
                 final AndroidPackage targetPkg = mPackages.get(targetPackageName);
                 if (targetPackageName == null || targetPkg == null) {
                     Slog.e(TAG, "failed to find package " + targetPackageName);
                     return false;
                 }
-                ArrayList<String> overlayPaths = null;
-                if (overlayPackageNames != null && overlayPackageNames.size() > 0) {
-                    final int N = overlayPackageNames.size();
-                    overlayPaths = new ArrayList<>(N);
-                    for (int i = 0; i < N; i++) {
-                        final String packageName = overlayPackageNames.get(i);
-                        final AndroidPackage pkg = mPackages.get(packageName);
-                        if (pkg == null) {
-                            Slog.e(TAG, "failed to find package " + packageName);
-                            return false;
-                        }
-                        overlayPaths.add(pkg.getBaseApkPath());
-                    }
-                }
 
-                ArraySet<String> updatedPackageNames = null;
                 if (targetPkg.getLibraryNames() != null) {
                     // Set the overlay paths for dependencies of the shared library.
-                    updatedPackageNames = new ArraySet<>();
-                    for (String libName : targetPkg.getLibraryNames()) {
+                    for (final String libName : targetPkg.getLibraryNames()) {
                         final SharedLibraryInfo info = getSharedLibraryInfoLPr(libName,
                                 SharedLibraryInfo.VERSION_UNDEFINED);
                         if (info == null) {
@@ -26739,28 +26742,30 @@ public class PackageManagerService extends IPackageManager.Stub
                         if (dependents == null) {
                             continue;
                         }
-                        for (VersionedPackage dependent : dependents) {
+                        for (final VersionedPackage dependent : dependents) {
                             final PackageSetting ps = mSettings.getPackageLPr(
                                     dependent.getPackageName());
                             if (ps == null) {
                                 continue;
                             }
-                            ps.setOverlayPathsForLibrary(libName, overlayPaths, userId);
-                            updatedPackageNames.add(dependent.getPackageName());
+                            if (ps.setOverlayPathsForLibrary(libName, overlayPaths, userId)) {
+                                outUpdatedPackageNames.add(dependent.getPackageName());
+                                modified = true;
+                            }
                         }
                     }
                 }
 
                 final PackageSetting ps = mSettings.getPackageLPr(targetPackageName);
-                ps.setOverlayPaths(overlayPaths, userId);
-
-                outUpdatedPackageNames.add(targetPackageName);
-                if (updatedPackageNames != null) {
-                    outUpdatedPackageNames.addAll(updatedPackageNames);
+                if (ps.setOverlayPaths(overlayPaths, userId)) {
+                    outUpdatedPackageNames.add(targetPackageName);
+                    modified = true;
                 }
             }
 
-            invalidatePackageInfoCache();
+            if (modified) {
+                invalidatePackageInfoCache();
+            }
             return true;
         }
 
@@ -27124,6 +27129,28 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         public boolean isSuspendingAnyPackages(String suspendingPackage, int userId) {
             return PackageManagerService.this.isSuspendingAnyPackages(suspendingPackage, userId);
+        }
+
+        @Override
+        public boolean registerInstalledLoadingProgressCallback(String packageName,
+                PackageManagerInternal.InstalledLoadingProgressCallback callback, int userId) {
+            final PackageSetting ps = getPackageSettingForUser(packageName, Binder.getCallingUid(),
+                    userId);
+            if (ps == null) {
+                return false;
+            }
+            if (!ps.isPackageLoading()) {
+                Slog.w(TAG,
+                        "Failed registering loading progress callback. Package is fully loaded.");
+                return false;
+            }
+            if (mIncrementalManager == null) {
+                Slog.w(TAG,
+                        "Failed registering loading progress callback. Incremental is not enabled");
+                return false;
+            }
+            return mIncrementalManager.registerLoadingProgressCallback(ps.getPathString(),
+                    (IPackageLoadingProgressCallback) callback.getBinder());
         }
 
         @Override
@@ -27802,6 +27829,43 @@ public class PackageManagerService extends IPackageManager.Stub
     @NonNull
     public DomainVerificationService.Connection getDomainVerificationConnection() {
         return mDomainVerificationConnection;
+    }
+
+    @Override
+    public void setKeepUninstalledPackages(List<String> packageList) {
+        mContext.enforceCallingPermission(
+                Manifest.permission.KEEP_UNINSTALLED_PACKAGES,
+                "setKeepUninstalledPackages requires KEEP_UNINSTALLED_PACKAGES permission");
+        Objects.requireNonNull(packageList);
+
+        setKeepUninstalledPackagesInternal(packageList);
+    }
+
+    private void setKeepUninstalledPackagesInternal(List<String> packageList) {
+        Preconditions.checkNotNull(packageList);
+        List<String> removedFromList = null;
+        synchronized (mLock) {
+            if (mKeepUninstalledPackages != null) {
+                final int packagesCount = mKeepUninstalledPackages.size();
+                for (int i = 0; i < packagesCount; i++) {
+                    String oldPackage = mKeepUninstalledPackages.get(i);
+                    if (packageList != null && packageList.contains(oldPackage)) {
+                        continue;
+                    }
+                    if (removedFromList == null) {
+                        removedFromList = new ArrayList<>();
+                    }
+                    removedFromList.add(oldPackage);
+                }
+            }
+            mKeepUninstalledPackages = new ArrayList<>(packageList);
+            if (removedFromList != null) {
+                final int removedCount = removedFromList.size();
+                for (int i = 0; i < removedCount; i++) {
+                    deletePackageIfUnusedLPr(removedFromList.get(i));
+                }
+            }
+        }
     }
 }
 

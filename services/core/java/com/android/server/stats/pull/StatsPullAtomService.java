@@ -90,6 +90,7 @@ import android.net.NetworkTemplate;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.BatteryStats;
+import android.os.BatteryStatsInternal;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -138,6 +139,7 @@ import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BatterySipper;
 import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BinderCallsStats.ExportedCallStat;
+import com.android.internal.os.KernelCpuBpfTracking;
 import com.android.internal.os.KernelCpuThreadReader;
 import com.android.internal.os.KernelCpuThreadReaderDiff;
 import com.android.internal.os.KernelCpuThreadReaderSettingsObserver;
@@ -152,6 +154,7 @@ import com.android.internal.os.LooperStats;
 import com.android.internal.os.PowerProfile;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.StoragedUidIoStatsReader;
+import com.android.internal.os.SystemServerCpuThreadReader.SystemServiceCpuThreadTimes;
 import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.role.RoleManagerLocal;
@@ -457,6 +460,8 @@ public class StatsPullAtomService extends SystemService {
                         synchronized (mCpuTimePerUidFreqLock) {
                             return pullCpuTimePerUidFreqLocked(atomTag, data);
                         }
+                    case FrameworkStatsLog.CPU_CYCLES_PER_THREAD_GROUP_CLUSTER:
+                        return pullCpuCyclesPerThreadGroupCluster(atomTag, data);
                     case FrameworkStatsLog.CPU_ACTIVE_TIME:
                         synchronized (mCpuActiveTimeLock) {
                             return pullCpuActiveTimeLocked(atomTag, data);
@@ -781,6 +786,7 @@ public class StatsPullAtomService extends SystemService {
         registerCpuTimePerUid();
         registerCpuCyclesPerUidCluster();
         registerCpuTimePerUidFreq();
+        registerCpuCyclesPerThreadGroupCluster();
         registerCpuActiveTime();
         registerCpuClusterTime();
         registerWifiActivityInfo();
@@ -1450,7 +1456,7 @@ public class StatsPullAtomService extends SystemService {
     }
 
     private void registerCpuTimePerClusterFreq() {
-        if (KernelCpuTotalBpfMapReader.isSupported()) {
+        if (KernelCpuBpfTracking.isSupported()) {
             int tagId = FrameworkStatsLog.CPU_TIME_PER_CLUSTER_FREQ;
             PullAtomMetadata metadata = new PullAtomMetadata.Builder()
                     .setAdditiveFields(new int[] {3})
@@ -1510,6 +1516,7 @@ public class StatsPullAtomService extends SystemService {
     }
 
     int pullCpuCyclesPerUidClusterLocked(int atomTag, List<StatsEvent> pulledData) {
+        // TODO(b/179485697): Remove power profile dependency.
         PowerProfile powerProfile = new PowerProfile(mContext);
         // Frequency index to frequency mapping.
         long[] freqs = mCpuUidFreqTimeReader.readFreqs(powerProfile);
@@ -1606,9 +1613,6 @@ public class StatsPullAtomService extends SystemService {
         // Aggregate times for the same uids.
         SparseArray<long[]> aggregated = new SparseArray<>();
         mCpuUidFreqTimeReader.readAbsolute((uid, cpuFreqTimeMs) -> {
-            // For uids known to be aggregated from many entries allow mutating in place to avoid
-            // many copies. Otherwise, copy before aggregating.
-            boolean mutateInPlace = false;
             if (UserHandle.isIsolated(uid)) {
                 // Skip individual isolated uids because they are recycled and quickly removed from
                 // the underlying data source.
@@ -1616,26 +1620,18 @@ public class StatsPullAtomService extends SystemService {
             } else if (UserHandle.isSharedAppGid(uid)) {
                 // All shared app gids are accounted together.
                 uid = LAST_SHARED_APPLICATION_GID;
-                mutateInPlace = true;
             } else {
                 // Everything else is accounted under their base uid.
                 uid = UserHandle.getAppId(uid);
             }
 
             long[] aggCpuFreqTimeMs = aggregated.get(uid);
-            if (aggCpuFreqTimeMs != null) {
-                if (!mutateInPlace) {
-                    aggCpuFreqTimeMs = Arrays.copyOf(aggCpuFreqTimeMs, cpuFreqTimeMs.length);
-                    aggregated.put(uid, aggCpuFreqTimeMs);
-                }
-                for (int freqIndex = 0; freqIndex < cpuFreqTimeMs.length; ++freqIndex) {
-                    aggCpuFreqTimeMs[freqIndex] += cpuFreqTimeMs[freqIndex];
-                }
-            } else {
-                if (mutateInPlace) {
-                    cpuFreqTimeMs = Arrays.copyOf(cpuFreqTimeMs, cpuFreqTimeMs.length);
-                }
-                aggregated.put(uid, cpuFreqTimeMs);
+            if (aggCpuFreqTimeMs == null) {
+                aggCpuFreqTimeMs = new long[cpuFreqTimeMs.length];
+                aggregated.put(uid, aggCpuFreqTimeMs);
+            }
+            for (int freqIndex = 0; freqIndex < cpuFreqTimeMs.length; ++freqIndex) {
+                aggCpuFreqTimeMs[freqIndex] += cpuFreqTimeMs[freqIndex];
             }
         });
 
@@ -1651,6 +1647,82 @@ public class StatsPullAtomService extends SystemService {
             }
         }
         return StatsManager.PULL_SUCCESS;
+    }
+
+    private void registerCpuCyclesPerThreadGroupCluster() {
+        if (KernelCpuBpfTracking.isSupported()) {
+            int tagId = FrameworkStatsLog.CPU_CYCLES_PER_THREAD_GROUP_CLUSTER;
+            PullAtomMetadata metadata = new PullAtomMetadata.Builder()
+                    .setAdditiveFields(new int[] {3, 4})
+                    .build();
+            mStatsManager.setPullAtomCallback(
+                    tagId,
+                    metadata,
+                    DIRECT_EXECUTOR,
+                    mStatsCallbackImpl
+            );
+        }
+    }
+
+    int pullCpuCyclesPerThreadGroupCluster(int atomTag, List<StatsEvent> pulledData) {
+        // TODO(b/179485697): Remove power profile dependency.
+        PowerProfile powerProfile = new PowerProfile(mContext);
+        // Frequency index to frequency mapping.
+        long[] freqs = mCpuUidFreqTimeReader.readFreqs(powerProfile);
+        if (freqs == null) {
+            return StatsManager.PULL_SKIP;
+        }
+        // Frequency index to cluster mapping.
+        int[] freqClusters = new int[freqs.length];
+        // Number of clusters.
+        int clusters;
+
+        // Initialize frequency mappings.
+        {
+            int cluster = 0;
+            long lastFreq = -1;
+            for (int freqIndex = 0; freqIndex < freqs.length; ++freqIndex) {
+                long currFreq = freqs[freqIndex];
+                if (currFreq <= lastFreq) {
+                    cluster++;
+                }
+                freqClusters[freqIndex] = cluster;
+                lastFreq = currFreq;
+            }
+
+            clusters = cluster + 1;
+        }
+
+        SystemServiceCpuThreadTimes times = LocalServices.getService(BatteryStatsInternal.class)
+                .getSystemServiceCpuThreadTimes();
+        if (times == null) {
+            return StatsManager.PULL_SKIP;
+        }
+
+        addCpuCyclesPerThreadGroupClusterAtoms(atomTag, pulledData,
+                FrameworkStatsLog.CPU_CYCLES_PER_THREAD_GROUP_CLUSTER__THREAD_GROUP__SYSTEM_SERVER,
+                times.threadCpuTimesUs, clusters, freqs, freqClusters);
+        addCpuCyclesPerThreadGroupClusterAtoms(atomTag, pulledData,
+                FrameworkStatsLog.CPU_CYCLES_PER_THREAD_GROUP_CLUSTER__THREAD_GROUP__SYSTEM_SERVER_BINDER,
+                times.binderThreadCpuTimesUs, clusters, freqs, freqClusters);
+
+        return StatsManager.PULL_SUCCESS;
+    }
+
+    private static void addCpuCyclesPerThreadGroupClusterAtoms(
+            int atomTag, List<StatsEvent> pulledData, int threadGroup, long[] cpuTimesUs,
+            int clusters, long[] freqs, int[] freqClusters) {
+        long[] aggregatedCycles = new long[clusters];
+        long[] aggregatedTimesUs = new long[clusters];
+        for (int i = 0; i < cpuTimesUs.length; ++i) {
+            aggregatedCycles[freqClusters[i]] += freqs[i] * cpuTimesUs[i] / 1_000;
+            aggregatedTimesUs[freqClusters[i]] += cpuTimesUs[i];
+        }
+        for (int cluster = 0; cluster < clusters; ++cluster) {
+            pulledData.add(FrameworkStatsLog.buildStatsEvent(
+                    atomTag, threadGroup, cluster, aggregatedCycles[cluster] / 1_000_000L,
+                    aggregatedTimesUs[cluster] / 1_000));
+        }
     }
 
     private void registerCpuActiveTime() {
@@ -2062,7 +2134,9 @@ public class StatsPullAtomService extends SystemService {
                         metrics.kernelStackKb,
                         metrics.totalIonKb,
                         metrics.unaccountedKb,
-                        metrics.gpuTotalUsageKb));
+                        metrics.gpuTotalUsageKb,
+                        metrics.gpuPrivateAllocationsKb,
+                        metrics.dmaBufTotalExportedKb));
         return StatsManager.PULL_SUCCESS;
     }
 
@@ -2509,7 +2583,6 @@ public class StatsPullAtomService extends SystemService {
         try {
             // force procstats to flush & combine old files into one store
             long lastHighWaterMark = readProcStatsHighWaterMark(section);
-            List<ParcelFileDescriptor> statsFiles = new ArrayList<>();
 
             ProtoOutputStream[] protoStreams = new ProtoOutputStream[MAX_PROCSTATS_SHARDS];
             for (int i = 0; i < protoStreams.length; i++) {
@@ -2519,7 +2592,7 @@ public class StatsPullAtomService extends SystemService {
             ProcessStats procStats = new ProcessStats(false);
             // Force processStatsService to aggregate all in-storage and in-memory data.
             long highWaterMark = processStatsService.getCommittedStatsMerged(
-                    lastHighWaterMark, section, true, statsFiles, procStats);
+                    lastHighWaterMark, section, true, null, procStats);
             procStats.dumpAggregatedProtoForStatsd(protoStreams, MAX_PROCSTATS_RAW_SHARD_SIZE);
 
             for (int i = 0; i < protoStreams.length; i++) {

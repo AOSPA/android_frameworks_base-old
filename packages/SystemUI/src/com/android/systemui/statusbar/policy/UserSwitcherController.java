@@ -113,12 +113,15 @@ public class UserSwitcherController implements Dumpable {
     private int mLastNonGuestUser = UserHandle.USER_SYSTEM;
     private boolean mResumeUserOnGuestLogout = true;
     private boolean mSimpleUserSwitcher;
-    private boolean mAddUsersWhenLocked;
+    // When false, there won't be any visual affordance to add a new user from the keyguard even if
+    // the user is unlocked
+    private boolean mAddUsersFromLockScreen;
     private boolean mPauseRefreshUsers;
     private int mSecondaryUser = UserHandle.USER_NULL;
     private Intent mSecondaryUserServiceIntent;
     private SparseBooleanArray mForcePictureLoadForUserId = new SparseBooleanArray(2);
     private final UiEventLogger mUiEventLogger;
+    public final DetailAdapter mUserDetailAdapter;
 
     @Inject
     public UserSwitcherController(Context context, KeyguardStateController keyguardStateController,
@@ -129,6 +132,7 @@ public class UserSwitcherController implements Dumpable {
         mBroadcastDispatcher = broadcastDispatcher;
         mActivityTaskManager = activityTaskManager;
         mUiEventLogger = uiEventLogger;
+        mUserDetailAdapter = new UserDetailAdapter(this, mContext, mUiEventLogger);
         if (!UserManager.isGuestUserEphemeral()) {
             mGuestResumeSessionReceiver.register(mBroadcastDispatcher);
         }
@@ -204,7 +208,7 @@ public class UserSwitcherController implements Dumpable {
         }
         mForcePictureLoadForUserId.clear();
 
-        final boolean addUsersWhenLocked = mAddUsersWhenLocked;
+        final boolean addUsersWhenLocked = mAddUsersFromLockScreen;
         new AsyncTask<SparseArray<Bitmap>, Void, ArrayList<UserRecord>>() {
             @SuppressWarnings("unchecked")
             @Override
@@ -421,7 +425,7 @@ public class UserSwitcherController implements Dumpable {
         }
     }
 
-    private void showExitGuestDialog(int id) {
+    protected void showExitGuestDialog(int id) {
         int newId = UserHandle.USER_SYSTEM;
         if (mResumeUserOnGuestLogout && mLastNonGuestUser != UserHandle.USER_SYSTEM) {
             UserInfo info = mUserManager.getUserInfo(mLastNonGuestUser);
@@ -554,7 +558,7 @@ public class UserSwitcherController implements Dumpable {
     private final ContentObserver mSettingsObserver = new ContentObserver(new Handler()) {
         public void onChange(boolean selfChange) {
             mSimpleUserSwitcher = shouldUseSimpleUserSwitcher();
-            mAddUsersWhenLocked = Settings.Global.getInt(mContext.getContentResolver(),
+            mAddUsersFromLockScreen = Settings.Global.getInt(mContext.getContentResolver(),
                     Settings.Global.ADD_USERS_WHEN_LOCKED, 0) != 0;
             refreshUsers(UserHandle.USER_NULL);
         };
@@ -610,43 +614,26 @@ public class UserSwitcherController implements Dumpable {
         }
 
         public int getUserCount() {
-            boolean secureKeyguardShowing = mKeyguardStateController.isShowing()
-                    && mKeyguardStateController.isMethodSecure()
-                    && !mKeyguardStateController.canDismissLockScreen();
-            if (!secureKeyguardShowing) {
-                return getUsers().size();
-            }
-            // The lock screen is secure and showing. Filter out restricted records.
-            final int userSize = getUsers().size();
-            int count = 0;
-            for (int i = 0; i < userSize; i++) {
-                if (getUsers().get(i).isGuest) continue;
-                if (getUsers().get(i).isRestricted) {
-                    break;
-                } else {
-                    count++;
-                }
-            }
-            return count;
+            return countUsers(false);
         }
 
         @Override
         public int getCount() {
-            boolean secureKeyguardShowing = mKeyguardStateController.isShowing()
-                    && mKeyguardStateController.isMethodSecure()
-                    && !mKeyguardStateController.canDismissLockScreen();
-            if (!secureKeyguardShowing) {
-                return getUsers().size();
-            }
-            // The lock screen is secure and showing. Filter out restricted records.
+            return countUsers(true);
+        }
+
+        private int countUsers(boolean includeGuest) {
+            boolean keyguardShowing = mKeyguardStateController.isShowing();
             final int userSize = getUsers().size();
             int count = 0;
             for (int i = 0; i < userSize; i++) {
-                if (getUsers().get(i).isRestricted) {
-                    break;
-                } else {
-                    count++;
+                if (getUsers().get(i).isGuest && !includeGuest) {
+                    continue;
                 }
+                if (getUsers().get(i).isRestricted && keyguardShowing) {
+                    break;
+                }
+                count++;
             }
             return count;
         }
@@ -695,11 +682,7 @@ public class UserSwitcherController implements Dumpable {
             if (item.isAddUser) {
                 iconRes = R.drawable.ic_add_circle;
             } else if (item.isGuest) {
-                if (item.isCurrent) {
-                    iconRes = R.drawable.ic_exit_to_app;
-                } else {
-                    iconRes = R.drawable.ic_avatar_guest_user;
-                }
+                iconRes = R.drawable.ic_avatar_guest_user;
             } else {
                 iconRes = R.drawable.ic_avatar_user;
             }
@@ -800,8 +783,19 @@ public class UserSwitcherController implements Dumpable {
         }
     }
 
-    public final DetailAdapter userDetailAdapter = new DetailAdapter() {
+    public static class UserDetailAdapter implements DetailAdapter {
         private final Intent USER_SETTINGS_INTENT = new Intent(Settings.ACTION_USER_SETTINGS);
+
+        private final UserSwitcherController mUserSwitcherController;
+        private final Context mContext;
+        private final UiEventLogger mUiEventLogger;
+
+        UserDetailAdapter(UserSwitcherController userSwitcherController, Context context,
+                UiEventLogger uiEventLogger) {
+            mUserSwitcherController = userSwitcherController;
+            mContext = context;
+            mUiEventLogger = uiEventLogger;
+        }
 
         @Override
         public CharSequence getTitle() {
@@ -813,7 +807,7 @@ public class UserSwitcherController implements Dumpable {
             UserDetailView v;
             if (!(convertView instanceof UserDetailView)) {
                 v = UserDetailView.inflate(context, parent, false);
-                v.createAndSetAdapter(UserSwitcherController.this, mUiEventLogger);
+                v.createAndSetAdapter(mUserSwitcherController, mUiEventLogger);
             } else {
                 v = (UserDetailView) convertView;
             }

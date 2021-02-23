@@ -20,6 +20,7 @@ import static android.media.AudioAttributes.ALLOW_CAPTURE_BY_ALL;
 import static android.media.AudioAttributes.ALLOW_CAPTURE_BY_NONE;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
@@ -180,6 +181,21 @@ public final class AudioPlaybackConfiguration implements Parcelable {
     @Retention(RetentionPolicy.SOURCE)
     public @interface PlayerState {}
 
+    /** @hide */
+    public static String playerStateToString(@PlayerState int state) {
+        switch (state) {
+            case PLAYER_STATE_UNKNOWN: return "PLAYER_STATE_UNKNOWN";
+            case PLAYER_STATE_RELEASED: return "PLAYER_STATE_RELEASED";
+            case PLAYER_STATE_IDLE: return "PLAYER_STATE_IDLE";
+            case PLAYER_STATE_STARTED: return "PLAYER_STATE_STARTED";
+            case PLAYER_STATE_PAUSED: return "PLAYER_STATE_PAUSED";
+            case PLAYER_STATE_STOPPED: return "PLAYER_STATE_STOPPED";
+            case PLAYER_UPDATE_DEVICE_ID: return "PLAYER_UPDATE_DEVICE_ID";
+            default:
+                return "invalid state " + state;
+        }
+    }
+
     // immutable data
     private final int mPlayerIId;
 
@@ -195,6 +211,8 @@ public final class AudioPlaybackConfiguration implements Parcelable {
 
     private int mDeviceId;
 
+    private int mSessionId;
+
     /**
      * Never use without initializing parameters afterwards
      */
@@ -207,7 +225,10 @@ public final class AudioPlaybackConfiguration implements Parcelable {
      * @hide
      */
     public AudioPlaybackConfiguration(PlayerBase.PlayerIdCard pic, int piid, int uid, int pid) {
-        if (DEBUG) { Log.d(TAG, "new: piid=" + piid + " iplayer=" + pic.mIPlayer); }
+        if (DEBUG) {
+            Log.d(TAG, "new: piid=" + piid + " iplayer=" + pic.mIPlayer
+                    + " sessionId=" + pic.mSessionId);
+        }
         mPlayerIId = piid;
         mPlayerType = pic.mPlayerType;
         mClientUid = uid;
@@ -220,6 +241,7 @@ public final class AudioPlaybackConfiguration implements Parcelable {
         } else {
             mIPlayerShell = null;
         }
+        mSessionId = pic.mSessionId;
     }
 
     /**
@@ -259,6 +281,7 @@ public final class AudioPlaybackConfiguration implements Parcelable {
         anonymCopy.mClientUid = PLAYER_UPID_INVALID;
         anonymCopy.mClientPid = PLAYER_UPID_INVALID;
         anonymCopy.mIPlayerShell = null;
+        anonymCopy.mSessionId = AudioSystem.AUDIO_SESSION_ALLOCATE;
         return anonymCopy;
     }
 
@@ -299,6 +322,17 @@ public final class AudioPlaybackConfiguration implements Parcelable {
             return null;
         }
         return AudioManager.getDeviceForPortId(mDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
+    }
+
+    /**
+     * @hide
+     * Return the audio session ID associated with this player.
+     * See {@link AudioManager#generateAudioSessionId()}.
+     * @return an audio session ID
+     */
+    @SystemApi
+    public @IntRange(from = 0) int getSessionId() {
+        return mSessionId;
     }
 
     /**
@@ -376,6 +410,17 @@ public final class AudioPlaybackConfiguration implements Parcelable {
     public boolean handleAudioAttributesEvent(@NonNull AudioAttributes attr) {
         final boolean changed = !attr.equals(mPlayerAttr);
         mPlayerAttr = attr;
+        return changed;
+    }
+
+    /**
+     * @hide
+     * Handle a change of audio session Id
+     * @param sessionId the audio session ID
+     */
+    public boolean handleSessionIdEvent(int sessionId) {
+        final boolean changed = sessionId != mSessionId;
+        mSessionId = sessionId;
         return changed;
     }
 
@@ -476,7 +521,8 @@ public final class AudioPlaybackConfiguration implements Parcelable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(mPlayerIId, mDeviceId, mPlayerType, mClientUid, mClientPid);
+        return Objects.hash(mPlayerIId, mDeviceId, mPlayerType, mClientUid, mClientPid,
+                mSessionId);
     }
 
     @Override
@@ -498,6 +544,7 @@ public final class AudioPlaybackConfiguration implements Parcelable {
             ips = mIPlayerShell;
         }
         dest.writeStrongInterface(ips == null ? null : ips.getIPlayer());
+        dest.writeInt(mSessionId);
     }
 
     private AudioPlaybackConfiguration(Parcel in) {
@@ -510,6 +557,7 @@ public final class AudioPlaybackConfiguration implements Parcelable {
         mPlayerAttr = AudioAttributes.CREATOR.createFromParcel(in);
         final IPlayer p = IPlayer.Stub.asInterface(in.readStrongBinder());
         mIPlayerShell = (p == null) ? null : new IPlayerShell(null, p);
+        mSessionId = in.readInt();
     }
 
     @Override
@@ -523,7 +571,8 @@ public final class AudioPlaybackConfiguration implements Parcelable {
                 && (mDeviceId == that.mDeviceId)
                 && (mPlayerType == that.mPlayerType)
                 && (mClientUid == that.mClientUid)
-                && (mClientPid == that.mClientPid));
+                && (mClientPid == that.mClientPid))
+                && (mSessionId == that.mSessionId);
     }
 
     @Override
@@ -533,7 +582,8 @@ public final class AudioPlaybackConfiguration implements Parcelable {
                 + " type:" + toLogFriendlyPlayerType(mPlayerType)
                 + " u/pid:" + mClientUid + "/" + mClientPid
                 + " state:" + toLogFriendlyPlayerState(mPlayerState)
-                + " attr:" + mPlayerAttr;
+                + " attr:" + mPlayerAttr
+                + " sessionId:" + mSessionId;
     }
 
     //=====================================================================

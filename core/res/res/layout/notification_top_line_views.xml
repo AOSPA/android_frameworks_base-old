@@ -26,7 +26,7 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="@dimen/notification_header_separating_margin"
         android:singleLine="true"
-        android:textAppearance="?attr/notificationHeaderTextAppearance"
+        android:textAppearance="@style/TextAppearance.DeviceDefault.Notification.Info"
         android:visibility="?attr/notificationHeaderAppNameVisibility"
         />
 
@@ -34,7 +34,7 @@
         android:id="@+id/header_text_secondary_divider"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textAppearance="?attr/notificationHeaderTextAppearance"
+        android:textAppearance="@style/TextAppearance.DeviceDefault.Notification.Info"
         android:layout_marginStart="@dimen/notification_header_separating_margin"
         android:layout_marginEnd="@dimen/notification_header_separating_margin"
         android:text="@string/notification_header_divider_symbol"
@@ -45,7 +45,7 @@
         android:id="@+id/header_text_secondary"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textAppearance="?attr/notificationHeaderTextAppearance"
+        android:textAppearance="@style/TextAppearance.DeviceDefault.Notification.Info"
         android:layout_marginStart="@dimen/notification_header_separating_margin"
         android:layout_marginEnd="@dimen/notification_header_separating_margin"
         android:visibility="gone"
@@ -56,7 +56,7 @@
         android:id="@+id/header_text_divider"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textAppearance="?attr/notificationHeaderTextAppearance"
+        android:textAppearance="@style/TextAppearance.DeviceDefault.Notification.Info"
         android:layout_marginStart="@dimen/notification_header_separating_margin"
         android:layout_marginEnd="@dimen/notification_header_separating_margin"
         android:text="@string/notification_header_divider_symbol"
@@ -67,7 +67,7 @@
         android:id="@+id/header_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textAppearance="?attr/notificationHeaderTextAppearance"
+        android:textAppearance="@style/TextAppearance.DeviceDefault.Notification.Info"
         android:layout_marginStart="@dimen/notification_header_separating_margin"
         android:layout_marginEnd="@dimen/notification_header_separating_margin"
         android:visibility="gone"
@@ -78,7 +78,7 @@
         android:id="@+id/time_divider"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textAppearance="?attr/notificationHeaderTextAppearance"
+        android:textAppearance="@style/TextAppearance.DeviceDefault.Notification.Info"
         android:layout_marginStart="@dimen/notification_header_separating_margin"
         android:layout_marginEnd="@dimen/notification_header_separating_margin"
         android:text="@string/notification_header_divider_symbol"
@@ -120,6 +120,18 @@
         android:paddingTop="2dp"
         android:visibility="gone"
         android:contentDescription="@string/notification_feedback_indicator"
+        />
+
+    <ImageView
+        android:id="@+id/phishing_alert"
+        android:layout_width="@dimen/notification_phishing_alert_size"
+        android:layout_height="@dimen/notification_phishing_alert_size"
+        android:layout_marginStart="4dp"
+        android:baseline="10dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_dialog_alert_material"
+        android:visibility="gone"
+        android:contentDescription="@string/notification_phishing_alert_content_description"
         />
 
     <ImageView

@@ -16,8 +16,12 @@
 
 package com.android.server.am;
 
+import static com.android.internal.os.BatteryStatsImpl.ExternalStatsSync.UPDATE_ALL;
+import static com.android.internal.os.BatteryStatsImpl.ExternalStatsSync.UPDATE_CPU;
+import static com.android.internal.os.BatteryStatsImpl.ExternalStatsSync.UPDATE_DISPLAY;
+
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 
 import android.content.Context;
@@ -29,17 +33,17 @@ import android.hardware.power.stats.EnergyMeasurement;
 import android.hardware.power.stats.PowerEntity;
 import android.hardware.power.stats.StateResidencyResult;
 import android.power.PowerStatsInternal;
+import android.util.IntArray;
 import android.util.SparseArray;
-import android.util.SparseLongArray;
 
 import androidx.test.InstrumentationRegistry;
 
 import com.android.internal.os.BatteryStatsImpl;
-import com.android.internal.power.MeasuredEnergyArray;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -64,41 +68,66 @@ public class BatteryExternalStatsWorkerTest {
     }
 
     @Test
-    public void getEnergyConsumptionData() {
-        SparseLongArray expectSubsystems = new SparseLongArray();
+    public void testTargetedEnergyConsumerQuerying() {
+        final int numCpuClusters = 4;
+        final int numOther = 3;
+
+        final IntArray tempAllIds = new IntArray();
         // Add some energy consumers used by BatteryExternalStatsWorker.
         final int displayId = mPowerStatsInternal.addEnergyConsumer(EnergyConsumerType.DISPLAY, 0,
                 "display");
+        tempAllIds.add(displayId);
         mPowerStatsInternal.incrementEnergyConsumption(displayId, 12345);
-        expectSubsystems.put(MeasuredEnergyArray.SUBSYSTEM_DISPLAY, 12345);
 
-        // Add an arbitrary energy consumer unused by BatteryExternalStatsWorker.
-        // Must be changed if '154' ever becomes an EnergyConsumerType used by BESW.
-        final int someId = mPowerStatsInternal.addEnergyConsumer((byte) 154, 0, "some_consumer");
-        mPowerStatsInternal.incrementEnergyConsumption(someId, 34567);
+        final int[] cpuClusterIds = new int[numCpuClusters];
+        for (int i = 0; i < numCpuClusters; i++) {
+            cpuClusterIds[i] = mPowerStatsInternal.addEnergyConsumer(
+                    EnergyConsumerType.CPU_CLUSTER, i, "cpu_cluster" + i);
+            tempAllIds.add(cpuClusterIds[i]);
+            mPowerStatsInternal.incrementEnergyConsumption(cpuClusterIds[i], 1111 + i);
+        }
+        Arrays.sort(cpuClusterIds);
+
+        final int[] otherIds = new int[numOther];
+        for (int i = 0; i < numOther; i++) {
+            otherIds[i] = mPowerStatsInternal.addEnergyConsumer(
+                    EnergyConsumerType.OTHER, i, "other" + i);
+            tempAllIds.add(otherIds[i]);
+            mPowerStatsInternal.incrementEnergyConsumption(otherIds[i], 3000 + i);
+        }
+        Arrays.sort(otherIds);
+
+        final int[] allIds = tempAllIds.toArray();
+        Arrays.sort(allIds);
 
         // Inform BESW that PowerStatsInternal is ready to query
         mBatteryExternalStatsWorker.systemServicesReady();
 
-        MeasuredEnergyArray energies = mBatteryExternalStatsWorker.getEnergyConsumptionData();
+        final EnergyConsumerResult[] displayResults =
+                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_DISPLAY).getNow(null);
+        // Results should only have the display energy consumer
+        assertEquals(1, displayResults.length);
+        assertEquals(displayId, displayResults[0].id);
 
-        assertEquals(expectSubsystems.size(), energies.size());
-        final int size = expectSubsystems.size();
-
-        for (int i = 0; i < size; i++) {
-            int subsystem = expectSubsystems.keyAt(i);
-            // find the subsystem in the returned MeasuredEnergyArray
-            int subsystemIndex = -1;
-            for (int j = 0; j < size; j++) {
-                if (subsystem == energies.getSubsystem(i)) {
-                    subsystemIndex = i;
-                    break;
-                }
-            }
-            assertNotEquals("Subsystem " + subsystem + " not found in MeasuredEnergyArray", -1,
-                    subsystemIndex);
-            assertEquals(expectSubsystems.valueAt(i), energies.getEnergy(subsystemIndex));
+        final EnergyConsumerResult[] cpuResults =
+                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_CPU).getNow(null);
+        // Results should only have the cpu cluster energy consumers
+        final int[] receivedCpuIds = new int[cpuResults.length];
+        for (int i = 0; i < cpuResults.length; i++) {
+            receivedCpuIds[i] = cpuResults[i].id;
         }
+        Arrays.sort(receivedCpuIds);
+        assertArrayEquals(cpuClusterIds, receivedCpuIds);
+
+        final EnergyConsumerResult[] allResults =
+                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_ALL).getNow(null);
+        // All energy consumer results should be available
+        final int[] receivedAllIds = new int[allResults.length];
+        for (int i = 0; i < allResults.length; i++) {
+            receivedAllIds[i] = allResults[i].id;
+        }
+        Arrays.sort(receivedAllIds);
+        assertArrayEquals(allIds, receivedAllIds);
     }
 
     public class TestInjector extends BatteryExternalStatsWorker.Injector {
@@ -122,9 +151,8 @@ public class BatteryExternalStatsWorkerTest {
     }
 
     public class TestPowerStatsInternal extends PowerStatsInternal {
-        private final SparseArray<EnergyConsumer> mEnergyConsumers = new SparseArray<>();
-        private final SparseArray<EnergyConsumerResult> mEnergyConsumerResults =
-                new SparseArray<>();
+        private final SparseArray<EnergyConsumer> mEnergyConsumers = new SparseArray();
+        private final SparseArray<EnergyConsumerResult> mEnergyConsumerResults = new SparseArray();
         private final int mTimeSinceBoot = 0;
 
         @Override
@@ -141,10 +169,19 @@ public class BatteryExternalStatsWorkerTest {
         public CompletableFuture<EnergyConsumerResult[]> getEnergyConsumedAsync(
                 int[] energyConsumerIds) {
             final CompletableFuture<EnergyConsumerResult[]> future = new CompletableFuture();
-            final int size = mEnergyConsumerResults.size();
-            final EnergyConsumerResult[] results = new EnergyConsumerResult[size];
-            for (int i = 0; i < size; i++) {
-                results[i] = mEnergyConsumerResults.valueAt(i);
+            final EnergyConsumerResult[] results;
+            final int length = energyConsumerIds.length;
+            if (length == 0) {
+                final int size = mEnergyConsumerResults.size();
+                results = new EnergyConsumerResult[size];
+                for (int i = 0; i < size; i++) {
+                    results[i] = mEnergyConsumerResults.valueAt(i);
+                }
+            } else {
+                results = new EnergyConsumerResult[length];
+                for (int i = 0; i < length; i++) {
+                    results[i] = mEnergyConsumerResults.get(energyConsumerIds[i]);
+                }
             }
             future.complete(results);
             return future;

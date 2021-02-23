@@ -21,10 +21,10 @@ import static android.net.ConnectivityManager.NETID_UNSET;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
 import static android.net.RouteInfo.RTN_THROW;
 import static android.net.RouteInfo.RTN_UNREACHABLE;
+import static android.net.VpnManager.NOTIFICATION_CHANNEL_VPN;
 
 import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.internal.util.Preconditions.checkNotNull;
-import static com.android.server.connectivity.NetworkNotificationManager.NOTIFICATION_CHANNEL_VPN;
 
 import android.Manifest;
 import android.annotation.NonNull;
@@ -74,6 +74,7 @@ import android.net.UidRangeParcel;
 import android.net.UnderlyingNetworkInfo;
 import android.net.VpnManager;
 import android.net.VpnService;
+import android.net.VpnTransportInfo;
 import android.net.ipsec.ike.ChildSessionCallback;
 import android.net.ipsec.ike.ChildSessionConfiguration;
 import android.net.ipsec.ike.ChildSessionParams;
@@ -170,6 +171,12 @@ public class Vpn {
      * profile is expected to be negligible in size.
      */
     @VisibleForTesting static final int MAX_VPN_PROFILE_SIZE_BYTES = 1 << 17; // 128kB
+
+    /**
+     * Network score that VPNs will announce to ConnectivityService.
+     * TODO: remove when the network scoring refactor lands.
+     */
+    private static final int VPN_DEFAULT_SCORE = 101;
 
     // TODO: create separate trackers for each unique VPN to support
     // automated reconnection
@@ -435,6 +442,7 @@ public class Vpn {
         mNetworkCapabilities.addTransportType(NetworkCapabilities.TRANSPORT_VPN);
         mNetworkCapabilities.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN);
         mNetworkCapabilities.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED);
+        mNetworkCapabilities.setTransportInfo(new VpnTransportInfo(VpnManager.TYPE_VPN_NONE));
 
         loadAlwaysOnPackage(keyStore);
     }
@@ -494,6 +502,11 @@ public class Vpn {
         updateAlwaysOnNotification(detailedState);
     }
 
+    private void resetNetworkCapabilities() {
+        mNetworkCapabilities.setUids(null);
+        mNetworkCapabilities.setTransportInfo(new VpnTransportInfo(VpnManager.TYPE_VPN_NONE));
+    }
+
     /**
      * Chooses whether to force all connections to go though VPN.
      *
@@ -516,6 +529,11 @@ public class Vpn {
         if (mAlwaysOn) {
             saveAlwaysOnPackage();
         }
+    }
+
+    /** Returns the package name that is currently prepared. */
+    public String getPackage() {
+        return mPackage;
     }
 
     /**
@@ -928,7 +946,7 @@ public class Vpn {
                 agentDisconnect();
                 jniReset(mInterface);
                 mInterface = null;
-                mNetworkCapabilities.setUids(null);
+                resetNetworkCapabilities();
             }
 
             // Revoke the connection or stop the VpnRunner.
@@ -999,6 +1017,8 @@ public class Vpn {
                 case VpnManager.TYPE_VPN_SERVICE:
                     toChange = new String[] {AppOpsManager.OPSTR_ACTIVATE_VPN};
                     break;
+                case VpnManager.TYPE_VPN_LEGACY:
+                    return false;
                 default:
                     Log.wtf(TAG, "Unrecognized VPN type while granting authorization");
                     return false;
@@ -1029,6 +1049,8 @@ public class Vpn {
                 return isVpnServicePreConsented(context, packageName);
             case VpnManager.TYPE_VPN_PLATFORM:
                 return isVpnProfilePreConsented(context, packageName);
+            case VpnManager.TYPE_VPN_LEGACY:
+                return VpnConfig.LEGACY_VPN.equals(packageName);
             default:
                 return false;
         }
@@ -1211,6 +1233,8 @@ public class Vpn {
         mNetworkCapabilities.setUids(createUserAndRestrictedProfilesRanges(mUserId,
                 mConfig.allowedApplications, mConfig.disallowedApplications));
 
+        mNetworkCapabilities.setTransportInfo(new VpnTransportInfo(getActiveVpnType()));
+
         // Only apps targeting Q and above can explicitly declare themselves as metered.
         // These VPNs are assumed metered unless they state otherwise.
         if (mIsPackageTargetingAtLeastQ && mConfig.isMetered) {
@@ -1220,8 +1244,7 @@ public class Vpn {
         }
 
         mNetworkAgent = new NetworkAgent(mContext, mLooper, NETWORKTYPE /* logtag */,
-                mNetworkCapabilities, lp,
-                ConnectivityConstants.VPN_DEFAULT_SCORE, networkAgentConfig, mNetworkProvider) {
+                mNetworkCapabilities, lp, VPN_DEFAULT_SCORE, networkAgentConfig, mNetworkProvider) {
             @Override
             public void unwanted() {
                 // We are user controlled, not driven by NetworkRequest.
@@ -1735,7 +1758,7 @@ public class Vpn {
 
     private void cleanupVpnStateLocked() {
         mStatusIntent = null;
-        mNetworkCapabilities.setUids(null);
+        resetNetworkCapabilities();
         mConfig = null;
         mInterface = null;
 
@@ -1846,22 +1869,18 @@ public class Vpn {
     }
 
     /**
-     * Gets the currently running App-based VPN type
+     * Gets the currently running VPN type
      *
-     * @return the {@link VpnManager.VpnType}. {@link VpnManager.TYPE_VPN_NONE} if not running an
-     *     app-based VPN. While VpnService-based VPNs are always app VPNs and LegacyVpn is always
+     * @return the {@link VpnManager.VpnType}. {@link VpnManager.TYPE_VPN_NONE} if not running a
+     *     VPN. While VpnService-based VPNs are always app VPNs and LegacyVpn is always
      *     Settings-based, the Platform VPNs can be initiated by both apps and Settings.
      */
-    public synchronized int getActiveAppVpnType() {
-        if (VpnConfig.LEGACY_VPN.equals(mPackage)) {
-            return VpnManager.TYPE_VPN_NONE;
-        }
-
-        if (mVpnRunner != null && mVpnRunner instanceof IkeV2VpnRunner) {
-            return VpnManager.TYPE_VPN_PLATFORM;
-        } else {
-            return VpnManager.TYPE_VPN_SERVICE;
-        }
+    public synchronized int getActiveVpnType() {
+        if (!mNetworkInfo.isConnectedOrConnecting()) return VpnManager.TYPE_VPN_NONE;
+        if (mVpnRunner == null) return VpnManager.TYPE_VPN_SERVICE;
+        return mVpnRunner instanceof IkeV2VpnRunner
+                ? VpnManager.TYPE_VPN_PLATFORM
+                : VpnManager.TYPE_VPN_LEGACY;
     }
 
     private void updateAlwaysOnNotification(DetailedState networkState) {

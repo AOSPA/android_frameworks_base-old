@@ -995,6 +995,16 @@ public class Process {
             throws IllegalArgumentException, SecurityException;
 
     /**
+     *
+     * Create a new process group in the cgroup uid/pid hierarchy
+     *
+     * @return <0 in case of error
+     *
+     * @hide
+     */
+    public static final native int createProcessGroup(int uid, int pid);
+
+    /**
      * On some devices, the foreground process may have one or more CPU
      * cores exclusively reserved for it. This method can be used to
      * retrieve which cores that are (if any), so the calling process
@@ -1467,7 +1477,7 @@ public class Process {
      *
      * @hide
      */
-    public static boolean hasFileLocks(int pid) throws IOException {
+    public static boolean hasFileLocks(int pid) throws Exception {
         BufferedReader br = null;
 
         try {
@@ -1479,8 +1489,13 @@ public class Process {
 
                 for (int i = 0; i < 5 && st.hasMoreTokens(); i++) {
                     String str = st.nextToken();
-                    if (i == 4 && Integer.parseInt(str) == pid) {
-                        return true;
+                    try {
+                        if (i == 4 && Integer.parseInt(str) == pid) {
+                            return true;
+                        }
+                    } catch (NumberFormatException nfe) {
+                        throw new Exception("Exception parsing /proc/locks at \" "
+                                + line +  " \", token #" + i);
                     }
                 }
             }

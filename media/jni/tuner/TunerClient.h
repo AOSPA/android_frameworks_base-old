@@ -48,6 +48,10 @@ using namespace std;
 
 namespace android {
 
+const static int TUNER_HAL_VERSION_UNKNOWN = 0;
+const static int TUNER_HAL_VERSION_1_0 = 1 << 16;
+const static int TUNER_HAL_VERSION_1_1 = (1 << 16) | 1;
+
 typedef enum {
     FRONTEND,
     LNB,
@@ -147,7 +151,7 @@ private:
     sp<IDescrambler> openHidlDescrambler();
     vector<int> getLnbHandles();
     DemuxCapabilities getHidlDemuxCaps(TunerDemuxCapabilities& aidlCaps);
-    FrontendInfo FrontendInfoAidlToHidl(TunerFrontendInfo aidlFrontendInfo);
+    FrontendInfo frontendInfoAidlToHidl(TunerFrontendInfo aidlFrontendInfo);
     void updateTunerResources();
     void updateFrontendResources();
     void updateLnbResources();

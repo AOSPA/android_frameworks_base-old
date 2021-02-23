@@ -114,12 +114,12 @@
     <style name="TextAppearance.StatusBar.Expanded.UserSwitcher">
         <item name="android:textSize">@dimen/kg_user_switcher_text_size</item>
         <item name="android:textStyle">normal</item>
-        <item name="android:textColor">?android:attr/textColorSecondary</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+        <item name="android:textColor">?attr/wallpaperTextColor</item>
     </style>
 
     <style name="TextAppearance.StatusBar.Expanded.UserSwitcher.Activated">
         <item name="android:fontWeight">700</item>
-        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="TextAppearance" />
@@ -582,7 +582,7 @@
 
     <style name="MediaPlayer.Button" parent="@android:style/Widget.Material.Button.Borderless.Small">
         <item name="android:background">@drawable/qs_media_light_source</item>
-        <item name="android:tint">@android:color/white</item>
+        <item name="android:tint">?android:attr/textColorPrimary</item>
         <item name="android:stateListAnimator">@anim/media_button_state_list_animator</item>
     </style>
 
@@ -764,6 +764,7 @@
     <style name="TextAppearance.PrivacyDialog">
         <item name="android:textSize">14sp</item>
         <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
     </style>
 
     <style name="UdfpsProgressBarStyle"

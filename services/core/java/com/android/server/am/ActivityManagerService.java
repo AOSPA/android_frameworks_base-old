@@ -130,6 +130,7 @@ import static com.android.server.wm.ActivityTaskManagerService.DUMP_LASTANR_TRAC
 import static com.android.server.wm.ActivityTaskManagerService.DUMP_RECENTS_CMD;
 import static com.android.server.wm.ActivityTaskManagerService.DUMP_RECENTS_SHORT_CMD;
 import static com.android.server.wm.ActivityTaskManagerService.DUMP_STARTER_CMD;
+import static com.android.server.wm.ActivityTaskManagerService.DUMP_TOP_RESUMED_ACTIVITY;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
 import static com.android.server.wm.ActivityTaskManagerService.relaunchReasonToString;
 
@@ -145,6 +146,7 @@ import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityTaskManager.RootTaskInfo;
 import android.app.ActivityThread;
+import android.app.AnrController;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.AppOpsManagerInternal.CheckOpsDelegate;
@@ -185,6 +187,7 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentCallbacks2;
 import android.content.ComponentName;
 import android.content.ContentCaptureOptions;
+import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.IIntentReceiver;
@@ -354,6 +357,7 @@ import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.graphics.fonts.FontManagerInternal;
 import com.android.server.job.JobSchedulerInternal;
+import com.android.server.os.NativeTombstoneManager;
 import com.android.server.pm.Installer;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.uri.GrantUri;
@@ -1511,7 +1515,9 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static final int INDEX_TOTAL_SWAP_PSS = 10;
     private static final int INDEX_TOTAL_RSS = 11;
     private static final int INDEX_TOTAL_NATIVE_PSS = 12;
-    private static final int INDEX_LAST = 13;
+    private static final int INDEX_TOTAL_MEMTRACK_GRAPHICS = 13;
+    private static final int INDEX_TOTAL_MEMTRACK_GL = 14;
+    private static final int INDEX_LAST = 15;
 
     final class UiHandler extends Handler {
         public UiHandler() {
@@ -5699,6 +5705,23 @@ public class ActivityManagerService extends IActivityManager.Stub
                 ? PackageManager.PERMISSION_GRANTED : PackageManager.PERMISSION_DENIED;
     }
 
+    @Override
+    public int[] checkUriPermissions(@NonNull List<Uri> uris, int pid, int uid,
+            final int modeFlags, IBinder callerToken) {
+        final int size = uris.size();
+        int[] res = new int[size];
+        // Default value DENIED.
+        Arrays.fill(res, PackageManager.PERMISSION_DENIED);
+
+        for (int i = 0; i < size; i++) {
+            final Uri uri = uris.get(i);
+            final int userId = ContentProvider.getUserIdFromUri(uri, mContext.getUserId());
+            res[i] = checkUriPermission(ContentProvider.getUriWithoutUserId(uri), pid, uid,
+                    modeFlags, userId, callerToken);
+        }
+        return res;
+    }
+
     /**
      * @param uri This uri must NOT contain an embedded userId.
      * @param userId The userId in which the uri is to be resolved.
@@ -8328,6 +8351,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         mUserController.handleIncomingUser(callingPid, callingUid, userId, true, ALLOW_NON_FULL,
                 "getHistoricalProcessExitReasons", null);
 
+        NativeTombstoneManager tombstoneService = LocalServices.getService(
+                NativeTombstoneManager.class);
+
         final ArrayList<ApplicationExitInfo> results = new ArrayList<ApplicationExitInfo>();
         if (!TextUtils.isEmpty(packageName)) {
             final int uid = enforceDumpPermissionForPackage(packageName, userId, callingUid,
@@ -8335,11 +8361,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (uid != Process.INVALID_UID) {
                 mProcessList.mAppExitInfoTracker.getExitInfo(
                         packageName, uid, pid, maxNum, results);
+                tombstoneService.collectTombstones(results, uid, pid, maxNum);
             }
         } else {
             // If no package name is given, use the caller's uid as the filter uid.
             mProcessList.mAppExitInfoTracker.getExitInfo(
                     packageName, callingUid, pid, maxNum, results);
+            tombstoneService.collectTombstones(results, callingUid, pid, maxNum);
         }
 
         return new ParceledListSlice<ApplicationExitInfo>(results);
@@ -8723,7 +8751,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (DUMP_ACTIVITIES_CMD.equals(cmd) || DUMP_ACTIVITIES_SHORT_CMD.equals(cmd)
                     || DUMP_LASTANR_CMD.equals(cmd) || DUMP_LASTANR_TRACES_CMD.equals(cmd)
                     || DUMP_STARTER_CMD.equals(cmd) || DUMP_CONTAINERS_CMD.equals(cmd)
-                    || DUMP_RECENTS_CMD.equals(cmd) || DUMP_RECENTS_SHORT_CMD.equals(cmd)) {
+                    || DUMP_RECENTS_CMD.equals(cmd) || DUMP_RECENTS_SHORT_CMD.equals(cmd)
+                    || DUMP_TOP_RESUMED_ACTIVITY.equals(cmd)) {
                 mAtmInternal.dump(
                         cmd, fd, pw, args, opti, true /* dumpAll */, dumpClient, dumpPackage);
             } else if ("binder-proxies".equals(cmd)) {
@@ -10391,6 +10420,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         long[] miscPss = new long[Debug.MemoryInfo.NUM_OTHER_STATS];
         long[] miscSwapPss = new long[Debug.MemoryInfo.NUM_OTHER_STATS];
         long[] miscRss = new long[Debug.MemoryInfo.NUM_OTHER_STATS];
+        long[] memtrackTmp = new long[4];
 
         long oomPss[] = new long[DUMP_MEM_OOM_LABEL.length];
         long oomSwapPss[] = new long[DUMP_MEM_OOM_LABEL.length];
@@ -10424,6 +10454,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 final int reportType;
                 final long startTime;
                 final long endTime;
+                long memtrackGraphics = 0;
+                long memtrackGl = 0;
                 if (opts.dumpDetails || (!brief && !opts.oomOnly)) {
                     reportType = ProcessStats.ADD_PSS_EXTERNAL_SLOW;
                     startTime = SystemClock.currentThreadTimeMillis();
@@ -10435,7 +10467,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 } else {
                     reportType = ProcessStats.ADD_PSS_EXTERNAL;
                     startTime = SystemClock.currentThreadTimeMillis();
-                    long pss = Debug.getPss(pid, tmpLong, null);
+                    long pss = Debug.getPss(pid, tmpLong, memtrackTmp);
                     if (pss == 0) {
                         continue;
                     }
@@ -10443,6 +10475,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     endTime = SystemClock.currentThreadTimeMillis();
                     mi.dalvikPrivateDirty = (int) tmpLong[0];
                     mi.dalvikRss = (int) tmpLong[2];
+                    memtrackGraphics = memtrackTmp[1];
+                    memtrackGl = memtrackTmp[2];
                 }
                 if (!opts.isCheckinRequest && opts.dumpDetails) {
                     pw.println("\n** MEMINFO in pid " + pid + " [" + r.processName + "] **");
@@ -10506,6 +10540,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     ss[INDEX_TOTAL_PSS] += myTotalPss;
                     ss[INDEX_TOTAL_SWAP_PSS] += myTotalSwapPss;
                     ss[INDEX_TOTAL_RSS] += myTotalRss;
+                    ss[INDEX_TOTAL_MEMTRACK_GRAPHICS] += memtrackGraphics;
+                    ss[INDEX_TOTAL_MEMTRACK_GL] += memtrackGl;
                     MemItem pssItem = new MemItem(r.processName + " (pid " + pid +
                             (hasActivities ? " / activities)" : ")"), r.processName, myTotalPss,
                             myTotalSwapPss, myTotalRss, pid, hasActivities);
@@ -10569,6 +10605,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             final Debug.MemoryInfo[] memInfos = new Debug.MemoryInfo[1];
             mAppProfiler.forAllCpuStats((st) -> {
                 if (st.vsize > 0 && procMemsMap.indexOfKey(st.pid) < 0) {
+                    long memtrackGraphics = 0;
+                    long memtrackGl = 0;
                     if (memInfos[0] == null) {
                         memInfos[0] = new Debug.MemoryInfo();
                     }
@@ -10578,13 +10616,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                             return;
                         }
                     } else {
-                        long pss = Debug.getPss(st.pid, tmpLong, null);
+                        long pss = Debug.getPss(st.pid, tmpLong, memtrackTmp);
                         if (pss == 0) {
                             return;
                         }
                         info.nativePss = (int) pss;
                         info.nativePrivateDirty = (int) tmpLong[0];
                         info.nativeRss = (int) tmpLong[2];
+                        memtrackGraphics = memtrackTmp[1];
+                        memtrackGl = memtrackTmp[2];
                     }
 
                     final long myTotalPss = info.getTotalPss();
@@ -10594,6 +10634,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     ss[INDEX_TOTAL_SWAP_PSS] += myTotalSwapPss;
                     ss[INDEX_TOTAL_RSS] += myTotalRss;
                     ss[INDEX_TOTAL_NATIVE_PSS] += myTotalPss;
+                    ss[INDEX_TOTAL_MEMTRACK_GRAPHICS] += memtrackGraphics;
+                    ss[INDEX_TOTAL_MEMTRACK_GL] += memtrackGl;
 
                     MemItem pssItem = new MemItem(st.name + " (pid " + st.pid + ")",
                             st.name, myTotalPss, info.getSummaryTotalSwapPss(), myTotalRss,
@@ -10775,13 +10817,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             long kernelUsed = memInfo.getKernelUsedSizeKb();
             final long ionHeap = Debug.getIonHeapsSizeKb();
             final long ionPool = Debug.getIonPoolsSizeKb();
+            final long dmabufMapped = Debug.getDmabufMappedSizeKb();
             if (ionHeap >= 0 && ionPool >= 0) {
-                final long ionMapped = Debug.getIonMappedSizeKb();
-                final long ionUnmapped = ionHeap - ionMapped;
+                final long ionUnmapped = ionHeap - dmabufMapped;
                 pw.print("      ION: ");
                         pw.print(stringifyKBSize(ionHeap + ionPool));
                         pw.print(" (");
-                        pw.print(stringifyKBSize(ionMapped));
+                        pw.print(stringifyKBSize(dmabufMapped));
                         pw.print(" mapped + ");
                         pw.print(stringifyKBSize(ionUnmapped));
                         pw.print(" unmapped + ");
@@ -10790,11 +10832,61 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // Note: mapped ION memory is not accounted in PSS due to VM_PFNMAP flag being
                 // set on ION VMAs, therefore consider the entire ION heap as used kernel memory
                 kernelUsed += ionHeap;
+            } else {
+                final long totalExportedDmabuf = Debug.getDmabufTotalExportedKb();
+                if (totalExportedDmabuf >= 0) {
+                    final long dmabufUnmapped = totalExportedDmabuf - dmabufMapped;
+                    pw.print("DMA-BUF: ");
+                    pw.print(stringifyKBSize(totalExportedDmabuf));
+                    pw.print(" (");
+                    pw.print(stringifyKBSize(dmabufMapped));
+                    pw.print(" mapped + ");
+                    pw.print(stringifyKBSize(dmabufUnmapped));
+                    pw.println(" unmapped)");
+                    // Account unmapped dmabufs as part of kernel memory allocations
+                    kernelUsed += dmabufUnmapped;
+                    // Replace memtrack HAL reported Graphics category with mapped dmabufs
+                    ss[INDEX_TOTAL_PSS] -= ss[INDEX_TOTAL_MEMTRACK_GRAPHICS];
+                    ss[INDEX_TOTAL_PSS] += dmabufMapped;
+                }
+
+                // totalDmabufHeapExported is included in totalExportedDmabuf above and hence do not
+                // need to be added to kernelUsed.
+                final long totalDmabufHeapExported = Debug.getDmabufHeapTotalExportedKb();
+                if (totalDmabufHeapExported >= 0) {
+                    pw.print("DMA-BUF Heaps: ");
+                    pw.println(stringifyKBSize(totalDmabufHeapExported));
+                }
+
+                final long totalDmabufHeapPool = Debug.getDmabufHeapPoolsSizeKb();
+                if (totalDmabufHeapPool >= 0) {
+                    pw.print("DMA-BUF Heaps pool: ");
+                    pw.println(stringifyKBSize(totalDmabufHeapPool));
+                }
             }
             final long gpuUsage = Debug.getGpuTotalUsageKb();
             if (gpuUsage >= 0) {
-                pw.print("      GPU: "); pw.println(stringifyKBSize(gpuUsage));
+                final long gpuDmaBufUsage = Debug.getGpuDmaBufUsageKb();
+                if (gpuDmaBufUsage >= 0) {
+                    final long gpuPrivateUsage = gpuUsage - gpuDmaBufUsage;
+                    pw.print("      GPU: ");
+                    pw.print(stringifyKBSize(gpuUsage));
+                    pw.print(" (");
+                    pw.print(stringifyKBSize(gpuDmaBufUsage));
+                    pw.print(" dmabuf + ");
+                    pw.print(stringifyKBSize(gpuPrivateUsage));
+                    pw.println(" private)");
+                    // Replace memtrack HAL reported GL category with private GPU allocations and
+                    // account it as part of kernel memory allocations
+                    ss[INDEX_TOTAL_PSS] -= ss[INDEX_TOTAL_MEMTRACK_GL];
+                    kernelUsed += gpuPrivateUsage;
+                } else {
+                    pw.print("      GPU: "); pw.println(stringifyKBSize(gpuUsage));
+                }
             }
+
+             // Note: ION/DMA-BUF heap pools are reclaimable and hence, they are included as part of
+             // memInfo.getCachedSizeKb().
             final long lostRAM = memInfo.getTotalSizeKb()
                     - (ss[INDEX_TOTAL_PSS] - ss[INDEX_TOTAL_SWAP_PSS])
                     - memInfo.getFreeSizeKb() - memInfo.getCachedSizeKb()
@@ -15963,6 +16055,16 @@ public class ActivityManagerService extends IActivityManager.Stub
             // Do not lock ActivityManagerService.this here, this API is called by
             // PackageManagerService.
             return mConstants.mBootTimeTempAllowlistDuration;
+        }
+
+        @Override
+        public void registerAnrController(AnrController controller) {
+            mActivityTaskManager.registerAnrController(controller);
+        }
+
+        @Override
+        public void unregisterAnrController(AnrController controller) {
+            mActivityTaskManager.unregisterAnrController(controller);
         }
     }
 

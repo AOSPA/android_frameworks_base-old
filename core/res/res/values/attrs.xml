@@ -362,6 +362,12 @@
              surface when the app has not drawn any content into this area. One example is
              when the user is resizing a window of an activity in multi-window mode. -->
         <attr name="windowBackgroundFallback" format="reference|color" />
+        <!-- Blur the screen behind the window with the bounds of the window.
+             The radius defines the size of the neighbouring area, from which pixels will be
+             averaged to form the final color for each pixel in the region.
+             A radius of 0 means no blur. The higher the radius, the denser the blur.
+             Corresponds to {@link android.view.Window#setBackgroundBlurRadius}. -->
+        <attr name="windowBackgroundBlurRadius" format="dimension" />
         <!-- Drawable to use as a frame around the window. -->
         <attr name="windowFrame" format="reference" />
         <!-- Flag indicating whether there should be no title on this window. -->
@@ -1139,6 +1145,15 @@
 
         <!-- The color applied to the edge effect on scrolling containers. -->
         <attr name="colorEdgeEffect" format="color" />
+
+        <!-- The type of the edge effect. The default is glow. -->
+        <attr name="edgeEffectType">
+            <!-- Use a colored glow at the edge. -->
+            <enum name="glow" value="0" />
+
+            <!-- Stretch the content. -->
+            <enum name="stretch" value="1" />
+        </attr>
 
         <!-- =================== -->
         <!-- Lighting properties -->
@@ -1957,6 +1972,7 @@
     <declare-styleable name="Window">
         <attr name="windowBackground" />
         <attr name="windowBackgroundFallback" />
+        <attr name="windowBackgroundBlurRadius" />
         <attr name="windowContentOverlay" />
         <attr name="windowFrame" />
         <attr name="windowNoTitle" />
@@ -2246,6 +2262,23 @@
             -->
             <enum name="always" value="3" />
         </attr>
+
+        <!-- The background color for the splash screen, if not specify then system will
+             calculate from windowBackground. -->
+        <attr name="windowSplashScreenBackground" format="color"/>
+
+        <!-- Replace an icon in the center of the starting window, if the object is animated
+             and drawable(e.g. AnimationDrawable, AnimatedVectorDrawable), then it will also
+             play the animation while showing the starting window. -->
+        <attr name="windowSplashScreenAnimatedIcon" format="reference"/>
+        <!-- The duration, in milliseconds, of the window splash screen icon animation duration
+             when playing the splash screen starting window. The maximum animation duration should
+             be limited below 1000ms. -->
+        <attr name="windowSplashScreenAnimationDuration" format="integer"/>
+
+        <!-- Place an drawable image in the bottom of the starting window, it can be used to
+             represent the branding of the application. -->
+        <attr name="windowSplashScreenBrandingImage" format="reference"/>
     </declare-styleable>
 
     <!-- The set of attributes that describe a AlertDialog's theme. -->
@@ -3251,6 +3284,16 @@
              a value of 'true' will not override any 'false' value in its parent chain nor will
              it prevent any 'false' in any of its children. -->
         <attr name="forceDarkAllowed" format="boolean" />
+
+        <!-- <p>Whether the View's Outline should be used to clip the contents of the View.
+             <p>Only a single non-rectangular clip can be applied on a View at any time. Circular
+             clips from a
+             {@link android.view.ViewAnimationUtils#createCircularReveal(View, int, int, float,
+             float)} circular reveal animation take priority over Outline clipping, and child
+             Outline clipping takes priority over Outline clipping done by a parent.
+             <p>Note that this flag will only be respected if the View's Outline returns true from
+             {@link android.graphics.Outline#canClip()}. -->
+        <attr name="clipToOutline" format="boolean" />
     </declare-styleable>
 
     <!-- Attributes that can be assigned to a tag for a particular View. -->
@@ -6346,6 +6389,13 @@
         <!-- The radius of the ripple when fully expanded. By default, the
              radius is computed based on the size of the ripple's container. -->
         <attr name="radius" />
+        <!-- The style of the ripple drawable is solid by default -->
+        <attr name="rippleStyle">
+            <!-- Solid is the default style -->
+            <enum name="solid" value="0" />
+            <!-- Patterned style-->
+            <enum name="patterned" value="1" />
+        </attr>
     </declare-styleable>
 
     <declare-styleable name="ScaleDrawable">
@@ -7960,6 +8010,14 @@
         <attr name="minResizeWidth" format="dimension"/>
         <!-- Minimum height that the AppWidget can be resized to. -->
         <attr name="minResizeHeight" format="dimension"/>
+        <!-- Maximum width that the AppWidget can be resized to. -->
+        <attr name="maxResizeWidth" format="dimension"/>
+        <!-- Maximum height that the AppWidget can be resized to. -->
+        <attr name="maxResizeHeight" format="dimension"/>
+        <!-- Default width of the AppWidget in units of launcher grid cells. -->
+        <attr name="targetCellWidth" format="integer"/>
+        <!-- Default height of the AppWidget in units of launcher grid cells. -->
+        <attr name="targetCellHeight" format="integer"/>
         <!-- Update period in milliseconds, or 0 if the AppWidget will update itself. -->
         <attr name="updatePeriodMillis" format="integer" />
         <!-- A resource id of a layout. -->
@@ -7969,9 +8027,17 @@
         <!-- A class name in the AppWidget's package to be launched to configure.
              If not supplied, then no activity will be launched. -->
         <attr name="configure" format="string" />
-        <!-- A preview of what the AppWidget will look like after it's configured.
-              If not supplied, the AppWidget's icon will be used. -->
+        <!-- A preview, in a drawable resource id, of what the AppWidget will look like after it's
+             configured.
+             If not supplied, the AppWidget's icon will be used. -->
         <attr name="previewImage" format="reference" />
+        <!-- The layout resource id of a preview of what the AppWidget will look like after it's
+             configured.
+             Unlike previewImage, previewLayout can better showcase AppWidget in different locales,
+             system themes, display sizes & density etc.
+             If supplied, this will take precedence over the previewImage on supported widget hosts.
+             Otherwise, previewImage will be used. -->
+        <attr name="previewLayout" format="reference" />
         <!-- The view id of the AppWidget subview which should be auto-advanced.
              by the widget's host. -->
         <attr name="autoAdvanceViewId" format="reference" />
@@ -9032,6 +9098,7 @@
     <!-- Used as a filter array on the theme to pull out only the EdgeEffect-relevant bits. -->
     <declare-styleable name="EdgeEffect">
         <attr name="colorEdgeEffect" />
+        <attr name="edgeEffectType" />
     </declare-styleable>
 
     <!-- Use <code>tv-input</code> as the root tag of the XML resource that describes a
@@ -9225,6 +9292,7 @@
         <attr name="shortcutShortLabel" format="reference" />
         <attr name="shortcutLongLabel" format="reference" />
         <attr name="shortcutDisabledMessage" format="reference" />
+        <attr name="splashScreenTheme" format="reference"/>
     </declare-styleable>
 
     <declare-styleable name="ShortcutCategories">

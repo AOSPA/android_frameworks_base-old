@@ -1379,7 +1379,7 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testNoFixedRotationWithPip() {
+    public void testFixedRotationWithPip() {
         final DisplayContent displayContent = mDefaultDisplay;
         unblockDisplayRotation(displayContent);
         // Make resume-top really update the activity state.
@@ -1406,15 +1406,20 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(homeConfigOrientation, displayConfig.orientation);
 
         clearInvocations(mWm);
-        // Leave PiP to fullscreen. The orientation can be updated from
-        // ActivityRecord#reportDescendantOrientationChangeIfNeeded.
-        pinnedTask.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+        // Leave PiP to fullscreen. Simulate the step of PipTaskOrganizer that sets the activity
+        // to fullscreen, so fixed rotation will apply on it.
+        pinnedActivity.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
         homeActivity.setState(Task.ActivityState.STOPPED, "test");
 
-        assertFalse(displayContent.hasTopFixedRotationLaunchingApp());
-        verify(mWm, atLeastOnce()).startFreezingDisplay(anyInt(), anyInt(), any(), anyInt());
-        assertEquals(pinnedConfigOrientation, displayConfig.orientation);
+        assertTrue(displayContent.hasTopFixedRotationLaunchingApp());
+        verify(mWm, never()).startFreezingDisplay(anyInt(), anyInt(), any(), anyInt());
+        assertNotEquals(pinnedConfigOrientation, displayConfig.orientation);
+
+        // Assume the animation of PipTaskOrganizer is done and then commit fullscreen to task.
+        pinnedTask.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+        displayContent.continueUpdateOrientationForDiffOrienLaunchingApp();
         assertFalse(displayContent.getPinnedStackController().isPipActiveOrWindowingModeChanging());
+        assertEquals(pinnedConfigOrientation, displayConfig.orientation);
 
         clearInvocations(mWm);
         // Enter PiP from fullscreen. The orientation can be updated from
@@ -1602,6 +1607,16 @@ public class DisplayContentTests extends WindowTestsBase {
         DisplayContent display = createNewDisplay();
         TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
         doReturn(false).when(display).isTrusted();
+
+        assertNull(taskDisplayArea.getRootHomeTask());
+        assertNull(taskDisplayArea.getOrCreateRootHomeTask());
+    }
+
+    @Test
+    public void testGetOrCreateRootHomeTask_dontMoveToTop() {
+        DisplayContent display = createNewDisplay();
+        display.mDontMoveToTop = true;
+        TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
 
         assertNull(taskDisplayArea.getRootHomeTask());
         assertNull(taskDisplayArea.getOrCreateRootHomeTask());
@@ -1819,7 +1834,7 @@ public class DisplayContentTests extends WindowTestsBase {
         mWm.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, false /* updateInputWindows */);
     }
 
-    private void performLayout(DisplayContent dc) {
+    static void performLayout(DisplayContent dc) {
         dc.setLayoutNeeded();
         dc.performLayout(true /* initial */, false /* updateImeWindows */);
     }

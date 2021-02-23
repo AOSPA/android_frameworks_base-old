@@ -213,6 +213,7 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
+import android.window.IDisplayAreaOrganizer;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
@@ -239,6 +240,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -662,12 +664,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     private boolean mRemoved;
 
-    /**
-     * Non-null if the last size compatibility mode activity is using non-native screen
-     * configuration. The activity is not able to put in multi-window mode, so it exists only one
-     * per display.
-     */
-    private ActivityRecord mLastCompatModeActivity;
+    /** Set of activities in foreground size compat mode. */
+    private Set<ActivityRecord> mActiveSizeCompatActivities = new ArraySet<>();
 
     // Used in updating the display size
     private Point mTmpDisplaySize = new Point();
@@ -684,6 +682,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * {@link #ensureActivitiesVisible(ActivityRecord, int, boolean, boolean)}
      */
     private boolean mInEnsureActivitiesVisible = false;
+
+    // Used to indicate that the movement of child tasks to top will not move the display to top as
+    // well and thus won't change the top resumed / focused record
+    boolean mDontMoveToTop;
 
     private final Consumer<WindowState> mUpdateWindowsForAnimator = w -> {
         WindowStateAnimator winAnimator = w.mWinAnimator;
@@ -948,7 +950,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         final ActivityRecord activity = w.mActivityRecord;
-        if (activity != null) {
+        if (activity != null && activity.isVisibleRequested()) {
             activity.updateLetterboxSurface(w);
             final boolean updateAllDrawn = activity.updateDrawnWindowStates(w);
             if (updateAllDrawn && !mTmpUpdateAllDrawn.contains(activity)) {
@@ -1000,7 +1002,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         final InputChannel inputChannel = mWmService.mInputManager.monitorInput(
                 "PointerEventDispatcher" + mDisplayId, mDisplayId);
-        mPointerEventDispatcher = new PointerEventDispatcher(inputChannel);
+        mPointerEventDispatcher = new PointerEventDispatcher(inputChannel, this);
 
         // Tap Listeners are supported for:
         // 1. All physical displays (multi-display).
@@ -1070,6 +1072,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         // Sets the display content for the children.
         onDisplayChanged(this);
+        updateDisplayAreaOrganizers();
 
         mInputMonitor = new InputMonitor(mWmService, this);
         mInsetsPolicy = new InsetsPolicy(mInsetsStateController, this);
@@ -1447,7 +1450,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
             config = new Configuration();
             computeScreenConfiguration(config);
-        } else if (currentConfig != null) {
+        } else if (currentConfig != null
+                // If waiting for a remote rotation, don't prematurely update configuration.
+                && !mDisplayRotation.isWaitingForRemoteRotation()) {
             // No obvious action we need to take, but if our current state mismatches the
             // activity manager's, update it, disregarding font scale, which should remain set
             // to the value of the previous configuration.
@@ -1597,7 +1602,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 && mFixedRotationLaunchingApp != mFixedRotationTransitionListener.mAnimatingRecents;
     }
 
-    @VisibleForTesting
     boolean isFixedRotationLaunchingApp(ActivityRecord r) {
         return mFixedRotationLaunchingApp == r;
     }
@@ -1826,8 +1830,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             if (w.mHasSurface && !rotateSeamlessly) {
                 ProtoLog.v(WM_DEBUG_ORIENTATION, "Set mOrientationChanging of %s", w);
                 w.setOrientationChanging(true);
-                mWmService.mRoot.mOrientationChangeComplete = false;
-                w.mLastFreezeDuration = 0;
             }
             w.mReportOrientationChanged = true;
         }, true /* traverseTopToBottom */);
@@ -2706,6 +2708,30 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     TaskDisplayArea getDefaultTaskDisplayArea() {
         return mDisplayAreaPolicy.getDefaultTaskDisplayArea();
+    }
+
+    /**
+     * Checks for all non-organized {@link DisplayArea}s for if there is any existing organizer for
+     * their features. If so, registers them with the matched organizer.
+     */
+    @VisibleForTesting
+    void updateDisplayAreaOrganizers() {
+        if (!isTrusted()) {
+            // No need to update for untrusted display.
+            return;
+        }
+        forAllDisplayAreas(displayArea -> {
+            if (displayArea.isOrganized()) {
+                return;
+            }
+            // Check if we have a registered organizer for the DA feature.
+            final IDisplayAreaOrganizer organizer =
+                    mAtmService.mWindowOrganizerController.mDisplayAreaOrganizerController
+                            .getOrganizerByFeature(displayArea.mFeatureId);
+            if (organizer != null) {
+                displayArea.setOrganizer(organizer);
+            }
+        });
     }
 
     /**
@@ -5524,24 +5550,23 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     /** Checks whether the given activity is in size compatibility mode and notifies the change. */
     void handleActivitySizeCompatModeIfNeeded(ActivityRecord r) {
         final Task organizedTask = r.getOrganizedTask();
-        if (!r.isState(RESUMED) || r.getWindowingMode() != WINDOWING_MODE_FULLSCREEN
-                || organizedTask == null) {
-            // The callback is only interested in the foreground changes of fullscreen activity.
+        if (organizedTask == null) {
+            mActiveSizeCompatActivities.remove(r);
             return;
         }
-        // TODO(b/178327644) Update for per Task size compat
-        if (!r.inSizeCompatMode()) {
-            if (mLastCompatModeActivity != null) {
+
+        if (r.isState(RESUMED) && r.inSizeCompatMode()) {
+            if (mActiveSizeCompatActivities.add(r)) {
+                // Trigger task event for new size compat activity.
                 organizedTask.onSizeCompatActivityChanged();
             }
-            mLastCompatModeActivity = null;
             return;
         }
-        if (mLastCompatModeActivity == r) {
-            return;
+
+        if (mActiveSizeCompatActivities.remove(r)) {
+            // Trigger task event for activity no longer in foreground size compat.
+            organizedTask.onSizeCompatActivityChanged();
         }
-        mLastCompatModeActivity = r;
-        organizedTask.onSizeCompatActivityChanged();
     }
 
     boolean isUidPresent(int uid) {

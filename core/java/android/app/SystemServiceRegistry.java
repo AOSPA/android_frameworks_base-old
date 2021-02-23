@@ -128,11 +128,13 @@ import android.net.EthernetManager;
 import android.net.IEthernetManager;
 import android.net.IIpSecService;
 import android.net.INetworkPolicyManager;
+import android.net.IVpnManager;
 import android.net.IpSecManager;
 import android.net.NetworkPolicyManager;
 import android.net.NetworkScoreManager;
 import android.net.NetworkWatchlistManager;
 import android.net.TetheringManager;
+import android.net.VpnManager;
 import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
 import android.net.nsd.INsdManager;
@@ -167,9 +169,11 @@ import android.os.StatsFrameworkInitializer;
 import android.os.SystemConfigManager;
 import android.os.SystemUpdateManager;
 import android.os.SystemVibrator;
+import android.os.SystemVibratorManager;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.os.health.SystemHealthManager;
 import android.os.image.DynamicSystemManager;
 import android.os.image.IDynamicSystemService;
@@ -181,6 +185,7 @@ import android.permission.PermissionControllerManager;
 import android.permission.PermissionManager;
 import android.print.IPrintManager;
 import android.print.PrintManager;
+import android.scheduling.SchedulingFrameworkInitializer;
 import android.security.FileIntegrityManager;
 import android.security.IFileIntegrityService;
 import android.service.oemlock.IOemLockService;
@@ -206,6 +211,7 @@ import android.view.autofill.AutofillManager;
 import android.view.autofill.IAutoFillManager;
 import android.view.contentcapture.ContentCaptureManager;
 import android.view.contentcapture.IContentCaptureManager;
+import android.view.displayhash.DisplayHashManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textservice.TextServicesManager;
@@ -380,6 +386,15 @@ public final class SystemServiceRegistry {
             public TetheringManager createService(ContextImpl ctx) {
                 return new TetheringManager(
                         ctx, () -> ServiceManager.getService(Context.TETHERING_SERVICE));
+            }});
+
+        registerService(Context.VPN_MANAGEMENT_SERVICE, VpnManager.class,
+                new CachedServiceFetcher<VpnManager>() {
+            @Override
+            public VpnManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                IBinder b = ServiceManager.getService(Context.VPN_MANAGEMENT_SERVICE);
+                IVpnManager service = IVpnManager.Stub.asInterface(b);
+                return new VpnManager(ctx, service);
             }});
 
         registerService(Context.VCN_MANAGEMENT_SERVICE, VcnManager.class,
@@ -698,6 +713,13 @@ public final class SystemServiceRegistry {
                         return UwbManager.getInstance();
                     }
                 });
+
+        registerService(Context.VIBRATOR_MANAGER_SERVICE, VibratorManager.class,
+                new CachedServiceFetcher<VibratorManager>() {
+                    @Override
+                    public VibratorManager createService(ContextImpl ctx) {
+                        return new SystemVibratorManager(ctx);
+                    }});
 
         registerService(Context.VIBRATOR_SERVICE, Vibrator.class,
                 new CachedServiceFetcher<Vibrator>() {
@@ -1405,6 +1427,13 @@ public final class SystemServiceRegistry {
                     }
                 });
 
+        registerService(Context.DISPLAY_HASH_SERVICE, DisplayHashManager.class,
+                new CachedServiceFetcher<DisplayHashManager>() {
+                    @Override
+                    public DisplayHashManager createService(ContextImpl ctx) {
+                        return new DisplayHashManager();
+                    }});
+
         sInitializing = true;
         try {
             // Note: the following functions need to be @SystemApis, once they become mainline
@@ -1420,6 +1449,7 @@ public final class SystemServiceRegistry {
             MediaFrameworkPlatformInitializer.registerServiceWrappers();
             MediaFrameworkInitializer.registerServiceWrappers();
             RoleFrameworkInitializer.registerServiceWrappers();
+            SchedulingFrameworkInitializer.registerServiceWrappers();
         } finally {
             // If any of the above code throws, we're in a pretty bad shape and the process
             // will likely crash, but we'll reset it just in case there's an exception handler...

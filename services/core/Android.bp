@@ -1,3 +1,12 @@
+package {
+    // See: http://go/android-license-faq
+    // A large-scale-change added 'default_applicable_licenses' to import
+    // all of the 'license_kinds' from "frameworks_base_license"
+    // to get the below license kinds:
+    //   SPDX-license-identifier-Apache-2.0
+    default_applicable_licenses: ["frameworks_base_license"],
+}
+
 filegroup {
     name: "services.core-sources-am-wm",
     srcs: [
@@ -84,7 +93,6 @@ java_library_static {
         ":dumpstate_aidl",
         ":framework_native_aidl",
         ":gsiservice_aidl",
-        ":idmap2_aidl",
         ":inputconstants_aidl",
         ":installd_aidl",
         ":storaged_aidl",
@@ -106,8 +114,7 @@ java_library_static {
         "android.hardware.gnss-V1-java",
         "android.hardware.power-V1-java",
         "android.hardware.power-V1.0-java",
-        "android.hardware.vibrator-V1-java",
-        "android.net.ipsec.ike.stubs.module_lib",
+        "android.hardware.vibrator-V2-java",
         "app-compat-annotations",
         "framework-tethering.stubs.module_lib",
         "service-permission.stubs.system_server",
@@ -132,10 +139,10 @@ java_library_static {
         "android.hardware.health-V2.0-java",
         "android.hardware.health-V2.1-java",
         "android.hardware.light-V1-java",
-        "android.hardware.tv.cec-V1.0-java",
+        "android.hardware.tv.cec-V1.1-java",
         "android.hardware.weaver-V1.0-java",
-        "android.hardware.biometrics.face-V1.1-java",
         "android.hardware.biometrics.face-V1-java",
+        "android.hardware.biometrics.face-V1.0-java",
         "android.hardware.biometrics.fingerprint-V2.3-java",
         "android.hardware.biometrics.fingerprint-V1-java",
         "android.hardware.oemlock-V1.0-java",
@@ -235,8 +242,5 @@ filegroup {
         "java/com/android/server/connectivity/QosCallbackAgentConnection.java",
         "java/com/android/server/connectivity/QosCallbackTracker.java",
         "java/com/android/server/connectivity/TcpKeepaliveController.java",
-        "java/com/android/server/connectivity/Vpn.java",
-        "java/com/android/server/connectivity/VpnIkev2Utils.java",
-        "java/com/android/server/net/LockdownVpnTracker.java",
     ],
 }

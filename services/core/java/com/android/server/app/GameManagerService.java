@@ -16,17 +16,23 @@
 
 package com.android.server.app;
 
+import android.Manifest;
 import android.annotation.NonNull;
+import android.annotation.RequiresPermission;
+import android.app.ActivityManager;
 import android.app.GameManager;
 import android.app.GameManager.GameMode;
 import android.app.IGameManagerService;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Binder;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.util.ArrayMap;
+import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
@@ -55,7 +61,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
     private final Object mLock = new Object();
     private final Handler mHandler;
     @GuardedBy("mLock")
-    private final ArrayMap<Integer, Settings> mSettings = new ArrayMap<>();
+    private final ArrayMap<Integer, GameManagerSettings> mSettings = new ArrayMap<>();
 
     public GameManagerService(Context context) {
         this(context, createServiceThread().getLooper());
@@ -81,11 +87,19 @@ public final class GameManagerService extends IGameManagerService.Stub {
             switch (msg.what) {
                 case WRITE_SETTINGS: {
                     final int userId = (int) msg.obj;
+                    if (userId < 0) {
+                        Slog.wtf(TAG, "Attempt to write settings for invalid user: " + userId);
+                        synchronized (mLock) {
+                            removeMessages(WRITE_SETTINGS, msg.obj);
+                        }
+                        break;
+                    }
+
                     Process.setThreadPriority(Process.THREAD_PRIORITY_DEFAULT);
                     synchronized (mLock) {
                         removeMessages(WRITE_SETTINGS, msg.obj);
                         if (mSettings.containsKey(userId)) {
-                            Settings userSettings = mSettings.get(userId);
+                            GameManagerSettings userSettings = mSettings.get(userId);
                             userSettings.writePersistentDataLocked();
                         }
                     }
@@ -94,13 +108,22 @@ public final class GameManagerService extends IGameManagerService.Stub {
                 }
                 case REMOVE_SETTINGS: {
                     final int userId = (int) msg.obj;
+                    if (userId < 0) {
+                        Slog.wtf(TAG, "Attempt to write settings for invalid user: " + userId);
+                        synchronized (mLock) {
+                            removeMessages(WRITE_SETTINGS, msg.obj);
+                            removeMessages(REMOVE_SETTINGS, msg.obj);
+                        }
+                        break;
+                    }
+
                     synchronized (mLock) {
                         // Since the user was removed, ignore previous write message
                         // and do write here.
                         removeMessages(WRITE_SETTINGS, msg.obj);
                         removeMessages(REMOVE_SETTINGS, msg.obj);
                         if (mSettings.containsKey(userId)) {
-                            final Settings userSettings = mSettings.get(userId);
+                            final GameManagerSettings userSettings = mSettings.get(userId);
                             mSettings.remove(userId);
                             userSettings.writePersistentDataLocked();
                         }
@@ -146,26 +169,49 @@ public final class GameManagerService extends IGameManagerService.Stub {
         }
     }
 
-    //TODO(b/178111358) Add proper permission check and multi-user handling
+    private boolean hasPermission(String permission) {
+        return mContext.checkCallingOrSelfPermission(permission)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
     @Override
+    @RequiresPermission(Manifest.permission.MANAGE_GAME_MODE)
     public @GameMode int getGameMode(String packageName, int userId) {
+        if (!hasPermission(Manifest.permission.MANAGE_GAME_MODE)) {
+            Log.w(TAG, String.format("Caller or self does not have permission.MANAGE_GAME_MODE"));
+            return GameManager.GAME_MODE_UNSUPPORTED;
+        }
+
+        userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(),
+                Binder.getCallingUid(), userId, false, true, "getGameMode",
+                "com.android.server.app.GameManagerService");
+
         synchronized (mLock) {
             if (!mSettings.containsKey(userId)) {
                 return GameManager.GAME_MODE_UNSUPPORTED;
             }
-            Settings userSettings = mSettings.get(userId);
+            GameManagerSettings userSettings = mSettings.get(userId);
             return userSettings.getGameModeLocked(packageName);
         }
     }
 
-    //TODO(b/178111358) Add proper permission check and multi-user handling
     @Override
+    @RequiresPermission(Manifest.permission.MANAGE_GAME_MODE)
     public void setGameMode(String packageName, @GameMode int gameMode, int userId) {
+        if (!hasPermission(Manifest.permission.MANAGE_GAME_MODE)) {
+            Log.w(TAG, String.format("Caller or self does not have permission.MANAGE_GAME_MODE"));
+            return;
+        }
+
+        userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(),
+                Binder.getCallingUid(), userId, false, true, "setGameMode",
+                "com.android.server.app.GameManagerService");
+
         synchronized (mLock) {
             if (!mSettings.containsKey(userId)) {
                 return;
             }
-            Settings userSettings = mSettings.get(userId);
+            GameManagerSettings userSettings = mSettings.get(userId);
             userSettings.setGameModeLocked(packageName, gameMode);
             final Message msg = mHandler.obtainMessage(WRITE_SETTINGS);
             msg.obj = userId;
@@ -189,7 +235,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
                 return;
             }
 
-            Settings userSettings = new Settings(Environment.getDataSystemDeDirectory(userId));
+            GameManagerSettings userSettings =
+                    new GameManagerSettings(Environment.getDataSystemDeDirectory(userId));
             mSettings.put(userId, userSettings);
             userSettings.readPersistentDataLocked();
         }

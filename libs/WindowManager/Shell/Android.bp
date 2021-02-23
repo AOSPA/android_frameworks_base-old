@@ -12,6 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package {
+    // See: http://go/android-license-faq
+    // A large-scale-change added 'default_applicable_licenses' to import
+    // all of the 'license_kinds' from "frameworks_base_license"
+    // to get the below license kinds:
+    //   SPDX-license-identifier-Apache-2.0
+    default_applicable_licenses: ["frameworks_base_license"],
+}
+
 // Begin ProtoLog
 java_library {
     name: "wm_shell_protolog-groups",
@@ -71,27 +80,6 @@ genrule {
       "$(locations :wm_shell-sources)",
     out: ["wm_shell_protolog.json"],
 }
-
-filegroup {
-    name: "wm_shell_protolog.json",
-    srcs: ["res/raw/wm_shell_protolog.json"],
-}
-
-genrule {
-    name: "checked-wm_shell_protolog.json",
-    srcs: [
-        ":generate-wm_shell_protolog.json",
-        ":wm_shell_protolog.json",
-    ],
-    cmd: "cp $(location :generate-wm_shell_protolog.json) $(out) && " +
-      "{ ! (diff $(out) $(location :wm_shell_protolog.json) | grep -q '^<') || " +
-      "{ echo -e '\\n\\n################################################################\\n#\\n" +
-      "#  ERROR: ProtoLog viewer config is stale.  To update it, run:\\n#\\n" +
-      "#  cp $(location :generate-wm_shell_protolog.json) " +
-      "$(location :wm_shell_protolog.json)\\n#\\n" +
-      "################################################################\\n\\n' >&2 && false; } }",
-    out: ["wm_shell_protolog.json"],
-}
 // End ProtoLog
 
 java_library {
@@ -114,6 +102,9 @@ android_library {
     ],
     resource_dirs: [
         "res",
+    ],
+    java_resources: [
+        ":generate-wm_shell_protolog.json"
     ],
     static_libs: [
         "androidx.appcompat_appcompat",

@@ -29,7 +29,7 @@
 
 #include <vibratorservice/VibratorHalController.h>
 
-#include "com_android_server_VibratorManagerService.h"
+#include "com_android_server_vibrator_VibratorManagerService.h"
 
 namespace V1_0 = android::hardware::vibrator::V1_0;
 namespace V1_1 = android::hardware::vibrator::V1_1;
@@ -73,11 +73,8 @@ static_assert(static_cast<uint8_t>(V1_3::Effect::TEXTURE_TICK) ==
               static_cast<uint8_t>(aidl::Effect::TEXTURE_TICK));
 
 static std::shared_ptr<vibrator::HalController> findVibrator(int32_t vibratorId) {
-    // TODO(b/167946816): remove this once VibratorService is removed.
-    if (vibratorId < 0) {
-        return std::move(std::make_unique<vibrator::HalController>());
-    }
-    vibrator::ManagerHalWrapper* manager = android_server_VibratorManagerService_getManager();
+    vibrator::ManagerHalController* manager =
+            android_server_vibrator_VibratorManagerService_getManager();
     if (manager == nullptr) {
         return nullptr;
     }

@@ -257,11 +257,15 @@ public final class AuthSession implements IBinder.DeathRecipient {
                             mUserId,
                             mOpPackageName,
                             mOperationId);
+                    mState = STATE_AUTH_STARTED;
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Remote exception", e);
                 }
+            } else {
+                // The UI was already showing :)
+                mState = STATE_AUTH_STARTED_UI_SHOWING;
             }
-            mState = STATE_AUTH_STARTED;
+
         }
     }
 
@@ -686,7 +690,8 @@ public final class AuthSession implements IBinder.DeathRecipient {
      * @return true if this AuthSession is finished, e.g. should be set to null
      */
     boolean onCancelAuthSession(boolean force) {
-        final boolean authStarted = mState == STATE_AUTH_STARTED
+        final boolean authStarted = mState == STATE_AUTH_CALLED
+                || mState == STATE_AUTH_STARTED
                 || mState == STATE_AUTH_STARTED_UI_SHOWING;
 
         if (authStarted && !force) {
@@ -793,7 +798,7 @@ public final class AuthSession implements IBinder.DeathRecipient {
             case BiometricAuthenticator.TYPE_FINGERPRINT:
                 return FingerprintManager.getAcquiredString(mContext, acquiredInfo, vendorCode);
             case BiometricAuthenticator.TYPE_FACE:
-                return FaceManager.getAcquiredString(mContext, acquiredInfo, vendorCode);
+                return FaceManager.getAuthHelpMessage(mContext, acquiredInfo, vendorCode);
             default:
                 return null;
         }

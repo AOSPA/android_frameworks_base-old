@@ -59,7 +59,6 @@ import android.view.ViewRootImpl;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
 import com.android.wm.shell.R;
@@ -89,7 +88,6 @@ public class PipMenuView extends FrameLayout {
     private static final boolean ENABLE_RESIZE_HANDLE = false;
 
     private int mMenuState;
-    private boolean mResize = true;
     private boolean mAllowMenuTimeout = true;
     private boolean mAllowTouches = true;
 
@@ -329,16 +327,21 @@ public class PipMenuView extends FrameLayout {
         hideMenu(null);
     }
 
+    void hideMenu(boolean animate, boolean resize) {
+        hideMenu(null, true /* notifyMenuVisibility */, animate, resize);
+    }
+
     void hideMenu(Runnable animationEndCallback) {
-        hideMenu(animationEndCallback, true /* notifyMenuVisibility */, true /* animate */);
+        hideMenu(animationEndCallback, true /* notifyMenuVisibility */, true /* animate */,
+                true /* resize */);
     }
 
     private void hideMenu(final Runnable animationFinishedRunnable, boolean notifyMenuVisibility,
-            boolean animate) {
+            boolean animate, boolean resize) {
         if (mMenuState != MENU_STATE_NONE) {
             cancelDelayedHide();
             if (notifyMenuVisibility) {
-                notifyMenuStateChange(MENU_STATE_NONE, mResize, null);
+                notifyMenuStateChange(MENU_STATE_NONE, resize, null);
             }
             mMenuContainerAnimator = new AnimatorSet();
             ObjectAnimator menuAnim = ObjectAnimator.ofFloat(mMenuContainer, View.ALPHA,
@@ -403,7 +406,7 @@ public class PipMenuView extends FrameLayout {
                 // Ensure we have as many buttons as actions
                 final LayoutInflater inflater = LayoutInflater.from(mContext);
                 while (mActionsGroup.getChildCount() < mActions.size()) {
-                    final ImageButton actionView = (ImageButton) inflater.inflate(
+                    final PipMenuActionView actionView = (PipMenuActionView) inflater.inflate(
                             R.layout.pip_menu_action, mActionsGroup, false);
                     mActionsGroup.addView(actionView);
                 }
@@ -420,7 +423,8 @@ public class PipMenuView extends FrameLayout {
                         && (stackBounds.width() > stackBounds.height());
                 for (int i = 0; i < mActions.size(); i++) {
                     final RemoteAction action = mActions.get(i);
-                    final ImageButton actionView = (ImageButton) mActionsGroup.getChildAt(i);
+                    final PipMenuActionView actionView =
+                            (PipMenuActionView) mActionsGroup.getChildAt(i);
 
                     // TODO: Check if the action drawable has changed before we reload it
                     action.getIcon().loadDrawableAsync(mContext, d -> {
@@ -469,7 +473,8 @@ public class PipMenuView extends FrameLayout {
     private void expandPip() {
         // Do not notify menu visibility when hiding the menu, the controller will do this when it
         // handles the message
-        hideMenu(mController::onPipExpand, false /* notifyMenuVisibility */, true /* animate */);
+        hideMenu(mController::onPipExpand, false /* notifyMenuVisibility */, true /* animate */,
+                true /* resize */);
     }
 
     private void dismissPip() {
@@ -479,7 +484,8 @@ public class PipMenuView extends FrameLayout {
         final boolean animate = mMenuState != MENU_STATE_CLOSE;
         // Do not notify menu visibility when hiding the menu, the controller will do this when it
         // handles the message
-        hideMenu(mController::onPipDismiss, false /* notifyMenuVisibility */, animate);
+        hideMenu(mController::onPipDismiss, false /* notifyMenuVisibility */, animate,
+                true /* resize */);
     }
 
     private void showSettings() {

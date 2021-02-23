@@ -663,6 +663,10 @@ public class MediaPlayer extends PlayerBase
      * result in an exception.</p>
      */
     public MediaPlayer() {
+        this(AudioSystem.AUDIO_SESSION_ALLOCATE);
+    }
+
+    private MediaPlayer(int sessionId) {
         super(new AudioAttributes.Builder().build(),
                 AudioPlaybackConfiguration.PLAYER_TYPE_JAM_MEDIAPLAYER);
 
@@ -684,7 +688,7 @@ public class MediaPlayer extends PlayerBase
         native_setup(new WeakReference<MediaPlayer>(this),
                 getCurrentOpPackageName());
 
-        baseRegisterPlayer();
+        baseRegisterPlayer(sessionId);
     }
 
     /*
@@ -913,11 +917,11 @@ public class MediaPlayer extends PlayerBase
             AudioAttributes audioAttributes, int audioSessionId) {
 
         try {
-            MediaPlayer mp = new MediaPlayer();
+            MediaPlayer mp = new MediaPlayer(audioSessionId);
             final AudioAttributes aa = audioAttributes != null ? audioAttributes :
                 new AudioAttributes.Builder().build();
             mp.setAudioAttributes(aa);
-            mp.setAudioSessionId(audioSessionId);
+            mp.native_setAudioSessionId(audioSessionId);
             mp.setDataSource(context, uri);
             if (holder != null) {
                 mp.setDisplay(holder);
@@ -978,12 +982,12 @@ public class MediaPlayer extends PlayerBase
             AssetFileDescriptor afd = context.getResources().openRawResourceFd(resid);
             if (afd == null) return null;
 
-            MediaPlayer mp = new MediaPlayer();
+            MediaPlayer mp = new MediaPlayer(audioSessionId);
 
             final AudioAttributes aa = audioAttributes != null ? audioAttributes :
                 new AudioAttributes.Builder().build();
             mp.setAudioAttributes(aa);
-            mp.setAudioSessionId(audioSessionId);
+            mp.native_setAudioSessionId(audioSessionId);
 
             mp.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
             afd.close();
@@ -1352,6 +1356,7 @@ public class MediaPlayer extends PlayerBase
     }
 
     private void startImpl() {
+        baseStart(0); // unknown device at this point
         stayAwake(true);
         _start();
     }
@@ -1377,6 +1382,7 @@ public class MediaPlayer extends PlayerBase
     public void stop() throws IllegalStateException {
         stayAwake(false);
         _stop();
+        baseStop();
     }
 
     private native void _stop() throws IllegalStateException;
@@ -1390,6 +1396,7 @@ public class MediaPlayer extends PlayerBase
     public void pause() throws IllegalStateException {
         stayAwake(false);
         _pause();
+        basePause();
     }
 
     private native void _pause() throws IllegalStateException;
@@ -2365,7 +2372,13 @@ public class MediaPlayer extends PlayerBase
      * This method must be called before one of the overloaded <code> setDataSource </code> methods.
      * @throws IllegalStateException if it is called in an invalid state
      */
-    public native void setAudioSessionId(int sessionId)  throws IllegalArgumentException, IllegalStateException;
+    public void setAudioSessionId(int sessionId)
+            throws IllegalArgumentException, IllegalStateException {
+        native_setAudioSessionId(sessionId);
+        baseUpdateSessionId(sessionId);
+    }
+
+    private native void native_setAudioSessionId(int sessionId);
 
     /**
      * Returns the audio session ID.
@@ -3469,7 +3482,8 @@ public class MediaPlayer extends PlayerBase
             case MEDIA_STOPPED:
                 {
                     tryToDisableNativeRoutingCallback();
-                    baseStop();
+                    // FIXME see b/179218630
+                    //baseStop();
                     TimeProvider timeProvider = mTimeProvider;
                     if (timeProvider != null) {
                         timeProvider.onStopped();
@@ -3479,15 +3493,17 @@ public class MediaPlayer extends PlayerBase
 
             case MEDIA_STARTED:
                 {
-                    baseStart(native_getRoutedDeviceId());
+                    // FIXME see b/179218630
+                    //baseStart(native_getRoutedDeviceId());
                     tryToEnableNativeRoutingCallback();
                 }
                 // fall through
             case MEDIA_PAUSED:
                 {
-                    if (msg.what == MEDIA_PAUSED) {
-                        basePause();
-                    }
+                    // FIXME see b/179218630
+                    //if (msg.what == MEDIA_PAUSED) {
+                    //    basePause();
+                    //}
                     TimeProvider timeProvider = mTimeProvider;
                     if (timeProvider != null) {
                         timeProvider.onPaused(msg.what == MEDIA_PAUSED);

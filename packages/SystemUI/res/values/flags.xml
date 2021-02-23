@@ -18,11 +18,12 @@
 <resources>
     <bool name="are_flags_overrideable">false</bool>
 
-    <bool name="flag_notification_pipeline2">false</bool>
+    <bool name="flag_notification_pipeline2">true</bool>
     <bool name="flag_notification_pipeline2_rendering">false</bool>
     <bool name="flag_notif_updates">false</bool>
 
     <bool name="flag_shade_is_opaque">false</bool>
+    <bool name="flag_monet">false</bool>
 
     <!-- b/171917882 -->
     <bool name="flag_notification_twocolumn">false</bool>
@@ -36,4 +37,9 @@
 
     <!-- People Tile flag -->
     <bool name="flag_conversations">false</bool>
+
+    <!-- The new animations to/from lockscreen and AOD! -->
+    <bool name="flag_lockscreen_animations">false</bool>
+
+    <bool name="flag_toast_style">false</bool>
 </resources>

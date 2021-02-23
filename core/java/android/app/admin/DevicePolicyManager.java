@@ -206,7 +206,6 @@ public class DevicePolicyManager {
      * {@link android.os.Build.VERSION_CODES#N}</li>
      * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOGO_URI}, optional</li>
-     * <li>{@link #EXTRA_PROVISIONING_MAIN_COLOR}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_SKIP_USER_CONSENT}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_KEEP_ACCOUNT_ON_MIGRATION}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_DISCLAIMERS}, optional</li>
@@ -250,7 +249,6 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_SKIP_ENCRYPTION}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOGO_URI}, optional</li>
-     * <li>{@link #EXTRA_PROVISIONING_MAIN_COLOR}, optional</li>
      * </ul>
      *
      * <p>If provisioning fails, the device returns to its previous state.
@@ -289,7 +287,6 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOGO_URI}, optional</li>
-     * <li>{@link #EXTRA_PROVISIONING_MAIN_COLOR}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_DISCLAIMERS}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_SKIP_EDUCATION_SCREENS}, optional</li>
      * </ul>
@@ -388,8 +385,6 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_COOKIE_HEADER}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM}, optional</li>
-     * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL}, optional</li>
-     * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_ICON_URI}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOCAL_TIME} (convert to String), optional</li>
      * <li>{@link #EXTRA_PROVISIONING_TIME_ZONE}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOCALE}, optional</li>
@@ -438,8 +433,6 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_COOKIE_HEADER}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM}, optional</li>
-     * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL}, optional</li>
-     * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_ICON_URI}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_SUPPORT_URL}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_ORGANIZATION_NAME}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional</li>
@@ -654,7 +647,10 @@ public class DevicePolicyManager {
      *
      * <p>Use with {@link #ACTION_PROVISION_MANAGED_PROFILE} or
      * {@link #ACTION_PROVISION_MANAGED_DEVICE}.
+     *
+     * @deprecated Color customization is no longer supported in the provisioning flow.
      */
+    @Deprecated
     public static final String EXTRA_PROVISIONING_MAIN_COLOR =
              "android.app.extra.PROVISIONING_MAIN_COLOR";
 
@@ -905,8 +901,10 @@ public class DevicePolicyManager {
      * <p>Use in an intent with action {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}
      * or {@link #ACTION_PROVISION_FINANCED_DEVICE}
      *
+     * @deprecated This extra is no longer respected in the provisioning flow.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL =
             "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL";
@@ -930,9 +928,11 @@ public class DevicePolicyManager {
      * <p>Use in an intent with action {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}
      * or {@link #ACTION_PROVISION_FINANCED_DEVICE}
      *
+     * @deprecated This extra is no longer respected in the provisioning flow.
      * @hide
      */
     @SystemApi
+    @Deprecated
     public static final String EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_ICON_URI =
             "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_ICON_URI";
 
@@ -1300,10 +1300,11 @@ public class DevicePolicyManager {
      * A value for {@link #EXTRA_PROVISIONING_SUPPORTED_MODES} indicating that provisioning is
      * organization-owned.
      *
-     * <p>Using this value will cause the admin app's {@link #ACTION_GET_PROVISIONING_MODE}
-     * activity to have the {@link #EXTRA_PROVISIONING_ALLOWED_PROVISIONING_MODES} array extra
-     * contain {@link #PROVISIONING_MODE_MANAGED_PROFILE} and {@link
-     * #PROVISIONING_MODE_FULLY_MANAGED_DEVICE}.
+     * <p>Using this value indicates the admin app can only be provisioned in either a
+     * fully-managed device or a corporate-owned work profile. This will cause the admin app's
+     * {@link #ACTION_GET_PROVISIONING_MODE} activity to have the {@link
+     * #EXTRA_PROVISIONING_ALLOWED_PROVISIONING_MODES} array extra contain {@link
+     * #PROVISIONING_MODE_MANAGED_PROFILE} and {@link #PROVISIONING_MODE_FULLY_MANAGED_DEVICE}.
      *
      * <p>Also, if this value is set, the admin app's {@link #ACTION_GET_PROVISIONING_MODE} activity
      * will not receive the {@link #EXTRA_PROVISIONING_IMEI} and {@link
@@ -1868,13 +1869,13 @@ public class DevicePolicyManager {
     /**
      * Grants access to {@link #setNetworkLoggingEnabled}, {@link #isNetworkLoggingEnabled} and
      * {@link #retrieveNetworkLogs}. Once granted the delegated app will start receiving
-     * DelegatedAdminReceiver.onNetworkLogsAvailable() callback, and Device owner will no longer
-     * receive the DeviceAdminReceiver.onNetworkLogsAvailable() callback.
+     * DelegatedAdminReceiver.onNetworkLogsAvailable() callback, and Device owner or Profile Owner
+     * will no longer receive the DeviceAdminReceiver.onNetworkLogsAvailable() callback.
      * There can be at most one app that has this delegation.
      * If another app already had delegated network logging access,
      * it will lose the delegation when a new app is delegated.
      *
-     * <p> Can only be granted by Device Owner.
+     * <p> Can only be granted by Device Owner or Profile Owner of a managed profile.
      */
     public static final String DELEGATION_NETWORK_LOGGING = "delegation-network-logging";
 
@@ -2922,33 +2923,61 @@ public class DevicePolicyManager {
         return DebugUtils.constantToString(DevicePolicyManager.class, PREFIX_OPERATION, operation);
     }
 
-    private static final String PREFIX_UNSAFE_OPERATION_REASON = "UNSAFE_OPERATION_REASON_";
+    private static final String PREFIX_OPERATION_SAFETY_REASON = "OPERATION_SAFETY_REASON_";
 
     /** @hide */
-    @IntDef(prefix = PREFIX_UNSAFE_OPERATION_REASON, value = {
-            UNSAFE_OPERATION_REASON_NONE,
-            UNSAFE_OPERATION_REASON_DRIVING_DISTRACTION
+    @IntDef(prefix = PREFIX_OPERATION_SAFETY_REASON, value = {
+            OPERATION_SAFETY_REASON_NONE,
+            OPERATION_SAFETY_REASON_DRIVING_DISTRACTION
     })
     @Retention(RetentionPolicy.SOURCE)
-    public static @interface UnsafeOperationReason {
+    public static @interface OperationSafetyReason {
     }
 
     /** @hide */
     @TestApi
-    public static final int UNSAFE_OPERATION_REASON_NONE = -1;
+    public static final int OPERATION_SAFETY_REASON_NONE = -1;
 
     /**
      * Indicates that a {@link UnsafeStateException} was thrown because the operation would distract
      * the driver of the vehicle.
      */
-    public static final int UNSAFE_OPERATION_REASON_DRIVING_DISTRACTION = 1;
+    public static final int OPERATION_SAFETY_REASON_DRIVING_DISTRACTION = 1;
 
     /** @hide */
     @NonNull
     @TestApi
-    public static String unsafeOperationReasonToString(@UnsafeOperationReason int reason) {
+    public static String operationSafetyReasonToString(@OperationSafetyReason int reason) {
         return DebugUtils.constantToString(DevicePolicyManager.class,
-                PREFIX_UNSAFE_OPERATION_REASON, reason);
+                PREFIX_OPERATION_SAFETY_REASON, reason);
+    }
+
+    /** @hide */
+    public static boolean isValidOperationSafetyReason(@OperationSafetyReason int reason) {
+        return reason == OPERATION_SAFETY_REASON_DRIVING_DISTRACTION;
+    }
+
+    /**
+     * Checks if it's safe to run operations that can be affected by the given {@code reason}.
+     *
+     * <p><b>Note:/b> notice that the operation safety state might change between the time this
+     * method returns and the operation's method is called, so calls to the latter could still throw
+     * a {@link UnsafeStateException} even when this method returns {@code true}.
+     *
+     * @param reason currently, only supported reason is
+     * {@link #OPERATION_SAFETY_REASON_DRIVING_DISTRACTION}.
+     *
+     * @return whether it's safe to run operations that can be affected by the given {@code reason}.
+     */
+    // TODO(b/173541467): should it throw SecurityException if caller is not admin?
+    public boolean isSafeOperation(@OperationSafetyReason int reason) {
+        if (mService == null) return false;
+
+        try {
+            return mService.isSafeOperation(reason);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /** @hide */
@@ -9822,6 +9851,84 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Sets whether 5g slicing is enabled on the work profile.
+     *
+     * Slicing allows operators to virtually divide their networks in portions and use different
+     * portions for specific use cases; for example, a corporation can have a deal/agreement with
+     * a carrier that all of its employees’ devices use data on a slice dedicated for enterprise
+     * use.
+     *
+     * By default, 5g slicing is enabled on the work profile on supported carriers and devices.
+     * Admins can explicitly disable it with this API.
+     *
+     * <p>This method can only be called by the profile owner of a managed profile.
+     *
+     * @param enabled whether 5g Slice should be enabled.
+     * @throws SecurityException if the caller is not the profile owner.
+     **/
+    public void setNetworkSlicingEnabled(boolean enabled) {
+        throwIfParentInstance("setNetworkSlicingEnabled");
+        if (mService != null) {
+            try {
+                mService.setNetworkSlicingEnabled(enabled);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Indicates whether 5g slicing is enabled.
+     *
+     * <p>This method can be called by the profile owner of a managed profile.
+     *
+     * @return whether 5g Slice is enabled.
+     * @throws SecurityException if the caller is not the profile owner.
+     */
+    public boolean isNetworkSlicingEnabled() {
+        throwIfParentInstance("isNetworkSlicingEnabled");
+        if (mService == null) {
+            return false;
+        }
+        try {
+            return mService.isNetworkSlicingEnabled(myUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Indicates whether 5g slicing is enabled for specific user.
+     *
+     * This method can be called with permission
+     * {@link android.Manifest.permission#READ_NETWORK_DEVICE_CONFIG} by the profile owner of
+     * a managed profile. And the caller must hold the
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} permission if query for
+     * other users.
+     *
+     * @param userHandle indicates the user to query the state
+     * @return indicates whether 5g Slice is enabled.
+     * @throws SecurityException if the caller is not granted the permission
+     *         {@link android.Manifest.permission#READ_NETWORK_DEVICE_CONFIG}
+     *         and not profile owner of a managed profile, and not granted the permission
+     *         {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} if query for
+     *         other users.
+     * @hide
+     */
+    @SystemApi
+    public boolean isNetworkSlicingEnabledForUser(@NonNull UserHandle userHandle) {
+        throwIfParentInstance("isNetworkSlicingEnabledForUser");
+        if (mService == null) {
+            return false;
+        }
+        try {
+            return mService.isNetworkSlicingEnabled(userHandle.getIdentifier());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * This method is mostly deprecated.
      * Most of the settings that still have an effect have dedicated setter methods or user
      * restrictions. See individual settings for details.
@@ -11689,8 +11796,11 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a device owner or delegated app with {@link #DELEGATION_NETWORK_LOGGING} to
-     * control the network logging feature.
+     * Called by a device owner, profile owner of a managed profile or delegated app with
+     * {@link #DELEGATION_NETWORK_LOGGING} to control the network logging feature.
+     *
+     * <p> When network logging is enabled by a profile owner, the network logs will only include
+     * work profile network activity, not activity on the personal profile.
      *
      * <p> Network logs contain DNS lookup and connect() library call events. The following library
      *     functions are recorded while network logging is active:
@@ -11730,7 +11840,7 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *        {@code null} if called by a delegated app.
      * @param enabled whether network logging should be enabled or not.
-     * @throws SecurityException if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not a device owner or profile owner.
      * @see #setAffiliationIds
      * @see #retrieveNetworkLogs
      */
@@ -11744,14 +11854,16 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Return whether network logging is enabled by a device owner.
+     * Return whether network logging is enabled by a device owner or profile owner of
+     * a managed profile.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with. Can only
      * be {@code null} if the caller is a delegated app with {@link #DELEGATION_NETWORK_LOGGING}
      * or has MANAGE_USERS permission.
-     * @return {@code true} if network logging is enabled by device owner, {@code false} otherwise.
-     * @throws SecurityException if {@code admin} is not a device owner and caller has
-     * no MANAGE_USERS permission
+     * @return {@code true} if network logging is enabled by device owner or profile owner,
+     * {@code false} otherwise.
+     * @throws SecurityException if {@code admin} is not a device owner or profile owner and
+     * caller has no MANAGE_USERS permission
      */
     public boolean isNetworkLoggingEnabled(@Nullable ComponentName admin) {
         throwIfParentInstance("isNetworkLoggingEnabled");
@@ -11763,9 +11875,14 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owner or delegated app with {@link #DELEGATION_NETWORK_LOGGING} to retrieve
-     * the most recent batch of network logging events.
-     * A device owner has to provide a batchToken provided as part of
+     * Called by device owner, profile owner of a managed profile or delegated app with
+     * {@link #DELEGATION_NETWORK_LOGGING} to retrieve the most recent batch of
+     * network logging events.
+     *
+     * <p> When network logging is enabled by a profile owner, the network logs will only include
+     * work profile network activity, not activity on the personal profile.
+     *
+     * A device owner or profile owner has to provide a batchToken provided as part of
      * {@link DeviceAdminReceiver#onNetworkLogsAvailable} callback. If the token doesn't match the
      * token of the most recent available batch of logs, {@code null} will be returned.
      *
@@ -11777,11 +11894,11 @@ public class DevicePolicyManager {
      * after the device device owner has been notified via
      * {@link DeviceAdminReceiver#onNetworkLogsAvailable}.
      *
-     * <p>If a secondary user or profile is created, calling this method will throw a
-     * {@link SecurityException} until all users become affiliated again. It will also no longer be
-     * possible to retrieve the network logs batch with the most recent batchToken provided
-     * by {@link DeviceAdminReceiver#onNetworkLogsAvailable}. See
-     * {@link DevicePolicyManager#setAffiliationIds}.
+     * <p>If the caller is not a profile owner and a secondary user or profile is created, calling
+     * this method will throw a {@link SecurityException} until all users become affiliated again.
+     * It will also no longer be possible to retrieve the network logs batch with the most recent
+     * batchToken provided by {@link DeviceAdminReceiver#onNetworkLogsAvailable}.
+     * See {@link DevicePolicyManager#setAffiliationIds}.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *        {@code null} if called by a delegated app.
@@ -11789,8 +11906,9 @@ public class DevicePolicyManager {
      * @return A new batch of network logs which is a list of {@link NetworkEvent}. Returns
      *        {@code null} if the batch represented by batchToken is no longer available or if
      *        logging is disabled.
-     * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
-     * profile or secondary user that is not affiliated with the device.
+     * @throws SecurityException if {@code admin} is not a device owner, profile owner or if the
+     * {@code admin} is not a profile owner and there is at least one profile or secondary user
+     * that is not affiliated with the device.
      * @see #setAffiliationIds
      * @see DeviceAdminReceiver#onNetworkLogsAvailable
      */
@@ -11909,11 +12027,12 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by the system to get the time at which the device owner last retrieved network logging
-     * events.
+     * Called by the system to get the time at which the device owner or profile owner of a
+     * managed profile last retrieved network logging events.
      *
-     * @return the time at which the device owner most recently retrieved network logging events, in
-     *         milliseconds since epoch; -1 if network logging events were never retrieved.
+     * @return the time at which the device owner or profile owner most recently retrieved network
+     *         logging events, in milliseconds since epoch; -1 if network logging events were
+     *         never retrieved.
      * @throws SecurityException if the caller is not the device owner, does not hold the
      *         MANAGE_USERS permission and is not the system.
      *
@@ -13157,7 +13276,7 @@ public class DevicePolicyManager {
     @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_DEVICE_ADMINS)
     public void setNextOperationSafety(@DevicePolicyOperation int operation,
-            @UnsafeOperationReason int reason) {
+            @OperationSafetyReason int reason) {
         if (mService != null) {
             try {
                 mService.setNextOperationSafety(operation, reason);
@@ -13316,6 +13435,7 @@ public class DevicePolicyManager {
             }
         }
     }
+
     /**
      * Returns true if the caller is running on a device where the admin can grant
      * permissions related to device sensors.
@@ -13328,24 +13448,110 @@ public class DevicePolicyManager {
      * @return true if the app can grant device sensors-related permissions, false otherwise.
      */
     public boolean canAdminGrantSensorsPermissions() {
-        return canAdminGrantSensorsPermissionsForUser(myUserId());
-    }
-
-    /**
-     * Returns true if the admin can control grants of sensors-related permissions, for
-     * a given user.
-     *
-     * @hide
-     * @param userId The ID of the user to check.
-     * @return if the admin may grant these permissions, false otherwise.
-     */
-    @SystemApi
-    public boolean canAdminGrantSensorsPermissionsForUser(int userId) {
+        throwIfParentInstance("canAdminGrantSensorsPermissions");
         if (mService == null) {
             return false;
         }
         try {
-            return mService.canAdminGrantSensorsPermissionsForUser(userId);
+            return mService.canAdminGrantSensorsPermissionsForUser(myUserId());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by device owner or profile owner of an organization-owned managed profile to
+     * enable or disable USB data signaling for the device. When disabled, USB data connections
+     * (except from charging functions) are prohibited.
+     *
+     * <p> This API is not supported on all devices, the caller should call
+     * {@link #canUsbDataSignalingBeDisabled()} to check whether enabling or disabling USB data
+     * signaling is supported on the device.
+     *
+     * @param enabled whether USB data signaling should be enabled or not.
+     * @throws SecurityException if the caller is not a device owner or a profile owner on
+     *         an organization-owned managed profile.
+     * @throws IllegalStateException if disabling USB data signaling is not supported or
+     *         if USB data signaling fails to be enabled/disabled.
+     */
+    public void setUsbDataSignalingEnabled(boolean enabled) {
+        throwIfParentInstance("setUsbDataSignalingEnabled");
+        if (mService != null) {
+            try {
+                mService.setUsbDataSignalingEnabled(mContext.getPackageName(), enabled);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Called by device owner or profile owner of an organization-owned managed profile to return
+     * whether USB data signaling is currently enabled by the admin.
+     *
+     * @return {@code true} if USB data signaling is enabled, {@code false} otherwise.
+     */
+    public boolean isUsbDataSignalingEnabled() {
+        throwIfParentInstance("isUsbDataSignalingEnabled");
+        if (mService != null) {
+            try {
+                return mService.isUsbDataSignalingEnabled(mContext.getPackageName());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Called by the system to check whether USB data signaling is currently enabled for this user.
+     *
+     * @param userId which user to check for.
+     * @return {@code true} if USB data signaling is enabled, {@code false} otherwise.
+     * @hide
+     */
+    public boolean isUsbDataSignalingEnabledForUser(@UserIdInt int userId) {
+        throwIfParentInstance("isUsbDataSignalingEnabledForUser");
+        if (mService != null) {
+            try {
+                return mService.isUsbDataSignalingEnabledForUser(userId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns whether enabling or disabling USB data signaling is supported on the device.
+     *
+     * @return {@code true} if the device supports enabling and disabling USB data signaling.
+     */
+    public boolean canUsbDataSignalingBeDisabled() {
+        throwIfParentInstance("canUsbDataSignalingBeDisabled");
+        if (mService != null) {
+            try {
+                return mService.canUsbDataSignalingBeDisabled();
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Gets the list of {@link #isAffiliatedUser() affiliated} users running on foreground.
+     *
+     * @return list of {@link #isAffiliatedUser() affiliated} users running on foreground.
+     *
+     * @throws SecurityException if the calling application is not a device owner
+     */
+    @NonNull
+    public List<UserHandle> listForegroundAffiliatedUsers() {
+        if (mService == null) return Collections.emptyList();
+
+        try {
+            return mService.listForegroundAffiliatedUsers();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

@@ -1490,6 +1490,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     void setOrientationChanging(boolean changing) {
         mOrientationChanging = changing;
         mOrientationChangeTimedOut = false;
+        if (changing) {
+            mLastFreezeDuration = 0;
+            mWmService.mRoot.mOrientationChangeComplete = false;
+        }
     }
 
     void orientationChangeTimedOut() {
@@ -1721,7 +1725,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     boolean isVisibleRequested() {
-        return isVisible();
+        return isVisible() && (mActivityRecord == null || mActivityRecord.isVisibleRequested());
     }
 
     /**
@@ -2132,7 +2136,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 && !mAnimatingExit
                 && (mWindowFrames.mRelFrame.top != mWindowFrames.mLastRelFrame.top
                     || mWindowFrames.mRelFrame.left != mWindowFrames.mLastRelFrame.left)
-                && (!mIsChildWindow || !getParentWindow().hasMoved());
+                && (!mIsChildWindow || !getParentWindow().hasMoved())
+                && !mWmService.mAtmService.getTransitionController().isCollecting();
     }
 
     boolean isObscuringDisplay() {
@@ -3095,7 +3100,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     void setForceHideNonSystemOverlayWindowIfNeeded(boolean forceHide) {
-        if (!mSession.mOverlaysCanBeHidden
+        if (mSession.mCanAddInternalSystemWindow
                 || (!isSystemAlertWindowType(mAttrs.type) && mAttrs.type != TYPE_TOAST)) {
             return;
         }
@@ -3286,7 +3291,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             ProtoLog.v(WM_DEBUG_ORIENTATION,
                     "set mOrientationChanging of %s", this);
             setOrientationChanging(true);
-            mWmService.mRoot.mOrientationChangeComplete = false;
         }
         mLastFreezeDuration = 0;
         setDisplayLayoutNeeded();
@@ -3633,6 +3637,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // since it will be destroyed anyway. This also prevents the client from receiving
         // windowing mode change before it is destroyed.
         if (mActivityRecord != null && mActivityRecord.isRelaunching()) {
+            return;
+        }
+        // If the activity is invisible or going invisible, don't report either since it is going
+        // away. This is likely during a transition so we want to preserve the original state.
+        if (mActivityRecord != null && !mActivityRecord.isVisibleRequested()) {
             return;
         }
 
@@ -5304,7 +5313,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         updateSurfacePositionNonOrganized();
         // Send information to SufaceFlinger about the priority of the current window.
         updateFrameRateSelectionPriorityIfNeeded();
-        updateGlobalScaleIfNeeded();
+        if (isVisibleRequested()) updateGlobalScaleIfNeeded();
 
         mWinAnimator.prepareSurfaceLocked(getSyncTransaction());
         super.prepareSurfaces();

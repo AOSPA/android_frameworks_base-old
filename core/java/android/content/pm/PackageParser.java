@@ -54,6 +54,7 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.overlay.OverlayPaths;
 import android.content.pm.split.SplitAssetLoader;
 import android.content.res.ApkAssets;
 import android.content.res.AssetManager;
@@ -6150,6 +6151,56 @@ public class PackageParser {
         }
 
         /**
+         * Returns whether this instance is currently signed, or has ever been signed, with a
+         * signing certificate from the provided {@link Set} of {@code certDigests}.
+         *
+         * <p>The provided {@code certDigests} should contain the SHA-256 digest of the DER encoding
+         * of each trusted certificate with the digest characters in upper case. If this instance
+         * has multiple signers then all signers must be in the provided {@code Set}. If this
+         * instance has a signing lineage then this method will return true if any of the previous
+         * signers in the lineage match one of the entries in the {@code Set}.
+         */
+        public boolean hasAncestorOrSelfWithDigest(Set<String> certDigests) {
+            if (this == UNKNOWN || certDigests == null || certDigests.size() == 0) {
+                return false;
+            }
+            // If an app is signed by multiple signers then all of the signers must be in the Set.
+            if (signatures.length > 1) {
+                // If the Set has less elements than the number of signatures then immediately
+                // return false as there's no way to satisfy the requirement of all signatures being
+                // in the Set.
+                if (certDigests.size() < signatures.length) {
+                    return false;
+                }
+                for (Signature signature : signatures) {
+                    String signatureDigest = PackageUtils.computeSha256Digest(
+                            signature.toByteArray());
+                    if (!certDigests.contains(signatureDigest)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            String signatureDigest = PackageUtils.computeSha256Digest(signatures[0].toByteArray());
+            if (certDigests.contains(signatureDigest)) {
+                return true;
+            }
+            if (hasPastSigningCertificates()) {
+                // The last element in the pastSigningCertificates array is the current signer;
+                // since that was verified above just check all the signers in the lineage.
+                for (int i = 0; i < pastSigningCertificates.length - 1; i++) {
+                    signatureDigest = PackageUtils.computeSha256Digest(
+                            pastSigningCertificates[i].toByteArray());
+                    if (certDigests.contains(signatureDigest)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /**
          * Returns the SigningDetails with a descendant (or same) signer after verifying the
          * descendant has the same, a superset, or a subset of the lineage of the ancestor.
          *
@@ -7969,7 +8020,11 @@ public class PackageParser {
             ai.category = FallbackCategoryProvider.getFallbackCategory(ai.packageName);
         }
         ai.seInfoUser = SELinuxUtil.assignSeinfoUser(state);
-        ai.resourceDirs = state.getAllOverlayPaths();
+        final OverlayPaths overlayPaths = state.getAllOverlayPaths();
+        if (overlayPaths != null) {
+            ai.resourceDirs = overlayPaths.getResourceDirs().toArray(new String[0]);
+            ai.overlayPaths = overlayPaths.getOverlayPaths().toArray(new String[0]);
+        }
         ai.icon = (sUseRoundIcon && ai.roundIconRes != 0) ? ai.roundIconRes : ai.iconRes;
     }
 
@@ -8600,6 +8655,7 @@ public class PackageParser {
                 null,
                 null,
                 androidAppInfo.resourceDirs,
+                androidAppInfo.overlayPaths,
                 androidAppInfo.sharedLibraryFiles,
                 null,
                 null,

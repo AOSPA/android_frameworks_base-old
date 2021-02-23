@@ -83,6 +83,10 @@ import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_BLAST_SYNC;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
+import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_MISSING_WINDOW;
+import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN;
+import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_UNKNOWN;
+import static android.view.displayhash.DisplayHashResultCallback.EXTRA_DISPLAY_HASH_ERROR_CODE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BOOT;
@@ -100,6 +104,7 @@ import static com.android.internal.util.LatencyTracker.ACTION_ROTATE_SCREEN;
 import static com.android.server.LockGuard.INDEX_WINDOW;
 import static com.android.server.LockGuard.installLock;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static com.android.server.wm.ActivityTaskManagerService.POWER_MODE_REASON_FREEZE_DISPLAY;
 import static com.android.server.wm.DisplayContent.IME_TARGET_CONTROL;
 import static com.android.server.wm.DisplayContent.IME_TARGET_INPUT;
 import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
@@ -186,6 +191,7 @@ import android.os.PowerManager;
 import android.os.PowerManager.ServiceType;
 import android.os.PowerManagerInternal;
 import android.os.PowerSaveState;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
@@ -198,7 +204,6 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings;
-import android.service.screenshot.ScreenshotHash;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
 import android.sysprop.SurfaceFlingerProperties;
@@ -261,6 +266,8 @@ import android.view.WindowManager.LayoutParams;
 import android.view.WindowManager.RemoveContentMode;
 import android.view.WindowManagerGlobal;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
+import android.view.displayhash.DisplayHash;
+import android.view.displayhash.VerifiedDisplayHash;
 import android.window.ClientWindowFrames;
 import android.window.TaskSnapshot;
 
@@ -754,6 +761,7 @@ public class WindowManagerService extends IWindowManager.Stub
     final TaskSnapshotController mTaskSnapshotController;
 
     boolean mIsTouchDevice;
+    boolean mIsFakeTouchDevice;
 
     final H mH = new H();
 
@@ -770,7 +778,8 @@ public class WindowManagerService extends IWindowManager.Stub
     final EmbeddedWindowController mEmbeddedWindowController;
     final AnrController mAnrController;
 
-    private final ScreenshotHashController mScreenshotHashController;
+    private final DisplayHashController mDisplayHashController;
+
     @VisibleForTesting
     final WindowContextListenerController mWindowContextListenerController =
             new WindowContextListenerController();
@@ -979,7 +988,7 @@ public class WindowManagerService extends IWindowManager.Stub
         void updateSupportsNonResizableMultiWindow() {
             ContentResolver resolver = mContext.getContentResolver();
             final boolean supportsNonResizableMultiWindow = Settings.Global.getInt(resolver,
-                    DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 0) != 0;
+                    DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 1) != 0;
 
             mAtmService.mSupportsNonResizableMultiWindow = supportsNonResizableMultiWindow;
         }
@@ -1421,7 +1430,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mDisplayAreaPolicyProvider = DisplayAreaPolicy.Provider.fromResources(
                 mContext.getResources());
 
-        mScreenshotHashController = new ScreenshotHashController(mContext);
+        mDisplayHashController = new DisplayHashController(mContext);
         setGlobalShadowSettings();
         mAnrController = new AnrController(this);
         mStartingSurfaceController = new StartingSurfaceController(this);
@@ -2150,23 +2159,6 @@ public class WindowManagerService extends IWindowManager.Stub
             e.fillInStackTrace();
         }
         Slog.i(tag, s, e);
-    }
-
-    void setTransparentRegionWindow(Session session, IWindow client, Region region) {
-        final long origId = Binder.clearCallingIdentity();
-        try {
-            synchronized (mGlobalLock) {
-                WindowState w = windowForClientLocked(session, client, false);
-                ProtoLog.i(WM_SHOW_TRANSACTIONS, "SURFACE transparentRegionHint=%s: %s",
-                        region, w);
-
-                if ((w != null) && w.mHasSurface) {
-                    w.mWinAnimator.setTransparentRegionHintLocked(region);
-                }
-            }
-        } finally {
-            Binder.restoreCallingIdentity(origId);
-        }
     }
 
     void setInsetsWindow(Session session, IWindow client, int touchableInsets, Rect contentInsets,
@@ -4980,6 +4972,8 @@ public class WindowManagerService extends IWindowManager.Stub
             mRoot.forAllDisplays(DisplayContent::reconfigureDisplayLocked);
             mIsTouchDevice = mContext.getPackageManager().hasSystemFeature(
                     PackageManager.FEATURE_TOUCHSCREEN);
+            mIsFakeTouchDevice = mContext.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_FAKETOUCH);
         }
 
         try {
@@ -5746,8 +5740,6 @@ public class WindowManagerService extends IWindowManager.Stub
         if (!w.mToken.okToDisplay() && mWindowsFreezingScreen != WINDOWS_FREEZING_SCREENS_TIMEOUT) {
             ProtoLog.v(WM_DEBUG_ORIENTATION, "Changing surface while display frozen: %s", w);
             w.setOrientationChanging(true);
-            w.mLastFreezeDuration = 0;
-            mRoot.mOrientationChangeComplete = false;
             if (mWindowsFreezingScreen == WINDOWS_FREEZING_SCREENS_NONE) {
                 mWindowsFreezingScreen = WINDOWS_FREEZING_SCREENS_ACTIVE;
                 // XXX should probably keep timeout from
@@ -5858,6 +5850,9 @@ public class WindowManagerService extends IWindowManager.Stub
                             "startFreezingDisplayLocked: exitAnim=%d enterAnim=%d called by %s",
                             exitAnim, enterAnim, Debug.getCallers(8));
         mScreenFrozenLock.acquire();
+        // Apply launch power mode to reduce screen frozen time because orientation change may
+        // relaunch activity and redraw windows. This may also help speed up user switching.
+        mAtmService.startLaunchPowerMode(POWER_MODE_REASON_FREEZE_DISPLAY);
 
         mDisplayFrozen = true;
         mDisplayFreezeTime = SystemClock.elapsedRealtime();
@@ -6007,6 +6002,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (configChanged) {
             displayContent.sendNewConfiguration();
         }
+        mAtmService.endLaunchPowerMode(POWER_MODE_REASON_FREEZE_DISPLAY);
         mLatencyTracker.onActionEnd(ACTION_ROTATE_SCREEN);
         if (mPerf != null) {
             mPerf.perfLockRelease();
@@ -7554,8 +7550,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (spec != null) {
                     result.setTo(spec);
                 }
-                spec.scale *= windowState.mGlobalScale;
-                return spec;
+                result.scale *= windowState.mGlobalScale;
+                return result;
             }
         }
 
@@ -7985,13 +7981,10 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public boolean isTouchableDisplay(int displayId) {
+        public boolean isTouchOrFaketouchDevice() {
             synchronized (mGlobalLock) {
-                final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-                final Configuration configuration =
-                        displayContent != null ? displayContent.getConfiguration() : null;
-                return configuration != null
-                        && configuration.touchscreen == Configuration.TOUCHSCREEN_FINGER;
+                // All touchable devices are also faketouchable.
+                return mIsFakeTouchDevice;
             }
         }
 
@@ -8642,39 +8635,42 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public String[] getSupportedScreenshotHashingAlgorithms() {
-        return mScreenshotHashController.getSupportedHashingAlgorithms();
+    public String[] getSupportedDisplayHashAlgorithms() {
+        return mDisplayHashController.getSupportedHashAlgorithms();
     }
 
     @Override
-    public boolean verifyScreenshotHash(ScreenshotHash screenshotHash) {
-        return mScreenshotHashController.verifyScreenshotHash(screenshotHash);
+    public VerifiedDisplayHash verifyDisplayHash(DisplayHash displayHash) {
+        return mDisplayHashController.verifyDisplayHash(displayHash);
     }
 
-    ScreenshotHash generateScreenshotHash(Session session, IWindow window,
-            Rect boundsInWindow, String hashAlgorithm) {
+    void generateDisplayHash(Session session, IWindow window, Rect boundsInWindow,
+            String hashAlgorithm, RemoteCallback callback) {
         final SurfaceControl displaySurfaceControl;
         final Rect boundsInDisplay = new Rect(boundsInWindow);
         synchronized (mGlobalLock) {
             final WindowState win = windowForClientLocked(session, window, false);
             if (win == null) {
-                Slog.w(TAG, "Failed to generate ScreenshotHash. Invalid window");
-                return null;
+                Slog.w(TAG, "Failed to generate DisplayHash. Invalid window");
+                sendDisplayHashError(callback, DISPLAY_HASH_ERROR_MISSING_WINDOW);
+                return;
             }
 
             DisplayContent displayContent = win.getDisplayContent();
             if (displayContent == null) {
-                Slog.w(TAG, "Failed to generate ScreenshotHash. Window is not on a display");
-                return null;
+                Slog.w(TAG, "Failed to generate DisplayHash. Window is not on a display");
+                sendDisplayHashError(callback, DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN);
+                return;
             }
 
             displaySurfaceControl = displayContent.getSurfaceControl();
-            mScreenshotHashController.calculateScreenshotHashBoundsLocked(win,
-                    boundsInWindow, boundsInDisplay);
+            mDisplayHashController.calculateDisplayHashBoundsLocked(win, boundsInWindow,
+                    boundsInDisplay);
 
             if (boundsInDisplay.isEmpty()) {
-                Slog.w(TAG, "Failed to generate ScreenshotHash. Bounds are not on screen");
-                return null;
+                Slog.w(TAG, "Failed to generate DisplayHash. Bounds are not on screen");
+                sendDisplayHashError(callback, DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN);
+                return;
             }
         }
 
@@ -8693,11 +8689,18 @@ public class WindowManagerService extends IWindowManager.Stub
                 SurfaceControl.captureLayers(args);
         if (screenshotHardwareBuffer == null
                 || screenshotHardwareBuffer.getHardwareBuffer() == null) {
-            Slog.w(TAG, "Failed to generate ScreenshotHash. Failed to take screenshot");
-            return null;
+            Slog.w(TAG, "Failed to generate DisplayHash. Couldn't capture content");
+            sendDisplayHashError(callback, DISPLAY_HASH_ERROR_UNKNOWN);
+            return;
         }
 
-        return mScreenshotHashController.generateScreenshotHash(
-                screenshotHardwareBuffer.getHardwareBuffer(), boundsInWindow, hashAlgorithm);
+        mDisplayHashController.generateDisplayHash(screenshotHardwareBuffer.getHardwareBuffer(),
+                boundsInWindow, hashAlgorithm, callback);
+    }
+
+    private void sendDisplayHashError(RemoteCallback callback, int errorCode) {
+        Bundle bundle = new Bundle();
+        bundle.putInt(EXTRA_DISPLAY_HASH_ERROR_CODE, errorCode);
+        callback.sendResult(bundle);
     }
 }

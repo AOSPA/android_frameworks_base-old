@@ -25,6 +25,7 @@ import static android.net.ConnectivityManager.NetworkCallback;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -74,6 +75,7 @@ import android.net.UidRange;
 import android.net.UidRangeParcel;
 import android.net.VpnManager;
 import android.net.VpnService;
+import android.net.VpnTransportInfo;
 import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.os.Build.VERSION_CODES;
@@ -953,14 +955,7 @@ public class VpnTest {
     }
 
     private Vpn startLegacyVpn(final Vpn vpn, final VpnProfile vpnProfile) throws Exception {
-        // TODO(b/175883995): once these tests have been updated for the changes to the UserManager
-        // API, remove this ad-hoc setup code and use setMockedUsers(primaryUser) again.
-        // setMockedUsers(primaryUser);
-        final ArrayList<UserInfo> users = new ArrayList<>();
-        users.add(primaryUser);
-        when(mUserManager.getAliveUsers()).thenReturn(users);
-        when(mUserManager.getUserInfo(primaryUser.id)).thenReturn(primaryUser);
-        when(mUserManager.canHaveRestrictedProfile()).thenReturn(false);
+        setMockedUsers(primaryUser);
 
         // Dummy egress interface
         final LinkProperties lp = new LinkProperties();
@@ -989,6 +984,13 @@ public class VpnTest {
     @Test
     public void testStartRacoonHostname() throws Exception {
         startRacoon("hostname", "5.6.7.8"); // address returned by deps.resolve
+    }
+
+    private void assertTransportInfoMatches(NetworkCapabilities nc, int type) {
+        assertNotNull(nc);
+        VpnTransportInfo ti = (VpnTransportInfo) nc.getTransportInfo();
+        assertNotNull(ti);
+        assertEquals(type, ti.type);
     }
 
     public void startRacoon(final String serverAddr, final String expectedAddr)
@@ -1027,8 +1029,10 @@ public class VpnTest {
 
             // Now wait for the runner to be ready before testing for the route.
             ArgumentCaptor<LinkProperties> lpCaptor = ArgumentCaptor.forClass(LinkProperties.class);
+            ArgumentCaptor<NetworkCapabilities> ncCaptor =
+                    ArgumentCaptor.forClass(NetworkCapabilities.class);
             verify(mConnectivityManager, timeout(10_000)).registerNetworkAgent(any(), any(),
-                    lpCaptor.capture(), any(), anyInt(), any(), anyInt());
+                    lpCaptor.capture(), ncCaptor.capture(), anyInt(), any(), anyInt());
 
             // In this test the expected address is always v4 so /32.
             // Note that the interface needs to be specified because RouteInfo objects stored in
@@ -1038,6 +1042,8 @@ public class VpnTest {
             final List<RouteInfo> actualRoutes = lpCaptor.getValue().getRoutes();
             assertTrue("Expected throw route (" + expectedRoute + ") not found in " + actualRoutes,
                     actualRoutes.contains(expectedRoute));
+
+            assertTransportInfoMatches(ncCaptor.getValue(), VpnManager.TYPE_VPN_LEGACY);
         } finally {
             // Now interrupt the thread, unblock the runner and clean up.
             vpn.mVpnRunner.exitVpnRunner();
@@ -1159,10 +1165,6 @@ public class VpnTest {
         doReturn(UserHandle.of(userId)).when(asUserContext).getUser();
         when(mContext.createContextAsUser(eq(UserHandle.of(userId)), anyInt()))
                 .thenReturn(asUserContext);
-        when(asUserContext.getSystemServiceName(UserManager.class))
-                .thenReturn(Context.USER_SERVICE);
-        when(asUserContext.getSystemService(UserManager.class))
-                .thenReturn(mUserManager);
         final TestLooper testLooper = new TestLooper();
         final Vpn vpn = new Vpn(testLooper.getLooper(), mContext, new TestDeps(), mNetService,
                 mNetd, userId, mKeyStore, mSystemServices, mIkev2SessionCreator);

@@ -30,6 +30,7 @@ import android.content.pm.PackageManager.ApplicationInfoFlags;
 import android.content.pm.PackageManager.ComponentInfoFlags;
 import android.content.pm.PackageManager.PackageInfoFlags;
 import android.content.pm.PackageManager.ResolveInfoFlags;
+import android.content.pm.overlay.OverlayPaths;
 import android.content.pm.parsing.component.ParsedMainComponent;
 import android.os.Bundle;
 import android.os.Handler;
@@ -49,8 +50,8 @@ import com.android.server.pm.parsing.pkg.AndroidPackage;
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -535,17 +536,17 @@ public abstract class PackageManagerInternal {
      * Set which overlay to use for a package.
      * @param userId The user for which to update the overlays.
      * @param targetPackageName The package name of the package for which to update the overlays.
-     * @param overlayPackageNames The complete list of overlay packages that should be enabled for
-     *                            the target. Previously enabled overlays not specified in the list
-     *                            will be disabled. Pass in null or an empty list to disable
-     *                            all overlays. The order of the items is significant if several
-     *                            overlays modify the same resource.
+     * @param overlayPaths  The complete list of overlay paths that should be enabled for
+     *                      the target. Previously enabled overlays not specified in the list
+     *                      will be disabled. Pass in null or empty paths to disable all overlays.
+     *                      The order of the items is significant if several overlays modify the
+     *                      same resource.
      * @param outUpdatedPackageNames An output list that contains the package names of packages
      *                               affected by the update of enabled overlays.
      * @return true if all packages names were known by the package manager, false otherwise
      */
     public abstract boolean setEnabledOverlayPackages(int userId, String targetPackageName,
-            List<String> overlayPackageNames, Collection<String> outUpdatedPackageNames);
+            @Nullable OverlayPaths overlayPaths, Set<String> outUpdatedPackageNames);
 
     /**
      * Resolves an activity intent, allowing instant apps to be resolved.
@@ -995,6 +996,18 @@ public abstract class PackageManagerInternal {
      * Returns {@code true} if the package is suspending any packages for the user.
      */
     public abstract boolean isSuspendingAnyPackages(String suspendingPackage, int userId);
+
+    /**
+     * Register to listen for loading progress of an installed package.
+     * The listener is automatically unregistered when the app is fully loaded.
+     * @param packageName The name of the installed package
+     * @param callback To loading reporting progress
+     * @param userId The user under which to check.
+     * @return Whether the registration was successful. It can fail if the package has not been
+     *          installed yet.
+     */
+    public abstract boolean registerInstalledLoadingProgressCallback(@NonNull String packageName,
+            @NonNull InstalledLoadingProgressCallback callback, int userId);
 
     /**
      * Returns the string representation of a known package. For example,

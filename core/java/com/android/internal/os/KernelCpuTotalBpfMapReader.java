@@ -23,12 +23,6 @@ public final class KernelCpuTotalBpfMapReader {
     private KernelCpuTotalBpfMapReader() {
     }
 
-    /** Returns whether total CPU time is measured. */
-    public static boolean isSupported() {
-        // TODO(b/174245730): Implement this check.
-        return true;
-    }
-
     /** Reads total CPU time from bpf map. */
     public static native boolean read(Callback callback);
 

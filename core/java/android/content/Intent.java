@@ -4766,6 +4766,32 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_PACKAGE_NEEDS_INTEGRITY_VERIFICATION =
             "android.intent.action.PACKAGE_NEEDS_INTEGRITY_VERIFICATION";
 
+    /**
+     * Broadcast Action: Indicates that the device's reboot readiness has changed.
+     *
+     * <p>This broadcast will be sent with an extra that indicates whether or not the device is
+     * ready to reboot.
+     * <p>
+     * The receiver <em>must</em> have the {@link android.Manifest.permission#REBOOT} permission.
+     * <p class="note">
+     * This is a protected intent that can only be sent by the system.
+     *
+     * @see #EXTRA_IS_READY_TO_REBOOT
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_REBOOT_READY = "android.intent.action.REBOOT_READY";
+
+    /**
+     * A boolean extra used with {@link #ACTION_REBOOT_READY} which indicates if the
+     * device is ready to reboot.
+     * Will be {@code true} if ready to reboot, {@code false} otherwise.
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_IS_READY_TO_REBOOT = "android.intent.extra.IS_READY_TO_REBOOT";
+
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
     // Standard intent categories (see addCategory()).
@@ -5730,7 +5756,7 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_BUG_REPORT = "android.intent.extra.BUG_REPORT";
 
     /**
-     * Used in the extra field in the remote intent. It's astring token passed with the
+     * Used in the extra field in the remote intent. It's a string token passed with the
      * remote intent.
      */
     public static final String EXTRA_REMOTE_INTENT_TOKEN =
@@ -6073,6 +6099,16 @@ public class Intent implements Parcelable, Cloneable {
      * <p>Type: String
      */
     public static final String EXTRA_UNSTARTABLE_REASON = "android.intent.extra.UNSTARTABLE_REASON";
+
+    /**
+     * A boolean extra indicating whether an activity is bubbled. Set on the shortcut or
+     * pending intent provided for the bubble. If the extra is not present or false, then it is not
+     * bubbled.
+     *
+     * @see android.app.Notification.Builder#setBubbleMetadata(Notification.BubbleMetadata)
+     * @see android.app.Notification.BubbleMetadata.Builder#Builder(String)
+     */
+    public static final String EXTRA_IS_BUBBLED = "android.intent.extra.IS_BUBBLED";
 
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------

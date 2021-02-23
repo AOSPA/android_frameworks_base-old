@@ -31,6 +31,8 @@ import android.util.ArrayMap;
 import android.util.Base64;
 import android.util.Slog;
 
+import com.android.internal.annotations.VisibleForTesting;
+
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
@@ -40,8 +42,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Manages set of updatable font files.
@@ -118,6 +122,12 @@ final class UpdatableFontDir {
      */
     private final ArrayMap<String, FontFileInfo> mFontFileInfoMap = new ArrayMap<>();
 
+    /**
+     * A mutable map containing mapping from font family name to {@link FontConfig.FontFamily}.
+     * The FontFamily entries only reference font files in {@link #mFontFileInfoMap}.
+     */
+    private final ArrayMap<String, FontConfig.FontFamily> mFontFamilyMap = new ArrayMap<>();
+
     UpdatableFontDir(File filesDir, List<File> preinstalledFontDirs, FontFileParser parser,
             FsverityUtil fsverityUtil) {
         this(filesDir, preinstalledFontDirs, parser, fsverityUtil, new File(CONFIG_XML_FILE));
@@ -136,6 +146,7 @@ final class UpdatableFontDir {
 
     /* package */ void loadFontFileMap() {
         mFontFileInfoMap.clear();
+        mFontFamilyMap.clear();
         mLastModifiedDate = 0;
         boolean success = false;
         try {
@@ -168,6 +179,17 @@ final class UpdatableFontDir {
                 FontFileInfo fontFileInfo = validateFontFile(files[0]);
                 addFileToMapIfNewer(fontFileInfo, true /* deleteOldFile */);
             }
+            // Resolve font file paths.
+            List<FontConfig.FontFamily> fontFamilies = config.fontFamilies;
+            for (int i = 0; i < fontFamilies.size(); i++) {
+                FontConfig.FontFamily fontFamily = fontFamilies.get(i);
+                try {
+                    addFontFamily(fontFamily);
+                } catch (SystemFontException e) {
+                    // Ignore failures as updated fonts may be obsoleted by system OTA update.
+                    Slog.i(TAG, "Obsolete font family: " + fontFamily.getName());
+                }
+            }
             success = true;
         } catch (Throwable t) {
             // If something happened during loading system fonts, clear all contents in finally
@@ -177,6 +199,7 @@ final class UpdatableFontDir {
             // Delete all files just in case if we find a problematic file.
             if (!success) {
                 mFontFileInfoMap.clear();
+                mFontFamilyMap.clear();
                 mLastModifiedDate = 0;
                 FileUtils.deleteContents(mFilesDir);
             }
@@ -186,10 +209,11 @@ final class UpdatableFontDir {
     /* package */ void clearUpdates() throws SystemFontException {
         mFontFileInfoMap.clear();
         FileUtils.deleteContents(mFilesDir);
+        mFontFamilyMap.clear();
 
         mLastModifiedDate = Instant.now().getEpochSecond();
         try (FileOutputStream fos = new FileOutputStream(mConfigFile)) {
-            PersistentSystemFontConfig.writeToXml(fos, getPersistentConfig());
+            PersistentSystemFontConfig.writeToXml(fos, createPersistentConfig());
         } catch (Exception e) {
             throw new SystemFontException(
                     FontManager.RESULT_ERROR_FAILED_UPDATE_CONFIG,
@@ -206,17 +230,26 @@ final class UpdatableFontDir {
     public void update(List<FontUpdateRequest> requests) throws SystemFontException {
         // Backup the mapping for rollback.
         ArrayMap<String, FontFileInfo> backupMap = new ArrayMap<>(mFontFileInfoMap);
+        ArrayMap<String, FontConfig.FontFamily> backupFamilies = new ArrayMap<>(mFontFamilyMap);
         long backupLastModifiedDate = mLastModifiedDate;
         boolean success = false;
         try {
             for (FontUpdateRequest request : requests) {
-                installFontFile(request.getFd().getFileDescriptor(), request.getSignature());
+                switch (request.getType()) {
+                    case FontUpdateRequest.TYPE_UPDATE_FONT_FILE:
+                        installFontFile(
+                                request.getFd().getFileDescriptor(), request.getSignature());
+                        break;
+                    case FontUpdateRequest.TYPE_UPDATE_FONT_FAMILY:
+                        addFontFamily(request.getFontFamily());
+                        break;
+                }
             }
 
             // Write config file.
             mLastModifiedDate = Instant.now().getEpochSecond();
             try (FileOutputStream fos = new FileOutputStream(mTmpConfigFile)) {
-                PersistentSystemFontConfig.writeToXml(fos, getPersistentConfig());
+                PersistentSystemFontConfig.writeToXml(fos, createPersistentConfig());
             } catch (Exception e) {
                 throw new SystemFontException(
                         FontManager.RESULT_ERROR_FAILED_UPDATE_CONFIG,
@@ -234,6 +267,8 @@ final class UpdatableFontDir {
             if (!success) {
                 mFontFileInfoMap.clear();
                 mFontFileInfoMap.putAll(backupMap);
+                mFontFamilyMap.clear();
+                mFontFamilyMap.putAll(backupFamilies);
                 mLastModifiedDate = backupLastModifiedDate;
             }
         }
@@ -454,12 +489,49 @@ final class UpdatableFontDir {
         }
     }
 
-    private PersistentSystemFontConfig.Config getPersistentConfig() {
+    /**
+     * Adds a font family to {@link #mFontFamilyMap} and returns true on success.
+     *
+     * <p>This method only accepts adding or updating a font family with a name.
+     * This is to prevent bad font family update from removing glyphs from font fallback chains.
+     * Unnamed font families are used as other named font family's fallback fonts to guarantee a
+     * complete glyph coverage.
+     */
+    private void addFontFamily(FontConfig.FontFamily fontFamily) throws SystemFontException {
+        Objects.requireNonNull(fontFamily.getName());
+        FontConfig.FontFamily resolvedFontFamily = resolveFontFiles(fontFamily);
+        if (resolvedFontFamily == null) {
+            throw new SystemFontException(
+                    FontManager.RESULT_ERROR_FONT_NOT_FOUND,
+                    "Required fonts are not available");
+        }
+        mFontFamilyMap.put(resolvedFontFamily.getName(), resolvedFontFamily);
+    }
+
+    @Nullable
+    private FontConfig.FontFamily resolveFontFiles(FontConfig.FontFamily fontFamily) {
+        List<FontConfig.Font> resolvedFonts = new ArrayList<>(fontFamily.getFontList().size());
+        List<FontConfig.Font> fontList = fontFamily.getFontList();
+        for (int i = 0; i < fontList.size(); i++) {
+            FontConfig.Font font = fontList.get(i);
+            FontFileInfo info = mFontFileInfoMap.get(font.getFile().getName());
+            if (info == null) {
+                return null;
+            }
+            resolvedFonts.add(new FontConfig.Font(info.mFile, null, font.getStyle(),
+                    font.getTtcIndex(), font.getFontVariationSettings(), font.getFontFamilyName()));
+        }
+        return new FontConfig.FontFamily(resolvedFonts, fontFamily.getName(),
+                fontFamily.getLocaleList(), fontFamily.getVariant());
+    }
+
+    private PersistentSystemFontConfig.Config createPersistentConfig() {
         PersistentSystemFontConfig.Config config = new PersistentSystemFontConfig.Config();
         config.lastModifiedDate = mLastModifiedDate;
         for (FontFileInfo info : mFontFileInfoMap.values()) {
             config.updatedFontDirs.add(info.getRandomizedFontDir().getName());
         }
+        config.fontFamilies.addAll(mFontFamilyMap.values());
         return config;
     }
 
@@ -471,8 +543,24 @@ final class UpdatableFontDir {
         return map;
     }
 
+    @VisibleForTesting
+    Map<String, FontConfig.FontFamily> getFontFamilyMap() {
+        return mFontFamilyMap;
+    }
+
     /* package */ FontConfig getSystemFontConfig() {
-        return SystemFonts.getSystemFontConfig(getFontFileMap(), mLastModifiedDate, mConfigVersion);
+        FontConfig config = SystemFonts.getSystemFontConfig(getFontFileMap(), 0, 0);
+        List<FontConfig.FontFamily> mergedFamilies =
+                new ArrayList<>(config.getFontFamilies().size() + mFontFamilyMap.size());
+        // We should keep the first font family (config.getFontFamilies().get(0)) because it's used
+        // as a fallback font. See SystemFonts.java.
+        mergedFamilies.addAll(config.getFontFamilies());
+        // When building Typeface, a latter font family definition will override the previous font
+        // family definition with the same name. An exception is config.getFontFamilies.get(0),
+        // which will be used as a fallback font without being overridden.
+        mergedFamilies.addAll(mFontFamilyMap.values());
+        return new FontConfig(
+                mergedFamilies, config.getAliases(), mLastModifiedDate, mConfigVersion);
     }
 
     /* package */ int getConfigVersion() {

@@ -4466,6 +4466,10 @@ public class TelephonyManager {
      * This functionality is only available to the app filling the {@link RoleManager#ROLE_DIALER}
      * role on the device.
      *
+     * This functionality is only available when
+     * {@link CarrierConfigManager#KEY_SUPPORTS_CALL_COMPOSER_BOOL} is set to {@code true} in the
+     * bundle returned from {@link #getCarrierConfig()}.
+     *
      * @param pictureToUpload An {@link InputStream} that supplies the bytes representing the
      *                        picture to upload. The client bears responsibility for closing this
      *                        stream after {@code callback} is called with success or failure.
@@ -4474,7 +4478,9 @@ public class TelephonyManager {
      *                        of {@link #getMaximumCallComposerPictureSize()}, the upload will be
      *                        aborted and the callback will be called with an exception containing
      *                        {@link CallComposerException#ERROR_FILE_TOO_LARGE}.
-     * @param contentType The MIME type of the picture you're uploading (e.g. image/jpeg)
+     * @param contentType The MIME type of the picture you're uploading (e.g. image/jpeg). The list
+     *                    of acceptable content types can be found at 3GPP TS 26.141 sections
+     *                    4.2 and 4.3.
      * @param executor The {@link Executor} on which the {@code pictureToUpload} stream will be
      *                 read, as well as on which the callback will be called.
      * @param callback A callback called when the upload operation terminates, either in success
@@ -8497,6 +8503,11 @@ public class TelephonyManager {
      * <p>Requires Permission:
      * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the calling
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     * <p>
+     * If {@link android.telephony.TelephonyManager#isRadioInterfaceCapabilitySupported}
+     * ({@link TelephonyManager#CAPABILITY_ALLOWED_NETWORK_TYPES_USED}) returns true, then
+     * setAllowedNetworkTypesBitmap is used on the radio interface.  Otherwise,
+     * setPreferredNetworkTypesBitmap is used instead.
      *
      * @param subId the id of the subscription to set the preferred network type for.
      * @param networkType the preferred network type
@@ -8530,6 +8541,11 @@ public class TelephonyManager {
      * <p>Requires Permission:
      * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the calling
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     * <p>
+     * If {@link android.telephony.TelephonyManager#isRadioInterfaceCapabilitySupported}
+     * ({@link TelephonyManager#CAPABILITY_ALLOWED_NETWORK_TYPES_USED}) returns true, then
+     * setAllowedNetworkTypesBitmap is used on the radio interface.  Otherwise,
+     * setPreferredNetworkTypesBitmap is used instead.
      *
      * @param networkTypeBitmask The bitmask of preferred network types.
      * @return true on success; false on any failure.
@@ -8556,6 +8572,11 @@ public class TelephonyManager {
      * Set the allowed network types of the device. This is for carrier or privileged apps to
      * enable/disable certain network types on the device. The user preferred network types should
      * be set through {@link #setPreferredNetworkTypeBitmask}.
+     * <p>
+     * If {@link android.telephony.TelephonyManager#isRadioInterfaceCapabilitySupported}
+     * ({@link TelephonyManager#CAPABILITY_ALLOWED_NETWORK_TYPES_USED}) returns true, then
+     * setAllowedNetworkTypesBitmap is used on the radio interface.  Otherwise,
+     * setPreferredNetworkTypesBitmap is used instead.
      *
      * @param allowedNetworkTypes The bitmask of allowed network types.
      * @return true on success; false on any failure.
@@ -8582,7 +8603,8 @@ public class TelephonyManager {
     @IntDef({
             ALLOWED_NETWORK_TYPES_REASON_USER,
             ALLOWED_NETWORK_TYPES_REASON_POWER,
-            ALLOWED_NETWORK_TYPES_REASON_CARRIER
+            ALLOWED_NETWORK_TYPES_REASON_CARRIER,
+            ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface AllowedNetworkTypesReason {
@@ -8619,6 +8641,14 @@ public class TelephonyManager {
     public static final int ALLOWED_NETWORK_TYPES_REASON_CARRIER = 2;
 
     /**
+     * To indicate allowed network type change is requested by the user via the 2G toggle.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G = 3;
+
+    /**
      * Set the allowed network types of the device and
      * provide the reason triggering the allowed network change.
      * This can be called for following reasons
@@ -8627,9 +8657,16 @@ public class TelephonyManager {
      * <li>Allowed network types control by power manager
      * {@link #ALLOWED_NETWORK_TYPES_REASON_POWER}
      * <li>Allowed network types control by carrier {@link #ALLOWED_NETWORK_TYPES_REASON_CARRIER}
+     * <li>Allowed network types control by the user-controlled "Allow 2G" toggle
+     * {@link #ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G}
      * </ol>
      * This API will result in allowing an intersection of allowed network types for all reasons,
      * including the configuration done through other reasons.
+     * <p>
+     * If {@link android.telephony.TelephonyManager#isRadioInterfaceCapabilitySupported}
+     * ({@link TelephonyManager#CAPABILITY_ALLOWED_NETWORK_TYPES_USED}) returns true, then
+     * setAllowedNetworkTypesBitmap is used on the radio interface.  Otherwise,
+     * setPreferredNetworkTypesBitmap is used instead.
      *
      * @param reason the reason the allowed network type change is taking place
      * @param allowedNetworkTypes The bitmask of allowed network types.
@@ -8705,6 +8742,7 @@ public class TelephonyManager {
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER:
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER:
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_CARRIER:
+            case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G:
                 return true;
         }
         return false;
@@ -11261,16 +11299,21 @@ public class TelephonyManager {
      *
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges})
-     * and {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}.
+     * Additionally, depending on the level of location permissions the caller holds (i.e. no
+     * location permissions, {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}, or
+     * {@link android.Manifest.permission#ACCESS_FINE_LOCATION}), location-sensitive fields will
+     * be cleared from the return value.
+     *
+     * <p>Note also that if the caller holds any sort of location permission, a usage event for the
+     * {@link android.app.AppOpsManager#OPSTR_FINE_LOCATION} or
+     * {@link android.app.AppOpsManager#OPSTR_FINE_LOCATION}
+     * will be logged against the caller when calling this method.
      *
      * May return {@code null} when the subscription is inactive or when there was an error
      * communicating with the phone process.
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
-    @RequiresPermission(allOf = {
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-    })
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     public @Nullable ServiceState getServiceState() {
         return getServiceStateForSubscriber(getSubId());
     }
@@ -14862,10 +14905,24 @@ public class TelephonyManager {
     public static final String CAPABILITY_SECONDARY_LINK_BANDWIDTH_VISIBLE =
             "CAPABILITY_SECONDARY_LINK_BANDWIDTH_VISIBLE";
 
+    /**
+     * Indicates whether {@link #setPreferredNetworkType}, {@link
+     * #setPreferredNetworkTypeBitmask}, {@link #setAllowedNetworkTypes} and
+     * {@link #setAllowedNetworkTypesForReason} rely on
+     * setAllowedNetworkTypesBitmap instead of setPreferredNetworkTypesBitmap on the radio
+     * interface.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String CAPABILITY_ALLOWED_NETWORK_TYPES_USED =
+            "CAPABILITY_ALLOWED_NETWORK_TYPES_USED";
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @StringDef(prefix = "CAPABILITY_", value = {
             CAPABILITY_SECONDARY_LINK_BANDWIDTH_VISIBLE,
+            CAPABILITY_ALLOWED_NETWORK_TYPES_USED,
     })
     public @interface RadioInterfaceCapability {}
 
@@ -15000,6 +15057,7 @@ public class TelephonyManager {
         }
         return THERMAL_MITIGATION_RESULT_UNKNOWN_ERROR;
     }
+
     /**
      * Registers a listener object to receive notification of changes
      * in specified telephony states.
@@ -15164,8 +15222,13 @@ public class TelephonyManager {
      *     <li>Generate the ks_NAF/ ks_Ext_NAF to be returned via the callback.</li>
      * </ol>
      *
-     * <p> Requires Permission: MODIFY_PHONE_STATE or that the calling app has carrier
-     * privileges (see {@link #hasCarrierPrivileges}).
+     * <p> Requires Permission:
+     * <ul>
+     *     <li>{@link android.Manifest.permission#MODIFY_PHONE_STATE},</li>
+     *     <li>{@link android.Manifest.permission#PERFORM_IMS_SINGLE_REGISTRATION},</li>
+     *     <li>or that the caller has carrier privileges (see
+     *         {@link TelephonyManager#hasCarrierPrivileges()}).</li>
+     * </ul>
      * @param appType icc application type, like {@link #APPTYPE_USIM} or {@link
      * #APPTYPE_ISIM} or {@link#APPTYPE_UNKNOWN}
      * @param nafId Network Application Function(NAF) fully qualified domain name and
@@ -15192,7 +15255,8 @@ public class TelephonyManager {
      */
     @SystemApi
     @WorkerThread
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresPermission(anyOf = {android.Manifest.permission.MODIFY_PHONE_STATE,
+            Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION})
     public void bootstrapAuthenticationRequest(
             @UiccAppTypeExt int appType, @NonNull Uri nafId,
             @NonNull UaSecurityProtocolIdentifier securityProtocol,
@@ -15355,5 +15419,67 @@ public class TelephonyManager {
         } else {
             return PhoneCapability.DEFAULT_SSSS_CAPABILITY;
         }
+    }
+
+    /**
+     * The unattended reboot was prepared successfully.
+     * @hide
+     */
+    @SystemApi
+    public static final int PREPARE_UNATTENDED_REBOOT_SUCCESS = 0;
+
+    /**
+     * The unattended reboot was prepared, but the user will need to manually
+     * enter the PIN code of at least one SIM card present in the device.
+     * @hide
+     */
+    @SystemApi
+    public static final int PREPARE_UNATTENDED_REBOOT_PIN_REQUIRED = 1;
+
+    /**
+     * The unattended reboot was not prepared due to generic error.
+     * @hide
+     */
+    @SystemApi
+    public static final int PREPARE_UNATTENDED_REBOOT_ERROR = 2;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"PREPARE_UNATTENDED_REBOOT_"},
+            value = {
+                    PREPARE_UNATTENDED_REBOOT_SUCCESS,
+                    PREPARE_UNATTENDED_REBOOT_PIN_REQUIRED,
+                    PREPARE_UNATTENDED_REBOOT_ERROR
+            })
+    public @interface PrepareUnattendedRebootResult {}
+
+    /**
+     * Prepare TelephonyManager for an unattended reboot. The reboot is required to be done
+     * shortly (e.g. within 15 seconds) after the API is invoked.
+     *
+     * <p>Requires Permission:
+     *   {@link android.Manifest.permission#REBOOT}
+     *
+     * @return {@link #PREPARE_UNATTENDED_REBOOT_SUCCESS} in case of success.
+     * {@link #PREPARE_UNATTENDED_REBOOT_PIN_REQUIRED} if the device contains
+     * at least one SIM card for which the user needs to manually enter the PIN
+     * code after the reboot. {@link #PREPARE_UNATTENDED_REBOOT_ERROR} in case
+     * of error.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.REBOOT)
+    @PrepareUnattendedRebootResult
+    public int prepareForUnattendedReboot() {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.prepareForUnattendedReboot();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Telephony#prepareForUnattendedReboot RemoteException", e);
+            e.rethrowFromSystemServer();
+        }
+        return PREPARE_UNATTENDED_REBOOT_ERROR;
     }
 }

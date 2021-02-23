@@ -355,29 +355,48 @@ static void Typeface_forceSetStaticFinalField(JNIEnv *env, jclass cls, jstring f
     env->SetStaticObjectField(cls, fid, typeface);
 }
 
+// Critical Native
+static jint Typeface_getFamilySize(CRITICAL_JNI_PARAMS_COMMA jlong faceHandle) {
+    return toTypeface(faceHandle)->fFontCollection->getFamilies().size();
+}
+
+// Critical Native
+static jlong Typeface_getFamily(CRITICAL_JNI_PARAMS_COMMA jlong faceHandle, jint index) {
+    std::shared_ptr<minikin::FontFamily> family =
+            toTypeface(faceHandle)->fFontCollection->getFamilies()[index];
+    return reinterpret_cast<jlong>(new FontFamilyWrapper(std::move(family)));
+}
+
+// Regular JNI
+static void Typeface_warmUpCache(JNIEnv* env, jobject, jstring jFilePath) {
+    ScopedUtfChars filePath(env, jFilePath);
+    makeSkDataCached(filePath.c_str(), false /* fs verity */);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
 static const JNINativeMethod gTypefaceMethods[] = {
-    { "nativeCreateFromTypeface", "(JI)J", (void*)Typeface_createFromTypeface },
-    { "nativeCreateFromTypefaceWithExactStyle", "(JIZ)J",
-            (void*)Typeface_createFromTypefaceWithExactStyle },
-    { "nativeCreateFromTypefaceWithVariation", "(JLjava/util/List;)J",
-            (void*)Typeface_createFromTypefaceWithVariation },
-    { "nativeCreateWeightAlias",  "(JI)J", (void*)Typeface_createWeightAlias },
-    { "nativeGetReleaseFunc",     "()J",  (void*)Typeface_getReleaseFunc },
-    { "nativeGetStyle",           "(J)I",  (void*)Typeface_getStyle },
-    { "nativeGetWeight",      "(J)I",  (void*)Typeface_getWeight },
-    { "nativeCreateFromArray",    "([JJII)J",
-                                           (void*)Typeface_createFromArray },
-    { "nativeSetDefault",         "(J)V",   (void*)Typeface_setDefault },
-    { "nativeGetSupportedAxes",   "(J)[I",  (void*)Typeface_getSupportedAxes },
-    { "nativeRegisterGenericFamily", "(Ljava/lang/String;J)V",
-          (void*)Typeface_registerGenericFamily },
-    { "nativeWriteTypefaces", "(Ljava/nio/ByteBuffer;[J)I", (void*)Typeface_writeTypefaces},
-    { "nativeReadTypefaces", "(Ljava/nio/ByteBuffer;)[J", (void*)Typeface_readTypefaces},
-    { "nativeForceSetStaticFinalField", "(Ljava/lang/String;Landroid/graphics/Typeface;)V",
-          (void*)Typeface_forceSetStaticFinalField },
+        {"nativeCreateFromTypeface", "(JI)J", (void*)Typeface_createFromTypeface},
+        {"nativeCreateFromTypefaceWithExactStyle", "(JIZ)J",
+         (void*)Typeface_createFromTypefaceWithExactStyle},
+        {"nativeCreateFromTypefaceWithVariation", "(JLjava/util/List;)J",
+         (void*)Typeface_createFromTypefaceWithVariation},
+        {"nativeCreateWeightAlias", "(JI)J", (void*)Typeface_createWeightAlias},
+        {"nativeGetReleaseFunc", "()J", (void*)Typeface_getReleaseFunc},
+        {"nativeGetStyle", "(J)I", (void*)Typeface_getStyle},
+        {"nativeGetWeight", "(J)I", (void*)Typeface_getWeight},
+        {"nativeCreateFromArray", "([JJII)J", (void*)Typeface_createFromArray},
+        {"nativeSetDefault", "(J)V", (void*)Typeface_setDefault},
+        {"nativeGetSupportedAxes", "(J)[I", (void*)Typeface_getSupportedAxes},
+        {"nativeRegisterGenericFamily", "(Ljava/lang/String;J)V",
+         (void*)Typeface_registerGenericFamily},
+        {"nativeWriteTypefaces", "(Ljava/nio/ByteBuffer;[J)I", (void*)Typeface_writeTypefaces},
+        {"nativeReadTypefaces", "(Ljava/nio/ByteBuffer;)[J", (void*)Typeface_readTypefaces},
+        {"nativeForceSetStaticFinalField", "(Ljava/lang/String;Landroid/graphics/Typeface;)V",
+         (void*)Typeface_forceSetStaticFinalField},
+        {"nativeGetFamilySize", "(J)I", (void*)Typeface_getFamilySize},
+        {"nativeGetFamily", "(JI)J", (void*)Typeface_getFamily},
+        {"nativeWarmUpCache", "(Ljava/lang/String;)V", (void*)Typeface_warmUpCache},
 };
 
 int register_android_graphics_Typeface(JNIEnv* env)

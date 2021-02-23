@@ -267,6 +267,9 @@ interface IDevicePolicyManager {
     void setSecondaryLockscreenEnabled(in ComponentName who, boolean enabled);
     boolean isSecondaryLockscreenEnabled(in UserHandle userHandle);
 
+    void setNetworkSlicingEnabled(in boolean enabled);
+    boolean isNetworkSlicingEnabled(int userHandle);
+
     void setLockTaskPackages(in ComponentName who, in String[] packages);
     String[] getLockTaskPackages(in ComponentName who);
     boolean isLockTaskPermitted(in String pkg);
@@ -492,6 +495,7 @@ interface IDevicePolicyManager {
     boolean canProfileOwnerResetPasswordWhenLocked(int userId);
 
     void setNextOperationSafety(int operation, int reason);
+    boolean isSafeOperation(int reason);
 
     String getEnrollmentSpecificId(String callerPackage);
     void setOrganizationIdForUser(in String callerPackage, in String enterpriseId, int userId);
@@ -501,4 +505,11 @@ interface IDevicePolicyManager {
 
     void resetDefaultCrossProfileIntentFilters(int userId);
     boolean canAdminGrantSensorsPermissionsForUser(int userId);
+
+    void setUsbDataSignalingEnabled(String callerPackage, boolean enabled);
+    boolean isUsbDataSignalingEnabled(String callerPackage);
+    boolean isUsbDataSignalingEnabledForUser(int userId);
+    boolean canUsbDataSignalingBeDisabled();
+
+    List<UserHandle> listForegroundAffiliatedUsers();
 }

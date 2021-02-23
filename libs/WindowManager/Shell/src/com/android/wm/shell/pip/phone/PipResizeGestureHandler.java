@@ -106,7 +106,8 @@ public class PipResizeGestureHandler {
     // For pinch-resize
     private boolean mThresholdCrossed0;
     private boolean mThresholdCrossed1;
-    private boolean mUsingPinchToZoom = false;
+    private boolean mUsingPinchToZoom = true;
+    private float mAngle = 0;
     int mFirstIndex = -1;
     int mSecondIndex = -1;
 
@@ -138,7 +139,7 @@ public class PipResizeGestureHandler {
         mEnablePinchResize = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 PIP_PINCH_RESIZE,
-                /* defaultValue = */ false);
+                /* defaultValue = */ true);
         DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI,
                 mMainExecutor,
                 new DeviceConfig.OnPropertiesChangedListener() {
@@ -146,7 +147,7 @@ public class PipResizeGestureHandler {
                     public void onPropertiesChanged(DeviceConfig.Properties properties) {
                         if (properties.getKeyset().contains(PIP_PINCH_RESIZE)) {
                             mEnablePinchResize = properties.getBoolean(
-                                    PIP_PINCH_RESIZE, /* defaultValue = */ false);
+                                    PIP_PINCH_RESIZE, /* defaultValue = */ true);
                         }
                     }
                 });
@@ -420,18 +421,25 @@ public class PipResizeGestureHandler {
                 float down1X = mDownSecondaryPoint.x;
                 float down1Y = mDownSecondaryPoint.y;
 
-                // Top right + Bottom left pinch to zoom.
-                if ((down0X > focusX && down0Y < focusY && down1X < focusX && down1Y > focusY)
-                        || (down1X > focusX && down1Y < focusY
-                        && down0X < focusX && down0Y > focusY)) {
+                if (down0X > focusX && down0Y < focusY && down1X < focusX && down1Y > focusY) {
+                    // Top right + Bottom left pinch to zoom.
                     mAngle = calculateRotationAngle(mLastResizeBounds.centerX(),
                             mLastResizeBounds.centerY(), x0, y0, x1, y1, true);
-                } else if ((down0X < focusX && down0Y < focusY
-                        && down1X > focusX && down1Y > focusY)
-                        || (down1X < focusX && down1Y < focusY
-                        && down0X > focusX && down0Y > focusY)) {
+                } else if (down1X > focusX && down1Y < focusY
+                        && down0X < focusX && down0Y > focusY) {
+                    // Top right + Bottom left pinch to zoom.
+                    mAngle = calculateRotationAngle(mLastResizeBounds.centerX(),
+                            mLastResizeBounds.centerY(), x1, y1, x0, y0, true);
+                } else if (down0X < focusX && down0Y < focusY
+                        && down1X > focusX && down1Y > focusY) {
+                    // Top left + bottom right pinch to zoom.
                     mAngle = calculateRotationAngle(mLastResizeBounds.centerX(),
                             mLastResizeBounds.centerY(), x0, y0, x1, y1, false);
+                } else if (down1X < focusX && down1Y < focusY
+                        && down0X > focusX && down0Y > focusY) {
+                    // Top left + bottom right pinch to zoom.
+                    mAngle = calculateRotationAngle(mLastResizeBounds.centerX(),
+                            mLastResizeBounds.centerY(), x1, y1, x0, y0, false);
                 }
 
                 mLastResizeBounds.set(PipPinchResizingAlgorithm.pinchResize(x0, y0, x1, y1,
@@ -445,21 +453,26 @@ public class PipResizeGestureHandler {
         }
     }
 
-    private float mAngle = 0;
-
-    private float calculateRotationAngle(int focusX, int focusY, float x0, float y0,
-            float x1, float y1, boolean positive) {
+    private float calculateRotationAngle(int pivotX, int pivotY, float topX, float topY,
+            float bottomX, float bottomY, boolean positive) {
 
         // The base angle is the angle formed by taking the angle between the center horizontal
         // and one of the corners.
-        double baseAngle = Math.toDegrees(Math.atan2(Math.abs(mLastResizeBounds.top - focusY),
-                Math.abs(mLastResizeBounds.right - focusX)));
+        double baseAngle = Math.toDegrees(Math.atan2(Math.abs(mLastResizeBounds.top - pivotY),
+                Math.abs(mLastResizeBounds.right - pivotX)));
+
         double angle0 = mThresholdCrossed0
-                ? Math.toDegrees(Math.atan2(Math.abs(y0 - focusY), Math.abs(x0 - focusX)))
-                : baseAngle;
-        double angle1 = mThresholdCrossed1
-                ? Math.toDegrees(Math.atan2(Math.abs(y1 - focusY), Math.abs(x1 - focusX)))
-                : baseAngle;
+                ? Math.toDegrees(Math.atan2(pivotY - topY, topX - pivotX)) : baseAngle;
+        double angle1 = mThresholdCrossed0
+                ? Math.toDegrees(Math.atan2(pivotY - bottomY, bottomX - pivotX)) : baseAngle;
+
+
+        if (positive) {
+            angle1 = angle1 < 0 ? 180 + angle1 : angle1 - 180;
+        } else {
+            angle0 = angle0 < 0 ? -angle0 - 180 : 180 - angle0;
+            angle1 = -angle1;
+        }
 
         // Calculate the percentage difference of [0, 90] compare to the base angle.
         double diff0 = (Math.max(0, Math.min(angle0, 90)) - baseAngle) / 90;
@@ -503,8 +516,8 @@ public class PipResizeGestureHandler {
                     }
                     if (mThresholdCrossed) {
                         if (mPhonePipMenuController.isMenuVisible()) {
-                            mPhonePipMenuController.hideMenuWithoutResize();
-                            mPhonePipMenuController.hideMenu();
+                            mPhonePipMenuController.hideMenu(false /* animate */,
+                                    false /* resize */);
                         }
                         final Rect currentPipBounds = mPipBoundsState.getBounds();
                         mLastResizeBounds.set(TaskResizingAlgorithm.resizeDrag(x, y,
@@ -545,8 +558,8 @@ public class PipResizeGestureHandler {
                         || mLastResizeBounds.height() >= PINCH_RESIZE_AUTO_MAX_RATIO * mMaxSize.y) {
                     mLastResizeBounds.set(0, 0, mMaxSize.x, mMaxSize.y);
                 }
-                mPipBoundsAlgorithm.applySnapFraction(mLastResizeBounds,
-                        mPipBoundsAlgorithm.getSnapFraction(mPipBoundsState.getBounds()));
+                final float snapFraction = mPipBoundsAlgorithm.getSnapFraction(mLastResizeBounds);
+                mPipBoundsAlgorithm.applySnapFraction(mLastResizeBounds, snapFraction);
                 mPipTaskOrganizer.scheduleAnimateResizePip(startBounds, mLastResizeBounds,
                         PINCH_RESIZE_SNAP_DURATION, -mAngle, callback);
             } else {

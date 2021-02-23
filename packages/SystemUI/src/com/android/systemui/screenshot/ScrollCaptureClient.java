@@ -50,8 +50,6 @@ import javax.inject.Inject;
 public class ScrollCaptureClient {
     private static final int TILE_SIZE_PX_MAX = 4 * (1024 * 1024);
     private static final int TILES_PER_PAGE = 2; // increase once b/174571735 is addressed
-    private static final int MAX_PAGES = 5;
-    private static final int MAX_IMAGE_COUNT = MAX_PAGES * TILES_PER_PAGE;
 
     @VisibleForTesting
     static final int MATCH_ANY_TASK = ActivityTaskManager.INVALID_TASK_ID;
@@ -66,10 +64,11 @@ public class ScrollCaptureClient {
         /**
          * Session start should be deferred until UI is active because of resource allocation and
          * potential visible side effects in the target window.
-
+         *
          * @param sessionConsumer listener to receive the session once active
+         * @param maxPages the capture buffer size expressed as a multiple of the content height
          */
-        void start(Consumer<Session> sessionConsumer);
+        void start(Consumer<Session> sessionConsumer, float maxPages);
 
         /**
          * Close the connection.
@@ -95,6 +94,17 @@ public class ScrollCaptureClient {
             this.image =  image;
             this.requested = request;
             this.captured = captured;
+        }
+
+        @Override
+        public String toString() {
+            return "CaptureResult{"
+                    + "requested=" + requested
+                    + " (" + requested.width() + "x" + requested.height() + ")"
+                    + ", captured=" + captured
+                    + " (" + captured.width() + "x" + captured.height() + ")"
+                    + ", image=" + image
+                    + '}';
         }
     }
 
@@ -196,6 +206,7 @@ public class ScrollCaptureClient {
         private int mTileWidth;
         private Rect mRequestRect;
         private boolean mStarted;
+        private int mMaxTiles;
 
         private ControllerCallbacks(Consumer<Connection> connectionConsumer) {
             mConnectionConsumer = connectionConsumer;
@@ -285,12 +296,15 @@ public class ScrollCaptureClient {
         // ScrollCaptureController.Connection
 
         @Override
-        public void start(Consumer<Session> sessionConsumer) {
+        public void start(Consumer<Session> sessionConsumer, float maxPages) {
             if (DEBUG_SCROLL) {
-                Log.d(TAG, "start(sessionConsumer=" + sessionConsumer + ")");
+                Log.d(TAG, "start(sessionConsumer=" + sessionConsumer + ","
+                        + " maxPages=" + maxPages + ")"
+                        + " [maxHeight: " + (mMaxTiles * mTileHeight) + "px]");
             }
+            mMaxTiles = (int) Math.ceil(maxPages * TILES_PER_PAGE);
             mReader = ImageReader.newInstance(mTileWidth, mTileHeight, PixelFormat.RGBA_8888,
-                    MAX_IMAGE_COUNT, HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE);
+                    mMaxTiles, HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE);
             mSessionConsumer = sessionConsumer;
             try {
                 mConnection.startCapture(mReader.getSurface());
@@ -345,7 +359,7 @@ public class ScrollCaptureClient {
 
         @Override
         public int getMaxTiles() {
-            return MAX_IMAGE_COUNT;
+            return mMaxTiles;
         }
 
         @Override

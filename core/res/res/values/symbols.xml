@@ -233,6 +233,7 @@
   <java-symbol type="id" name="pin_confirm_text" />
   <java-symbol type="id" name="pin_error_message" />
   <java-symbol type="id" name="timePickerLayout" />
+  <java-symbol type="id" name="phishing_alert" />
   <java-symbol type="id" name="profile_badge" />
   <java-symbol type="id" name="alerted_icon" />
   <java-symbol type="id" name="transitionPosition" />
@@ -1834,6 +1835,9 @@
   <java-symbol type="string" name="forward_intent_to_owner" />
   <java-symbol type="string" name="forward_intent_to_work" />
   <java-symbol type="dimen" name="cross_profile_apps_thumbnail_size" />
+  <java-symbol type="layout" name="splash_screen_view" />
+  <java-symbol type="id" name="splashscreen_icon_view" />
+  <java-symbol type="id" name="splashscreen_branding_view" />
 
   <!-- From services -->
   <java-symbol type="anim" name="screen_rotate_0_enter" />
@@ -2665,6 +2669,7 @@
   <java-symbol type="bool" name="config_defaultWindowFeatureContextMenu" />
   <java-symbol type="bool" name="config_overrideRemoteViewsActivityTransition" />
   <java-symbol type="attr" name="colorProgressBackgroundNormal" />
+  <java-symbol type="bool" name="config_allow_pin_storage_for_unattended_reboot" />
 
   <java-symbol type="layout" name="simple_account_item" />
   <java-symbol type="string" name="prohibit_manual_network_selection_in_gobal_mode" />
@@ -2698,6 +2703,8 @@
 
   <java-symbol type="integer" name="config_jobSchedulerInactivityIdleThreshold" />
   <java-symbol type="integer" name="config_jobSchedulerIdleWindowSlop" />
+  <java-symbol type="bool" name="config_jobSchedulerRestrictBackgroundUser" />
+  <java-symbol type="integer" name="config_jobSchedulerUserGracePeriod" />
 
   <java-symbol type="style" name="Animation.ImmersiveModeConfirmation" />
 
@@ -2826,6 +2833,7 @@
   <java-symbol type="id" name="smart_reply_container" />
   <java-symbol type="id" name="remote_input_tag" />
   <java-symbol type="id" name="pending_intent_tag" />
+  <java-symbol type="id" name="remote_checked_change_listener_tag" />
   <java-symbol type="id" name="notification_action_index_tag" />
 
   <java-symbol type="attr" name="seekBarDialogPreferenceStyle" />
@@ -3104,7 +3112,25 @@
 
   <!-- TV Remote Service package -->
   <java-symbol type="string" name="config_tvRemoteServicePackage" />
+
+  <!-- Notifications: MessagingStyle -->
   <java-symbol type="string" name="notification_messaging_title_template" />
+
+  <!-- Notifications: CallStyle -->
+  <java-symbol type="layout" name="notification_template_material_call" />
+  <java-symbol type="string" name="call_notification_answer_action" />
+  <java-symbol type="string" name="call_notification_decline_action" />
+  <java-symbol type="string" name="call_notification_hang_up_action" />
+  <java-symbol type="string" name="call_notification_incoming_text" />
+  <java-symbol type="string" name="call_notification_ongoing_text" />
+  <java-symbol type="string" name="call_notification_screening_text" />
+  <java-symbol type="color" name="call_notification_decline_color"/>
+  <java-symbol type="color" name="call_notification_answer_color"/>
+  <java-symbol type="dimen" name="call_notification_collapsible_indent"/>
+  <java-symbol type="drawable" name="ic_call_answer" />
+  <java-symbol type="drawable" name="ic_call_decline" />
+  <java-symbol type="id" name="verification_icon" />
+  <java-symbol type="id" name="verification_text" />
 
   <!-- Notification handler / dashboard package -->
   <java-symbol type="string" name="config_notificationHandlerPackage" />
@@ -3431,6 +3457,7 @@
   <java-symbol type="dimen" name="notification_media_image_max_width"/>
   <java-symbol type="dimen" name="notification_media_image_max_height"/>
   <java-symbol type="dimen" name="notification_right_icon_size"/>
+  <java-symbol type="dimen" name="notification_actions_icon_drawable_size"/>
   <java-symbol type="dimen" name="notification_custom_view_max_image_height"/>
   <java-symbol type="dimen" name="notification_custom_view_max_image_width"/>
 
@@ -4114,8 +4141,6 @@
 
   <java-symbol type="string" name="notification_history_title_placeholder" />
 
-  <java-symbol type="string" name="config_customMediaKeyDispatcher" />
-  <java-symbol type="string" name="config_customSessionPolicyProvider" />
   <!-- The max scale for the wallpaper when it's zoomed in -->
   <java-symbol type="dimen" name="config_wallpaperMaxScale"/>
 
@@ -4175,6 +4200,8 @@
   <java-symbol type="string" name="turn_on_magnification_settings_action" />
   <java-symbol type="string" name="dismiss_action" />
 
+  <java-symbol type="bool" name="config_magnification_area" />
+
   <java-symbol type="bool" name="config_trackerAppNeedsPermissions"/>
 
   <!-- Package with global data query permissions for AppSearch -->
@@ -4202,6 +4229,4 @@
   <java-symbol type="bool" name="config_telephony5gNonStandalone" />
 
   <java-symbol type="bool" name="config_voice_data_sms_auto_fallback" />
-
-  <java-symbol type="bool" name="config_enableOneHandedKeyguard" />
 </resources>

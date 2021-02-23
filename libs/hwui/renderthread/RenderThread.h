@@ -17,6 +17,7 @@
 #ifndef RENDERTHREAD_H_
 #define RENDERTHREAD_H_
 
+#include <surface_control_private.h>
 #include <GrDirectContext.h>
 #include <SkBitmap.h>
 #include <cutils/compiler.h>
@@ -78,6 +79,27 @@ struct VsyncSource {
     virtual ~VsyncSource() {}
 };
 
+typedef void (*ASC_acquire)(ASurfaceControl* control);
+typedef void (*ASC_release)(ASurfaceControl* control);
+
+typedef void (*ASC_registerSurfaceStatsListener)(ASurfaceControl* control, void* context,
+        ASurfaceControl_SurfaceStatsListener func);
+typedef void (*ASC_unregisterSurfaceStatsListener)(void* context,
+                                       ASurfaceControl_SurfaceStatsListener func);
+
+typedef int64_t (*ASCStats_getAcquireTime)(ASurfaceControlStats* stats);
+typedef uint64_t (*ASCStats_getFrameNumber)(ASurfaceControlStats* stats);
+
+struct ASurfaceControlFunctions {
+    ASurfaceControlFunctions();
+    ASC_acquire acquireFunc;
+    ASC_release releaseFunc;
+    ASC_registerSurfaceStatsListener registerListenerFunc;
+    ASC_unregisterSurfaceStatsListener unregisterListenerFunc;
+    ASCStats_getAcquireTime getAcquireTimeFunc;
+    ASCStats_getFrameNumber getFrameNumberFunc;
+};
+
 class ChoreographerSource;
 class DummyVsyncSource;
 
@@ -104,6 +126,7 @@ public:
     RenderState& renderState() const { return *mRenderState; }
     EglManager& eglManager() const { return *mEglManager; }
     ProfileDataContainer& globalProfileData() { return mGlobalProfileData; }
+    std::mutex& getJankDataMutex() { return mJankDataMutex; }
     Readback& readback();
 
     GrDirectContext* getGrContext() const { return mGrContext.get(); }
@@ -120,6 +143,10 @@ public:
     void destroyRenderingContext();
 
     void preload();
+
+    const ASurfaceControlFunctions& getASurfaceControlFunctions() {
+        return mASurfaceControlFunctions;
+    }
 
     /**
      * isCurrent provides a way to query, if the caller is running on
@@ -189,6 +216,9 @@ private:
     sk_sp<GrDirectContext> mGrContext;
     CacheManager* mCacheManager;
     sp<VulkanManager> mVkManager;
+
+    ASurfaceControlFunctions mASurfaceControlFunctions;
+    std::mutex mJankDataMutex;
 };
 
 } /* namespace renderthread */

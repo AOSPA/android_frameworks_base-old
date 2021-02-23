@@ -43,7 +43,6 @@ import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.widget.RemoteViews;
 
-import com.android.systemui.R;
 import com.android.systemui.TestableDependency;
 import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.media.MediaFeatureFlag;
@@ -67,7 +66,10 @@ import com.android.systemui.statusbar.notification.row.NotificationRowContentBin
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
-import com.android.systemui.statusbar.policy.InflatedSmartReplies;
+import com.android.systemui.statusbar.policy.InflatedSmartReplyState;
+import com.android.systemui.statusbar.policy.InflatedSmartReplyViewHolder;
+import com.android.systemui.statusbar.policy.SmartReplyStateInflater;
+import com.android.systemui.tests.R;
 import com.android.systemui.wmshell.BubblesManager;
 import com.android.systemui.wmshell.BubblesTestActivity;
 import com.android.wm.shell.bubbles.Bubbles;
@@ -139,8 +141,7 @@ public class NotificationTestHelper {
                 mock(ConversationNotificationProcessor.class),
                 mock(MediaFeatureFlag.class),
                 mock(Executor.class),
-                (sysuiContext, notifPackageContext, entry, existingRepliesAndAction) ->
-                        mock(InflatedSmartReplies.class));
+                new MockSmartReplyInflater());
         contentBinder.setInflateSynchronously(true);
         mBindStage = new RowContentBindStage(contentBinder,
                 mock(NotifInflationErrorManager.class),
@@ -463,5 +464,20 @@ public class NotificationTestHelper {
                 .setDeleteIntent(deleteIntent)
                 .setDesiredHeight(314)
                 .build();
+    }
+
+    private static class MockSmartReplyInflater implements SmartReplyStateInflater {
+        @Override
+        public InflatedSmartReplyState inflateSmartReplyState(NotificationEntry entry) {
+            return mock(InflatedSmartReplyState.class);
+        }
+
+        @Override
+        public InflatedSmartReplyViewHolder inflateSmartReplyViewHolder(Context sysuiContext,
+                Context notifPackageContext, NotificationEntry entry,
+                InflatedSmartReplyState existingSmartReplyState,
+                InflatedSmartReplyState newSmartReplyState) {
+            return mock(InflatedSmartReplyViewHolder.class);
+        }
     }
 }

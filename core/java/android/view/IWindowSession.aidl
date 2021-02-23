@@ -22,7 +22,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.Bundle;
-import android.service.screenshot.ScreenshotHash;
+import android.os.RemoteCallback;
 import android.util.MergedConfiguration;
 import android.view.DisplayCutout;
 import android.view.InputChannel;
@@ -121,14 +121,6 @@ interface IWindowSession {
      * Called by a client to report that it ran out of graphics memory.
      */
     boolean outOfMemory(IWindow window);
-
-    /**
-     * Give the window manager a hint of the part of the window that is
-     * completely transparent, allowing it to work with the surface flinger
-     * to optimize compositing of this part of the window.
-     */
-    @UnsupportedAppUsage
-    oneway void setTransparentRegion(IWindow window, in Region region);
 
     /**
      * Tell the window manager about the content and visible insets of the
@@ -345,14 +337,15 @@ interface IWindowSession {
     void grantEmbeddedWindowFocus(IWindow window, in IBinder inputToken, boolean grantFocus);
 
     /**
-     * Generates an ScreenshotHash that can be used to validate whether specific content was on
+     * Generates an DisplayHash that can be used to validate whether specific content was on
      * screen.
      *
-     * @param window The token for the window where the view to screenshot is shown.
-     * @param boundsInWindow The size and position of the ads view in the window
-     * @param hashAlgorithm The String for the hashing algorithm to use based on values returned
-     *                      from {@link IWindowManager#getSupportedHashingAlgorithms()}
+     * @param window The token for the window to generate the hash of.
+     * @param boundsInWindow The size and position in the window of where to generate the hash.
+     * @param hashAlgorithm The String for the hash algorithm to use based on values returned
+     *                      from {@link IWindowManager#getSupportedDisplayHashAlgorithms()}
+     * @param callback The callback invoked to get the results of generateDisplayHash
      */
-    ScreenshotHash generateScreenshotHash(IWindow window, in Rect boundsInWindow,
-            in String hashAlgorithm);
+    oneway void generateDisplayHash(IWindow window, in Rect boundsInWindow,
+            in String hashAlgorithm, in RemoteCallback callback);
 }

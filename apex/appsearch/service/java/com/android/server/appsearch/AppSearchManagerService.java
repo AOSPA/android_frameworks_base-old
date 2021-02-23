@@ -38,8 +38,10 @@ import android.os.ParcelableException;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.Log;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
@@ -49,12 +51,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** TODO(b/142567528): add comments when implement this class */
 public class AppSearchManagerService extends SystemService {
     private static final String TAG = "AppSearchManagerService";
     private PackageManagerInternal mPackageManagerInternal;
     private ImplInstanceManager mImplInstanceManager;
+
+    // Cache of unlocked user ids so we don't have to query UserManager service each time. The
+    // "locked" suffix refers to the fact that access to the field should be locked; unrelated to
+    // the unlocked status of user ids.
+    @GuardedBy("mUnlockedUserIdsLocked")
+    private final Set<Integer> mUnlockedUserIdsLocked = new ArraySet<>();
 
     public AppSearchManagerService(Context context) {
         super(context);
@@ -65,6 +74,13 @@ public class AppSearchManagerService extends SystemService {
         publishBinderService(Context.APP_SEARCH_SERVICE, new Stub());
         mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
         mImplInstanceManager = ImplInstanceManager.getInstance(getContext());
+    }
+
+    @Override
+    public void onUserUnlocked(@NonNull TargetUser user) {
+        synchronized (mUnlockedUserIdsLocked) {
+            mUnlockedUserIdsLocked.add(user.getUserIdentifier());
+        }
     }
 
     private class Stub extends IAppSearchManager.Stub {
@@ -86,6 +102,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 verifyCallingPackage(callingUid, packageName);
                 List<AppSearchSchema> schemas = new ArrayList<>(schemaBundles.size());
                 for (int i = 0; i < schemaBundles.size(); i++) {
@@ -97,7 +114,7 @@ public class AppSearchManagerService extends SystemService {
                         schemasPackageAccessibleBundles.entrySet()) {
                     List<PackageIdentifier> packageIdentifiers =
                             new ArrayList<>(entry.getValue().size());
-                    for (int i = 0; i < packageIdentifiers.size(); i++) {
+                    for (int i = 0; i < entry.getValue().size(); i++) {
                         packageIdentifiers.add(new PackageIdentifier(entry.getValue().get(i)));
                     }
                     schemasPackageAccessible.put(entry.getKey(), packageIdentifiers);
@@ -133,6 +150,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 verifyCallingPackage(callingUid, packageName);
                 AppSearchImpl impl =
                         mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
@@ -165,6 +183,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 verifyCallingPackage(callingUid, packageName);
                 AppSearchBatchResult.Builder<String, Void> resultBuilder =
                         new AppSearchBatchResult.Builder<>();
@@ -207,6 +226,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 verifyCallingPackage(callingUid, packageName);
                 AppSearchBatchResult.Builder<String, Bundle> resultBuilder =
                         new AppSearchBatchResult.Builder<>();
@@ -253,6 +273,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 verifyCallingPackage(callingUid, packageName);
                 AppSearchImpl impl =
                         mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
@@ -287,6 +308,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 verifyCallingPackage(callingUid, packageName);
                 AppSearchImpl impl =
                         mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
@@ -318,6 +340,7 @@ public class AppSearchManagerService extends SystemService {
             // TODO(b/162450968) check nextPageToken is being advanced by the same uid as originally
             // opened it
             try {
+                verifyUserUnlocked(callingUserId);
                 AppSearchImpl impl =
                         mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
                 SearchResultPage searchResultPage = impl.getNextPage(nextPageToken);
@@ -337,6 +360,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 AppSearchImpl impl =
                         mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
                 impl.invalidateNextPageToken(nextPageToken);
@@ -364,6 +388,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 AppSearchImpl impl =
                         mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
                 impl.reportUsage(packageName, databaseName, namespace, uri, usageTimeMillis);
@@ -392,6 +417,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 verifyCallingPackage(callingUid, packageName);
                 AppSearchBatchResult.Builder<String, Void> resultBuilder =
                         new AppSearchBatchResult.Builder<>();
@@ -431,6 +457,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 verifyCallingPackage(callingUid, packageName);
                 AppSearchImpl impl =
                         mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
@@ -453,6 +480,7 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 AppSearchImpl impl =
                         mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
                 impl.persistToDisk();
@@ -470,12 +498,22 @@ public class AppSearchManagerService extends SystemService {
             int callingUserId = handleIncomingUser(userId, callingUid);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
+                verifyUserUnlocked(callingUserId);
                 mImplInstanceManager.getAppSearchImpl(getContext(), callingUserId);
                 invokeCallbackOnResult(callback, AppSearchResult.newSuccessfulResult(null));
             } catch (Throwable t) {
                 invokeCallbackOnError(callback, t);
             } finally {
                 Binder.restoreCallingIdentity(callingIdentity);
+            }
+        }
+
+        private void verifyUserUnlocked(int callingUserId) {
+            synchronized (mUnlockedUserIdsLocked) {
+                if (!mUnlockedUserIdsLocked.contains(callingUserId)) {
+                    throw new IllegalStateException(
+                            "User " + callingUserId + " is locked or not running.");
+                }
             }
         }
 

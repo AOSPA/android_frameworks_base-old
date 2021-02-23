@@ -24,7 +24,6 @@ import android.os.BatteryUsageStatsQuery;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.os.UserHandle;
-import android.os.UserManager;
 import android.util.SparseArray;
 
 import java.util.ArrayList;
@@ -53,6 +52,7 @@ public class BatteryUsageStatsProvider {
                 mPowerCalculators = new ArrayList<>();
 
                 // Power calculators are applied in the order of registration
+                mPowerCalculators.add(new DischargedPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new CpuPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new MemoryPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new WakelockPowerCalculator(mPowerProfile));
@@ -71,10 +71,14 @@ public class BatteryUsageStatsProvider {
                 mPowerCalculators.add(new PhonePowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new ScreenPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new AmbientDisplayPowerCalculator(mPowerProfile));
-                mPowerCalculators.add(new SystemServicePowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new IdlePowerCalculator(mPowerProfile));
-
+                mPowerCalculators.add(new CustomMeasuredPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new UserPowerCalculator());
+
+                // It is important that SystemServicePowerCalculator be applied last,
+                // because it re-attributes some of the power estimated by the other
+                // calculators.
+                mPowerCalculators.add(new SystemServicePowerCalculator(mPowerProfile));
             }
         }
         return mPowerCalculators;
@@ -89,34 +93,38 @@ public class BatteryUsageStatsProvider {
         final BatteryStatsHelper batteryStatsHelper = new BatteryStatsHelper(mContext,
                 false /* collectBatteryBroadcast */);
         batteryStatsHelper.create((Bundle) null);
-        final UserManager userManager = mContext.getSystemService(UserManager.class);
-        final List<UserHandle> asUsers = userManager.getUserProfiles();
-        final int n = asUsers.size();
-        SparseArray<UserHandle> users = new SparseArray<>(n);
-        for (int i = 0; i < n; ++i) {
-            UserHandle userHandle = asUsers.get(i);
-            users.put(userHandle.getIdentifier(), userHandle);
+        final List<UserHandle> users = new ArrayList<>();
+        for (int i = 0; i < queries.size(); i++) {
+            BatteryUsageStatsQuery query = queries.get(i);
+            for (int userId : query.getUserIds()) {
+                UserHandle userHandle = UserHandle.of(userId);
+                if (!users.contains(userHandle)) {
+                    users.add(userHandle);
+                }
+            }
         }
-
         batteryStatsHelper.refreshStats(BatteryStats.STATS_SINCE_CHARGED, users);
 
         ArrayList<BatteryUsageStats> results = new ArrayList<>(queries.size());
         for (int i = 0; i < queries.size(); i++) {
-            results.add(getBatteryUsageStats(queries.get(i), batteryStatsHelper, users));
+            results.add(getBatteryUsageStats(queries.get(i)));
         }
         return results;
     }
 
-    private BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query,
-            BatteryStatsHelper batteryStatsHelper, SparseArray<UserHandle> users) {
-        // TODO(b/174186358): read extra power component number from configuration
-        final int customPowerComponentCount = 0;
+    private BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query) {
+        final long[] customMeasuredEnergiesMicroJoules =
+                mStats.getCustomMeasuredEnergiesMicroJoules();
+        final int customPowerComponentCount = customMeasuredEnergiesMicroJoules != null
+                        ? customMeasuredEnergiesMicroJoules.length
+                        : 0;
+
+        // TODO(b/174186358): read extra time component number from configuration
         final int customTimeComponentCount = 0;
 
         final BatteryUsageStats.Builder batteryUsageStatsBuilder =
                 new BatteryUsageStats.Builder(customPowerComponentCount, customTimeComponentCount)
-                        .setDischargePercentage(batteryStatsHelper.getStats().getDischargeAmount(0))
-                        .setConsumedPower(batteryStatsHelper.getTotalPower());
+                        .setStatsStartRealtime(mStats.getStatsStartRealtime() / 1000);
 
         SparseArray<? extends BatteryStats.Uid> uidStats = mStats.getUidStats();
         for (int i = uidStats.size() - 1; i >= 0; i--) {
@@ -127,9 +135,10 @@ public class BatteryUsageStatsProvider {
         final long uptimeUs = SystemClock.uptimeMillis() * 1000;
 
         final List<PowerCalculator> powerCalculators = getPowerCalculators();
-        for (PowerCalculator powerCalculator : powerCalculators) {
-            powerCalculator.calculate(batteryUsageStatsBuilder, mStats, realtimeUs, uptimeUs, query,
-                    users);
+        for (int i = 0, count = powerCalculators.size(); i < count; i++) {
+            PowerCalculator powerCalculator = powerCalculators.get(i);
+            powerCalculator.calculate(batteryUsageStatsBuilder, mStats, realtimeUs, uptimeUs,
+                    query);
         }
 
         return batteryUsageStatsBuilder.build();

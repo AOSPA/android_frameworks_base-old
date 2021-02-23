@@ -1012,6 +1012,7 @@ class ActivityMetricsLogger {
         final TransitionInfoSnapshot infoSnapshot =
                 new TransitionInfoSnapshot(info, r, (int) startupTimeMs);
         BackgroundThread.getHandler().post(() -> logAppFullyDrawn(infoSnapshot));
+        mLastTransitionInfo.remove(r);
 
         if (!info.isInterestingToLoggerAndObserver()) {
             return infoSnapshot;

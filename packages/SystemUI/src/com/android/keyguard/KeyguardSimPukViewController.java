@@ -85,13 +85,15 @@ public class KeyguardSimPukViewController
             KeyguardSecurityCallback keyguardSecurityCallback,
             KeyguardMessageAreaController.Factory messageAreaControllerFactory,
             LatencyTracker latencyTracker, LiftToActivateListener liftToActivateListener,
-            TelephonyManager telephonyManager, FalsingCollector falsingCollector) {
+            TelephonyManager telephonyManager,
+            FalsingCollector falsingCollector, boolean isNewLayoutEnabled) {
         super(view, keyguardUpdateMonitor, securityMode, lockPatternUtils, keyguardSecurityCallback,
                 messageAreaControllerFactory, latencyTracker, liftToActivateListener,
                 falsingCollector);
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mTelephonyManager = telephonyManager;
         mSimImageView = mView.findViewById(R.id.keyguard_sim);
+        view.setIsNewLayoutEnabled(isNewLayoutEnabled);
     }
 
     @Override

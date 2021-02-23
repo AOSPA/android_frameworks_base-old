@@ -1629,6 +1629,12 @@ public final class PowerManager {
      * <p>
      * Requires the {@link android.Manifest.permission#REBOOT} permission.
      * </p>
+     * <p>
+     * If the {@code reason} string contains ",quiescent", then the screen stays off during reboot
+     * and is not turned on again until the user triggers the device to wake up (for example,
+     * by pressing the power key).
+     * This behavior applies to Android TV devices launched on Android 11 (API level 30) or higher.
+     * </p>
      *
      * @param reason code to pass to the kernel (e.g., "recovery") to
      *               request special boot modes, or null.
@@ -1898,7 +1904,8 @@ public final class PowerManager {
      * These estimates will be displayed on system UI surfaces in place of the system computed
      * value.
      *
-     * Calling this requires the {@link android.Manifest.permission#DEVICE_POWER} permission.
+     * Calling this requires either the {@link android.Manifest.permission#DEVICE_POWER} or the
+     * {@link android.Manifest.permission#BATTERY_PREDICTION} permissions.
      *
      * @param timeRemaining  The time remaining as a {@link Duration}.
      * @param isPersonalized true if personalized based on device usage history, false otherwise.
@@ -1906,7 +1913,10 @@ public final class PowerManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.DEVICE_POWER)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.BATTERY_PREDICTION,
+            android.Manifest.permission.DEVICE_POWER
+    })
     public void setBatteryDischargePrediction(@NonNull Duration timeRemaining,
             boolean isPersonalized) {
         if (timeRemaining == null) {

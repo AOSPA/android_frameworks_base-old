@@ -16,6 +16,7 @@
 
 package android.app;
 
+import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.StrictMode.vmIncorrectContextUseEnabled;
 
@@ -105,6 +106,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -2181,6 +2183,18 @@ class ContextImpl extends Context {
         }
     }
 
+    @NonNull
+    @Override
+    public int[] checkUriPermissions(@NonNull List<Uri> uris, int pid, int uid,
+            int modeFlags) {
+        try {
+            return ActivityManager.getService().checkUriPermissions(uris, pid, uid, modeFlags,
+                    null);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     /** @hide */
     @Override
     public int checkUriPermission(Uri uri, int pid, int uid, int modeFlags, IBinder callerToken) {
@@ -2207,10 +2221,28 @@ class ContextImpl extends Context {
         return PackageManager.PERMISSION_DENIED;
     }
 
+    @NonNull
+    @Override
+    public int[] checkCallingUriPermissions(@NonNull List<Uri> uris, int modeFlags) {
+        int pid = Binder.getCallingPid();
+        if (pid != Process.myPid()) {
+            return checkUriPermissions(uris, pid, Binder.getCallingUid(), modeFlags);
+        }
+        int[] res = new int[uris.size()];
+        Arrays.fill(res, PERMISSION_DENIED);
+        return res;
+    }
+
     @Override
     public int checkCallingOrSelfUriPermission(Uri uri, int modeFlags) {
         return checkUriPermission(uri, Binder.getCallingPid(),
                 Binder.getCallingUid(), modeFlags);
+    }
+
+    @NonNull
+    @Override
+    public int[] checkCallingOrSelfUriPermissions(@NonNull List<Uri> uris, int modeFlags) {
+        return checkUriPermissions(uris, Binder.getCallingPid(), Binder.getCallingUid(), modeFlags);
     }
 
     @Override
@@ -2345,6 +2377,7 @@ class ContextImpl extends Context {
                 pi.getResDir(),
                 splitResDirs,
                 pi.getOverlayDirs(),
+                pi.getOverlayPaths(),
                 pi.getApplicationInfo().sharedLibraryFiles,
                 overrideDisplayId,
                 overrideConfig,
@@ -2442,6 +2475,7 @@ class ContextImpl extends Context {
                 mPackageInfo.getResDir(),
                 paths,
                 mPackageInfo.getOverlayDirs(),
+                mPackageInfo.getOverlayPaths(),
                 mPackageInfo.getApplicationInfo().sharedLibraryFiles,
                 mForceDisplayOverrideInResources ? getDisplayId() : null,
                 null,
@@ -2558,7 +2592,8 @@ class ContextImpl extends Context {
     Resources createWindowContextResources() {
         final String resDir = mPackageInfo.getResDir();
         final String[] splitResDirs = mPackageInfo.getSplitResDirs();
-        final String[] overlayDirs = mPackageInfo.getOverlayDirs();
+        final String[] legacyOverlayDirs = mPackageInfo.getOverlayDirs();
+        final String[] overlayPaths = mPackageInfo.getOverlayPaths();
         final String[] libDirs = mPackageInfo.getApplicationInfo().sharedLibraryFiles;
         final int displayId = getDisplayId();
         final CompatibilityInfo compatInfo = (displayId == Display.DEFAULT_DISPLAY)
@@ -2567,7 +2602,7 @@ class ContextImpl extends Context {
         final List<ResourcesLoader> loaders = mResources.getLoaders();
 
         return mResourcesManager.createBaseTokenResources(mToken, resDir, splitResDirs,
-                overlayDirs, libDirs, displayId, null /* overrideConfig */,
+                legacyOverlayDirs, overlayPaths, libDirs, displayId, null /* overrideConfig */,
                 compatInfo, mClassLoader, loaders);
     }
 
@@ -2855,6 +2890,7 @@ class ContextImpl extends Context {
                 packageInfo.getResDir(),
                 splitDirs,
                 packageInfo.getOverlayDirs(),
+                packageInfo.getOverlayPaths(),
                 packageInfo.getApplicationInfo().sharedLibraryFiles,
                 displayId,
                 overrideConfiguration,

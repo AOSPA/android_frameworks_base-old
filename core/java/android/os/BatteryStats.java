@@ -994,6 +994,19 @@ public abstract class BatteryStats implements Parcelable {
          */
         public abstract long getScreenOnEnergy();
 
+        /**
+         * Returns the energies used by this uid for each
+         * {@link android.hardware.power.stats.EnergyConsumer.ordinal} of (custom) energy consumer
+         * type {@link android.hardware.power.stats.EnergyConsumerType#OTHER}).
+         *
+         * @return energies (in microjoules) used since boot for each (custom) energy consumer of
+         *         type OTHER, indexed by their ordinal. Returns null if no energy reporting is
+         *         supported.
+         *
+         * {@hide}
+         */
+        public abstract @Nullable long[] getCustomMeasuredEnergiesMicroJoules();
+
         public static abstract class Sensor {
 
             @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
@@ -1658,7 +1671,7 @@ public abstract class BatteryStats implements Parcelable {
         public char batteryVoltage;
 
         // The charge of the battery in micro-Ampere-hours.
-        public int batteryChargeUAh;
+        public int batteryChargeUah;
 
         public double modemRailChargeMah;
         public double wifiRailChargeMah;
@@ -1871,7 +1884,7 @@ public abstract class BatteryStats implements Parcelable {
             bat = (((int)batteryTemperature)&0xffff)
                     | ((((int)batteryVoltage)<<16)&0xffff0000);
             dest.writeInt(bat);
-            dest.writeInt(batteryChargeUAh);
+            dest.writeInt(batteryChargeUah);
             dest.writeDouble(modemRailChargeMah);
             dest.writeDouble(wifiRailChargeMah);
             dest.writeInt(states);
@@ -1903,7 +1916,7 @@ public abstract class BatteryStats implements Parcelable {
             int bat2 = src.readInt();
             batteryTemperature = (short)(bat2&0xffff);
             batteryVoltage = (char)((bat2>>16)&0xffff);
-            batteryChargeUAh = src.readInt();
+            batteryChargeUah = src.readInt();
             modemRailChargeMah = src.readDouble();
             wifiRailChargeMah = src.readDouble();
             states = src.readInt();
@@ -1946,7 +1959,7 @@ public abstract class BatteryStats implements Parcelable {
             batteryPlugType = 0;
             batteryTemperature = 0;
             batteryVoltage = 0;
-            batteryChargeUAh = 0;
+            batteryChargeUah = 0;
             modemRailChargeMah = 0;
             wifiRailChargeMah = 0;
             states = 0;
@@ -1978,7 +1991,7 @@ public abstract class BatteryStats implements Parcelable {
             batteryPlugType = o.batteryPlugType;
             batteryTemperature = o.batteryTemperature;
             batteryVoltage = o.batteryVoltage;
-            batteryChargeUAh = o.batteryChargeUAh;
+            batteryChargeUah = o.batteryChargeUah;
             modemRailChargeMah = o.modemRailChargeMah;
             wifiRailChargeMah = o.wifiRailChargeMah;
             states = o.states;
@@ -2012,7 +2025,7 @@ public abstract class BatteryStats implements Parcelable {
                     && batteryPlugType == o.batteryPlugType
                     && batteryTemperature == o.batteryTemperature
                     && batteryVoltage == o.batteryVoltage
-                    && batteryChargeUAh == o.batteryChargeUAh
+                    && batteryChargeUah == o.batteryChargeUah
                     && modemRailChargeMah == o.modemRailChargeMah
                     && wifiRailChargeMah == o.wifiRailChargeMah
                     && states == o.states
@@ -2511,6 +2524,19 @@ public abstract class BatteryStats implements Parcelable {
      */
     public abstract long getScreenDozeEnergy();
 
+    /**
+     * Returns the energies used for each
+     * {@link android.hardware.power.stats.EnergyConsumer.ordinal} of (custom) energy consumer
+     * type {@link android.hardware.power.stats.EnergyConsumerType#OTHER}).
+     *
+     * @return energies (in microjoules) used since boot for each (custom) energy consumer of
+     *         type OTHER, indexed by their ordinal. Returns null if no energy reporting is
+     *         supported.
+     *
+     * {@hide}
+     */
+    public abstract @Nullable long[] getCustomMeasuredEnergiesMicroJoules();
+
     public static final BitDescription[] HISTORY_STATE_DESCRIPTIONS = new BitDescription[] {
         new BitDescription(HistoryItem.STATE_CPU_RUNNING_FLAG, "running", "r"),
         new BitDescription(HistoryItem.STATE_WAKE_LOCK_FLAG, "wake_lock", "w"),
@@ -2831,6 +2857,11 @@ public abstract class BatteryStats implements Parcelable {
      * Return whether we are currently running on battery.
      */
     public abstract boolean getIsOnBattery();
+
+    /**
+     * Returns the timestamp of when battery stats collection started, in microseconds.
+     */
+    public abstract long getStatsStartRealtime();
 
     /**
      * Returns a SparseArray containing the statistics for each uid.
@@ -5268,6 +5299,15 @@ public abstract class BatteryStats implements Parcelable {
                         pw.print(" flash=");
                         printmAh(pw, bs.flashlightPowerMah);
                     }
+                    if (bs.customMeasuredPowerMah != null) {
+                        for (int idx = 0; idx < bs.customMeasuredPowerMah.length; idx++) {
+                            final double customPowerMah = bs.customMeasuredPowerMah[idx];
+                            if (customPowerMah != 0) {
+                                pw.print(" custom[" + idx + "]=");
+                                printmAh(pw, customPowerMah);
+                            }
+                        }
+                    }
                     pw.print(" )");
                 }
 
@@ -6485,7 +6525,7 @@ public abstract class BatteryStats implements Parcelable {
                     item.append(checkin ? ",Bv=" : " volt=");
                     item.append(oldVolt);
                 }
-                final int chargeMAh = rec.batteryChargeUAh / 1000;
+                final int chargeMAh = rec.batteryChargeUah / 1000;
                 if (oldChargeMAh != chargeMAh) {
                     oldChargeMAh = chargeMAh;
                     item.append(checkin ? ",Bcc=" : " charge=");

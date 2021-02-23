@@ -163,9 +163,13 @@
     <!-- heads up elevation that is added if the view is pinned -->
     <dimen name="heads_up_pinned_elevation">16dp</dimen>
 
-    <!-- Height of a messaging notifications with actions at least. Not that this is an upper bound
+    <!-- Height of a messaging notifications with actions at least. Note that this is an upper bound
          and the notification won't use this much, but is measured with wrap_content -->
     <dimen name="notification_messaging_actions_min_height">196dp</dimen>
+
+    <!-- Height of a call notification. Note that this is an upper bound
+     and the notification won't use this much, but is measured with wrap_content -->
+    <dimen name="call_notification_full_height">172dp</dimen>
 
     <!-- a threshold in dp per second that is considered fast scrolling -->
     <dimen name="scroll_fast_threshold">1500dp</dimen>
@@ -198,6 +202,9 @@
 
     <!-- The amount the content shifts upwards when transforming into the shelf -->
     <dimen name="shelf_transform_content_shift">32dp</dimen>
+
+    <!-- The y translation for keyguard indication text animation for rotating text in/out -->
+    <dimen name="keyguard_indication_y_translation">24dp</dimen>
 
     <!-- The padding on the bottom of the notifications on the keyguard -->
     <dimen name="keyguard_indication_bottom_padding">12sp</dimen>
@@ -685,6 +692,11 @@
     <!-- The amount to shift the clocks during a small/large transition -->
     <dimen name="keyguard_clock_switch_y_shift">10dp</dimen>
 
+    <!-- Default line spacing multiplier between hours and minutes of the keyguard clock -->
+    <item name="keyguard_clock_line_spacing_scale" type="dimen" format="float">.7</item>
+    <!-- Burmese line spacing multiplier between hours and minutes of the keyguard clock -->
+    <item name="keyguard_clock_line_spacing_scale_burmese" type="dimen" format="float">1</item>
+
     <item name="scrim_behind_alpha" format="float" type="dimen">0.62</item>
 
     <!-- The minimum amount the user needs to swipe to go to the camera / phone. -->
@@ -730,9 +742,6 @@
 
     <!-- end margin for system icons if multi user switch is hidden -->
     <dimen name="system_icons_switcher_hidden_expanded_margin">16dp</dimen>
-
-    <!-- The thickness of the colored border around the current user. -->
-    <dimen name="keyguard_user_switcher_border_thickness">2dp</dimen>
 
     <dimen name="data_usage_graph_marker_width">4dp</dimen>
 
@@ -793,7 +802,7 @@
     <!-- Size of user icon + frame in the qs user picker (incl. frame) -->
     <dimen name="qs_framed_avatar_size">54dp</dimen>
     <!-- Size of user icon + frame in the keyguard user picker (incl. frame) -->
-    <dimen name="kg_framed_avatar_size">54dp</dimen>
+    <dimen name="kg_framed_avatar_size">48dp</dimen>
 
     <!-- Margin on the left side of the carrier text on Keyguard -->
     <dimen name="keyguard_carrier_text_margin">16dp</dimen>
@@ -1157,7 +1166,7 @@
     <dimen name="logout_button_layout_height">32dp</dimen>
     <dimen name="logout_button_padding_horizontal">16dp</dimen>
     <dimen name="logout_button_margin_bottom">12dp</dimen>
-    <dimen name="logout_button_corner_radius">2dp</dimen>
+    <dimen name="logout_button_corner_radius">4dp</dimen>
 
     <!--  Blur radius on status bar window and power menu  -->
     <dimen name="min_window_blur_radius">1px</dimen>
@@ -1167,17 +1176,13 @@
     <dimen name="display_cutout_margin_consumption">0px</dimen>
 
     <!-- Height of the Ongoing App Ops chip -->
-    <dimen name="ongoing_appops_chip_height">32dp</dimen>
-    <!-- Padding between background of Ongoing App Ops chip and content -->
-    <dimen name="ongoing_appops_chip_bg_padding">8dp</dimen>
+    <dimen name="ongoing_appops_chip_height">24dp</dimen>
     <!-- Side padding between background of Ongoing App Ops chip and content -->
     <dimen name="ongoing_appops_chip_side_padding">8dp</dimen>
-    <!-- Margin between icons of Ongoing App Ops chip when QQS-->
-    <dimen name="ongoing_appops_chip_icon_margin_collapsed">0dp</dimen>
-    <!-- Margin between icons of Ongoing App Ops chip when QS-->
-    <dimen name="ongoing_appops_chip_icon_margin_expanded">2dp</dimen>
+    <!-- Margin between icons of Ongoing App Ops chip -->
+    <dimen name="ongoing_appops_chip_icon_margin">4dp</dimen>
     <!-- Icon size of Ongoing App Ops chip -->
-    <dimen name="ongoing_appops_chip_icon_size">@dimen/status_bar_icon_drawing_size</dimen>
+    <dimen name="ongoing_appops_chip_icon_size">16dp</dimen>
     <!-- Radius of Ongoing App Ops chip corners -->
     <dimen name="ongoing_appops_chip_bg_corner_radius">16dp</dimen>
 
@@ -1316,7 +1321,15 @@
     <dimen name="screenrecord_status_icon_height">17.5dp</dimen>
     <dimen name="screenrecord_status_icon_bg_radius">8dp</dimen>
 
+    <!-- Keyguard user switcher -->
     <dimen name="kg_user_switcher_text_size">16sp</dimen>
+
+    <!-- End guest session button -->
+    <dimen name="end_guest_button_layout_height">32dp</dimen>
+    <dimen name="end_guest_button_padding_horizontal">16dp</dimen>
+    <dimen name="end_guest_button_margin_bottom">96dp</dimen>
+    <dimen name="end_guest_button_border_size">1dp</dimen>
+    <dimen name="end_guest_button_corner_radius">16dp</dimen>
 
     <!-- Opacity at which the background for the shutdown UI will be drawn. -->
     <item name="shutdown_scrim_behind_alpha" format="float" type="dimen">0.95</item>
@@ -1335,8 +1348,8 @@
     <dimen name="media_output_dialog_icon_corner_radius">16dp</dimen>
     <dimen name="media_output_dialog_title_anim_y_delta">12.5dp</dimen>
 
-    <dimen name="people_space_widget_radius">24dp</dimen>
-    <dimen name="people_space_widget_round_radius">100dp</dimen>
+    <dimen name="people_space_widget_radius">28dp</dimen>
+    <dimen name="people_space_image_radius">20dp</dimen>
     <dimen name="people_space_widget_background_padding">6dp</dimen>
 
     <dimen name="rounded_slider_height">48dp</dimen>
@@ -1346,4 +1359,11 @@
     <dimen name="rounded_slider_icon_size">24dp</dimen>
     <!-- rounded_slider_icon_size / 2 -->
     <dimen name="rounded_slider_icon_inset">12dp</dimen>
+
+    <dimen name="toast_width">296dp</dimen>
+    <item name="toast_icon_alpha" format="float" type="dimen">1</item>
+    <dimen name="toast_text_size">14sp</dimen>
+    <dimen name="toast_y_offset">48dp</dimen>
+    <dimen name="toast_icon_size">48dp</dimen>
+    <dimen name="toast_bg_radius">28dp</dimen>
 </resources>

@@ -723,6 +723,9 @@
     <!-- Made protected in S (was added in R) -->
     <protected-broadcast android:name="com.android.internal.intent.action.BUGREPORT_REQUESTED" />
 
+    <!-- Added in S -->
+    <protected-broadcast android:name="android.intent.action.REBOOT_READY" />
+
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
     <!-- ====================================================================== -->
@@ -1088,6 +1091,14 @@
         android:description="@string/permdesc_accessImsCallService"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @SystemApi @hide Allows an application to perform IMS Single Registration related actions.
+         Only granted if the application is a system app AND is in the Default SMS Role.
+         The permission is revoked when the app is taken out of the Default SMS Role.
+        <p>Protection level: internal|role
+    -->
+    <permission android:name="android.permission.PERFORM_IMS_SINGLE_REGISTRATION"
+        android:protectionLevel="internal|role" />
+
     <!-- Allows an application to read the user's call log.
          <p class="note"><strong>Note:</strong> If your app uses the
          {@link #READ_CONTACTS} permission and <em>both</em> your <a
@@ -1338,11 +1349,13 @@
         android:protectionLevel="dangerous|instant" />
 
     <!-- ====================================================================== -->
-    <!-- Permissions for accessing the UCE Service                              -->
+    <!-- Permissions for accessing the vendor UCE Service                              -->
     <!-- ====================================================================== -->
 
     <!-- @hide Allows an application to Access UCE-Presence.
          <p>Protection level: signature|privileged
+         @deprecated Framework should no longer use this permission to access the vendor UCE service
+         using AIDL, it is instead implemented by RcsCapabilityExchangeImplBase
     -->
     <permission android:name="android.permission.ACCESS_UCE_PRESENCE_SERVICE"
         android:permissionGroup="android.permission-group.PHONE"
@@ -1350,6 +1363,8 @@
 
     <!-- @hide Allows an application to Access UCE-OPTIONS.
          <p>Protection level: signature|privileged
+         @deprecated Framework should no longer use this permission to access the vendor UCE service
+         using AIDL, it is instead implemented by RcsCapabilityExchangeImplBase
     -->
     <permission android:name="android.permission.ACCESS_UCE_OPTIONS_SERVICE"
         android:permissionGroup="android.permission-group.PHONE"
@@ -1427,6 +1442,15 @@
         android:label="@string/permgrouplab_sensors"
         android:description="@string/permgroupdesc_sensors"
         android:priority="800" />
+
+    <!-- Allows an app to access sensor data with a sampling rate greater than 200 Hz.
+        <p>Protection level: normal
+    -->
+    <permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"
+                android:permissionGroup="android.permission-group.SENSORS"
+                android:label="@string/permlab_highSamplingRateSensors"
+                android:description="@string/permdesc_highSamplingRateSensors"
+                android:protectionLevel="normal" />
 
     <!-- Allows an application to access data from sensors that the user uses to
          measure what is happening inside their body, such as heart rate.
@@ -1900,6 +1924,12 @@
     <permission android:name="android.permission.WIFI_ACCESS_COEX_UNSAFE_CHANNELS"
                 android:protectionLevel="signature|privileged" />
 
+    <!-- @SystemApi @hide Allows an application to manage an automotive device's application network
+         preference as it relates to OEM_PAID and OEM_PRIVATE capable networks.
+         <p>Not for use by third-party or privileged applications. -->
+    <permission android:name="android.permission.CONTROL_OEM_PAID_NETWORK_PREFERENCE"
+        android:protectionLevel="signature" />
+
     <!-- ======================================= -->
     <!-- Permissions for short range, peripheral networks -->
     <!-- ======================================= -->
@@ -2025,6 +2055,12 @@
     <!-- @hide Allows the device to be reset, clearing all data and enables Test Harness Mode. -->
     <permission android:name="android.permission.ENABLE_TEST_HARNESS_MODE"
         android:protectionLevel="signature" />
+
+    <!-- @SystemApi Allows access to ultra wideband device.
+     <p>Not for use by third-party applications.
+     @hide -->
+    <permission android:name="android.permission.UWB_PRIVILEGED"
+                android:protectionLevel="signature|privileged" />
 
     <!-- ================================== -->
     <!-- Permissions for accessing accounts -->
@@ -2287,6 +2323,11 @@
     <permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @SystemApi Allows read access to privileged network state in the device config.
+         @hide Used internally. -->
+    <permission android:name="android.permission.READ_NETWORK_DEVICE_CONFIG"
+        android:protectionLevel="signature|privileged" />
+
     <!-- Allows to read device identifiers and use ICC based authentication like EAP-AKA.
          Often required in authentication to access the carrier's server and manage services
          of the subscriber.
@@ -2471,6 +2512,15 @@
     -->
     <permission android:name="android.permission.BIND_GBA_SERVICE"
         android:protectionLevel="signature" />
+
+    <!-- Required for an Application to access APIs related to RCS User Capability Exchange.
+         <p> This permission is only granted to system applications fulfilling the SMS, Dialer, and
+         Contacts app roles.
+         <p>Protection level: internal|role
+         @SystemApi
+         @hide -->
+    <permission android:name="android.permission.ACCESS_RCS_USER_CAPABILITY_EXCHANGE"
+        android:protectionLevel="internal|role" />
 
     <!-- ================================== -->
     <!-- Permissions for sdcard interaction -->
@@ -2736,11 +2786,11 @@
          The app can check whether it has this authorization by calling
          {@link android.provider.Settings#canDrawOverlays
          Settings.canDrawOverlays()}.
-         <p>Protection level: signature|appop|installer|recents|appPredictor|pre23|development -->
+         <p>Protection level: signature|appop|installer|appPredictor|pre23|development -->
     <permission android:name="android.permission.SYSTEM_ALERT_WINDOW"
         android:label="@string/permlab_systemAlertWindow"
         android:description="@string/permdesc_systemAlertWindow"
-        android:protectionLevel="signature|appop|installer|recents|appPredictor|pre23|development" />
+        android:protectionLevel="signature|appop|installer|appPredictor|pre23|development" />
 
     <!-- @SystemApi @hide Allows an application to create windows using the type
          {@link android.view.WindowManager.LayoutParams#TYPE_APPLICATION_OVERLAY},
@@ -3896,6 +3946,12 @@
     <permission android:name="android.permission.SET_KEYBOARD_LAYOUT"
         android:protectionLevel="signature" />
 
+    <!-- Allows an app to use exact alarm scheduling APIs to perform timing
+         sensitive background work.
+     -->
+    <permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:protectionLevel="normal|appop"/>
+
     <!-- Allows an application to query tablet mode state and monitor changes
          in it.
          <p>Not for use by third-party applications.
@@ -4031,6 +4087,11 @@
          @hide -->
     <permission android:name="android.permission.MOVE_PACKAGE"
         android:protectionLevel="signature|privileged" />
+
+    <!-- @TestApi Allows an application to keep uninstalled packages as apks.
+         @hide -->
+    <permission android:name="android.permission.KEEP_UNINSTALLED_PACKAGES"
+        android:protectionLevel="signature" />
 
     <!-- Allows an application to change whether an application component (other than its own) is
          enabled or not.
@@ -4389,6 +4450,12 @@
          Superseded by DEVICE_POWER permission. @hide @SystemApi
     -->
     <permission android:name="android.permission.POWER_SAVER"
+        android:protectionLevel="signature|privileged" />
+
+    <!-- Allows providing the system with battery predictions.
+         Superseded by DEVICE_POWER permission. @hide @SystemApi
+    -->
+    <permission android:name="android.permission.BATTERY_PREDICTION"
         android:protectionLevel="signature|privileged" />
 
    <!-- Allows access to the PowerManager.userActivity function.
@@ -5472,11 +5539,11 @@
                 android:protectionLevel="signature" />
 
     <!-- Must be required by a
-        {@link android.service.screenshot.ScreenshotHasherService}
+        {@link android.service.displayhash.DisplayHasherService}
         to ensure that only the system can bind to it.
         @hide This is not a third-party API (intended for OEMs and system apps).
     -->
-    <permission android:name="android.permission.BIND_SCREENSHOT_HASHER_SERVICE"
+    <permission android:name="android.permission.BIND_DISPLAY_HASHER_SERVICE"
         android:protectionLevel="signature" />
 
     <!-- @hide @TestApi Allows an application to enable/disable toast rate limiting.
@@ -5484,6 +5551,27 @@
     -->
     <permission android:name="android.permission.MANAGE_TOAST_RATE_LIMITING"
                 android:protectionLevel="signature" />
+
+    <!-- Allows managing the Game Mode
+     @hide Used internally. -->
+    <permission android:name="android.permission.MANAGE_GAME_MODE"
+                android:protectionLevel="signature" />
+
+    <!-- @SystemApi Allows the holder to register callbacks to inform the RebootReadinessManager
+         when they are performing reboot-blocking work.
+         @hide -->
+    <permission android:name="android.permission.SIGNAL_REBOOT_READINESS"
+                android:protectionLevel="signature|privileged" />
+
+    <!-- @hide Allows an application to get a People Tile preview for a given shortcut. -->
+    <permission android:name="android.permission.GET_PEOPLE_TILE_PREVIEW"
+        android:protectionLevel="signature|recents" />
+
+    <!-- @hide @SystemApi Allows an application to retrieve whether shortcut is backed by a
+         Conversation.
+         TODO(b/180412052): STOPSHIP: Define a role so it can be granted to Shell and AiAi. -->
+    <permission android:name="android.permission.READ_PEOPLE_DATA"
+                android:protectionLevel="signature|appPredictor|recents"/>
 
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>

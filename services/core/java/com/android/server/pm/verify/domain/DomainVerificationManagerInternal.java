@@ -16,35 +16,113 @@
 
 package com.android.server.pm.verify.domain;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.UserIdInt;
 import android.content.Intent;
 import android.content.pm.IntentFilterVerificationInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.ResolveInfo;
 import android.content.pm.verify.domain.DomainVerificationInfo;
 import android.content.pm.verify.domain.DomainVerificationManager;
 import android.os.Binder;
 import android.os.UserHandle;
 import android.util.IndentingPrintWriter;
+import android.util.Pair;
 import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
 
 import com.android.server.pm.PackageSetting;
+import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.verify.domain.models.DomainVerificationPkgState;
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxy;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 public interface DomainVerificationManagerInternal extends DomainVerificationManager {
 
     UUID DISABLED_ID = new UUID(0, 0);
+
+    /**
+     * The app has not been approved for this domain and should never be able to open it through
+     * an implicit web intent.
+     */
+    int APPROVAL_LEVEL_NONE = 0;
+
+    /**
+     * The app has been approved through the legacy
+     * {@link PackageManager#updateIntentVerificationStatusAsUser(String, int, int)} API, which has
+     * been preserved for migration purposes, but is otherwise ignored. Corresponds to
+     * {@link PackageManager#INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ASK} and
+     * {@link PackageManager#INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS_ASK}.
+     *
+     * This should be used as the cutoff for showing a picker if no better approved app exists
+     * during the legacy transition period.
+     *
+     * TODO(b/177923646): The legacy values can be removed once the Settings API changes are
+     *  shipped. These values are not stable, so just deleting the constant and shifting others is
+     *  fine.
+     */
+    int APPROVAL_LEVEL_LEGACY_ASK = 1;
+
+    /**
+     * The app has been approved through the legacy
+     * {@link PackageManager#updateIntentVerificationStatusAsUser(String, int, int)} API, which has
+     * been preserved for migration purposes, but is otherwise ignored. Corresponds to
+     * {@link PackageManager#INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS}.
+     */
+    int APPROVAL_LEVEL_LEGACY_ALWAYS = 1;
+
+    /**
+     * The app has been chosen by the user through
+     * {@link #setDomainVerificationUserSelection(UUID, Set, boolean)}, indictag an explicit
+     * choice to use this app to open an unverified domain.
+     */
+    int APPROVAL_LEVEL_SELECTION = 2;
+
+    /**
+     * The app is approved through the digital asset link statement being hosted at the domain
+     * it is capturing. This is set through {@link #setDomainVerificationStatus(UUID, Set, int)} by
+     * the domain verification agent on device.
+     */
+    int APPROVAL_LEVEL_VERIFIED = 3;
+
+    /**
+     * The app has been installed as an instant app, which grants it total authority on the domains
+     * that it declares. It is expected that the package installer validate the domains the app
+     * declares against the digital asset link statements before allowing it to be installed.
+     *
+     * The user is still able to disable instant app link handling through
+     * {@link #setDomainVerificationLinkHandlingAllowed(String, boolean)}.
+     */
+    int APPROVAL_LEVEL_INSTANT_APP = 4;
+
+    /**
+     * Defines the possible values for {@link #approvalLevelForDomain(PackageSetting, Intent, int)}
+     * which sorts packages by approval priority. A higher numerical value means the package should
+     * override all lower values. This means that comparison using less/greater than IS valid.
+     *
+     * Negative values are possible, although not implemented, reserved if explicit disable of a
+     * package for a domain needs to be tracked.
+     */
+    @IntDef({
+            APPROVAL_LEVEL_NONE,
+            APPROVAL_LEVEL_LEGACY_ASK,
+            APPROVAL_LEVEL_LEGACY_ALWAYS,
+            APPROVAL_LEVEL_SELECTION,
+            APPROVAL_LEVEL_VERIFIED,
+            APPROVAL_LEVEL_INSTANT_APP
+    })
+    @interface ApprovalLevel{}
 
     /**
      * Generate a new domain set ID to be used for attaching new packages.
@@ -173,8 +251,10 @@ public interface DomainVerificationManagerInternal extends DomainVerificationMan
      * Set aside a legacy user selection that will be restored to a pending
      * {@link DomainVerificationPkgState} once it's added through
      * {@link #addPackage(PackageSetting)}.
+     *
+     * @return true if state changed successfully
      */
-    void setLegacyUserState(@NonNull String packageName, @UserIdInt int userId, int state);
+    boolean setLegacyUserState(@NonNull String packageName, @UserIdInt int userId, int state);
 
     /**
      * Until the legacy APIs are entirely removed, returns the legacy state from the previously
@@ -183,20 +263,23 @@ public interface DomainVerificationManagerInternal extends DomainVerificationMan
     int getLegacyState(@NonNull String packageName, @UserIdInt int userId);
 
     /**
-     * Serialize a legacy setting that wasn't attached yet.
-     * TODO: Does this even matter? Should consider for removal.
-     */
-    void writeLegacySettings(TypedXmlSerializer serializer, String name);
-
-    /**
      * Print the verification state and user selection state of a package.
      *
-     * @param packageName the package whose state to change, or all packages if none is specified
-     * @param userId      the specific user to print, or null to skip printing user selection
-     *                    states, supports {@link android.os.UserHandle#USER_ALL}
+     * @param packageName        the package whose state to change, or all packages if none is
+     *                           specified
+     * @param userId             the specific user to print, or null to skip printing user selection
+     *                           states, supports {@link android.os.UserHandle#USER_ALL}
+     * @param pkgSettingFunction the method by which to retrieve package data; if this is called
+     *                           from {@link com.android.server.pm.PackageManagerService}, it is
+     *                           expected to pass in the snapshot of {@link PackageSetting} objects,
+     *                           or if null is passed, the manager may decide to lock {@link
+     *                           com.android.server.pm.PackageManagerService} through {@link
+     *                           Connection#getPackageSettingLocked(String)}
      */
     void printState(@NonNull IndentingPrintWriter writer, @Nullable String packageName,
-            @Nullable @UserIdInt Integer userId) throws NameNotFoundException;
+            @Nullable @UserIdInt Integer userId,
+            @Nullable Function<String, PackageSetting> pkgSettingFunction)
+            throws NameNotFoundException;
 
     @NonNull
     DomainVerificationShell getShell();
@@ -205,11 +288,28 @@ public interface DomainVerificationManagerInternal extends DomainVerificationMan
     DomainVerificationCollector getCollector();
 
     /**
-     * Check if a resolving URI is approved to takeover the domain as the sole resolved target.
-     * This can be because the domain was auto-verified for the package, or if the user manually
-     * chose to enable the domain for the package.
+     * Filters the provided list down to the {@link ResolveInfo} objects that should be allowed
+     * to open the domain inside the {@link Intent}. It is possible for no packages represented in
+     * the list to be approved, in which case an empty list will be returned.
+     *
+     * @return the filtered list and the corresponding approval level
      */
-    boolean isApprovedForDomain(@NonNull PackageSetting pkgSetting, @NonNull Intent intent,
+    @NonNull
+    Pair<List<ResolveInfo>, Integer> filterToApprovedApp(@NonNull Intent intent,
+            @NonNull List<ResolveInfo> infos, @UserIdInt int userId,
+            @NonNull Function<String, PackageSetting> pkgSettingFunction);
+
+    /**
+     * Check at what precedence a package resolving a URI is approved to takeover the domain.
+     * This can be because the domain was auto-verified for the package, or if the user manually
+     * chose to enable the domain for the package. If an app is auto-verified, it will be
+     * preferred over apps that were manually selected.
+     *
+     * NOTE: This should not be used for filtering intent resolution. See
+     * {@link #filterToApprovedApp(Intent, List, int, Function)} for that.
+     */
+    @ApprovalLevel
+    int approvalLevelForDomain(@NonNull PackageSetting pkgSetting, @NonNull Intent intent,
             @UserIdInt int userId);
 
     /**
@@ -225,7 +325,7 @@ public interface DomainVerificationManagerInternal extends DomainVerificationMan
             throws IllegalArgumentException, NameNotFoundException;
 
 
-    interface Connection {
+    interface Connection extends DomainVerificationEnforcer.Callback {
 
         /**
          * Notify that a settings change has been made and that eventually
@@ -249,6 +349,10 @@ public interface DomainVerificationManagerInternal extends DomainVerificationMan
          */
         void schedule(int code, @Nullable Object object);
 
+        // TODO(b/178733426): Make DomainVerificationService PMS snapshot aware so it can avoid
+        //  locking package state at all. This can be as simple as removing this method in favor of
+        //  accepting a PackageSetting function in at every method call, although should probably
+        //  be abstracted to a wrapper class.
         @Nullable
         PackageSetting getPackageSettingLocked(@NonNull String pkgName);
 

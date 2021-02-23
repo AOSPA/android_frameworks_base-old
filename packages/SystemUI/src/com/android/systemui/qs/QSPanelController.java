@@ -40,6 +40,7 @@ import com.android.systemui.qs.dagger.QSScope;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.settings.brightness.BrightnessController;
 import com.android.systemui.settings.brightness.BrightnessSlider;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
 import com.android.systemui.tuner.TunerService;
 
@@ -92,9 +93,10 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
             DumpManager dumpManager, MetricsLogger metricsLogger, UiEventLogger uiEventLogger,
             QSLogger qsLogger, BrightnessController.Factory brightnessControllerFactory,
             BrightnessSlider.Factory brightnessSliderFactory,
-            @Named(QS_LABELS_FLAG) boolean qsLabelsFlag) {
+            @Named(QS_LABELS_FLAG) boolean qsLabelsFlag,
+            FeatureFlags featureFlags) {
         super(view, qstileHost, qsCustomizerController, usingMediaPlayer, mediaHost,
-                metricsLogger, uiEventLogger, qsLogger, dumpManager);
+                metricsLogger, uiEventLogger, qsLogger, dumpManager, featureFlags);
         mQsSecurityFooter = qsSecurityFooter;
         mTunerService = tunerService;
         mQsCustomizerController = qsCustomizerController;
@@ -309,7 +311,7 @@ public class QSPanelController extends QSPanelControllerBase<QSPanel> {
     }
 
     /** */
-    public void showDetailDapater(DetailAdapter detailAdapter, int x, int y) {
+    public void showDetailAdapter(DetailAdapter detailAdapter, int x, int y) {
         mView.showDetailAdapter(true, detailAdapter, new int[]{x, y});
     }
 

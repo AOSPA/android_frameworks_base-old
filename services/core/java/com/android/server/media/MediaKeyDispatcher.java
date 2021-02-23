@@ -77,7 +77,7 @@ public abstract class MediaKeyDispatcher {
         mOverriddenKeyEvents.put(KeyEvent.KEYCODE_VOLUME_MUTE, 0);
     }
 
-    // TODO: Move this method into SessionPolicyProvider.java for better readability.
+    // TODO: Move this method into MediaSessionPolicyProvider.java for better readability.
     /**
      * Implement this to customize the logic for which MediaSession should consume which key event.
      *
@@ -100,9 +100,12 @@ public abstract class MediaKeyDispatcher {
     /**
      * Implement this to customize the logic for which MediaButtonReceiver should consume a
      * dispatched key event.
-     *
-     * Note: This pending intent will have lower priority over the {@link MediaSession.Token}
+     * <p>
+     * This pending intent will have lower priority over the {@link MediaSession.Token}
      * returned from {@link #getMediaSession(KeyEvent, int, boolean)}.
+     * <p>
+     * Use a pending intent with an explicit intent; setting a pending intent with an implicit
+     * intent that cannot be resolved to a certain component name will fail.
      *
      * @return a {@link PendingIntent} instance that should receive the dispatched key event.
      */
