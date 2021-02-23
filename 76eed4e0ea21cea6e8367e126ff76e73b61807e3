@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6fca45d8_cfc5712a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2021-02-23T02:52:00Z",
+      "side": 1,
+      "message": "needs a failure note\n\nif biometric auth fails enough times, fingerprint is no longer acknowledged but the dialog doesnt update to show that",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
