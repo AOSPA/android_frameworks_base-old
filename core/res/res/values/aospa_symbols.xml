@@ -55,4 +55,7 @@
     <!-- Whether to show WiFi/Hotspot standard -->
     <java-symbol type="bool" name="config_show_network_standard" />
 
+    <!-- Location indicator -->
+    <java-symbol type="drawable" name="stat_sys_location" />
+
 </resources>
