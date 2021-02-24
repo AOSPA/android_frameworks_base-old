@@ -34,6 +34,176 @@
       "parentUuid": "6fca45d8_cfc5712a",
       "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "75367248_6899466c",
+        "filename": "core/java/android/app/AppLockManager.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "whitespaces",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "1c4e8c73_c213f563",
+        "filename": "core/java/android/app/IAppLockCallback.aidl",
+        "patchSetId": 4
+      },
+      "lineNbr": 21,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "blank line, either remove it or add one after the function declaration",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "32868039_aa1ec2ad",
+        "filename": "core/java/android/app/IAppLockService.aidl",
+        "patchSetId": 4
+      },
+      "lineNbr": 24,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "Strings are in by default, you can remove that here and at the later ones",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "6717b79a_0e239d2c",
+        "filename": "core/java/android/app/IAppLockService.aidl",
+        "patchSetId": 4
+      },
+      "lineNbr": 32,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "booleans are in by default too",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "837aec6a_035a030a",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/AuthBiometricView.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 609,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "maybe add whitespaces around the /",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "134cf9c5_0ab34c3f",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/AuthBiometricView.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 701,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "I think a resource should be used here in favour of translations",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "37acd010_b761472b",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/AuthBiometricView.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 725,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "Can this be moved into the face/fingerprint class instead?",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ed4e96cc_50611122",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/AuthBiometricView.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 775,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "whitespaces",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3cc3445a_c09eb938",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/notification/NotificationEntryManager.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 242,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "What prevents us from injecting the AppLockManager directly?",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "d5f64ec7_3731a3d7",
+        "filename": "services/core/java/com/android/server/wm/ActivityStarter.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 1016,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-02-24T21:32:00Z",
+      "side": 1,
+      "message": "Guard that with one of the debugging constants",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
