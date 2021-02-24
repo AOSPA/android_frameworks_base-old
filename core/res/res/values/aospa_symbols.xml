@@ -91,6 +91,9 @@
     <!-- Whether usage of the proximity sensor during doze is supported -->
     <java-symbol type="bool" name="config_doze_proximity_sensor_supported" />
 
+    <!-- Location indicator -->
+    <java-symbol type="drawable" name="stat_sys_location" />
+
     <!-- DC Dimming -->
     <java-symbol type="string" name="config_deviceDcDimmingSysfsNode" />
     <java-symbol type="string" name="config_deviceDcDimmingEnableValue" />
