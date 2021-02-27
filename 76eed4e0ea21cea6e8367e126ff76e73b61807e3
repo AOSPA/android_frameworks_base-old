@@ -204,6 +204,23 @@
       "message": "Guard that with one of the debugging constants",
       "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "45fbb65c_6f42623c",
+        "filename": "services/core/java/com/android/server/wm/ActivityTaskManagerDebugConfig.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 73,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2021-02-27T19:44:35Z",
+      "side": 1,
+      "message": "This should be set false before merge.",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
