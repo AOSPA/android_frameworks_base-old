@@ -24,6 +24,7 @@ import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.SystemWindows;
 import com.android.wm.shell.common.TaskStackListenerImpl;
+import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
@@ -31,12 +32,9 @@ import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
 import com.android.wm.shell.pip.PipTaskOrganizer;
 import com.android.wm.shell.pip.PipUiEventLogger;
-import com.android.wm.shell.pip.tv.PipController;
-import com.android.wm.shell.pip.tv.PipControlsView;
-import com.android.wm.shell.pip.tv.PipControlsViewController;
-import com.android.wm.shell.pip.tv.PipNotification;
+import com.android.wm.shell.pip.tv.TvPipController;
 import com.android.wm.shell.pip.tv.TvPipMenuController;
-import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
+import com.android.wm.shell.pip.tv.TvPipNotificationController;
 
 import java.util.Optional;
 
@@ -57,40 +55,20 @@ public abstract class TvPipModule {
             PipTaskOrganizer pipTaskOrganizer,
             TvPipMenuController tvPipMenuController,
             PipMediaController pipMediaController,
-            PipNotification pipNotification,
+            TvPipNotificationController tvPipNotificationController,
             TaskStackListenerImpl taskStackListener,
             WindowManagerShellWrapper windowManagerShellWrapper) {
         return Optional.of(
-                new PipController(
+                new TvPipController(
                         context,
                         pipBoundsState,
                         pipBoundsAlgorithm,
                         pipTaskOrganizer,
                         tvPipMenuController,
                         pipMediaController,
-                        pipNotification,
+                        tvPipNotificationController,
                         taskStackListener,
                         windowManagerShellWrapper));
-    }
-
-    @WMSingleton
-    @Provides
-    static PipControlsViewController providePipControlsViewController(
-            PipControlsView pipControlsView, PipController pipController) {
-        return new PipControlsViewController(pipControlsView, pipController);
-    }
-
-    @WMSingleton
-    @Provides
-    static PipControlsView providePipControlsView(Context context) {
-        return new PipControlsView(context, null);
-    }
-
-    @WMSingleton
-    @Provides
-    static PipNotification providePipNotification(Context context,
-            PipMediaController pipMediaController) {
-        return new PipNotification(context, pipMediaController);
     }
 
     @WMSingleton
@@ -108,22 +86,32 @@ public abstract class TvPipModule {
 
     @WMSingleton
     @Provides
-    static TvPipMenuController providesPipTvMenuController(Context context,
-            PipBoundsState pipBoundsState, SystemWindows systemWindows) {
-        return new TvPipMenuController(context, pipBoundsState, systemWindows);
+    static TvPipMenuController providesTvPipMenuController(
+            Context context,
+            PipBoundsState pipBoundsState,
+            SystemWindows systemWindows,
+            PipMediaController pipMediaController) {
+        return new TvPipMenuController(context, pipBoundsState, systemWindows, pipMediaController);
+    }
+
+    @WMSingleton
+    @Provides
+    static TvPipNotificationController provideTvPipNotificationController(Context context,
+            PipMediaController pipMediaController) {
+        return new TvPipNotificationController(context, pipMediaController);
     }
 
     @WMSingleton
     @Provides
     static PipTaskOrganizer providePipTaskOrganizer(Context context,
-            TvPipMenuController tvMenuController,
+            TvPipMenuController tvPipMenuController,
             PipBoundsState pipBoundsState,
             PipBoundsAlgorithm pipBoundsAlgorithm,
             PipSurfaceTransactionHelper pipSurfaceTransactionHelper,
             Optional<LegacySplitScreen> splitScreenOptional, DisplayController displayController,
             PipUiEventLogger pipUiEventLogger, ShellTaskOrganizer shellTaskOrganizer) {
         return new PipTaskOrganizer(context, pipBoundsState, pipBoundsAlgorithm,
-                tvMenuController, pipSurfaceTransactionHelper, splitScreenOptional,
+                tvPipMenuController, pipSurfaceTransactionHelper, splitScreenOptional,
                 displayController, pipUiEventLogger, shellTaskOrganizer);
     }
 }

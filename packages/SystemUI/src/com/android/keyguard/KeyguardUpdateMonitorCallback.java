@@ -336,4 +336,9 @@ public class KeyguardUpdateMonitorCallback {
      */
     public void onLockScreenModeChanged(int mode) { }
 
+    /**
+     * Called when notifying user to unlock in order to use NFC.
+     */
+    public void onRequireUnlockForNfc() { }
+
 }

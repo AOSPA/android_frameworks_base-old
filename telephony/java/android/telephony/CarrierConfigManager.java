@@ -751,6 +751,14 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_WFC_IMS_AVAILABLE_BOOL = "carrier_wfc_ims_available_bool";
 
     /**
+     * Flag specifying whether Cross SIM over IMS should be available for carrier.
+     * When {@code false} the carrier does not support cross SIM calling.
+     * When {@code true} the carrier does support cross sim calling, where available
+     */
+    public static final String KEY_CARRIER_CROSS_SIM_IMS_AVAILABLE_BOOL =
+            "carrier_cross_sim_ims_available_bool";
+
+    /**
      * Specifies a map from dialstrings to replacements for roaming network service numbers which
      * cannot be replaced on the carrier side.
      * <p>
@@ -1531,6 +1539,31 @@ public class CarrierConfigManager {
      */
     public static final String KEY_WFC_CARRIER_NAME_OVERRIDE_BY_PNN_BOOL =
             "wfc_carrier_name_override_by_pnn_bool";
+
+    /**
+     * Value for {#CROSS_SIM_SPN_FORMAT_CARRIER_NAME_WITH_BRANDING} cnfig.
+     * specifies SPN format of displaying carrier name only.
+     *
+     */
+    public static final int CROSS_SIM_SPN_FORMAT_CARRIER_NAME_ONLY = 0;
+
+    /**
+     * Value for {#CROSS_SIM_SPN_FORMAT_CARRIER_NAME_WITH_BRANDING} cnfig.
+     * specifies SPN format of displaying carrier name along with "Cross-SIM calling".
+     */
+    public static final int CROSS_SIM_SPN_FORMAT_CARRIER_NAME_WITH_BRANDING = 1;
+
+    /**
+     * Indexes of SPN format strings in crossSimSpnFormats.
+     *
+     * <p>Available options are:
+     * <ul>
+     * <li>  {#CROSS_SIM_SPN_FORMAT_CARRIER_NAME_ONLY}: %s</li>
+     * <li>  {#CROSS_SIM_SPN_FORMAT_CARRIER_NAME_WITH_BRANDING}: %s Cross-SIM Calling</li>
+     * </ul>
+     * %s will be filled with carrier name
+     */
+    public static final String KEY_CROSS_SIM_SPN_FORMAT_INT = "cross_sim_spn_format_int";
 
     /**
      * Override the SPN Display Condition 2 integer bits (lsb). B2, B1 is the last two bits of the
@@ -2415,7 +2448,8 @@ public class CarrierConfigManager {
             "show_blocking_pay_phone_option_bool";
 
     /**
-     * Flag specifying whether the carrier will use the WFC home network mode in roaming network.
+     * Flag specifying whether the carrier will use the
+     * WFC home network mode in roaming network.
      * {@code false} - roaming preference can be selected separately from the home preference.
      * {@code true}  - roaming preference is the same as home preference and
      *                 {@link #KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT} is used as the default value.
@@ -3599,6 +3633,28 @@ public class CarrierConfigManager {
      */
     public static final String ENABLE_EAP_METHOD_PREFIX_BOOL = "enable_eap_method_prefix_bool";
 
+
+    /**
+     * Configs used by ImsServiceEntitlement.
+     */
+    public static final class ImsServiceEntitlement {
+        private ImsServiceEntitlement() {}
+
+        /** Prefix of all ImsServiceEntitlement.KEY_* constants. */
+        public static final String KEY_PREFIX = "imsserviceentitlement.";
+
+
+        /** The address of the entitlement configuration server. */
+        public static final String KEY_AES_URL_STRING = KEY_PREFIX + "aes_url_string";
+
+
+        private static PersistableBundle getDefaults() {
+            PersistableBundle defaults = new PersistableBundle();
+            defaults.putString(KEY_AES_URL_STRING, "");
+            return defaults;
+        }
+    }
+
     /**
      * GPS configs. See the GNSS HAL documentation for more details.
      */
@@ -4624,10 +4680,29 @@ public class CarrierConfigManager {
             "use_lower_mtu_value_if_both_received";
 
     /**
+     * Determines the default RTT mode.
+     *
+     * Upon first boot, when the user has not yet set a value for their preferred RTT mode,
+     * the value of this config will be sent to the IMS stack. Valid values are the same as for
+     * {@link Settings.Secure#RTT_CALLING_MODE}.
+     *
+     * @hide
+     */
+    public static final String KEY_DEFAULT_RTT_MODE_INT =
+            "default_rtt_mode_int";
+
+    /**
      * Indicates if auto-configuration server is used for the RCS config
      * Reference: GSMA RCC.14
      */
     public static final String KEY_USE_ACS_FOR_RCS_BOOL = "use_acs_for_rcs_bool";
+
+    /**
+     * Indicates temporarily unmetered mobile data is supported by the carrier.
+     * @hide
+     */
+    public static final String KEY_NETWORK_TEMP_NOT_METERED_SUPPORTED_BOOL =
+            "network_temp_not_metered_supported_bool";
 
      /**
      * Flag indicating whether carrier supports multianchor conference.
@@ -4638,14 +4713,6 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE =
             "carrier_supports_multianchor_conference";
-
-    /**
-     * Determines the default RTT mode.
-     *
-     * @hide
-     */
-    public static final String KEY_DEFAULT_RTT_MODE_INT =
-            "default_rtt_mode_int";
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -4682,6 +4749,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_VILTE_DATA_IS_METERED_BOOL, true);
         sDefaults.putBoolean(KEY_IGNORE_RESET_UT_CAPABILITY_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_WFC_IMS_AVAILABLE_BOOL, false);
+        sDefaults.putBoolean(KEY_CARRIER_CROSS_SIM_IMS_AVAILABLE_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_WFC_SUPPORTS_WIFI_ONLY_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_WFC_SUPPORTS_IMS_PREFERRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_DEFAULT_WFC_IMS_ENABLED_BOOL, false);
@@ -4859,6 +4927,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_NAME_OVERRIDE_BOOL, false);
         sDefaults.putString(KEY_CARRIER_NAME_STRING, "");
         sDefaults.putBoolean(KEY_WFC_CARRIER_NAME_OVERRIDE_BY_PNN_BOOL, false);
+        sDefaults.putInt(KEY_CROSS_SIM_SPN_FORMAT_INT, 1);
         sDefaults.putInt(KEY_SPN_DISPLAY_CONDITION_OVERRIDE_INT, -1);
         sDefaults.putStringArray(KEY_SPDI_OVERRIDE_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_PNN_OVERRIDE_STRING_ARRAY, null);
@@ -5148,6 +5217,7 @@ public class CarrierConfigManager {
         sDefaults.putLong(KEY_OPPORTUNISTIC_NETWORK_BACKOFF_TIME_LONG, 10000);
         /* Default value is 60 seconds. */
         sDefaults.putLong(KEY_OPPORTUNISTIC_NETWORK_MAX_BACKOFF_TIME_LONG, 60000);
+        sDefaults.putAll(ImsServiceEntitlement.getDefaults());
         sDefaults.putAll(Gps.getDefaults());
         sDefaults.putIntArray(KEY_CDMA_ENHANCED_ROAMING_INDICATOR_FOR_HOME_NETWORK_INT_ARRAY,
                 new int[] {
@@ -5199,8 +5269,9 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_CALL_COMPOSER_PICTURE_SERVER_URL_STRING, "");
         sDefaults.putBoolean(KEY_USE_LOWER_MTU_VALUE_IF_BOTH_RECEIVED, false);
         sDefaults.putBoolean(KEY_USE_ACS_FOR_RCS_BOOL, false);
-        sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
+        sDefaults.putBoolean(KEY_NETWORK_TEMP_NOT_METERED_SUPPORTED_BOOL, true);
         sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);
+        sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
     }
 
     /**
@@ -5219,9 +5290,25 @@ public class CarrierConfigManager {
         public static final String KEY_HOTSPOT_MAX_CLIENT_COUNT =
                 KEY_PREFIX + "hotspot_maximum_client_count";
 
+        /**
+         * This configuration is intended to be a narrow exception for provisioning
+         * {@link android.net.wifi.WifiNetworkSuggestion} of widely-known carrier networks that do
+         * not support using randomized MAC address.
+         * Carrier provisioned {@link android.net.wifi.WifiNetworkSuggestion} with SSIDs included
+         * in this list will have MAC randomization disabled.
+         *
+         * Note: the SSIDs in the list are expected to be interpreted as is - do not add double
+         * quotes to the SSIDs.
+         */
+        public static final String KEY_SUGGESTION_SSID_LIST_WITH_MAC_RANDOMIZATION_DISABLED =
+                KEY_PREFIX + "suggestion_ssid_list_with_mac_randomization_disabled";
+
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
             defaults.putInt(KEY_HOTSPOT_MAX_CLIENT_COUNT, 0);
+            defaults.putStringArray(KEY_SUGGESTION_SSID_LIST_WITH_MAC_RANDOMIZATION_DISABLED,
+                    new String[0]);
+
             return defaults;
         }
 

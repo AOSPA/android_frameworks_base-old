@@ -29,8 +29,7 @@ import android.os.IBinder;
 import android.stats.location.LocationStatsEnums;
 import android.util.Log;
 
-import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.util.Preconditions;
+import com.android.server.location.gnss.hal.GnssNative;
 import com.android.server.location.injector.AppOpsHelper;
 import com.android.server.location.injector.Injector;
 import com.android.server.location.injector.LocationAttributionHelper;
@@ -38,7 +37,6 @@ import com.android.server.location.injector.LocationUsageLogger;
 import com.android.server.location.injector.SettingsHelper;
 
 import java.util.Collection;
-import java.util.Objects;
 
 /**
  * An base implementation for GNSS measurements provider. It abstracts out the responsibility of
@@ -47,8 +45,10 @@ import java.util.Objects;
  * @hide
  */
 public final class GnssMeasurementsProvider extends
-        GnssListenerMultiplexer<GnssMeasurementRequest, IGnssMeasurementsListener, Boolean>
-        implements SettingsHelper.GlobalSettingChangedListener {
+        GnssListenerMultiplexer<GnssMeasurementRequest, IGnssMeasurementsListener,
+                GnssMeasurementRequest> implements
+        SettingsHelper.GlobalSettingChangedListener, GnssNative.BaseCallbacks,
+        GnssNative.MeasurementCallbacks {
 
     private class GnssMeasurementListenerRegistration extends GnssListenerRegistration {
 
@@ -57,8 +57,14 @@ public final class GnssMeasurementsProvider extends
         protected GnssMeasurementListenerRegistration(
                 @Nullable GnssMeasurementRequest request,
                 CallerIdentity callerIdentity,
-                IGnssMeasurementsListener iGnssMeasurementsListener) {
-            super(request, callerIdentity, iGnssMeasurementsListener);
+                IGnssMeasurementsListener listener) {
+            super(request, callerIdentity, listener);
+        }
+
+        @Override
+        protected void onGnssListenerRegister() {
+            executeOperation(listener -> listener.onStatusChanged(
+                    GnssMeasurementsEvent.Callback.STATUS_READY));
         }
 
         @Nullable
@@ -79,24 +85,22 @@ public final class GnssMeasurementsProvider extends
     private final AppOpsHelper mAppOpsHelper;
     private final LocationAttributionHelper mLocationAttributionHelper;
     private final LocationUsageLogger mLogger;
-    private final GnssMeasurementProviderNative mNative;
+    private final GnssNative mGnssNative;
 
-    public GnssMeasurementsProvider(Injector injector) {
-        this(injector, new GnssMeasurementProviderNative());
-    }
-
-    @VisibleForTesting
-    public GnssMeasurementsProvider(Injector injector, GnssMeasurementProviderNative aNative) {
+    public GnssMeasurementsProvider(Injector injector, GnssNative gnssNative) {
         super(injector);
         mAppOpsHelper = injector.getAppOpsHelper();
         mLocationAttributionHelper = injector.getLocationAttributionHelper();
         mLogger = injector.getLocationUsageLogger();
-        mNative = aNative;
+        mGnssNative = gnssNative;
+
+        mGnssNative.addBaseCallbacks(this);
+        mGnssNative.addMeasurementCallbacks(this);
     }
 
     @Override
     protected boolean isServiceSupported() {
-        return mNative.isMeasurementSupported();
+        return mGnssNative.isMeasurementSupported();
     }
 
     @Override
@@ -112,17 +116,15 @@ public final class GnssMeasurementsProvider extends
     }
 
     @Override
-    protected boolean registerWithService(Boolean fullTrackingRequest,
+    protected boolean registerWithService(GnssMeasurementRequest request,
             Collection<GnssListenerRegistration> registrations) {
-        Preconditions.checkState(mNative.isMeasurementSupported());
-
-        if (mNative.startMeasurementCollection(fullTrackingRequest)) {
+        if (mGnssNative.startMeasurementCollection(request.isFullTracking(),
+                request.isCorrelationVectorOutputsEnabled())) {
             if (D) {
-                Log.d(TAG, "starting gnss measurements (" + fullTrackingRequest + ")");
+                Log.d(TAG, "starting gnss measurements (" + request + ")");
             }
             return true;
         } else {
-
             Log.e(TAG, "error starting gnss measurements");
             return false;
         }
@@ -130,14 +132,12 @@ public final class GnssMeasurementsProvider extends
 
     @Override
     protected void unregisterWithService() {
-        if (mNative.isMeasurementSupported()) {
-            if (mNative.stopMeasurementCollection()) {
-                if (D) {
-                    Log.d(TAG, "stopping gnss measurements");
-                }
-            } else {
-                Log.e(TAG, "error stopping gnss measurements");
+        if (mGnssNative.stopMeasurementCollection()) {
+            if (D) {
+                Log.d(TAG, "stopping gnss measurements");
             }
+        } else {
+            Log.e(TAG, "error stopping gnss measurements");
         }
     }
 
@@ -158,18 +158,29 @@ public final class GnssMeasurementsProvider extends
     }
 
     @Override
-    protected Boolean mergeRegistrations(Collection<GnssListenerRegistration> registrations) {
+    protected GnssMeasurementRequest mergeRegistrations(
+            Collection<GnssListenerRegistration> registrations) {
+        boolean fullTracking = false;
+        boolean enableCorrVecOutputs = false;
+
         if (mSettingsHelper.isGnssMeasurementsFullTrackingEnabled()) {
-            return true;
+            fullTracking = true;
         }
 
         for (GnssListenerRegistration registration : registrations) {
-            if (Objects.requireNonNull(registration.getRequest()).isFullTracking()) {
-                return true;
+            GnssMeasurementRequest request = registration.getRequest();
+            if (request.isFullTracking()) {
+                fullTracking = true;
+            }
+            if (request.isCorrelationVectorOutputsEnabled()) {
+                enableCorrVecOutputs = true;
             }
         }
 
-        return false;
+        return new GnssMeasurementRequest.Builder()
+                    .setFullTracking(fullTracking)
+                    .setCorrelationVectorOutputsEnabled(enableCorrVecOutputs)
+                    .build();
     }
 
     @Override
@@ -198,10 +209,13 @@ public final class GnssMeasurementsProvider extends
                 null, registration.isForeground());
     }
 
-    /**
-     * Called by GnssLocationProvider.
-     */
-    public void onMeasurementsAvailable(GnssMeasurementsEvent event) {
+    @Override
+    public void onHalRestarted() {
+        resetService();
+    }
+
+    @Override
+    public void onReportMeasurements(GnssMeasurementsEvent event) {
         deliverToListeners(registration -> {
             if (mAppOpsHelper.noteOpNoThrow(AppOpsManager.OP_FINE_LOCATION,
                     registration.getIdentity())) {
@@ -211,25 +225,4 @@ public final class GnssMeasurementsProvider extends
             }
         });
     }
-
-    @VisibleForTesting
-    static class GnssMeasurementProviderNative {
-        boolean isMeasurementSupported() {
-            return native_is_measurement_supported();
-        }
-
-        boolean startMeasurementCollection(boolean enableFullTracking) {
-            return native_start_measurement_collection(enableFullTracking);
-        }
-
-        boolean stopMeasurementCollection() {
-            return native_stop_measurement_collection();
-        }
-    }
-
-    static native boolean native_is_measurement_supported();
-
-    static native boolean native_start_measurement_collection(boolean enableFullTracking);
-
-    static native boolean native_stop_measurement_collection();
 }

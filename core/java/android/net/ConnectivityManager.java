@@ -16,6 +16,9 @@
 package android.net;
 
 import static android.net.IpSecManager.INVALID_RESOURCE_ID;
+import static android.net.NetworkRequest.Type.LISTEN;
+import static android.net.NetworkRequest.Type.REQUEST;
+import static android.net.NetworkRequest.Type.TRACK_DEFAULT;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
@@ -59,6 +62,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.util.Range;
 import android.util.SparseIntArray;
 
 import com.android.connectivity.aidl.INetworkAgent;
@@ -68,15 +72,16 @@ import com.android.internal.util.Protocol;
 
 import libcore.net.event.NetworkEventDispatcher;
 
-import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1163,6 +1168,55 @@ public class ConnectivityManager {
     }
 
     /**
+     * Adds or removes a requirement for given UID ranges to use the VPN.
+     *
+     * If set to {@code true}, informs the system that the UIDs in the specified ranges must not
+     * have any connectivity except if a VPN is connected and applies to the UIDs, or if the UIDs
+     * otherwise have permission to bypass the VPN (e.g., because they have the
+     * {@link android.Manifest.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS} permission, or when
+     * using a socket protected by a method such as {@link VpnService#protect(DatagramSocket)}. If
+     * set to {@code false}, a previously-added restriction is removed.
+     * <p>
+     * Each of the UID ranges specified by this method is added and removed as is, and no processing
+     * is performed on the ranges to de-duplicate, merge, split, or intersect them. In order to
+     * remove a previously-added range, the exact range must be removed as is.
+     * <p>
+     * The changes are applied asynchronously and may not have been applied by the time the method
+     * returns. Apps will be notified about any changes that apply to them via
+     * {@link NetworkCallback#onBlockedStatusChanged} callbacks called after the changes take
+     * effect.
+     * <p>
+     * This method should be called only by the VPN code.
+     *
+     * @param ranges the UID ranges to restrict
+     * @param requireVpn whether the specified UID ranges must use a VPN
+     *
+     * TODO: expose as @SystemApi.
+     * @hide
+     */
+    @RequiresPermission(anyOf = {
+            NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
+            android.Manifest.permission.NETWORK_STACK})
+    public void setRequireVpnForUids(boolean requireVpn,
+            @NonNull Collection<Range<Integer>> ranges) {
+        Objects.requireNonNull(ranges);
+        // The Range class is not parcelable. Convert to UidRange, which is what is used internally.
+        // This method is not necessarily expected to be used outside the system server, so
+        // parceling may not be necessary, but it could be used out-of-process, e.g., by the network
+        // stack process, or by tests.
+        UidRange[] rangesArray = new UidRange[ranges.size()];
+        int index = 0;
+        for (Range<Integer> range : ranges) {
+            rangesArray[index++] = new UidRange(range.getLower(), range.getUpper());
+        }
+        try {
+            mService.setRequireVpnForUids(requireVpn, rangesArray);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns details about the currently active default data network
      * for a given uid.  This is for internal use only to avoid spying
      * other apps.
@@ -1833,30 +1887,42 @@ public class ConnectivityManager {
             mCallback = new ISocketKeepaliveCallback.Stub() {
                 @Override
                 public void onStarted(int slot) {
-                    Binder.withCleanCallingIdentity(() ->
-                            mExecutor.execute(() -> {
-                                mSlot = slot;
-                                callback.onStarted();
-                            }));
+                    final long token = Binder.clearCallingIdentity();
+                    try {
+                        mExecutor.execute(() -> {
+                            mSlot = slot;
+                            callback.onStarted();
+                        });
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
                 }
 
                 @Override
                 public void onStopped() {
-                    Binder.withCleanCallingIdentity(() ->
-                            mExecutor.execute(() -> {
-                                mSlot = null;
-                                callback.onStopped();
-                            }));
+                    final long token = Binder.clearCallingIdentity();
+                    try {
+                        mExecutor.execute(() -> {
+                            mSlot = null;
+                            callback.onStopped();
+                        });
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
                     mExecutor.shutdown();
                 }
 
                 @Override
                 public void onError(int error) {
-                    Binder.withCleanCallingIdentity(() ->
-                            mExecutor.execute(() -> {
-                                mSlot = null;
-                                callback.onError(error);
-                            }));
+                    final long token = Binder.clearCallingIdentity();
+                    try {
+                        mExecutor.execute(() -> {
+                            mSlot = null;
+                            callback.onError(error);
+                        });
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
                     mExecutor.shutdown();
                 }
 
@@ -1891,6 +1957,12 @@ public class ConnectivityManager {
         return k;
     }
 
+    // Construct an invalid fd.
+    private ParcelFileDescriptor createInvalidFd() {
+        final int invalidFd = -1;
+        return ParcelFileDescriptor.adoptFd(invalidFd);
+    }
+
     /**
      * Request that keepalives be started on a IPsec NAT-T socket.
      *
@@ -1921,7 +1993,7 @@ public class ConnectivityManager {
         } catch (IOException ignored) {
             // Construct an invalid fd, so that if the user later calls start(), it will fail with
             // ERROR_INVALID_SOCKET.
-            dup = new ParcelFileDescriptor(new FileDescriptor());
+            dup = createInvalidFd();
         }
         return new NattSocketKeepalive(mService, network, dup, socket.getResourceId(), source,
                 destination, executor, callback);
@@ -1963,7 +2035,7 @@ public class ConnectivityManager {
         } catch (IOException ignored) {
             // Construct an invalid fd, so that if the user later calls start(), it will fail with
             // ERROR_INVALID_SOCKET.
-            dup = new ParcelFileDescriptor(new FileDescriptor());
+            dup = createInvalidFd();
         }
         return new NattSocketKeepalive(mService, network, dup,
                 INVALID_RESOURCE_ID /* Unused */, source, destination, executor, callback);
@@ -2000,7 +2072,7 @@ public class ConnectivityManager {
         } catch (UncheckedIOException ignored) {
             // Construct an invalid fd, so that if the user later calls start(), it will fail with
             // ERROR_INVALID_SOCKET.
-            dup = new ParcelFileDescriptor(new FileDescriptor());
+            dup = createInvalidFd();
         }
         return new TcpSocketKeepalive(mService, network, dup, executor, callback);
     }
@@ -3120,39 +3192,6 @@ public class ConnectivityManager {
     }
 
     /**
-     * Check mobile provisioning.
-     *
-     * @param suggestedTimeOutMs, timeout in milliseconds
-     *
-     * @return time out that will be used, maybe less that suggestedTimeOutMs
-     * -1 if an error.
-     *
-     * {@hide}
-     */
-    public int checkMobileProvisioning(int suggestedTimeOutMs) {
-        int timeOutMs = -1;
-        try {
-            timeOutMs = mService.checkMobileProvisioning(suggestedTimeOutMs);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-        return timeOutMs;
-    }
-
-    /**
-     * Get the mobile provisioning url.
-     * {@hide}
-     */
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public String getMobileProvisioningUrl() {
-        try {
-            return mService.getMobileProvisioningUrl();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
      * Set sign in error notification to visible or invisible
      *
      * @hide
@@ -3699,14 +3738,12 @@ public class ConnectivityManager {
     private static final HashMap<NetworkRequest, NetworkCallback> sCallbacks = new HashMap<>();
     private static CallbackHandler sCallbackHandler;
 
-    private static final int LISTEN  = 1;
-    private static final int REQUEST = 2;
-
     private NetworkRequest sendRequestForNetwork(NetworkCapabilities need, NetworkCallback callback,
-            int timeoutMs, int action, int legacyType, CallbackHandler handler) {
+            int timeoutMs, NetworkRequest.Type reqType, int legacyType, CallbackHandler handler) {
         printStackTrace();
         checkCallbackNotNull(callback);
-        Preconditions.checkArgument(action == REQUEST || need != null, "null NetworkCapabilities");
+        Preconditions.checkArgument(
+                reqType == TRACK_DEFAULT || need != null, "null NetworkCapabilities");
         final NetworkRequest request;
         final String callingPackageName = mContext.getOpPackageName();
         try {
@@ -3719,13 +3756,13 @@ public class ConnectivityManager {
                 }
                 Messenger messenger = new Messenger(handler);
                 Binder binder = new Binder();
-                if (action == LISTEN) {
+                if (reqType == LISTEN) {
                     request = mService.listenForNetwork(
                             need, messenger, binder, callingPackageName);
                 } else {
                     request = mService.requestNetwork(
-                            need, messenger, timeoutMs, binder, legacyType, callingPackageName,
-                            getAttributionTag());
+                            need, reqType.ordinal(), messenger, timeoutMs, binder, legacyType,
+                            callingPackageName, getAttributionTag());
                 }
                 if (request != null) {
                     sCallbacks.put(request, callback);
@@ -4229,7 +4266,7 @@ public class ConnectivityManager {
         // request, i.e., the system default network.
         CallbackHandler cbHandler = new CallbackHandler(handler);
         sendRequestForNetwork(null /* NetworkCapabilities need */, networkCallback, 0,
-                REQUEST, TYPE_NONE, cbHandler);
+                TRACK_DEFAULT, TYPE_NONE, cbHandler);
     }
 
     /**

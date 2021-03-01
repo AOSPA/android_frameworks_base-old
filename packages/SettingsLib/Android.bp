@@ -57,6 +57,7 @@ java_defaults {
         "SettingsLibTopIntroPreference",
         "SettingsLibBannerMessagePreference",
         "SettingsLibFooterPreference",
+        "SettingsLibUsageProgressBarPreference",
     ],
 }
 

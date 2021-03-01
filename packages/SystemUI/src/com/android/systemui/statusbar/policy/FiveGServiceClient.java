@@ -48,19 +48,19 @@ import java.lang.Exception;
 import java.util.ArrayList;
 import java.lang.ref.WeakReference;
 
-import org.codeaurora.internal.Client;
-import org.codeaurora.internal.IExtTelephony;
-import org.codeaurora.internal.INetworkCallback;
-import org.codeaurora.internal.NetworkCallbackBase;
-import org.codeaurora.internal.NrIconType;
-import org.codeaurora.internal.ServiceUtil;
-import org.codeaurora.internal.Status;
-import org.codeaurora.internal.Token;
-
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.SignalIcon.MobileIconGroup;
 import com.android.systemui.R;
+
+import com.qti.extphone.Client;
+import com.qti.extphone.ExtTelephonyManager;
+import com.qti.extphone.IExtPhoneCallback;
+import com.qti.extphone.ExtPhoneCallbackBase;
+import com.qti.extphone.NrIconType;
+import com.qti.extphone.Status;
+import com.qti.extphone.ServiceCallback;
+import com.qti.extphone.Token;
 
 public class FiveGServiceClient {
     private static final String TAG = "FiveGServiceClient";
@@ -82,11 +82,11 @@ public class FiveGServiceClient {
 
     private Context mContext;
     private boolean mServiceConnected;
-    private IExtTelephony mNetworkService;
     private String mPackageName;
     private Client mClient;
-    private int mBindRetryTimes = 0;
     private int mInitRetryTimes = 0;
+    private ExtTelephonyManager mExtTelephonyManager;
+    private boolean mIsConnectInProgress = false;
 
     public static class FiveGServiceState{
         private int mNrIconType;
@@ -133,6 +133,9 @@ public class FiveGServiceClient {
     public FiveGServiceClient(Context context) {
         mContext = context;
         mPackageName = mContext.getPackageName();
+        if (mExtTelephonyManager == null) {
+            mExtTelephonyManager = ExtTelephonyManager.getInstance(mContext);
+        }
     }
 
     public static FiveGServiceClient getInstance(Context context) {
@@ -153,7 +156,7 @@ public class FiveGServiceClient {
 
         mStatesListeners.put(phoneId, listener);
         if ( !isServiceConnected() ) {
-            binderService();
+            connectService();
         }else{
             initFiveGServiceState(phoneId);
         }
@@ -166,19 +169,41 @@ public class FiveGServiceClient {
         mLastServiceStates.remove(phoneId);
     }
 
-    private void binderService() {
-        boolean success = ServiceUtil.bindService(mContext, mServiceConnection);
-        Log.d(TAG, " bind service " + success);
-        if ( !success && mBindRetryTimes < MAX_RETRY && !mHandler.hasMessages(MESSAGE_REBIND)) {
-            mHandler.sendEmptyMessageDelayed(MESSAGE_REBIND,
-                    DELAY_MILLISECOND + mBindRetryTimes*DELAY_INCREMENT);
-            mBindRetryTimes+=1;
-        }
-    }
-
     public boolean isServiceConnected() {
         return mServiceConnected;
     }
+
+    private void connectService() {
+        if (!isServiceConnected() && !mIsConnectInProgress) {
+            mIsConnectInProgress = true;
+            Log.d(TAG, "Connect to ExtTelephony bound service...");
+            mExtTelephonyManager.connectService(mServiceCallback);
+        }
+    }
+
+    private ServiceCallback mServiceCallback = new ServiceCallback() {
+        @Override
+        public void onConnected() {
+            Log.d(TAG, "ExtTelephony Service connected");
+            mServiceConnected = true;
+            mIsConnectInProgress = false;
+            mClient = mExtTelephonyManager.registerCallback(mPackageName, mCallback);
+            initFiveGServiceState();
+            Log.d(TAG, "Client = " + mClient);
+        }
+        @Override
+        public void onDisconnected() {
+            Log.d(TAG, "ExtTelephony Service disconnected...");
+            if (mServiceConnected) {
+                mExtTelephonyManager.unRegisterCallback(mCallback);
+            }
+            mServiceConnected = false;
+            mClient = null;
+            mIsConnectInProgress = false;
+            mHandler.sendEmptyMessageDelayed(MESSAGE_REBIND,
+                    DELAY_MILLISECOND + DELAY_INCREMENT);
+        }
+    };
 
     @VisibleForTesting
     public FiveGServiceState getCurrentServiceState(int phoneId) {
@@ -230,21 +255,13 @@ public class FiveGServiceClient {
     }
 
     private void initFiveGServiceState(int phoneId) {
-        Log.d(TAG, "mNetworkService=" + mNetworkService + " mClient=" + mClient);
-        if ( mNetworkService != null && mClient != null) {
+        Log.d(TAG, "mServiceConnected=" + mServiceConnected + " mClient=" + mClient);
+        if ( mServiceConnected && mClient != null) {
             Log.d(TAG, "query 5G service state for phoneId " + phoneId);
             try {
-                Token token = mNetworkService.queryNrIconType(phoneId, mClient);
+                Token token = mExtTelephonyManager.queryNrIconType(phoneId, mClient);
                 Log.d(TAG, "queryNrIconType result:" + token);
-            }catch(DeadObjectException e) {
-                Log.e(TAG, "initFiveGServiceState: Exception = " + e);
-                Log.d(TAG, "try to re-binder service");
-                mInitRetryTimes = 0;
-                mServiceConnected = false;
-                mNetworkService = null;
-                mClient = null;
-                binderService();
-            }catch (Exception e) {
+            } catch (Exception e) {
                 Log.d(TAG, "initFiveGServiceState: Exception = " + e);
                 if ( mInitRetryTimes < MAX_RETRY && !mHandler.hasMessages(MESSAGE_REINIT) ) {
                     mHandler.sendEmptyMessageDelayed(MESSAGE_REINIT,
@@ -287,7 +304,7 @@ public class FiveGServiceClient {
             int what = msg.what;
             switch ( msg.what ) {
                 case MESSAGE_REBIND:
-                    binderService();
+                    connectService();
                     break;
 
                 case MESSAGE_REINIT:
@@ -302,50 +319,9 @@ public class FiveGServiceClient {
         }
     };
 
-    private ServiceConnection mServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            Log.d(TAG, "onServiceConnected:" + service);
-
-            try {
-                mNetworkService = IExtTelephony.Stub.asInterface(service);
-                mClient = mNetworkService.registerCallback(mPackageName, mCallback);
-                mServiceConnected = true;
-                initFiveGServiceState();
-                Log.d(TAG, "Client = " + mClient);
-            } catch (Exception e) {
-                Log.d(TAG, "onServiceConnected: Exception = " + e);
-            }
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            Log.d(TAG, "onServiceDisconnected:" + name);
-            cleanup();
-        }
-
-        @Override
-        public void onBindingDied(ComponentName name) {
-            Log.d(TAG, "onBindingDied:" + name);
-            cleanup();
-            if ( mBindRetryTimes < MAX_RETRY ) {
-                Log.d(TAG, "try to re-bind");
-                mHandler.sendEmptyMessageDelayed(MESSAGE_REBIND,
-                        DELAY_MILLISECOND+mBindRetryTimes*DELAY_INCREMENT);
-            }
-        }
-
-        private void cleanup() {
-            Log.d(TAG, "cleanup");
-            mServiceConnected = false;
-            mNetworkService = null;
-            mClient = null;
-        }
-    };
-
 
     @VisibleForTesting
-    protected INetworkCallback mCallback = new NetworkCallbackBase() {
+    protected IExtPhoneCallback mCallback = new ExtPhoneCallbackBase() {
         @Override
         public void onNrIconType(int slotId, Token token, Status status, NrIconType
                 nrIconType) throws RemoteException {

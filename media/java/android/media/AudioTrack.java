@@ -1824,6 +1824,7 @@ public class AudioTrack extends PlayerBase
 
     @Override
     protected void finalize() {
+        tryToDisableNativeRoutingCallback();
         baseRelease();
         native_finalize();
     }
@@ -2717,9 +2718,14 @@ public class AudioTrack extends PlayerBase
     }
 
     private void startImpl() {
+        synchronized (mRoutingChangeListeners) {
+            if (!mEnableSelfRoutingMonitor) {
+                mEnableSelfRoutingMonitor = testEnableNativeRoutingCallbacksLocked();
+            }
+        }
         synchronized(mPlayStateLock) {
-            baseStart();
             native_start();
+            baseStart(native_getRoutedDeviceId());
             if (mPlayState == PLAYSTATE_PAUSED_STOPPING) {
                 mPlayState = PLAYSTATE_STOPPING;
             } else {
@@ -2757,6 +2763,7 @@ public class AudioTrack extends PlayerBase
                 mPlayStateLock.notify();
             }
         }
+        tryToDisableNativeRoutingCallback();
     }
 
     /**
@@ -3486,33 +3493,48 @@ public class AudioTrack extends PlayerBase
         if (deviceId == 0) {
             return null;
         }
-        AudioDeviceInfo[] devices =
-                AudioManager.getDevicesStatic(AudioManager.GET_DEVICES_OUTPUTS);
-        for (int i = 0; i < devices.length; i++) {
-            if (devices[i].getId() == deviceId) {
-                return devices[i];
+        return AudioManager.getDeviceForPortId(deviceId, AudioManager.GET_DEVICES_OUTPUTS);
+    }
+
+    private void tryToDisableNativeRoutingCallback() {
+        synchronized (mRoutingChangeListeners) {
+            if (mEnableSelfRoutingMonitor) {
+                mEnableSelfRoutingMonitor = false;
+                testDisableNativeRoutingCallbacksLocked();
             }
         }
-        return null;
     }
 
-    /*
-     * Call BEFORE adding a routing callback handler.
+    /**
+     * Call BEFORE adding a routing callback handler and when enabling self routing listener
+     * @return returns true for success, false otherwise.
      */
     @GuardedBy("mRoutingChangeListeners")
-    private void testEnableNativeRoutingCallbacksLocked() {
-        if (mRoutingChangeListeners.size() == 0) {
-            native_enableDeviceCallback();
+    private boolean testEnableNativeRoutingCallbacksLocked() {
+        if (mRoutingChangeListeners.size() == 0 && !mEnableSelfRoutingMonitor) {
+            try {
+                native_enableDeviceCallback();
+                return true;
+            } catch (IllegalStateException e) {
+                // Fail silently as track state could have changed in between start
+                // and enabling routing callback, return false to indicate not enabled
+            }
         }
+        return false;
     }
 
     /*
-     * Call AFTER removing a routing callback handler.
+     * Call AFTER removing a routing callback handler and when disabling self routing listener.
      */
     @GuardedBy("mRoutingChangeListeners")
     private void testDisableNativeRoutingCallbacksLocked() {
-        if (mRoutingChangeListeners.size() == 0) {
-            native_disableDeviceCallback();
+        if (mRoutingChangeListeners.size() == 0 && !mEnableSelfRoutingMonitor) {
+            try {
+                native_disableDeviceCallback();
+            } catch (IllegalStateException e) {
+                // Fail silently as track state could have changed in between stop
+                // and disabling routing callback
+            }
         }
     }
 
@@ -3527,6 +3549,9 @@ public class AudioTrack extends PlayerBase
     @GuardedBy("mRoutingChangeListeners")
     private ArrayMap<AudioRouting.OnRoutingChangedListener,
             NativeRoutingEventHandlerDelegate> mRoutingChangeListeners = new ArrayMap<>();
+
+    @GuardedBy("mRoutingChangeListeners")
+    private boolean mEnableSelfRoutingMonitor;
 
    /**
     * Adds an {@link AudioRouting.OnRoutingChangedListener} to receive notifications of routing
@@ -3627,6 +3652,7 @@ public class AudioTrack extends PlayerBase
      */
     private void broadcastRoutingChange() {
         AudioManager.resetAudioPortGeneration();
+        baseUpdateDeviceId(getRoutedDevice());
         synchronized (mRoutingChangeListeners) {
             for (NativeRoutingEventHandlerDelegate delegate : mRoutingChangeListeners.values()) {
                 delegate.notifyClient();

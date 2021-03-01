@@ -230,8 +230,8 @@ Result<ResourceMapping> ResourceMapping::CreateResourceMappingLegacy(
         base::StringPrintf("%s:%s", target_package->GetPackageName().c_str(), name->c_str());
     auto target_resource_result = target_am->GetResourceId(full_name);
     if (!target_resource_result.has_value()) {
-      log_info.Warning(LogMessage() << "failed to find resource \"" << full_name
-                                    << "\" in target resources");
+      log_info.Warning(LogMessage()
+                       << "failed to find resource \"" << full_name << "\" in target resources");
       continue;
     }
 
@@ -285,14 +285,12 @@ Result<ResourceMapping> ResourceMapping::FromApkAssets(const ApkAssets& target_a
                                                        bool enforce_overlayable,
                                                        LogInfo& log_info) {
   AssetManager2 target_asset_manager;
-  if (!target_asset_manager.SetApkAssets({&target_apk_assets}, true /* invalidate_caches */,
-                                         false /* filter_incompatible_configs*/)) {
+  if (!target_asset_manager.SetApkAssets({&target_apk_assets})) {
     return Error("failed to create target asset manager");
   }
 
   AssetManager2 overlay_asset_manager;
-  if (!overlay_asset_manager.SetApkAssets({&overlay_apk_assets}, true /* invalidate_caches */,
-                                          false /* filter_incompatible_configs */)) {
+  if (!overlay_asset_manager.SetApkAssets({&overlay_apk_assets})) {
     return Error("failed to create overlay asset manager");
   }
 

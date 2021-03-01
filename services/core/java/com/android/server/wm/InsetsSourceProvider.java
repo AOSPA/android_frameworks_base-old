@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.os.Build.IS_DEBUGGABLE;
 import static android.view.InsetsState.ITYPE_CLIMATE_BAR;
 import static android.view.InsetsState.ITYPE_EXTRA_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_IME;
@@ -151,6 +152,7 @@ class InsetsSourceProvider {
             // animate-out as new one animates-in.
             mWin.cancelAnimation();
             mWin.mPendingPositionChanged = null;
+            mWin.mProvidedInsetsSources.remove(mSource.getType());
         }
         ProtoLog.d(WM_DEBUG_IME, "InsetsSource setWin %s", win);
         mWin = win;
@@ -160,11 +162,14 @@ class InsetsSourceProvider {
             setServerVisible(false);
             mSource.setFrame(new Rect());
             mSource.setVisibleFrame(null);
-        } else if (mControllable) {
-            mWin.setControllableInsetProvider(this);
-            if (mPendingControlTarget != null) {
-                updateControlForTarget(mPendingControlTarget, true /* force */);
-                mPendingControlTarget = null;
+        } else {
+            mWin.mProvidedInsetsSources.put(mSource.getType(), mSource);
+            if (mControllable) {
+                mWin.setControllableInsetProvider(this);
+                if (mPendingControlTarget != null) {
+                    updateControlForTarget(mPendingControlTarget, true /* force */);
+                    mPendingControlTarget = null;
+                }
             }
         }
     }
@@ -552,6 +557,11 @@ class InsetsSourceProvider {
                 // TODO: use 0 alpha and remove t.hide() once b/138459974 is fixed.
                 t.setAlpha(animationLeash, 1 /* alpha */);
                 t.hide(animationLeash);
+
+                // TODO(b/175954493): Remove this after finding root cause.
+                if (IS_DEBUGGABLE) {
+                    animationLeash.setDebugRelease(true);
+                }
             }
             ProtoLog.i(WM_DEBUG_IME,
                     "ControlAdapter startAnimation mSource: %s controlTarget: %s", mSource,

@@ -19,6 +19,7 @@ package android.app;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.compat.Compatibility;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
@@ -221,6 +222,7 @@ public final class PendingIntent implements Parcelable {
      * @hide
      */
     @Deprecated
+    @TestApi
     public static final int FLAG_MUTABLE_UNAUDITED = FLAG_MUTABLE;
 
     /**
@@ -350,9 +352,20 @@ public final class PendingIntent implements Parcelable {
                 "Cannot set both FLAG_IMMUTABLE and FLAG_MUTABLE for PendingIntent");
         }
 
+        // TODO(b/178092897) Remove the below instrumentation check and enforce
+        // the explicit mutability requirement for apps under instrumentation.
+        ActivityThread thread = ActivityThread.currentActivityThread();
+        Instrumentation mInstrumentation = thread.getInstrumentation();
+
         if (Compatibility.isChangeEnabled(PENDING_INTENT_EXPLICIT_MUTABILITY_REQUIRED)
                 && !flagImmutableSet && !flagMutableSet) {
-            Log.e(TAG, msg);
+
+            //TODO(b/178065720) Remove check for chrome and enforce this requirement
+            if (packageName.equals("com.android.chrome") || mInstrumentation.isInstrumenting()) {
+                Log.e(TAG, msg);
+            } else {
+                throw new IllegalArgumentException(msg);
+            }
         }
     }
 

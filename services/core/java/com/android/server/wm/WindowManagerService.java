@@ -27,7 +27,6 @@ import static android.Manifest.permission.STATUS_BAR_SERVICE;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
-import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
 import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
@@ -221,7 +220,6 @@ import android.util.TypedValue;
 import android.util.proto.ProtoOutputStream;
 import android.view.Choreographer;
 import android.view.Display;
-import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.IAppTransitionAnimationSpecsFuture;
@@ -690,12 +688,9 @@ public class WindowManagerService extends IWindowManager.Stub
     // Whether the system should use BLAST for ViewRootImpl
     final boolean mUseBLAST;
     // Whether to enable BLASTSyncEngine Transaction passing.
-    final boolean mUseBLASTSync = false;
+    final boolean mUseBLASTSync = true;
 
     final BLASTSyncEngine mSyncEngine;
-
-    int mDockedStackCreateMode = SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
-    Rect mDockedStackCreateBounds;
 
     boolean mIsPc;
     /**
@@ -1449,8 +1444,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     public int addWindow(Session session, IWindow client, LayoutParams attrs, int viewVisibility,
             int displayId, int requestUserId, InsetsState requestedVisibility, Rect outFrame,
-            DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel,
-            InsetsState outInsetsState, InsetsSourceControl[] outActiveControls) {
+            InputChannel outInputChannel, InsetsState outInsetsState,
+            InsetsSourceControl[] outActiveControls) {
         Arrays.fill(outActiveControls, null);
         int[] appOp = new int[1];
         final boolean isRoundedCornerOverlay = (attrs.privateFlags
@@ -1629,7 +1624,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
             final WindowState win = new WindowState(this, session, client, token, parentWindow,
                     appOp[0], attrs, viewVisibility, session.mUid, userId,
-                    session.mCanAddInternalSystemWindow);
+                    session.mCanAddInternalSystemWindow, session.mCanUseBackgroundBlur);
             if (win.mDeathRecipient == null) {
                 // Client has apparently died, so there is no reason to
                 // continue.
@@ -1763,8 +1758,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 prepareNoneTransitionForRelaunching(activity);
             }
 
-            if (displayPolicy.getLayoutHint(win.mAttrs, token, outFrame, outDisplayCutout,
-                    outInsetsState, win.isClientLocal())) {
+            if (displayPolicy.getLayoutHint(win.mAttrs, token, outFrame, outInsetsState,
+                    win.isClientLocal())) {
                 res |= WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_SYSTEM_BARS;
             }
 
@@ -3247,6 +3242,11 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void closeSystemDialogs(String reason) {
+        int callingPid = Binder.getCallingPid();
+        int callingUid = Binder.getCallingUid();
+        if (!mAtmInternal.checkCanCloseSystemDialogs(callingPid, callingUid, null)) {
+            return;
+        }
         synchronized (mGlobalLock) {
             mRoot.closeSystemDialogs(reason);
         }
@@ -8421,7 +8421,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public boolean getWindowInsets(WindowManager.LayoutParams attrs, int displayId,
-            DisplayCutout.ParcelableWrapper outDisplayCutout, InsetsState outInsetsState) {
+            InsetsState outInsetsState) {
         final boolean fromLocal = Binder.getCallingPid() == myPid();
         final long origId = Binder.clearCallingIdentity();
         try {
@@ -8433,17 +8433,17 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 final WindowToken windowToken = dc.getWindowToken(attrs.token);
                 return dc.getDisplayPolicy().getLayoutHint(attrs, windowToken,
-                        mTmpRect /* outFrame */, outDisplayCutout, outInsetsState, fromLocal);
+                        mTmpRect /* outFrame */, outInsetsState, fromLocal);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
     }
 
-    void grantEmbeddedWindowFocus(Session session, IBinder targetInputToken, boolean grantFocus) {
+    void grantEmbeddedWindowFocus(Session session, IBinder inputToken, boolean grantFocus) {
         synchronized (mGlobalLock) {
             final EmbeddedWindowController.EmbeddedWindow embeddedWindow =
-                    mEmbeddedWindowController.get(targetInputToken);
+                    mEmbeddedWindowController.get(inputToken);
             if (embeddedWindow == null) {
                 Slog.e(TAG, "Embedded window not found");
                 return;
@@ -8455,7 +8455,7 @@ public class WindowManagerService extends IWindowManager.Stub
             SurfaceControl.Transaction t = mTransactionFactory.get();
             final int displayId = embeddedWindow.mDisplayId;
             if (grantFocus) {
-                t.setFocusedWindow(targetInputToken, displayId).apply();
+                t.setFocusedWindow(inputToken, embeddedWindow.getName(), displayId).apply();
                 EventLog.writeEvent(LOGTAG_INPUT_FOCUS,
                         "Focus request " + embeddedWindow.getName(),
                         "reason=grantEmbeddedWindowFocus(true)");
@@ -8470,7 +8470,8 @@ public class WindowManagerService extends IWindowManager.Stub
                             embeddedWindow.getName());
                     return;
                 }
-                t.requestFocusTransfer(newFocusTarget.mInputChannelToken, targetInputToken,
+                t.requestFocusTransfer(newFocusTarget.mInputChannelToken, newFocusTarget.getName(),
+                        inputToken, embeddedWindow.getName(),
                         displayId).apply();
                 EventLog.writeEvent(LOGTAG_INPUT_FOCUS,
                         "Transfer focus request " + newFocusTarget,
@@ -8506,13 +8507,17 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             SurfaceControl.Transaction t = mTransactionFactory.get();
             if (grantFocus) {
-                t.requestFocusTransfer(targetInputToken, hostWindow.mInputChannel.getToken(),
+                t.requestFocusTransfer(targetInputToken, embeddedWindow.getName(),
+                        hostWindow.mInputChannel.getToken(),
+                        hostWindow.getName(),
                         hostWindow.getDisplayId()).apply();
                 EventLog.writeEvent(LOGTAG_INPUT_FOCUS,
                         "Transfer focus request " + embeddedWindow.getName(),
                         "reason=grantEmbeddedWindowFocus(true)");
             } else {
-                t.requestFocusTransfer(hostWindow.mInputChannel.getToken(), targetInputToken,
+                t.requestFocusTransfer(hostWindow.mInputChannel.getToken(), hostWindow.getName(),
+                        targetInputToken,
+                        embeddedWindow.getName(),
                         hostWindow.getDisplayId()).apply();
                 EventLog.writeEvent(LOGTAG_INPUT_FOCUS,
                         "Transfer focus request " + hostWindow,

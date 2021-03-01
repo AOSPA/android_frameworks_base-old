@@ -33,6 +33,7 @@ import android.net.wifi.WifiNetworkScoreCache;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.FeatureFlagUtils;
 
 import com.android.settingslib.R;
 
@@ -66,39 +67,51 @@ public class WifiStatusTracker {
         @Override
         public void onCapabilitiesChanged(
                 Network network, NetworkCapabilities networkCapabilities) {
+            WifiInfo wifiInfo = (WifiInfo) networkCapabilities.getTransportInfo();
+            updateWifiInfo(wifiInfo);
+            updateStatusLabel();
+            mCallback.run();
+        }
+
+        @Override
+        public void onLost(Network network) {
+            updateWifiInfo(null);
             updateStatusLabel();
             mCallback.run();
         }
     };
     private final NetworkCallback mDefaultNetworkCallback = new NetworkCallback() {
-                @Override
-                public void onCapabilitiesChanged(Network network, NetworkCapabilities nc) {
-                    // network is now the default network, and its capabilities are nc.
-                    // This method will always be called immediately after the network becomes the
-                    // default, in addition to any time the capabilities change while the network is
-                    // the default.
-                    mDefaultNetwork = network;
-                    mDefaultNetworkCapabilities = nc;
-                    updateStatusLabel();
-                    mCallback.run();
-                }
-                @Override
-                public void onLost(Network network) {
-                    // The system no longer has a default network.
-                    mDefaultNetwork = null;
-                    mDefaultNetworkCapabilities = null;
-                    updateStatusLabel();
-                    mCallback.run();
-                }
-            };
+        @Override
+        public void onCapabilitiesChanged(Network network, NetworkCapabilities nc) {
+            // network is now the default network, and its capabilities are nc.
+            // This method will always be called immediately after the network becomes the
+            // default, in addition to any time the capabilities change while the network is
+            // the default.
+            mDefaultNetwork = network;
+            mDefaultNetworkCapabilities = nc;
+            updateStatusLabel();
+            mCallback.run();
+        }
+        @Override
+        public void onLost(Network network) {
+            // The system no longer has a default network.
+            mDefaultNetwork = null;
+            mDefaultNetworkCapabilities = null;
+            updateStatusLabel();
+            mCallback.run();
+        }
+    };
     private Network mDefaultNetwork = null;
     private NetworkCapabilities mDefaultNetworkCapabilities = null;
     private final Runnable mCallback;
+    private final boolean mProviderModel;
 
     private WifiInfo mWifiInfo;
     public boolean enabled;
     public boolean isCaptivePortal;
     public boolean isDefaultNetwork;
+    public boolean isCarrierMerged;
+    public int subId;
     public int state;
     public boolean connected;
     public String ssid;
@@ -118,6 +131,8 @@ public class WifiStatusTracker {
         mNetworkScoreManager = networkScoreManager;
         mConnectivityManager = connectivityManager;
         mCallback = callback;
+        mProviderModel = FeatureFlagUtils.isEnabled(
+                mContext, FeatureFlagUtils.SETTINGS_PROVIDER_MODEL);
     }
 
     public void setListening(boolean listening) {
@@ -159,6 +174,10 @@ public class WifiStatusTracker {
                 } else {
                     ssid = getValidSsid(mWifiInfo);
                 }
+                if (mProviderModel) {
+                    isCarrierMerged = mWifiInfo.isCarrierMerged();
+                    subId = mWifiInfo.getSubscriptionId();
+                }
                 updateRssi(mWifiInfo.getRssi());
                 maybeRequestNetworkScore();
             }
@@ -173,41 +192,39 @@ public class WifiStatusTracker {
         String action = intent.getAction();
         if (action.equals(WifiManager.WIFI_STATE_CHANGED_ACTION)) {
             updateWifiState();
-        } else if (action.equals(WifiManager.NETWORK_STATE_CHANGED_ACTION)) {
-            updateWifiState();
-            final NetworkInfo networkInfo =
-                    intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
-            connected = networkInfo != null && networkInfo.isConnected();
-            mWifiInfo = null;
-            ssid = null;
-            if (connected) {
-                mWifiInfo = mWifiManager.getConnectionInfo();
-                if (mWifiInfo != null) {
-                    if (mWifiInfo.isPasspointAp() || mWifiInfo.isOsuAp()) {
-                        ssid = mWifiInfo.getPasspointProviderFriendlyName();
-                    } else {
-                        ssid = getValidSsid(mWifiInfo);
-                    }
-                    updateRssi(mWifiInfo.getRssi());
-                    maybeRequestNetworkScore();
-                    wifiStandard = mWifiInfo.getWifiStandard();
-                    vhtMax8SpatialStreamsSupport = mWifiInfo.isVhtMax8SpatialStreamsSupported();
-                    he8ssCapableAp = mWifiInfo.isHe8ssCapableAp();
-                }
+        }
+    }
+
+    private void updateWifiInfo(WifiInfo wifiInfo) {
+        updateWifiState();
+        connected = wifiInfo != null;
+        mWifiInfo = wifiInfo;
+        ssid = null;
+        if (mWifiInfo != null) {
+            if (mWifiInfo.isPasspointAp() || mWifiInfo.isOsuAp()) {
+                ssid = mWifiInfo.getPasspointProviderFriendlyName();
+            } else {
+                ssid = getValidSsid(mWifiInfo);
             }
-            updateStatusLabel();
-            mCallback.run();
-        } else if (action.equals(WifiManager.RSSI_CHANGED_ACTION)) {
-            // Default to -200 as its below WifiManager.MIN_RSSI.
-            updateRssi(intent.getIntExtra(WifiManager.EXTRA_NEW_RSSI, -200));
-            updateStatusLabel();
-            mCallback.run();
+            updateRssi(mWifiInfo.getRssi());
+            maybeRequestNetworkScore();
+            wifiStandard = mWifiInfo.getWifiStandard();
+            vhtMax8SpatialStreamsSupport = mWifiInfo.isVhtMax8SpatialStreamsSupported();
+            he8ssCapableAp = mWifiInfo.isHe8ssCapableAp();
+            if (mProviderModel) {
+                isCarrierMerged = mWifiInfo.isCarrierMerged();
+                subId = mWifiInfo.getSubscriptionId();
+            }
+            updateRssi(mWifiInfo.getRssi());
+            maybeRequestNetworkScore();
         }
     }
 
     private void updateWifiState() {
         state = mWifiManager.getWifiState();
         enabled = state == WifiManager.WIFI_STATE_ENABLED;
+        isCarrierMerged = false;
+        subId = 0;
     }
 
     private void updateRssi(int newRssi) {

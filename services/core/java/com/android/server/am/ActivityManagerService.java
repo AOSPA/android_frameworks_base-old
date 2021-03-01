@@ -32,6 +32,7 @@ import static android.app.ActivityManager.PROCESS_STATE_TOP;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.AppOpsManager.OP_NONE;
+import static android.app.BroadcastOptions.TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 import static android.content.pm.ApplicationInfo.HIDDEN_API_ENFORCEMENT_DEFAULT;
 import static android.content.pm.PackageManager.GET_SHARED_LIBRARY_FILES;
 import static android.content.pm.PackageManager.MATCH_ALL;
@@ -174,12 +175,12 @@ import android.app.ProfilerInfo;
 import android.app.WaitResult;
 import android.app.backup.BackupManager.OperationType;
 import android.app.backup.IBackupManager;
-import android.app.compat.CompatChanges;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageEvents.Event;
 import android.app.usage.UsageStatsManager;
 import android.app.usage.UsageStatsManagerInternal;
 import android.appwidget.AppWidgetManager;
+import android.compat.Compatibility;
 import android.content.AutofillOptions;
 import android.content.BroadcastReceiver;
 import android.content.ComponentCallbacks2;
@@ -306,6 +307,7 @@ import com.android.internal.app.ProcessMap;
 import com.android.internal.app.SystemUserHomeActivity;
 import com.android.internal.app.procstats.ProcessStats;
 import com.android.internal.app.ActivityTrigger;
+import com.android.internal.compat.CompatibilityChangeConfig;
 import com.android.internal.content.PackageHelper;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
@@ -586,6 +588,16 @@ public class ActivityManagerService extends IActivityManager.Stub
     String mDeviceOwnerName;
 
     private int mDeviceOwnerUid = Process.INVALID_UID;
+
+    /**
+     * Map userId to its companion app uids.
+     */
+    private final Map<Integer, Set<Integer>> mCompanionAppUidsMap = new ArrayMap<>();
+
+    /**
+     * The profile owner UIDs.
+     */
+    private ArraySet<Integer> mProfileOwnerUids = null;
 
     final UserController mUserController;
     @VisibleForTesting
@@ -1098,11 +1110,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         final int targetUid;
         final long duration;
         final String tag;
+        final int type;
 
-        PendingTempWhitelist(int _targetUid, long _duration, String _tag) {
+        PendingTempWhitelist(int _targetUid, long _duration, String _tag, int _type) {
             targetUid = _targetUid;
             duration = _duration;
             tag = _tag;
+            type = _type;
         }
 
         void dumpDebug(ProtoOutputStream proto, long fieldId) {
@@ -1110,6 +1124,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             proto.write(ActivityManagerServiceDumpProcessesProto.PendingTempWhitelist.TARGET_UID, targetUid);
             proto.write(ActivityManagerServiceDumpProcessesProto.PendingTempWhitelist.DURATION_MS, duration);
             proto.write(ActivityManagerServiceDumpProcessesProto.PendingTempWhitelist.TAG, tag);
+            proto.write(ActivityManagerServiceDumpProcessesProto.PendingTempWhitelist.TYPE, type);
             proto.end(token);
         }
     }
@@ -5593,8 +5608,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     boolean isWhitelistedForFgsStartLocked(int uid) {
-        final int appId = UserHandle.getAppId(uid);
-        return Arrays.binarySearch(mDeviceIdleExceptIdleWhitelist, appId) >= 0
+        return Arrays.binarySearch(mDeviceIdleExceptIdleWhitelist, UserHandle.getAppId(uid)) >= 0
                 || mFgsStartTempAllowList.isAllowed(uid);
     }
 
@@ -5804,20 +5818,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     public ParceledListSlice<ActivityManager.RecentTaskInfo> getRecentTasks(int maxNum, int flags,
             int userId) {
         return mActivityTaskManager.getRecentTasks(maxNum, flags, userId);
-    }
-
-    /**
-     * Moves the top activity in the input rootTaskId to the pinned root task.
-     *
-     * @param rootTaskId Id of root task to move the top activity to pinned root task.
-     * @param bounds Bounds to use for pinned root task.
-     *
-     * @return True if the top activity of the input root task was successfully moved to the pinned
-     *          root task.
-     */
-    @Override
-    public boolean moveTopActivityToPinnedRootTask(int rootTaskId, Rect bounds) {
-        return mActivityTaskManager.moveTopActivityToPinnedRootTask(rootTaskId, bounds);
     }
 
     @Override
@@ -6081,23 +6081,21 @@ public class ActivityManagerService extends IActivityManager.Stub
     final ProcessRecord addAppLocked(ApplicationInfo info, String customProcess, boolean isolated,
             String abiOverride, int zygotePolicyFlags) {
         return addAppLocked(info, customProcess, isolated, false /* disableHiddenApiChecks */,
-                false /* mountExtStorageFull */, abiOverride, zygotePolicyFlags);
+                abiOverride, zygotePolicyFlags);
     }
 
     @GuardedBy("this")
     final ProcessRecord addAppLocked(ApplicationInfo info, String customProcess, boolean isolated,
-            boolean disableHiddenApiChecks, boolean mountExtStorageFull, String abiOverride,
-            int zygotePolicyFlags) {
+            boolean disableHiddenApiChecks, String abiOverride, int zygotePolicyFlags) {
         return addAppLocked(info, customProcess, isolated, disableHiddenApiChecks,
-                false /* disableTestApiChecks */, mountExtStorageFull, abiOverride,
-                zygotePolicyFlags);
+                false /* disableTestApiChecks */, abiOverride, zygotePolicyFlags);
     }
 
     // TODO: Move to ProcessList?
     @GuardedBy("this")
     final ProcessRecord addAppLocked(ApplicationInfo info, String customProcess, boolean isolated,
             boolean disableHiddenApiChecks, boolean disableTestApiChecks,
-            boolean mountExtStorageFull, String abiOverride, int zygotePolicyFlags) {
+            String abiOverride, int zygotePolicyFlags) {
         ProcessRecord app;
         if (!isolated) {
             app = getProcessRecordLocked(customProcess != null ? customProcess : info.processName,
@@ -6132,8 +6130,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             mPersistentStartingProcesses.add(app);
             mProcessList.startProcessLocked(app, new HostingRecord("added application",
                     customProcess != null ? customProcess : app.processName),
-                    zygotePolicyFlags, disableHiddenApiChecks, disableTestApiChecks,
-                    mountExtStorageFull, abiOverride);
+                    zygotePolicyFlags, disableHiddenApiChecks, disableTestApiChecks, abiOverride);
         }
 
         return app;
@@ -7317,6 +7314,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final long waitForNetworkTimeoutMs = Settings.Global.getLong(resolver,
                 NETWORK_ACCESS_TIMEOUT_MS, NETWORK_ACCESS_TIMEOUT_DEFAULT_MS);
         mHiddenApiBlacklist.registerObserver();
+        mPlatformCompat.registerContentObserver();
 
         mAppProfiler.retrieveSettings();
 
@@ -7689,10 +7687,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 crashInfo.throwLineNumber);
 
         FrameworkStatsLog.write(FrameworkStatsLog.APP_CRASH_OCCURRED,
-                Binder.getCallingUid(),
+                (r != null) ? r.uid : -1,
                 eventType,
                 processName,
-                Binder.getCallingPid(),
+                (r != null) ? r.pid : -1,
                 (r != null && r.info != null) ? r.info.packageName : "",
                 (r != null && r.info != null) ? (r.info.isInstantApp()
                         ? FrameworkStatsLog.APP_CRASH_OCCURRED__IS_INSTANT_APP__TRUE
@@ -8382,6 +8380,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized(this) {
             mConstants.dump(pw);
             mOomAdjuster.dumpCachedAppOptimizerSettings(pw);
+            mOomAdjuster.dumpCacheOomRankerSettings(pw);
             pw.println();
             if (dumpAll) {
                 pw.println("-------------------------------------------------------------------------------");
@@ -8802,6 +8801,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 synchronized (this) {
                     mConstants.dump(pw);
                     mOomAdjuster.dumpCachedAppOptimizerSettings(pw);
+                    mOomAdjuster.dumpCacheOomRankerSettings(pw);
                 }
             } else if ("services".equals(cmd) || "s".equals(cmd)) {
                 if (dumpClient) {
@@ -9376,6 +9376,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     TimeUtils.formatDuration(ptw.duration, pw);
                     pw.print(" ");
                     pw.println(ptw.tag);
+                    pw.print(" ");
+                    pw.print(ptw.type);
                 }
             }
         }
@@ -13693,6 +13695,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                     cleanupDisabledPackageComponentsLocked(ssp, userId,
                                             intent.getStringArrayExtra(
                                                     Intent.EXTRA_CHANGED_COMPONENT_NAME_LIST));
+                                    mServices.schedulePendingServiceStartLocked(ssp, userId);
                                 }
                             }
                             break;
@@ -13818,34 +13821,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                             false, false, userId, "package unstartable");
                     break;
                 case Intent.ACTION_CLOSE_SYSTEM_DIALOGS:
-                    if (!canCloseSystemDialogs(callingPid, callingUid, callerApp)) {
-                        // The app can't close system dialogs, throw only if it targets S+
-                        if (CompatChanges.isChangeEnabled(
-                                ActivityManager.LOCK_DOWN_CLOSE_SYSTEM_DIALOGS, callingUid)) {
-                            throw new SecurityException(
-                                    "Permission Denial: " + Intent.ACTION_CLOSE_SYSTEM_DIALOGS
-                                            + " broadcast from " + callerPackage + " (pid="
-                                            + callingPid + ", uid=" + callingUid + ")"
-                                            + " requires "
-                                            + permission.BROADCAST_CLOSE_SYSTEM_DIALOGS + ".");
-                        } else if (CompatChanges.isChangeEnabled(
-                                ActivityManager.DROP_CLOSE_SYSTEM_DIALOGS, callingUid)) {
-                            Slog.w(TAG, "Permission Denial: " + intent.getAction()
-                                    + " broadcast from " + callerPackage + " (pid=" + callingPid
-                                    + ", uid=" + callingUid + ")"
-                                    + " requires "
-                                    + permission.BROADCAST_CLOSE_SYSTEM_DIALOGS
-                                    + ", dropping broadcast.");
-                            // Returning success seems to be the pattern here
-                            return ActivityManager.BROADCAST_SUCCESS;
-                        } else {
-                            Slog.w(TAG, intent.getAction()
-                                    + " broadcast from " + callerPackage + " (pid=" + callingPid
-                                    + ", uid=" + callingUid + ")"
-                                    + " will require  "
-                                    + permission.BROADCAST_CLOSE_SYSTEM_DIALOGS
-                                    + " in future builds.");
-                        }
+                    if (!mAtmInternal.checkCanCloseSystemDialogs(callingPid, callingUid,
+                            callerPackage)) {
+                        // Returning success seems to be the pattern here
+                        return ActivityManager.BROADCAST_SUCCESS;
                     }
                     break;
             }
@@ -14138,32 +14117,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         return ActivityManager.BROADCAST_SUCCESS;
-    }
-
-    private boolean canCloseSystemDialogs(int pid, int uid, @Nullable ProcessRecord callerApp) {
-        if (checkPermission(permission.BROADCAST_CLOSE_SYSTEM_DIALOGS, pid, uid)
-                == PERMISSION_GRANTED) {
-            return true;
-        }
-        if (callerApp == null) {
-            synchronized (mPidsSelfLocked) {
-                callerApp = mPidsSelfLocked.get(pid);
-            }
-        }
-        // Check if the instrumentation of the process has the permission. This covers the usual
-        // test started from the shell (which has the permission) case. This is needed for apps
-        // targeting SDK level < S but we are also allowing for targetSdk S+ as a convenience to
-        // avoid breaking a bunch of existing tests and asking them to adopt shell permissions to do
-        // this.
-        if (callerApp != null) {
-            ActiveInstrumentation instrumentation = callerApp.getActiveInstrumentation();
-            if (instrumentation != null && checkPermission(
-                    permission.BROADCAST_CLOSE_SYSTEM_DIALOGS, -1, instrumentation.mSourceUid)
-                    == PERMISSION_GRANTED) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -14498,11 +14451,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (disableHiddenApiChecks || disableTestApiChecks) {
                 enforceCallingPermission(android.Manifest.permission.DISABLE_HIDDEN_API_CHECKS,
                         "disable hidden API checks");
-            }
 
-            // TODO(b/158750470): remove
-            final boolean mountExtStorageFull = isCallerShell()
-                    && (flags & INSTR_FLAG_DISABLE_ISOLATED_STORAGE) != 0;
+                enableTestApiAccess(ii.packageName);
+            }
 
             final long origId = Binder.clearCallingIdentity();
 
@@ -14519,8 +14470,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             UsageEvents.Event.SYSTEM_INTERACTION);
                 }
                 app = addAppLocked(ai, defProcess, false, disableHiddenApiChecks,
-                        disableTestApiChecks, mountExtStorageFull, abiOverride,
-                        ZYGOTE_POLICY_FLAG_EMPTY);
+                        disableTestApiChecks, abiOverride, ZYGOTE_POLICY_FLAG_EMPTY);
             }
 
 
@@ -14669,6 +14619,25 @@ public class ActivityManagerService extends IActivityManager.Stub
             forceStopPackageLocked(app.info.packageName, -1, false, false, true, true, false,
                     app.userId,
                     "finished inst");
+        }
+
+        disableTestApiAccess(app.info.packageName);
+    }
+
+    private void enableTestApiAccess(String packageName) {
+        if (mPlatformCompat != null) {
+            Compatibility.ChangeConfig config = new Compatibility.ChangeConfig(
+                    Collections.singleton(166236554L /* VMRuntime.ALLOW_TEST_API_ACCESS */),
+                    Collections.emptySet());
+            CompatibilityChangeConfig override = new CompatibilityChangeConfig(config);
+            mPlatformCompat.setOverridesForTest(override, packageName);
+        }
+    }
+
+    private void disableTestApiAccess(String packageName) {
+        if (mPlatformCompat != null) {
+            mPlatformCompat.clearOverrideForTest(166236554L /* VMRuntime.ALLOW_TEST_API_ACCESS */,
+                    packageName);
         }
     }
 
@@ -15473,10 +15442,10 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @GuardedBy("this")
     void tempWhitelistForPendingIntentLocked(int callerPid, int callerUid, int targetUid,
-            long duration, String tag) {
+            long duration, int type, String tag) {
         if (DEBUG_WHITELISTS) {
             Slog.d(TAG, "tempWhitelistForPendingIntentLocked(" + callerPid + ", " + callerUid + ", "
-                    + targetUid + ", " + duration + ")");
+                    + targetUid + ", " + duration + ", " + type + ")");
         }
 
         synchronized (mPidsSelfLocked) {
@@ -15488,7 +15457,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             if (!pr.whitelistManager) {
                 if (checkPermission(CHANGE_DEVICE_IDLE_TEMP_WHITELIST, callerPid, callerUid)
-                        != PackageManager.PERMISSION_GRANTED) {
+                        != PackageManager.PERMISSION_GRANTED
+                        && checkPermission(START_ACTIVITIES_FROM_BACKGROUND, callerPid, callerUid)
+                        != PackageManager.PERMISSION_GRANTED
+                        && checkPermission(START_FOREGROUND_SERVICES_FROM_BACKGROUND, callerPid,
+                        callerUid) != PackageManager.PERMISSION_GRANTED) {
                     if (DEBUG_WHITELISTS) {
                         Slog.d(TAG, "tempWhitelistForPendingIntentLocked() for target " + targetUid
                                 + ": pid " + callerPid + " is not allowed");
@@ -15498,8 +15471,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
-        tempWhitelistUidLocked(targetUid, duration, tag,
-                BroadcastOptions.TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED);
+        tempWhitelistUidLocked(targetUid, duration, tag, type);
     }
 
     /**
@@ -15507,11 +15479,12 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @GuardedBy("this")
     void tempWhitelistUidLocked(int targetUid, long duration, String tag, int type) {
-        mPendingTempWhitelist.put(targetUid, new PendingTempWhitelist(targetUid, duration, tag));
+        mPendingTempWhitelist.put(targetUid,
+                new PendingTempWhitelist(targetUid, duration, tag, type));
         setUidTempWhitelistStateLocked(targetUid, true);
         mUiHandler.obtainMessage(PUSH_TEMP_WHITELIST_UI_MSG).sendToTarget();
 
-        if (type == BroadcastOptions.TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED) {
+        if (type == TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED) {
             mFgsStartTempAllowList.add(targetUid, duration);
         }
     }
@@ -15537,7 +15510,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             for (int i = 0; i < N; i++) {
                 PendingTempWhitelist ptw = list[i];
                 mLocalDeviceIdleController.addPowerSaveTempWhitelistAppDirect(ptw.targetUid,
-                        ptw.duration, true, ptw.tag);
+                        ptw.duration, ptw.type, true, ptw.tag);
             }
         }
 
@@ -15554,8 +15527,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @GuardedBy("this")
-    final void setAppIdTempWhitelistStateLocked(int appId, boolean onWhitelist) {
-        mOomAdjuster.setAppIdTempWhitelistStateLocked(appId, onWhitelist);
+    final void setAppIdTempWhitelistStateLocked(int uid, boolean onWhitelist) {
+        mOomAdjuster.setAppIdTempWhitelistStateLocked(uid, onWhitelist);
     }
 
     @GuardedBy("this")
@@ -15863,6 +15836,16 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
+    public boolean startProfile(@UserIdInt int userId) {
+        return mUserController.startProfile(userId);
+    }
+
+    @Override
+    public boolean stopProfile(@UserIdInt int userId) {
+        return mUserController.stopProfile(userId);
+    }
+
+    @Override
     public UserInfo getCurrentUser() {
         return mUserController.getCurrentUser();
     }
@@ -16107,9 +16090,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void setPendingIntentWhitelistDuration(IIntentSender target, IBinder whitelistToken,
-                long duration) {
+                long duration, int type) {
             mPendingIntentController.setPendingIntentWhitelistDuration(target, whitelistToken,
-                    duration);
+                    duration, type);
         }
 
         @Override
@@ -16152,10 +16135,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public void updateDeviceIdleTempWhitelist(int[] appids, int changingAppId, boolean adding) {
+        public void updateDeviceIdleTempWhitelist(int[] appids, int changingUid, boolean adding,
+                long durationMs, @BroadcastOptions.TempAllowListType int type) {
             synchronized (ActivityManagerService.this) {
                 mDeviceIdleTempWhitelist = appids;
-                setAppIdTempWhitelistStateLocked(changingAppId, adding);
+                if (adding) {
+                    if (type == TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED) {
+                        mFgsStartTempAllowList.add(changingUid, durationMs);
+                    }
+                }
+                setAppIdTempWhitelistStateLocked(changingUid, adding);
             }
         }
 
@@ -16525,10 +16514,10 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void tempWhitelistForPendingIntent(int callerPid, int callerUid, int targetUid,
-                long duration, String tag) {
+                long duration, int type, String tag) {
             synchronized (ActivityManagerService.this) {
                 ActivityManagerService.this.tempWhitelistForPendingIntentLocked(
-                        callerPid, callerUid, targetUid, duration, tag);
+                        callerPid, callerUid, targetUid, duration, type, tag);
             }
         }
 
@@ -16882,21 +16871,49 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void setDeviceOwnerUid(int uid) {
-            synchronized (ActivityManagerService.this) {
-                mDeviceOwnerUid = uid;
-            }
+            mDeviceOwnerUid = uid;
         }
 
         @Override
         public boolean isDeviceOwner(int uid) {
+            int cachedUid = mDeviceOwnerUid;
+            return uid >= 0 && cachedUid == uid;
+        }
+
+
+        @Override
+        public void setProfileOwnerUid(ArraySet<Integer> profileOwnerUids) {
             synchronized (ActivityManagerService.this) {
-                return uid >= 0 && mDeviceOwnerUid == uid;
+                mProfileOwnerUids = profileOwnerUids;
             }
         }
 
         @Override
+        public boolean isProfileOwner(int uid) {
+            synchronized (ActivityManagerService.this) {
+                return mProfileOwnerUids != null && mProfileOwnerUids.indexOf(uid) >= 0;
+            }
+        }
+
+        @Override
+        public void setCompanionAppUids(int userId, Set<Integer> companionAppUids) {
+            synchronized (ActivityManagerService.this) {
+                mCompanionAppUidsMap.put(userId, companionAppUids);
+            }
+        }
+
+        @Override
+        public boolean isAssociatedCompanionApp(int userId, int uid) {
+            final Set<Integer> allUids = mCompanionAppUidsMap.get(userId);
+            if (allUids == null) {
+                return false;
+            }
+            return allUids.contains(uid);
+        }
+
+        @Override
         public void addPendingTopUid(int uid, int pid) {
-                mPendingStartActivityUids.add(uid, pid);
+            mPendingStartActivityUids.add(uid, pid);
         }
 
         @Override
@@ -16912,6 +16929,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public Intent getIntentForIntentSender(IIntentSender sender) {
             return ActivityManagerService.this.getIntentForIntentSender(sender);
+        }
+
+        @Override
+        public long getBootTimeTempAllowListDuration() {
+            // Do not lock ActivityManagerService.this here, this API is called by
+            // PackageManagerService.
+            return mConstants.mBootTimeTempAllowlistDuration;
         }
     }
 

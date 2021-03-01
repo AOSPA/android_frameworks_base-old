@@ -20,9 +20,9 @@ import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.os.Build.VERSION_CODES.Q;
 import static android.os.IInputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
-import static android.view.Display.INVALID_DISPLAY;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
+import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.server.am.ActivityManagerService.MY_PID;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ACTIVITY_STARTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RELEASE;
@@ -161,6 +161,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     private volatile boolean mDebugging;
     // Active instrumentation running in process?
     private volatile boolean mInstrumenting;
+    // If there is active instrumentation, this is the source
+    private volatile int mInstrumentationSourceUid = -1;
     // Active instrumentation with background activity starts privilege running in process?
     private volatile boolean mInstrumentingWithBackgroundActivityStartPrivileges;
     // This process it perceptible by the user.
@@ -198,8 +200,13 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     private final Configuration mLastReportedConfiguration = new Configuration();
     /** Whether the process configuration is waiting to be dispatched to the process. */
     private boolean mHasPendingConfigurationChange;
-    // Registered display id as a listener to override config change
-    private int mDisplayId;
+
+    /**
+     * Registered {@link DisplayArea} as a listener to override config changes. {@code null} if not
+     * registered.
+     */
+    @Nullable
+    private DisplayArea mDisplayArea;
     private ActivityRecord mConfigActivityRecord;
     // Whether the activity config override is allowed for this process.
     private volatile boolean mIsActivityConfigOverrideAllowed = true;
@@ -249,7 +256,6 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         mOwner = owner;
         mListener = listener;
         mAtm = atm;
-        mDisplayId = INVALID_DISPLAY;
         mBackgroundActivityStartCallback = mAtm.getBackgroundActivityStartCallback();
 
         boolean isSysUiPackage = info.packageName.equals(
@@ -390,9 +396,9 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return mPendingUiClean;
     }
 
-    /** @return {@code true} if the process registered to a display as a config listener. */
-    boolean registeredForDisplayConfigChanges() {
-        return mDisplayId != INVALID_DISPLAY;
+    /** @return {@code true} if the process registered to a display area as a config listener. */
+    boolean registeredForDisplayAreaConfigChanges() {
+        return mDisplayArea != null;
     }
 
     /** @return {@code true} if the process registered to an activity as a config listener. */
@@ -440,11 +446,14 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return mRequiredAbi;
     }
 
-    /** Returns ID of display overriding the configuration for this process, or
-     *  INVALID_DISPLAY if no display is overriding. */
+    /**
+     * Registered {@link DisplayArea} as a listener to override config changes. {@code null} if not
+     * registered.
+     */
     @VisibleForTesting
-    int getDisplayId() {
-        return mDisplayId;
+    @Nullable
+    DisplayArea getDisplayArea() {
+        return mDisplayArea;
     }
 
     public void setDebugging(boolean debugging) {
@@ -510,13 +519,9 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         }
     }
 
-    /**
-     * Returns true if background activity starts are allowed by any token added via {@link
-     * #addOrUpdateAllowBackgroundActivityStartsToken(Binder, IBinder)}.
-     */
-    public boolean areBackgroundActivityStartsAllowedByToken() {
+    public boolean areBackgroundActivityStartsAllowed() {
         synchronized (mAtm.mGlobalLock) {
-            return !mBackgroundActivityStartTokens.isEmpty();
+            return areBackgroundActivityStartsAllowed(mAtm.getBalAppSwitchesAllowed());
         }
     }
 
@@ -585,9 +590,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     }
 
     /**
-     * If there are no tokens, we don't allow *by token*. If there are tokens, we need to check if
-     * the callback handles all the tokens, if so we ask the callback if the activity should be
-     * started, otherwise we allow.
+     * If there are no tokens, we don't allow *by token*. If there are tokens, we ask the callback
+     * if the start is allowed for these tokens, otherwise if there is no callback we allow.
      */
     private boolean isBackgroundStartAllowedByToken() {
         if (mBackgroundActivityStartTokens.isEmpty()) {
@@ -597,16 +601,22 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             // We have tokens but no callback to decide => allow
             return true;
         }
-        IBinder callbackToken = mBackgroundActivityStartCallback.getToken();
-        for (IBinder token : mBackgroundActivityStartTokens.values()) {
-            if (token != callbackToken) {
-                // The callback doesn't handle all the tokens => allow
-                return true;
-            }
+        // The callback will decide
+        return mBackgroundActivityStartCallback.isActivityStartAllowed(
+                mBackgroundActivityStartTokens.values(), mInfo.uid, mInfo.packageName);
+    }
+
+    /**
+     * Returns whether this process is allowed to close system dialogs via a background activity
+     * start token that allows the close system dialogs operation (eg. notification).
+     */
+    public boolean canCloseSystemDialogsByToken() {
+        synchronized (mAtm.mGlobalLock) {
+            return !mBackgroundActivityStartTokens.isEmpty()
+                    && mBackgroundActivityStartCallback != null
+                    && mBackgroundActivityStartCallback.canCloseSystemDialogs(
+                            mBackgroundActivityStartTokens.values(), mInfo.uid);
         }
-        // The callback handles all the tokens => callback decides
-        return mBackgroundActivityStartCallback.isActivityStartAllowed(mInfo.uid,
-                mInfo.packageName);
     }
 
     private boolean isBoundByForegroundUid() {
@@ -622,14 +632,26 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         mBoundClientUids = boundClientUids;
     }
 
-    public void setInstrumenting(boolean instrumenting,
+    /**
+     * Set instrumentation-related info.
+     *
+     * If {@code instrumenting} is {@code false}, {@code sourceUid} has to be -1.
+     */
+    public void setInstrumenting(boolean instrumenting, int sourceUid,
             boolean hasBackgroundActivityStartPrivileges) {
+        checkArgument(instrumenting || sourceUid == -1);
         mInstrumenting = instrumenting;
+        mInstrumentationSourceUid = sourceUid;
         mInstrumentingWithBackgroundActivityStartPrivileges = hasBackgroundActivityStartPrivileges;
     }
 
     boolean isInstrumenting() {
         return mInstrumenting;
+    }
+
+    /** Returns the uid of the active instrumentation source if there is one, otherwise -1. */
+    int getInstrumentationSourceUid() {
+        return mInstrumentationSourceUid;
     }
 
     public void setPerceptible(boolean perceptible) {
@@ -1301,29 +1323,22 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return hasVisibleActivities;
     }
 
-    void registerDisplayConfigurationListener(DisplayContent displayContent) {
-        if (displayContent == null) {
+    void registerDisplayAreaConfigurationListener(@Nullable DisplayArea displayArea) {
+        if (displayArea == null || displayArea.containsListener(this)) {
             return;
         }
-        // A process can only register to one display to listen to the override configuration
-        // change. Unregister existing listener if it has one before register the new one.
-        unregisterDisplayConfigurationListener();
-        unregisterActivityConfigurationListener();
-        mDisplayId = displayContent.mDisplayId;
-        displayContent.registerConfigurationChangeListener(this);
+        unregisterConfigurationListeners();
+        mDisplayArea = displayArea;
+        displayArea.registerConfigurationChangeListener(this);
     }
 
     @VisibleForTesting
-    void unregisterDisplayConfigurationListener() {
-        if (mDisplayId == INVALID_DISPLAY) {
+    void unregisterDisplayAreaConfigurationListener() {
+        if (mDisplayArea == null) {
             return;
         }
-        final DisplayContent displayContent =
-                mAtm.mRootWindowContainer.getDisplayContent(mDisplayId);
-        if (displayContent != null) {
-            displayContent.unregisterConfigurationChangeListener(this);
-        }
-        mDisplayId = INVALID_DISPLAY;
+        mDisplayArea.unregisterConfigurationChangeListener(this);
+        mDisplayArea = null;
         onMergedOverrideConfigurationChanged(Configuration.EMPTY);
     }
 
@@ -1333,10 +1348,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 || !mIsActivityConfigOverrideAllowed) {
             return;
         }
-        // A process can only register to one activityRecord to listen to the override configuration
-        // change. Unregister existing listener if it has one before register the new one.
-        unregisterDisplayConfigurationListener();
-        unregisterActivityConfigurationListener();
+        unregisterConfigurationListeners();
         mConfigActivityRecord = activityRecord;
         activityRecord.registerConfigurationChangeListener(this);
     }
@@ -1348,6 +1360,16 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         mConfigActivityRecord.unregisterConfigurationChangeListener(this);
         mConfigActivityRecord = null;
         onMergedOverrideConfigurationChanged(Configuration.EMPTY);
+    }
+
+    /**
+     * A process can only register to one {@link WindowContainer} to listen to the override
+     * configuration changes. Unregisters the existing listener if it has one before registers a
+     * new one.
+     */
+    private void unregisterConfigurationListeners() {
+        unregisterActivityConfigurationListener();
+        unregisterDisplayAreaConfigurationListener();
     }
 
     /**

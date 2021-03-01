@@ -1670,7 +1670,9 @@ class ContextImpl extends Context {
                     flags);
             if (intent != null) {
                 intent.setExtrasClassLoader(getClassLoader());
-                intent.prepareToEnterProcess();
+                // TODO: determine at registration time if caller is
+                // protecting themselves with signature permission
+                intent.prepareToEnterProcess(ActivityThread.isProtectedBroadcast(intent));
             }
             return intent;
         } catch (RemoteException e) {
@@ -1795,7 +1797,6 @@ class ContextImpl extends Context {
     @Override
     public boolean bindService(
             Intent service, int flags, Executor executor, ServiceConnection conn) {
-        warnIfCallingFromSystemProcess();
         return bindServiceCommon(service, conn, flags, null, null, executor, getUser());
     }
 
@@ -1996,8 +1997,7 @@ class ContextImpl extends Context {
     }
 
     private static boolean isUiComponent(String name) {
-        return WINDOW_SERVICE.equals(name) || LAYOUT_INFLATER_SERVICE.equals(name)
-                || WALLPAPER_SERVICE.equals(name);
+        return WINDOW_SERVICE.equals(name) || LAYOUT_INFLATER_SERVICE.equals(name);
     }
 
     @Override
@@ -2488,6 +2488,20 @@ class ContextImpl extends Context {
         }
         return new WindowContext(this, display, type, options);
     }
+
+    @NonNull
+    @Override
+    public Context createTokenContext(@NonNull IBinder token, @NonNull Display display) {
+        if (display == null) {
+            throw new UnsupportedOperationException("Token context can only be created from "
+                    + "other visual contexts, such as Activity or one created with "
+                    + "Context#createDisplayContext(Display)");
+        }
+        final ContextImpl tokenContext = createBaseWindowContext(token, display);
+        tokenContext.setResources(createWindowContextResources());
+        return tokenContext;
+    }
+
 
     ContextImpl createBaseWindowContext(IBinder token, Display display) {
         ContextImpl context = new ContextImpl(this, mMainThread, mPackageInfo, mAttributionTag,

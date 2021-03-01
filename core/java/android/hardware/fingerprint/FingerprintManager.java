@@ -89,6 +89,8 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
     private static final int MSG_REMOVED = 105;
     private static final int MSG_CHALLENGE_GENERATED = 106;
     private static final int MSG_FINGERPRINT_DETECTED = 107;
+    private static final int MSG_UDFPS_POINTER_DOWN = 108;
+    private static final int MSG_UDFPS_POINTER_UP = 109;
 
     /**
      * Request authentication with any single sensor.
@@ -338,6 +340,20 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
          */
         @Override
         public void onAuthenticationAcquired(int acquireInfo) {}
+
+        /**
+         * Invoked for under-display fingerprint sensors when a touch has been detected on the
+         * sensor area.
+         * @hide
+         */
+        public void onUdfpsPointerDown(int sensorId) {}
+
+        /**
+         * Invoked for under-display fingerprint sensors when a touch has been removed from the
+         * sensor area.
+         * @hide
+         */
+        public void onUdfpsPointerUp(int sensorId) {}
     }
 
     /**
@@ -568,11 +584,13 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
      * @param cancel an object that can be used to cancel enrollment
      * @param userId the user to whom this fingerprint will belong to
      * @param callback an object to receive enrollment events
+     * @param shouldLogMetrics a flag that indicates if enrollment failure/success metrics
+     * should be logged.
      * @hide
      */
     @RequiresPermission(MANAGE_FINGERPRINT)
     public void enroll(byte [] hardwareAuthToken, CancellationSignal cancel, int userId,
-            EnrollmentCallback callback) {
+            EnrollmentCallback callback, boolean shouldLogMetrics) {
         if (userId == UserHandle.USER_CURRENT) {
             userId = getCurrentUserId();
         }
@@ -593,7 +611,7 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
             try {
                 mEnrollmentCallback = callback;
                 mService.enroll(mToken, hardwareAuthToken, userId, mServiceReceiver,
-                        mContext.getOpPackageName());
+                        mContext.getOpPackageName(), shouldLogMetrics);
             } catch (RemoteException e) {
                 Slog.w(TAG, "Remote exception in enroll: ", e);
                 // Though this may not be a hardware issue, it will cause apps to give up or try
@@ -1003,6 +1021,12 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
                     sendFingerprintDetected(msg.arg1 /* sensorId */, msg.arg2 /* userId */,
                             (boolean) msg.obj /* isStrongBiometric */);
                     break;
+                case MSG_UDFPS_POINTER_DOWN:
+                    sendUdfpsPointerDown(msg.arg1 /* sensorId */);
+                    break;
+                case MSG_UDFPS_POINTER_UP:
+                    sendUdfpsPointerUp(msg.arg1 /* sensorId */);
+                    break;
                 default:
                     Slog.w(TAG, "Unknown message: " + msg.what);
 
@@ -1099,6 +1123,22 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
             return;
         }
         mFingerprintDetectionCallback.onFingerprintDetected(sensorId, userId, isStrongBiometric);
+    }
+
+    private void sendUdfpsPointerDown(int sensorId) {
+        if (mAuthenticationCallback == null) {
+            Slog.e(TAG, "sendUdfpsPointerDown, callback null");
+            return;
+        }
+        mAuthenticationCallback.onUdfpsPointerDown(sensorId);
+    }
+
+    private void sendUdfpsPointerUp(int sensorId) {
+        if (mAuthenticationCallback == null) {
+            Slog.e(TAG, "sendUdfpsPointerUp, callback null");
+            return;
+        }
+        mAuthenticationCallback.onUdfpsPointerUp(sensorId);
     }
 
     /**
@@ -1277,6 +1317,17 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
         public void onChallengeGenerated(int sensorId, long challenge) {
             mHandler.obtainMessage(MSG_CHALLENGE_GENERATED, sensorId, 0, challenge)
                     .sendToTarget();
+        }
+
+        @Override // binder call
+        public void onUdfpsPointerDown(int sensorId) {
+            mHandler.obtainMessage(MSG_UDFPS_POINTER_DOWN, sensorId, 0).sendToTarget();
+        }
+
+        @Override // binder call
+        public void onUdfpsPointerUp(int sensorId) {
+            mHandler.obtainMessage(MSG_UDFPS_POINTER_UP, sensorId, 0).sendToTarget();
+
         }
     };
 

@@ -43,6 +43,7 @@ public class TelephonyIcons {
     public static final int ICON_1X = R.drawable.ic_1x_mobiledata;
     public static final int ICON_5G = R.drawable.ic_5g_mobiledata;
     public static final int ICON_5G_PLUS = R.drawable.ic_5g_plus_mobiledata;
+    public static final int ICON_CWF = R.drawable.ic_carrier_wifi;
     public static final int ICON_5G_SA = R.drawable.ic_5g_mobiledata;
     public static final int ICON_5G_BASIC = R.drawable.ic_5g_mobiledata;
     public static final int ICON_5G_UWB = R.drawable.ic_5g_uwb_mobiledata;
@@ -280,6 +281,20 @@ public class TelephonyIcons {
             R.string.not_default_data_content_description,
             0,
             false);
+
+    public static final MobileIconGroup CARRIER_MERGED_WIFI = new MobileIconGroup(
+            "CWF",
+            /* sbIcons= */ null,
+            /* qsIcons= */ null,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
+            /* sbNullState= */ 0,
+            /* qsNullState= */ 0,
+            /* sbDiscState= */ 0,
+            /* qsDiscState= */ 0,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
+            R.string.data_connection_carrier_wifi,
+            TelephonyIcons.ICON_CWF,
+            /* isWide= */ true);
 
     // When adding a new MobileIconGround, check if the dataContentDescription has to be filtered
     // in QSCarrier#hasValidTypeContentDescription

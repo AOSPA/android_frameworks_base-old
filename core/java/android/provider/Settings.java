@@ -1018,6 +1018,20 @@ public final class Settings {
             "android.settings.MANAGE_ALL_APPLICATIONS_SETTINGS";
 
     /**
+     * Activity Action: Show settings to manage all SIM profiles.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_ALL_SUBSCRIPTIONS_SETTINGS =
+            "android.settings.MANAGE_ALL_SUBSCRIPTIONS_SETTINGS";
+
+    /**
      * Activity Action: Show screen for controlling which apps can draw on top of other apps.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you safeguard against this.
@@ -8451,14 +8465,6 @@ public final class Settings {
                 "emergency_gesture_sound_enabled";
 
         /**
-         * The default number to call in emergency gesture
-         *
-         * @hide
-         */
-        public static final String EMERGENCY_GESTURE_CALL_NUMBER =
-                "emergency_gesture_call_number";
-
-        /**
          * Whether the camera launch gesture to double tap the power button when the screen is off
          * should be disabled.
          *
@@ -9203,6 +9209,39 @@ public final class Settings {
          * @hide
          */
         public static final int ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU = 0x1;
+
+        /**
+         * The size of the accessibility floating menu.
+         * <ul>
+         *     <li> 0 = small size
+         *     <li> 1 = large size
+         * </ul>
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_FLOATING_MENU_SIZE =
+                "accessibility_floating_menu_size";
+
+        /**
+         * The icon type of the accessibility floating menu.
+         * <ul>
+         *     <li> 0 = full circle type
+         *     <li> 1 = half circle type
+         * </ul>
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_FLOATING_MENU_ICON_TYPE =
+                "accessibility_floating_menu_icon_type";
+
+        /**
+         * The opacity value for the accessibility floating menu fade out effect, from 0.0
+         * (transparent) to 1.0 (opaque).
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_FLOATING_MENU_OPACITY =
+                "accessibility_floating_menu_opacity";
 
         /**
          * Whether the Adaptive connectivity option is enabled.
@@ -13436,6 +13475,16 @@ public final class Settings {
         @TestApi
         public static final String HIDDEN_API_POLICY = "hidden_api_policy";
 
+         /**
+         * Flag for forcing {@link com.android.server.compat.OverrideValidatorImpl}
+         * to consider this a non-debuggable build.
+         *
+         * @hide
+         */
+        public static final String FORCE_NON_DEBUGGABLE_FINAL_BUILD_FOR_COMPAT =
+                "force_non_debuggable_final_build_for_compat";
+
+
         /**
          * Current version of signed configuration applied.
          *
@@ -14606,6 +14655,34 @@ public final class Settings {
          * @hide
          */
         public static final String BACKPORT_S_NOTIF_RULES = "backport_s_notif_rules";
+
+        /**
+         * The decoration to put on fully custom views that target S.
+         *
+         * <p>Values are:
+         * <br>0: DECORATION_NONE: no decorations.
+         * <br>1: DECORATION_MINIMAL: most minimal template; just the icon and the expander.
+         * <br>2: DECORATION_PARTIAL: basic template without the top line.
+         * <br>3: DECORATION_FULL_COMPATIBLE: basic template with the top line; 40dp of height.
+         * <br>4: DECORATION_FULL_CONSTRAINED: basic template with the top line;  28dp of height.
+         * <p>See {@link android.app.Notification.DevFlags} for more details.
+         * @hide
+         */
+        public static final String FULLY_CUSTOM_VIEW_NOTIF_DECORATION =
+                "fully_custom_view_notif_decoration";
+
+        /**
+         * The decoration to put on decorated custom views that target S.
+         *
+         * <p>Values are:
+         * <br>2: DECORATION_PARTIAL: basic template without the top line.
+         * <br>3: DECORATION_FULL_COMPATIBLE: basic template with the top line; 40dp of height.
+         * <br>4: DECORATION_FULL_CONSTRAINED: basic template with the top line;  28dp of height.
+         * <p>See {@link android.app.Notification.DevFlags} for more details.
+         * @hide
+         */
+        public static final String DECORATED_CUSTOM_VIEW_NOTIF_DECORATION =
+                "decorated_custom_view_notif_decoration";
 
         /**
          * Block untrusted touches mode.

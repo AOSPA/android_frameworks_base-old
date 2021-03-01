@@ -44,8 +44,12 @@ import android.compat.Compatibility;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.location.provider.ProviderProperties;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
@@ -61,13 +65,14 @@ import android.os.UserHandle;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.listeners.ListenerExecutor;
 import com.android.internal.listeners.ListenerTransportMultiplexer;
-import com.android.internal.location.ProviderProperties;
 import com.android.internal.util.Preconditions;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -313,6 +318,48 @@ public class LocationManager {
             "android.location.HIGH_POWER_REQUEST_CHANGE";
 
     /**
+     * Broadcast intent action when GNSS capabilities change. This is most common at boot time as
+     * GNSS capabilities are queried from the chipset. Includes an intent extra,
+     * {@link #EXTRA_GNSS_CAPABILITIES}, with the new {@link GnssCapabilities}.
+     *
+     * @see #EXTRA_GNSS_CAPABILITIES
+     * @see #getGnssCapabilities()
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_GNSS_CAPABILITIES_CHANGED =
+            "android.location.action.GNSS_CAPABILITIES_CHANGED";
+
+    /**
+     * Intent extra included with {@link #ACTION_GNSS_CAPABILITIES_CHANGED} broadcasts, containing
+     * the new {@link GnssCapabilities}.
+     *
+     * @see #ACTION_GNSS_CAPABILITIES_CHANGED
+     */
+    public static final String EXTRA_GNSS_CAPABILITIES = "android.location.extra.GNSS_CAPABILITIES";
+
+    /**
+     * Broadcast intent action when GNSS antenna infos change. Includes an intent extra,
+     * {@link #EXTRA_GNSS_ANTENNA_INFOS}, with an ArrayList of the new {@link GnssAntennaInfo}. This
+     * may be read via {@link android.content.Intent#getParcelableArrayListExtra(String)}.
+     *
+     * @see #EXTRA_GNSS_ANTENNA_INFOS
+     * @see #getGnssAntennaInfos()
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_GNSS_ANTENNA_INFOS_CHANGED =
+            "android.location.action.GNSS_ANTENNA_INFOS_CHANGED";
+
+    /**
+     * Intent extra included with {@link #ACTION_GNSS_ANTENNA_INFOS_CHANGED} broadcasts, containing
+     * the new ArrayList of {@link GnssAntennaInfo}. This may be read via
+     * {@link android.content.Intent#getParcelableArrayListExtra(String)}.
+     *
+     * @see #ACTION_GNSS_ANTENNA_INFOS_CHANGED
+     */
+    public static final String EXTRA_GNSS_ANTENNA_INFOS =
+            "android.location.extra.GNSS_ANTENNA_INFOS";
+
+    /**
      * Broadcast intent action for Settings app to inject a footer at the bottom of location
      * settings. This is for use only by apps that are included in the system image.
      *
@@ -381,6 +428,8 @@ public class LocationManager {
     @GuardedBy("mLock")
     @Nullable private GnssStatusTransportMultiplexer mGnssStatusTransportMultiplexer;
     @GuardedBy("mLock")
+    @Nullable private GnssNmeaTransportMultiplexer mGnssNmeaTransportMultiplexer;
+    @GuardedBy("mLock")
     @Nullable private GnssMeasurementsTransportMultiplexer mGnssMeasurementsTransportMultiplexer;
     @GuardedBy("mLock")
     @Nullable private GnssNavigationTransportMultiplexer mGnssNavigationTransportMultiplexer;
@@ -401,6 +450,15 @@ public class LocationManager {
                 mGnssStatusTransportMultiplexer = new GnssStatusTransportMultiplexer();
             }
             return mGnssStatusTransportMultiplexer;
+        }
+    }
+
+    private GnssNmeaTransportMultiplexer getGnssNmeaTransportMultiplexer() {
+        synchronized (mLock) {
+            if (mGnssNmeaTransportMultiplexer == null) {
+                mGnssNmeaTransportMultiplexer = new GnssNmeaTransportMultiplexer();
+            }
+            return mGnssNmeaTransportMultiplexer;
         }
     }
 
@@ -1631,6 +1689,25 @@ public class LocationManager {
     }
 
     /**
+     * Returns true if the given location provider exists on this device, irrespective of whether
+     * it is currently enabled or not.
+     *
+     * @param provider a potential location provider
+     * @return true if the location provider exists, false otherwise
+     *
+     * @throws IllegalArgumentException if provider is null
+     */
+    public boolean hasProvider(@NonNull String provider) {
+        Preconditions.checkArgument(provider != null, "invalid null provider");
+
+        try {
+            return mService.hasProvider(provider);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns a list of the names of all available location providers. All providers are returned,
      * including those that are currently disabled.
      *
@@ -1718,7 +1795,12 @@ public class LocationManager {
      * @return location provider information, or null if provider does not exist
      *
      * @throws IllegalArgumentException if provider is null
+     *
+     * @deprecated This method has no way to indicate that a provider's properties are unknown, and
+     * so may return incorrect results on rare occasions. Use {@link #getProviderProperties(String)}
+     * instead.
      */
+    @Deprecated
     public @Nullable LocationProvider getProvider(@NonNull String provider) {
         Preconditions.checkArgument(provider != null, "invalid null provider");
 
@@ -1739,10 +1821,31 @@ public class LocationManager {
 
         try {
             ProviderProperties properties = mService.getProviderProperties(provider);
-            if (properties == null) {
-                return null;
-            }
             return new LocationProvider(provider, properties);
+        } catch (IllegalArgumentException e) {
+            // provider does not exist
+            return null;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the properties of the given provider, or null if the properties are currently
+     * unknown. Provider properties may change over time, although this is discouraged, and should
+     * be rare. The most common transition is when provider properties go from being unknown to
+     * known, which is most common near boot time.
+     *
+     * @param provider a provider listed by {@link #getAllProviders()}
+     * @return location provider properties, or null if properties are currently unknown
+     *
+     * @throws IllegalArgumentException if provider is null or does not exist
+     */
+    public @Nullable ProviderProperties getProviderProperties(@NonNull String provider) {
+        Preconditions.checkArgument(provider != null, "invalid null provider");
+
+        try {
+            return mService.getProviderProperties(provider);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1753,17 +1856,13 @@ public class LocationManager {
      * otherwise.
      *
      * @hide
-     * @deprecated Prefer {@link #isProviderPackage(String, String)} instead.
+     * @deprecated Prefer {@link #isProviderPackage(String, String, String)} instead.
      */
     @Deprecated
     @SystemApi
     @RequiresPermission(Manifest.permission.READ_DEVICE_CONFIG)
     public boolean isProviderPackage(@NonNull String packageName) {
-        try {
-            return mService.isProviderPackage(null, packageName);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return isProviderPackage(null, packageName, null);
     }
 
     /**
@@ -1774,13 +1873,37 @@ public class LocationManager {
      * @param provider a provider listed by {@link #getAllProviders()} or null
      * @param packageName the package name to test if it is a provider
      * @return true if the given arguments correspond to a provider
+     *
+     * @deprecated Use {@link #isProviderPackage(String, String, String)} instead.
+     *
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    @RequiresPermission(Manifest.permission.READ_DEVICE_CONFIG)
+    public boolean isProviderPackage(@Nullable String provider, @NonNull String packageName) {
+        return isProviderPackage(provider, packageName, null);
+    }
+
+    /**
+     * Returns true if the given provider corresponds to the given package name. If the given
+     * provider is null, this will return true if any provider corresponds to the given package
+     * name and/or attribution tag. If attribution tag is non-null, the provider identity must match
+     * both the given package name and attribution tag.
+     *
+     * @param provider a provider listed by {@link #getAllProviders()} or null
+     * @param packageName the package name to test if it is a provider
+     * @param attributionTag an optional attribution tag within the given package
+     * @return true if the given arguments correspond to a provider
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.READ_DEVICE_CONFIG)
-    public boolean isProviderPackage(@Nullable String provider, @NonNull String packageName) {
+    public boolean isProviderPackage(@Nullable String provider, @NonNull String packageName,
+            @Nullable String attributionTag) {
         try {
-            return mService.isProviderPackage(provider, packageName);
+            return mService.isProviderPackage(provider, Objects.requireNonNull(packageName),
+                    attributionTag);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1791,7 +1914,7 @@ public class LocationManager {
      * and an empty list if no package is associated with the provider.
      *
      * @hide
-     * @deprecated Prefer {@link #isProviderPackage(String, String)} instead.
+     * @deprecated Prefer {@link #isProviderPackage(String, String, String)} instead.
      */
     @TestApi
     @Deprecated
@@ -1842,12 +1965,38 @@ public class LocationManager {
     public void addTestProvider(
             @NonNull String provider, boolean requiresNetwork, boolean requiresSatellite,
             boolean requiresCell, boolean hasMonetaryCost, boolean supportsAltitude,
-            boolean supportsSpeed, boolean supportsBearing, int powerRequirement, int accuracy) {
-        Preconditions.checkArgument(provider != null, "invalid null provider");
+            boolean supportsSpeed, boolean supportsBearing,
+            @ProviderProperties.PowerUsage int powerUsage,
+            @ProviderProperties.Accuracy int accuracy) {
+        addTestProvider(provider, new ProviderProperties.Builder()
+                .setHasNetworkRequirement(requiresNetwork)
+                .setHasSatelliteRequirement(requiresSatellite)
+                .setHasCellRequirement(requiresCell)
+                .setHasMonetaryCost(hasMonetaryCost)
+                .setHasAltitudeSupport(supportsAltitude)
+                .setHasSpeedSupport(supportsSpeed)
+                .setHasBearingSupport(supportsBearing)
+                .setPowerUsage(powerUsage)
+                .setAccuracy(accuracy)
+                .build());
+    }
 
-        ProviderProperties properties = new ProviderProperties(requiresNetwork,
-                requiresSatellite, requiresCell, hasMonetaryCost, supportsAltitude, supportsSpeed,
-                supportsBearing, powerRequirement, accuracy);
+    /**
+     * Creates a test location provider and adds it to the set of active providers. This provider
+     * will replace any provider with the same name that exists prior to this call.
+     *
+     * @param provider the provider name
+     *
+     * @throws IllegalArgumentException if provider is null
+     * @throws IllegalArgumentException if properties is null
+     * @throws SecurityException if {@link android.app.AppOpsManager#OPSTR_MOCK_LOCATION
+     * mock location app op} is not set to {@link android.app.AppOpsManager#MODE_ALLOWED
+     * allowed} for your app.
+     */
+    public void addTestProvider(@NonNull String provider, @NonNull ProviderProperties properties) {
+        Preconditions.checkArgument(provider != null, "invalid null provider");
+        Preconditions.checkArgument(properties != null, "invalid null properties");
+
         try {
             mService.addTestProvider(provider, properties, mContext.getOpPackageName(),
                     mContext.getFeatureId());
@@ -2061,20 +2210,15 @@ public class LocationManager {
      */
     public @NonNull GnssCapabilities getGnssCapabilities() {
         try {
-            long gnssCapabilities = mService.getGnssCapabilities();
-            if (gnssCapabilities == GnssCapabilities.INVALID_CAPABILITIES) {
-                gnssCapabilities = 0L;
-            }
-            return GnssCapabilities.of(gnssCapabilities);
+            return mService.getGnssCapabilities();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
-     * Returns the model year of the GNSS hardware and software build. More details, such as build
-     * date, may be available in {@link #getGnssHardwareModelName()}. May return 0 if the model year
-     * is less than 2016.
+     * Returns the model year of the GNSS hardware and software build, or 0 if the model year
+     * is before 2016.
      */
     public int getGnssYearOfHardware() {
         try {
@@ -2085,18 +2229,29 @@ public class LocationManager {
     }
 
     /**
-     * Returns the Model Name (including Vendor and Hardware/Software Version) of the GNSS hardware
-     * driver.
+     * Returns the model name (including vendor and hardware/software version) of the GNSS hardware
+     * driver, or null if this information is not available.
      *
-     * <p> No device-specific serial number or ID is returned from this API.
-     *
-     * <p> Will return null when the GNSS hardware abstraction layer does not support providing
-     * this value.
+     * <p>No device-specific serial number or ID is returned from this API.
      */
     @Nullable
     public String getGnssHardwareModelName() {
         try {
             return mService.getGnssHardwareModelName();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the current list of GNSS antenna infos, or null if unknown or unsupported.
+     *
+     * @see #getGnssCapabilities()
+     */
+    @Nullable
+    public List<GnssAntennaInfo> getGnssAntennaInfos() {
+        try {
+            return mService.getGnssAntennaInfos();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2187,8 +2342,11 @@ public class LocationManager {
      * Registers a GNSS status callback. This method must be called from a {@link Looper} thread,
      * and callbacks will occur on that looper.
      *
-     * @param callback GNSS status callback object to register
-     * @return true if the listener was successfully added
+     * <p>See {@link #registerGnssStatusCallback(Executor, GnssStatus.Callback)} for more detail on
+     * how this method works.
+     *
+     * @param callback the callback to register
+     * @return {@code true} always
      *
      * @throws SecurityException if the ACCESS_FINE_LOCATION permission is not present
      *
@@ -2204,9 +2362,12 @@ public class LocationManager {
     /**
      * Registers a GNSS status callback.
      *
-     * @param callback GNSS status callback object to register
-     * @param handler  a handler with a looper that the callback runs on
-     * @return true if the listener was successfully added
+     * <p>See {@link #registerGnssStatusCallback(Executor, GnssStatus.Callback)} for more detail on
+     * how this method works.
+     *
+     * @param callback the callback to register
+     * @param handler  the handler the callback runs on
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if callback is null
      * @throws SecurityException if the ACCESS_FINE_LOCATION permission is not present
@@ -2222,11 +2383,12 @@ public class LocationManager {
     }
 
     /**
-     * Registers a GNSS status callback.
+     * Registers a GNSS status callback. GNSS status information will only be received while the
+     * {@link #GPS_PROVIDER} is enabled, and while the client app is in the foreground.
      *
      * @param executor the executor that the callback runs on
-     * @param callback GNSS status callback object to register
-     * @return true if the listener was successfully added
+     * @param callback the callback to register
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if executor is null
      * @throws IllegalArgumentException if callback is null
@@ -2272,8 +2434,12 @@ public class LocationManager {
     /**
      * Adds an NMEA listener.
      *
-     * @param listener a {@link OnNmeaMessageListener} object to register
-     * @return true if the listener was successfully added
+     * <p>See {@link #addNmeaListener(Executor, OnNmeaMessageListener)} for more detail on how this
+     * method works.
+     *
+     * @param listener the listener to register
+     * @return {@code true} always
+     *
      * @throws SecurityException if the ACCESS_FINE_LOCATION permission is not present
      * @deprecated Use {@link #addNmeaListener(OnNmeaMessageListener, Handler)} or {@link
      * #addNmeaListener(Executor, OnNmeaMessageListener)} instead.
@@ -2287,9 +2453,12 @@ public class LocationManager {
     /**
      * Adds an NMEA listener.
      *
-     * @param listener a {@link OnNmeaMessageListener} object to register
-     * @param handler  a handler with the looper that the listener runs on.
-     * @return true if the listener was successfully added
+     * <p>See {@link #addNmeaListener(Executor, OnNmeaMessageListener)} for more detail on how this
+     * method works.
+     *
+     * @param listener the listener to register
+     * @param handler  the handler that the listener runs on
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if listener is null
      * @throws SecurityException if the ACCESS_FINE_LOCATION permission is not present
@@ -2305,11 +2474,12 @@ public class LocationManager {
     }
 
     /**
-     * Adds an NMEA listener.
+     * Adds an NMEA listener. GNSS NMEA information will only be received while the
+     * {@link #GPS_PROVIDER} is enabled, and while the client app is in the foreground.
      *
-     * @param listener a {@link OnNmeaMessageListener} object to register
-     * @param executor the {@link Executor} that the listener runs on.
-     * @return true if the listener was successfully added
+     * @param listener the listener to register
+     * @param executor the executor that the listener runs on
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if executor is null
      * @throws IllegalArgumentException if listener is null
@@ -2319,7 +2489,7 @@ public class LocationManager {
     public boolean addNmeaListener(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull OnNmeaMessageListener listener) {
-        getGnssStatusTransportMultiplexer().addListener(listener, executor);
+        getGnssNmeaTransportMultiplexer().addListener(listener, executor);
         return true;
     }
 
@@ -2329,7 +2499,7 @@ public class LocationManager {
      * @param listener a {@link OnNmeaMessageListener} object to remove
      */
     public void removeNmeaListener(@NonNull OnNmeaMessageListener listener) {
-        getGnssStatusTransportMultiplexer().removeListener(listener);
+        getGnssNmeaTransportMultiplexer().removeListener(listener);
     }
 
     /**
@@ -2357,10 +2527,14 @@ public class LocationManager {
     public void removeGpsMeasurementListener(GpsMeasurementsEvent.Listener listener) {}
 
     /**
-     * Registers a GPS Measurement callback which will run on a binder thread.
+     * Registers a GNSS measurements callback which will run on a binder thread.
      *
-     * @param callback a {@link GnssMeasurementsEvent.Callback} object to register.
-     * @return {@code true} if the callback was added successfully, {@code false} otherwise.
+     * <p>See {@link #registerGnssMeasurementsCallback(Executor, GnssMeasurementsEvent.Callback)
+     * for more detail on how this method works.
+     *
+     * @param callback a {@link GnssMeasurementsEvent.Callback} object to register
+     * @return {@code true} always
+     *
      * @deprecated Use {@link
      * #registerGnssMeasurementsCallback(GnssMeasurementsEvent.Callback, Handler)} or {@link
      * #registerGnssMeasurementsCallback(Executor, GnssMeasurementsEvent.Callback)} instead.
@@ -2373,11 +2547,14 @@ public class LocationManager {
     }
 
     /**
-     * Registers a GPS Measurement callback.
+     * Registers a GNSS measurements callback.
      *
-     * @param callback a {@link GnssMeasurementsEvent.Callback} object to register.
-     * @param handler  the handler that the callback runs on.
-     * @return {@code true} if the callback was added successfully, {@code false} otherwise.
+     * <p>See {@link #registerGnssMeasurementsCallback(Executor, GnssMeasurementsEvent.Callback)
+     * for more detail on how this method works.
+     *
+     * @param callback a {@link GnssMeasurementsEvent.Callback} object to register
+     * @param handler  the handler that the callback runs on
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if callback is null
      * @throws SecurityException if the ACCESS_FINE_LOCATION permission is not present
@@ -2394,11 +2571,14 @@ public class LocationManager {
     }
 
     /**
-     * Registers a GPS Measurement callback.
+     * Registers a GNSS measurements callback. GNSS measurements information will only be received
+     * while the {@link #GPS_PROVIDER} is enabled, and while the client app is in the foreground.
      *
-     * @param callback a {@link GnssMeasurementsEvent.Callback} object to register.
-     * @param executor the executor that the callback runs on.
-     * @return {@code true} if the callback was added successfully, {@code false} otherwise.
+     * <p>Not all GNSS chipsets support measurements updates, see {@link #getGnssCapabilities()}.
+     *
+     * @param executor the executor that the callback runs on
+     * @param callback the callback to register
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if executor is null
      * @throws IllegalArgumentException if callback is null
@@ -2415,12 +2595,11 @@ public class LocationManager {
     /**
      * Registers a GNSS Measurement callback.
      *
-     * @param request  extra parameters to pass to GNSS measurement provider. For example, if {@link
-     *                 GnssRequest#isFullTracking()} is true, GNSS chipset switches off duty
-     *                 cycling.
-     * @param executor the executor that the callback runs on.
-     * @param callback a {@link GnssMeasurementsEvent.Callback} object to register.
-     * @return {@code true} if the callback was added successfully, {@code false} otherwise.
+     * @param request  the gnss measurement request containgin measurement parameters
+     * @param executor the executor that the callback runs on
+     * @param callback the callack to register
+     * @return {@code true} always
+     *
      * @throws IllegalArgumentException if request is null
      * @throws IllegalArgumentException if executor is null
      * @throws IllegalArgumentException if callback is null
@@ -2469,8 +2648,7 @@ public class LocationManager {
     /**
      * Injects GNSS measurement corrections into the GNSS chipset.
      *
-     * @param measurementCorrections a {@link GnssMeasurementCorrections} object with the GNSS
-     *     measurement corrections to be injected into the GNSS chipset.
+     * @param measurementCorrections measurement corrections to be injected into the chipset
      *
      * @throws IllegalArgumentException if measurementCorrections is null
      * @throws SecurityException if the ACCESS_FINE_LOCATION permission is not present
@@ -2499,18 +2677,24 @@ public class LocationManager {
     }
 
     /**
-     * Registers a Gnss Antenna Info listener. Only expect results if
-     * {@link GnssCapabilities#hasGnssAntennaInfo()} shows that antenna info is supported.
+     * Registers a GNSS antenna info listener. GNSS antenna info updates will only be received while
+     * the {@link #GPS_PROVIDER} is enabled, and while the client app is in the foreground.
      *
-     * @param executor the executor that the listener runs on.
-     * @param listener a {@link GnssAntennaInfo.Listener} object to register.
-     * @return {@code true} if the listener was added successfully, {@code false} otherwise.
+     * <p>Not all GNSS chipsets support antenna info updates, see {@link #getGnssCapabilities()}.
+     *
+     * <p>Prior to Android S, this requires the {@link Manifest.permission#ACCESS_FINE_LOCATION}
+     * permission.
+     *
+     * @param executor the executor that the listener runs on
+     * @param listener the listener to register
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if executor is null
      * @throws IllegalArgumentException if listener is null
-     * @throws SecurityException if the ACCESS_FINE_LOCATION permission is not present
+     *
+     * @deprecated Prefer to use a receiver for {@link #ACTION_GNSS_ANTENNA_INFOS_CHANGED}.
      */
-    @RequiresPermission(ACCESS_FINE_LOCATION)
+    @Deprecated
     public boolean registerAntennaInfoListener(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull GnssAntennaInfo.Listener listener) {
@@ -2521,8 +2705,11 @@ public class LocationManager {
     /**
      * Unregisters a GNSS Antenna Info listener.
      *
-     * @param listener a {@link GnssAntennaInfo.Listener} object to remove.
+     * @param listener a {@link GnssAntennaInfo.Listener} object to remove
+     *
+     * @deprecated Prefer to use a receiver for {@link #ACTION_GNSS_ANTENNA_INFOS_CHANGED}.
      */
+    @Deprecated
     public void unregisterAntennaInfoListener(@NonNull GnssAntennaInfo.Listener listener) {
         getGnssAntennaInfoTransportMultiplexer().removeListener(listener);
     }
@@ -2552,10 +2739,15 @@ public class LocationManager {
     public void removeGpsNavigationMessageListener(GpsNavigationMessageEvent.Listener listener) {}
 
     /**
-     * Registers a GNSS Navigation Message callback which will run on a binder thread.
+     * Registers a GNSS navigation message callback which will run on a binder thread.
      *
-     * @param callback a {@link GnssNavigationMessage.Callback} object to register.
-     * @return {@code true} if the callback was added successfully, {@code false} otherwise.
+     * <p>See
+     * {@link #registerGnssNavigationMessageCallback(Executor, GnssNavigationMessage.Callback)} for
+     * more detail on how this method works.
+     *
+     * @param callback the callback to register
+     * @return {@code true} always
+     *
      * @deprecated Use {@link
      * #registerGnssNavigationMessageCallback(GnssNavigationMessage.Callback, Handler)} or {@link
      * #registerGnssNavigationMessageCallback(Executor, GnssNavigationMessage.Callback)} instead.
@@ -2567,11 +2759,15 @@ public class LocationManager {
     }
 
     /**
-     * Registers a GNSS Navigation Message callback.
+     * Registers a GNSS navigation message callback.
      *
-     * @param callback a {@link GnssNavigationMessage.Callback} object to register.
-     * @param handler  the handler that the callback runs on.
-     * @return {@code true} if the callback was added successfully, {@code false} otherwise.
+     * <p>See
+     * {@link #registerGnssNavigationMessageCallback(Executor, GnssNavigationMessage.Callback)} for
+     * more detail on how this method works.
+     *
+     * @param callback the callback to register
+     * @param handler  the handler that the callback runs on
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if callback is null
      * @throws SecurityException if the ACCESS_FINE_LOCATION permission is not present
@@ -2587,11 +2783,15 @@ public class LocationManager {
     }
 
     /**
-     * Registers a GNSS Navigation Message callback.
+     * Registers a GNSS navigation message callback. GNSS navigation messages will only be received
+     * while the {@link #GPS_PROVIDER} is enabled, and while the client app is in the foreground.
      *
-     * @param callback a {@link GnssNavigationMessage.Callback} object to register.
-     * @param executor the looper that the callback runs on.
-     * @return {@code true} if the callback was added successfully, {@code false} otherwise.
+     * <p>Not all GNSS chipsets support navigation message updates, see
+     * {@link #getGnssCapabilities()}.
+     *
+     * @param executor the executor that the callback runs on
+     * @param callback the callback to register
+     * @return {@code true} always
      *
      * @throws IllegalArgumentException if executor is null
      * @throws IllegalArgumentException if callback is null
@@ -2618,6 +2818,9 @@ public class LocationManager {
     /**
      * Returns the batch size (in number of Location objects) that are supported by the batching
      * interface.
+     *
+     * Prior to Android S this call requires the {@link Manifest.permission#LOCATION_HARDWARE}
+     * permission.
      *
      * @return Maximum number of location objects that can be returned
      * @deprecated Do not use
@@ -2822,20 +3025,6 @@ public class LocationManager {
         }
     }
 
-    private static class NmeaAdapter extends GnssStatus.Callback implements OnNmeaMessageListener {
-
-        private final OnNmeaMessageListener mListener;
-
-        NmeaAdapter(OnNmeaMessageListener listener) {
-            mListener = listener;
-        }
-
-        @Override
-        public void onNmeaMessage(String message, long timestamp) {
-            mListener.onNmeaMessage(message, timestamp);
-        }
-    }
-
     private static class GpsAdapter extends GnssStatus.Callback {
 
         private final GpsStatus.Listener mGpsListener;
@@ -2881,11 +3070,6 @@ public class LocationManager {
 
         public int getTtff() {
             return mTtff;
-        }
-
-        public void addListener(@NonNull OnNmeaMessageListener listener,
-                @NonNull Executor executor) {
-            addListener(listener, null, new NmeaAdapter(listener), executor);
         }
 
         public void addListener(@NonNull GpsStatus.Listener listener, @NonNull Executor executor) {
@@ -2940,14 +3124,51 @@ public class LocationManager {
                 mGnssStatus = gnssStatus;
                 deliverToListeners(callback -> callback.onSatelliteStatusChanged(gnssStatus));
             }
+        }
+    }
+
+    private class GnssNmeaTransportMultiplexer extends
+            ListenerTransportMultiplexer<Void, OnNmeaMessageListener> {
+
+        private @Nullable IGnssNmeaListener mListenerTransport;
+
+        GnssNmeaTransportMultiplexer() {}
+
+        public void addListener(@NonNull OnNmeaMessageListener listener,
+                @NonNull Executor executor) {
+            addListener(listener, null, listener, executor);
+        }
+
+        @Override
+        protected void registerWithServer(Void ignored) throws RemoteException {
+            IGnssNmeaListener transport = mListenerTransport;
+            if (transport == null) {
+                transport = new GnssNmeaListener();
+            }
+
+            // if a remote exception is thrown the transport should not be set
+            mListenerTransport = null;
+            mService.registerGnssNmeaCallback(transport, mContext.getPackageName(),
+                    mContext.getAttributionTag());
+            mListenerTransport = transport;
+        }
+
+        @Override
+        protected void unregisterWithServer() throws RemoteException {
+            if (mListenerTransport != null) {
+                IGnssNmeaListener transport = mListenerTransport;
+                mListenerTransport = null;
+                mService.unregisterGnssNmeaCallback(transport);
+            }
+        }
+
+        private class GnssNmeaListener extends IGnssNmeaListener.Stub {
+
+            GnssNmeaListener() {}
 
             @Override
             public void onNmeaReceived(long timestamp, String nmea) {
-                deliverToListeners((callback) -> {
-                    if (callback instanceof NmeaAdapter) {
-                        ((NmeaAdapter) callback).onNmeaMessage(nmea, timestamp);
-                    }
-                });
+                deliverToListeners(callback -> callback.onNmeaMessage(nmea, timestamp));
             }
         }
     }
@@ -2989,7 +3210,9 @@ public class LocationManager {
             for (GnssMeasurementRequest request : requests) {
                 if (request.isFullTracking()) {
                     builder.setFullTracking(true);
-                    break;
+                }
+                if (request.isCorrelationVectorOutputsEnabled()) {
+                    builder.setCorrelationVectorOutputsEnabled(true);
                 }
             }
 
@@ -3062,40 +3285,41 @@ public class LocationManager {
     private class GnssAntennaInfoTransportMultiplexer extends
             ListenerTransportMultiplexer<Void, GnssAntennaInfo.Listener> {
 
-        private @Nullable IGnssAntennaInfoListener mListenerTransport;
+        private @Nullable BroadcastReceiver mListenerTransport;
 
         GnssAntennaInfoTransportMultiplexer() {}
 
         @Override
-        protected void registerWithServer(Void ignored) throws RemoteException {
-            IGnssAntennaInfoListener transport = mListenerTransport;
-            if (transport == null) {
-                transport = new GnssAntennaInfoListener();
+        protected void registerWithServer(Void ignored) {
+            if (mListenerTransport == null) {
+                // if an exception is thrown the transport should not be set
+                BroadcastReceiver transport = new GnssAntennaInfoReceiver();
+                mContext.registerReceiver(transport,
+                        new IntentFilter(ACTION_GNSS_ANTENNA_INFOS_CHANGED));
+                mListenerTransport = transport;
             }
-
-            // if a remote exception is thrown the transport should not be set
-            mListenerTransport = null;
-            mService.addGnssAntennaInfoListener(transport, mContext.getPackageName(),
-                    mContext.getAttributionTag());
-            mListenerTransport = transport;
         }
 
         @Override
-        protected void unregisterWithServer() throws RemoteException {
+        protected void unregisterWithServer() {
             if (mListenerTransport != null) {
-                IGnssAntennaInfoListener transport = mListenerTransport;
+                BroadcastReceiver transport = mListenerTransport;
                 mListenerTransport = null;
-                mService.removeGnssAntennaInfoListener(transport);
+                mContext.unregisterReceiver(transport);
             }
         }
 
-        private class GnssAntennaInfoListener extends IGnssAntennaInfoListener.Stub {
+        private class GnssAntennaInfoReceiver extends BroadcastReceiver {
 
-            GnssAntennaInfoListener() {}
+            GnssAntennaInfoReceiver() {}
 
             @Override
-            public void onGnssAntennaInfoReceived(List<GnssAntennaInfo> infos) {
-                deliverToListeners(callback -> callback.onGnssAntennaInfoReceived(infos));
+            public void onReceive(Context context, Intent intent) {
+                ArrayList<GnssAntennaInfo> infos = intent.getParcelableArrayListExtra(
+                        EXTRA_GNSS_ANTENNA_INFOS);
+                if (infos != null) {
+                    deliverToListeners(callback -> callback.onGnssAntennaInfoReceived(infos));
+                }
             }
         }
     }

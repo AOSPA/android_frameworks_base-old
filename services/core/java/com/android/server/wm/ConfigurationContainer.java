@@ -547,19 +547,16 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
         return activityType == ACTIVITY_TYPE_STANDARD || activityType == ACTIVITY_TYPE_UNDEFINED;
     }
 
-    public boolean hasCompatibleActivityType(ConfigurationContainer other) {
-        /*@WindowConfiguration.ActivityType*/ int thisType = getActivityType();
-        /*@WindowConfiguration.ActivityType*/ int otherType = other.getActivityType();
-
-        if (thisType == otherType) {
+    public static boolean isCompatibleActivityType(int currentType, int otherType) {
+        if (currentType == otherType) {
             return true;
         }
-        if (thisType == ACTIVITY_TYPE_ASSISTANT) {
+        if (currentType == ACTIVITY_TYPE_ASSISTANT) {
             // Assistant activities are only compatible with themselves...
             return false;
         }
         // Otherwise we are compatible if us or other is not currently defined.
-        return thisType == ACTIVITY_TYPE_UNDEFINED || otherType == ACTIVITY_TYPE_UNDEFINED;
+        return currentType == ACTIVITY_TYPE_UNDEFINED || otherType == ACTIVITY_TYPE_UNDEFINED;
     }
 
     /**
@@ -665,7 +662,9 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
         pw.println(getName()
                 + " type=" + activityTypeToString(getActivityType())
                 + " mode=" + windowingModeToString(getWindowingMode())
-                + " override-mode=" + windowingModeToString(getRequestedOverrideWindowingMode()));
+                + " override-mode=" + windowingModeToString(getRequestedOverrideWindowingMode())
+                + " requested-bounds=" + getRequestedOverrideBounds().toShortString()
+                + " bounds=" + getBounds().toShortString());
         for (int i = getChildCount() - 1; i >= 0; --i) {
             final E cc = getChildAt(i);
             pw.print(childPrefix + "#" + i + " ");

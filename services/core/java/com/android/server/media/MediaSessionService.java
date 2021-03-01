@@ -43,7 +43,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.media.AudioManager;
 import android.media.AudioPlaybackConfiguration;
-import android.media.IRemoteVolumeControllerCallback;
+import android.media.IRemoteSessionCallback;
 import android.media.Session2Token;
 import android.media.session.IActiveSessionsListener;
 import android.media.session.IOnMediaKeyEventDispatchedListener;
@@ -109,6 +109,10 @@ public class MediaSessionService extends SystemService implements Monitor {
     private static final int LONG_PRESS_TIMEOUT = ViewConfiguration.getLongPressTimeout()
             + /* Buffer for delayed delivery of key event */ 50;
     private static final int MULTI_TAP_TIMEOUT = ViewConfiguration.getMultiPressTimeout();
+    /**
+     * Copied from Settings.System.MEDIA_BUTTON_RECEIVER
+     */
+    private static final String MEDIA_BUTTON_RECEIVER = "media_button_receiver";
 
     private final Context mContext;
     private final SessionManagerImpl mSessionManagerImpl;
@@ -131,7 +135,6 @@ public class MediaSessionService extends SystemService implements Monitor {
 
     private KeyguardManager mKeyguardManager;
     private AudioManager mAudioManager;
-    private ContentResolver mContentResolver;
     private boolean mHasFeatureLeanback;
 
     // The FullUserRecord of the current users. (i.e. The foreground user that isn't a profile)
@@ -142,7 +145,7 @@ public class MediaSessionService extends SystemService implements Monitor {
 
     // Used to notify System UI and Settings when remote volume was changed.
     @GuardedBy("mLock")
-    final RemoteCallbackList<IRemoteVolumeControllerCallback> mRemoteVolumeControllers =
+    final RemoteCallbackList<IRemoteSessionCallback> mRemoteVolumeControllers =
             new RemoteCallbackList<>();
 
     private SessionPolicyProvider mCustomSessionPolicyProvider;
@@ -183,7 +186,6 @@ public class MediaSessionService extends SystemService implements Monitor {
                         }
                     }
                 }, null /* handler */);
-        mContentResolver = mContext.getContentResolver();
         mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_LEANBACK);
 
@@ -304,7 +306,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             MediaSession.Token token = session.getSessionToken();
             for (int i = size - 1; i >= 0; i--) {
                 try {
-                    IRemoteVolumeControllerCallback cb =
+                    IRemoteSessionCallback cb =
                             mRemoteVolumeControllers.getBroadcastItem(i);
                     cb.onVolumeChanged(token, flags);
                 } catch (Exception e) {
@@ -713,7 +715,7 @@ public class MediaSessionService extends SystemService implements Monitor {
 
             for (int i = size - 1; i >= 0; i--) {
                 try {
-                    IRemoteVolumeControllerCallback cb =
+                    IRemoteSessionCallback cb =
                             mRemoteVolumeControllers.getBroadcastItem(i);
                     cb.onSessionChanged(token);
                 } catch (Exception e) {
@@ -831,6 +833,7 @@ public class MediaSessionService extends SystemService implements Monitor {
      */
     final class FullUserRecord implements MediaSessionStack.OnMediaButtonSessionChangedListener {
         private final int mFullUserId;
+        private final ContentResolver mContentResolver;
         private final MediaSessionStack mPriorityStack;
         private final HashMap<IBinder, OnMediaKeyEventDispatchedListenerRecord>
                 mOnMediaKeyEventDispatchedListeners = new HashMap<>();
@@ -848,10 +851,12 @@ public class MediaSessionService extends SystemService implements Monitor {
 
         FullUserRecord(int fullUserId) {
             mFullUserId = fullUserId;
+            mContentResolver = mContext.createContextAsUser(UserHandle.of(mFullUserId), 0)
+                    .getContentResolver();
             mPriorityStack = new MediaSessionStack(mAudioPlayerStateMonitor, this);
             // Restore the remembered media button receiver before the boot.
-            String mediaButtonReceiverInfo = Settings.Secure.getStringForUser(mContentResolver,
-                    Settings.System.MEDIA_BUTTON_RECEIVER, mFullUserId);
+            String mediaButtonReceiverInfo = Settings.Secure.getString(mContentResolver,
+                    MEDIA_BUTTON_RECEIVER);
             mLastMediaButtonReceiverHolder =
                     MediaButtonReceiverHolder.unflattenFromString(
                             mContext, mediaButtonReceiverInfo);
@@ -970,10 +975,9 @@ public class MediaSessionService extends SystemService implements Monitor {
             mLastMediaButtonReceiverHolder = sessionRecord.getMediaButtonReceiver();
             String mediaButtonReceiverInfo = (mLastMediaButtonReceiverHolder == null)
                     ? "" : mLastMediaButtonReceiverHolder.flattenToString();
-            Settings.Secure.putStringForUser(mContentResolver,
-                    Settings.System.MEDIA_BUTTON_RECEIVER,
-                    mediaButtonReceiverInfo,
-                    mFullUserId);
+            Settings.Secure.putString(mContentResolver,
+                    MEDIA_BUTTON_RECEIVER,
+                    mediaButtonReceiverInfo);
         }
 
         private void pushAddressedPlayerChangedLocked(
@@ -1839,7 +1843,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         }
 
         @Override
-        public void registerRemoteVolumeControllerCallback(IRemoteVolumeControllerCallback rvc) {
+        public void registerRemoteSessionCallback(IRemoteSessionCallback rvc) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
@@ -1854,7 +1858,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         }
 
         @Override
-        public void unregisterRemoteVolumeControllerCallback(IRemoteVolumeControllerCallback rvc) {
+        public void unregisterRemoteSessionCallback(IRemoteSessionCallback rvc) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();

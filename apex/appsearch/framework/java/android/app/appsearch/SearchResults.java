@@ -24,6 +24,8 @@ import android.os.Bundle;
 import android.os.RemoteException;
 import android.util.Log;
 
+import com.android.internal.util.Preconditions;
+
 import java.io.Closeable;
 import java.util.List;
 import java.util.Objects;
@@ -45,15 +47,19 @@ public class SearchResults implements Closeable {
 
     private final IAppSearchManager mService;
 
+    // The package name of the caller.
+    private final String mPackageName;
+
+    // The database name to search over. If null, this will search over all database names.
     @Nullable
     private final String mDatabaseName;
-
-    @UserIdInt
-    private final int mUserId;
 
     private final String mQueryExpression;
 
     private final SearchSpec mSearchSpec;
+
+    @UserIdInt
+    private final int mUserId;
 
     private final Executor mExecutor;
 
@@ -61,17 +67,22 @@ public class SearchResults implements Closeable {
 
     private boolean mIsFirstLoad = true;
 
-    SearchResults(@NonNull IAppSearchManager service,
+    private boolean mIsClosed = false;
+
+    SearchResults(
+            @NonNull IAppSearchManager service,
+            @NonNull String packageName,
             @Nullable String databaseName,
             @NonNull String queryExpression,
             @NonNull SearchSpec searchSpec,
             @UserIdInt int userId,
             @NonNull @CallbackExecutor Executor executor) {
         mService = Objects.requireNonNull(service);
-        mUserId = userId;
-        mDatabaseName = Objects.requireNonNull(databaseName);
+        mPackageName = packageName;
+        mDatabaseName = databaseName;
         mQueryExpression = Objects.requireNonNull(queryExpression);
         mSearchSpec = Objects.requireNonNull(searchSpec);
+        mUserId = userId;
         mExecutor = Objects.requireNonNull(executor);
     }
 
@@ -86,15 +97,18 @@ public class SearchResults implements Closeable {
      * @param callback Callback to receive the pending result of performing this operation.
      */
     public void getNextPage(@NonNull Consumer<AppSearchResult<List<SearchResult>>> callback) {
+        Preconditions.checkState(!mIsClosed, "SearchResults has already been closed");
         try {
             if (mIsFirstLoad) {
                 mIsFirstLoad = false;
                 if (mDatabaseName == null) {
-                    mService.globalQuery(mQueryExpression, mSearchSpec.getBundle(), mUserId,
-                            wrapCallback(callback));
+                    // Global query, there's no one package-database combination to check.
+                    mService.globalQuery(mPackageName, mQueryExpression,
+                            mSearchSpec.getBundle(), mUserId, wrapCallback(callback));
                 } else {
-                    mService.query(mDatabaseName, mQueryExpression, mSearchSpec.getBundle(),
-                            mUserId, wrapCallback(callback));
+                    // Normal local query, pass in specified database.
+                    mService.query(mPackageName, mDatabaseName, mQueryExpression,
+                            mSearchSpec.getBundle(), mUserId, wrapCallback(callback));
                 }
             } else {
                 mService.getNextPage(mNextPageToken, mUserId, wrapCallback(callback));
@@ -102,6 +116,27 @@ public class SearchResults implements Closeable {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    @Override
+    public void close() {
+        if (!mIsClosed) {
+            try {
+                mService.invalidateNextPageToken(mNextPageToken, mUserId);
+                mIsClosed = true;
+            } catch (RemoteException e) {
+                Log.e(TAG, "Unable to close the SearchResults", e);
+            }
+        }
+    }
+
+    private IAppSearchResultCallback wrapCallback(
+            @NonNull Consumer<AppSearchResult<List<SearchResult>>> callback) {
+        return new IAppSearchResultCallback.Stub() {
+            public void onResult(AppSearchResult result) {
+                mExecutor.execute(() -> invokeCallback(result, callback));
+            }
+        };
     }
 
     private void invokeCallback(AppSearchResult result,
@@ -119,24 +154,5 @@ public class SearchResults implements Closeable {
         } else {
             callback.accept(result);
         }
-    }
-    @Override
-    public void close() {
-        mExecutor.execute(() -> {
-            try {
-                mService.invalidateNextPageToken(mNextPageToken, mUserId);
-            } catch (RemoteException e) {
-                Log.d(TAG, "Unable to close the SearchResults", e);
-            }
-        });
-    }
-
-    private IAppSearchResultCallback wrapCallback(
-            @NonNull Consumer<AppSearchResult<List<SearchResult>>> callback) {
-        return new IAppSearchResultCallback.Stub() {
-            public void onResult(AppSearchResult result) {
-                mExecutor.execute(() -> invokeCallback(result, callback));
-            }
-        };
     }
 }

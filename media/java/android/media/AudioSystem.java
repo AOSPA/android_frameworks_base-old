@@ -766,8 +766,6 @@ public class AudioSystem
         synchronized (AudioSystem.class) {
             cb = sRoutingUpdateCallback;
         }
-        //###
-        Log.i(TAG, "#################### update");
         if (cb == null) {
             Log.e(TAG, "routing update from APM was not captured");
             return;

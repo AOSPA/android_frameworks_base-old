@@ -29,6 +29,7 @@ import android.net.NetworkRequest;
 import android.net.NetworkState;
 import android.net.ISocketKeepaliveCallback;
 import android.net.ProxyInfo;
+import android.net.UidRange;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.INetworkActivityListener;
@@ -146,10 +147,7 @@ interface IConnectivityManager
     String getAlwaysOnVpnPackage(int userId);
     boolean isVpnLockdownEnabled(int userId);
     List<String> getVpnLockdownWhitelist(int userId);
-
-    int checkMobileProvisioning(int suggestedTimeOutMs);
-
-    String getMobileProvisioningUrl();
+    void setRequireVpnForUids(boolean requireVpn, in UidRange[] ranges);
 
     void setProvisioningNotificationVisible(boolean visible, int networkType, in String action);
 
@@ -169,7 +167,7 @@ interface IConnectivityManager
             in NetworkCapabilities nc, int score, in NetworkAgentConfig config,
             in int factorySerialNumber);
 
-    NetworkRequest requestNetwork(in NetworkCapabilities networkCapabilities,
+    NetworkRequest requestNetwork(in NetworkCapabilities networkCapabilities, int reqType,
             in Messenger messenger, int timeoutSec, in IBinder binder, int legacy,
             String callingPackageName, String callingAttributionTag);
 
@@ -208,11 +206,11 @@ interface IConnectivityManager
     void startNattKeepalive(in Network network, int intervalSeconds,
             in ISocketKeepaliveCallback cb, String srcAddr, int srcPort, String dstAddr);
 
-    void startNattKeepaliveWithFd(in Network network, in FileDescriptor fd, int resourceId,
+    void startNattKeepaliveWithFd(in Network network, in ParcelFileDescriptor pfd, int resourceId,
             int intervalSeconds, in ISocketKeepaliveCallback cb, String srcAddr,
             String dstAddr);
 
-    void startTcpKeepalive(in Network network, in FileDescriptor fd, int intervalSeconds,
+    void startTcpKeepalive(in Network network, in ParcelFileDescriptor pfd, int intervalSeconds,
             in ISocketKeepaliveCallback cb);
 
     void stopKeepalive(in Network network, int slot);

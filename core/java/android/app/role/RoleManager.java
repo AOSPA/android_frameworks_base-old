@@ -174,6 +174,11 @@ public final class RoleManager {
     @NonNull
     private final Object mListenersLock = new Object();
 
+    @GuardedBy("mRoleControllerManagerLock")
+    @Nullable
+    private RoleControllerManager mRoleControllerManager;
+    private final Object mRoleControllerManagerLock = new Object();
+
     /**
      * @hide
      */
@@ -673,6 +678,54 @@ public final class RoleManager {
             return mService.getSmsRoleHolder(userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Check whether a role should be visible to user.
+     *
+     * @param roleName name of the role to check for
+     * @param executor the executor to execute callback on
+     * @param callback the callback to receive whether the role should be visible to user
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.MANAGE_ROLE_HOLDERS)
+    @TestApi
+    public void isRoleVisible(@NonNull String roleName,
+            @NonNull @CallbackExecutor Executor executor, @NonNull Consumer<Boolean> callback) {
+        getRoleControllerManager().isRoleVisible(roleName, executor, callback);
+    }
+
+    /**
+     * Check whether an application is visible for a role.
+     *
+     * While an application can be qualified for a role, it can still stay hidden from user (thus
+     * not visible). If an application is visible for a role, we may show things related to the role
+     * for it, e.g. showing an entry pointing to the role settings in its application info page.
+     *
+     * @param roleName the name of the role to check for
+     * @param packageName the package name of the application to check for
+     * @param executor the executor to execute callback on
+     * @param callback the callback to receive whether the application is visible for the role
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.MANAGE_ROLE_HOLDERS)
+    @TestApi
+    public void isApplicationVisibleForRole(@NonNull String roleName, @NonNull String packageName,
+            @NonNull @CallbackExecutor Executor executor, @NonNull Consumer<Boolean> callback) {
+        getRoleControllerManager().isApplicationVisibleForRole(roleName, packageName, executor,
+                callback);
+    }
+
+    @NonNull
+    private RoleControllerManager getRoleControllerManager() {
+        synchronized (mRoleControllerManagerLock) {
+            if (mRoleControllerManager == null) {
+                mRoleControllerManager = new RoleControllerManager(mContext);
+            }
+            return mRoleControllerManager;
         }
     }
 

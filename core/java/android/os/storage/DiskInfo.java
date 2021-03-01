@@ -52,6 +52,8 @@ public class DiskInfo implements Parcelable {
     public static final int FLAG_USB = 1 << 3;
     public static final int FLAG_EMMC = 1 << 4;
     public static final int FLAG_UFS_CARD = 1 << 5;
+    /** The FLAG_STUB_VISIBLE is set from vold, which gets the flag from outside (e.g., ChromeOS) */
+    public static final int FLAG_STUB_VISIBLE = 1 << 6;
 
     public final String id;
     @UnsupportedAppUsage
@@ -152,6 +154,10 @@ public class DiskInfo implements Parcelable {
     @UnsupportedAppUsage
     public boolean isUsb() {
         return (flags & FLAG_USB) != 0;
+    }
+
+    public boolean isStubVisible() {
+        return (flags & FLAG_STUB_VISIBLE) != 0;
     }
 
     @Override

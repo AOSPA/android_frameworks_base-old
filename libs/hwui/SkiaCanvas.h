@@ -53,9 +53,8 @@ public:
         LOG_ALWAYS_FATAL("SkiaCanvas cannot be reset as a recording canvas");
     }
 
-    virtual uirenderer::DisplayList* finishRecording() override {
+    virtual void finishRecording(uirenderer::RenderNode*) override {
         LOG_ALWAYS_FATAL("SkiaCanvas does not produce a DisplayList");
-        return nullptr;
     }
     virtual void enableZ(bool enableZ) override {
         LOG_ALWAYS_FATAL("SkiaCanvas does not support enableZ");
@@ -147,6 +146,12 @@ public:
                             uirenderer::CanvasPropertyPrimitive* y,
                             uirenderer::CanvasPropertyPrimitive* radius,
                             uirenderer::CanvasPropertyPaint* paint) override;
+    virtual void drawRipple(uirenderer::CanvasPropertyPrimitive* x,
+                            uirenderer::CanvasPropertyPrimitive* y,
+                            uirenderer::CanvasPropertyPrimitive* radius,
+                            uirenderer::CanvasPropertyPaint* paint,
+                            uirenderer::CanvasPropertyPrimitive* progress,
+                            const SkRuntimeShaderBuilder& effectBuilder) override;
 
     virtual void drawLayer(uirenderer::DeferredLayerUpdater* layerHandle) override;
     virtual void drawRenderNode(uirenderer::RenderNode* renderNode) override;
@@ -190,7 +195,6 @@ protected:
         }
         operator const SkPaint*() const { return mPtr; }
         const SkPaint* operator->() const { assert(mPtr); return mPtr; }
-        const SkPaint& operator*() const { assert(mPtr); return *mPtr; }
         explicit operator bool() { return mPtr != nullptr; }
     private:
         const SkPaint* mPtr;

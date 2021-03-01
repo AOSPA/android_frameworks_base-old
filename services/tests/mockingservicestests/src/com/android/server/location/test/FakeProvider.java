@@ -16,9 +16,9 @@
 
 package com.android.server.location.test;
 
+import android.location.provider.ProviderRequest;
 import android.os.Bundle;
 
-import com.android.internal.location.ProviderRequest;
 import com.android.server.location.provider.AbstractLocationProvider;
 
 import java.io.FileDescriptor;
@@ -40,7 +40,7 @@ public class FakeProvider extends AbstractLocationProvider {
     private final FakeProviderInterface mFakeInterface;
 
     public FakeProvider(FakeProviderInterface fakeInterface) {
-        super(Runnable::run);
+        super(Runnable::run, null, null);
         mFakeInterface = fakeInterface;
     }
 

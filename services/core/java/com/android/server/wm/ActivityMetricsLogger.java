@@ -179,6 +179,10 @@ class ActivityMetricsLogger {
         boolean allDrawn() {
             return mAssociatedTransitionInfo != null && mAssociatedTransitionInfo.allDrawn();
         }
+
+        boolean contains(ActivityRecord r) {
+            return mAssociatedTransitionInfo != null && mAssociatedTransitionInfo.contains(r);
+        }
     }
 
     /** The information created when an activity is confirmed to be launched. */
@@ -289,7 +293,7 @@ class ActivityMetricsLogger {
                 return;
             }
             mLastLaunchedActivity = r;
-            if (!r.noDisplay) {
+            if (!r.noDisplay && !r.isReportedDrawn()) {
                 if (DEBUG_METRICS) Slog.i(TAG, "Add pending draw " + r);
                 mPendingDrawActivities.add(r);
             }
@@ -577,7 +581,7 @@ class ActivityMetricsLogger {
                     + " processSwitch=" + processSwitch + " info=" + info);
         }
 
-        if (launchedActivity.isReportedDrawn()) {
+        if (launchedActivity.isReportedDrawn() && launchedActivity.isVisible()) {
             // Launched activity is already visible. We cannot measure windows drawn delay.
             abort(info, "launched activity already visible");
             return;
@@ -798,6 +802,7 @@ class ActivityMetricsLogger {
 
         stopLaunchTrace(info);
         if (abort) {
+            mSupervisor.stopWaitingForActivityVisible(info.mLastLaunchedActivity);
             launchObserverNotifyActivityLaunchCancelled(info);
         } else {
             if (info.isInterestingToLoggerAndObserver()) {

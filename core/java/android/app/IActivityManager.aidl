@@ -508,7 +508,6 @@ interface IActivityManager {
     boolean stopBinderTrackingAndDump(in ParcelFileDescriptor fd);
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void suppressResizeConfigChanges(boolean suppress);
-    boolean moveTopActivityToPinnedRootTask(int rootTaskId, in Rect bounds);
     boolean isAppStartModeDisabled(int uid, in String packageName);
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean unlockUser(int userid, in byte[] token, in byte[] secret,
@@ -687,4 +686,22 @@ interface IActivityManager {
      * {@link android.content.pm.PackageManager#getHoldLockToken()}.
      */
     void holdLock(in IBinder token, in int durationMs);
+
+    /**
+     * Starts a profile.
+     * @param userId the user id of the profile.
+     * @return true if the profile has been successfully started or if the profile is already
+     * running, false if profile failed to start.
+     * @throws IllegalArgumentException if the user is not a profile.
+     */
+    boolean startProfile(int userId);
+
+    /**
+     * Stops a profile.
+     * @param userId the user id of the profile.
+     * @return true if the profile has been successfully stopped or is already stopped. Otherwise
+     * the exceptions listed below are thrown.
+     * @throws IllegalArgumentException if the user is not a profile.
+     */
+    boolean stopProfile(int userId);
 }
