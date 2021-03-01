@@ -226,6 +226,7 @@ android_app {
         "ims-common",
         "extphonelib",
     ],
+    enforce_uses_libs: false,
 
     kotlincflags: ["-Xjvm-default=enable"],
 
