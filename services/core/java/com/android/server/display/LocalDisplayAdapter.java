@@ -630,7 +630,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                         mInfo.flags |= DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY;
                     }
 
-                    mInfo.setAssumedDensityForExternalDisplay(config.width, config.height);
+                    mInfo.setAssumedDensityForExternalDisplay(mode.width, mode.height);
                 } else {
                     if (!res.getBoolean(
                                 com.android.internal.R.bool.config_localDisplaysMirrorContent)) {
