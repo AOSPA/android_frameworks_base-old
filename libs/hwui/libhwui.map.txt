@@ -64,12 +64,6 @@ LIBHWUI_PLATFORM {
       SkFILEStream::SkFILEStream*;
       SkImageInfo::*;
       SkMemoryStream::SkMemoryStream*;
-      SkPaint::*;
-      SkRGBA4f*::FromColor*;
-      SkTypeface::MakeFromFile*;
-      SkData::*;
-      SkImage::*;
-      SkBitmap::*;
     };
   local:
     *;
