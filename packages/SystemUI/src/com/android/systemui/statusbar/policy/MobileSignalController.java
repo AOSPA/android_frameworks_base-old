@@ -54,7 +54,6 @@ import android.text.TextUtils;
 import android.util.FeatureFlagUtils;
 import android.util.Log;
 
-import com.android.ims.ImsException;
 import com.android.ims.ImsManager;
 import com.android.ims.FeatureConnector;
 import com.android.internal.annotations.VisibleForTesting;
@@ -185,7 +184,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             mContext, phoneId, "?",
             new FeatureConnector.Listener<ImsManager> () {
                 @Override
-                public void connectionReady(ImsManager manager) throws ImsException {
+                public void connectionReady(ImsManager manager) throws com.android.ims.ImsException {
                     Log.d(mTag, "ImsManager: connection ready.");
                     mImsManager = manager;
                     setListeners();
@@ -449,7 +448,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             Log.d(mTag, "addCapabilitiesCallback " + mCapabilityCallback + " into " + mImsManager);
             Log.d(mTag, "addRegistrationCallback " + mImsRegistrationCallback
                     + " into " + mImsManager);
-        } catch (ImsException e) {
+        } catch (com.android.ims.ImsException e) {
             Log.d(mTag, "unable to addCapabilitiesCallback callback.");
         }
         queryImsState();
