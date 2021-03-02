@@ -444,19 +444,6 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
         return isDefault ? Display.DEFAULT_DISPLAY_GROUP : mNextNonDefaultGroupId++;
     }
 
-    private int assignDisplayIdLocked(boolean isDefault, DisplayAddress address) {
-        boolean isDisplayBuiltIn = false;
-        if (address instanceof DisplayAddress.Physical) {
-          isDisplayBuiltIn =
-                   (((DisplayAddress.Physical) address).getPort() < 0);
-        }
-        if (!isDefault && isDisplayBuiltIn) {
-            return mNextBuiltInDisplayId++;
-        }
-
-        return assignDisplayIdLocked(isDefault);
-    }
-
     private int assignLayerStackLocked(int displayId) {
         // Currently layer stacks and display ids are the same.
         // This need not be the case.

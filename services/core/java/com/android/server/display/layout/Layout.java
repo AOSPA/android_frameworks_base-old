@@ -44,6 +44,20 @@ public class Layout {
         return isDefault ? DEFAULT_DISPLAY : sNextNonDefaultDisplayId++;
     }
 
+    public static int assignDisplayIdLocked(boolean isDefault, DisplayAddress address) {
+        boolean isDisplayBuiltIn = false;
+        if (address instanceof DisplayAddress.Physical) {
+          isDisplayBuiltIn =
+                   (((DisplayAddress.Physical) address).getPort() < 0);
+        }
+        if (!isDefault && isDisplayBuiltIn) {
+            return sNextNonDefaultDisplayId++;
+        }
+
+        return assignDisplayIdLocked(isDefault);
+    }
+
+
     @Override
     public String toString() {
         return mDisplays.toString();
