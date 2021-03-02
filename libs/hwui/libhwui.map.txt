@@ -59,7 +59,6 @@ LIBHWUI_PLATFORM {
       android::uirenderer::ColorSpaceToADataSpace*;
       getMimeType*;
       SkAndroidCodec::*;
-      SkBitmap::*;
       SkCodec::MakeFromStream*;
       SkColorInfo::*;
       SkFILEStream::SkFILEStream*;
