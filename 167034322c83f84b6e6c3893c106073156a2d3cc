@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "7a007989_b13bd2a7",
+        "filename": "packages/SystemUI/src/com/google/android/systemui/statusbar/phone/StatusBarGoogle.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 203,
+      "author": {
+        "id": 1000649
+      },
+      "writtenOn": "2021-03-05T14:01:49Z",
+      "side": 0,
+      "message": "Doesn\u0027t compile because of this, bring \"FODCircleViewImpl fodCircleViewImpl\" back.",
+      "revId": "167034322c83f84b6e6c3893c106073156a2d3cc",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2c304c4a_dea562fe",
+        "filename": "packages/SystemUI/src/com/google/android/systemui/statusbar/phone/StatusBarGoogle.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 282,
+      "author": {
+        "id": 1000649
+      },
+      "writtenOn": "2021-03-05T14:01:49Z",
+      "side": 0,
+      "message": "Here too.",
+      "revId": "167034322c83f84b6e6c3893c106073156a2d3cc",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
