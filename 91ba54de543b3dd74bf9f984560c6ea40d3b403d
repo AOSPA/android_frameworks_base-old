@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5e840421_caf753fc",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-03-05T12:54:20Z",
+      "side": 1,
+      "message": "You\u0027d better use overlays\nHere\u0027s an example https://gerrit.aospa.co/c/AOSPA/android_vendor_pa/+/11078",
+      "revId": "91ba54de543b3dd74bf9f984560c6ea40d3b403d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
