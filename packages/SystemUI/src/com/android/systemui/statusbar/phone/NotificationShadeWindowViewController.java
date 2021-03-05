@@ -165,8 +165,7 @@ public class NotificationShadeWindowViewController {
                     new AmbientDisplayConfiguration(mView.getContext());
             switch (key) {
                 case Settings.Secure.DOZE_DOUBLE_TAP_GESTURE:
-                    mDoubleTapEnabled = configuration.doubleTapGestureEnabled(
-                            UserHandle.USER_CURRENT);
+                    mDoubleTapEnabled = true;
                     break;
                 case Settings.Secure.DOZE_TAP_SCREEN_GESTURE:
                     mSingleTapEnabled = configuration.tapGestureEnabled(UserHandle.USER_CURRENT);
