@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6c65f5db_eafc15e6",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000649
+      },
+      "writtenOn": "2021-03-05T16:23:49Z",
+      "side": 1,
+      "message": "Deleted overlays for it and tested. It works, forces portrait mode too https://i.ibb.co/6g7TsJq/resim.png",
+      "revId": "55c175b9eeb58ebc624bbb4023cfa508be1677a2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
