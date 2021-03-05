@@ -951,9 +951,24 @@ public class Watchdog {
 
     private void binderStateRead() {
         try {
+            boolean binderfsNodePresent = false;
+            BufferedReader in = null;
             Slog.i(TAG,"Collecting Binder Transaction Status Information");
-            BufferedReader in =
-                    new BufferedReader(new FileReader("/sys/kernel/debug/binder/state"));
+            try {
+                in = new BufferedReader(new FileReader("/dev/binderfs/binder_logs/state"));
+                Slog.i(TAG, "Collecting Binder state file from binderfs");
+                binderfsNodePresent = true;
+            } catch(IOException e) {
+                Slog.i(TAG, "Binderfs node not found, Trying to collect it from debugfs", e);
+            }
+            try {
+                if (binderfsNodePresent == false) {
+                    in = new BufferedReader(new FileReader("/sys/kernel/debug/binder/state"));
+                    Slog.i(TAG, "Collecting Binder state file from debugfs");
+                }
+            } catch(IOException e) {
+                Slog.i(TAG, "Debugfs node not found", e);
+            }
             FileWriter out = new FileWriter("/data/anr/BinderTraces_pid" +
                     String.valueOf(Process.myPid()) + ".txt");
             String line = null;
