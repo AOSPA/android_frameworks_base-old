@@ -34,6 +34,24 @@
       "parentUuid": "6c65f5db_eafc15e6",
       "revId": "55c175b9eeb58ebc624bbb4023cfa508be1677a2",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0950b376_f7f7ebae",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000649
+      },
+      "writtenOn": "2021-03-08T22:28:24Z",
+      "side": 1,
+      "message": "FP icon is fine for both themes on me.",
+      "parentUuid": "e183d2ec_248412b8",
+      "revId": "55c175b9eeb58ebc624bbb4023cfa508be1677a2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
