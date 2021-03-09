@@ -69,6 +69,23 @@
       "message": "Doesn\u0027t seem to work on OP8, icon is too high.",
       "revId": "55c175b9eeb58ebc624bbb4023cfa508be1677a2",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c93deddb_f742fdc1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000466
+      },
+      "writtenOn": "2021-03-09T17:11:58Z",
+      "side": 1,
+      "message": "\nDark theme Before: https://pasteboard.co/JRxPzbI.jpg\nDark Theme After: https://pasteboard.co/JRxQ66s.jpg\nLight Theme: https://pasteboard.co/JRQgkC4.jpg\nOn the last SS, I have a commit which fixes the text behind. This change doesn\u0027t affect the look with white theme. Picked and tested. That may be becoz of my source (my ROM I mean), just wanted to report. \nDevice: instantnoodlep (OnePlus 8 Pro)\n\nBut I like idea though, becoz biometric auth icon and FOD icon looks displaced without this commit. So, looking for solution. Appreciate your work guys.",
+      "revId": "55c175b9eeb58ebc624bbb4023cfa508be1677a2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
