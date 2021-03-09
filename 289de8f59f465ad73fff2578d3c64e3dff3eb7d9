@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9f0044e7_cba06fb5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000447
+      },
+      "writtenOn": "2021-03-09T16:51:15Z",
+      "side": 1,
+      "message": "A better way of doing this is using RRO to select power profiles on a SKU.",
+      "revId": "289de8f59f465ad73fff2578d3c64e3dff3eb7d9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
