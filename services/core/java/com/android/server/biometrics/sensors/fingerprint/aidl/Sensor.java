@@ -22,6 +22,7 @@ import android.content.Context;
 import android.content.pm.UserInfo;
 import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.ITestSession;
+import android.hardware.biometrics.ITestSessionCallback;
 import android.hardware.biometrics.fingerprint.Error;
 import android.hardware.biometrics.fingerprint.IFingerprint;
 import android.hardware.biometrics.fingerprint.ISession;
@@ -31,7 +32,6 @@ import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.hardware.keymaster.HardwareAuthToken;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserManager;
 import android.util.Slog;
@@ -65,7 +65,7 @@ import java.util.Map;
  * {@link android.hardware.biometrics.fingerprint.IFingerprint} HAL.
  */
 @SuppressWarnings("deprecation")
-class Sensor implements IBinder.DeathRecipient {
+class Sensor {
 
     private boolean mTestHalEnabled;
 
@@ -416,13 +416,7 @@ class Sensor implements IBinder.DeathRecipient {
         mScheduler = new BiometricScheduler(tag, gestureAvailabilityDispatcher);
         mLockoutCache = new LockoutCache();
         mAuthenticatorIds = new HashMap<>();
-        mLazySession = () -> {
-            if (mTestHalEnabled) {
-                return new TestSession(mCurrentSession.mHalSessionCallback);
-            } else {
-                return mCurrentSession != null ? mCurrentSession.mSession : null;
-            }
-        };
+        mLazySession = () -> mCurrentSession != null ? mCurrentSession.mSession : null;
     }
 
     @NonNull HalClientMonitor.LazyDaemon<ISession> getLazySession() {
@@ -446,8 +440,9 @@ class Sensor implements IBinder.DeathRecipient {
         }
     }
 
-    @NonNull ITestSession createTestSession() {
-        return new BiometricTestSessionImpl(mContext, mSensorProperties.sensorId, mProvider, this);
+    @NonNull ITestSession createTestSession(@NonNull ITestSessionCallback callback) {
+        return new BiometricTestSessionImpl(mContext, mSensorProperties.sensorId, callback,
+                mProvider, this);
     }
 
     void createNewSession(@NonNull IFingerprint daemon, int sensorId, int userId)
@@ -461,7 +456,6 @@ class Sensor implements IBinder.DeathRecipient {
                 mTag, mScheduler, sensorId, userId, callback);
 
         final ISession newSession = daemon.createSession(sensorId, userId, resultController);
-        newSession.asBinder().linkToDeath(this, 0 /* flags */);
         mCurrentSession = new Session(mTag, newSession, userId, resultController);
     }
 
@@ -478,6 +472,11 @@ class Sensor implements IBinder.DeathRecipient {
     }
 
     void setTestHalEnabled(boolean enabled) {
+        Slog.w(mTag, "setTestHalEnabled: " + enabled);
+        if (enabled != mTestHalEnabled) {
+            // The framework should retrieve a new session from the HAL.
+            mCurrentSession = null;
+        }
         mTestHalEnabled = enabled;
     }
 
@@ -503,24 +502,21 @@ class Sensor implements IBinder.DeathRecipient {
         proto.end(sensorToken);
     }
 
-    @Override
-    public void binderDied() {
-        Slog.e(mTag, "Binder died");
-        mHandler.post(() -> {
-            final BaseClientMonitor client = mScheduler.getCurrentClient();
-            if (client instanceof Interruptable) {
-                Slog.e(mTag, "Sending ERROR_HW_UNAVAILABLE for client: " + client);
-                final Interruptable interruptable = (Interruptable) client;
-                interruptable.onError(FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE,
-                        0 /* vendorCode */);
+    public void onBinderDied() {
+        final BaseClientMonitor client = mScheduler.getCurrentClient();
+        if (client instanceof Interruptable) {
+            Slog.e(mTag, "Sending ERROR_HW_UNAVAILABLE for client: " + client);
+            final Interruptable interruptable = (Interruptable) client;
+            interruptable.onError(FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE,
+                    0 /* vendorCode */);
 
-                mScheduler.recordCrashState();
+            FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_SYSTEM_HEALTH_ISSUE_DETECTED,
+                    BiometricsProtoEnums.MODALITY_FINGERPRINT,
+                    BiometricsProtoEnums.ISSUE_HAL_DEATH);
+        }
 
-                FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_SYSTEM_HEALTH_ISSUE_DETECTED,
-                        BiometricsProtoEnums.MODALITY_FINGERPRINT,
-                        BiometricsProtoEnums.ISSUE_HAL_DEATH);
-                mCurrentSession = null;
-            }
-        });
+        mScheduler.recordCrashState();
+        mScheduler.reset();
+        mCurrentSession = null;
     }
 }

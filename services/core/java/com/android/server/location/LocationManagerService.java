@@ -66,6 +66,7 @@ import android.location.LocationManagerInternal;
 import android.location.LocationProvider;
 import android.location.LocationRequest;
 import android.location.LocationTime;
+import android.location.provider.IProviderRequestListener;
 import android.location.provider.ProviderProperties;
 import android.location.util.identity.CallerIdentity;
 import android.os.Binder;
@@ -77,7 +78,9 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.os.WorkSource.WorkChain;
+import android.provider.Settings;
 import android.stats.location.LocationStatsEnums;
+import android.util.ArrayMap;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 
@@ -86,6 +89,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.location.eventlog.LocationEventLog;
 import com.android.server.location.geofence.GeofenceManager;
 import com.android.server.location.geofence.GeofenceProxy;
 import com.android.server.location.gnss.GnssConfiguration;
@@ -94,10 +98,11 @@ import com.android.server.location.gnss.hal.GnssNative;
 import com.android.server.location.injector.AlarmHelper;
 import com.android.server.location.injector.AppForegroundHelper;
 import com.android.server.location.injector.AppOpsHelper;
+import com.android.server.location.injector.DeviceIdleHelper;
+import com.android.server.location.injector.DeviceStationaryHelper;
 import com.android.server.location.injector.EmergencyHelper;
 import com.android.server.location.injector.Injector;
 import com.android.server.location.injector.LocationAttributionHelper;
-import com.android.server.location.injector.LocationEventLog;
 import com.android.server.location.injector.LocationPermissionsHelper;
 import com.android.server.location.injector.LocationPowerSaveModeHelper;
 import com.android.server.location.injector.LocationUsageLogger;
@@ -106,6 +111,8 @@ import com.android.server.location.injector.SettingsHelper;
 import com.android.server.location.injector.SystemAlarmHelper;
 import com.android.server.location.injector.SystemAppForegroundHelper;
 import com.android.server.location.injector.SystemAppOpsHelper;
+import com.android.server.location.injector.SystemDeviceIdleHelper;
+import com.android.server.location.injector.SystemDeviceStationaryHelper;
 import com.android.server.location.injector.SystemEmergencyHelper;
 import com.android.server.location.injector.SystemLocationPermissionsHelper;
 import com.android.server.location.injector.SystemLocationPowerSaveModeHelper;
@@ -118,6 +125,7 @@ import com.android.server.location.provider.LocationProviderManager;
 import com.android.server.location.provider.MockLocationProvider;
 import com.android.server.location.provider.PassiveLocationProvider;
 import com.android.server.location.provider.PassiveLocationProviderManager;
+import com.android.server.location.provider.StationaryThrottlingLocationProvider;
 import com.android.server.location.provider.proxy.ProxyLocationProvider;
 import com.android.server.pm.permission.LegacyPermissionManagerInternal;
 
@@ -146,9 +154,10 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         public Lifecycle(Context context) {
             super(context);
+            LocationEventLog eventLog = new LocationEventLog();
             mUserInfoHelper = new LifecycleUserInfoHelper(context);
-            mSystemInjector = new SystemInjector(context, mUserInfoHelper);
-            mService = new LocationManagerService(context, mSystemInjector);
+            mSystemInjector = new SystemInjector(context, mUserInfoHelper, eventLog);
+            mService = new LocationManagerService(context, mSystemInjector, eventLog);
         }
 
         @Override
@@ -158,7 +167,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             // client caching behavior is only enabled after seeing the first invalidate
             LocationManager.invalidateLocalLocationEnabledCaches();
             // disable caching for our own process
-            Objects.requireNonNull(mService.mContext.getSystemService(LocationManager.class))
+            Objects.requireNonNull(getContext().getSystemService(LocationManager.class))
                     .disableLocalLocationEnabledCaches();
         }
 
@@ -220,6 +229,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     private final Context mContext;
     private final Injector mInjector;
+    private final LocationEventLog mEventLog;
     private final LocalService mLocalService;
 
     private final GeofenceManager mGeofenceManager;
@@ -249,10 +259,10 @@ public class LocationManagerService extends ILocationManager.Stub {
     private final CopyOnWriteArrayList<LocationProviderManager> mProviderManagers =
             new CopyOnWriteArrayList<>();
 
-    LocationManagerService(Context context, Injector injector) {
+    LocationManagerService(Context context, Injector injector, LocationEventLog eventLog) {
         mContext = context.createAttributionContext(ATTRIBUTION_TAG);
         mInjector = injector;
-
+        mEventLog = eventLog;
         mLocalService = new LocalService();
         LocalServices.addService(LocationManagerInternal.class, mLocalService);
 
@@ -260,7 +270,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         // set up passive provider first since it will be required for all other location providers,
         // which are loaded later once the system is ready.
-        mPassiveManager = new PassiveLocationProviderManager(mContext, injector);
+        mPassiveManager = new PassiveLocationProviderManager(mContext, injector, mEventLog);
         addLocationProviderManager(mPassiveManager, new PassiveLocationProvider(mContext));
 
         // TODO: load the gps provider here as well, which will require refactoring
@@ -301,7 +311,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             }
 
             LocationProviderManager manager = new LocationProviderManager(mContext, mInjector,
-                    providerName, mPassiveManager);
+                    mEventLog, providerName, mPassiveManager);
             addLocationProviderManager(manager, null);
             return manager;
         }
@@ -314,6 +324,18 @@ public class LocationManagerService extends ILocationManager.Stub {
 
             manager.startManager();
             if (realProvider != null) {
+
+                // custom logic wrapping all non-passive providers
+                if (manager != mPassiveManager) {
+                    boolean enableStationaryThrottling = Settings.Global.getInt(
+                            mContext.getContentResolver(),
+                            Settings.Global.LOCATION_ENABLE_STATIONARY_THROTTLE, 1) != 0;
+                    if (enableStationaryThrottling) {
+                        realProvider = new StationaryThrottlingLocationProvider(manager.getName(),
+                                mInjector, realProvider, mEventLog);
+                    }
+                }
+
                 manager.setRealProvider(realProvider);
             }
             mProviderManagers.add(manager);
@@ -345,7 +367,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 com.android.internal.R.string.config_networkLocationProviderPackageName);
         if (networkProvider != null) {
             LocationProviderManager networkManager = new LocationProviderManager(mContext,
-                    mInjector, NETWORK_PROVIDER, mPassiveManager);
+                    mInjector, mEventLog, NETWORK_PROVIDER, mPassiveManager);
             addLocationProviderManager(networkManager, networkProvider);
         } else {
             Log.w(TAG, "no network location provider found");
@@ -364,7 +386,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 com.android.internal.R.string.config_fusedLocationProviderPackageName);
         if (fusedProvider != null) {
             LocationProviderManager fusedManager = new LocationProviderManager(mContext, mInjector,
-                    FUSED_PROVIDER, mPassiveManager);
+                    mEventLog, FUSED_PROVIDER, mPassiveManager);
             addLocationProviderManager(fusedManager, fusedProvider);
         } else {
             Log.wtf(TAG, "no fused location provider found");
@@ -379,7 +401,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             mGnssManagerService.onSystemReady();
 
             LocationProviderManager gnssManager = new LocationProviderManager(mContext, mInjector,
-                    GPS_PROVIDER, mPassiveManager);
+                    mEventLog, GPS_PROVIDER, mPassiveManager);
             addLocationProviderManager(gnssManager, mGnssManagerService.getGnssLocationProvider());
         }
 
@@ -442,7 +464,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             Log.d(TAG, "[u" + userId + "] location enabled = " + enabled);
         }
 
-        mInjector.getLocationEventLog().logLocationEnabled(userId, enabled);
+        mEventLog.logLocationEnabled(userId, enabled);
 
         Intent intent = new Intent(LocationManager.MODE_CHANGED_ACTION)
                 .putExtra(LocationManager.EXTRA_LOCATION_ENABLED, enabled)
@@ -894,6 +916,20 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     @Override
+    public void addProviderRequestListener(IProviderRequestListener listener) {
+        for (LocationProviderManager manager : mProviderManagers) {
+            manager.addProviderRequestListener(listener);
+        }
+    }
+
+    @Override
+    public void removeProviderRequestListener(IProviderRequestListener listener) {
+        for (LocationProviderManager manager : mProviderManagers) {
+            manager.removeProviderRequestListener(listener);
+        }
+    }
+
+    @Override
     public void injectGnssMeasurementCorrections(GnssMeasurementCorrections corrections) {
         if (mGnssManagerService != null) {
             mGnssManagerService.injectGnssMeasurementCorrections(corrections);
@@ -1190,9 +1226,27 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
 
-        if (mGnssManagerService != null && args.length > 0 && args[0].equals("--gnssmetrics")) {
-            mGnssManagerService.dump(fd, ipw, args);
-            return;
+        if (args.length > 0) {
+            LocationProviderManager manager = getLocationProviderManager(args[0]);
+            if (manager != null) {
+                ipw.println("Provider:");
+                ipw.increaseIndent();
+                manager.dump(fd, ipw, args);
+                ipw.decreaseIndent();
+
+                ipw.println("Event Log:");
+                ipw.increaseIndent();
+                mEventLog.iterate(manager.getName(), ipw::println);
+                ipw.decreaseIndent();
+                return;
+            }
+
+            if ("--gnssmetrics".equals(args[0])) {
+                if (mGnssManagerService != null) {
+                    mGnssManagerService.dump(fd, ipw, args);
+                }
+                return;
+            }
         }
 
         ipw.println("Location Manager State:");
@@ -1224,6 +1278,26 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
         ipw.decreaseIndent();
 
+        ipw.println("Historical Aggregate Location Provider Data:");
+        ipw.increaseIndent();
+        ArrayMap<String, ArrayMap<String, LocationEventLog.AggregateStats>> aggregateStats =
+                mEventLog.copyAggregateStats();
+        for (int i = 0; i < aggregateStats.size(); i++) {
+            ipw.print(aggregateStats.keyAt(i));
+            ipw.println(":");
+            ipw.increaseIndent();
+            ArrayMap<String, LocationEventLog.AggregateStats> providerStats =
+                    aggregateStats.valueAt(i);
+            for (int j = 0; j < providerStats.size(); j++) {
+                ipw.print(providerStats.keyAt(j));
+                ipw.print(": ");
+                providerStats.valueAt(j).updateTotals();
+                ipw.println(providerStats.valueAt(j));
+            }
+            ipw.decreaseIndent();
+        }
+        ipw.decreaseIndent();
+
         if (mGnssManagerService != null) {
             ipw.println("GNSS Manager:");
             ipw.increaseIndent();
@@ -1238,7 +1312,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         ipw.println("Event Log:");
         ipw.increaseIndent();
-        mInjector.getLocationEventLog().iterate(ipw::println);
+        mEventLog.iterate(ipw::println);
         ipw.decreaseIndent();
     }
 
@@ -1317,7 +1391,6 @@ public class LocationManagerService extends ILocationManager.Stub {
         private final Context mContext;
 
         private final UserInfoHelper mUserInfoHelper;
-        private final LocationEventLog mLocationEventLog;
         private final AlarmHelper mAlarmHelper;
         private final SystemAppOpsHelper mAppOpsHelper;
         private final SystemLocationPermissionsHelper mLocationPermissionsHelper;
@@ -1325,6 +1398,8 @@ public class LocationManagerService extends ILocationManager.Stub {
         private final SystemAppForegroundHelper mAppForegroundHelper;
         private final SystemLocationPowerSaveModeHelper mLocationPowerSaveModeHelper;
         private final SystemScreenInteractiveHelper mScreenInteractiveHelper;
+        private final SystemDeviceStationaryHelper mDeviceStationaryHelper;
+        private final SystemDeviceIdleHelper mDeviceIdleHelper;
         private final LocationAttributionHelper mLocationAttributionHelper;
         private final LocationUsageLogger mLocationUsageLogger;
 
@@ -1336,20 +1411,20 @@ public class LocationManagerService extends ILocationManager.Stub {
         @GuardedBy("this")
         private boolean mSystemReady;
 
-        SystemInjector(Context context, UserInfoHelper userInfoHelper) {
+        SystemInjector(Context context, UserInfoHelper userInfoHelper, LocationEventLog eventLog) {
             mContext = context;
 
             mUserInfoHelper = userInfoHelper;
-            mLocationEventLog = new LocationEventLog();
             mAlarmHelper = new SystemAlarmHelper(context);
             mAppOpsHelper = new SystemAppOpsHelper(context);
             mLocationPermissionsHelper = new SystemLocationPermissionsHelper(context,
                     mAppOpsHelper);
             mSettingsHelper = new SystemSettingsHelper(context);
             mAppForegroundHelper = new SystemAppForegroundHelper(context);
-            mLocationPowerSaveModeHelper = new SystemLocationPowerSaveModeHelper(context,
-                    mLocationEventLog);
+            mLocationPowerSaveModeHelper = new SystemLocationPowerSaveModeHelper(context, eventLog);
             mScreenInteractiveHelper = new SystemScreenInteractiveHelper(context);
+            mDeviceStationaryHelper = new SystemDeviceStationaryHelper();
+            mDeviceIdleHelper = new SystemDeviceIdleHelper(context);
             mLocationAttributionHelper = new LocationAttributionHelper(mAppOpsHelper);
             mLocationUsageLogger = new LocationUsageLogger();
         }
@@ -1361,6 +1436,8 @@ public class LocationManagerService extends ILocationManager.Stub {
             mAppForegroundHelper.onSystemReady();
             mLocationPowerSaveModeHelper.onSystemReady();
             mScreenInteractiveHelper.onSystemReady();
+            mDeviceStationaryHelper.onSystemReady();
+            mDeviceIdleHelper.onSystemReady();
 
             if (mEmergencyCallHelper != null) {
                 mEmergencyCallHelper.onSystemReady();
@@ -1410,6 +1487,16 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         @Override
+        public DeviceStationaryHelper getDeviceStationaryHelper() {
+            return mDeviceStationaryHelper;
+        }
+
+        @Override
+        public DeviceIdleHelper getDeviceIdleHelper() {
+            return mDeviceIdleHelper;
+        }
+
+        @Override
         public LocationAttributionHelper getLocationAttributionHelper() {
             return mLocationAttributionHelper;
         }
@@ -1424,11 +1511,6 @@ public class LocationManagerService extends ILocationManager.Stub {
             }
 
             return mEmergencyCallHelper;
-        }
-
-        @Override
-        public LocationEventLog getLocationEventLog() {
-            return mLocationEventLog;
         }
 
         @Override

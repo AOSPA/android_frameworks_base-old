@@ -25,6 +25,8 @@ import com.android.systemui.statusbar.policy.NetworkController.EmergencyListener
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 
+import java.io.PrintWriter;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,6 +36,7 @@ import java.util.List;
  * the current or specified Looper.
  */
 public class CallbackHandler extends Handler implements EmergencyListener, SignalCallback {
+    private static final String TAG = "CallbackHandler";
     private static final int MSG_EMERGENCE_CHANGED           = 0;
     private static final int MSG_SUBS_CHANGED                = 1;
     private static final int MSG_NO_SIM_VISIBLE_CHANGED      = 2;
@@ -42,10 +45,18 @@ public class CallbackHandler extends Handler implements EmergencyListener, Signa
     private static final int MSG_MOBILE_DATA_ENABLED_CHANGED = 5;
     private static final int MSG_ADD_REMOVE_EMERGENCY        = 6;
     private static final int MSG_ADD_REMOVE_SIGNAL           = 7;
+    private static final int HISTORY_SIZE = 64;
+    private static final SimpleDateFormat SSDF = new SimpleDateFormat("MM-dd HH:mm:ss.SSS");
 
     // All the callbacks.
     private final ArrayList<EmergencyListener> mEmergencyListeners = new ArrayList<>();
     private final ArrayList<SignalCallback> mSignalCallbacks = new ArrayList<>();
+
+    // Save the previous HISTORY_SIZE states for logging.
+    private final String[] mHistory = new String[HISTORY_SIZE];
+    // Where to copy the next state into.
+    private int mHistoryIndex;
+    private String mLastCallback;
 
     public CallbackHandler() {
         super(Looper.getMainLooper());
@@ -111,12 +122,27 @@ public class CallbackHandler extends Handler implements EmergencyListener, Signa
     public void setWifiIndicators(final boolean enabled, final IconState statusIcon,
             final IconState qsIcon, final boolean activityIn, final boolean activityOut,
             final String description, boolean isTransient, String secondaryLabel) {
+        String log = new StringBuilder()
+                .append(SSDF.format(System.currentTimeMillis())).append(",")
+                .append("setWifiIndicators: ")
+                .append("enabled=").append(enabled).append(",")
+                .append("statusIcon=").append(statusIcon).append(",")
+                .append("qsIcon=").append(qsIcon).append(",")
+                .append("activityIn=").append(activityIn).append(",")
+                .append("activityOut=").append(activityOut).append(",")
+                .append("description=").append(description).append(",")
+                .append("isTransient=").append(isTransient).append(",")
+                .append("secondaryLabel=").append(secondaryLabel)
+                .toString();
+        recordLastCallback(log);
         post(() -> {
             for (SignalCallback callback : mSignalCallbacks) {
                 callback.setWifiIndicators(enabled, statusIcon, qsIcon, activityIn, activityOut,
                         description, isTransient, secondaryLabel);
             }
         });
+
+
     }
 
     @Override
@@ -125,6 +151,25 @@ public class CallbackHandler extends Handler implements EmergencyListener, Signa
             final boolean activityOut, final int volteIcon, final CharSequence typeContentDescription,
             CharSequence typeContentDescriptionHtml, final CharSequence description,
             final boolean isWide, final int subId, boolean roaming, boolean showTriangle) {
+        String log = new StringBuilder()
+                .append(SSDF.format(System.currentTimeMillis())).append(",")
+                .append("setMobileDataIndicators: ")
+                .append("statusIcon=").append(statusIcon).append(",")
+                .append("qsIcon=").append(qsIcon).append(",")
+                .append("statusType=").append(statusType).append(",")
+                .append("qsType=").append(qsType).append(",")
+                .append("activityIn=").append(activityIn).append(",")
+                .append("activityOut=").append(activityOut).append(",")
+                .append("typeContentDescription=").append(typeContentDescription).append(",")
+                .append("typeContentDescriptionHtml=").append(typeContentDescriptionHtml)
+                .append(",")
+                .append("description=").append(description).append(",")
+                .append("isWide=").append(isWide).append(",")
+                .append("subId=").append(subId).append(",")
+                .append("roaming=").append(roaming).append(",")
+                .append("showTriangle=").append(showTriangle)
+                .toString();
+        recordLastCallback(log);
         post(() -> {
             for (SignalCallback signalCluster : mSignalCallbacks) {
                 signalCluster.setMobileDataIndicators(statusIcon, qsIcon, statusType, qsType,
@@ -138,6 +183,20 @@ public class CallbackHandler extends Handler implements EmergencyListener, Signa
     @Override
     public void setConnectivityStatus(boolean noDefaultNetwork, boolean noValidatedNetwork,
                 boolean noNetworksAvailable) {
+        String currentCallback = new StringBuilder()
+                .append("setConnectivityStatus: ")
+                .append("noDefaultNetwork=").append(noDefaultNetwork).append(",")
+                .append("noValidatedNetwork=").append(noValidatedNetwork).append(",")
+                .append("noNetworksAvailable=").append(noNetworksAvailable)
+                .toString();
+        if (!currentCallback.equals(mLastCallback)) {
+            mLastCallback = currentCallback;
+            String log = new StringBuilder()
+                    .append(SSDF.format(System.currentTimeMillis())).append(",")
+                    .append(currentCallback).append(",")
+                    .toString();
+            recordLastCallback(log);
+        }
         post(() -> {
             for (SignalCallback signalCluster : mSignalCallbacks) {
                 signalCluster.setConnectivityStatus(
@@ -147,16 +206,41 @@ public class CallbackHandler extends Handler implements EmergencyListener, Signa
     }
 
     @Override
-    public void setNoCallingStatus(boolean noCalling, int subId) {
+    public void setCallIndicator(IconState statusIcon, int subId) {
+        String currentCallback = new StringBuilder()
+                .append("setCallIndicator: ")
+                .append("statusIcon=").append(statusIcon).append(",")
+                .append("subId=").append(subId)
+                .toString();
+        if (!currentCallback.equals(mLastCallback)) {
+            mLastCallback = currentCallback;
+            String log = new StringBuilder()
+                    .append(SSDF.format(System.currentTimeMillis())).append(",")
+                    .append(currentCallback).append(",")
+                    .toString();
+            recordLastCallback(log);
+        }
         post(() -> {
             for (SignalCallback signalCluster : mSignalCallbacks) {
-                signalCluster.setNoCallingStatus(noCalling, subId);
+                signalCluster.setCallIndicator(statusIcon, subId);
             }
         });
     }
 
     @Override
     public void setSubs(List<SubscriptionInfo> subs) {
+        String currentCallback = new StringBuilder()
+                .append("setSubs: ")
+                .append("subs=").append(subs == null ? "" : subs.toString())
+                .toString();
+        if (!currentCallback.equals(mLastCallback)) {
+            mLastCallback = currentCallback;
+            String log = new StringBuilder()
+                    .append(SSDF.format(System.currentTimeMillis())).append(",")
+                    .append(currentCallback).append(",")
+                    .toString();
+            recordLastCallback(log);
+        }
         obtainMessage(MSG_SUBS_CHANGED, subs).sendToTarget();
     }
 
@@ -177,11 +261,29 @@ public class CallbackHandler extends Handler implements EmergencyListener, Signa
 
     @Override
     public void setEthernetIndicators(IconState icon) {
+        String log = new StringBuilder()
+                .append(SSDF.format(System.currentTimeMillis())).append(",")
+                .append("setEthernetIndicators: ")
+                .append("icon=").append(icon)
+                .toString();
+        recordLastCallback(log);
         obtainMessage(MSG_ETHERNET_CHANGED, icon).sendToTarget();;
     }
 
     @Override
     public void setIsAirplaneMode(IconState icon) {
+        String currentCallback = new StringBuilder()
+                .append("setIsAirplaneMode: ")
+                .append("icon=").append(icon)
+                .toString();
+        if (!currentCallback.equals(mLastCallback)) {
+            mLastCallback = currentCallback;
+            String log = new StringBuilder()
+                    .append(SSDF.format(System.currentTimeMillis())).append(",")
+                    .append(currentCallback).append(",")
+                    .toString();
+            recordLastCallback(log);
+        }
         obtainMessage(MSG_AIRPLANE_MODE_CHANGED, icon).sendToTarget();;
     }
 
@@ -191,6 +293,30 @@ public class CallbackHandler extends Handler implements EmergencyListener, Signa
 
     public void setListening(SignalCallback listener, boolean listening) {
         obtainMessage(MSG_ADD_REMOVE_SIGNAL, listening ? 1 : 0, 0, listener).sendToTarget();
+    }
+
+    protected void recordLastCallback(String callback) {
+        mHistory[mHistoryIndex] = callback;
+        mHistoryIndex = (mHistoryIndex + 1) % HISTORY_SIZE;
+    }
+
+    /**
+     * Dump the Callback logs
+     */
+    public void dump(PrintWriter pw) {
+        pw.println("  - CallbackHandler -----");
+        int size = 0;
+        for (int i = 0; i < HISTORY_SIZE; i++) {
+            if (mHistory[i] != null) {
+                size++;
+            }
+        }
+        // Print out the previous states in ordered number.
+        for (int i = mHistoryIndex + HISTORY_SIZE - 1;
+                i >= mHistoryIndex + HISTORY_SIZE - size; i--) {
+            pw.println("  Previous Callback(" + (mHistoryIndex + HISTORY_SIZE - i) + "): "
+                    + mHistory[i & (HISTORY_SIZE - 1)]);
+        }
     }
 
 }

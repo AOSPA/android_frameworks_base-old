@@ -41,7 +41,6 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
-import com.android.server.security.FileIntegrityService;
 import com.android.server.security.VerityUtils;
 
 import java.io.File;
@@ -72,11 +71,11 @@ public final class FontManagerService extends IFontManager.Stub {
     }
 
     @Override
-    public int updateFont(int baseVersion, @NonNull FontUpdateRequest request) {
+    public int updateFontFile(@NonNull FontUpdateRequest request, int baseVersion) {
+        Preconditions.checkArgumentNonnegative(baseVersion);
         Objects.requireNonNull(request);
         Objects.requireNonNull(request.getFd());
         Objects.requireNonNull(request.getSignature());
-        Preconditions.checkArgumentNonnegative(baseVersion);
         getContext().enforceCallingPermission(Manifest.permission.UPDATE_FONTS,
                 "UPDATE_FONTS permission required.");
         try {
@@ -84,6 +83,21 @@ public final class FontManagerService extends IFontManager.Stub {
             return FontManager.RESULT_SUCCESS;
         } catch (SystemFontException e) {
             Slog.e(TAG, "Failed to update font file", e);
+            return e.getErrorCode();
+        }
+    }
+
+    @Override
+    public int updateFontFamily(@NonNull List<FontUpdateRequest> requests, int baseVersion) {
+        Preconditions.checkArgumentNonnegative(baseVersion);
+        Objects.requireNonNull(requests);
+        getContext().enforceCallingPermission(Manifest.permission.UPDATE_FONTS,
+                "UPDATE_FONTS permission required.");
+        try {
+            update(baseVersion, requests);
+            return FontManager.RESULT_SUCCESS;
+        } catch (SystemFontException e) {
+            Slog.e(TAG, "Failed to update font family", e);
             return e.getErrorCode();
         }
     }
@@ -211,7 +225,7 @@ public final class FontManagerService extends IFontManager.Stub {
     @Nullable
     private static UpdatableFontDir createUpdatableFontDir() {
         // If apk verity is supported, fs-verity should be available.
-        if (!FileIntegrityService.isApkVeritySupported()) return null;
+        if (!VerityUtils.isFsVeritySupported()) return null;
         return new UpdatableFontDir(new File(FONT_FILES_DIR),
                 Arrays.asList(new File(SystemFonts.SYSTEM_FONT_DIR),
                         new File(SystemFonts.OEM_FONT_DIR)),
@@ -345,6 +359,7 @@ public final class FontManagerService extends IFontManager.Stub {
             synchronized (mSerializedFontMapLock) {
                 mSerializedFontMap = serializeFontMap;
             }
+            return;
         } catch (IOException | ErrnoException e) {
             Slog.w(TAG, "Failed to serialize updatable font map. "
                     + "Retrying with system image fonts.", e);

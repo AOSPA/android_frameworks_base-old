@@ -337,6 +337,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
         final WindowManager.LayoutParams attrs = new WindowManager.LayoutParams(type);
         attrs.setTitle(name);
+        attrs.packageName = "test";
 
         final WindowState w = new WindowState(service, session, iWindow, token, parent,
                 OP_NONE, attrs, VISIBLE, ownerId, userId,
@@ -890,6 +891,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
                     mTask.moveToFront("createActivity");
                 }
                 // Make visible by default...
+                activity.mVisibleRequested = true;
                 activity.setVisible(true);
             }
 
@@ -1140,6 +1142,9 @@ class WindowTestsBase extends SystemServiceTestsBase {
         }
         @Override
         public void removeStartingWindow(int taskId) {
+        }
+        @Override
+        public void copySplashScreenView(int taskId) {
         }
         @Override
         public void onTaskAppeared(ActivityManager.RunningTaskInfo info, SurfaceControl leash) {

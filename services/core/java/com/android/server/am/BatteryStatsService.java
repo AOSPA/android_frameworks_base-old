@@ -72,6 +72,7 @@ import com.android.internal.os.BinderCallsStats;
 import com.android.internal.os.PowerProfile;
 import com.android.internal.os.RailStats;
 import com.android.internal.os.RpmStats;
+import com.android.internal.os.SystemServerCpuThreadReader.SystemServiceCpuThreadTimes;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.ParseUtils;
@@ -126,15 +127,20 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     .onMalformedInput(CodingErrorAction.REPLACE)
                     .onUnmappableCharacter(CodingErrorAction.REPLACE)
                     .replaceWith("?");
-    private static final int MAX_LOW_POWER_STATS_SIZE = 4096;
+    private static final int MAX_LOW_POWER_STATS_SIZE = 8192;
     private static final int POWER_STATS_QUERY_TIMEOUT_MILLIS = 2000;
+    private static final String EMPTY = "Empty";
 
     private final HandlerThread mHandlerThread;
     private final Handler mHandler;
     private final Object mLock = new Object();
 
+    private final Object mPowerStatsLock = new Object();
+    @GuardedBy("mPowerStatsLock")
     private PowerStatsInternal mPowerStatsInternal = null;
+    @GuardedBy("mPowerStatsLock")
     private Map<Integer, String> mEntityNames = new HashMap();
+    @GuardedBy("mPowerStatsLock")
     private Map<Integer, Map<Integer, String>> mStateNames = new HashMap();
 
     @GuardedBy("mStats")
@@ -172,13 +178,6 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             };
 
     private void populatePowerEntityMaps() {
-        if (mPowerStatsInternal == null) {
-            // PowerStatsInternal unavailable, don't bother populating maps.
-            mEntityNames = null;
-            mStateNames = null;
-            return;
-        }
-
         PowerEntity[] entities = mPowerStatsInternal.getPowerEntityInfo();
         if (entities == null) {
             return;
@@ -202,6 +201,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
      */
     @Override
     public void fillLowPowerStats(RpmStats rpmStats) {
+        synchronized (mPowerStatsLock) {
+            if (mPowerStatsInternal == null || mEntityNames.isEmpty() || mStateNames.isEmpty()) {
+                return;
+            }
+        }
+
         final StateResidencyResult[] results;
         try {
             results = mPowerStatsInternal.getStateResidencyAsync(new int[0])
@@ -237,16 +242,22 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
     @Override
     public String getSubsystemLowPowerStats() {
+        synchronized (mPowerStatsLock) {
+            if (mPowerStatsInternal == null || mEntityNames.isEmpty() || mStateNames.isEmpty()) {
+                return EMPTY;
+            }
+        }
+
         final StateResidencyResult[] results;
         try {
             results = mPowerStatsInternal.getStateResidencyAsync(new int[0])
                     .get(POWER_STATS_QUERY_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             Slog.e(TAG, "Failed to getStateResidencyAsync", e);
-            return "Empty";
+            return EMPTY;
         }
 
-        if (results.length == 0) return "Empty";
+        if (results.length == 0) return EMPTY;
 
         int charsLeft = MAX_LOW_POWER_STATS_SIZE;
         StringBuilder builder = new StringBuilder("SubsystemPowerState");
@@ -322,9 +333,14 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         } catch (RemoteException e) {
             Slog.e(TAG, "Could not register INetworkManagement event observer " + e);
         }
-        mPowerStatsInternal = LocalServices.getService(PowerStatsInternal.class);
-        if (mPowerStatsInternal != null) {
-            populatePowerEntityMaps();
+
+        synchronized (mPowerStatsLock) {
+            mPowerStatsInternal = LocalServices.getService(PowerStatsInternal.class);
+            if (mPowerStatsInternal != null) {
+                populatePowerEntityMaps();
+            } else {
+                Slog.e(TAG, "Could not register PowerStatsInternal");
+            }
         }
 
         Watchdog.getInstance().addMonitor(this);
@@ -339,6 +355,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         @Override
         public String[] getMobileIfaces() {
             return mStats.getMobileIfaces().clone();
+        }
+
+        @Override
+        public SystemServiceCpuThreadTimes getSystemServiceCpuThreadTimes() {
+            return mStats.getSystemServiceCpuThreadTimes();
         }
 
         @Override

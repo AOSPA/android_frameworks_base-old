@@ -836,7 +836,7 @@ public class AudioTrack extends PlayerBase
             mState = STATE_INITIALIZED;
         }
 
-        baseRegisterPlayer();
+        baseRegisterPlayer(mSessionId);
     }
 
     /**
@@ -866,7 +866,7 @@ public class AudioTrack extends PlayerBase
 
         // other initialization...
         if (nativeTrackInJavaObj != 0) {
-            baseRegisterPlayer();
+            baseRegisterPlayer(AudioSystem.AUDIO_SESSION_ALLOCATE);
             deferred_connect(nativeTrackInJavaObj);
         } else {
             mState = STATE_UNINITIALIZED;
@@ -2726,8 +2726,10 @@ public class AudioTrack extends PlayerBase
             }
         }
         synchronized(mPlayStateLock) {
+            baseStart(0); // unknown device at this point
             native_start();
-            baseStart(native_getRoutedDeviceId());
+            // FIXME see b/179218630
+            //baseStart(native_getRoutedDeviceId());
             if (mPlayState == PLAYSTATE_PAUSED_STOPPING) {
                 mPlayState = PLAYSTATE_STOPPING;
             } else {

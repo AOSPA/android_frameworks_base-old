@@ -33,6 +33,7 @@
 #include <GrContextOptions.h>
 #include <gl/GrGLInterface.h>
 
+#include <dlfcn.h>
 #include <sys/resource.h>
 #include <utils/Condition.h>
 #include <utils/Log.h>
@@ -48,6 +49,37 @@ namespace renderthread {
 static bool gHasRenderThreadInstance = false;
 
 static JVMAttachHook gOnStartHook = nullptr;
+
+ASurfaceControlFunctions::ASurfaceControlFunctions() {
+    void* handle_ = dlopen("libandroid.so", RTLD_NOW | RTLD_NODELETE);
+    acquireFunc = (ASC_acquire) dlsym(handle_, "ASurfaceControl_acquire");
+    LOG_ALWAYS_FATAL_IF(acquireFunc == nullptr,
+            "Failed to find required symbol ASurfaceControl_acquire!");
+
+    releaseFunc = (ASC_release) dlsym(handle_, "ASurfaceControl_release");
+    LOG_ALWAYS_FATAL_IF(releaseFunc == nullptr,
+            "Failed to find required symbol ASurfaceControl_release!");
+
+    registerListenerFunc = (ASC_registerSurfaceStatsListener) dlsym(handle_,
+            "ASurfaceControl_registerSurfaceStatsListener");
+    LOG_ALWAYS_FATAL_IF(registerListenerFunc == nullptr,
+            "Failed to find required symbol ASurfaceControl_registerSurfaceStatsListener!");
+
+    unregisterListenerFunc = (ASC_unregisterSurfaceStatsListener) dlsym(handle_,
+            "ASurfaceControl_unregisterSurfaceStatsListener");
+    LOG_ALWAYS_FATAL_IF(unregisterListenerFunc == nullptr,
+            "Failed to find required symbol ASurfaceControl_unregisterSurfaceStatsListener!");
+
+    getAcquireTimeFunc = (ASCStats_getAcquireTime) dlsym(handle_,
+            "ASurfaceControlStats_getAcquireTime");
+    LOG_ALWAYS_FATAL_IF(getAcquireTimeFunc == nullptr,
+            "Failed to find required symbol ASurfaceControlStats_getAcquireTime!");
+
+    getFrameNumberFunc = (ASCStats_getFrameNumber) dlsym(handle_,
+            "ASurfaceControlStats_getFrameNumber");
+    LOG_ALWAYS_FATAL_IF(getFrameNumberFunc == nullptr,
+            "Failed to find required symbol ASurfaceControlStats_getFrameNumber!");
+}
 
 void RenderThread::frameCallback(int64_t frameTimeNanos, void* data) {
     RenderThread* rt = reinterpret_cast<RenderThread*>(data);
@@ -134,7 +166,8 @@ RenderThread::RenderThread()
         , mFrameCallbackTaskPending(false)
         , mRenderState(nullptr)
         , mEglManager(nullptr)
-        , mFunctorManager(WebViewFunctorManager::instance()) {
+        , mFunctorManager(WebViewFunctorManager::instance())
+        , mGlobalProfileData(mJankDataMutex) {
     Properties::load();
     start("RenderThread");
 }

@@ -61,8 +61,12 @@ public class PowerStatsService extends SystemService {
     private static final String MODEL_FILENAME = "log.powerstats.model." + DATA_STORAGE_VERSION;
     private static final String RESIDENCY_FILENAME =
             "log.powerstats.residency." + DATA_STORAGE_VERSION;
+    private static final String METER_CACHE_FILENAME = "meterCache";
+    private static final String MODEL_CACHE_FILENAME = "modelCache";
+    private static final String RESIDENCY_CACHE_FILENAME = "residencyCache";
 
     private final Injector mInjector;
+    private File mDataStoragePath;
 
     private Context mContext;
     @Nullable
@@ -73,6 +77,8 @@ public class PowerStatsService extends SystemService {
     private TimerTrigger mTimerTrigger;
     @Nullable
     private StatsPullAtomCallbackImpl mPullAtomCallback;
+    @Nullable
+    private PowerStatsInternal mPowerStatsInternal;
 
     @VisibleForTesting
     static class Injector {
@@ -96,6 +102,18 @@ public class PowerStatsService extends SystemService {
             return RESIDENCY_FILENAME;
         }
 
+        String createMeterCacheFilename() {
+            return METER_CACHE_FILENAME;
+        }
+
+        String createModelCacheFilename() {
+            return MODEL_CACHE_FILENAME;
+        }
+
+        String createResidencyCacheFilename() {
+            return RESIDENCY_CACHE_FILENAME;
+        }
+
         IPowerStatsHALWrapper createPowerStatsHALWrapperImpl() {
             return PowerStatsHALWrapper.getPowerStatsHalImpl();
         }
@@ -110,10 +128,15 @@ public class PowerStatsService extends SystemService {
         }
 
         PowerStatsLogger createPowerStatsLogger(Context context, File dataStoragePath,
-                String meterFilename, String modelFilename, String residencyFilename,
+                String meterFilename, String meterCacheFilename,
+                String modelFilename, String modelCacheFilename,
+                String residencyFilename, String residencyCacheFilename,
                 IPowerStatsHALWrapper powerStatsHALWrapper) {
-            return new PowerStatsLogger(context, dataStoragePath, meterFilename,
-                modelFilename, residencyFilename, powerStatsHALWrapper);
+            return new PowerStatsLogger(context, dataStoragePath,
+                meterFilename, meterCacheFilename,
+                modelFilename, modelCacheFilename,
+                residencyFilename, residencyCacheFilename,
+                powerStatsHALWrapper);
         }
 
         BatteryTrigger createBatteryTrigger(Context context, PowerStatsLogger powerStatsLogger) {
@@ -125,8 +148,8 @@ public class PowerStatsService extends SystemService {
         }
 
         StatsPullAtomCallbackImpl createStatsPullerImpl(Context context,
-                IPowerStatsHALWrapper powerStatsHALWrapper) {
-            return new StatsPullAtomCallbackImpl(context, powerStatsHALWrapper);
+                PowerStatsInternal powerStatsInternal) {
+            return new StatsPullAtomCallbackImpl(context, powerStatsInternal);
         }
     }
 
@@ -175,31 +198,41 @@ public class PowerStatsService extends SystemService {
     @Override
     public void onStart() {
         if (getPowerStatsHal().isInitialized()) {
-            // Only create internal service if PowerStatsHal is available.
-            publishLocalService(PowerStatsInternal.class, new LocalService());
+            mPowerStatsInternal = new LocalService();
+            publishLocalService(PowerStatsInternal.class, mPowerStatsInternal);
         }
         publishBinderService(Context.POWER_STATS_SERVICE, new BinderService());
     }
 
     private void onSystemServicesReady() {
-        if (getPowerStatsHal().isInitialized()) {
-            if (DEBUG) Slog.d(TAG, "Starting PowerStatsService statsd pullers");
+        mPullAtomCallback = mInjector.createStatsPullerImpl(mContext, mPowerStatsInternal);
+    }
 
-            // Only start statsd pullers if initialization is successful.
-            mPullAtomCallback = mInjector.createStatsPullerImpl(mContext, getPowerStatsHal());
-        } else {
-            Slog.e(TAG, "Failed to start PowerStatsService statsd pullers");
-        }
+    @VisibleForTesting
+    public boolean getDeleteMeterDataOnBoot() {
+        return mPowerStatsLogger.getDeleteMeterDataOnBoot();
+    }
+
+    @VisibleForTesting
+    public boolean getDeleteModelDataOnBoot() {
+        return mPowerStatsLogger.getDeleteModelDataOnBoot();
+    }
+
+    @VisibleForTesting
+    public boolean getDeleteResidencyDataOnBoot() {
+        return mPowerStatsLogger.getDeleteResidencyDataOnBoot();
     }
 
     private void onBootCompleted() {
         if (getPowerStatsHal().isInitialized()) {
             if (DEBUG) Slog.d(TAG, "Starting PowerStatsService loggers");
+            mDataStoragePath = mInjector.createDataStoragePath();
 
             // Only start logger and triggers if initialization is successful.
-            mPowerStatsLogger = mInjector.createPowerStatsLogger(mContext,
-                mInjector.createDataStoragePath(), mInjector.createMeterFilename(),
-                mInjector.createModelFilename(), mInjector.createResidencyFilename(),
+            mPowerStatsLogger = mInjector.createPowerStatsLogger(mContext, mDataStoragePath,
+                mInjector.createMeterFilename(), mInjector.createMeterCacheFilename(),
+                mInjector.createModelFilename(), mInjector.createModelCacheFilename(),
+                mInjector.createResidencyFilename(), mInjector.createResidencyCacheFilename(),
                 getPowerStatsHal());
             mBatteryTrigger = mInjector.createBatteryTrigger(mContext, mPowerStatsLogger);
             mTimerTrigger = mInjector.createTimerTrigger(mContext, mPowerStatsLogger);

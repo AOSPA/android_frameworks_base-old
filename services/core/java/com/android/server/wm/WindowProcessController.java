@@ -256,6 +256,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         }
 
         onConfigurationChanged(atm.getGlobalConfiguration());
+        mAtm.mPackageConfigPersister.updateConfigIfNeeded(this, mUserId, mName);
     }
 
     public void setPid(int pid) {
@@ -802,6 +803,13 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return false;
     }
 
+    void updateNightModeForAllActivities(int nightMode) {
+        for (int i = mActivities.size() - 1; i >= 0; --i) {
+            final ActivityRecord r = mActivities.get(i);
+            r.setOverrideNightMode(nightMode);
+        }
+    }
+
     public void clearPackagePreferredForHomeActivities() {
         synchronized (mAtm.mGlobalLock) {
             for (int i = mActivities.size() - 1; i >= 0; --i) {
@@ -1329,6 +1337,10 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             mHasPendingConfigurationChange = true;
             return;
         }
+        dispatchConfiguration(config);
+    }
+
+    void dispatchConfiguration(Configuration config) {
         mHasPendingConfigurationChange = false;
         if (mThread == null) {
             if (Build.IS_DEBUGGABLE && mHasImeService) {
@@ -1367,8 +1379,13 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         mPauseConfigurationDispatchCount++;
     }
 
-    void resumeConfigurationDispatch() {
+    /** Returns {@code true} if the configuration change is pending to dispatch. */
+    boolean resumeConfigurationDispatch() {
+        if (mPauseConfigurationDispatchCount == 0) {
+            return false;
+        }
         mPauseConfigurationDispatchCount--;
+        return mHasPendingConfigurationChange;
     }
 
     /**

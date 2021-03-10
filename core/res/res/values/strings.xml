@@ -1832,6 +1832,11 @@
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_startViewPermissionUsage">Allows the holder to start the permission usage for an app. Should never be needed for normal apps.</string>
 
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permlab_highSamplingRateSensors">access sensor data at a high sampling rate</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this.[CHAR_LIMIT=NONE] -->
+    <string name="permdesc_highSamplingRateSensors">Allows the app to sample sensor data at a rate greater than 200 Hz</string>
+
     <!-- Policy administration -->
 
     <!-- Title of policy access to limiting the user's password choices -->
@@ -4534,9 +4539,8 @@
      shown in the warning dialog about the accessibility shortcut. -->
     <string name="color_correction_feature_name">Color Correction</string>
 
-    <!-- TODO(b/170970602): remove translatable=false when RBC has official name and strings -->
-    <!-- Title of Reduce Bright Colors feature, shown in the warning dialog about the accessibility shortcut. [CHAR LIMIT=none] -->
-    <string name="reduce_bright_colors_feature_name" translatable="false">Reduce Bright Colors</string>
+    <!-- Title of Reduce Brightness feature, shown in the warning dialog about the accessibility shortcut. [CHAR LIMIT=none] -->
+    <string name="reduce_bright_colors_feature_name">Reduce Brightness</string>
 
     <!-- Text in toast to alert the user that the accessibility shortcut turned on an accessibility service. [CHAR LIMIT=none] -->
     <string name="accessibility_shortcut_enabling_service">Held volume keys. <xliff:g id="service_name" example="TalkBack">%1$s</xliff:g> turned on.</string>
@@ -5000,6 +5004,9 @@
     <string name="stk_cc_ss_to_ussd">SS request changed to USSD request</string>
     <string name="stk_cc_ss_to_ss">Changed to new SS request</string>
 
+    <!-- Content description of the phishing alert icon in the notification. [CHAR_LIMIT=NONE] -->
+    <string name="notification_phishing_alert_content_description">Phishing alert</string>
+
     <!-- Content description of the work profile icon in the notification. -->
     <string name="notification_work_profile_content_description">Work profile</string>
 
@@ -5042,6 +5049,18 @@
     <!-- Tempalate for Notification.MessagingStyle to join a conversation name with the name of the sender of a message, to make a notification title [CHAR LIMIT=NONE] -->
     <string name="notification_messaging_title_template"><xliff:g id="conversation_title" example="Tasty Treat Team">%1$s</xliff:g>: <xliff:g id="sender_name" example="Adrian Baker">%2$s</xliff:g></string>
 
+    <!-- Action text to be displayed for the "answer" action of an incoming call [CHAR LIMIT=13] -->
+    <string name="call_notification_answer_action">Answer</string>
+    <!-- Action text to be displayed for the "decline" action of an incoming call [CHAR LIMIT=13] -->
+    <string name="call_notification_decline_action">Decline</string>
+    <!-- Action text to be displayed for the "hang up" action of an ongoing call [CHAR LIMIT=13] -->
+    <string name="call_notification_hang_up_action">Hang Up</string>
+    <!-- Default notification text to be displayed in incoming call notifications [CHAR LIMIT=40] -->
+    <string name="call_notification_incoming_text">Incoming call</string>
+    <!-- Default notification text to be displayed in ongoing call notifications [CHAR LIMIT=40] -->
+    <string name="call_notification_ongoing_text">Ongoing call</string>
+    <!-- Default notification text to be displayed in screening call notifications [CHAR LIMIT=40] -->
+    <string name="call_notification_screening_text">Screening an incoming call</string>
 
     <!-- Label describing the number of selected items [CHAR LIMIT=48] -->
     <plurals name="selected_count">

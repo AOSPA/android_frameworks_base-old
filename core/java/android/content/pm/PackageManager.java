@@ -47,8 +47,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
-import android.content.pm.verify.domain.DomainVerificationManager;
 import android.content.pm.dex.ArtManager;
+import android.content.pm.verify.domain.DomainVerificationManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
@@ -1356,15 +1356,11 @@ public abstract class PackageManager {
 
     /**
      * A value to indicate the lack of CUJ information, disabling all installation scenario logic.
-     *
-     * @hide
      */
     public static final int INSTALL_SCENARIO_DEFAULT = 0;
 
     /**
      * Installation scenario providing the fastest “install button to launch" experience possible.
-     *
-     * @hide
      */
     public static final int INSTALL_SCENARIO_FAST = 1;
 
@@ -1381,8 +1377,6 @@ public abstract class PackageManager {
      * less optimized applications.  The device state (e.g. memory usage or battery status) should
      * not be considered when making this decision as those factors are taken into account by the
      * Package Manager when acting on the installation scenario.
-     *
-     * @hide
      */
     public static final int INSTALL_SCENARIO_BULK = 2;
 
@@ -1393,8 +1387,6 @@ public abstract class PackageManager {
      * operation that are marked BULK_SECONDARY, the faster the entire bulk operation will be.
      *
      * See the comments for INSTALL_SCENARIO_BULK for more information.
-     *
-     * @hide
      */
     public static final int INSTALL_SCENARIO_BULK_SECONDARY = 3;
 
@@ -3592,13 +3584,30 @@ public abstract class PackageManager {
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
      * the requisite kernel support to support incremental delivery aka Incremental FileSystem.
      *
-     * @see IncrementalManager#isEnabled
+     * @see IncrementalManager#isFeatureEnabled
      * @hide
+     *
+     * @deprecated Use {@link #FEATURE_INCREMENTAL_DELIVERY_VERSION} instead.
      */
+    @Deprecated
     @SystemApi
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_INCREMENTAL_DELIVERY =
             "android.software.incremental_delivery";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * feature not present - IncFs is not present on the device.
+     * 1 - IncFs v1, core features, no PerUid support. Optional in R.
+     * 2 - IncFs v2, PerUid support, fs-verity support. Required in S.
+     *
+     * @see IncrementalManager#isFeatureEnabled and IncrementalManager#isV2()
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_INCREMENTAL_DELIVERY_VERSION =
+            "android.software.incremental_delivery_version";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
@@ -3659,6 +3668,15 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_KEYSTORE_LIMITED_USE_KEY =
             "android.hardware.keystore.limited_use_key";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
+     * a Keystore implementation that can create application-specific attestation keys.
+     * See {@link android.security.keystore.KeyGenParameterSpec.Builder#setAttestKeyAlias}.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_KEYSTORE_APP_ATTEST_KEY =
+            "android.hardware.keystore.app_attest_key";
 
     /** @hide */
     public static final boolean APP_ENUMERATION_ENABLED_BY_DEFAULT = true;
@@ -4054,6 +4072,8 @@ public abstract class PackageManager {
     /**
      * Permission flag: This location permission is selected as the level of granularity of
      * location accuracy.
+     * Example: If this flag is set for ACCESS_FINE_LOCATION, FINE location is the selected location
+     *          accuracy for location permissions.
      *
      * @hide
      */
@@ -9278,6 +9298,22 @@ public abstract class PackageManager {
     public void holdLock(IBinder token, int durationMs) {
         try {
             ActivityThread.getPackageManager().holdLock(token, durationMs);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Set a list of apps to keep around as APKs even if no user has currently installed it.
+     * @param packageList List of package names to keep cached.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.KEEP_UNINSTALLED_PACKAGES)
+    @TestApi
+    public void setKeepUninstalledPackages(@NonNull List<String> packageList) {
+        try {
+            ActivityThread.getPackageManager().setKeepUninstalledPackages(packageList);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

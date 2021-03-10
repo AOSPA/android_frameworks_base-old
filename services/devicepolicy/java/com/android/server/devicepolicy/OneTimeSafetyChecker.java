@@ -15,16 +15,18 @@
  */
 package com.android.server.devicepolicy;
 
-import static android.app.admin.DevicePolicyManager.UNSAFE_OPERATION_REASON_NONE;
+import static android.app.admin.DevicePolicyManager.OPERATION_SAFETY_REASON_NONE;
+import static android.app.admin.DevicePolicyManager.operationSafetyReasonToString;
 import static android.app.admin.DevicePolicyManager.operationToString;
-import static android.app.admin.DevicePolicyManager.unsafeOperationReasonToString;
 
 import android.app.admin.DevicePolicyManager.DevicePolicyOperation;
-import android.app.admin.DevicePolicyManager.UnsafeOperationReason;
+import android.app.admin.DevicePolicyManager.OperationSafetyReason;
+import android.app.admin.DevicePolicyManagerInternal;
 import android.app.admin.DevicePolicySafetyChecker;
 import android.util.Slog;
 
 import com.android.internal.os.IResultReceiver;
+import com.android.server.LocalServices;
 
 import java.util.Objects;
 
@@ -43,10 +45,10 @@ final class OneTimeSafetyChecker implements DevicePolicySafetyChecker {
     private final DevicePolicyManagerService mService;
     private final DevicePolicySafetyChecker mRealSafetyChecker;
     private final @DevicePolicyOperation int mOperation;
-    private final @UnsafeOperationReason int mReason;
+    private final @OperationSafetyReason int mReason;
 
     OneTimeSafetyChecker(DevicePolicyManagerService service,
-            @DevicePolicyOperation int operation, @UnsafeOperationReason int reason) {
+            @DevicePolicyOperation int operation, @OperationSafetyReason int reason) {
         mService = Objects.requireNonNull(service);
         mOperation = operation;
         mReason = reason;
@@ -55,25 +57,56 @@ final class OneTimeSafetyChecker implements DevicePolicySafetyChecker {
     }
 
     @Override
-    @UnsafeOperationReason
+    @OperationSafetyReason
     public int getUnsafeOperationReason(@DevicePolicyOperation int operation) {
         String name = operationToString(operation);
-        int reason = UNSAFE_OPERATION_REASON_NONE;
+        Slog.i(TAG, "getUnsafeOperationReason(" + name + ")");
+        int reason = OPERATION_SAFETY_REASON_NONE;
         if (operation == mOperation) {
             reason = mReason;
         } else {
             Slog.wtf(TAG, "invalid call to isDevicePolicyOperationSafe(): asked for " + name
                     + ", should be " + operationToString(mOperation));
         }
-        Slog.i(TAG, "getDevicePolicyOperationSafety(" + name + "): returning "
-                + unsafeOperationReasonToString(reason)
-                + " and restoring DevicePolicySafetyChecker to " + mRealSafetyChecker);
-        mService.setDevicePolicySafetyCheckerUnchecked(mRealSafetyChecker);
+        String reasonName = operationSafetyReasonToString(reason);
+        DevicePolicyManagerInternal dpmi = LocalServices
+                .getService(DevicePolicyManagerInternal.class);
+
+        Slog.i(TAG, "notifying " + reasonName + " is active");
+        dpmi.notifyUnsafeOperationStateChanged(this, reason, true);
+
+        Slog.i(TAG, "notifying " + reasonName + " is inactive");
+        dpmi.notifyUnsafeOperationStateChanged(this, reason, false);
+
+        Slog.i(TAG, "returning " + reasonName);
+
+        disableSelf();
         return reason;
+    }
+
+    @Override
+    public boolean isSafeOperation(@OperationSafetyReason int reason) {
+        boolean safe = mReason != reason;
+        Slog.i(TAG, "isSafeOperation(" + operationSafetyReasonToString(reason) + "): " + safe);
+
+        disableSelf();
+        return safe;
     }
 
     @Override
     public void onFactoryReset(IResultReceiver callback) {
         throw new UnsupportedOperationException();
+    }
+
+    private void disableSelf() {
+        Slog.i(TAG, "restoring DevicePolicySafetyChecker to " + mRealSafetyChecker);
+        mService.setDevicePolicySafetyCheckerUnchecked(mRealSafetyChecker);
+    }
+
+    @Override
+    public String toString() {
+        return "OneTimeSafetyChecker[id=" + System.identityHashCode(this)
+                + ", reason=" + operationSafetyReasonToString(mReason)
+                + ", operation=" + operationToString(mOperation) + ']';
     }
 }

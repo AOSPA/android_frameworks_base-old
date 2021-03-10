@@ -93,6 +93,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.List;
 import java.util.concurrent.Executor;
 
 /**
@@ -3479,6 +3480,7 @@ public abstract class Context {
             STORAGE_STATS_SERVICE,
             WALLPAPER_SERVICE,
             TIME_ZONE_RULES_MANAGER_SERVICE,
+            VIBRATOR_MANAGER_SERVICE,
             VIBRATOR_SERVICE,
             //@hide: STATUS_BAR_SERVICE,
             CONNECTIVITY_SERVICE,
@@ -3519,6 +3521,7 @@ public abstract class Context {
             APPWIDGET_SERVICE,
             //@hide: VOICE_INTERACTION_MANAGER_SERVICE,
             //@hide: BACKUP_SERVICE,
+            REBOOT_READINESS_SERVICE,
             ROLLBACK_SERVICE,
             DROPBOX_SERVICE,
             //@hide: DEVICE_IDLE_CONTROLLER,
@@ -3552,6 +3555,7 @@ public abstract class Context {
             //@hide: NETWORK_SCORE_SERVICE,
             USAGE_STATS_SERVICE,
             MEDIA_SESSION_SERVICE,
+            MEDIA_COMMUNICATION_SERVICE,
             BATTERY_SERVICE,
             JOB_SCHEDULER_SERVICE,
             //@hide: PERSISTENT_DATA_BLOCK_SERVICE,
@@ -3624,9 +3628,11 @@ public abstract class Context {
      *   (e.g., GPS) updates.
      *  <dt> {@link #SEARCH_SERVICE} ("search")
      *  <dd> A {@link android.app.SearchManager} for handling search.
+     *  <dt> {@link #VIBRATOR_MANAGER_SERVICE} ("vibrator_manager")
+     *  <dd> A {@link android.os.VibratorManager} for accessing the device vibrators, interacting
+     *  with individual ones and playing synchronized effects on multiple vibrators.
      *  <dt> {@link #VIBRATOR_SERVICE} ("vibrator")
-     *  <dd> A {@link android.os.Vibrator} for interacting with the vibrator
-     *  hardware.
+     *  <dd> A {@link android.os.Vibrator} for interacting with the vibrator hardware.
      *  <dt> {@link #CONNECTIVITY_SERVICE} ("connectivity")
      *  <dd> A {@link android.net.ConnectivityManager ConnectivityManager} for
      *  handling management of network connections.
@@ -3706,6 +3712,8 @@ public abstract class Context {
      * @see android.hardware.SensorManager
      * @see #STORAGE_SERVICE
      * @see android.os.storage.StorageManager
+     * @see #VIBRATOR_MANAGER_SERVICE
+     * @see android.os.VibratorManager
      * @see #VIBRATOR_SERVICE
      * @see android.os.Vibrator
      * @see #CONNECTIVITY_SERVICE
@@ -4033,8 +4041,19 @@ public abstract class Context {
     public static final String WALLPAPER_SERVICE = "wallpaper";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve a {@link
-     * android.os.Vibrator} for interacting with the vibration hardware.
+     * Use with {@link #getSystemService(String)} to retrieve a {@link android.os.VibratorManager}
+     * for accessing the device vibrators, interacting with individual ones and playing synchronized
+     * effects on multiple vibrators.
+     *
+     * @see #getSystemService(String)
+     * @see android.os.VibratorManager
+     */
+    @SuppressLint("ServiceName")
+    public static final String VIBRATOR_MANAGER_SERVICE = "vibrator_manager";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link android.os.Vibrator} for
+     * interacting with the vibration hardware.
      *
      * @see #getSystemService(String)
      * @see android.os.Vibrator
@@ -4564,6 +4583,14 @@ public abstract class Context {
     public static final String AUTOFILL_MANAGER_SERVICE = "autofill";
 
     /**
+     * Official published name of the (internal) text to speech manager service.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    public static final String TEXT_TO_SPEECH_MANAGER_SERVICE = "texttospeech";
+
+    /**
      * Official published name of the content capture service.
      *
      * @hide
@@ -4723,6 +4750,17 @@ public abstract class Context {
      */
     @SystemApi
     public static final String ROLLBACK_SERVICE = "rollback";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.scheduling.RebootReadinessManagerService} for communicating
+     * with the reboot readiness detector.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @SystemApi
+    public static final String REBOOT_READINESS_SERVICE = "reboot_readiness";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -5461,6 +5499,14 @@ public abstract class Context {
     public static final String DOMAIN_VERIFICATION_SERVICE = "domain_verification";
 
     /**
+     * Use with {@link #getSystemService(String)} to access
+     * {@link android.view.displayhash.DisplayHashManager} to handle display hashes.
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String DISPLAY_HASH_SERVICE = "display_hash";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
@@ -5708,6 +5754,32 @@ public abstract class Context {
     public abstract int checkUriPermission(Uri uri, int pid, int uid,
             @Intent.AccessUriMode int modeFlags);
 
+    /**
+     * Determine whether a particular process and user ID has been granted
+     * permission to access a list of URIs.  This only checks for permissions
+     * that have been explicitly granted -- if the given process/uid has
+     * more general access to the URI's content provider then this check will
+     * always fail.
+     *
+     * @param uris The list of URIs that is being checked.
+     * @param pid The process ID being checked against.  Must be &gt; 0.
+     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * user, which will pass every permission check.
+     * @param modeFlags The access modes to check for the list of uris
+     *
+     * @return Array of permission grants corresponding to each entry in the list of uris.
+     * {@link PackageManager#PERMISSION_GRANTED} if the given pid/uid is allowed to access that uri,
+     * or {@link PackageManager#PERMISSION_DENIED} if it is not.
+     *
+     * @see #checkCallingUriPermission
+     */
+    @NonNull
+    @PackageManager.PermissionResult
+    public int[] checkUriPermissions(@NonNull List<Uri> uris, int pid, int uid,
+            @Intent.AccessUriMode int modeFlags) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
     /** @hide */
     @SuppressWarnings("HiddenAbstractMethod")
     @PackageManager.PermissionResult
@@ -5738,6 +5810,32 @@ public abstract class Context {
     public abstract int checkCallingUriPermission(Uri uri, @Intent.AccessUriMode int modeFlags);
 
     /**
+     * Determine whether the calling process and user ID has been
+     * granted permission to access a list of URIs.  This is basically
+     * the same as calling {@link #checkUriPermissions(List, int, int, int)}
+     * with the pid and uid returned by {@link
+     * android.os.Binder#getCallingPid} and {@link
+     * android.os.Binder#getCallingUid}.  One important difference is
+     * that if you are not currently processing an IPC, this function
+     * will always fail.
+     *
+     * @param uris The list of URIs that is being checked.
+     * @param modeFlags The access modes to check.
+     *
+     * @return Array of permission grants corresponding to each entry in the list of uris.
+     * {@link PackageManager#PERMISSION_GRANTED} if the given pid/uid is allowed to access that uri,
+     * or {@link PackageManager#PERMISSION_DENIED} if it is not.
+     *
+     * @see #checkUriPermission(Uri, int, int, int)
+     */
+    @NonNull
+    @PackageManager.PermissionResult
+    public int[] checkCallingUriPermissions(@NonNull List<Uri> uris,
+            @Intent.AccessUriMode int modeFlags) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * Determine whether the calling process of an IPC <em>or you</em> has been granted
      * permission to access a specific URI.  This is the same as
      * {@link #checkCallingUriPermission}, except it grants your own permissions
@@ -5756,6 +5854,28 @@ public abstract class Context {
     @PackageManager.PermissionResult
     public abstract int checkCallingOrSelfUriPermission(Uri uri,
             @Intent.AccessUriMode int modeFlags);
+
+    /**
+     * Determine whether the calling process of an IPC <em>or you</em> has been granted
+     * permission to access a list of URIs.  This is the same as
+     * {@link #checkCallingUriPermission}, except it grants your own permissions
+     * if you are not currently processing an IPC.  Use with care!
+     *
+     * @param uris The list of URIs that is being checked.
+     * @param modeFlags The access modes to check.
+     *
+     * @return Array of permission grants corresponding to each entry in the list of uris.
+     * {@link PackageManager#PERMISSION_GRANTED} if the given pid/uid is allowed to access that uri,
+     * or {@link PackageManager#PERMISSION_DENIED} if it is not.
+     *
+     * @see #checkCallingUriPermission
+     */
+    @NonNull
+    @PackageManager.PermissionResult
+    public int[] checkCallingOrSelfUriPermissions(@NonNull List<Uri> uris,
+            @Intent.AccessUriMode int modeFlags) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Check both a Uri and normal permission.  This allows you to perform

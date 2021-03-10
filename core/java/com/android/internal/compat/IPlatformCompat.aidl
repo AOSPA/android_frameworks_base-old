@@ -21,6 +21,7 @@ import com.android.internal.compat.IOverrideValidator;
 import java.util.Map;
 
 parcelable CompatibilityChangeConfig;
+parcelable CompatibilityOverrideConfig;
 parcelable CompatibilityChangeInfo;
 /**
  * Platform private API for talking with the PlatformCompat service.
@@ -152,6 +153,17 @@ interface IPlatformCompat {
     /**
      * Adds overrides to compatibility changes.
      *
+     * <p>Kills the app to allow the changes to take effect.
+     *
+     * @param overrides   parcelable containing the compat change overrides to be applied
+     * @param packageName the package name of the app whose changes will be overridden
+     * @throws SecurityException if overriding changes is not permitted
+     */
+    void setOverridesFromInstaller(in CompatibilityOverrideConfig overrides, in String packageName);
+
+    /**
+     * Adds overrides to compatibility changes.
+     *
      * <p>Does not kill the app, to be only used in tests.
      *
      * @param overrides   parcelable containing the compat change overrides to be applied
@@ -179,9 +191,10 @@ interface IPlatformCompat {
      *
      * @param changeId    the ID of the change that was overridden
      * @param packageName the app package name that was overridden
+     * @return {@code true} if an override existed
      * @throws SecurityException if overriding changes is not permitted
      */
-    void clearOverrideForTest(long changeId, String packageName);
+    boolean clearOverrideForTest(long changeId, String packageName);
 
     /**
      * Enables all compatibility changes that have enabledSinceTargetSdk ==
