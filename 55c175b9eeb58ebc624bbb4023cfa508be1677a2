@@ -86,6 +86,24 @@
       "message": "\nDark theme Before: https://pasteboard.co/JRxPzbI.jpg\nDark Theme After: https://pasteboard.co/JRxQ66s.jpg\nLight Theme: https://pasteboard.co/JRQgkC4.jpg\nOn the last SS, I have a commit which fixes the text behind. This change doesn\u0027t affect the look with white theme. Picked and tested. That may be becoz of my source (my ROM I mean), just wanted to report. \nDevice: instantnoodlep (OnePlus 8 Pro)\n\nBut I like idea though, becoz biometric auth icon and FOD icon looks displaced without this commit. So, looking for solution. Appreciate your work guys.",
       "revId": "55c175b9eeb58ebc624bbb4023cfa508be1677a2",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6d79c21c_f289b2b4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000466
+      },
+      "writtenOn": "2021-03-10T05:54:16Z",
+      "side": 1,
+      "message": "Update: The issue with light theme was be\u0027coz of my OOS FP icon which comes from device trees. Switched to stok and now all good.",
+      "parentUuid": "c93deddb_f742fdc1",
+      "revId": "55c175b9eeb58ebc624bbb4023cfa508be1677a2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
