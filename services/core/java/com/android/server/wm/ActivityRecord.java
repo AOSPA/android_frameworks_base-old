@@ -524,6 +524,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private boolean mLastDeferHidingClient; // If true we will defer setting mClientVisible to false
                                            // and reporting to the client that it is hidden.
     public boolean launching;      // is activity launch in progress?
+    public boolean translucentWindowLaunch; // a translucent window launch?
     boolean nowVisible;     // is this activity's window visible?
     boolean mClientVisibilityDeferred;// was the visibility change message to client deferred?
     boolean idle;           // has the activity gone idle?
@@ -1701,6 +1702,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mClientVisible = true;
         idle = false;
         hasBeenLaunched = false;
+        launching = false;
+        translucentWindowLaunch = false;
         mTaskSupervisor = supervisor;
 
         info.taskAffinity = computeTaskAffinity(info.taskAffinity, info.applicationInfo.uid,
@@ -1899,6 +1902,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     windowIsTranslucent, windowIsFloating, windowShowWallpaper,
                     windowDisableStarting);
             if (windowIsTranslucent || windowIsFloating || windowDisableStarting) {
+                translucentWindowLaunch = true;
                 return false;
             }
             if (windowShowWallpaper
