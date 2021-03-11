@@ -16,11 +16,13 @@
 
 package com.android.server.pm;
 
+import static android.app.ActivityOptions.KEY_SPLASH_SCREEN_THEME;
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
 import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.pm.LauncherApps.FLAG_CACHE_BUBBLE_SHORTCUTS;
 import static android.content.pm.LauncherApps.FLAG_CACHE_NOTIFICATION_SHORTCUTS;
+import static android.content.pm.LauncherApps.FLAG_CACHE_PEOPLE_TILE_SHORTCUTS;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -929,10 +931,22 @@ public class LauncherAppsService extends SystemService {
                 // Flag for bubble to make behaviour match documentLaunchMode=always.
                 intents[0].addFlags(FLAG_ACTIVITY_NEW_DOCUMENT);
                 intents[0].addFlags(FLAG_ACTIVITY_MULTIPLE_TASK);
+                intents[0].putExtra(Intent.EXTRA_IS_BUBBLED, true);
             }
 
             intents[0].addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intents[0].setSourceBounds(sourceBounds);
+
+            // Replace theme for splash screen
+            final int splashScreenThemeResId =
+                    mShortcutServiceInternal.getShortcutStartingThemeResId(getCallingUserId(),
+                            callingPackage, packageName, shortcutId, targetUserId);
+            if (splashScreenThemeResId != 0) {
+                if (startActivityOptions == null) {
+                    startActivityOptions = new Bundle();
+                }
+                startActivityOptions.putInt(KEY_SPLASH_SCREEN_THEME, splashScreenThemeResId);
+            }
 
             return startShortcutIntentsAsPublisher(
                     intents, packageName, featureId, startActivityOptions, targetUserId);
@@ -1157,6 +1171,8 @@ public class LauncherAppsService extends SystemService {
                 ret = ShortcutInfo.FLAG_CACHED_NOTIFICATIONS;
             } else if (cacheFlags == FLAG_CACHE_BUBBLE_SHORTCUTS) {
                 ret = ShortcutInfo.FLAG_CACHED_BUBBLES;
+            } else if (cacheFlags == FLAG_CACHE_PEOPLE_TILE_SHORTCUTS) {
+                ret = ShortcutInfo.FLAG_CACHED_PEOPLE_TILE;
             }
             Preconditions.checkArgumentPositive(ret, "Invalid cache owner");
 
@@ -1317,6 +1333,10 @@ public class LauncherAppsService extends SystemService {
                     mListeners.finishBroadcast();
                 }
                 super.onPackageAdded(packageName, uid);
+                PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
+                pmi.registerInstalledLoadingProgressCallback(packageName,
+                        new PackageLoadingProgressCallback(packageName, user),
+                        user.getIdentifier());
             }
 
             @Override
@@ -1536,6 +1556,39 @@ public class LauncherAppsService extends SystemService {
             @Override
             public void onCallbackDied(T callback, Object cookie) {
                 checkCallbackCount();
+            }
+        }
+
+        class PackageLoadingProgressCallback extends
+                PackageManagerInternal.InstalledLoadingProgressCallback {
+            private String mPackageName;
+            private UserHandle mUser;
+
+            PackageLoadingProgressCallback(String packageName, UserHandle user) {
+                super(mCallbackHandler);
+                mPackageName = packageName;
+                mUser = user;
+            }
+
+            @Override
+            public void onLoadingProgressChanged(float progress) {
+                final int n = mListeners.beginBroadcast();
+                try {
+                    for (int i = 0; i < n; i++) {
+                        IOnAppsChangedListener listener = mListeners.getBroadcastItem(i);
+                        BroadcastCookie cookie = (BroadcastCookie) mListeners.getBroadcastCookie(i);
+                        if (!isEnabledProfileOf(cookie.user, mUser, "onLoadingProgressChanged")) {
+                            continue;
+                        }
+                        try {
+                            listener.onPackageLoadingProgressChanged(mUser, mPackageName, progress);
+                        } catch (RemoteException re) {
+                            Slog.d(TAG, "Callback failed ", re);
+                        }
+                    }
+                } finally {
+                    mListeners.finishBroadcast();
+                }
             }
         }
     }

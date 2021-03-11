@@ -67,6 +67,7 @@ import android.telephony.TelephonyManager;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
+import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.view.IRemoteAnimationFinishedCallback;
 import android.view.RemoteAnimationTarget;
@@ -308,6 +309,13 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
     private final SparseIntArray mLastSimStates = new SparseIntArray();
     private static SparseIntArray mUnlockTrackSimStates = new SparseIntArray();
 
+    /**
+     * Indicates if a SIM card had the SIM PIN enabled during the initialization, before
+     * reaching the SIM_STATE_READY state. The flag is reset to false at SIM_STATE_READY.
+     * Index is the slotId - in case of multiple SIM cards.
+     */
+    private final SparseBooleanArray mSimWasLocked = new SparseBooleanArray();
+
     private boolean mDeviceInteractive;
     private boolean mGoingToSleep;
 
@@ -409,6 +417,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
 
         @Override
         public void onUserSwitching(int userId) {
+            if (DEBUG) Log.d(TAG, String.format("onUserSwitching %d", userId));
             // Note that the mLockPatternUtils user has already been updated from setCurrentUser.
             // We need to force a reset of the views, since lockNow (called by
             // ActivityManagerService) will not reconstruct the keyguard if it is already showing.
@@ -426,6 +435,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
 
         @Override
         public void onUserSwitchComplete(int userId) {
+            if (DEBUG) Log.d(TAG, String.format("onUserSwitchComplete %d", userId));
             if (userId != UserHandle.USER_SYSTEM) {
                 UserInfo info = UserManager.get(mContext).getUserInfo(userId);
                 // Don't try to dismiss if the user has Pin/Patter/Password set
@@ -479,10 +489,10 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
                 }
             }
 
-            boolean simWasLocked;
+            boolean lastSimStateWasLocked;
             synchronized (KeyguardViewMediator.this) {
                 int lastState = mLastSimStates.get(slotId);
-                simWasLocked = (lastState == TelephonyManager.SIM_STATE_PIN_REQUIRED
+                lastSimStateWasLocked = (lastState == TelephonyManager.SIM_STATE_PIN_REQUIRED
                         || lastState == TelephonyManager.SIM_STATE_PUK_REQUIRED);
                 mLastSimStates.append(slotId, simState);
 
@@ -519,17 +529,19 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
                         if (simState == TelephonyManager.SIM_STATE_ABSENT) {
                             // MVNO SIMs can become transiently NOT_READY when switching networks,
                             // so we should only lock when they are ABSENT.
-                            if (simWasLocked) {
+                            if (lastSimStateWasLocked) {
                                 if (DEBUG_SIM_STATES) Log.d(TAG, "SIM moved to ABSENT when the "
                                         + "previous state was locked. Reset the state.");
                                 resetStateLocked();
                             }
+                            mSimWasLocked.append(slotId, false);
                         }
                     }
                     break;
                 case TelephonyManager.SIM_STATE_PIN_REQUIRED:
                 case TelephonyManager.SIM_STATE_PUK_REQUIRED:
                     synchronized (KeyguardViewMediator.this) {
+                        mSimWasLocked.append(slotId, true);
                         if (!mShowing) {
                             if (DEBUG_SIM_STATES) Log.d(TAG,
                                     "INTENT_VALUE_ICC_LOCKED and keygaurd isn't "
@@ -556,9 +568,10 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
                 case TelephonyManager.SIM_STATE_READY:
                     synchronized (KeyguardViewMediator.this) {
                         if (DEBUG_SIM_STATES) Log.d(TAG, "READY, reset state? " + mShowing);
-                        if (mShowing && simWasLocked) {
+                        if (mShowing && mSimWasLocked.get(slotId, false)) {
                             if (DEBUG_SIM_STATES) Log.d(TAG, "SIM moved to READY when the "
-                                    + "previous state was locked. Reset the state.");
+                                    + "previously was locked. Reset the state.");
+                            mSimWasLocked.append(slotId, false);
                             resetStateLocked();
                         }
                     }
@@ -2401,6 +2414,9 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
             return;
         }
         mDozing = dozing;
+        if (!dozing) {
+            mAnimatingScreenOff = false;
+        }
         setShowingLocked(mShowing);
     }
 
@@ -2410,7 +2426,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
         // is 1f), then show the activity lock screen.
         if (mAnimatingScreenOff && mDozing && linear == 1f) {
             mAnimatingScreenOff = false;
-            setShowingLocked(mShowing);
+            setShowingLocked(mShowing, true);
         }
     }
 

@@ -17,6 +17,7 @@
 package android.app;
 
 import android.app.ActivityManager;
+import android.app.IRequestFinishCallback;
 import android.app.PictureInPictureParams;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -34,7 +35,7 @@ import com.android.internal.policy.IKeyguardDismissCallback;
  */
 interface IActivityClientController {
     oneway void activityIdle(in IBinder token, in Configuration config, in boolean stopProfiling);
-    oneway void activityResumed(in IBinder token);
+    oneway void activityResumed(in IBinder token, in boolean handleSplashScreenExit);
     oneway void activityTopResumedStateLost();
     /**
      * Notifies that the activity has completed paused. This call is not one-way because it can make
@@ -141,5 +142,9 @@ interface IActivityClientController {
      * Reports that an Activity received a back key press when there were no additional activities
      * on the back stack.
      */
-    oneway void onBackPressedOnTaskRoot(in IBinder token);
+    oneway void onBackPressedOnTaskRoot(in IBinder activityToken,
+            in IRequestFinishCallback callback);
+
+    /** Reports that the splash screen view has attached to activity.  */
+    oneway void splashScreenAttached(in IBinder token);
 }

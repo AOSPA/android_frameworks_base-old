@@ -98,7 +98,7 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
     private final UiEventLogger mUiEventLogger;
     private final AccessibilityDelegateCompat mAccessibilityDelegate;
     private RecyclerView mRecyclerView;
-    private final int mNumColumns;
+    private int mNumColumns;
 
     @Inject
     public TileAdapter(Context context, QSTileHost qsHost, UiEventLogger uiEventLogger) {
@@ -121,6 +121,21 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
     @Override
     public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {
         mRecyclerView = null;
+    }
+
+    /**
+     * Update the number of columns to show, from resources.
+     *
+     * @return {@code true} if the number of columns changed, {@code false} otherwise
+     */
+    public boolean updateNumColumns() {
+        int numColumns = mContext.getResources().getInteger(R.integer.quick_settings_num_columns);
+        if (numColumns != mNumColumns) {
+            mNumColumns = numColumns;
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public int getNumColumns() {
@@ -441,15 +456,17 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         return position > mEditIndex;
     }
 
-    private void addFromPosition(int position) {
-        if (!canAddFromPosition(position)) return;
+    private boolean addFromPosition(int position) {
+        if (!canAddFromPosition(position)) return false;
         move(position, mEditIndex);
+        return true;
     }
 
-    private void removeFromPosition(int position) {
-        if (!canRemoveFromPosition(position)) return;
+    private boolean removeFromPosition(int position) {
+        if (!canRemoveFromPosition(position)) return false;
         TileInfo info = mTiles.get(position);
         move(position, info.isSystem ? mEditIndex : mTileDividerIndex);
+        return true;
     }
 
     public SpanSizeLookup getSizeLookup() {
@@ -578,11 +595,17 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         }
 
         private void add() {
-            addFromPosition(getLayoutPosition());
+            if (addFromPosition(getLayoutPosition())) {
+                itemView.announceForAccessibility(
+                        itemView.getContext().getText(R.string.accessibility_qs_edit_tile_added));
+            }
         }
 
         private void remove() {
-            removeFromPosition(getLayoutPosition());
+            if (removeFromPosition(getLayoutPosition())) {
+                itemView.announceForAccessibility(
+                        itemView.getContext().getText(R.string.accessibility_qs_edit_tile_removed));
+            }
         }
 
         boolean isCurrentTile() {

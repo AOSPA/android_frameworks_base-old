@@ -16,12 +16,15 @@
 
 package com.android.server.vcn;
 
+import static com.android.server.VcnManagementService.VDBG;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.vcn.VcnConfig;
 import android.net.vcn.VcnGatewayConnectionConfig;
+import android.net.vcn.VcnManager.VcnErrorCode;
 import android.os.Handler;
 import android.os.Message;
 import android.os.ParcelUuid;
@@ -29,7 +32,7 @@ import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.annotations.VisibleForTesting.Visibility;
-import com.android.server.VcnManagementService.VcnSafemodeCallback;
+import com.android.server.VcnManagementService.VcnCallback;
 import com.android.server.vcn.TelephonySubscriptionTracker.TelephonySubscriptionSnapshot;
 
 import java.util.Collections;
@@ -85,18 +88,18 @@ public class Vcn extends Handler {
     private static final int MSG_CMD_TEARDOWN = MSG_CMD_BASE;
 
     /**
-     * Causes this VCN to immediately enter Safemode.
+     * Causes this VCN to immediately enter safe mode.
      *
-     * <p>Upon entering Safemode, the VCN will unregister its RequestListener, tear down all of its
-     * VcnGatewayConnections, and notify VcnManagementService that it is in Safemode.
+     * <p>Upon entering safe mode, the VCN will unregister its RequestListener, tear down all of its
+     * VcnGatewayConnections, and notify VcnManagementService that it is in safe mode.
      */
-    private static final int MSG_CMD_ENTER_SAFEMODE = MSG_CMD_BASE + 1;
+    private static final int MSG_CMD_ENTER_SAFE_MODE = MSG_CMD_BASE + 1;
 
     @NonNull private final VcnContext mVcnContext;
     @NonNull private final ParcelUuid mSubscriptionGroup;
     @NonNull private final Dependencies mDeps;
     @NonNull private final VcnNetworkRequestListener mRequestListener;
-    @NonNull private final VcnSafemodeCallback mVcnSafemodeCallback;
+    @NonNull private final VcnCallback mVcnCallback;
 
     @NonNull
     private final Map<VcnGatewayConnectionConfig, VcnGatewayConnection> mVcnGatewayConnections =
@@ -124,14 +127,8 @@ public class Vcn extends Handler {
             @NonNull ParcelUuid subscriptionGroup,
             @NonNull VcnConfig config,
             @NonNull TelephonySubscriptionSnapshot snapshot,
-            @NonNull VcnSafemodeCallback vcnSafemodeCallback) {
-        this(
-                vcnContext,
-                subscriptionGroup,
-                config,
-                snapshot,
-                vcnSafemodeCallback,
-                new Dependencies());
+            @NonNull VcnCallback vcnCallback) {
+        this(vcnContext, subscriptionGroup, config, snapshot, vcnCallback, new Dependencies());
     }
 
     @VisibleForTesting(visibility = Visibility.PRIVATE)
@@ -140,13 +137,12 @@ public class Vcn extends Handler {
             @NonNull ParcelUuid subscriptionGroup,
             @NonNull VcnConfig config,
             @NonNull TelephonySubscriptionSnapshot snapshot,
-            @NonNull VcnSafemodeCallback vcnSafemodeCallback,
+            @NonNull VcnCallback vcnCallback,
             @NonNull Dependencies deps) {
         super(Objects.requireNonNull(vcnContext, "Missing vcnContext").getLooper());
         mVcnContext = vcnContext;
         mSubscriptionGroup = Objects.requireNonNull(subscriptionGroup, "Missing subscriptionGroup");
-        mVcnSafemodeCallback =
-                Objects.requireNonNull(vcnSafemodeCallback, "Missing vcnSafemodeCallback");
+        mVcnCallback = Objects.requireNonNull(vcnCallback, "Missing vcnCallback");
         mDeps = Objects.requireNonNull(deps, "Missing deps");
         mRequestListener = new VcnNetworkRequestListener();
 
@@ -215,8 +211,8 @@ public class Vcn extends Handler {
             case MSG_CMD_TEARDOWN:
                 handleTeardown();
                 break;
-            case MSG_CMD_ENTER_SAFEMODE:
-                handleEnterSafemode();
+            case MSG_CMD_ENTER_SAFE_MODE:
+                handleEnterSafeMode();
                 break;
             default:
                 Slog.wtf(getLogTag(), "Unknown msg.what: " + msg.what);
@@ -225,7 +221,7 @@ public class Vcn extends Handler {
 
     private void handleConfigUpdated(@NonNull VcnConfig config) {
         // TODO: Add a dump function in VcnConfig that omits PII. Until then, use hashCode()
-        Slog.v(getLogTag(), String.format("Config updated: config = %s", config.hashCode()));
+        Slog.v(getLogTag(), "Config updated: config = " + config.hashCode());
 
         mConfig = config;
 
@@ -242,26 +238,38 @@ public class Vcn extends Handler {
         mIsActive.set(false);
     }
 
-    private void handleEnterSafemode() {
+    private void handleEnterSafeMode() {
         handleTeardown();
 
-        mVcnSafemodeCallback.onEnteredSafemode();
+        mVcnCallback.onEnteredSafeMode();
     }
 
     private void handleNetworkRequested(
             @NonNull NetworkRequest request, int score, int providerId) {
         if (score > getNetworkScore()) {
-            Slog.v(getLogTag(),
-                    "Request already satisfied by higher-scoring (" + score + ") network from "
-                            + "provider " + providerId + ": " + request);
+            if (VDBG) {
+                Slog.v(
+                        getLogTag(),
+                        "Request already satisfied by higher-scoring ("
+                                + score
+                                + ") network from "
+                                + "provider "
+                                + providerId
+                                + ": "
+                                + request);
+            }
             return;
         }
 
         // If preexisting VcnGatewayConnection(s) satisfy request, return
         for (VcnGatewayConnectionConfig gatewayConnectionConfig : mVcnGatewayConnections.keySet()) {
             if (requestSatisfiedByGatewayConnectionConfig(request, gatewayConnectionConfig)) {
-                Slog.v(getLogTag(),
-                        "Request already satisfied by existing VcnGatewayConnection: " + request);
+                if (VDBG) {
+                    Slog.v(
+                            getLogTag(),
+                            "Request already satisfied by existing VcnGatewayConnection: "
+                                    + request);
+                }
                 return;
             }
         }
@@ -308,7 +316,7 @@ public class Vcn extends Handler {
     }
 
     private String getLogTag() {
-        return String.format("%s [%d]", TAG, mSubscriptionGroup.hashCode());
+        return TAG + " [" + mSubscriptionGroup.hashCode() + "]";
     }
 
     /** Retrieves the network score for a VCN Network */
@@ -322,14 +330,31 @@ public class Vcn extends Handler {
     /** Callback used for passing status signals from a VcnGatewayConnection to its managing Vcn. */
     @VisibleForTesting(visibility = Visibility.PACKAGE)
     public interface VcnGatewayStatusCallback {
-        /** Called by a VcnGatewayConnection to indicate that it has entered Safemode. */
-        void onEnteredSafemode();
+        /** Called by a VcnGatewayConnection to indicate that it has entered safe mode. */
+        void onEnteredSafeMode();
+
+        /** Callback by a VcnGatewayConnection to indicate that an error occurred. */
+        void onGatewayConnectionError(
+                @NonNull int[] networkCapabilities,
+                @VcnErrorCode int errorCode,
+                @Nullable String exceptionClass,
+                @Nullable String exceptionMessage);
     }
 
     private class VcnGatewayStatusCallbackImpl implements VcnGatewayStatusCallback {
         @Override
-        public void onEnteredSafemode() {
-            sendMessage(obtainMessage(MSG_CMD_ENTER_SAFEMODE));
+        public void onEnteredSafeMode() {
+            sendMessage(obtainMessage(MSG_CMD_ENTER_SAFE_MODE));
+        }
+
+        @Override
+        public void onGatewayConnectionError(
+                @NonNull int[] networkCapabilities,
+                @VcnErrorCode int errorCode,
+                @Nullable String exceptionClass,
+                @Nullable String exceptionMessage) {
+            mVcnCallback.onGatewayConnectionError(
+                    networkCapabilities, errorCode, exceptionClass, exceptionMessage);
         }
     }
 

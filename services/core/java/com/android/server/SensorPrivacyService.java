@@ -105,8 +105,6 @@ public final class SensorPrivacyService extends SystemService {
 
     private static final String TAG = "SensorPrivacyService";
 
-    private static final int SUPPRESS_REMINDERS_REMOVAL_DELAY_MILLIS = 2000;
-
     /** Version number indicating compatibility parsing the persisted file */
     private static final int CURRENT_PERSISTENCE_VERSION = 1;
     /** Version number indicating the persisted data needs upgraded to match new internal data
@@ -568,7 +566,7 @@ public final class SensorPrivacyService extends SystemService {
                                     // User may no longer exist or isn't set
                                     continue;
                                 }
-                                int sensor = parser.getAttributeIndex(null, XML_ATTRIBUTE_SENSOR);
+                                int sensor = parser.getAttributeInt(null, XML_ATTRIBUTE_SENSOR);
                                 boolean isEnabled = parser.getAttributeBoolean(null,
                                         XML_ATTRIBUTE_ENABLED);
                                 SparseBooleanArray userIndividualEnabled = individualEnabled.get(
@@ -756,10 +754,7 @@ public final class SensorPrivacyService extends SystemService {
 
                     suppressPackageReminderTokens.add(token);
                 } else {
-                    mHandler.postDelayed(PooledLambda.obtainRunnable(
-                            SensorPrivacyServiceImpl::removeSuppressPackageReminderToken,
-                            this, key, token),
-                            SUPPRESS_REMINDERS_REMOVAL_DELAY_MILLIS);
+                    mHandler.removeSuppressPackageReminderToken(key, token);
                 }
             }
         }
@@ -1109,6 +1104,13 @@ public final class SensorPrivacyService extends SystemService {
                 }
             }
             listeners.finishBroadcast();
+        }
+
+        public void removeSuppressPackageReminderToken(Pair<String, UserHandle> key,
+                IBinder token) {
+            sendMessage(PooledLambda.obtainMessage(
+                    SensorPrivacyServiceImpl::removeSuppressPackageReminderToken,
+                    mSensorPrivacyServiceImpl, key, token));
         }
     }
 

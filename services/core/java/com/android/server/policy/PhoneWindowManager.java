@@ -56,13 +56,11 @@ import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
-import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
 import static android.view.WindowManager.LayoutParams.TYPE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_QS_DIALOG;
-import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
@@ -346,8 +344,21 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /** Amount of time (in milliseconds) to wait for windows drawn before powering on. */
     static final int WAITING_FOR_DRAWN_TIMEOUT = 1000;
 
-    /** Amount of time (in milliseconds) a toast window can be shown. */
-    public static final int TOAST_WINDOW_TIMEOUT = 3500; // 3.5 seconds
+    /**
+      * Extra time for additional SystemUI animations.
+      * <p>Since legacy apps can add Toast windows directly instead of using Toast APIs,
+      * {@link DisplayPolicy} ensures that the window manager removes toast windows after
+      * TOAST_WINDOW_TIMEOUT. We increase this timeout by TOAST_WINDOW_ANIM_BUFFER to account for
+      * SystemUI's in/out toast animations, so that the toast text is still shown for a minimum
+      * of 3.5 seconds and the animations are finished before window manager removes the window.
+      */
+    public static final int TOAST_WINDOW_ANIM_BUFFER = 600;
+
+    /**
+      * Amount of time (in milliseconds) a toast window can be shown before it's automatically
+      * removed by window manager.
+      */
+    public static final int TOAST_WINDOW_TIMEOUT = 3500 + TOAST_WINDOW_ANIM_BUFFER;
 
     /**
      * Lock protecting internal state.  Must not call out into window
@@ -2286,25 +2297,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public boolean isKeyguardHostWindow(WindowManager.LayoutParams attrs) {
         return attrs.type == TYPE_NOTIFICATION_SHADE;
-    }
-
-    @Override
-    public boolean canBeHiddenByKeyguardLw(WindowState win) {
-
-        // Keyguard visibility of window from activities are determined over activity visibility.
-        if (win.getAppToken() != null) {
-            return false;
-        }
-        switch (win.getAttrs().type) {
-            case TYPE_NOTIFICATION_SHADE:
-            case TYPE_STATUS_BAR:
-            case TYPE_NAVIGATION_BAR:
-            case TYPE_WALLPAPER:
-                return false;
-            default:
-                // Hide only windows below the keyguard host window.
-                return getWindowLayerLw(win) < getWindowLayerFromTypeLw(TYPE_NOTIFICATION_SHADE);
-        }
     }
 
     /** {@inheritDoc} */

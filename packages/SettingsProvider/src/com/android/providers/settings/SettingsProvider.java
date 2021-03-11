@@ -297,6 +297,24 @@ public class SettingsProvider extends ContentProvider {
         Settings.System.getCloneFromParentOnValueSettings(sSystemCloneFromParentOnDependency);
     }
 
+    private static final Set<String> sAllSecureSettings = new ArraySet<>();
+    private static final Set<String> sReadableSecureSettings = new ArraySet<>();
+    static {
+        Settings.Secure.getPublicSettings(sAllSecureSettings, sReadableSecureSettings);
+    }
+
+    private static final Set<String> sAllSystemSettings = new ArraySet<>();
+    private static final Set<String> sReadableSystemSettings = new ArraySet<>();
+    static {
+        Settings.System.getPublicSettings(sAllSystemSettings, sReadableSystemSettings);
+    }
+
+    private static final Set<String> sAllGlobalSettings = new ArraySet<>();
+    private static final Set<String> sReadableGlobalSettings = new ArraySet<>();
+    static {
+        Settings.Global.getPublicSettings(sAllGlobalSettings, sReadableGlobalSettings);
+    }
+
     private final Object mLock = new Object();
 
     @GuardedBy("mLock")
@@ -1919,6 +1937,7 @@ public class SettingsProvider extends ContentProvider {
         if (UserHandle.getAppId(Binder.getCallingUid()) < Process.FIRST_APPLICATION_UID) {
             return;
         }
+        checkReadableAnnotation(settingsType, settingName);
         ApplicationInfo ai = getCallingApplicationInfoOrThrow();
         if (!ai.isInstantApp()) {
             return;
@@ -1929,6 +1948,41 @@ public class SettingsProvider extends ContentProvider {
             // breakage in the current form.
             Slog.w(LOG_TAG, "Instant App " + ai.packageName
                     + " trying to access unexposed setting, this will be an error in the future.");
+        }
+    }
+
+    /**
+     * Check if the target settings key is readable. Reject if the caller app is trying to access a
+     * settings key defined in the Settings.Secure, Settings.System or Settings.Global and is not
+     * annotated as @Readable.
+     * Notice that a key string that is not defined in any of the Settings.* classes will still be
+     * regarded as readable.
+     */
+    private void checkReadableAnnotation(int settingsType, String settingName) {
+        final Set<String> allFields;
+        final Set<String> readableFields;
+        switch (settingsType) {
+            case SETTINGS_TYPE_GLOBAL:
+                allFields = sAllGlobalSettings;
+                readableFields = sReadableGlobalSettings;
+                break;
+            case SETTINGS_TYPE_SYSTEM:
+                allFields = sAllSystemSettings;
+                readableFields = sReadableSystemSettings;
+                break;
+            case SETTINGS_TYPE_SECURE:
+                allFields = sAllSecureSettings;
+                readableFields = sReadableSecureSettings;
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid settings type: " + settingsType);
+        }
+
+        if (allFields.contains(settingName) && !readableFields.contains(settingName)) {
+            throw new SecurityException(
+                    "Settings key: <" + settingName + "> is not readable. From S+, new public "
+                            + "settings keys need to be annotated with @Readable unless they are "
+                            + "annotated with @hide.");
         }
     }
 
@@ -4736,17 +4790,23 @@ public class SettingsProvider extends ContentProvider {
                 }
 
                 if (currentVersion == 192) {
-                    // Version 192: set the default value for magnification capabilities. If
-                    // magnification is enabled by the user, set it to full-screen, and set a value
-                    // to show a prompt when using the magnification first time after upgrading.
+                    // Version 192: set the default value for magnification capabilities.
+                    // If the device supports magnification area and magnification is enabled
+                    // by the user, set it to full-screen, and set a value to show a prompt
+                    // when using the magnification first time after upgrading.
                     final SettingsState secureSettings = getSecureSettingsLocked(userId);
                     final Setting magnificationCapabilities = secureSettings.getSettingLocked(
                             Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY);
+                    final boolean supportMagnificationArea = getContext().getResources().getBoolean(
+                            com.android.internal.R.bool.config_magnification_area);
+                    final int capability = supportMagnificationArea
+                            ? R.integer.def_accessibility_magnification_capabilities
+                            : Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN;
+                    final String supportShowPrompt = supportMagnificationArea ? "1" : "0";
                     if (magnificationCapabilities.isNull()) {
                         secureSettings.insertSettingLocked(
                                 Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY,
-                                String.valueOf(getContext().getResources().getInteger(
-                                        R.integer.def_accessibility_magnification_capabilities)),
+                                String.valueOf(getContext().getResources().getInteger(capability)),
                                 null, true, SettingsState.SYSTEM_PACKAGE_NAME);
 
                         if (isMagnificationSettingsOn(secureSettings)) {
@@ -4756,7 +4816,8 @@ public class SettingsProvider extends ContentProvider {
                                     null, false  /* makeDefault */,
                                     SettingsState.SYSTEM_PACKAGE_NAME);
                             secureSettings.insertSettingLocked(
-                                    Secure.ACCESSIBILITY_SHOW_WINDOW_MAGNIFICATION_PROMPT, "1",
+                                    Secure.ACCESSIBILITY_SHOW_WINDOW_MAGNIFICATION_PROMPT,
+                                    supportShowPrompt,
                                     null, false /* makeDefault */,
                                     SettingsState.SYSTEM_PACKAGE_NAME);
                         }

@@ -133,6 +133,12 @@ public class BatterySipper implements Comparable<BatterySipper> {
     public double wakeLockPowerMah;
     public double wifiPowerMah;
     public double systemServiceCpuPowerMah;
+    public double[] customMeasuredPowerMah;
+
+    // Power that is re-attributed to other sippers. For example, for System Server
+    // this represents the power attributed to apps requesting system services.
+    // The value should be negative or zero.
+    public double powerReattributedToOtherSippersMah;
 
     // Do not include this sipper in results because it is included
     // in an aggregate sipper.
@@ -251,6 +257,18 @@ public class BatterySipper implements Comparable<BatterySipper> {
         proportionalSmearMah += other.proportionalSmearMah;
         totalSmearedPowerMah += other.totalSmearedPowerMah;
         systemServiceCpuPowerMah += other.systemServiceCpuPowerMah;
+        if (other.customMeasuredPowerMah != null) {
+            if (customMeasuredPowerMah == null) {
+                customMeasuredPowerMah = new double[other.customMeasuredPowerMah.length];
+            }
+            if (customMeasuredPowerMah.length == other.customMeasuredPowerMah.length) {
+                // This should always be true.
+                for (int idx = 0; idx < other.customMeasuredPowerMah.length; idx++) {
+                    customMeasuredPowerMah[idx] += other.customMeasuredPowerMah[idx];
+                }
+            }
+        }
+        powerReattributedToOtherSippersMah += other.powerReattributedToOtherSippersMah;
     }
 
     /**
@@ -264,6 +282,15 @@ public class BatterySipper implements Comparable<BatterySipper> {
                 sensorPowerMah + mobileRadioPowerMah + wakeLockPowerMah + cameraPowerMah +
                 flashlightPowerMah + bluetoothPowerMah + audioPowerMah + videoPowerMah
                 + systemServiceCpuPowerMah;
+        if (customMeasuredPowerMah != null) {
+            for (int idx = 0; idx < customMeasuredPowerMah.length; idx++) {
+                totalPowerMah += customMeasuredPowerMah[idx];
+            }
+        }
+
+        // powerAttributedToOtherSippersMah is negative or zero
+        totalPowerMah = totalPowerMah + powerReattributedToOtherSippersMah;
+
         totalSmearedPowerMah = totalPowerMah + screenPowerMah + proportionalSmearMah;
 
         return totalPowerMah;

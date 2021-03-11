@@ -4273,10 +4273,6 @@ public class CarrierConfigManager {
         public static final String KEY_RETRANSMIT_TIMER_MSEC_INT_ARRAY =
                 KEY_PREFIX + "retransmit_timer_sec_int_array";
 
-        /** Controls if wifi mac Id should be added to network access identifier(NAI) */
-        public static final String KEY_ADD_WIFI_MAC_ADDR_TO_NAI_BOOL =
-                KEY_PREFIX + "add_wifi_mac_addr_to_nai_bool";
-
         /**
          * Specifies the local identity type for IKE negotiations. Possible values are {@link
          * #ID_TYPE_FQDN}, {@link #ID_TYPE_RFC822_ADDR}, {@link #ID_TYPE_KEY_ID}
@@ -4600,7 +4596,6 @@ public class CarrierConfigManager {
                     KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
                     new int[] {EPDG_ADDRESS_PLMN, EPDG_ADDRESS_STATIC});
             defaults.putStringArray(KEY_MCC_MNCS_STRING_ARRAY, new String[] {});
-            defaults.putBoolean(KEY_ADD_WIFI_MAC_ADDR_TO_NAI_BOOL, false);
             defaults.putInt(KEY_IKE_LOCAL_ID_TYPE_INT, ID_TYPE_RFC822_ADDR);
             defaults.putInt(KEY_IKE_REMOTE_ID_TYPE_INT, ID_TYPE_FQDN);
             defaults.putBoolean(KEY_ADD_KE_TO_CHILD_SESSION_REKEY_BOOL, false);
@@ -4644,8 +4639,9 @@ public class CarrierConfigManager {
             "mmi_two_digit_number_pattern_string_array";
 
     /**
-     * Holds the list of carrier certificate hashes.
-     * Note that each carrier has its own certificates.
+     * Holds the list of carrier certificate hashes, followed by optional package names.
+     * Format: "sha1/256" or "sha1/256:package1,package2,package3..."
+     * Note that each carrier has its own hashes.
      */
     public static final String KEY_CARRIER_CERTIFICATE_STRING_ARRAY =
             "carrier_certificate_string_array";
@@ -4790,6 +4786,39 @@ public class CarrierConfigManager {
      */
     public static final String KEY_NETWORK_TEMP_NOT_METERED_SUPPORTED_BOOL =
             "network_temp_not_metered_supported_bool";
+
+    /**
+     * Boolean indicating whether the SIM PIN can be stored and verified
+     * seamlessly after an unattended reboot.
+     *
+     * The device configuration value {@code config_allow_pin_storage_for_unattended_reboot}
+     * ultimately controls whether this carrier configuration option is used.  Where
+     * {@code config_allow_pin_storage_for_unattended_reboot} is false, the value of the
+     * {@link #KEY_STORE_SIM_PIN_FOR_UNATTENDED_REBOOT_BOOL} carrier configuration option is
+     * ignored.
+     *
+     * @hide
+     */
+    public static final String KEY_STORE_SIM_PIN_FOR_UNATTENDED_REBOOT_BOOL =
+            "store_sim_pin_for_unattended_reboot_bool";
+
+    /**
+     * Determine whether "Enable 2G" toggle can be shown.
+     *
+     * Used to trade privacy/security against potentially reduced carrier coverage for some
+     * carriers.
+     */
+    public static final String KEY_HIDE_ENABLE_2G = "hide_enable_2g_bool";
+
+    /**
+     * Indicates the allowed APN types that can be used for LTE initial attach. The order of APN
+     * types in the configuration is the order of APN types that will be used for initial attach.
+     * Empty list indicates that no APN types are allowed for initial attach.
+     *
+     * @hide
+     */
+    public static final String KEY_ALLOWED_INITIAL_ATTACH_APN_TYPES_STRING_ARRAY =
+            "allowed_initial_attach_apn_types_string_array";
 
      /**
      * Flag indicating whether carrier supports multianchor conference.
@@ -5391,6 +5420,10 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_USE_ACS_FOR_RCS_BOOL, false);
         sDefaults.putBoolean(KEY_NETWORK_TEMP_NOT_METERED_SUPPORTED_BOOL, true);
         sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);
+        sDefaults.putBoolean(KEY_STORE_SIM_PIN_FOR_UNATTENDED_REBOOT_BOOL, true);
+        sDefaults.putBoolean(KEY_HIDE_ENABLE_2G, false);
+        sDefaults.putStringArray(KEY_ALLOWED_INITIAL_ATTACH_APN_TYPES_STRING_ARRAY,
+                new String[]{"ia", "default", "ims", "mms", "dun", "emergency"});
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
         sDefaults.putStringArray(KEY_MULTI_APN_ARRAY_FOR_SAME_GID, new String[] {
                 "52FF:mms,supl,hipri,default,fota:SA:nrphone",
@@ -5443,11 +5476,28 @@ public class CarrierConfigManager {
         public static final String KEY_SUGGESTION_SSID_LIST_WITH_MAC_RANDOMIZATION_DISABLED =
                 KEY_PREFIX + "suggestion_ssid_list_with_mac_randomization_disabled";
 
+        /**
+         * Avoid SoftAp in 5GHz if cellular is on unlicensed 5Ghz using License Assisted Access
+         * (LAA).
+         */
+        public static final String KEY_AVOID_5GHZ_SOFTAP_FOR_LAA_BOOL =
+                KEY_PREFIX + "avoid_5ghz_softap_for_laa_bool";
+
+        /**
+         * Avoid Wifi Direct in 5GHz if cellular is on unlicensed 5Ghz using License Assisted
+         * Access (LAA).
+         */
+        public static final String KEY_AVOID_5GHZ_WIFI_DIRECT_FOR_LAA_BOOL =
+                KEY_PREFIX + "avoid_5ghz_wifi_direct_for_laa_bool";
+
+
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
             defaults.putInt(KEY_HOTSPOT_MAX_CLIENT_COUNT, 0);
             defaults.putStringArray(KEY_SUGGESTION_SSID_LIST_WITH_MAC_RANDOMIZATION_DISABLED,
                     new String[0]);
+            defaults.putBoolean(KEY_AVOID_5GHZ_SOFTAP_FOR_LAA_BOOL, false);
+            defaults.putBoolean(KEY_AVOID_5GHZ_WIFI_DIRECT_FOR_LAA_BOOL, false);
 
             return defaults;
         }

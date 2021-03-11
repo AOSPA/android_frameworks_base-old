@@ -130,6 +130,7 @@ import android.app.ActivityTaskManager;
 import android.app.ActivityTaskManager.RootTaskInfo;
 import android.app.ActivityThread;
 import android.app.AlertDialog;
+import android.app.AnrController;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.Dialog;
@@ -175,6 +176,7 @@ import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.hardware.power.Mode;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -222,6 +224,7 @@ import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationDefinition;
 import android.view.WindowManager;
 import android.window.IWindowOrganizerController;
+import android.window.SplashScreenView.SplashScreenViewParcelable;
 import android.window.TaskSnapshot;
 import android.window.WindowContainerTransaction;
 
@@ -315,6 +318,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public static final String DUMP_CONTAINERS_CMD = "containers";
     public static final String DUMP_RECENTS_CMD = "recents";
     public static final String DUMP_RECENTS_SHORT_CMD = "r";
+    public static final String DUMP_TOP_RESUMED_ACTIVITY = "top-resumed";
 
     /** This activity is not being relaunched, or being relaunched for a non-resize reason. */
     public static final int RELAUNCH_REASON_NONE = 0;
@@ -342,7 +346,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     private StatusBarManagerInternal mStatusBarManagerInternal;
     @VisibleForTesting
     final ActivityTaskManagerInternal mInternal;
-    PowerManagerInternal mPowerManagerInternal;
+    private PowerManagerInternal mPowerManagerInternal;
     private UsageStatsManagerInternal mUsageStatsInternal;
 
     PendingIntentController mPendingIntentController;
@@ -449,6 +453,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /** The controller for all operations related to locktask. */
     private LockTaskController mLockTaskController;
     private ActivityStartController mActivityStartController;
+    PackageConfigPersister mPackageConfigPersister;
 
     boolean mSuppressResizeConfigChanges;
 
@@ -494,6 +499,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     private volatile long mLastStopAppSwitchesTime;
 
+    private final List<AnrController> mAnrController = new ArrayList<>();
     IActivityController mController = null;
     boolean mControllerIsAMonkey = false;
 
@@ -586,6 +592,22 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      * This changes between TOP and TOP_SLEEPING to following mSleeping.
      */
     volatile int mTopProcessState = ActivityManager.PROCESS_STATE_TOP;
+
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+            POWER_MODE_REASON_START_ACTIVITY,
+            POWER_MODE_REASON_FREEZE_DISPLAY,
+            POWER_MODE_REASON_ALL,
+    })
+    @interface PowerModeReason {}
+
+    static final int POWER_MODE_REASON_START_ACTIVITY = 1 << 0;
+    static final int POWER_MODE_REASON_FREEZE_DISPLAY = 1 << 1;
+    /** This can only be used by {@link #endLaunchPowerMode(int)}.*/
+    static final int POWER_MODE_REASON_ALL = (1 << 2) - 1;
+
+    /** The reasons to use {@link Mode#LAUNCH} power mode. */
+    private @PowerModeReason int mLaunchPowerModeReasons;
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
@@ -769,7 +791,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final boolean sizeCompatFreeform = Settings.Global.getInt(
                 resolver, DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM, 0) != 0;
         final boolean supportsNonResizableMultiWindow = Settings.Global.getInt(
-                resolver, DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 0) != 0;
+                resolver, DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 1) != 0;
 
         // Transfer any global setting for forcing RTL layout, into a System Property
         DisplayProperties.debug_force_rtl(forceRtl);
@@ -842,11 +864,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         mTaskChangeNotificationController =
                 new TaskChangeNotificationController(mGlobalLock, mTaskSupervisor, mH);
-        mLockTaskController = new LockTaskController(mContext, mTaskSupervisor, mH);
+        mLockTaskController = new LockTaskController(mContext, mTaskSupervisor, mH,
+                mTaskChangeNotificationController);
         mActivityStartController = new ActivityStartController(this);
         setRecentTasks(new RecentTasks(this, mTaskSupervisor));
         mVrController = new VrController(mGlobalLock);
         mKeyguardController = mTaskSupervisor.getKeyguardController();
+        mPackageConfigPersister = new PackageConfigPersister(mTaskSupervisor.mPersisterQueue);
     }
 
     public void onActivityManagerInternalAdded() {
@@ -2008,8 +2032,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
                 // We are reshowing a task, use a starting window to hide the initial draw delay
                 // so the transition can start earlier.
-                topActivity.showStartingWindow(null /* prev */, false /* newTask */,
-                        true /* taskSwitch */);
+                topActivity.showStartingWindow(true /* taskSwitch */);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -2056,6 +2079,40 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     boolean getBalAppSwitchesAllowed() {
         return mAppSwitchesAllowed;
+    }
+
+    /** Register an {@link AnrController} to control the ANR dialog behavior */
+    public void registerAnrController(AnrController controller) {
+        synchronized (mGlobalLock) {
+            mAnrController.add(controller);
+        }
+    }
+
+    /** Unregister an {@link AnrController} */
+    public void unregisterAnrController(AnrController controller) {
+        synchronized (mGlobalLock) {
+            mAnrController.remove(controller);
+        }
+    }
+
+    /** @return the max ANR delay from all registered {@link AnrController} instances */
+    public long getMaxAnrDelayMillis(ApplicationInfo info) {
+        if (info == null || info.packageName == null) {
+            return 0;
+        }
+
+        final ArrayList<AnrController> controllers;
+        synchronized (mGlobalLock) {
+            controllers = new ArrayList<>(mAnrController);
+        }
+
+        final String packageName = info.packageName;
+        long maxDelayMs = 0;
+        for (AnrController controller : controllers) {
+            maxDelayMs = Math.max(maxDelayMs, controller.getAnrDelayMillis(packageName, info.uid));
+        }
+        maxDelayMs = Math.max(maxDelayMs, 0);
+        return maxDelayMs;
     }
 
     @Override
@@ -3196,6 +3253,30 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     /**
+     * A splash screen view has copied, pass it to an activity.
+     *
+     * @param taskId Id of task to handle the material to reconstruct the view.
+     * @param parcelable Used to reconstruct the view, null means the surface is un-copyable.
+     * @hide
+     */
+    @Override
+    public void onSplashScreenViewCopyFinished(int taskId, SplashScreenViewParcelable parcelable)
+            throws RemoteException {
+        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_TASKS,
+                "copySplashScreenViewFinish()");
+        synchronized (mGlobalLock) {
+            final Task task = mRootWindowContainer.anyTaskForId(taskId,
+                    MATCH_ATTACHED_TASK_ONLY);
+            if (task != null) {
+                final ActivityRecord r = task.getTopWaitSplashScreenActivity();
+                if (r != null) {
+                    r.onCopySplashScreenFinish(parcelable);
+                }
+            }
+        }
+    }
+
+    /**
      * Puts the given activity in picture in picture mode if possible.
      *
      * @return true if the activity is now in picture-in-picture mode, or false if it could not
@@ -3677,6 +3758,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    void dumpTopResumedActivityLocked(PrintWriter pw) {
+        pw.println("ACTIVITY MANAGER TOP-RESUMED (dumpsys activity top-resumed)");
+        ActivityRecord topRecord = mRootWindowContainer.getTopResumedActivity();
+        if (topRecord != null) {
+            topRecord.dump(pw, "", true);
+        }
+    }
+
     void dumpActivitiesLocked(FileDescriptor fd, PrintWriter pw, String[] args,
             int opti, boolean dumpAll, boolean dumpClient, String dumpPackage) {
         dumpActivitiesLocked(fd, pw, args, opti, dumpAll, dumpClient, dumpPackage,
@@ -4057,6 +4146,20 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 deferResume);
 
         return changes;
+    }
+
+    void startLaunchPowerMode(@PowerModeReason int reason) {
+        if (mPowerManagerInternal == null) return;
+        mPowerManagerInternal.setPowerMode(Mode.LAUNCH, true);
+        mLaunchPowerModeReasons |= reason;
+    }
+
+    void endLaunchPowerMode(@PowerModeReason int reason) {
+        if (mPowerManagerInternal == null || mLaunchPowerModeReasons == 0) return;
+        mLaunchPowerModeReasons &= ~reason;
+        if (mLaunchPowerModeReasons == 0) {
+            mPowerManagerInternal.setPowerMode(Mode.LAUNCH, false);
+        }
     }
 
     /** @see WindowSurfacePlacer#deferLayout */
@@ -5366,6 +5469,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             synchronized (mGlobalLock) {
                 mAppWarnings.onPackageUninstalled(name);
                 mCompatModePackages.handlePackageUninstalledLocked(name);
+                mPackageConfigPersister.onPackageUninstall(name);
             }
         }
 
@@ -5802,6 +5906,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     if (getRecentTasks() != null) {
                         getRecentTasks().dump(pw, dumpAll, dumpPackage);
                     }
+                } else if (DUMP_TOP_RESUMED_ACTIVITY.equals(cmd)) {
+                    dumpTopResumedActivityLocked(pw);
                 }
             }
         }
@@ -6036,6 +6142,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public void removeUser(int userId) {
             synchronized (mGlobalLock) {
                 mRootWindowContainer.removeUser(userId);
+                mPackageConfigPersister.removeUser(userId);
             }
         }
 
@@ -6133,6 +6240,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public void loadRecentTasksForUser(int userId) {
             synchronized (mGlobalLock) {
                 mRecentTasks.loadUserRecentsLocked(userId);
+                // TODO renaming the methods(?)
+                mPackageConfigPersister.loadUserPackages(userId);
             }
         }
 
@@ -6240,6 +6349,55 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             synchronized (mGlobalLock) {
                 return getLockTaskController().isBaseOfLockedTask(packageName);
             }
+        }
+
+        @Override
+        public PackageConfigurationUpdater createPackageConfigurationUpdater() {
+            synchronized (mGlobalLock) {
+                return new PackageConfigurationUpdaterImpl(Binder.getCallingPid());
+            }
+        }
+    }
+
+    final class PackageConfigurationUpdaterImpl implements
+            ActivityTaskManagerInternal.PackageConfigurationUpdater {
+        private int mPid;
+        private int mNightMode;
+
+        PackageConfigurationUpdaterImpl(int pid) {
+            mPid = pid;
+        }
+
+        @Override
+        public ActivityTaskManagerInternal.PackageConfigurationUpdater setNightMode(int nightMode) {
+            mNightMode = nightMode;
+            return this;
+        }
+
+        @Override
+        public void commit() throws RemoteException {
+            if (mPid == 0) {
+                throw new RemoteException("Invalid process");
+            }
+            synchronized (mGlobalLock) {
+                final WindowProcessController wpc = mProcessMap.getProcess(mPid);
+                if (wpc == null) {
+                    Slog.w(TAG, "Override application configuration: cannot find application");
+                    return;
+                }
+                if (wpc.getNightMode() == mNightMode) {
+                    return;
+                }
+                if (!wpc.setOverrideNightMode(mNightMode)) {
+                    return;
+                }
+                wpc.updateNightModeForAllActivities(mNightMode);
+                mPackageConfigPersister.updateFromImpl(wpc.mName, wpc.mUserId, this);
+            }
+        }
+
+        int getNightMode() {
+            return mNightMode;
         }
     }
 }

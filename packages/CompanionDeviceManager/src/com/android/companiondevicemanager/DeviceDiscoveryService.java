@@ -309,7 +309,7 @@ public class DeviceDiscoveryService extends Service {
     }
 
     private void onDeviceLost(@Nullable DeviceFilterPair device) {
-        if (DEBUG) Log.i(LOG_TAG, "Lost device " + device.getDisplayName());
+        Log.i(LOG_TAG, "Lost device " + device.getDisplayName());
         Handler.getMain().sendMessage(obtainMessage(
                 DeviceDiscoveryService::onDeviceLostMainThread, this, device));
     }
@@ -322,7 +322,8 @@ public class DeviceDiscoveryService extends Service {
 
     void onDeviceSelected(String callingPackage, String deviceAddress) {
         mServiceCallback.complete(new Association(
-                getUserId(), deviceAddress, callingPackage, mRequest.getDeviceProfile(), false));
+                getUserId(), deviceAddress, callingPackage, mRequest.getDeviceProfile(), false,
+                System.currentTimeMillis()));
     }
 
     void onCancel() {

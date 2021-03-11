@@ -16,18 +16,29 @@
 
 package com.android.systemui.screenshot;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
+import android.os.Bundle;
 import android.util.AttributeSet;
+import android.util.IntArray;
+import android.util.Log;
 import android.util.MathUtils;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.Nullable;
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 
+import com.android.internal.widget.ExploreByTouchHelper;
 import com.android.systemui.R;
 
 /**
@@ -35,6 +46,7 @@ import com.android.systemui.R;
  * cropped out.
  */
 public class CropView extends View {
+    private static final String TAG = "CropView";
     public enum CropBoundary {
         NONE, TOP, BOTTOM
     }
@@ -74,6 +86,8 @@ public class CropView extends View {
         t.recycle();
         // 48 dp touchable region around each handle.
         mCropTouchMargin = 24 * getResources().getDisplayMetrics().density;
+
+        setAccessibilityDelegate(new AccessibilityHelper());
     }
 
     @Override
@@ -118,14 +132,47 @@ public class CropView extends View {
             case MotionEvent.ACTION_UP:
                 if (mCurrentDraggingBoundary != CropBoundary.NONE) {
                     // Commit the delta to the stored crop values.
-                    mTopCrop += mTopDelta;
-                    mBottomCrop += mBottomDelta;
-                    mTopDelta = 0;
-                    mBottomDelta = 0;
+                    commitDeltas();
                     updateListener(event);
                 }
         }
         return super.onTouchEvent(event);
+    }
+
+    /**
+     * Animate the given boundary to the given value.
+     */
+    public void animateBoundaryTo(CropBoundary boundary, float value) {
+        if (boundary == CropBoundary.NONE) {
+            Log.w(TAG, "No boundary selected for animation");
+            return;
+        }
+        float totalDelta = (boundary == CropBoundary.TOP) ? (value - mTopCrop)
+                : (value - mBottomCrop);
+        ValueAnimator animator = new ValueAnimator();
+        animator.addUpdateListener(animation -> {
+            if (boundary == CropBoundary.TOP) {
+                mTopDelta = animation.getAnimatedFraction() * totalDelta;
+            } else {
+                mBottomDelta = animation.getAnimatedFraction() * totalDelta;
+            }
+            invalidate();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                commitDeltas();
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                commitDeltas();
+            }
+        });
+        animator.setFloatValues(0f, 1f);
+        animator.setDuration(750);
+        animator.setInterpolator(new FastOutSlowInInterpolator());
+        animator.start();
     }
 
     /**
@@ -146,6 +193,13 @@ public class CropView extends View {
 
     public void setCropInteractionListener(CropInteractionListener listener) {
         mCropInteractionListener = listener;
+    }
+
+    private void commitDeltas() {
+        mTopCrop += mTopDelta;
+        mBottomCrop += mBottomDelta;
+        mTopDelta = 0;
+        mBottomDelta = 0;
     }
 
     private void updateListener(MotionEvent event) {
@@ -183,6 +237,87 @@ public class CropView extends View {
             return CropBoundary.BOTTOM;
         }
         return CropBoundary.NONE;
+    }
+
+    private class AccessibilityHelper extends ExploreByTouchHelper {
+
+        private static final int TOP_HANDLE_ID = 1;
+        private static final int BOTTOM_HANDLE_ID = 2;
+
+        AccessibilityHelper() {
+            super(CropView.this);
+        }
+
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            if (Math.abs(y - fractionToPixels(mTopCrop)) < mCropTouchMargin) {
+                return TOP_HANDLE_ID;
+            }
+            if (Math.abs(y - fractionToPixels(mBottomCrop)) < mCropTouchMargin) {
+                return BOTTOM_HANDLE_ID;
+            }
+            return ExploreByTouchHelper.INVALID_ID;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(IntArray virtualViewIds) {
+            virtualViewIds.add(TOP_HANDLE_ID);
+            virtualViewIds.add(BOTTOM_HANDLE_ID);
+        }
+
+        @Override
+        protected void onPopulateEventForVirtualView(int virtualViewId, AccessibilityEvent event) {
+            switch(virtualViewId) {
+                case TOP_HANDLE_ID:
+                    event.setContentDescription(
+                            getResources().getString(R.string.screenshot_top_boundary));
+                    break;
+                case BOTTOM_HANDLE_ID:
+                    event.setContentDescription(
+                            getResources().getString(R.string.screenshot_bottom_boundary));
+                    break;
+            }
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int virtualViewId,
+                AccessibilityNodeInfo node) {
+            switch(virtualViewId) {
+                case TOP_HANDLE_ID:
+                    node.setContentDescription(
+                            getResources().getString(R.string.screenshot_top_boundary));
+                    setNodePositions(mTopCrop, node);
+                    break;
+                case BOTTOM_HANDLE_ID:
+                    node.setContentDescription(
+                            getResources().getString(R.string.screenshot_bottom_boundary));
+                    setNodePositions(mBottomCrop, node);
+                    break;
+            }
+
+            // TODO: need to figure out the full set of actions to support here.
+            node.addAction(
+                    AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK);
+            node.setClickable(true);
+            node.setFocusable(true);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(
+                int virtualViewId, int action, Bundle arguments) {
+            return false;
+        }
+
+        private void setNodePositions(float fraction, AccessibilityNodeInfo node) {
+            int pixels = fractionToPixels(fraction);
+            Rect rect = new Rect(0, (int) (pixels - mCropTouchMargin),
+                    getWidth(), (int) (pixels + mCropTouchMargin));
+            node.setBoundsInParent(rect);
+            int[] pos = new int[2];
+            getLocationOnScreen(pos);
+            rect.offset(pos[0], pos[1]);
+            node.setBoundsInScreen(rect);
+        }
     }
 
     /**

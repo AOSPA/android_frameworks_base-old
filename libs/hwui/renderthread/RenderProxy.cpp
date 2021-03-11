@@ -84,6 +84,19 @@ void RenderProxy::setSurface(ANativeWindow* window, bool enableTimeout) {
     });
 }
 
+void RenderProxy::setSurfaceControl(ASurfaceControl* surfaceControl) {
+    auto funcs = mRenderThread.getASurfaceControlFunctions();
+    if (surfaceControl) {
+        funcs.acquireFunc(surfaceControl);
+    }
+    mRenderThread.queue().post([this, control = surfaceControl, funcs]() mutable {
+        mContext->setSurfaceControl(control);
+        if (control) {
+            funcs.releaseFunc(control);
+        }
+    });
+}
+
 void RenderProxy::allocateBuffers() {
     mRenderThread.queue().post([=]() { mContext->allocateBuffers(); });
 }
@@ -202,6 +215,7 @@ void RenderProxy::notifyFramePending() {
 
 void RenderProxy::dumpProfileInfo(int fd, int dumpFlags) {
     mRenderThread.queue().runSync([&]() {
+        std::lock_guard lock(mRenderThread.getJankDataMutex());
         mContext->profiler().dumpData(fd);
         if (dumpFlags & DumpFlags::FrameStats) {
             mContext->dumpFrames(fd);
@@ -221,6 +235,7 @@ void RenderProxy::resetProfileInfo() {
 
 uint32_t RenderProxy::frameTimePercentile(int percentile) {
     return mRenderThread.queue().runSync([&]() -> auto {
+        std::lock_guard lock(mRenderThread.globalProfileData().getDataMutex());
         return mRenderThread.globalProfileData()->findPercentile(percentile);
     });
 }
@@ -293,11 +308,6 @@ void RenderProxy::removeFrameMetricsObserver(FrameMetricsObserver* observerPtr) 
 
 void RenderProxy::setForceDark(bool enable) {
     mRenderThread.queue().post([this, enable]() { mContext->setForceDark(enable); });
-}
-
-void RenderProxy::setRenderAheadDepth(int renderAhead) {
-    mRenderThread.queue().post(
-            [context = mContext, renderAhead] { context->setRenderAheadDepth(renderAhead); });
 }
 
 int RenderProxy::copySurfaceInto(ANativeWindow* window, int left, int top, int right, int bottom,

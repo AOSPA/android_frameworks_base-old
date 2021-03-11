@@ -37,6 +37,7 @@ import android.content.res.Resources.NotFoundException;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
 import android.database.ContentObserver;
+import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayViewport;
 import android.hardware.input.IInputDevicesChangedListener;
@@ -57,6 +58,7 @@ import android.os.CombinedVibrationEffect;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.IVibratorStateListener;
 import android.os.InputEventInjectionResult;
 import android.os.InputEventInjectionSync;
 import android.os.LocaleList;
@@ -64,9 +66,11 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.MessageQueue;
 import android.os.Process;
+import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.provider.DeviceConfig;
@@ -77,6 +81,7 @@ import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 import android.view.Display;
 import android.view.IInputFilter;
 import android.view.IInputFilterHost;
@@ -100,6 +105,7 @@ import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.server.DisplayThread;
 import com.android.server.LocalServices;
@@ -164,6 +170,9 @@ public class InputManagerService extends IInputManager.Stub
     /** TODO(b/169067926): Remove this. */
     private static final boolean UNTRUSTED_TOUCHES_TOAST = false;
 
+    public static final boolean ENABLE_PER_WINDOW_INPUT_ROTATION =
+            SystemProperties.getBoolean("persist.debug.per_window_input_rotation", false);
+
     // Pointer to native input manager service object.
     private final long mPtr;
 
@@ -221,13 +230,16 @@ public class InputManagerService extends IInputManager.Stub
     private Map<IBinder, VibratorToken> mVibratorTokens = new ArrayMap<IBinder, VibratorToken>();
     private int mNextVibratorTokenValue;
 
+    // List of currently registered vibrator state changed listeners by device id.
+    @GuardedBy("mVibratorLock")
+    private final SparseArray<RemoteCallbackList<IVibratorStateListener>> mVibratorStateListeners =
+            new SparseArray<RemoteCallbackList<IVibratorStateListener>>();
+    // List of vibrator states by device id.
+    @GuardedBy("mVibratorLock")
+    private final SparseBooleanArray mIsVibrating = new SparseBooleanArray();
+
     // State for lid switch
-    // Lock for the lid switch state. Held when triggering callbacks to guarantee lid switch events
-    // are delivered in order. For ex, when a new lid switch callback is registered the lock is held
-    // while the callback is processing the initial lid switch event which guarantees that any
-    // events that occur at the same time are delivered after the callback has returned.
     private final Object mLidSwitchLock = new Object();
-    @GuardedBy("mLidSwitchLock")
     private List<LidSwitchCallback> mLidSwitchCallbacks = new ArrayList<>();
 
     // State for the currently installed input filter.
@@ -375,6 +387,9 @@ public class InputManagerService extends IInputManager.Stub
     public static final int SW_CAMERA_LENS_COVER_BIT = 1 << SW_CAMERA_LENS_COVER;
     public static final int SW_MUTE_DEVICE_BIT = 1 << SW_MUTE_DEVICE;
 
+    /** Indicates an open state for the lid switch. */
+    public static final int SW_STATE_LID_OPEN = 0;
+
     /** Whether to use the dev/input/event or uevent subsystem for the audio jack. */
     final boolean mUseDevInputEventForAudioJack;
 
@@ -410,18 +425,13 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     void registerLidSwitchCallbackInternal(@NonNull LidSwitchCallback callback) {
+        boolean lidOpen;
         synchronized (mLidSwitchLock) {
             mLidSwitchCallbacks.add(callback);
-
-            // Skip triggering the initial callback if the system is not yet ready as the switch
-            // state will be reported as KEY_STATE_UNKNOWN. The callback will be triggered in
-            // systemRunning().
-            if (mSystemReady) {
-                boolean lidOpen = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY, SW_LID)
-                        == KEY_STATE_UP;
-                callback.notifyLidSwitchChanged(0 /* whenNanos */, lidOpen);
-            }
+            lidOpen = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY, SW_LID)
+                    == SW_STATE_LID_OPEN;
         }
+        callback.notifyLidSwitchChanged(0 /* whenNanos */, lidOpen);
     }
 
     void unregisterLidSwitchCallbackInternal(@NonNull LidSwitchCallback callback) {
@@ -469,18 +479,7 @@ public class InputManagerService extends IInputManager.Stub
         }
         mNotificationManager = (NotificationManager)mContext.getSystemService(
                 Context.NOTIFICATION_SERVICE);
-
-        synchronized (mLidSwitchLock) {
-            mSystemReady = true;
-
-            // Send the initial lid switch state to any callback registered before the system was
-            // ready.
-            int switchState = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY, SW_LID);
-            for (int i = 0; i < mLidSwitchCallbacks.size(); i++) {
-                LidSwitchCallback callback = mLidSwitchCallbacks.get(i);
-                callback.notifyLidSwitchChanged(0 /* whenNanos */, switchState == KEY_STATE_UP);
-            }
-        }
+        mSystemReady = true;
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
         filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
@@ -524,8 +523,51 @@ public class InputManagerService extends IInputManager.Stub
         nativeReloadDeviceAliases(mPtr);
     }
 
+    /** Rotates CCW by `delta` 90-degree increments. */
+    private static void rotateBounds(Rect inOutBounds, int parentW, int parentH, int delta) {
+        int rdelta = ((delta % 4) + 4) % 4;
+        int origLeft = inOutBounds.left;
+        switch (rdelta) {
+            case 0:
+                return;
+            case 1:
+                inOutBounds.left = inOutBounds.top;
+                inOutBounds.top = parentW - inOutBounds.right;
+                inOutBounds.right = inOutBounds.bottom;
+                inOutBounds.bottom = parentW - origLeft;
+                return;
+            case 2:
+                inOutBounds.left = parentW - inOutBounds.right;
+                inOutBounds.right = parentW - origLeft;
+                return;
+            case 3:
+                inOutBounds.left = parentH - inOutBounds.bottom;
+                inOutBounds.bottom = inOutBounds.right;
+                inOutBounds.right = parentH - inOutBounds.top;
+                inOutBounds.top = origLeft;
+                return;
+        }
+    }
+
     private void setDisplayViewportsInternal(List<DisplayViewport> viewports) {
-        nativeSetDisplayViewports(mPtr, viewports.toArray(new DisplayViewport[0]));
+        final DisplayViewport[] vArray = new DisplayViewport[viewports.size()];
+        if (ENABLE_PER_WINDOW_INPUT_ROTATION) {
+            // Remove all viewport operations. They will be built-into the window transforms.
+            for (int i = viewports.size() - 1; i >= 0; --i) {
+                final DisplayViewport v = vArray[i] = viewports.get(i).makeCopy();
+                // deviceWidth/Height are apparently in "rotated" space, so flip them if needed.
+                int dw = (v.orientation % 2) == 0 ? v.deviceWidth : v.deviceHeight;
+                int dh = (v.orientation % 2) == 0 ? v.deviceHeight : v.deviceWidth;
+                v.logicalFrame.set(0, 0, dw, dh);
+                v.physicalFrame.set(0, 0, dw, dh);
+                v.orientation = 0;
+            }
+        } else {
+            for (int i = viewports.size() - 1; i >= 0; --i) {
+                vArray[i] = viewports.get(i);
+            }
+        }
+        nativeSetDisplayViewports(mPtr, vArray);
     }
 
     /**
@@ -2008,6 +2050,92 @@ public class InputManagerService extends IInputManager.Stub
         }
     }
 
+    // Native callback.
+    private void notifyVibratorState(int deviceId, boolean isOn) {
+        if (DEBUG) {
+            Slog.d(TAG, "notifyVibratorState: deviceId=" + deviceId + " isOn=" + isOn);
+        }
+        synchronized (mVibratorLock) {
+            mIsVibrating.put(deviceId, isOn);
+            notifyVibratorStateListenersLocked(deviceId);
+        }
+    }
+
+    @GuardedBy("mVibratorLock")
+    private void notifyVibratorStateListenersLocked(int deviceId) {
+        if (!mVibratorStateListeners.contains(deviceId)) {
+            if (DEBUG) {
+                Slog.v(TAG, "Device " + deviceId + " doesn't have vibrator state listener.");
+            }
+            return;
+        }
+        RemoteCallbackList<IVibratorStateListener> listeners =
+                mVibratorStateListeners.get(deviceId);
+        final int length = listeners.beginBroadcast();
+        try {
+            for (int i = 0; i < length; i++) {
+                notifyVibratorStateListenerLocked(deviceId, listeners.getBroadcastItem(i));
+            }
+        } finally {
+            listeners.finishBroadcast();
+        }
+    }
+
+    @GuardedBy("mVibratorLock")
+    private void notifyVibratorStateListenerLocked(int deviceId, IVibratorStateListener listener) {
+        try {
+            listener.onVibrating(mIsVibrating.get(deviceId));
+        } catch (RemoteException | RuntimeException e) {
+            Slog.e(TAG, "Vibrator state listener failed to call", e);
+        }
+    }
+
+    @Override // Binder call
+    public boolean registerVibratorStateListener(int deviceId, IVibratorStateListener listener) {
+        Preconditions.checkNotNull(listener, "listener must not be null");
+
+        RemoteCallbackList<IVibratorStateListener> listeners;
+        synchronized (mVibratorLock) {
+            if (!mVibratorStateListeners.contains(deviceId)) {
+                listeners = new RemoteCallbackList<>();
+                mVibratorStateListeners.put(deviceId, listeners);
+            } else {
+                listeners = mVibratorStateListeners.get(deviceId);
+            }
+
+            final long token = Binder.clearCallingIdentity();
+            try {
+                if (!listeners.register(listener)) {
+                    Slog.e(TAG, "Could not register vibrator state listener " + listener);
+                    return false;
+                }
+                // Notify its callback after new client registered.
+                notifyVibratorStateListenerLocked(deviceId, listener);
+                return true;
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+    }
+
+    @Override // Binder call
+    public boolean unregisterVibratorStateListener(int deviceId, IVibratorStateListener listener) {
+        synchronized (mVibratorLock) {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                if (!mVibratorStateListeners.contains(deviceId)) {
+                    Slog.w(TAG, "Vibrator state listener " + deviceId + " doesn't exist");
+                    return false;
+                }
+                RemoteCallbackList<IVibratorStateListener> listeners =
+                        mVibratorStateListeners.get(deviceId);
+                return listeners.unregister(listener);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+    }
+
     // Binder call
     @Override
     public int getBatteryStatus(int deviceId) {
@@ -2251,13 +2379,14 @@ public class InputManagerService extends IInputManager.Stub
 
         if ((switchMask & SW_LID_BIT) != 0) {
             final boolean lidOpen = ((switchValues & SW_LID_BIT) == 0);
+
+            ArrayList<LidSwitchCallback> callbacksCopy;
             synchronized (mLidSwitchLock) {
-                if (mSystemReady) {
-                    for (int i = 0; i < mLidSwitchCallbacks.size(); i++) {
-                        LidSwitchCallback callbacks = mLidSwitchCallbacks.get(i);
-                        callbacks.notifyLidSwitchChanged(whenNanos, lidOpen);
-                    }
-                }
+                callbacksCopy = new ArrayList<>(mLidSwitchCallbacks);
+            }
+            for (int i = 0; i < callbacksCopy.size(); i++) {
+                LidSwitchCallback callbacks = callbacksCopy.get(i);
+                callbacks.notifyLidSwitchChanged(whenNanos, lidOpen);
             }
         }
 

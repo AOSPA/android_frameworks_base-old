@@ -29,7 +29,6 @@ import android.media.AudioManager;
 import android.util.AttributeSet;
 import android.util.MathUtils;
 import android.util.Pair;
-import android.view.ContextThemeWrapper;
 import android.view.DisplayCutout;
 import android.view.View;
 import android.view.ViewGroup;
@@ -48,7 +47,6 @@ import androidx.lifecycle.LifecycleRegistry;
 
 import com.android.settingslib.Utils;
 import com.android.systemui.BatteryMeterView;
-import com.android.systemui.DualToneHandler;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.privacy.OngoingPrivacyChip;
@@ -75,8 +73,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
     protected QuickQSPanel mHeaderQsPanel;
     private TouchAnimator mStatusIconsAlphaAnimator;
     private TouchAnimator mHeaderTextContainerAlphaAnimator;
-    private TouchAnimator mPrivacyChipAlphaAnimator;
-    private DualToneHandler mDualToneHandler;
 
     private View mSystemIconsView;
     private View mQuickQsStatusIcons;
@@ -94,6 +90,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
     private OngoingPrivacyChip mPrivacyChip;
     private Space mSpace;
     private BatteryMeterView mBatteryRemainingIcon;
+    private TintedIconManager mTintedIconManager;
 
     // Used for RingerModeTracker
     private final LifecycleRegistry mLifecycle = new LifecycleRegistry(this);
@@ -111,8 +108,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
 
     public QuickStatusBarHeader(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mDualToneHandler = new DualToneHandler(
-                new ContextThemeWrapper(context, R.style.QSHeaderTheme));
     }
 
     @Override
@@ -150,10 +145,9 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
     }
 
     void onAttach(TintedIconManager iconManager) {
-        int colorForeground = Utils.getColorAttrDefaultColor(getContext(),
-                android.R.attr.colorForeground);
-        float intensity = getColorIntensity(colorForeground);
-        int fillColor = mDualToneHandler.getSingleColor(intensity);
+        mTintedIconManager = iconManager;
+        int fillColor = Utils.getColorAttrDefaultColor(getContext(),
+                android.R.attr.textColorPrimary);
 
         // Set the correct tint for the status icons so they contrast
         iconManager.setTint(fillColor);
@@ -272,19 +266,19 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
 
         int textColor = Utils.getColorAttrDefaultColor(mContext, android.R.attr.textColorPrimary);
         if (textColor != mTextColorPrimary) {
+            int textColorSecondary = Utils.getColorAttrDefaultColor(mContext,
+                    android.R.attr.textColorSecondary);
             mTextColorPrimary = textColor;
             mClockView.setTextColor(textColor);
-
-            float intensity = getColorIntensity(textColor);
-            int fillColor = mDualToneHandler.getSingleColor(intensity);
-
-            Rect tintArea = new Rect(0, 0, 0, 0);
-            mBatteryRemainingIcon.onDarkChanged(tintArea, intensity, fillColor);
+            if (mTintedIconManager != null) {
+                mTintedIconManager.setTint(textColor);
+            }
+            mBatteryRemainingIcon.updateColors(mTextColorPrimary, textColorSecondary,
+                    mTextColorPrimary);
         }
 
         updateStatusIconAlphaAnimator();
         updateHeaderTextContainerAlphaAnimator();
-        updatePrivacyChipAlphaAnimator();
     }
 
     private void updateStatusIconAlphaAnimator() {
@@ -296,12 +290,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
     private void updateHeaderTextContainerAlphaAnimator() {
         mHeaderTextContainerAlphaAnimator = new TouchAnimator.Builder()
                 .addFloat(mHeaderTextContainerView, "alpha", 0, 0, mExpandedHeaderAlpha)
-                .build();
-    }
-
-    private void updatePrivacyChipAlphaAnimator() {
-        mPrivacyChipAlphaAnimator = new TouchAnimator.Builder()
-                .addFloat(mPrivacyChip, "alpha", 1, 0, 1)
                 .build();
     }
 
@@ -343,10 +331,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements LifecycleOwn
             } else {
                 mHeaderTextContainerView.setVisibility(INVISIBLE);
             }
-        }
-        if (mPrivacyChipAlphaAnimator != null) {
-            mPrivacyChip.setExpanded(expansionFraction > 0.5);
-            mPrivacyChipAlphaAnimator.setPosition(keyguardExpansionFraction);
         }
 
         mKeyguardExpansionFraction = keyguardExpansionFraction;

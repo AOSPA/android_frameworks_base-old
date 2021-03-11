@@ -50,7 +50,6 @@ import android.widget.TextView;
 import androidx.test.filters.SmallTest;
 import androidx.test.filters.Suppress;
 
-import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.media.MediaFeatureFlag;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
@@ -59,8 +58,10 @@ import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.BindParams;
 import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.InflationCallback;
 import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.InflationFlag;
-import com.android.systemui.statusbar.policy.InflatedSmartReplies;
-import com.android.systemui.statusbar.policy.SmartRepliesAndActionsInflater;
+import com.android.systemui.statusbar.policy.InflatedSmartReplyState;
+import com.android.systemui.statusbar.policy.InflatedSmartReplyViewHolder;
+import com.android.systemui.statusbar.policy.SmartReplyStateInflater;
+import com.android.systemui.tests.R;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -87,11 +88,24 @@ public class NotificationContentInflaterTest extends SysuiTestCase {
 
     @Mock private NotifRemoteViewCache mCache;
     @Mock private ConversationNotificationProcessor mConversationNotificationProcessor;
-    @Mock private InflatedSmartReplies mInflatedSmartReplies;
+    @Mock private InflatedSmartReplyState mInflatedSmartReplyState;
+    @Mock private InflatedSmartReplyViewHolder mInflatedSmartReplies;
 
-    private final SmartRepliesAndActionsInflater mSmartRepliesAndActionsInflater =
-            (sysuiContext, notifPackageContext, entry, existingRepliesAndAction) ->
-                    mInflatedSmartReplies;
+    private final SmartReplyStateInflater mSmartReplyStateInflater =
+            new SmartReplyStateInflater() {
+                @Override
+                public InflatedSmartReplyViewHolder inflateSmartReplyViewHolder(
+                        Context sysuiContext, Context notifPackageContext, NotificationEntry entry,
+                        InflatedSmartReplyState existingSmartReplyState,
+                        InflatedSmartReplyState newSmartReplyState) {
+                    return mInflatedSmartReplies;
+                }
+
+                @Override
+                public InflatedSmartReplyState inflateSmartReplyState(NotificationEntry entry) {
+                    return mInflatedSmartReplyState;
+                }
+            };
 
     @Before
     public void setUp() throws Exception {
@@ -114,7 +128,7 @@ public class NotificationContentInflaterTest extends SysuiTestCase {
                 mConversationNotificationProcessor,
                 mock(MediaFeatureFlag.class),
                 mock(Executor.class),
-                mSmartRepliesAndActionsInflater);
+                mSmartReplyStateInflater);
     }
 
     @Test
@@ -130,7 +144,7 @@ public class NotificationContentInflaterTest extends SysuiTestCase {
                 FLAG_CONTENT_VIEW_ALL,
                 builder,
                 mContext,
-                mSmartRepliesAndActionsInflater);
+                mSmartReplyStateInflater);
         verify(builder).createHeadsUpContentView(true);
     }
 
@@ -147,7 +161,7 @@ public class NotificationContentInflaterTest extends SysuiTestCase {
                 FLAG_CONTENT_VIEW_ALL,
                 builder,
                 mContext,
-                mSmartRepliesAndActionsInflater);
+                mSmartReplyStateInflater);
         verify(builder).createContentView(true);
     }
 
@@ -386,7 +400,7 @@ public class NotificationContentInflaterTest extends SysuiTestCase {
 
         @Override
         public CancellationSignal applyAsync(Context context, ViewGroup parent, Executor executor,
-                OnViewAppliedListener listener, OnClickHandler handler) {
+                OnViewAppliedListener listener, InteractionHandler handler) {
             mHandler.post(() -> listener.onError(new RuntimeException("Failed to inflate async")));
             return new CancellationSignal();
         }

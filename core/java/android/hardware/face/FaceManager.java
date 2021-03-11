@@ -71,17 +71,19 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     private static final int MSG_FACE_DETECTED = 109;
     private static final int MSG_CHALLENGE_INTERRUPTED = 110;
     private static final int MSG_CHALLENGE_INTERRUPT_FINISHED = 111;
+    private static final int MSG_AUTHENTICATION_FRAME = 112;
+    private static final int MSG_ENROLLMENT_FRAME = 113;
 
     private final IFaceService mService;
     private final Context mContext;
     private IBinder mToken = new Binder();
-    private AuthenticationCallback mAuthenticationCallback;
-    private FaceDetectionCallback mFaceDetectionCallback;
-    private EnrollmentCallback mEnrollmentCallback;
-    private RemovalCallback mRemovalCallback;
-    private SetFeatureCallback mSetFeatureCallback;
-    private GetFeatureCallback mGetFeatureCallback;
-    private GenerateChallengeCallback mGenerateChallengeCallback;
+    @Nullable private AuthenticationCallback mAuthenticationCallback;
+    @Nullable private FaceDetectionCallback mFaceDetectionCallback;
+    @Nullable private EnrollmentCallback mEnrollmentCallback;
+    @Nullable private RemovalCallback mRemovalCallback;
+    @Nullable private SetFeatureCallback mSetFeatureCallback;
+    @Nullable private GetFeatureCallback mGetFeatureCallback;
+    @Nullable private GenerateChallengeCallback mGenerateChallengeCallback;
     private CryptoObject mCryptoObject;
     private Face mRemovalFace;
     private Handler mHandler;
@@ -153,6 +155,16 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         @Override
         public void onChallengeInterruptFinished(int sensorId) {
             mHandler.obtainMessage(MSG_CHALLENGE_INTERRUPT_FINISHED, sensorId).sendToTarget();
+        }
+
+        @Override
+        public void onAuthenticationFrame(FaceAuthenticationFrame frame) {
+            mHandler.obtainMessage(MSG_AUTHENTICATION_FRAME, frame).sendToTarget();
+        }
+
+        @Override
+        public void onEnrollmentFrame(FaceEnrollFrame frame) {
+            mHandler.obtainMessage(MSG_ENROLLMENT_FRAME, frame).sendToTarget();
         }
     };
 
@@ -562,12 +574,23 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                 mService.remove(mToken, face.getBiometricId(), userId, mServiceReceiver,
                         mContext.getOpPackageName());
             } catch (RemoteException e) {
-                Slog.w(TAG, "Remote exception in remove: ", e);
-                if (callback != null) {
-                    callback.onRemovalError(face, FACE_ERROR_HW_UNAVAILABLE,
-                            getErrorString(mContext, FACE_ERROR_HW_UNAVAILABLE,
-                                0 /* vendorCode */));
-                }
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Removes all face templates for the given user.
+     * @hide
+     */
+    @RequiresPermission(MANAGE_BIOMETRIC)
+    public void removeAll(int userId, @NonNull RemovalCallback callback) {
+        if (mService != null) {
+            try {
+                mRemovalCallback = callback;
+                mService.removeAll(mToken, userId, mServiceReceiver, mContext.getOpPackageName());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
             }
         }
     }
@@ -818,67 +841,6 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
         Slog.w(TAG, "Invalid error message: " + errMsg + ", " + vendorCode);
         return "";
-    }
-
-    /**
-     * @hide
-     */
-    public static String getAcquiredString(Context context, int acquireInfo, int vendorCode) {
-        switch (acquireInfo) {
-            case FACE_ACQUIRED_GOOD:
-                return null;
-            case FACE_ACQUIRED_INSUFFICIENT:
-                return context.getString(R.string.face_acquired_insufficient);
-            case FACE_ACQUIRED_TOO_BRIGHT:
-                return context.getString(R.string.face_acquired_too_bright);
-            case FACE_ACQUIRED_TOO_DARK:
-                return context.getString(R.string.face_acquired_too_dark);
-            case FACE_ACQUIRED_TOO_CLOSE:
-                return context.getString(R.string.face_acquired_too_close);
-            case FACE_ACQUIRED_TOO_FAR:
-                return context.getString(R.string.face_acquired_too_far);
-            case FACE_ACQUIRED_TOO_HIGH:
-                return context.getString(R.string.face_acquired_too_high);
-            case FACE_ACQUIRED_TOO_LOW:
-                return context.getString(R.string.face_acquired_too_low);
-            case FACE_ACQUIRED_TOO_RIGHT:
-                return context.getString(R.string.face_acquired_too_right);
-            case FACE_ACQUIRED_TOO_LEFT:
-                return context.getString(R.string.face_acquired_too_left);
-            case FACE_ACQUIRED_POOR_GAZE:
-                return context.getString(R.string.face_acquired_poor_gaze);
-            case FACE_ACQUIRED_NOT_DETECTED:
-                return context.getString(R.string.face_acquired_not_detected);
-            case FACE_ACQUIRED_TOO_MUCH_MOTION:
-                return context.getString(R.string.face_acquired_too_much_motion);
-            case FACE_ACQUIRED_RECALIBRATE:
-                return context.getString(R.string.face_acquired_recalibrate);
-            case FACE_ACQUIRED_TOO_DIFFERENT:
-                return context.getString(R.string.face_acquired_too_different);
-            case FACE_ACQUIRED_TOO_SIMILAR:
-                return context.getString(R.string.face_acquired_too_similar);
-            case FACE_ACQUIRED_PAN_TOO_EXTREME:
-                return context.getString(R.string.face_acquired_pan_too_extreme);
-            case FACE_ACQUIRED_TILT_TOO_EXTREME:
-                return context.getString(R.string.face_acquired_tilt_too_extreme);
-            case FACE_ACQUIRED_ROLL_TOO_EXTREME:
-                return context.getString(R.string.face_acquired_roll_too_extreme);
-            case FACE_ACQUIRED_FACE_OBSCURED:
-                return context.getString(R.string.face_acquired_obscured);
-            case FACE_ACQUIRED_START:
-                return null;
-            case FACE_ACQUIRED_SENSOR_DIRTY:
-                return context.getString(R.string.face_acquired_sensor_dirty);
-            case FACE_ACQUIRED_VENDOR: {
-                String[] msgArray = context.getResources().getStringArray(
-                        R.array.face_acquired_vendor);
-                if (vendorCode < msgArray.length) {
-                    return msgArray[vendorCode];
-                }
-            }
-        }
-        Slog.w(TAG, "Invalid acquired message: " + acquireInfo + ", " + vendorCode);
-        return null;
     }
 
     /**
@@ -1248,6 +1210,12 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                 case MSG_CHALLENGE_INTERRUPT_FINISHED:
                     sendChallengeInterruptFinished((int) msg.obj /* sensorId */);
                     break;
+                case MSG_AUTHENTICATION_FRAME:
+                    sendAuthenticationFrame((FaceAuthenticationFrame) msg.obj /* frame */);
+                    break;
+                case MSG_ENROLLMENT_FRAME:
+                    sendEnrollmentFrame((FaceEnrollFrame) msg.obj /* frame */);
+                    break;
                 default:
                     Slog.w(TAG, "Unknown message: " + msg.what);
             }
@@ -1349,15 +1317,172 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
 
     private void sendAcquiredResult(int acquireInfo, int vendorCode) {
         if (mAuthenticationCallback != null) {
+            final FaceAuthenticationFrame frame = new FaceAuthenticationFrame(
+                    new FaceDataFrame(acquireInfo, vendorCode));
+            sendAuthenticationFrame(frame);
+        } else if (mEnrollmentCallback != null) {
+            final FaceEnrollFrame frame = new FaceEnrollFrame(
+                    null /* cell */,
+                    FaceEnrollStage.UNKNOWN,
+                    new FaceDataFrame(acquireInfo, vendorCode));
+            sendEnrollmentFrame(frame);
+        }
+    }
+
+    private void sendAuthenticationFrame(@Nullable FaceAuthenticationFrame frame) {
+        if (frame == null) {
+            Slog.w(TAG, "Received null authentication frame");
+        } else if (mAuthenticationCallback != null) {
+            // TODO(b/178414967): Send additional frame data to callback
+            final int acquireInfo = frame.getData().getAcquiredInfo();
+            final int vendorCode = frame.getData().getVendorCode();
+            final int helpCode = getHelpCode(acquireInfo, vendorCode);
+            final String helpMessage = getAuthHelpMessage(mContext, acquireInfo, vendorCode);
             mAuthenticationCallback.onAuthenticationAcquired(acquireInfo);
+
+            // Ensure that only non-null help messages are sent.
+            if (helpMessage != null) {
+                mAuthenticationCallback.onAuthenticationHelp(helpCode, helpMessage);
+            }
         }
-        final String msg = getAcquiredString(mContext, acquireInfo, vendorCode);
-        final int clientInfo = acquireInfo == FACE_ACQUIRED_VENDOR
-                ? (vendorCode + FACE_ACQUIRED_VENDOR_BASE) : acquireInfo;
-        if (mEnrollmentCallback != null) {
-            mEnrollmentCallback.onEnrollmentHelp(clientInfo, msg);
-        } else if (mAuthenticationCallback != null && msg != null) {
-            mAuthenticationCallback.onAuthenticationHelp(clientInfo, msg);
+    }
+
+    private void sendEnrollmentFrame(@Nullable FaceEnrollFrame frame) {
+        if (frame == null) {
+            Slog.w(TAG, "Received null enrollment frame");
+        } else if (mEnrollmentCallback != null) {
+            // TODO(b/178414967): Send additional frame data to callback
+            final int acquireInfo = frame.getData().getAcquiredInfo();
+            final int vendorCode = frame.getData().getVendorCode();
+            final int helpCode = getHelpCode(acquireInfo, vendorCode);
+            final String helpMessage = getEnrollHelpMessage(mContext, acquireInfo, vendorCode);
+            mEnrollmentCallback.onEnrollmentHelp(helpCode, helpMessage);
         }
+    }
+
+    private static int getHelpCode(int acquireInfo, int vendorCode) {
+        return acquireInfo == FACE_ACQUIRED_VENDOR
+                ? vendorCode + FACE_ACQUIRED_VENDOR_BASE
+                : acquireInfo;
+    }
+
+    /**
+     * @hide
+     */
+    @Nullable
+    public static String getAuthHelpMessage(Context context, int acquireInfo, int vendorCode) {
+        switch (acquireInfo) {
+            // No help message is needed for a good capture.
+            case FACE_ACQUIRED_GOOD:
+            case FACE_ACQUIRED_START:
+                return null;
+
+            // Consolidate positional feedback to reduce noise during authentication.
+            case FACE_ACQUIRED_NOT_DETECTED:
+            case FACE_ACQUIRED_TOO_CLOSE:
+            case FACE_ACQUIRED_TOO_FAR:
+            case FACE_ACQUIRED_TOO_HIGH:
+            case FACE_ACQUIRED_TOO_LOW:
+            case FACE_ACQUIRED_TOO_RIGHT:
+            case FACE_ACQUIRED_TOO_LEFT:
+            case FACE_ACQUIRED_POOR_GAZE:
+            case FACE_ACQUIRED_PAN_TOO_EXTREME:
+            case FACE_ACQUIRED_TILT_TOO_EXTREME:
+            case FACE_ACQUIRED_ROLL_TOO_EXTREME:
+                return context.getString(R.string.face_acquired_not_detected);
+
+            // Provide more detailed feedback for other soft errors.
+            case FACE_ACQUIRED_INSUFFICIENT:
+                return context.getString(R.string.face_acquired_insufficient);
+            case FACE_ACQUIRED_TOO_BRIGHT:
+                return context.getString(R.string.face_acquired_too_bright);
+            case FACE_ACQUIRED_TOO_DARK:
+                return context.getString(R.string.face_acquired_too_dark);
+            case FACE_ACQUIRED_TOO_MUCH_MOTION:
+                return context.getString(R.string.face_acquired_too_much_motion);
+            case FACE_ACQUIRED_RECALIBRATE:
+                return context.getString(R.string.face_acquired_recalibrate);
+            case FACE_ACQUIRED_TOO_DIFFERENT:
+                return context.getString(R.string.face_acquired_too_different);
+            case FACE_ACQUIRED_TOO_SIMILAR:
+                return context.getString(R.string.face_acquired_too_similar);
+            case FACE_ACQUIRED_FACE_OBSCURED:
+                return context.getString(R.string.face_acquired_obscured);
+            case FACE_ACQUIRED_SENSOR_DIRTY:
+                return context.getString(R.string.face_acquired_sensor_dirty);
+
+            // Find and return the appropriate vendor-specific message.
+            case FACE_ACQUIRED_VENDOR: {
+                String[] msgArray = context.getResources().getStringArray(
+                        R.array.face_acquired_vendor);
+                if (vendorCode < msgArray.length) {
+                    return msgArray[vendorCode];
+                }
+            }
+        }
+
+        Slog.w(TAG, "Unknown authentication acquired message: " + acquireInfo + ", " + vendorCode);
+        return null;
+    }
+
+    /**
+     * @hide
+     */
+    @Nullable
+    public static String getEnrollHelpMessage(Context context, int acquireInfo, int vendorCode) {
+        switch (acquireInfo) {
+            case FACE_ACQUIRED_GOOD:
+            case FACE_ACQUIRED_START:
+                return null;
+            case FACE_ACQUIRED_INSUFFICIENT:
+                return context.getString(R.string.face_acquired_insufficient);
+            case FACE_ACQUIRED_TOO_BRIGHT:
+                return context.getString(R.string.face_acquired_too_bright);
+            case FACE_ACQUIRED_TOO_DARK:
+                return context.getString(R.string.face_acquired_too_dark);
+            case FACE_ACQUIRED_TOO_CLOSE:
+                return context.getString(R.string.face_acquired_too_close);
+            case FACE_ACQUIRED_TOO_FAR:
+                return context.getString(R.string.face_acquired_too_far);
+            case FACE_ACQUIRED_TOO_HIGH:
+                return context.getString(R.string.face_acquired_too_high);
+            case FACE_ACQUIRED_TOO_LOW:
+                return context.getString(R.string.face_acquired_too_low);
+            case FACE_ACQUIRED_TOO_RIGHT:
+                return context.getString(R.string.face_acquired_too_right);
+            case FACE_ACQUIRED_TOO_LEFT:
+                return context.getString(R.string.face_acquired_too_left);
+            case FACE_ACQUIRED_POOR_GAZE:
+                return context.getString(R.string.face_acquired_poor_gaze);
+            case FACE_ACQUIRED_NOT_DETECTED:
+                return context.getString(R.string.face_acquired_not_detected);
+            case FACE_ACQUIRED_TOO_MUCH_MOTION:
+                return context.getString(R.string.face_acquired_too_much_motion);
+            case FACE_ACQUIRED_RECALIBRATE:
+                return context.getString(R.string.face_acquired_recalibrate);
+            case FACE_ACQUIRED_TOO_DIFFERENT:
+                return context.getString(R.string.face_acquired_too_different);
+            case FACE_ACQUIRED_TOO_SIMILAR:
+                return context.getString(R.string.face_acquired_too_similar);
+            case FACE_ACQUIRED_PAN_TOO_EXTREME:
+                return context.getString(R.string.face_acquired_pan_too_extreme);
+            case FACE_ACQUIRED_TILT_TOO_EXTREME:
+                return context.getString(R.string.face_acquired_tilt_too_extreme);
+            case FACE_ACQUIRED_ROLL_TOO_EXTREME:
+                return context.getString(R.string.face_acquired_roll_too_extreme);
+            case FACE_ACQUIRED_FACE_OBSCURED:
+                return context.getString(R.string.face_acquired_obscured);
+            case FACE_ACQUIRED_SENSOR_DIRTY:
+                return context.getString(R.string.face_acquired_sensor_dirty);
+            case FACE_ACQUIRED_VENDOR: {
+                String[] msgArray = context.getResources().getStringArray(
+                        R.array.face_acquired_vendor);
+                if (vendorCode < msgArray.length) {
+                    return msgArray[vendorCode];
+                }
+            }
+        }
+        Slog.w(TAG, "Unknown enrollment acquired message: " + acquireInfo + ", " + vendorCode);
+        return null;
     }
 }
