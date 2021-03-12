@@ -15,8 +15,11 @@
  */
 package android.accounts;
 
-import android.app.Activity;
 import android.app.ActivityTaskManager;
+import com.google.android.collect.Sets;
+
+import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -35,8 +38,6 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import com.android.internal.R;
-
-import com.google.android.collect.Sets;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -142,9 +143,7 @@ public class ChooseTypeAndAccountActivity extends Activity
             Log.v(TAG, "ChooseTypeAndAccountActivity.onCreate(savedInstanceState="
                     + savedInstanceState + ")");
         }
-        getWindow().addSystemFlags(
-                android.view.WindowManager.LayoutParams
-                        .SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
+
         String message = null;
 
         try {

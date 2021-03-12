@@ -31,7 +31,6 @@ import android.widget.ArrayAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
-
 import com.android.internal.R;
 
 import java.util.ArrayList;
@@ -52,9 +51,7 @@ public class ChooseAccountTypeActivity extends Activity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().addSystemFlags(
-                android.view.WindowManager.LayoutParams
-                        .SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
+
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "ChooseAccountTypeActivity.onCreate(savedInstanceState="
                     + savedInstanceState + ")");
