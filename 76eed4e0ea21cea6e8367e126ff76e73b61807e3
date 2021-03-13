@@ -71,6 +71,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "37681fb0_86497bcb",
+        "filename": "core/java/android/app/AppLockManager.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2021-03-13T03:40:09Z",
+      "side": 1,
+      "message": "Thank you!!",
+      "parentUuid": "e84b6f59_c166ab16",
+      "revId": "76eed4e0ea21cea6e8367e126ff76e73b61807e3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "1c4e8c73_c213f563",
