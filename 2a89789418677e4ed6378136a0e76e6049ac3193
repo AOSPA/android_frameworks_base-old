@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8916c147_30d07f07",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000447
+      },
+      "writtenOn": "2021-03-15T16:02:35Z",
+      "side": 1,
+      "message": "Went back to just defining the margin manually, can introduce patchset 2 as a separate commit later since we want this for release.",
+      "revId": "2a89789418677e4ed6378136a0e76e6049ac3193",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
