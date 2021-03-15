@@ -50,9 +50,12 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.BlurUtils;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.util.concurrency.FakeExecutor;
+import com.android.systemui.util.time.FakeSystemClock;
 import com.android.systemui.util.wakelock.DelayedWakeLock;
 import com.android.systemui.utils.os.FakeHandler;
 
@@ -104,6 +107,8 @@ public class ScrimControllerTest extends SysuiTestCase {
     private BlurUtils mBlurUtils;
     @Mock
     private ConfigurationController mConfigurationController;
+    @Mock
+    private FeatureFlags mFeatureFlags;
 
 
     private static class AnimatorListener implements Animator.AnimatorListener {
@@ -211,13 +216,14 @@ public class ScrimControllerTest extends SysuiTestCase {
         when(mDelayedWakeLockBuilder.setTag(any(String.class)))
                 .thenReturn(mDelayedWakeLockBuilder);
         when(mDelayedWakeLockBuilder.build()).thenReturn(mWakeLock);
-
+        when(mFeatureFlags.isShadeOpaque()).thenReturn(true);
         when(mDockManager.isDocked()).thenReturn(false);
 
         mScrimController = new ScrimController(mLightBarController,
                 mDozeParamenters, mAlarmManager, mKeyguardStateController, mDelayedWakeLockBuilder,
                 new FakeHandler(mLooper.getLooper()), mKeyguardUpdateMonitor,
-                mDockManager, mBlurUtils, mConfigurationController);
+                mDockManager, mBlurUtils, mConfigurationController, mFeatureFlags,
+                new FakeExecutor(new FakeSystemClock()));
         mScrimController.setScrimVisibleListener(visible -> mScrimVisibility = visible);
         mScrimController.attachViews(mScrimBehind, mScrimInFront, mScrimForBubble);
         mScrimController.setAnimatorListener(mAnimatorListener);
@@ -536,7 +542,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         Assert.assertEquals(ScrimController.BUSY_SCRIM_ALPHA,
                 mScrimBehind.getViewAlpha(), 0.0f);
         // Bubble scrim should be visible
-        Assert.assertEquals(ScrimController.BUBBLE_SCRIM_ALPHA,
+        Assert.assertEquals(ScrimController.BUSY_SCRIM_ALPHA,
                 mScrimForBubble.getViewAlpha(), 0.0f);
     }
 

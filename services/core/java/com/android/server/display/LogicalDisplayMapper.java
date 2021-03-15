@@ -17,6 +17,7 @@
 package com.android.server.display;
 
 import android.content.Context;
+import android.os.Process;
 import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.IndentingPrintWriter;
@@ -100,7 +101,7 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
     private final SparseArray<LogicalDisplay> mLogicalDisplays =
             new SparseArray<LogicalDisplay>();
     private int mNextNonDefaultDisplayId = Display.DEFAULT_DISPLAY + 1;
-    private int mNextNonDefaultGroupId = DisplayGroup.DEFAULT + 1;
+    private int mNextNonDefaultGroupId = Display.DEFAULT_DISPLAY_GROUP + 1;
     private int mNextBuiltInDisplayId = 4096;
 
     /** A mapping from logical display id to display group. */
@@ -108,7 +109,7 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
 
     private final DisplayDeviceRepository mDisplayDeviceRepo;
     private final Listener mListener;
-    private final int mFoldedDeviceState;
+    private final int[] mFoldedDeviceStates;
 
     LogicalDisplayMapper(Context context, DisplayDeviceRepository repo, Listener listener) {
         mDisplayDeviceRepo = repo;
@@ -116,8 +117,8 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
         mSingleDisplayDemoMode = SystemProperties.getBoolean("persist.demo.singledisplay", false);
         mDisplayDeviceRepo.addListener(this);
 
-        mFoldedDeviceState = context.getResources().getInteger(
-                com.android.internal.R.integer.config_foldedDeviceState);
+        mFoldedDeviceStates = context.getResources().getIntArray(
+                com.android.internal.R.array.config_foldedDeviceStates);
 
         loadFoldedDisplayConfig(context);
     }
@@ -159,6 +160,10 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
         return null;
     }
 
+    public int[] getDisplayIdsLocked() {
+        return getDisplayIdsLocked(Process.SYSTEM_UID);
+    }
+
     public int[] getDisplayIdsLocked(int callingUid) {
         final int count = mLogicalDisplays.size();
         int[] displayIds = new int[count];
@@ -181,6 +186,15 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
         for (int i = 0; i < count; i++) {
             consumer.accept(mLogicalDisplays.valueAt(i));
         }
+    }
+
+    public int getDisplayGroupIdLocked(int displayId) {
+        final DisplayGroup displayGroup = mDisplayIdToGroupMap.get(displayId);
+        if (displayGroup != null) {
+            return displayGroup.getGroupId();
+        }
+
+        return -1;
     }
 
     public DisplayGroup getDisplayGroupLocked(int groupId) {
@@ -220,7 +234,14 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
     }
 
     void setDeviceStateLocked(int state) {
-        setDeviceFoldedLocked(state == mFoldedDeviceState);
+        boolean folded = false;
+        for (int i = 0; i < mFoldedDeviceStates.length; i++) {
+            if (state == mFoldedDeviceStates[i]) {
+                folded = true;
+                break;
+            }
+        }
+        setDeviceFoldedLocked(folded);
     }
 
     void setDeviceFoldedLocked(boolean isFolded) {
@@ -317,7 +338,18 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
         final int displayId = assignDisplayIdLocked(isDefault, deviceInfo.address);
         final int layerStack = assignLayerStackLocked(displayId);
 
+        final DisplayGroup displayGroup;
+        final boolean addNewDisplayGroup =
+                isDefault || (deviceInfo.flags & DisplayDeviceInfo.FLAG_OWN_DISPLAY_GROUP) != 0;
+        if (addNewDisplayGroup) {
+            final int groupId = assignDisplayGroupIdLocked(isDefault);
+            displayGroup = new DisplayGroup(groupId);
+        } else {
+            displayGroup = mDisplayIdToGroupMap.get(Display.DEFAULT_DISPLAY);
+        }
+
         LogicalDisplay display = new LogicalDisplay(displayId, layerStack, device);
+        display.updateDisplayGroupIdLocked(displayGroup.getGroupId());
         display.updateLocked(mDisplayDeviceRepo);
         if (!display.isValidLocked()) {
             // This should never happen currently.
@@ -328,15 +360,6 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
 
         mLogicalDisplays.put(displayId, display);
 
-        final DisplayGroup displayGroup;
-        final boolean addNewDisplayGroup =
-                isDefault || (deviceInfo.flags & DisplayDeviceInfo.FLAG_OWN_DISPLAY_GROUP) != 0;
-        if (addNewDisplayGroup) {
-            final int groupId = assignDisplayGroupIdLocked(isDefault);
-            displayGroup = new DisplayGroup(groupId);
-        } else {
-            displayGroup = mDisplayIdToGroupMap.get(Display.DEFAULT_DISPLAY);
-        }
         displayGroup.addDisplayLocked(display);
         mDisplayIdToGroupMap.append(displayId, displayGroup);
 
@@ -390,6 +413,7 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
                         final int groupId = assignDisplayGroupIdLocked(false);
                         final DisplayGroup displayGroup = new DisplayGroup(groupId);
                         displayGroup.addDisplayLocked(display);
+                        display.updateDisplayGroupIdLocked(groupId);
                         mDisplayIdToGroupMap.append(display.getDisplayIdLocked(), displayGroup);
                         mListener.onDisplayGroupEventLocked(displayGroup.getGroupId(),
                                 LogicalDisplayMapper.DISPLAY_GROUP_EVENT_ADDED);
@@ -403,7 +427,8 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
                     if (displayGroup != defaultDisplayGroup) {
                         displayGroup.removeDisplayLocked(display);
                         defaultDisplayGroup.addDisplayLocked(display);
-                        mListener.onDisplayGroupEventLocked(displayGroup.getGroupId(),
+                        display.updateDisplayGroupIdLocked(defaultDisplayGroup.getGroupId());
+                        mListener.onDisplayGroupEventLocked(defaultDisplayGroup.getGroupId(),
                                 LogicalDisplayMapper.DISPLAY_GROUP_EVENT_CHANGED);
                         mDisplayIdToGroupMap.put(displayId, defaultDisplayGroup);
                         changedDisplayGroup = displayGroup;
@@ -448,7 +473,7 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
     }
 
     private int assignDisplayGroupIdLocked(boolean isDefault) {
-        return isDefault ? DisplayGroup.DEFAULT : mNextNonDefaultGroupId++;
+        return isDefault ? Display.DEFAULT_DISPLAY_GROUP : mNextNonDefaultGroupId++;
     }
 
     private int assignDisplayIdLocked(boolean isDefault, DisplayAddress address) {

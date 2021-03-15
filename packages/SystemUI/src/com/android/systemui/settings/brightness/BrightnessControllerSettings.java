@@ -17,7 +17,7 @@
 package com.android.systemui.settings.brightness;
 
 import com.android.systemui.dagger.SysUISingleton;
-import com.android.systemui.util.settings.SecureSettings;
+import com.android.systemui.statusbar.FeatureFlags;
 
 import javax.inject.Inject;
 
@@ -28,24 +28,22 @@ import javax.inject.Inject;
 public class BrightnessControllerSettings {
 
     private static final String THICK_BRIGHTNESS_SLIDER = "sysui_thick_brightness";
-    private final boolean mUseThickSlider;
-    private final boolean mUseMirrorOnThickSlider;
+    private final FeatureFlags mFeatureFlags;
 
     @Inject
-    public BrightnessControllerSettings(SecureSettings settings) {
-        mUseThickSlider = settings.getInt(THICK_BRIGHTNESS_SLIDER, 0) != 0;
-        mUseMirrorOnThickSlider = settings.getInt(THICK_BRIGHTNESS_SLIDER, 0) != 2;
+    public BrightnessControllerSettings(FeatureFlags featureFlags) {
+        mFeatureFlags = featureFlags;
     }
 
     // Changing this setting between zero and non-zero may crash systemui down the line. Better to
     // restart systemui after changing it.
     /** */
     boolean useThickSlider() {
-        return mUseThickSlider;
+        return mFeatureFlags.useNewBrightnessSlider();
     }
 
     /** */
     boolean useMirrorOnThickSlider() {
-        return mUseMirrorOnThickSlider;
+        return !useThickSlider();
     }
 }

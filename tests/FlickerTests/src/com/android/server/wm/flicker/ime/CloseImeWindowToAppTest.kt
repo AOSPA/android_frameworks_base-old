@@ -21,7 +21,6 @@ import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.Flicker
 import com.android.server.wm.flicker.FlickerTestRunner
 import com.android.server.wm.flicker.FlickerTestRunnerFactory
 import com.android.server.wm.flicker.helpers.ImeAppHelper
@@ -54,9 +53,8 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @FlakyTest(bugId = 178015460)
 class CloseImeWindowToAppTest(
-    testName: String,
-    flickerSpec: Flicker
-) : FlickerTestRunner(testName, flickerSpec) {
+    testSpec: FlickerTestRunnerFactory.TestSpec
+) : FlickerTestRunner(testSpec) {
 
     companion object {
         @Parameterized.Parameters(name = "{0}")
@@ -64,28 +62,28 @@ class CloseImeWindowToAppTest(
         fun getParams(): List<Array<Any>> {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
             val testApp = ImeAppHelper(instrumentation)
-            return FlickerTestRunnerFactory(instrumentation)
-                .buildTest { configuration ->
-                    withTestName { buildTestTag("imeToApp", testApp, configuration) }
+            return FlickerTestRunnerFactory.getInstance()
+                .buildTest(instrumentation, repetitions = 5) { configuration ->
+                    withTestName { buildTestTag("imeToApp", configuration) }
                     repeat { configuration.repetitions }
                     setup {
                         test {
                             device.wakeUpAndGoToHomeScreen()
+                            testApp.launchViaIntent()
+                            this.setRotation(configuration.startRotation)
                         }
                         eachRun {
-                            this.setRotation(configuration.startRotation)
-                            testApp.open()
-                            testApp.openIME(device)
+                            testApp.openIME(device, wmHelper)
                         }
                     }
                     teardown {
-                        eachRun {
+                        test {
                             testApp.exit()
                             this.setRotation(Surface.ROTATION_0)
                         }
                     }
                     transitions {
-                        testApp.closeIME(device)
+                        testApp.closeIME(device, wmHelper)
                     }
                     assertions {
                         windowManagerTrace {
@@ -104,7 +102,7 @@ class CloseImeWindowToAppTest(
                             statusBarLayerRotatesScales(configuration.startRotation)
                             visibleLayersShownMoreThanOneConsecutiveEntry()
 
-                            imeLayerBecomesInvisible(enabled = false)
+                            imeLayerBecomesInvisible()
                             imeAppLayerIsAlwaysVisible(testApp)
                         }
                     }

@@ -21,14 +21,23 @@ package android.hardware.fingerprint;
  */
 oneway interface IUdfpsOverlayController {
     const int REASON_UNKNOWN = 0;
-    const int REASON_ENROLL = 1;
-    const int REASON_AUTH = 2;
+    const int REASON_ENROLL_FIND_SENSOR = 1;
+    const int REASON_ENROLL_ENROLLING = 2;
+    const int REASON_AUTH_BP = 3; // BiometricPrompt
+    const int REASON_AUTH_FPM_KEYGUARD = 4; // FingerprintManager usage from Keyguard
+    const int REASON_AUTH_FPM_OTHER = 5; // Other FingerprintManager usage
 
     // Shows the overlay.
     void showUdfpsOverlay(int sensorId, int reason);
 
     // Hides the overlay.
     void hideUdfpsOverlay(int sensorId);
+
+    // Notifies of enrollment progress changes.
+    void onEnrollmentProgress(int sensorId, int remaining);
+
+    // Notifies when a non-terminal error occurs (e.g. user moved their finger too fast).
+    void onEnrollmentHelp(int sensorId);
 
     // Shows debug messages on the UDFPS overlay.
     void setDebugMessage(int sensorId, String message);

@@ -86,10 +86,10 @@
     <bool name="config_navigation_bar_enable_auto_dim_no_visible_wallpaper">true</bool>
 
     <!-- The maximum number of tiles in the QuickQSPanel -->
-    <integer name="quick_qs_panel_max_columns">4</integer>
+    <integer name="quick_qs_panel_max_columns">6</integer>
 
     <!-- The number of columns in the QuickSettings -->
-    <integer name="quick_settings_num_columns">4</integer>
+    <integer name="quick_settings_num_columns">3</integer>
 
     <!-- The number of rows in the QuickSettings -->
     <integer name="quick_settings_max_rows">3</integer>
@@ -301,7 +301,6 @@
         <item>com.android.systemui.ScreenDecorations</item>
         <item>com.android.systemui.biometrics.AuthController</item>
         <item>com.android.systemui.SliceBroadcastRelayHandler</item>
-        <item>com.android.systemui.SizeCompatModeActivityController</item>
         <item>com.android.systemui.statusbar.notification.InstantAppNotifier</item>
         <item>com.android.systemui.theme.ThemeOverlayController</item>
         <item>com.android.systemui.accessibility.WindowMagnification</item>
@@ -351,7 +350,7 @@
     <bool name="config_showNotificationGear">true</bool>
 
     <!-- Whether or not a background should be drawn behind a notification. -->
-    <bool name="config_drawNotificationBackground">false</bool>
+    <bool name="config_drawNotificationBackground">true</bool>
 
     <!-- Whether or the notifications can be shown and dismissed with a drag. -->
     <bool name="config_enableNotificationShadeDrag">true</bool>
@@ -570,4 +569,7 @@
 
     <!-- Whether wallet view is shown in landscape / seascape orientations -->
     <bool name="global_actions_show_landscape_wallet_view">false</bool>
+
+    <!-- Whether to use the split 2-column notification shade -->
+    <bool name="config_use_split_notification_shade">false</bool>
 </resources>

@@ -17,15 +17,33 @@
 #ifndef _ANDROID_MEDIA_TV_FILTER_CLIENT_H_
 #define _ANDROID_MEDIA_TV_FILTER_CLIENT_H_
 
-//#include <aidl/android/media/tv/tuner/ITunerFilter.h>
+#include <aidl/android/media/tv/tuner/ITunerFilter.h>
+#include <aidl/android/media/tv/tuner/BnTunerFilterCallback.h>
+#include <aidl/android/media/tv/tuner/TunerFilterEvent.h>
+#include <aidl/android/media/tv/tuner/TunerFilterSettings.h>
+#include <aidlcommonsupport/NativeHandle.h>
 #include <android/hardware/tv/tuner/1.1/IFilter.h>
 #include <android/hardware/tv/tuner/1.1/IFilterCallback.h>
 #include <android/hardware/tv/tuner/1.1/types.h>
+#include <fmq/AidlMessageQueue.h>
 #include <fmq/MessageQueue.h>
 
+#include "ClientHelper.h"
 #include "FilterClientCallback.h"
 
-//using ::aidl::android::media::tv::tuner::ITunerFilter;
+using Status = ::ndk::ScopedAStatus;
+using ::aidl::android::hardware::common::fmq::SynchronizedReadWrite;
+using ::aidl::android::media::tv::tuner::BnTunerFilterCallback;
+using ::aidl::android::media::tv::tuner::ITunerFilter;
+using ::aidl::android::media::tv::tuner::TunerDemuxIpAddress;
+using ::aidl::android::media::tv::tuner::TunerFilterAvSettings;
+using ::aidl::android::media::tv::tuner::TunerFilterConfiguration;
+using ::aidl::android::media::tv::tuner::TunerFilterDownloadSettings;
+using ::aidl::android::media::tv::tuner::TunerFilterEvent;
+using ::aidl::android::media::tv::tuner::TunerFilterPesDataSettings;
+using ::aidl::android::media::tv::tuner::TunerFilterRecordSettings;
+using ::aidl::android::media::tv::tuner::TunerFilterSectionSettings;
+using ::aidl::android::media::tv::tuner::TunerFilterSettings;
 
 using ::android::hardware::EventFlag;
 using ::android::hardware::MessageQueue;
@@ -33,8 +51,19 @@ using ::android::hardware::MQDescriptorSync;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
 using ::android::hardware::hidl_handle;
+using ::android::hardware::tv::tuner::V1_0::DemuxAlpFilterSettings;
+using ::android::hardware::tv::tuner::V1_0::DemuxMmtpFilterSettings;
+using ::android::hardware::tv::tuner::V1_0::DemuxFilterAvSettings;
+using ::android::hardware::tv::tuner::V1_0::DemuxFilterDownloadSettings;
+using ::android::hardware::tv::tuner::V1_0::DemuxFilterPesDataSettings;
+using ::android::hardware::tv::tuner::V1_0::DemuxFilterRecordSettings;
+using ::android::hardware::tv::tuner::V1_0::DemuxFilterSectionSettings;
 using ::android::hardware::tv::tuner::V1_0::DemuxFilterSettings;
 using ::android::hardware::tv::tuner::V1_0::DemuxFilterType;
+using ::android::hardware::tv::tuner::V1_0::DemuxIpAddress;
+using ::android::hardware::tv::tuner::V1_0::DemuxIpFilterSettings;
+using ::android::hardware::tv::tuner::V1_0::DemuxTlvFilterSettings;
+using ::android::hardware::tv::tuner::V1_0::DemuxTsFilterSettings;
 using ::android::hardware::tv::tuner::V1_0::IFilter;
 using ::android::hardware::tv::tuner::V1_0::Result;
 using ::android::hardware::tv::tuner::V1_1::AvStreamType;
@@ -42,27 +71,51 @@ using ::android::hardware::tv::tuner::V1_1::IFilterCallback;
 
 using namespace std;
 
-using MQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
-
 namespace android {
+
+using MQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
+using MQDesc = MQDescriptorSync<uint8_t>;
+using AidlMQ = AidlMessageQueue<int8_t, SynchronizedReadWrite>;
+using AidlMQDesc = MQDescriptor<int8_t, SynchronizedReadWrite>;
 
 struct SharedHandleInfo {
     native_handle_t* sharedHandle;
     uint64_t size;
 };
 
-// TODO: pending aidl interface
-/*class TunerFilterCallback : public BnTunerFilterCallback {
+class TunerFilterCallback : public BnTunerFilterCallback {
 
 public:
     TunerFilterCallback(sp<FilterClientCallback> filterClientCallback);
-
-    Status onFilterEvent(vector<TunerDemuxFilterEvent> events);
     Status onFilterStatus(int status);
+    Status onFilterEvent(const vector<TunerFilterEvent>& filterEvents);
 
 private:
+    void getHidlFilterEvent(const vector<TunerFilterEvent>& filterEvents,
+            DemuxFilterEvent& event, DemuxFilterEventExt& eventExt);
+    void getHidlMediaEvent(
+            const vector<TunerFilterEvent>& filterEvents, DemuxFilterEvent& event);
+    void getHidlSectionEvent(
+            const vector<TunerFilterEvent>& filterEvents, DemuxFilterEvent& event);
+    void getHidlPesEvent(
+            const vector<TunerFilterEvent>& filterEvents, DemuxFilterEvent& event);
+    void getHidlTsRecordEvent(const vector<TunerFilterEvent>& filterEvents,
+            DemuxFilterEvent& event, DemuxFilterEventExt& eventExt);
+    void getHidlMmtpRecordEvent(const vector<TunerFilterEvent>& filterEvents,
+            DemuxFilterEvent& event, DemuxFilterEventExt& eventExt);
+    void getHidlDownloadEvent(
+            const vector<TunerFilterEvent>& filterEvents, DemuxFilterEvent& event);
+    void getHidlIpPayloadEvent(
+            const vector<TunerFilterEvent>& filterEvents, DemuxFilterEvent& event);
+    void getHidlTemiEvent(
+            const vector<TunerFilterEvent>& filterEvents, DemuxFilterEvent& event);
+    void getHidlMonitorEvent(
+            const vector<TunerFilterEvent>& filterEvents, DemuxFilterEventExt& eventExt);
+    void getHidlRestartEvent(
+            const vector<TunerFilterEvent>& filterEvents, DemuxFilterEventExt& eventExt);
+
     sp<FilterClientCallback> mFilterClientCallback;
-};*/
+};
 
 struct HidlFilterCallback : public IFilterCallback {
 
@@ -80,8 +133,7 @@ private:
 struct FilterClient : public RefBase {
 
 public:
-    // TODO: pending aidl interface
-    FilterClient(DemuxFilterType type);
+    FilterClient(DemuxFilterType type, shared_ptr<ITunerFilter> tunerFilter);
     ~FilterClient();
 
     // TODO: remove after migration to Tuner Service is done.
@@ -92,7 +144,7 @@ public:
      *
      * @return the actual reading size. -1 if failed to read.
      */
-    int read(uint8_t* buffer, int size);
+    int read(int8_t* buffer, int size);
 
     /**
      * Get the a/v shared memory handle information
@@ -162,7 +214,7 @@ public:
     /**
      * Get the Aidl filter to build up filter linkage.
      */
-    //shared_ptr<ITunerFilter> getAidlFilter() { return mTunerFilter; }
+    shared_ptr<ITunerFilter> getAidlFilter() { return mTunerFilter; }
 
     /**
      * Close a new interface of ITunerFilter.
@@ -170,17 +222,33 @@ public:
     Result close();
 
 private:
+    TunerFilterConfiguration getAidlFilterSettings(DemuxFilterSettings configure);
+
+    TunerFilterConfiguration getAidlTsSettings(DemuxTsFilterSettings configure);
+    TunerFilterConfiguration getAidlMmtpSettings(DemuxMmtpFilterSettings mmtp);
+    TunerFilterConfiguration getAidlIpSettings(DemuxIpFilterSettings ip);
+    TunerFilterConfiguration getAidlTlvSettings(DemuxTlvFilterSettings tlv);
+    TunerFilterConfiguration getAidlAlpSettings(DemuxAlpFilterSettings alp);
+
+    TunerFilterAvSettings getAidlAvSettings(DemuxFilterAvSettings hidlAv);
+    TunerFilterSectionSettings getAidlSectionSettings(DemuxFilterSectionSettings hidlSection);
+    TunerFilterPesDataSettings getAidlPesDataSettings(DemuxFilterPesDataSettings hidlPesData);
+    TunerFilterRecordSettings getAidlRecordSettings(DemuxFilterRecordSettings hidlRecord);
+    TunerFilterDownloadSettings getAidlDownloadSettings(DemuxFilterDownloadSettings hidlDownload);
+
+    void getAidlIpAddress(DemuxIpAddress ipAddr,
+            TunerDemuxIpAddress& srcIpAddress, TunerDemuxIpAddress& dstIpAddress);
     Result getFilterMq();
-    int copyData(uint8_t* buffer, int size);
+    int copyData(int8_t* buffer, int size);
     void checkIsMediaFilter(DemuxFilterType type);
     void handleAvShareMemory();
+    void closeAvSharedMemory();
 
     /**
      * An AIDL Tuner Filter Singleton assigned at the first time when the Tuner Client
      * opens a filter. Default null when Tuner Service does not exist.
      */
-    // TODO: pending on aidl interface
-    //shared_ptr<ITunerFilter> mTunerFilter;
+    shared_ptr<ITunerFilter> mTunerFilter;
 
     /**
      * A 1.0 Filter HAL interface that is ready before migrating to the TunerFilter.
@@ -196,11 +264,10 @@ private:
      */
     sp<::android::hardware::tv::tuner::V1_1::IFilter> mFilter_1_1;
 
-    unique_ptr<MQ> mFilterMQ;
+    AidlMQ* mFilterMQ;
     EventFlag* mFilterMQEventFlag;
 
     sp<FilterClientCallback> mCallback;
-    //shared_ptr<TunerFilterCallback> mAidlCallback;
     sp<HidlFilterCallback> mHidlCallback;
 
     native_handle_t* mAvSharedHandle;

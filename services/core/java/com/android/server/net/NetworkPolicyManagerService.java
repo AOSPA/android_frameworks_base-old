@@ -243,6 +243,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.StatLogger;
 import com.android.internal.util.XmlUtils;
+import com.android.net.module.util.NetworkIdentityUtils;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
@@ -1253,7 +1254,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 // identified carrier, which may want to manage their own notifications. This method
                 // should be called every time the carrier config changes anyways, and there's no
                 // reason to alert if there isn't a carrier.
-                return;
+                continue;
             }
 
             final boolean notifyWarning = getBooleanDefeatingNullable(config,
@@ -2163,13 +2164,14 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             if (template.matches(probeIdent)) {
                 if (LOGD) {
                     Slog.d(TAG, "Found template " + template + " which matches subscriber "
-                            + NetworkIdentity.scrubSubscriberId(subscriberId));
+                            + NetworkIdentityUtils.scrubSubscriberId(subscriberId));
                 }
                 return false;
             }
         }
 
-        Slog.i(TAG, "No policy for subscriber " + NetworkIdentity.scrubSubscriberId(subscriberId)
+        Slog.i(TAG, "No policy for subscriber "
+                + NetworkIdentityUtils.scrubSubscriberId(subscriberId)
                 + "; generating default policy");
         final NetworkPolicy policy = buildDefaultMobilePolicy(subId, subscriberId);
         addNetworkPolicyAL(policy);
@@ -3614,14 +3616,15 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     final int subId = mSubIdToSubscriberId.keyAt(i);
                     final String subscriberId = mSubIdToSubscriberId.valueAt(i);
 
-                    fout.println(subId + "=" + NetworkIdentity.scrubSubscriberId(subscriberId));
+                    fout.println(subId + "="
+                            + NetworkIdentityUtils.scrubSubscriberId(subscriberId));
                 }
                 fout.decreaseIndent();
 
                 fout.println();
                 for (String[] mergedSubscribers : mMergedSubscriberIds) {
                     fout.println("Merged subscriptions: " + Arrays.toString(
-                            NetworkIdentity.scrubSubscriberId(mergedSubscribers)));
+                            NetworkIdentityUtils.scrubSubscriberIds(mergedSubscribers)));
                 }
 
                 fout.println();
@@ -5383,7 +5386,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     public boolean isUidNetworkingBlocked(int uid, boolean isNetworkMetered) {
         final long startTime = mStatLogger.getTime();
 
-        enforceAnyPermissionOf(OBSERVE_NETWORK_POLICY, PERMISSION_MAINLINE_NETWORK_STACK);
+        mContext.enforceCallingOrSelfPermission(OBSERVE_NETWORK_POLICY, TAG);
         final int uidRules;
         final boolean isBackgroundRestricted;
         synchronized (mUidRulesFirstLock) {
@@ -5396,6 +5399,34 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         mStatLogger.logDurationStat(Stats.IS_UID_NETWORKING_BLOCKED, startTime);
 
         return ret;
+    }
+
+    @Override
+    public boolean checkUidNetworkingBlocked(int uid, int uidRules,
+            boolean isNetworkMetered, boolean isBackgroundRestricted) {
+        mContext.enforceCallingOrSelfPermission(OBSERVE_NETWORK_POLICY, TAG);
+        // Log of invoking this function is disabled because it will be called very frequently. And
+        // metrics are unlikely needed on this method because the callers are external and this
+        // method doesn't take any locks or perform expensive operations.
+        return isUidNetworkingBlockedInternal(uid, uidRules, isNetworkMetered,
+                isBackgroundRestricted, null);
+    }
+
+    @Override
+    public boolean isUidRestrictedOnMeteredNetworks(int uid) {
+        mContext.enforceCallingOrSelfPermission(OBSERVE_NETWORK_POLICY, TAG);
+        final int uidRules;
+        final boolean isBackgroundRestricted;
+        synchronized (mUidRulesFirstLock) {
+            uidRules = mUidRules.get(uid, RULE_ALLOW_ALL);
+            isBackgroundRestricted = mRestrictBackground;
+        }
+        // TODO(b/177490332): The logic here might not be correct because it doesn't consider
+        //  RULE_REJECT_METERED condition. And it could be replaced by
+        //  isUidNetworkingBlockedInternal().
+        return isBackgroundRestricted
+                && !hasRule(uidRules, RULE_ALLOW_METERED)
+                && !hasRule(uidRules, RULE_TEMPORARY_ALLOW_METERED);
     }
 
     private static boolean isSystem(int uid) {
@@ -5464,22 +5495,6 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     }
                 }
             }
-        }
-
-        /**
-         * @return true if the given uid is restricted from doing networking on metered networks.
-         */
-        @Override
-        public boolean isUidRestrictedOnMeteredNetworks(int uid) {
-            final int uidRules;
-            final boolean isBackgroundRestricted;
-            synchronized (mUidRulesFirstLock) {
-                uidRules = mUidRules.get(uid, RULE_ALLOW_ALL);
-                isBackgroundRestricted = mRestrictBackground;
-            }
-            return isBackgroundRestricted
-                    && !hasRule(uidRules, RULE_ALLOW_METERED)
-                    && !hasRule(uidRules, RULE_TEMPORARY_ALLOW_METERED);
         }
 
         @Override

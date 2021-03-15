@@ -42,10 +42,11 @@ import android.view.animation.PathInterpolator;
 import androidx.annotation.BinderThread;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.internal.inputmethod.Completable;
+import com.android.internal.inputmethod.ResultCallbacks;
 import com.android.internal.view.IInputMethodManager;
 
 import java.util.ArrayList;
-import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
@@ -158,6 +159,14 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
         }
     }
 
+    private void dispatchVisibilityChanged(int displayId, boolean isShowing) {
+        synchronized (mPositionProcessors) {
+            for (ImePositionProcessor pp : mPositionProcessors) {
+                pp.onImeVisibilityChanged(displayId, isShowing);
+            }
+        }
+    }
+
     /**
      * Adds an {@link ImePositionProcessor} to be called during ime position updates.
      */
@@ -207,23 +216,21 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
         }
 
         protected void insetsChanged(InsetsState insetsState) {
-            mMainExecutor.execute(() -> {
-                if (mInsetsState.equals(insetsState)) {
-                    return;
-                }
+            if (mInsetsState.equals(insetsState)) {
+                return;
+            }
 
-                mImeShowing = insetsState.getSourceOrDefaultVisibility(InsetsState.ITYPE_IME);
+            updateImeVisibility(insetsState.getSourceOrDefaultVisibility(InsetsState.ITYPE_IME));
 
-                final InsetsSource newSource = insetsState.getSource(InsetsState.ITYPE_IME);
-                final Rect newFrame = newSource.getFrame();
-                final Rect oldFrame = mInsetsState.getSource(InsetsState.ITYPE_IME).getFrame();
+            final InsetsSource newSource = insetsState.getSource(InsetsState.ITYPE_IME);
+            final Rect newFrame = newSource.getFrame();
+            final Rect oldFrame = mInsetsState.getSource(InsetsState.ITYPE_IME).getFrame();
 
-                mInsetsState.set(insetsState, true /* copySources */);
-                if (mImeShowing && !newFrame.equals(oldFrame) && newSource.isVisible()) {
-                    if (DEBUG) Slog.d(TAG, "insetsChanged when IME showing, restart animation");
-                    startAnimation(mImeShowing, true /* forceRestart */);
-                }
-            });
+            mInsetsState.set(insetsState, true /* copySources */);
+            if (mImeShowing && !newFrame.equals(oldFrame) && newSource.isVisible()) {
+                if (DEBUG) Slog.d(TAG, "insetsChanged when IME showing, restart animation");
+                startAnimation(mImeShowing, true /* forceRestart */);
+            }
         }
 
         @VisibleForTesting
@@ -236,27 +243,25 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                         continue;
                     }
                     if (activeControl.getType() == InsetsState.ITYPE_IME) {
-                        mMainExecutor.execute(() -> {
-                            final Point lastSurfacePosition = mImeSourceControl != null
-                                    ? mImeSourceControl.getSurfacePosition() : null;
-                            final boolean positionChanged =
-                                    !activeControl.getSurfacePosition().equals(lastSurfacePosition);
-                            final boolean leashChanged =
-                                    !haveSameLeash(mImeSourceControl, activeControl);
-                            mImeSourceControl = activeControl;
-                            if (mAnimation != null) {
-                                if (positionChanged) {
-                                    startAnimation(mImeShowing, true /* forceRestart */);
-                                }
-                            } else {
-                                if (leashChanged) {
-                                    applyVisibilityToLeash();
-                                }
-                                if (!mImeShowing) {
-                                    removeImeSurface();
-                                }
+                        final Point lastSurfacePosition = mImeSourceControl != null
+                                ? mImeSourceControl.getSurfacePosition() : null;
+                        final boolean positionChanged =
+                                !activeControl.getSurfacePosition().equals(lastSurfacePosition);
+                        final boolean leashChanged =
+                                !haveSameLeash(mImeSourceControl, activeControl);
+                        mImeSourceControl = activeControl;
+                        if (mAnimation != null) {
+                            if (positionChanged) {
+                                startAnimation(mImeShowing, true /* forceRestart */);
                             }
-                        });
+                        } else {
+                            if (leashChanged) {
+                                applyVisibilityToLeash();
+                            }
+                            if (!mImeShowing) {
+                                removeImeSurface();
+                            }
+                        }
                     }
                 }
             }
@@ -281,7 +286,7 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                 return;
             }
             if (DEBUG) Slog.d(TAG, "Got showInsets for ime");
-            mMainExecutor.execute(() -> startAnimation(true /* show */, false /* forceRestart */));
+            startAnimation(true /* show */, false /* forceRestart */);
         }
 
 
@@ -290,7 +295,7 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                 return;
             }
             if (DEBUG) Slog.d(TAG, "Got hideInsets for ime");
-            mMainExecutor.execute(() -> startAnimation(false /* show */, false /* forceRestart */));
+            startAnimation(false /* show */, false /* forceRestart */);
         }
 
         public void topFocusedWindowChanged(String packageName) {
@@ -374,7 +379,7 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                 seek = true;
             }
             mAnimationDirection = show ? DIRECTION_SHOW : DIRECTION_HIDE;
-            mImeShowing = show;
+            updateImeVisibility(show);
             mAnimation = ValueAnimator.ofFloat(startY, endY);
             mAnimation.setDuration(
                     show ? ANIMATION_DURATION_SHOW_MS : ANIMATION_DURATION_HIDE_MS);
@@ -458,6 +463,13 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
             }
         }
 
+        private void updateImeVisibility(boolean isShowing) {
+            if (mImeShowing != isShowing) {
+                mImeShowing = isShowing;
+                dispatchVisibilityChanged(mDisplayId, isShowing);
+            }
+        }
+
         @VisibleForTesting
         @BinderThread
         public class DisplayWindowInsetsControllerImpl
@@ -506,7 +518,9 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
             try {
                 // Remove the IME surface to make the insets invisible for
                 // non-client controlled insets.
-                imms.removeImeSurface();
+                final Completable.Void value = Completable.createVoid();
+                imms.removeImeSurface(ResultCallbacks.of(value));
+                Completable.getResult(value);
             } catch (RemoteException e) {
                 Slog.e(TAG, "Failed to remove IME surface.", e);
             }
@@ -563,6 +577,15 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
          */
         default void onImeEndPositioning(int displayId, boolean cancel,
                 SurfaceControl.Transaction t) {
+        }
+
+        /**
+         * Called when the IME visibility changed.
+         *
+         * @param isShowing {@code true} if the IME is shown.
+         */
+        default void onImeVisibilityChanged(int displayId, boolean isShowing) {
+
         }
     }
 

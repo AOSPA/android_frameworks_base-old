@@ -28,7 +28,6 @@ import android.app.ActivityThread;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
-import android.hardware.soundtrigger.IRecognitionStatusCallback;
 import android.hardware.soundtrigger.KeyphraseEnrollmentInfo;
 import android.hardware.soundtrigger.KeyphraseMetadata;
 import android.hardware.soundtrigger.SoundTrigger;
@@ -48,6 +47,7 @@ import android.os.Message;
 import android.os.RemoteException;
 import android.util.Slog;
 
+import com.android.internal.app.IHotwordRecognitionStatusCallback;
 import com.android.internal.app.IVoiceInteractionManagerService;
 import com.android.internal.app.IVoiceInteractionSoundTriggerSession;
 
@@ -125,6 +125,7 @@ public class AlwaysOnHotwordDetector {
             RECOGNITION_FLAG_ALLOW_MULTIPLE_TRIGGERS,
             RECOGNITION_FLAG_ENABLE_AUDIO_ECHO_CANCELLATION,
             RECOGNITION_FLAG_ENABLE_AUDIO_NOISE_SUPPRESSION,
+            RECOGNITION_FLAG_RUN_IN_BATTERY_SAVER,
     })
     public @interface RecognitionFlags {}
 
@@ -170,6 +171,14 @@ public class AlwaysOnHotwordDetector {
      * audio capability supported, there will be no audio effect applied.
      */
     public static final int RECOGNITION_FLAG_ENABLE_AUDIO_NOISE_SUPPRESSION = 0x8;
+
+    /**
+     * Recognition flag for {@link #startRecognition(int)} that indicates whether the recognition
+     * should continue after battery saver mode is enabled.
+     * When this flag is specified, the caller will be checked for
+     * {@link android.Manifest.permission#SOUND_TRIGGER_RUN_IN_BATTERY_SAVER} permission granted.
+     */
+    public static final int RECOGNITION_FLAG_RUN_IN_BATTERY_SAVER = 0x10;
 
     //---- Recognition mode flags. Return codes for getSupportedRecognitionModes() ----//
     // Must be kept in sync with the related attribute defined as searchKeyphraseRecognitionFlags.
@@ -228,6 +237,18 @@ public class AlwaysOnHotwordDetector {
     public @interface ModelParams {}
 
     /**
+     * Indicates that the given audio data is a false alert for {@link VoiceInteractionService}.
+     */
+    public static final int HOTWORD_DETECTION_FALSE_ALERT = 0;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, prefix = { "HOTWORD_DETECTION_" }, value = {
+            HOTWORD_DETECTION_FALSE_ALERT,
+    })
+    public @interface HotwordDetectionResult {}
+
+    /**
      * Controls the sensitivity threshold adjustment factor for a given model.
      * Negative value corresponds to less sensitive model (high threshold) and
      * a positive value corresponds to a more sensitive model (low threshold).
@@ -247,6 +268,7 @@ public class AlwaysOnHotwordDetector {
     private static final int MSG_DETECTION_ERROR = 3;
     private static final int MSG_DETECTION_PAUSE = 4;
     private static final int MSG_DETECTION_RESUME = 5;
+    private static final int MSG_HOTWORD_REJECTED = 6;
 
     private final String mText;
     private final Locale mLocale;
@@ -451,6 +473,13 @@ public class AlwaysOnHotwordDetector {
          * except showing an indication on their UI if they have to.
          */
         public abstract void onRecognitionResumed();
+
+        /**
+         * Called when the validated result is invalid.
+         *
+         * @param reason The reason why the validated result is invalid.
+         */
+        public void onRejected(@HotwordDetectionResult int reason) {}
     }
 
     /**
@@ -860,6 +889,7 @@ public class AlwaysOnHotwordDetector {
                 (recognitionFlags&RECOGNITION_FLAG_CAPTURE_TRIGGER_AUDIO) != 0;
         boolean allowMultipleTriggers =
                 (recognitionFlags&RECOGNITION_FLAG_ALLOW_MULTIPLE_TRIGGERS) != 0;
+        boolean runInBatterySaver = (recognitionFlags&RECOGNITION_FLAG_RUN_IN_BATTERY_SAVER) != 0;
 
         int audioCapabilities = 0;
         if ((recognitionFlags & RECOGNITION_FLAG_ENABLE_AUDIO_ECHO_CANCELLATION) != 0) {
@@ -874,7 +904,8 @@ public class AlwaysOnHotwordDetector {
             code = mSoundTriggerSession.startRecognition(
                     mKeyphraseMetadata.getId(), mLocale.toLanguageTag(), mInternalCallback,
                     new RecognitionConfig(captureTriggerAudio, allowMultipleTriggers,
-                            recognitionExtra, null /* additional data */, audioCapabilities));
+                            recognitionExtra, null /* additional data */, audioCapabilities),
+                    runInBatterySaver);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -955,7 +986,7 @@ public class AlwaysOnHotwordDetector {
     }
 
     /** @hide */
-    static final class SoundTriggerListener extends IRecognitionStatusCallback.Stub {
+    static final class SoundTriggerListener extends IHotwordRecognitionStatusCallback.Stub {
         private final Handler mHandler;
 
         public SoundTriggerListener(Handler handler) {
@@ -977,6 +1008,16 @@ public class AlwaysOnHotwordDetector {
         @Override
         public void onGenericSoundTriggerDetected(SoundTrigger.GenericRecognitionEvent event) {
             Slog.w(TAG, "Generic sound trigger event detected at AOHD: " + event);
+        }
+
+        @Override
+        public void onRejected(int reason) {
+            if (DBG) {
+                Slog.d(TAG, "onRejected(" + reason + ")");
+            } else {
+                Slog.i(TAG, "onRejected");
+            }
+            Message.obtain(mHandler, MSG_HOTWORD_REJECTED, reason).sendToTarget();
         }
 
         @Override
@@ -1023,6 +1064,9 @@ public class AlwaysOnHotwordDetector {
                     break;
                 case MSG_DETECTION_RESUME:
                     mExternalCallback.onRecognitionResumed();
+                    break;
+                case MSG_HOTWORD_REJECTED:
+                    mExternalCallback.onRejected(msg.arg1);
                     break;
                 default:
                     super.handleMessage(msg);

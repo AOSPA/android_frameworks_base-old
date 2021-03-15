@@ -38,6 +38,7 @@ public class SecureSettings {
         Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED,
         Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED,
         Settings.Secure.ADAPTIVE_SLEEP,
+        Settings.Secure.CAMERA_AUTOROTATE,
         Settings.Secure.AUTOFILL_SERVICE,
         Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE,
         Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
@@ -184,6 +185,7 @@ public class SecureSettings {
         Settings.Secure.ACCESSIBILITY_BUTTON_MODE,
         Settings.Secure.ACCESSIBILITY_FLOATING_MENU_SIZE,
         Settings.Secure.ACCESSIBILITY_FLOATING_MENU_ICON_TYPE,
-        Settings.Secure.ACCESSIBILITY_FLOATING_MENU_OPACITY
+        Settings.Secure.ACCESSIBILITY_FLOATING_MENU_OPACITY,
+        Settings.Secure.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED,
     };
 }

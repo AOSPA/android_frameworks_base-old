@@ -41,6 +41,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.Size;
 import android.annotation.StyleRes;
+import android.annotation.SuppressLint;
 import android.annotation.TestApi;
 import android.annotation.UiContext;
 import android.annotation.UiThread;
@@ -139,6 +140,7 @@ import android.view.inputmethod.InputConnection;
 import android.view.inspector.InspectableProperty;
 import android.view.inspector.InspectableProperty.EnumEntry;
 import android.view.inspector.InspectableProperty.FlagEntry;
+import android.view.translation.TranslationRequest;
 import android.widget.Checkable;
 import android.widget.FrameLayout;
 import android.widget.ScrollBarDrawable;
@@ -8738,13 +8740,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Populates a {@link ViewStructure} for content capture.
      *
-     * <p>This method is called after a view is that is eligible for content capture
-     * (for example, if it {@link #isImportantForAutofill()}, an intelligence service is enabled for
-     * the user, and the activity rendering the view is enabled for content capture) is laid out and
-     * is visible.
-     *
-     * <p>The populated structure is then passed to the service through
+     * <p>This method is called after a view that is eligible for content capture
+     * (for example, if it {@link #isImportantForContentCapture()}, an intelligence service is
+     * enabled for the user, and the activity rendering the view is enabled for content capture)
+     * is laid out and is visible. The populated structure is then passed to the service through
      * {@link ContentCaptureSession#notifyViewAppeared(ViewStructure)}.
+     *
+     * <p>The default implementation of this method sets the most relevant properties based on
+     * related {@link View} methods, and views in the standard Android widgets library also
+     * override it to set their relevant properties. Therefore, if overriding this method, it
+     * is recommended to call {@code super.onProvideContentCaptureStructure()}.
      *
      * <p><b>Note: </b>views that manage a virtual structure under this view must populate just
      * the node representing this view and return right away, then asynchronously report (not
@@ -8753,7 +8758,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link ContentCaptureSession#notifyViewAppeared(ViewStructure)},
      * {@link ContentCaptureSession#notifyViewDisappeared(AutofillId)}, and
      * {@link ContentCaptureSession#notifyViewTextChanged(AutofillId, CharSequence)}
-     * respectively. The structure for the a child must be created using
+     * respectively. The structure for a child must be created using
      * {@link ContentCaptureSession#newVirtualViewStructure(AutofillId, long)}, and the
      * {@code autofillId} for a child can be obtained either through
      * {@code childStructure.getAutofillId()} or
@@ -8898,7 +8903,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Called when assist structure is being retrieved from a view as part of
      * {@link android.app.Activity#onProvideAssistData Activity.onProvideAssistData} to
-     * generate additional virtual structure under this view.  The defaullt implementation
+     * generate additional virtual structure under this view.  The default implementation
      * uses {@link #getAccessibilityNodeProvider()} to try to generate this from the
      * view's virtual accessibility nodes, if any.  You can override this for a more
      * optimal implementation providing this data.
@@ -9029,7 +9034,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                  not be null or empty if a non-null listener is passed in.
      * @param listener The listener to use. This can be null to reset to the default behavior.
      */
-    public void setOnReceiveContentListener(@Nullable String[] mimeTypes,
+    public void setOnReceiveContentListener(
+            @SuppressLint("NullableCollection") @Nullable String[] mimeTypes,
             @Nullable OnReceiveContentListener listener) {
         if (listener != null) {
             Preconditions.checkArgument(mimeTypes != null && mimeTypes.length > 0,
@@ -9105,6 +9111,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return The MIME types accepted by {@link #performReceiveContent} for this view (may
      * include patterns such as "image/*").
      */
+    @SuppressLint("NullableCollection")
     @Nullable
     public String[] getOnReceiveContentMimeTypes() {
         return mOnReceiveContentMimeTypes;
@@ -9802,20 +9809,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
     }
 
-    private void notifyAttachForDrawables() {
-        if (mBackground != null) mBackground.onAttached(this);
-        if (mForegroundInfo != null && mForegroundInfo.mDrawable != null) {
-            mForegroundInfo.mDrawable.onAttached(this);
-        }
-    }
-
-    private void notifyDetachForDrawables() {
-        if (mBackground != null) mBackground.onDetached(this);
-        if (mForegroundInfo != null && mForegroundInfo.mDrawable != null) {
-            mForegroundInfo.mDrawable.onDetached(this);
-        }
-    }
-
     private void setNotifiedContentCaptureAppeared() {
         mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED;
         mPrivateFlags4 &= ~PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED;
@@ -10363,6 +10356,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         for (int i = 0; i < childDrawIndex; i++) {
                             drawingOrderInParent += numViewsForAccessibility(preorderedList.get(i));
                         }
+                        preorderedList.clear();
                     } else {
                         final int childIndex = parentGroup.indexOfChild(viewAtDrawingLevel);
                         final boolean customOrder = parentGroup.isChildrenDrawingOrderEnabled();
@@ -20671,7 +20665,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         notifyEnterOrExitForAutoFillIfNeeded(true);
         notifyAppearedOrDisappearedForContentCaptureIfNeeded(true);
-        notifyAttachForDrawables();
     }
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
@@ -20721,7 +20714,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         notifyEnterOrExitForAutoFillIfNeeded(false);
         notifyAppearedOrDisappearedForContentCaptureIfNeeded(false);
-        notifyDetachForDrawables();
     }
 
     /**
@@ -21369,6 +21361,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             int width = mRight - mLeft;
             int height = mBottom - mTop;
             int layerType = getLayerType();
+
+            // Hacky hack: Reset any stretch effects as those are applied during the draw pass
+            // instead of being "stateful" like other RenderNode properties
+            renderNode.clearStretch();
 
             final RecordingCanvas canvas = renderNode.beginRecording(width, height);
 
@@ -22796,6 +22792,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         final Rect bounds = drawable.getBounds();
         final int width = bounds.width();
         final int height = bounds.height();
+
+        // Hacky hack: Reset any stretch effects as those are applied during the draw pass
+        // instead of being "stateful" like other RenderNode properties
+        renderNode.clearStretch();
+
         final RecordingCanvas canvas = renderNode.beginRecording(width, height);
 
         // Reverse left/top translation done by drawable canvas, which will
@@ -23850,7 +23851,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mBackground != null) {
             if (isAttachedToWindow()) {
                 mBackground.setVisible(false, false);
-                mBackground.onDetached(this);
             }
             mBackground.setCallback(null);
             unscheduleDrawable(mBackground);
@@ -23900,7 +23900,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 background.setState(getDrawableState());
             }
             if (isAttachedToWindow()) {
-                background.onAttached(this);
                 background.setVisible(getWindowVisibility() == VISIBLE && isShown(), false);
             }
 
@@ -24133,7 +24132,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mForegroundInfo.mDrawable != null) {
             if (isAttachedToWindow()) {
                 mForegroundInfo.mDrawable.setVisible(false, false);
-                mForegroundInfo.mDrawable.onDetached(this);
             }
             mForegroundInfo.mDrawable.setCallback(null);
             unscheduleDrawable(mForegroundInfo.mDrawable);
@@ -24151,7 +24149,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
             applyForegroundTint();
             if (isAttachedToWindow()) {
-                foreground.onAttached(this);
                 foreground.setVisible(getWindowVisibility() == VISIBLE && isShown(), false);
             }
             // Set callback last, since the view may still be initializing.
@@ -30633,5 +30630,73 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         } else {
             mPrivateFlags4 &= ~PFLAG4_DETACHED;
         }
+    }
+
+    /**
+     * Returns a {@link TranslationRequest} to the {@link onStartUiTranslation} which represents
+     * the content to be translated.
+     *
+     * <p>The default implementation does nothing and return null.</p>
+     *
+     * @hide
+     *
+     * @return the {@link TranslationRequest} which contains the information to be translated.
+     */
+    @Nullable
+    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
+    public TranslationRequest onCreateTranslationRequest() {
+        return null;
+    }
+
+    /**
+     * Called when the user wants to show the original text instead of the translated text.
+     *
+     * @hide
+     *
+     * <p> The default implementation does nothing.
+     */
+    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
+    public void onPauseUiTranslation() {
+        // no-op
+    }
+
+    /**
+     * User can switch back to show the original text, this method called when the user wants to
+     * re-show the translated text again.
+     *
+     * @hide
+     *
+     * <p> The default implementation does nothing.</p>
+     */
+    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
+    public void onRestoreUiTranslation() {
+        // no-op
+    }
+
+    /**
+     * Called when the user finish the Ui translation and no longer to show the translated text.
+     *
+     * @hide
+     *
+     * <p> The default implementation does nothing.</p>
+     */
+    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
+    public void onFinishUiTranslation() {
+        // no-op
+    }
+
+    /**
+     * Called when the request from {@link onStartUiTranslation} is completed by the translation
+     * service so that the translation result can be shown.
+     *
+     * @hide
+     *
+     * <p> The default implementation does nothing.</p>
+     *
+     * @param request the translated information which can be shown in the view.
+     */
+    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
+    public void onTranslationComplete(@NonNull TranslationRequest request) {
+        // no-op
     }
 }

@@ -915,6 +915,45 @@ public final class PowerManager {
     })
     public @interface LocationPowerSaveMode {}
 
+    /**
+     * In this mode, all active SoundTrigger recognitions are enabled by the SoundTrigger system
+     * service.
+     * @hide
+     */
+    @SystemApi
+    public static final int SOUND_TRIGGER_MODE_ALL_ENABLED = 0;
+    /**
+     * In this mode, only privileged components of the SoundTrigger system service should be
+     * enabled. This functionality is to be used to limit SoundTrigger recognitions to those only
+     * deemed necessary by the system.
+     * @hide
+     */
+    @SystemApi
+    public static final int SOUND_TRIGGER_MODE_CRITICAL_ONLY = 1;
+    /**
+     * In this mode, all active SoundTrigger recognitions should be disabled by the SoundTrigger
+     * system service.
+     * @hide
+     */
+    @SystemApi
+    public static final int SOUND_TRIGGER_MODE_ALL_DISABLED = 2;
+
+    /** @hide */
+    public static final int MIN_SOUND_TRIGGER_MODE = SOUND_TRIGGER_MODE_ALL_ENABLED;
+    /** @hide */
+    public static final int MAX_SOUND_TRIGGER_MODE = SOUND_TRIGGER_MODE_ALL_DISABLED;
+
+    /**
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"SOUND_TRIGGER_MODE_"}, value = {
+            SOUND_TRIGGER_MODE_ALL_ENABLED,
+            SOUND_TRIGGER_MODE_CRITICAL_ONLY,
+            SOUND_TRIGGER_MODE_ALL_DISABLED,
+    })
+    public @interface SoundTriggerPowerSaveMode {}
+
     /** @hide */
     public static String locationPowerSaveModeToString(@LocationPowerSaveMode int mode) {
         switch (mode) {
@@ -1659,6 +1698,65 @@ public final class PowerManager {
     }
 
     /**
+     * Gets the current policy for full power save mode.
+     *
+     * @return The {@link BatterySaverPolicyConfig} which is currently set for the full power save
+     *          policy level.
+     *
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public BatterySaverPolicyConfig getFullPowerSavePolicy() {
+        try {
+            return mService.getFullPowerSavePolicy();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the policy for full power save mode.
+     *
+     * Any settings set by this API will persist for only one session of full battery saver mode.
+     * The settings set by this API are cleared upon exit of full battery saver mode, and the
+     * caller is expected to set the desired values again for the next full battery saver mode
+     * session if desired.
+     *
+     * Use-cases:
+     * 1. Set policy outside of full battery saver mode
+     *     - full policy set -> enter BS -> policy setting applied -> exit BS -> setting cleared
+     * 2. Set policy inside of full battery saver mode
+     *     - enter BS -> full policy set -> policy setting applied -> exit BS -> setting cleared
+     *
+     * This API is intended to be used with {@link #getFullPowerSavePolicy()} API when a client only
+     * wants to modify a specific setting(s) and leave the remaining policy attributes the same.
+     * Example:
+     * BatterySaverPolicyConfig newFullPolicyConfig =
+     *     new BatterySaverPolicyConfig.Builder(powerManager.getFullPowerSavePolicy())
+     *         .setSoundTriggerMode(PowerManager.SOUND_TRIGGER_MODE_ALL_DISABLED)
+     *         .build();
+     * powerManager.setFullPowerSavePolicy(newFullPolicyConfig);
+     *
+     * @return true if there was an effectual change. If full battery saver is enabled, then this
+     * will return true.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.DEVICE_POWER,
+            android.Manifest.permission.POWER_SAVER
+    })
+    public boolean setFullPowerSavePolicy(@NonNull BatterySaverPolicyConfig config) {
+        try {
+            return mService.setFullPowerSavePolicy(config);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Updates the current state of dynamic power savings and disable threshold. This is
      * a signal to the system which an app can update to serve as an indicator that
      * the user will be in a battery critical situation before being able to plug in.
@@ -1890,6 +1988,26 @@ public final class PowerManager {
             return LOCATION_MODE_NO_CHANGE;
         }
         return powerSaveState.locationMode;
+    }
+
+    /**
+     * Returns how SoundTrigger features should behave when battery saver is on. When battery saver
+     * is off, this will always return {@link #SOUND_TRIGGER_MODE_ALL_ENABLED}.
+     *
+     * <p>This API is normally only useful for components that provide use SoundTrigger features.
+     *
+     * @see #isPowerSaveMode()
+     * @see #ACTION_POWER_SAVE_MODE_CHANGED
+     *
+     * @hide
+     */
+    @SoundTriggerPowerSaveMode
+    public int getSoundTriggerPowerSaveMode() {
+        final PowerSaveState powerSaveState = getPowerSaveState(ServiceType.SOUND);
+        if (!powerSaveState.batterySaverEnabled) {
+            return SOUND_TRIGGER_MODE_ALL_ENABLED;
+        }
+        return powerSaveState.soundTriggerMode;
     }
 
     /**

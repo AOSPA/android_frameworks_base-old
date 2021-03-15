@@ -60,6 +60,10 @@ public class CacheOomRanker {
 
     private final Object mPhenotypeFlagLock = new Object();
 
+    private final ActivityManagerService mService;
+    private final ActivityManagerGlobalLock mProcLock;
+    private final Object mProfilerLock;
+
     @GuardedBy("mPhenotypeFlagLock")
     private boolean mUseOomReRanking = DEFAULT_USE_OOM_RE_RANKING;
     // Weight to apply to the LRU ordering.
@@ -100,6 +104,12 @@ public class CacheOomRanker {
                     }
                 }
             };
+
+    CacheOomRanker(final ActivityManagerService service) {
+        mService = service;
+        mProcLock = service.mProcLock;
+        mProfilerLock = service.mAppProfiler.mProfilerLock;
+    }
 
     /** Load settings from device config and register a listener for changes. */
     public void init(Executor executor) {
@@ -171,14 +181,13 @@ public class CacheOomRanker {
      * Re-rank the cached processes in the lru list with a weighted ordering
      * of lru, rss size and number of times the process has been put in the cache.
      */
-    public void reRankLruCachedApps(ProcessList processList) {
+    @GuardedBy({"mService", "mProcLock"})
+    void reRankLruCachedAppsLSP(ArrayList<ProcessRecord> lruList, int lruProcessServiceStart) {
         float lruWeight;
         float usesWeight;
         float rssWeight;
         int[] lruPositions;
         RankedProcessRecord[] scoredProcessRecords;
-
-        ArrayList<ProcessRecord> lruList = processList.mLruProcesses;
 
         synchronized (mPhenotypeFlagLock) {
             lruWeight = mLruWeight;
@@ -196,11 +205,11 @@ public class CacheOomRanker {
         // Collect the least recently used processes to re-rank, only rank cached
         // processes further down the list than mLruProcessServiceStart.
         int cachedProcessPos = 0;
-        for (int i = 0; i < processList.mLruProcessServiceStart
+        for (int i = 0; i < lruProcessServiceStart
                 && cachedProcessPos < scoredProcessRecords.length; ++i) {
             ProcessRecord app = lruList.get(i);
             // Processes that will be assigned a cached oom adj score.
-            if (!app.killedByAm && app.thread != null && app.curAdj
+            if (!app.isKilledByAm() && app.getThread() != null && app.mState.getCurAdj()
                     >= ProcessList.UNKNOWN_ADJ) {
                 scoredProcessRecords[cachedProcessPos].proc = app;
                 scoredProcessRecords[cachedProcessPos].score = 0.0f;
@@ -223,7 +232,9 @@ public class CacheOomRanker {
             addToScore(scoredProcessRecords, lruWeight);
         }
         if (rssWeight > 0.0f) {
-            Arrays.sort(scoredProcessRecords, LAST_RSS_COMPARATOR);
+            synchronized (mService.mAppProfiler.mProfilerLock) {
+                Arrays.sort(scoredProcessRecords, LAST_RSS_COMPARATOR);
+            }
             addToScore(scoredProcessRecords, rssWeight);
         }
         if (usesWeight > 0.0f) {
@@ -237,7 +248,8 @@ public class CacheOomRanker {
         if (ActivityManagerDebugConfig.DEBUG_OOM_ADJ) {
             boolean printedHeader = false;
             for (int i = 0; i < scoredProcessRecords.length; ++i) {
-                if (scoredProcessRecords[i].proc.pid != lruList.get(lruPositions[i]).pid) {
+                if (scoredProcessRecords[i].proc.getPid()
+                        != lruList.get(lruPositions[i]).getPid()) {
                     if (!printedHeader) {
                         Slog.i(OomAdjuster.TAG, "reRankLruCachedApps");
                         printedHeader = true;
@@ -281,15 +293,15 @@ public class CacheOomRanker {
     private static class LastActivityTimeComparator implements Comparator<RankedProcessRecord> {
         @Override
         public int compare(RankedProcessRecord o1, RankedProcessRecord o2) {
-            return Long.compare(o1.proc.lastActivityTime, o2.proc.lastActivityTime);
+            return Long.compare(o1.proc.getLastActivityTime(), o2.proc.getLastActivityTime());
         }
     }
 
     private static class CacheUseComparator implements Comparator<RankedProcessRecord> {
         @Override
         public int compare(RankedProcessRecord o1, RankedProcessRecord o2) {
-            return Long.compare(o1.proc.getCacheOomRankerUseCount(),
-                    o2.proc.getCacheOomRankerUseCount());
+            return Long.compare(o1.proc.mState.getCacheOomRankerUseCount(),
+                    o2.proc.mState.getCacheOomRankerUseCount());
         }
     }
 
@@ -297,7 +309,7 @@ public class CacheOomRanker {
         @Override
         public int compare(RankedProcessRecord o1, RankedProcessRecord o2) {
             // High RSS first to match least recently used.
-            return Long.compare(o2.proc.mLastRss, o1.proc.mLastRss);
+            return Long.compare(o2.proc.mProfile.getLastRss(), o1.proc.mProfile.getLastRss());
         }
     }
 

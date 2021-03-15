@@ -22,7 +22,6 @@ import static android.Manifest.permission.HIDE_OVERLAY_WINDOWS;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
 import static android.Manifest.permission.SYSTEM_APPLICATION_OVERLAY;
-import static android.Manifest.permission.USE_BACKGROUND_BLUR;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.content.ClipDescription.MIMETYPE_APPLICATION_ACTIVITY;
 import static android.content.ClipDescription.MIMETYPE_APPLICATION_SHORTCUT;
@@ -58,7 +57,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.Trace;
 import android.os.UserHandle;
-import android.service.attestation.ImpressionToken;
+import android.service.screenshot.ScreenshotHash;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.MergedConfiguration;
@@ -103,13 +102,14 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     private final ArraySet<WindowSurfaceController> mAlertWindowSurfaces = new ArraySet<>();
     private final DragDropController mDragDropController;
     final boolean mCanAddInternalSystemWindow;
+    private final boolean mCanStartTasksFromRecents;
+
     // If non-system overlays from this process can be hidden by the user or app using
     // HIDE_NON_SYSTEM_OVERLAY_WINDOWS.
     final boolean mOverlaysCanBeHidden;
     final boolean mCanCreateSystemApplicationOverlay;
     final boolean mCanHideNonSystemOverlayWindows;
     final boolean mCanAcquireSleepToken;
-    final boolean mCanUseBackgroundBlur;
     private AlertWindowNotification mAlertWindowNotification;
     private boolean mShowingAlertWindowNotificationAllowed;
     private boolean mClientDead = false;
@@ -134,11 +134,11 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         mCanCreateSystemApplicationOverlay =
                 service.mContext.checkCallingOrSelfPermission(SYSTEM_APPLICATION_OVERLAY)
                         == PERMISSION_GRANTED;
+        mCanStartTasksFromRecents = service.mContext.checkCallingOrSelfPermission(
+                START_TASKS_FROM_RECENTS) == PERMISSION_GRANTED;
         mOverlaysCanBeHidden = !mCanAddInternalSystemWindow
                 && !mService.mAtmInternal.isCallerRecents(mUid);
         mCanAcquireSleepToken = service.mContext.checkCallingOrSelfPermission(DEVICE_POWER)
-                == PERMISSION_GRANTED;
-        mCanUseBackgroundBlur = service.mContext.checkCallingOrSelfPermission(USE_BACKGROUND_BLUR)
                 == PERMISSION_GRANTED;
         mShowingAlertWindowNotificationAllowed = mService.mShowAlertWindowNotifications;
         mDragDropController = mService.mDragDropController;
@@ -192,32 +192,30 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
 
     @Override
     public int addToDisplay(IWindow window, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, InsetsState requestedVisibility, Rect outFrame,
+            int viewVisibility, int displayId, InsetsState requestedVisibility,
             InputChannel outInputChannel, InsetsState outInsetsState,
             InsetsSourceControl[] outActiveControls) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId,
-                UserHandle.getUserId(mUid), requestedVisibility, outFrame, outInputChannel,
-                outInsetsState, outActiveControls);
+                UserHandle.getUserId(mUid), requestedVisibility, outInputChannel, outInsetsState,
+                outActiveControls);
     }
 
 
     @Override
     public int addToDisplayAsUser(IWindow window, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, int userId, InsetsState requestedVisibility,
-            Rect outFrame, InputChannel outInputChannel, InsetsState outInsetsState,
+            InputChannel outInputChannel, InsetsState outInsetsState,
             InsetsSourceControl[] outActiveControls) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId, userId,
-                requestedVisibility, outFrame, outInputChannel, outInsetsState,
-                outActiveControls);
+                requestedVisibility, outInputChannel, outInsetsState, outActiveControls);
     }
 
     @Override
     public int addToDisplayWithoutInputChannel(IWindow window, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, InsetsState outInsetsState) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId,
-                UserHandle.getUserId(mUid), mDummyRequestedVisibility,
-                new Rect() /* outFrame */, null /* outInputChannel */, outInsetsState,
-                mDummyControls);
+                UserHandle.getUserId(mUid), mDummyRequestedVisibility, null /* outInputChannel */,
+                outInsetsState, mDummyControls);
     }
 
     @Override
@@ -374,8 +372,9 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         } else if (hasShortcut) {
             // Restrict who can start a shortcut drag since it will start the shortcut as the
             // target shortcut package
-            mService.mAtmService.enforceCallerIsRecentsOrHasPermission(START_TASKS_FROM_RECENTS,
-                    "performDrag");
+            if (!mCanStartTasksFromRecents) {
+                throw new SecurityException("Requires START_TASKS_FROM_RECENTS permission");
+            }
             for (int i = 0; i < data.getItemCount(); i++) {
                 final ClipData.Item item = data.getItemAt(i);
                 final Intent intent = item.getIntent();
@@ -403,8 +402,9 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
             }
         } else if (hasTask) {
             // TODO(b/169894807): Consider opening this up for tasks from the same app as the caller
-            mService.mAtmService.enforceCallerIsRecentsOrHasPermission(START_TASKS_FROM_RECENTS,
-                    "performDrag");
+            if (!mCanStartTasksFromRecents) {
+                throw new SecurityException("Requires START_TASKS_FROM_RECENTS permission");
+            }
             for (int i = 0; i < data.getItemCount(); i++) {
                 final ClipData.Item item = data.getItemAt(i);
                 final Intent intent = item.getIntent();
@@ -860,11 +860,11 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public ImpressionToken generateImpressionToken(IWindow window, Rect boundsInWindow,
+    public ScreenshotHash generateScreenshotHash(IWindow window, Rect boundsInWindow,
             String hashAlgorithm) {
         final long origId = Binder.clearCallingIdentity();
         try {
-            return mService.generateImpressionToken(this, window, boundsInWindow, hashAlgorithm);
+            return mService.generateScreenshotHash(this, window, boundsInWindow, hashAlgorithm);
         } finally {
             Binder.restoreCallingIdentity(origId);
         }

@@ -490,7 +490,7 @@ public class AndroidKeyStoreSpi extends KeyStoreSpi {
             int[] keymasterEncryptionPaddings =
                     KeyProperties.EncryptionPadding.allToKeymaster(
                             spec.getEncryptionPaddings());
-            if (((spec.getPurposes() & KeyProperties.PURPOSE_DECRYPT) != 0)
+            if (((spec.getPurposes() & KeyProperties.PURPOSE_ENCRYPT) != 0)
                     && (spec.isRandomizedEncryptionRequired())) {
                 for (int keymasterPadding : keymasterEncryptionPaddings) {
                     if (!KeymasterUtils
@@ -533,6 +533,12 @@ public class AndroidKeyStoreSpi extends KeyStoreSpi {
                 importArgs.add(KeyStore2ParameterUtils.makeDate(
                         KeymasterDefs.KM_TAG_USAGE_EXPIRE_DATETIME,
                         spec.getKeyValidityForConsumptionEnd()
+                ));
+            }
+            if (spec.getMaxUsageCount() != KeyProperties.UNRESTRICTED_USAGE_COUNT) {
+                importArgs.add(KeyStore2ParameterUtils.makeInt(
+                        KeymasterDefs.KM_TAG_USAGE_COUNT_LIMIT,
+                        spec.getMaxUsageCount()
                 ));
             }
         } catch (IllegalArgumentException | IllegalStateException e) {
@@ -770,6 +776,12 @@ public class AndroidKeyStoreSpi extends KeyStoreSpi {
                 importArgs.add(KeyStore2ParameterUtils.makeDate(
                         KeymasterDefs.KM_TAG_USAGE_EXPIRE_DATETIME,
                         params.getKeyValidityForConsumptionEnd()
+                ));
+            }
+            if (params.getMaxUsageCount() != KeyProperties.UNRESTRICTED_USAGE_COUNT) {
+                importArgs.add(KeyStore2ParameterUtils.makeInt(
+                        KeymasterDefs.KM_TAG_USAGE_COUNT_LIMIT,
+                        params.getMaxUsageCount()
                 ));
             }
         } catch (IllegalArgumentException | IllegalStateException e) {

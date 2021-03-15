@@ -20,6 +20,7 @@ import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.app.AlarmManager;
@@ -28,6 +29,7 @@ import android.net.wifi.SoftApInfo;
 import android.net.wifi.WifiAnnotations;
 import android.net.wifi.WifiScanner;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -89,6 +91,10 @@ public class WifiNl80211Manager {
      * specify the type of scan result to fetch.
      */
     public static final int SCAN_TYPE_PNO_SCAN = 1;
+
+    // Extra scanning parameter used to enable 6Ghz RNR (Reduced Neighbour Support).
+    public static final String SCANNING_PARAM_ENABLE_6GHZ_RNR =
+            "android.net.wifi.nl80211.SCANNING_PARAM_ENABLE_6GHZ_RNR";
 
     private AlarmManager mAlarmManager;
     private Handler mEventHandler;
@@ -900,6 +906,15 @@ public class WifiNl80211Manager {
     }
 
     /**
+     * @deprecated replaced by {@link #startScan(String, int, Set, List, Bundle)}
+     **/
+    @Deprecated
+    public boolean startScan(@NonNull String ifaceName, @WifiAnnotations.ScanType int scanType,
+            @Nullable Set<Integer> freqs, @Nullable List<byte[]> hiddenNetworkSSIDs) {
+        return startScan(ifaceName, scanType, freqs, hiddenNetworkSSIDs, null);
+    }
+
+    /**
      * Start a scan using the specified parameters. A scan is an asynchronous operation. The
      * result of the operation is returned in the {@link ScanEventCallback} registered when
      * setting up an interface using
@@ -918,11 +933,14 @@ public class WifiNl80211Manager {
      * @param freqs list of frequencies to scan for, if null scan all supported channels.
      * @param hiddenNetworkSSIDs List of hidden networks to be scanned for, a null indicates that
      *                           no hidden frequencies will be scanned for.
+     * @param extraScanningParams bundle of extra scanning parameters.
      * @return Returns true on success, false on failure (e.g. when called before the interface
      * has been set up).
      */
     public boolean startScan(@NonNull String ifaceName, @WifiAnnotations.ScanType int scanType,
-            @Nullable Set<Integer> freqs, @Nullable List<byte[]> hiddenNetworkSSIDs) {
+            @SuppressLint("NullableCollection") @Nullable Set<Integer> freqs,
+            @SuppressLint("NullableCollection") @Nullable List<byte[]> hiddenNetworkSSIDs,
+            @SuppressLint("NullableCollection") @Nullable Bundle extraScanningParams) {
         IWifiScannerImpl scannerImpl = getScannerImpl(ifaceName);
         if (scannerImpl == null) {
             Log.e(TAG, "No valid wificond scanner interface handler for iface=" + ifaceName);
@@ -937,6 +955,9 @@ public class WifiNl80211Manager {
         }
         settings.channelSettings  = new ArrayList<>();
         settings.hiddenNetworks  = new ArrayList<>();
+        if (extraScanningParams != null) {
+            settings.enable6GhzRnr = extraScanningParams.getBoolean(SCANNING_PARAM_ENABLE_6GHZ_RNR);
+        }
 
         if (freqs != null) {
             for (Integer freq : freqs) {

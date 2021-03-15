@@ -118,8 +118,12 @@ public class AppChildProcessTest {
     @After
     public void tearDown() {
         LocalServices.removeServiceForTest(PackageManagerInternal.class);
-        mMockitoSession.finishMocking();
-        mHandlerThread.quit();
+        if (mMockitoSession != null) {
+            mMockitoSession.finishMocking();
+        }
+        if (mHandlerThread != null) {
+            mHandlerThread.quit();
+        }
     }
 
     @Test
@@ -228,8 +232,8 @@ public class AppChildProcessTest {
         ai.packageName = packageName;
         ai.uid = uid;
         ProcessRecord app = new ProcessRecord(mAms, ai, processName, uid);
-        app.pid = pid;
-        mAms.mPidsSelfLocked.doAddInternal(app);
+        app.setPid(pid);
+        mAms.mPidsSelfLocked.doAddInternal(app.getPid(), app);
         mPhantomInjector.addToProcess(uid, pid, pid);
     }
 
@@ -298,7 +302,7 @@ public class AppChildProcessTest {
         }
 
         void addToProcess(int uid, int pid, int newPid) {
-            final String path = PhantomProcessList.getCgroupFilePath(uid, pid);
+            final String path = mPhantomProcessList.getCgroupFilePath(uid, pid);
             StringBuffer sb = mPathToData.get(path);
             if (sb == null) {
                 sb = new StringBuffer();

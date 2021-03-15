@@ -21,9 +21,14 @@ import android.os.BatteryStats;
 import android.os.BatteryUsageStats;
 import android.os.BatteryUsageStatsQuery;
 import android.os.SystemBatteryConsumer;
+import android.os.SystemClock;
 import android.os.UserHandle;
-import android.util.Log;
+import android.text.format.DateUtils;
+import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseLongArray;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.List;
 
@@ -57,6 +62,8 @@ public class ScreenPowerCalculator extends PowerCalculator {
                     .setUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_USAGE, durationMs)
                     .setConsumedPower(BatteryConsumer.POWER_COMPONENT_USAGE, powerMah);
         }
+        // TODO(b/178140704): Attribute *measured* total usage for BatteryUsageStats.
+        // TODO(b/178140704): Attribute (measured/smeared) usage *per app* for BatteryUsageStats.
     }
 
     /**
@@ -65,15 +72,43 @@ public class ScreenPowerCalculator extends PowerCalculator {
     @Override
     public void calculate(List<BatterySipper> sippers, BatteryStats batteryStats,
             long rawRealtimeUs, long rawUptimeUs, int statsType, SparseArray<UserHandle> asUsers) {
+
+        final long energyUJ = batteryStats.getScreenOnEnergy();
+        final boolean isMeasuredDataAvailable = energyUJ != BatteryStats.ENERGY_DATA_UNAVAILABLE;
+
         final long durationMs = computeDuration(batteryStats, rawRealtimeUs, statsType);
-        final double powerMah = computePower(batteryStats, rawRealtimeUs, statsType, durationMs);
-        if (powerMah != 0) {
-            final BatterySipper bs = new BatterySipper(BatterySipper.DrainType.SCREEN, null, 0);
-            bs.usagePowerMah = powerMah;
-            bs.usageTimeMs = durationMs;
-            bs.sumPower();
-            sippers.add(bs);
+        final double powerMah = getMeasuredOrComputedPower(
+                energyUJ, batteryStats, rawRealtimeUs, statsType, durationMs);
+        if (powerMah == 0) {
+            return;
         }
+
+        // First deal with the SCREEN BatterySipper (since we need this for smearing over apps).
+        final BatterySipper bs = new BatterySipper(BatterySipper.DrainType.SCREEN, null, 0);
+        bs.usagePowerMah = powerMah;
+        bs.usageTimeMs = durationMs;
+        bs.sumPower();
+        sippers.add(bs);
+
+        // Now deal with each app's BatterySipper. The results are stored in the screenPowerMah
+        // field, which is considered smeared, but the method depends on the data source.
+        if (isMeasuredDataAvailable) {
+            super.calculate(sippers, batteryStats, rawRealtimeUs, rawUptimeUs, statsType, asUsers);
+        } else {
+            smearScreenBatterySipper(sippers, bs);
+        }
+    }
+
+    @Override
+    protected void calculateApp(BatterySipper app, BatteryStats.Uid u, long rawRealtimeUs,
+            long rawUptimeUs, int statsType) {
+        final long energyUJ = u.getScreenOnEnergy();
+        if (energyUJ < 0) {
+            Slog.wtf(TAG, "Screen energy not supported, so calculateApp shouldn't de called");
+            return;
+        }
+        if (energyUJ == 0) return;
+        app.screenPowerMah = mAhToUJ(u.getScreenOnEnergy());
     }
 
     private long computeDuration(BatteryStats batteryStats, long rawRealtimeUs, int statsType) {
@@ -89,11 +124,78 @@ public class ScreenPowerCalculator extends PowerCalculator {
             final double binPowerMah = mScreenFullPowerEstimator.calculatePower(brightnessTime)
                     * (i + 0.5f) / BatteryStats.NUM_SCREEN_BRIGHTNESS_BINS;
             if (DEBUG && binPowerMah != 0) {
-                Log.d(TAG, "Screen bin #" + i + ": time=" + brightnessTime
+                Slog.d(TAG, "Screen bin #" + i + ": time=" + brightnessTime
                         + " power=" + formatCharge(binPowerMah));
             }
             power += binPowerMah;
         }
         return power;
+    }
+
+    private double getMeasuredOrComputedPower(long measuredEnergyUJ,
+            BatteryStats batteryStats, long rawRealtimeUs, int statsType, long durationMs) {
+
+        if (measuredEnergyUJ != BatteryStats.ENERGY_DATA_UNAVAILABLE) {
+            return mAhToUJ(measuredEnergyUJ);
+        } else {
+            return computePower(batteryStats, rawRealtimeUs, statsType, durationMs);
+        }
+    }
+
+    /**
+     * Smear the screen on power usage among {@code sippers}, based on ratio of foreground activity
+     * time, and store this in the {@link BatterySipper#screenPowerMah} field.
+     */
+    @VisibleForTesting
+    public void smearScreenBatterySipper(List<BatterySipper> sippers, BatterySipper screenSipper) {
+
+        long totalActivityTimeMs = 0;
+        final SparseLongArray activityTimeArray = new SparseLongArray();
+        for (int i = sippers.size() - 1; i >= 0; i--) {
+            final BatteryStats.Uid uid = sippers.get(i).uidObj;
+            if (uid != null) {
+                final long timeMs = getProcessForegroundTimeMs(uid);
+                activityTimeArray.put(uid.getUid(), timeMs);
+                totalActivityTimeMs += timeMs;
+            }
+        }
+
+        if (screenSipper != null && totalActivityTimeMs >= 10 * DateUtils.MINUTE_IN_MILLIS) {
+            final double totalScreenPowerMah = screenSipper.totalPowerMah;
+            for (int i = sippers.size() - 1; i >= 0; i--) {
+                final BatterySipper sipper = sippers.get(i);
+                sipper.screenPowerMah = totalScreenPowerMah
+                        * activityTimeArray.get(sipper.getUid(), 0)
+                        / totalActivityTimeMs;
+            }
+        }
+    }
+
+    /** Get the minimum of the uid's ForegroundActivity time and its TOP time. */
+    @VisibleForTesting
+    public long getProcessForegroundTimeMs(BatteryStats.Uid uid) {
+        final long rawRealTimeUs = SystemClock.elapsedRealtime() * 1000;
+        final int[] foregroundTypes = {BatteryStats.Uid.PROCESS_STATE_TOP};
+
+        long timeUs = 0;
+        for (int type : foregroundTypes) {
+            final long localTime = uid.getProcessStateTime(type, rawRealTimeUs,
+                    BatteryStats.STATS_SINCE_CHARGED);
+            timeUs += localTime;
+        }
+
+        // Return the min value of STATE_TOP time and foreground activity time, since both of these
+        // time have some errors.
+        return Math.min(timeUs, getForegroundActivityTotalTimeUs(uid, rawRealTimeUs)) / 1000;
+    }
+
+    /** Get the ForegroundActivity time of the given uid. */
+    @VisibleForTesting
+    public long getForegroundActivityTotalTimeUs(BatteryStats.Uid uid, long rawRealtimeUs) {
+        final BatteryStats.Timer timer = uid.getForegroundActivityTimer();
+        if (timer == null) {
+            return 0;
+        }
+        return timer.getTotalTimeLocked(rawRealtimeUs, BatteryStats.STATS_SINCE_CHARGED);
     }
 }

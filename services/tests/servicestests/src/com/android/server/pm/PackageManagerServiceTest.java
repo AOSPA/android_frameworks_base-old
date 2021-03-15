@@ -22,6 +22,7 @@ import static java.lang.reflect.Modifier.isFinal;
 import static java.lang.reflect.Modifier.isPublic;
 import static java.lang.reflect.Modifier.isStatic;
 
+import android.annotation.Nullable;
 import android.content.IIntentReceiver;
 import android.content.pm.PackageManagerInternal;
 import android.os.Bundle;
@@ -68,7 +69,8 @@ public class PackageManagerServiceTest {
             public void sendPackageBroadcast(final String action, final String pkg,
                     final Bundle extras, final int flags, final String targetPkg,
                     final IIntentReceiver finishedReceiver, final int[] userIds,
-                    int[] instantUserIds, SparseArray<int[]> broadcastAllowList) {
+                    int[] instantUserIds, SparseArray<int[]> broadcastAllowList,
+                    @Nullable Bundle bOptions) {
             }
 
             public void sendPackageAddedForNewUsers(String packageName,
@@ -105,10 +107,15 @@ public class PackageManagerServiceTest {
 
         // Create a real (non-null) PackageSetting and confirm that the removed
         // users are copied properly
-        setting = new PackageSetting("name", "realName", new File("codePath"),
-                "legacyNativeLibraryPathString", "primaryCpuAbiString", "secondaryCpuAbiString",
-                "cpuAbiOverrideString", 0, 0, 0, 0,
-                null, null, null);
+        setting = new PackageSettingBuilder()
+                .setName("name")
+                .setRealName("realName")
+                .setCodePath("codePath")
+                .setLegacyNativeLibraryPathString("legacyNativeLibraryPathString")
+                .setPrimaryCpuAbiString("primaryCpuAbiString")
+                .setSecondaryCpuAbiString("secondaryCpuAbiString")
+                .setCpuAbiOverrideString("cpuAbiOverrideString")
+                .build();
         pri.populateUsers(new int[] {
                 1, 2, 3, 4, 5
         }, setting);

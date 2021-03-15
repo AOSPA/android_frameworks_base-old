@@ -244,7 +244,7 @@
     <bool name="def_aware_lock_enabled">false</bool>
 
     <!-- Default for setting for Settings.Global.HDMI_CONTROL_AUTO_DEVICE_OFF_ENABLED -->
-    <bool name="def_hdmiControlAutoDeviceOff">false</bool>
+    <bool name="def_hdmiControlAutoDeviceOff">true</bool>
 
     <!-- Default for Settings.Secure.SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED -->
     <bool name="def_swipe_bottom_to_notification_enabled">true</bool>
@@ -254,6 +254,9 @@
 
     <!-- Default for Settings.Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY -->
     <integer name="def_accessibility_magnification_capabilities">3</integer>
+
+    <!-- Default for Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW -->
+    <bool name="def_enable_non_resizable_multi_window">false</bool>
 
     <!-- Default for Settings.System.TIME_12_24 -->
     <string name="def_time_format" translatable="false">12</string>

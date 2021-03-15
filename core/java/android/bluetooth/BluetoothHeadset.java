@@ -83,7 +83,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
 
     /**
      * Intent used to broadcast the change in the Audio Connection state of the
-     * HDP profile.
+     * HFP profile.
      *
      * <p>This intent will have 3 extras:
      * <ul>

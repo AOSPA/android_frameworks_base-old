@@ -17,19 +17,23 @@
 #ifndef _ANDROID_MEDIA_TV_DEMUX_CLIENT_H_
 #define _ANDROID_MEDIA_TV_DEMUX_CLIENT_H_
 
-//#include <aidl/android/media/tv/tuner/ITunerDemux.h>
+#include <aidl/android/media/tv/tuner/ITunerDemux.h>
 #include <android/hardware/tv/tuner/1.0/IDemux.h>
 #include <android/hardware/tv/tuner/1.1/types.h>
 
 #include "DvrClient.h"
+#include "ClientHelper.h"
 #include "DvrClientCallback.h"
 #include "FilterClient.h"
 #include "FilterClientCallback.h"
 #include "FrontendClient.h"
 #include "TimeFilterClient.h"
 
-//using ::aidl::android::media::tv::tuner::ITunerDemux;
+using Status = ::ndk::ScopedAStatus;
+using ::aidl::android::media::tv::tuner::ITunerDemux;
+using ::aidl::android::media::tv::tuner::ITunerTimeFilter;
 
+using ::android::hardware::tv::tuner::V1_0::IDemux;
 using ::android::hardware::tv::tuner::V1_0::DemuxFilterType;
 using ::android::hardware::tv::tuner::V1_0::DvrType;
 using ::android::hardware::tv::tuner::V1_0::IDemux;
@@ -37,12 +41,15 @@ using ::android::hardware::tv::tuner::V1_0::ITimeFilter;
 
 using namespace std;
 
+const int64_t INVALID_AV_SYNC_TIME = -1;
+const int INVALID_AV_SYNC_HW_ID = -1;
+
 namespace android {
 
 struct DemuxClient : public RefBase {
 
 public:
-    DemuxClient();
+    DemuxClient(shared_ptr<ITunerDemux> tunerDemux);
     ~DemuxClient();
 
     // TODO: remove after migration to Tuner Service is done.
@@ -100,13 +107,13 @@ private:
     sp<IFilter> openHidlFilter(DemuxFilterType type, int bufferSize, sp<HidlFilterCallback> cb);
     sp<ITimeFilter> openHidlTimeFilter();
     sp<IDvr> openHidlDvr(DvrType type, int bufferSize, sp<HidlDvrCallback> cb);
+    int getSubType(DemuxFilterType filterType);
 
     /**
      * An AIDL Tuner Demux Singleton assigned at the first time the Tuner Client
      * opens a demux. Default null when demux is not opened.
      */
-    // TODO: pending on aidl interface
-    //shared_ptr<ITunerDemux> mTunerDemux;
+    shared_ptr<ITunerDemux> mTunerDemux;
 
     /**
      * A Demux HAL interface that is ready before migrating to the TunerDemux.

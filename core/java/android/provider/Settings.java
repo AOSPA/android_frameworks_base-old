@@ -3061,7 +3061,9 @@ public final class Settings {
      */
     public static boolean canDrawOverlays(Context context) {
         return Settings.isCallingPackageAllowedToDrawOverlays(context, Process.myUid(),
-                context.getOpPackageName(), false);
+                context.getOpPackageName(), false) || context.checkSelfPermission(
+                Manifest.permission.SYSTEM_APPLICATION_OVERLAY)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     /**
@@ -3984,6 +3986,14 @@ public final class Settings {
          * @hide
          */
         public static final String DISPLAY_COLOR_MODE = "display_color_mode";
+
+        /**
+         * Hint to decide whether restored vendor color modes are compatible with the new device. If
+         * unset or a match is not made, only the standard color modes will be restored.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_MODE_VENDOR_HINT =
+                "display_color_mode_vendor_hint";
 
         /**
          * Whether to play tone while outgoing call is accepted.
@@ -4950,6 +4960,7 @@ public final class Settings {
             PRIVATE_SETTINGS.add(EGG_MODE);
             PRIVATE_SETTINGS.add(SHOW_BATTERY_PERCENT);
             PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE);
+            PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE_VENDOR_HINT);
             PRIVATE_SETTINGS.add(CALL_CONNECTED_TONE_ENABLED);
         }
 
@@ -5929,6 +5940,13 @@ public final class Settings {
          * @hide
          */
         public static final String ADAPTIVE_SLEEP = "adaptive_sleep";
+
+        /**
+         * Setting key to indicate whether camera-based autorotate is enabled.
+         *
+         * @hide
+         */
+        public static final String CAMERA_AUTOROTATE = "camera_autorotate";
 
         /**
          * @deprecated Use {@link android.provider.Settings.Global#DEVELOPMENT_SETTINGS_ENABLED}
@@ -9235,6 +9253,14 @@ public final class Settings {
                 "accessibility_floating_menu_icon_type";
 
         /**
+         * Whether the fade effect for the accessibility floating menu is enabled.
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED =
+                "accessibility_floating_menu_fade_enabled";
+
+        /**
          * The opacity value for the accessibility floating menu fade out effect, from 0.0
          * (transparent) to 1.0 (opaque).
          *
@@ -9787,13 +9813,13 @@ public final class Settings {
         */
        public static final String MDC_INITIAL_MAX_RETRY = "mdc_initial_max_retry";
 
-       /**
-        * Whether any package can be on external storage. When this is true, any
-        * package, regardless of manifest values, is a candidate for installing
-        * or moving onto external storage. (0 = false, 1 = true)
-        * @hide
-        */
-       public static final String FORCE_ALLOW_ON_EXTERNAL = "force_allow_on_external";
+        /**
+         * Whether any package can be on external storage. When this is true, any
+         * package, regardless of manifest values, is a candidate for installing
+         * or moving onto external storage. (0 = false, 1 = true)
+         * @hide
+         */
+        public static final String FORCE_ALLOW_ON_EXTERNAL = "force_allow_on_external";
 
         /**
          * The default SM-DP+ configured for this device.
@@ -9875,10 +9901,25 @@ public final class Settings {
 
         /**
          * Whether to allow non-resizable apps to be freeform.
+         *
+         * TODO(b/176061101) remove after update all usages
+         * @deprecated use {@link #DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW}
          * @hide
          */
+        @Deprecated
         public static final String DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM =
                 "enable_sizecompat_freeform";
+
+        /**
+         * Whether to allow non-resizable apps to be shown in multi-window. The app will be
+         * letterboxed if the request orientation is not met, and will be shown in size-compat
+         * mode if the container size has changed.
+         * @hide
+         */
+        @TestApi
+        @SuppressLint("NoSettingsProvider")
+        public static final String DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW =
+                "enable_non_resizable_multi_window";
 
         /**
          * If true, shadows drawn around the window will be rendered by the system compositor. If
@@ -13372,6 +13413,24 @@ public final class Settings {
                 "euicc_factory_reset_timeout_millis";
 
         /**
+         * Flag to set the waiting time for euicc slot switch.
+         * Type: long
+         *
+         * @hide
+         */
+        public static final String EUICC_SWITCH_SLOT_TIMEOUT_MILLIS =
+                "euicc_switch_slot_timeout_millis";
+
+        /**
+         * Flag to set the waiting time for enabling multi SIM slot.
+         * Type: long
+         *
+         * @hide
+         */
+        public static final String ENABLE_MULTI_SLOT_TIMEOUT_MILLIS =
+                "enable_multi_slot_timeout_millis";
+
+        /**
          * Flag to set the timeout for when to refresh the storage settings cached data.
          * Type: long
          *
@@ -13533,6 +13592,28 @@ public final class Settings {
          */
         public static final String POWER_BUTTON_VERY_LONG_PRESS =
                 "power_button_very_long_press";
+
+
+        /**
+         * Keyguard should be on the left hand side of the screen, for wide screen layouts.
+         *
+         * @hide
+         */
+        public static final int ONE_HANDED_KEYGUARD_SIDE_LEFT = 0;
+
+        /**
+         * Keyguard should be on the right hand side of the screen, for wide screen layouts.
+         *
+         * @hide
+         */
+        public static final int ONE_HANDED_KEYGUARD_SIDE_RIGHT = 1;
+        /**
+         * In one handed mode, which side the keyguard should be on. Allowable values are one of
+         * the ONE_HANDED_KEYGUARD_SIDE_* constants.
+         *
+         * @hide
+         */
+        public static final String ONE_HANDED_KEYGUARD_SIDE = "one_handed_keyguard_side";
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to
@@ -14625,15 +14706,6 @@ public final class Settings {
                 "people_space_conversation_type";
 
         /**
-         * Whether to show new lockscreen & AOD UI.
-         * Values are:
-         * 0: Disabled (default)
-         * 1: Enabled
-         * @hide
-         */
-        public static final String SHOW_NEW_LOCKSCREEN = "show_new_lockscreen";
-
-        /**
          * Whether to show new notification dismissal.
          * Values are:
          * 0: Disabled
@@ -14717,9 +14789,8 @@ public final class Settings {
          *     touch, allow the UID to propagate the touch.
          * </ul>
          *
-         * @see android.hardware.input.InputManager#getMaximumObscuringOpacityForTouch(Context)
-         * @see android.hardware.input.InputManager#setMaximumObscuringOpacityForTouch(Context,
-         * float)
+         * @see android.hardware.input.InputManager#getMaximumObscuringOpacityForTouch()
+         * @see android.hardware.input.InputManager#setMaximumObscuringOpacityForTouch(float)
          *
          * @hide
          */

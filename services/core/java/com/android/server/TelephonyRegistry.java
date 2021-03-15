@@ -317,6 +317,8 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
 
     private int mDataEnabledReason;
 
+    private Map<Integer, Long> mAllowedNetworkTypesList;
+
     /**
      * Per-phone map of precise data connection state. The key of the map is the pair of transport
      * type and APN setting. This is the cache to prevent redundant callbacks to the listeners.
@@ -623,6 +625,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         mBarringInfo = new ArrayList<>();
         mTelephonyDisplayInfos = new TelephonyDisplayInfo[numPhones];
         mPhysicalChannelConfigs = new ArrayList<>();
+        mAllowedNetworkTypesList = new HashMap<>();
         for (int i = 0; i < numPhones; i++) {
             mCallState[i] =  TelephonyManager.CALL_STATE_IDLE;
             mDataActivity[i] = TelephonyManager.DATA_ACTIVITY_NONE;
@@ -1148,6 +1151,14 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                         PhoneStateListener.EVENT_DATA_ENABLED_CHANGED)) {
                     try {
                         r.callback.onDataEnabledChanged(mIsDataEnabled, mDataEnabledReason);
+                    } catch (RemoteException ex) {
+                        remove(r.binder);
+                    }
+                }
+                if (events.contains(
+                        PhoneStateListener.EVENT_ALLOWED_NETWORK_TYPE_LIST_CHANGED)) {
+                    try {
+                        r.callback.onAllowedNetworkTypesChanged(mAllowedNetworkTypesList);
                     } catch (RemoteException ex) {
                         remove(r.binder);
                     }
@@ -2118,6 +2129,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             }
             handleRemoveListLocked();
         }
+        broadcastRadioPowerStateChanged(state, phoneId, subId);
     }
 
     @Override
@@ -2390,6 +2402,44 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         }
     }
 
+    /**
+     * Notify that the allowed network type has changed.
+     *
+     * @param phoneId the phone id.
+     * @param subId the subId.
+     * @param allowedNetworkTypesList Map associating all allowed network type reasons with reason's
+     *                                allowed network type values.
+     */
+    public void notifyAllowedNetworkTypesChanged(int phoneId, int subId,
+            Map allowedNetworkTypesList) {
+        if (!checkNotifyPermission("notifyAllowedNetworkTypesChanged()")) {
+            return;
+        }
+
+        synchronized (mRecords) {
+            if (validatePhoneId(phoneId)) {
+                mAllowedNetworkTypesList = allowedNetworkTypesList;
+
+                for (Record r : mRecords) {
+                    if (r.matchPhoneStateListenerEvent(
+                            PhoneStateListener.EVENT_ALLOWED_NETWORK_TYPE_LIST_CHANGED)
+                            && idMatch(r.subId, subId, phoneId)) {
+                        try {
+                            if (VDBG) {
+                                log("notifyAllowedNetworkTypesChanged: AllowedNetworkTypesList= "
+                                        + mAllowedNetworkTypesList.toString());
+                            }
+                            r.callback.onAllowedNetworkTypesChanged(mAllowedNetworkTypesList);
+                        } catch (RemoteException ex) {
+                            mRemoveList.add(r.binder);
+                        }
+                    }
+                }
+            }
+            handleRemoveListLocked();
+        }
+    }
+
     @Override
     public void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
         final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
@@ -2498,6 +2548,12 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
      */
     public static final String ACTION_SIGNAL_STRENGTH_CHANGED = "android.intent.action.SIG_STR";
 
+    /**
+     * Broadcast Action: The radio power state has changed.
+     */
+    private static final String ACTION_RADIO_POWER_STATE_CHANGED =
+            "org.codeaurora.intent.action.RADIO_POWER_STATE";
+
     private void broadcastServiceStateChanged(ServiceState state, int phoneId, int subId) {
         final long ident = Binder.clearCallingIdentity();
         try {
@@ -2519,6 +2575,19 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         intent.putExtra(PHONE_CONSTANTS_SLOT_KEY, phoneId);
         intent.putExtra(SubscriptionManager.EXTRA_SLOT_INDEX, phoneId);
         mContext.sendBroadcastAsUser(intent, UserHandle.ALL, Manifest.permission.READ_PHONE_STATE);
+    }
+
+    private void broadcastRadioPowerStateChanged(int state, int phoneId, int subId) {
+        Intent intent = new Intent(ACTION_RADIO_POWER_STATE_CHANGED);
+        intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+        // Pass the subscription along with the intent.
+        intent.putExtra(PHONE_CONSTANTS_SUBSCRIPTION_KEY, subId);
+        intent.putExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, subId);
+        intent.putExtra(PHONE_CONSTANTS_SLOT_KEY, phoneId);
+        intent.putExtra(SubscriptionManager.EXTRA_SLOT_INDEX, phoneId);
+        intent.putExtra(PHONE_CONSTANTS_STATE_KEY, state);
+        mContext.sendBroadcastAsUser(intent, UserHandle.ALL,
+                Manifest.permission.READ_PRIVILEGED_PHONE_STATE);
     }
 
     private void broadcastSignalStrengthChanged(SignalStrength signalStrength, int phoneId,

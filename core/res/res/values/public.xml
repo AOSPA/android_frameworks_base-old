@@ -3048,16 +3048,19 @@
     <public name="allowClickWhenDisabled" />
     <public name="windowLayoutAffinity" />
     <public name="canPauseRecording" />
-    <!-- @hide -->
-    <!-- @hide @SystemApi -->
-    <public name="windowBackgroundBlurRadius"/>
-    <!-- @hide @SystemApi -->
-    <public name="windowBackgroundBlurEnabled"/>
+    <public name="windowBlurBehindRadius"/>
+    <public name="windowBlurBehindEnabled"/>
     <public name="requireDeviceScreenOn" />
     <public name="pathSuffix" />
     <public name="sspSuffix" />
     <public name="pathAdvancedPattern" />
     <public name="sspAdvancedPattern" />
+    <public name="fontProviderSystemFontFamily" />
+    <public name="hand_second" />
+    <public name="memtagMode" />
+    <public name="nativeHeapZeroInit" />
+    <!-- @hide @SystemApi -->
+    <public name="hotwordDetectionService" />
   </public-group>
 
   <public-group type="drawable" first-id="0x010800b5">

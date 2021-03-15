@@ -102,6 +102,7 @@ public class AppTransitionController {
     private final DisplayContent mDisplayContent;
     private final WallpaperController mWallpaperControllerLocked;
     private RemoteAnimationDefinition mRemoteAnimationDefinition = null;
+    private static final int KEYGUARD_GOING_AWAY_ANIMATION_DURATION = 400;
 
     private final ArrayMap<WindowContainer, Integer> mTempTransitionReasons = new ArrayMap<>();
 
@@ -437,10 +438,14 @@ public class AppTransitionController {
                 return adapter;
             }
         }
-        if (mRemoteAnimationDefinition == null) {
-            return null;
+        if (mRemoteAnimationDefinition != null) {
+            final RemoteAnimationAdapter adapter = mRemoteAnimationDefinition.getAdapter(
+                    transit, activityTypes);
+            if (adapter != null) {
+                return adapter;
+            }
         }
-        return mRemoteAnimationDefinition.getAdapter(transit, activityTypes);
+        return null;
     }
 
     /**
@@ -709,11 +714,17 @@ public class AppTransitionController {
         applyAnimations(closingWcs, closingApps, transit, false /* visible */, animLp,
                 voiceInteraction);
 
+        for (int i = 0; i < openingApps.size(); ++i) {
+            openingApps.valueAtUnchecked(i).mOverrideTaskTransition = false;
+        }
+        for (int i = 0; i < closingApps.size(); ++i) {
+            closingApps.valueAtUnchecked(i).mOverrideTaskTransition = false;
+        }
+
         final AccessibilityController accessibilityController =
                 mDisplayContent.mWmService.mAccessibilityController;
         if (accessibilityController != null) {
-            accessibilityController.onAppWindowTransitionLocked(
-                    mDisplayContent.getDisplayId(), transit);
+            accessibilityController.onAppWindowTransition(mDisplayContent.getDisplayId(), transit);
         }
     }
 
@@ -894,7 +905,8 @@ public class AppTransitionController {
 
     /**
      * Identifies whether the current transition occurs within a single task or not. This is used
-     * to determine whether animations should be clipped to the task bounds instead of stack bounds.
+     * to determine whether animations should be clipped to the task bounds instead of root task
+     * bounds.
      */
     @VisibleForTesting
     boolean isTransitWithinTask(@TransitionOldType int transit, Task task) {

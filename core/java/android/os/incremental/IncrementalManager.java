@@ -22,7 +22,6 @@ import android.annotation.Nullable;
 import android.annotation.SystemService;
 import android.content.Context;
 import android.content.pm.DataLoaderParams;
-import android.content.pm.IDataLoaderStatusListener;
 import android.content.pm.IPackageLoadingProgressCallback;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
@@ -95,32 +94,20 @@ public final class IncrementalManager {
      * @param params              IncrementalDataLoaderParams object to configure data loading.
      * @param createMode          Mode for opening an old Incremental File System mount or creating
      *                            a new mount.
-     * @param autoStartDataLoader Set true to immediately start data loader after creating storage.
      * @return IncrementalStorage object corresponding to the mounted directory.
      */
     @Nullable
     public IncrementalStorage createStorage(@NonNull String path,
             @NonNull DataLoaderParams params,
-            @CreateMode int createMode,
-            boolean autoStartDataLoader,
-            @Nullable IDataLoaderStatusListener statusListener,
-            @Nullable StorageHealthCheckParams healthCheckParams,
-            @Nullable IStorageHealthListener healthListener,
-            @NonNull PerUidReadTimeouts[] perUidReadTimeouts) {
+            @CreateMode int createMode) {
         Objects.requireNonNull(path);
         Objects.requireNonNull(params);
-        Objects.requireNonNull(perUidReadTimeouts);
         try {
-            final int id = mService.createStorage(path, params.getData(), createMode,
-                    statusListener, healthCheckParams, healthListener, perUidReadTimeouts);
+            final int id = mService.createStorage(path, params.getData(), createMode);
             if (id < 0) {
                 return null;
             }
-            final IncrementalStorage storage = new IncrementalStorage(mService, id);
-            if (autoStartDataLoader) {
-                storage.startLoading();
-            }
-            return storage;
+            return new IncrementalStorage(mService, id);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -281,15 +268,18 @@ public final class IncrementalManager {
      * Unbinds the target dir and deletes the corresponding storage instance.
      * Deletes the package name and associated storage id from maps.
      */
-    public void onPackageRemoved(@NonNull String codePath) {
+    public void onPackageRemoved(@NonNull File codeFile) {
         try {
+            final String codePath = codeFile.getAbsolutePath();
             final IncrementalStorage storage = openStorage(codePath);
             if (storage == null) {
                 return;
             }
             mLoadingProgressCallbacks.cleanUpCallbacks(storage);
             unregisterHealthListener(codePath);
-            mService.deleteStorage(storage.getId());
+
+            // Parent since we bind-mount a folder one level above.
+            mService.deleteBindMount(storage.getId(), codeFile.getParent());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -314,20 +304,16 @@ public final class IncrementalManager {
     }
 
     /**
-     * Called when a callback wants to stop listen to the loading progress of an installed package.
-     * Decrease the count of the callbacks on the associated to the corresponding storage.
-     * If the count becomes zero, unregister the storage listener.
+     * Called to stop all listeners from listening to loading progress of an installed package.
      * @param codePath Path of the installed package
-     * @return True if the package name and associated storage id are valid. False otherwise.
      */
-    public boolean unregisterLoadingProgressCallback(@NonNull String codePath,
-            @NonNull IPackageLoadingProgressCallback callback) {
+    public void unregisterLoadingProgressCallbacks(@NonNull String codePath) {
         final IncrementalStorage storage = openStorage(codePath);
         if (storage == null) {
             // storage does not exist, package not installed
-            return false;
+            return;
         }
-        return mLoadingProgressCallbacks.unregisterCallback(storage, callback);
+        mLoadingProgressCallbacks.cleanUpCallbacks(storage);
     }
 
     private static class LoadingProgressCallbacks extends IStorageLoadingProgressListener.Stub {
@@ -335,7 +321,6 @@ public final class IncrementalManager {
         private final SparseArray<RemoteCallbackList<IPackageLoadingProgressCallback>> mCallbacks =
                 new SparseArray<>();
 
-        // TODO(b/165841827): disable callbacks when app state changes to fully loaded
         public void cleanUpCallbacks(@NonNull IncrementalStorage storage) {
             final int storageId = storage.getId();
             final RemoteCallbackList<IPackageLoadingProgressCallback> callbacksForStorage;

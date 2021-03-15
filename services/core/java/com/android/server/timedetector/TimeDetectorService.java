@@ -18,6 +18,7 @@ package com.android.server.timedetector;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.timedetector.ExternalTimeSuggestion;
 import android.app.timedetector.GnssTimeSuggestion;
 import android.app.timedetector.ITimeDetectorService;
 import android.app.timedetector.ManualTimeSuggestion;
@@ -49,7 +50,7 @@ import java.util.Objects;
  * implementation to deal with the logic around time detection.
  */
 public final class TimeDetectorService extends ITimeDetectorService.Stub {
-    private static final String TAG = "TimeDetectorService";
+    static final String TAG = "time_detector";
 
     public static class Lifecycle extends SystemService {
 
@@ -72,8 +73,8 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
     @NonNull private final TimeDetectorStrategy mTimeDetectorStrategy;
 
     private static TimeDetectorService create(@NonNull Context context) {
-        TimeDetectorStrategyImpl.Callback callback = new TimeDetectorStrategyCallbackImpl(context);
-        TimeDetectorStrategy timeDetectorStrategy = new TimeDetectorStrategyImpl(callback);
+        TimeDetectorStrategyImpl.Environment environment = new EnvironmentImpl(context);
+        TimeDetectorStrategy timeDetectorStrategy = new TimeDetectorStrategyImpl(environment);
 
         Handler handler = FgThread.getHandler();
         TimeDetectorService timeDetectorService =
@@ -138,6 +139,14 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
         mHandler.post(() -> mTimeDetectorStrategy.suggestGnssTime(timeSignal));
     }
 
+    @Override
+    public void suggestExternalTime(@NonNull ExternalTimeSuggestion timeSignal) {
+        enforceSuggestExternalTimePermission();
+        Objects.requireNonNull(timeSignal);
+
+        mHandler.post(() -> mTimeDetectorStrategy.suggestExternalTime(timeSignal));
+    }
+
     /** Internal method for handling the auto time setting being changed. */
     @VisibleForTesting
     public void handleAutoTimeDetectionChanged() {
@@ -176,5 +185,12 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.SET_TIME,
                 "suggest gnss time");
+    }
+
+    private void enforceSuggestExternalTimePermission() {
+        // We don't expect a call from system server, so simply enforce calling permission.
+        mContext.enforceCallingPermission(
+                android.Manifest.permission.SET_TIME,
+                "suggest time from external source");
     }
 }

@@ -38,6 +38,7 @@ import android.window.TransitionFilter;
 import android.window.TransitionInfo;
 import android.window.TransitionRequestInfo;
 import android.window.WindowContainerTransaction;
+import android.window.WindowContainerTransactionCallback;
 import android.window.WindowOrganizer;
 
 import androidx.annotation.BinderThread;
@@ -231,23 +232,33 @@ public class Transitions {
         if (!info.getRootLeash().isValid()) {
             // Invalid root-leash implies that the transition is empty/no-op, so just do
             // housekeeping and return.
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "Invalid root leash (%s): %s",
+                    transitionToken, info);
             t.apply();
-            onFinish(transitionToken);
+            onFinish(transitionToken, null /* wct */, null /* wctCB */);
             return;
         }
 
         setupStartState(info, t);
 
-        final Runnable finishRunnable = () -> onFinish(transitionToken);
+        final TransitionFinishCallback finishCb = (wct, cb) -> onFinish(transitionToken, wct, cb);
         // If a handler chose to uniquely run this animation, try delegating to it.
-        if (active.mFirstHandler != null && active.mFirstHandler.startAnimation(
-                transitionToken, info, t, finishRunnable)) {
-            return;
+        if (active.mFirstHandler != null) {
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, " try firstHandler %s",
+                    active.mFirstHandler);
+            if (active.mFirstHandler.startAnimation(transitionToken, info, t, finishCb)) {
+                ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, " animated by firstHandler");
+                return;
+            }
         }
         // Otherwise give every other handler a chance (in order)
         for (int i = mHandlers.size() - 1; i >= 0; --i) {
             if (mHandlers.get(i) == active.mFirstHandler) continue;
-            if (mHandlers.get(i).startAnimation(transitionToken, info, t, finishRunnable)) {
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, " try handler %s",
+                    mHandlers.get(i));
+            if (mHandlers.get(i).startAnimation(transitionToken, info, t, finishCb)) {
+                ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, " animated by %s",
+                        mHandlers.get(i));
                 return;
             }
         }
@@ -255,7 +266,8 @@ public class Transitions {
                 "This shouldn't happen, maybe the default handler is broken.");
     }
 
-    private void onFinish(IBinder transition) {
+    private void onFinish(IBinder transition, @Nullable WindowContainerTransaction wct,
+            @Nullable WindowContainerTransactionCallback wctCB) {
         if (!mActiveTransitions.containsKey(transition)) {
             Log.e(TAG, "Trying to finish a non-running transition. Maybe remote crashed?");
             return;
@@ -263,7 +275,7 @@ public class Transitions {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS,
                 "Transition animations finished, notifying core %s", transition);
         mActiveTransitions.remove(transition);
-        mOrganizer.finishTransition(transition, null, null);
+        mOrganizer.finishTransition(transition, wct, wctCB);
     }
 
     void requestStartTransition(@NonNull IBinder transitionToken,
@@ -298,6 +310,23 @@ public class Transitions {
     }
 
     /**
+     * Interface for a callback that must be called after a TransitionHandler finishes playing an
+     * animation.
+     */
+    public interface TransitionFinishCallback {
+        /**
+         * This must be called on the main thread when a transition finishes playing an animation.
+         * The transition must not touch the surfaces after this has been called.
+         *
+         * @param wct A WindowContainerTransaction to run along with the transition clean-up.
+         * @param wctCB A sync callback that will be run when the transition clean-up is done and
+         *              wct has been applied.
+         */
+        void onTransitionFinished(@Nullable WindowContainerTransaction wct,
+                @Nullable WindowContainerTransactionCallback wctCB);
+    }
+
+    /**
      * Interface for something which can handle a subset of transitions.
      */
     public interface TransitionHandler {
@@ -310,7 +339,8 @@ public class Transitions {
          * @return true if transition was handled, false if not (falls-back to default).
          */
         boolean startAnimation(@NonNull IBinder transition, @NonNull TransitionInfo info,
-                @NonNull SurfaceControl.Transaction t, @NonNull Runnable finishCallback);
+                @NonNull SurfaceControl.Transaction t,
+                @NonNull TransitionFinishCallback finishCallback);
 
         /**
          * Potentially handles a startTransition request.

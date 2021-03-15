@@ -61,6 +61,7 @@ import androidx.annotation.NonNull;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.TelephonyIntents;
+import com.android.settingslib.Utils;
 import com.android.settingslib.mobile.MobileMappings.Config;
 import com.android.settingslib.mobile.MobileStatusTracker.SubscriptionDefaults;
 import com.android.settingslib.mobile.TelephonyIcons;
@@ -533,6 +534,10 @@ public class NetworkControllerImpl extends BroadcastReceiver
         return mWifiSignalController.isCarrierMergedWifi(subId);
     }
 
+    boolean isEthernetDefault() {
+        return mConnectedTransports.get(NetworkCapabilities.TRANSPORT_ETHERNET);
+    }
+
     String getNonDefaultMobileDataNetworkName(int subId) {
         MobileSignalController controller = getControllerWithSubId(subId);
         return controller != null ? controller.getNonDefaultCarrierName() : "";
@@ -931,9 +936,17 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (NetworkCapabilities nc :
                 mConnectivityManager.getDefaultNetworkCapabilitiesForUser(mCurrentUserId)) {
             for (int transportType : nc.getTransportTypes()) {
-                mConnectedTransports.set(transportType);
-                if (nc.hasCapability(NET_CAPABILITY_VALIDATED)) {
-                    mValidatedTransports.set(transportType);
+                if (transportType == NetworkCapabilities.TRANSPORT_CELLULAR
+                        && Utils.tryGetWifiInfoForVcn(nc) != null) {
+                    mConnectedTransports.set(NetworkCapabilities.TRANSPORT_WIFI);
+                    if (nc.hasCapability(NET_CAPABILITY_VALIDATED)) {
+                        mValidatedTransports.set(NetworkCapabilities.TRANSPORT_WIFI);
+                    }
+                } else {
+                    mConnectedTransports.set(transportType);
+                    if (nc.hasCapability(NET_CAPABILITY_VALIDATED)) {
+                        mValidatedTransports.set(transportType);
+                    }
                 }
             }
         }

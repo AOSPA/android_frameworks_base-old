@@ -25,6 +25,7 @@ import android.app.appsearch.GetByUriRequest;
 import android.app.appsearch.PackageIdentifier;
 import android.app.appsearch.SearchResultPage;
 import android.app.appsearch.SearchSpec;
+import android.app.appsearch.SetSchemaResult;
 import android.app.appsearch.exceptions.AppSearchException;
 import android.content.Context;
 import android.os.Bundle;
@@ -36,9 +37,11 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.Preconditions;
 import com.android.server.appsearch.external.localstorage.converter.GenericDocumentToProtoConverter;
+import com.android.server.appsearch.external.localstorage.converter.ResultCodeToProtoConverter;
 import com.android.server.appsearch.external.localstorage.converter.SchemaToProtoConverter;
 import com.android.server.appsearch.external.localstorage.converter.SearchResultToProtoConverter;
 import com.android.server.appsearch.external.localstorage.converter.SearchSpecToProtoConverter;
+import com.android.server.appsearch.external.localstorage.converter.SetSchemaResultToProtoConverter;
 import com.android.server.appsearch.external.localstorage.converter.TypePropertyPathToProtoConverter;
 
 import com.google.android.icing.IcingSearchEngine;
@@ -192,8 +195,7 @@ public final class AppSearchImpl {
             mIcingSearchEngineLocked = new IcingSearchEngine(options);
 
             mVisibilityStoreLocked =
-                    new VisibilityStore(
-                            this, context, userId, globalQuerierPackage);
+                    new VisibilityStore(this, context, userId, globalQuerierPackage);
 
             InitializeResultProto initializeResultProto = mIcingSearchEngineLocked.initialize();
             SchemaProto schemaProto;
@@ -259,7 +261,8 @@ public final class AppSearchImpl {
      *     which do not comply with the new schema will be deleted.
      * @throws AppSearchException on IcingSearchEngine error.
      */
-    public void setSchema(
+    @NonNull
+    public SetSchemaResult setSchema(
             @NonNull String packageName,
             @NonNull String databaseName,
             @NonNull List<AppSearchSchema> schemas,
@@ -273,8 +276,9 @@ public final class AppSearchImpl {
 
             SchemaProto.Builder newSchemaBuilder = SchemaProto.newBuilder();
             for (int i = 0; i < schemas.size(); i++) {
+                AppSearchSchema schema = schemas.get(i);
                 SchemaTypeConfigProto schemaTypeProto =
-                        SchemaToProtoConverter.toSchemaTypeConfigProto(schemas.get(i));
+                        SchemaToProtoConverter.toSchemaTypeConfigProto(schema);
                 newSchemaBuilder.addTypes(schemaTypeProto);
             }
 
@@ -293,16 +297,10 @@ public final class AppSearchImpl {
             try {
                 checkSuccess(setSchemaResultProto.getStatus());
             } catch (AppSearchException e) {
-                // Improve the error message by merging in information about incompatible types.
                 if (setSchemaResultProto.getDeletedSchemaTypesCount() > 0
                         || setSchemaResultProto.getIncompatibleSchemaTypesCount() > 0) {
-                    String newMessage =
-                            e.getMessage()
-                                    + "\n  Deleted types: "
-                                    + setSchemaResultProto.getDeletedSchemaTypesList()
-                                    + "\n  Incompatible types: "
-                                    + setSchemaResultProto.getIncompatibleSchemaTypesList();
-                    throw new AppSearchException(e.getResultCode(), newMessage, e.getCause());
+                    return SetSchemaResultToProtoConverter.toSetSchemaResult(
+                            setSchemaResultProto, prefix);
                 } else {
                     throw e;
                 }
@@ -339,6 +337,7 @@ public final class AppSearchImpl {
                 // incompatible schemas.
                 checkForOptimizeLocked(/* force= */ true);
             }
+            return SetSchemaResultToProtoConverter.toSetSchemaResult(setSchemaResultProto, prefix);
         } finally {
             mReadWriteLock.writeLock().unlock();
         }
@@ -508,8 +507,8 @@ public final class AppSearchImpl {
             @NonNull String queryExpression,
             @NonNull SearchSpec searchSpec)
             throws AppSearchException {
-        if (!searchSpec.getPackageNames().isEmpty()
-                && !searchSpec.getPackageNames().contains(packageName)) {
+        List<String> filterPackageNames = searchSpec.getFilterPackageNames();
+        if (!filterPackageNames.isEmpty() && !filterPackageNames.contains(packageName)) {
             // Client wanted to query over some packages that weren't its own. This isn't
             // allowed through local query so we can return early with no results.
             return new SearchResultPage(Bundle.EMPTY);
@@ -553,7 +552,7 @@ public final class AppSearchImpl {
             throws AppSearchException {
         mReadWriteLock.readLock().lock();
         try {
-            Set<String> packageFilters = new ArraySet<>(searchSpec.getPackageNames());
+            Set<String> packageFilters = new ArraySet<>(searchSpec.getFilterPackageNames());
             Set<String> prefixFilters = new ArraySet<>();
             Set<String> allPrefixes = mNamespaceMapLocked.keySet();
             if (packageFilters.isEmpty()) {
@@ -573,7 +572,7 @@ public final class AppSearchImpl {
 
             // Find which schemas the client is allowed to query over.
             Set<String> allowedPrefixedSchemas = new ArraySet<>();
-            List<String> schemaFilters = searchSpec.getSchemaTypes();
+            List<String> schemaFilters = searchSpec.getFilterSchemas();
             for (String prefix : prefixFilters) {
                 String packageName = getPackageName(prefix);
 
@@ -752,8 +751,8 @@ public final class AppSearchImpl {
             @NonNull String queryExpression,
             @NonNull SearchSpec searchSpec)
             throws AppSearchException {
-        if (!searchSpec.getPackageNames().isEmpty()
-                && !searchSpec.getPackageNames().contains(packageName)) {
+        List<String> filterPackageNames = searchSpec.getFilterPackageNames();
+        if (!filterPackageNames.isEmpty() && !filterPackageNames.contains(packageName)) {
             // We're only removing documents within the parameter `packageName`. If we're not
             // restricting our remove-query to this package name, then there's nothing for us to
             // remove.
@@ -796,6 +795,8 @@ public final class AppSearchImpl {
      * <p>If the app crashes before a call to PersistToDisk(), Icing would trigger a costly recovery
      * process in next initialization. After that, Icing would still be able to recover all written
      * data.
+     *
+     * @throws AppSearchException on any error that AppSearch persist data to disk.
      */
     public void persistToDisk() throws AppSearchException {
         PersistToDiskResultProto persistToDiskResultProto =
@@ -1083,7 +1084,7 @@ public final class AppSearchImpl {
         Set<String> allowedPrefixedSchemas = new ArraySet<>();
 
         // Add all the schema filters the client specified.
-        List<String> schemaFilters = searchSpec.getSchemaTypes();
+        List<String> schemaFilters = searchSpec.getFilterSchemas();
         for (int i = 0; i < schemaFilters.size(); i++) {
             allowedPrefixedSchemas.add(prefix + schemaFilters.get(i));
         }
@@ -1374,28 +1375,8 @@ public final class AppSearchImpl {
      * @return AppSearchException with the parallel error code.
      */
     private static AppSearchException statusProtoToAppSearchException(StatusProto statusProto) {
-        switch (statusProto.getCode()) {
-            case INVALID_ARGUMENT:
-                return new AppSearchException(
-                        AppSearchResult.RESULT_INVALID_ARGUMENT, statusProto.getMessage());
-            case NOT_FOUND:
-                return new AppSearchException(
-                        AppSearchResult.RESULT_NOT_FOUND, statusProto.getMessage());
-            case FAILED_PRECONDITION:
-                // Fallthrough
-            case ABORTED:
-                // Fallthrough
-            case INTERNAL:
-                return new AppSearchException(
-                        AppSearchResult.RESULT_INTERNAL_ERROR, statusProto.getMessage());
-            case OUT_OF_SPACE:
-                return new AppSearchException(
-                        AppSearchResult.RESULT_OUT_OF_SPACE, statusProto.getMessage());
-            default:
-                // Some unknown/unsupported error
-                return new AppSearchException(
-                        AppSearchResult.RESULT_UNKNOWN_ERROR,
-                        "Unknown IcingSearchEngine status code: " + statusProto.getCode());
-        }
+        return new AppSearchException(
+                ResultCodeToProtoConverter.toResultCode(statusProto.getCode()),
+                statusProto.getMessage());
     }
 }

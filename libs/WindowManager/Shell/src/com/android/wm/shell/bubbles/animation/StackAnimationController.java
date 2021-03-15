@@ -62,12 +62,12 @@ public class StackAnimationController extends
 
     private static final String TAG = "Bubbs.StackCtrl";
 
-    /** Values to use for animating bubbles in. */
-    private static final float ANIMATE_IN_STIFFNESS = 1000f;
-    private static final int ANIMATE_IN_START_DELAY = 25;
+    /** Value to use for animating bubbles in and springing stack after fling. */
+    private static final float STACK_SPRING_STIFFNESS = 700f;
 
     /** Values to use for animating updated bubble to top of stack. */
-    private static final float BUBBLE_SWAP_SCALE = 0.8f;
+    private static final float NEW_BUBBLE_START_SCALE = 0.5f;
+    private static final float NEW_BUBBLE_START_Y = 100f;
     private static final long BUBBLE_SWAP_DURATION = 300L;
 
     /**
@@ -80,20 +80,15 @@ public class StackAnimationController extends
 
     private final PhysicsAnimator.SpringConfig mAnimateOutSpringConfig =
             new PhysicsAnimator.SpringConfig(
-                    ANIMATE_IN_STIFFNESS, SpringForce.DAMPING_RATIO_NO_BOUNCY);
+                    STACK_SPRING_STIFFNESS, SpringForce.DAMPING_RATIO_NO_BOUNCY);
 
     /**
      * Friction applied to fling animations. Since the stack must land on one of the sides of the
      * screen, we want less friction horizontally so that the stack has a better chance of making it
      * to the side without needing a spring.
      */
-    private static final float FLING_FRICTION = 2.2f;
+    private static final float FLING_FRICTION = 1.9f;
 
-    /**
-     * Values to use for the stack spring animation used to spring the stack to its final position
-     * after a fling.
-     */
-    private static final int SPRING_AFTER_FLING_STIFFNESS = 750;
     private static final float SPRING_AFTER_FLING_DAMPING_RATIO = 0.85f;
 
     /** Sentinel value for unset position value. */
@@ -216,7 +211,7 @@ public class StackAnimationController extends
 
         @Override
         public void moveToBounds(@NonNull Rect bounds) {
-            springStack(bounds.left, bounds.top, SpringForce.STIFFNESS_LOW);
+            springStack(bounds.left, bounds.top, STACK_SPRING_STIFFNESS);
         }
 
         @NonNull
@@ -341,7 +336,7 @@ public class StackAnimationController extends
      * flings.
      */
     public void springStackAfterFling(float destinationX, float destinationY) {
-        springStack(destinationX, destinationY, SPRING_AFTER_FLING_STIFFNESS);
+        springStack(destinationX, destinationY, STACK_SPRING_STIFFNESS);
     }
 
     /**
@@ -371,7 +366,7 @@ public class StackAnimationController extends
 
         final ContentResolver contentResolver = mLayout.getContext().getContentResolver();
         final float stiffness = Settings.Secure.getFloat(contentResolver, "bubble_stiffness",
-                SPRING_AFTER_FLING_STIFFNESS /* default */);
+                STACK_SPRING_STIFFNESS /* default */);
         final float dampingRatio = Settings.Secure.getFloat(contentResolver, "bubble_damping",
                 SPRING_AFTER_FLING_DAMPING_RATIO);
         final float friction = Settings.Secure.getFloat(contentResolver, "bubble_friction",
@@ -779,48 +774,58 @@ public class StackAnimationController extends
     }
 
     public void animateReorder(List<View> bubbleViews, Runnable after) {
+        // After the bubble going to index 0 springs above stack, update all icons
+        // at the same time, to avoid visibly changing bubble order before the animation completes.
+        Runnable updateAllIcons = () -> {
+            for (int newIndex = 0; newIndex < bubbleViews.size(); newIndex++) {
+                View view = bubbleViews.get(newIndex);
+                updateBadgesAndZOrder(view, newIndex);
+            }
+        };
+
         for (int newIndex = 0; newIndex < bubbleViews.size(); newIndex++) {
             View view = bubbleViews.get(newIndex);
             final int oldIndex = mLayout.indexOfChild(view);
-            animateSwap(view, oldIndex, newIndex, after);
+            animateSwap(view, oldIndex, newIndex, updateAllIcons, after);
         }
     }
 
-    private void animateSwap(View view, int oldIndex, int newIndex, Runnable finishReorder) {
-        final float newY = getStackPosition().y + newIndex * mSwapAnimationOffset;
-        final float swapY = newIndex == 0
-                ? newY - mSwapAnimationOffset  // Above top of stack
-                : newY + mSwapAnimationOffset;  // Below where bubble will be
-        final ViewPropertyAnimator animator = view.animate()
-                .scaleX(BUBBLE_SWAP_SCALE)
-                .scaleY(BUBBLE_SWAP_SCALE)
-                .translationY(swapY)
+    private void animateSwap(View view, int oldIndex, int newIndex,
+            Runnable updateAllIcons, Runnable finishReorder) {
+        if (newIndex == oldIndex) {
+            // Add new bubble to index 0; move existing bubbles down
+            updateBadgesAndZOrder(view, newIndex);
+            if (newIndex == 0) {
+                animateInBubble(view, newIndex);
+            } else {
+                moveToFinalIndex(view, newIndex, finishReorder);
+            }
+        } else {
+            // Reorder existing bubbles
+            if (newIndex == 0) {
+                animateToFrontThenUpdateIcons(view, updateAllIcons, finishReorder);
+            } else {
+                moveToFinalIndex(view, newIndex, finishReorder);
+            }
+        }
+    }
+
+    private void animateToFrontThenUpdateIcons(View v, Runnable updateAllIcons,
+            Runnable finishReorder) {
+        final ViewPropertyAnimator animator = v.animate()
+                .translationY(getStackPosition().y - mSwapAnimationOffset)
                 .setDuration(BUBBLE_SWAP_DURATION)
                 .withEndAction(() -> {
-                    finishSwapAnimation(view, oldIndex, newIndex, finishReorder);
+                    updateAllIcons.run();
+                    moveToFinalIndex(v, 0 /* index */, finishReorder);
                 });
-        view.setTag(R.id.reorder_animator_tag, animator);
+        v.setTag(R.id.reorder_animator_tag, animator);
     }
 
-    private void finishSwapAnimation(View view, int oldIndex, int newIndex,
+    private void moveToFinalIndex(View view, int newIndex,
             Runnable finishReorder) {
-
-        // At this point, swapping bubbles have the least overlap.
-        // Update z-index and badge visibility here for least jarring transition.
-        view.setZ((mMaxBubbles * mElevation) - newIndex);
-        BadgedImageView bv = (BadgedImageView) view;
-        if (oldIndex == 0 && newIndex > 0) {
-            bv.hideDotAndBadge(!isStackOnLeftSide());
-        } else if (oldIndex > 0 && newIndex == 0) {
-            bv.showDotAndBadge(!isStackOnLeftSide());
-        }
-
-        // Animate bubble back into stack, at new index and original size.
-        final float newY = getStackPosition().y + newIndex * mStackOffset;
         final ViewPropertyAnimator animator = view.animate()
-                .scaleX(1f)
-                .scaleY(1f)
-                .translationY(newY)
+                .translationY(getStackPosition().y + newIndex * mStackOffset)
                 .setDuration(BUBBLE_SWAP_DURATION)
                 .withEndAction(() -> {
                     view.setTag(R.id.reorder_animator_tag, null);
@@ -829,12 +834,18 @@ public class StackAnimationController extends
         view.setTag(R.id.reorder_animator_tag, animator);
     }
 
-    @Override
-    void onChildReordered(View child, int oldIndex, int newIndex) {
-        if (isStackPositionSet()) {
-            setStackPosition(mStackPosition);
+    private void updateBadgesAndZOrder(View v, int index) {
+        v.setZ((mMaxBubbles * mElevation) - index);
+        BadgedImageView bv = (BadgedImageView) v;
+        if (index == 0) {
+            bv.showDotAndBadge(!isStackOnLeftSide());
+        } else {
+            bv.hideDotAndBadge(!isStackOnLeftSide());
         }
     }
+
+    @Override
+    void onChildReordered(View child, int oldIndex, int newIndex) {}
 
     @Override
     void onActiveControllerForLayout(PhysicsAnimationLayout layout) {
@@ -943,35 +954,29 @@ public class StackAnimationController extends
     }
 
     /** Animates in the given bubble. */
-    private void animateInBubble(View child, int index) {
+    private void animateInBubble(View v, int index) {
         if (!isActiveController()) {
             return;
         }
-
+        v.setTranslationX(mStackPosition.x);
         final float yOffset =
                 getOffsetForChainedPropertyAnimation(DynamicAnimation.TRANSLATION_Y);
-
-        // Position the new bubble in the correct position, scaled down completely.
-        child.setTranslationX(mStackPosition.x);
-        child.setTranslationY(mStackPosition.y + yOffset * index);
-        child.setScaleX(0f);
-        child.setScaleY(0f);
-
-        // Push the subsequent views out of the way, if there are subsequent views.
-        if (index + 1 < mLayout.getChildCount()) {
-            animationForChildAtIndex(index + 1)
-                    .translationY(mStackPosition.y + yOffset * (index + 1))
-                    .withStiffness(SpringForce.STIFFNESS_LOW)
-                    .start();
-        }
-
-        // Scale in the new bubble, slightly delayed.
-        animationForChild(child)
+        final float endY = mStackPosition.y + yOffset * index;
+        final float startY = endY + NEW_BUBBLE_START_Y;
+        v.setTranslationY(startY);
+        v.setScaleX(NEW_BUBBLE_START_SCALE);
+        v.setScaleY(NEW_BUBBLE_START_SCALE);
+        v.setAlpha(0f);
+        final ViewPropertyAnimator animator = v.animate()
+                .translationY(endY)
                 .scaleX(1f)
                 .scaleY(1f)
-                .withStiffness(ANIMATE_IN_STIFFNESS)
-                .withStartDelay(mLayout.getChildCount() > 1 ? ANIMATE_IN_START_DELAY : 0)
-                .start();
+                .alpha(1f)
+                .setDuration(BUBBLE_SWAP_DURATION)
+                .withEndAction(() -> {
+                    v.setTag(R.id.reorder_animator_tag, null);
+                });
+        v.setTag(R.id.reorder_animator_tag, animator);
     }
 
     /**

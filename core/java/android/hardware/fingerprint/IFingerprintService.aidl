@@ -36,7 +36,7 @@ interface IFingerprintService {
     ITestSession createTestSession(int sensorId, String opPackageName);
 
     // Requests a proto dump of the specified sensor
-    byte[] dumpSensorServiceStateProto(int sensorId);
+    byte[] dumpSensorServiceStateProto(int sensorId, boolean clearSchedulerBuffer);
 
     // Retrieve static sensor properties for all fingerprint sensors
     List<FingerprintSensorPropertiesInternal> getSensorPropertiesInternal(String opPackageName);
@@ -78,7 +78,7 @@ interface IFingerprintService {
 
     // Start fingerprint enrollment
     void enroll(IBinder token, in byte [] hardwareAuthToken, int userId, IFingerprintServiceReceiver receiver,
-            String opPackageName, boolean shouldLogMetrics);
+            String opPackageName, int enrollReason);
 
     // Cancel enrollment in progress
     void cancelEnrollment(IBinder token);

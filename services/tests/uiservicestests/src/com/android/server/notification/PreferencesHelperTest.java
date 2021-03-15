@@ -29,8 +29,8 @@ import static android.app.NotificationManager.IMPORTANCE_LOW;
 import static android.app.NotificationManager.IMPORTANCE_MAX;
 import static android.app.NotificationManager.IMPORTANCE_NONE;
 import static android.app.NotificationManager.IMPORTANCE_UNSPECIFIED;
+import static android.util.StatsLog.ANNOTATION_ID_IS_UID;
 
-import static com.android.internal.util.FrameworkStatsLog.ANNOTATION_ID_IS_UID;
 import static com.android.internal.util.FrameworkStatsLog.PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES;
 import static com.android.os.AtomsProto.PackageNotificationChannelPreferences.CHANNEL_ID_FIELD_NUMBER;
 import static com.android.os.AtomsProto.PackageNotificationChannelPreferences.CHANNEL_NAME_FIELD_NUMBER;
@@ -3534,6 +3534,28 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertTrue(conversationWrapperContainsChannel(convos, channel));
         assertTrue(conversationWrapperContainsChannel(convos, diffConvo));
         assertFalse(conversationWrapperContainsChannel(convos, channel2));
+    }
+
+    @Test
+    public void testGetConversations_parentDeleted() {
+        String convoId = "convo";
+        NotificationChannel messages =
+                new NotificationChannel("messages", "Messages", IMPORTANCE_DEFAULT);
+        mHelper.createNotificationChannel(PKG_O, UID_O, messages, true, false);
+
+        NotificationChannel channel =
+                new NotificationChannel("A person msgs", "messages from A", IMPORTANCE_DEFAULT);
+        channel.setConversationId(messages.getId(), convoId);
+        channel.setImportantConversation(true);
+        mHelper.createNotificationChannel(PKG_O, UID_O, channel, true, false);
+
+        mHelper.permanentlyDeleteNotificationChannel(PKG_O, UID_O, "messages");
+
+        List<ConversationChannelWrapper> convos =
+                mHelper.getConversations(IntArray.wrap(new int[] {0}), true);
+
+        assertEquals(1, convos.size());
+        assertTrue(conversationWrapperContainsChannel(convos, channel));
     }
 
     private boolean conversationWrapperContainsChannel(List<ConversationChannelWrapper> list,

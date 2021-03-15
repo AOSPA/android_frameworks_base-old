@@ -25,22 +25,30 @@ import android.annotation.NonNull;
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.NetworkCapabilities;
+import android.net.TelephonyNetworkSpecifier;
 import android.net.vcn.IVcnManagementService;
 import android.net.vcn.IVcnUnderlyingNetworkPolicyListener;
 import android.net.vcn.VcnConfig;
+import android.net.vcn.VcnUnderlyingNetworkPolicy;
+import android.net.wifi.WifiInfo;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelUuid;
 import android.os.PersistableBundle;
 import android.os.Process;
+import android.os.RemoteException;
 import android.os.ServiceSpecificException;
 import android.os.UserHandle;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
+import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
@@ -58,6 +66,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -154,6 +163,11 @@ public class VcnManagementService extends IVcnManagementService.Stub {
     @NonNull private final Object mLock = new Object();
 
     @NonNull private final PersistableBundleUtils.LockingReadWriteHelper mConfigDiskRwHelper;
+
+    @GuardedBy("mLock")
+    @NonNull
+    private final Map<IBinder, PolicyListenerBinderDeath> mRegisteredPolicyListeners =
+            new ArrayMap<>();
 
     @VisibleForTesting(visibility = Visibility.PRIVATE)
     VcnManagementService(@NonNull Context context, @NonNull Dependencies deps) {
@@ -277,8 +291,16 @@ public class VcnManagementService extends IVcnManagementService.Stub {
         public Vcn newVcn(
                 @NonNull VcnContext vcnContext,
                 @NonNull ParcelUuid subscriptionGroup,
-                @NonNull VcnConfig config) {
-            return new Vcn(vcnContext, subscriptionGroup, config);
+                @NonNull VcnConfig config,
+                @NonNull TelephonySubscriptionSnapshot snapshot,
+                @NonNull VcnSafemodeCallback safemodeCallback) {
+            return new Vcn(vcnContext, subscriptionGroup, config, snapshot, safemodeCallback);
+        }
+
+        /** Gets the subId indicated by the given {@link WifiInfo}. */
+        public int getSubIdForWifiInfo(@NonNull WifiInfo wifiInfo) {
+            // TODO(b/178501049): use the subId indicated by WifiInfo#getSubscriptionId
+            return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
         }
     }
 
@@ -363,6 +385,7 @@ public class VcnManagementService extends IVcnManagementService.Stub {
                 // delay)
                 for (Entry<ParcelUuid, Vcn> entry : mVcns.entrySet()) {
                     final VcnConfig config = mConfigs.get(entry.getKey());
+
                     if (config == null
                             || !snapshot.packageHasPermissionsForSubscriptionGroup(
                                     entry.getKey(), config.getProvisioningPackageName())) {
@@ -376,13 +399,37 @@ public class VcnManagementService extends IVcnManagementService.Stub {
                                 // correct instance is torn down. This could happen as a result of a
                                 // Carrier App manually removing/adding a VcnConfig.
                                 if (mVcns.get(uuidToTeardown) == instanceToTeardown) {
-                                    mVcns.remove(uuidToTeardown).teardownAsynchronously();
+                                    stopVcnLocked(uuidToTeardown);
                                 }
                             }
                         }, instanceToTeardown, CARRIER_PRIVILEGES_LOST_TEARDOWN_DELAY_MS);
+                    } else {
+                        // If this VCN's status has not changed, update it with the new snapshot
+                        entry.getValue().updateSubscriptionSnapshot(mLastSnapshot);
                     }
                 }
             }
+        }
+    }
+
+    @GuardedBy("mLock")
+    private void stopVcnLocked(@NonNull ParcelUuid uuidToTeardown) {
+        final Vcn vcnToTeardown = mVcns.remove(uuidToTeardown);
+        if (vcnToTeardown == null) {
+            return;
+        }
+
+        vcnToTeardown.teardownAsynchronously();
+
+        // Now that the VCN is removed, notify all registered listeners to refresh their
+        // UnderlyingNetworkPolicy.
+        notifyAllPolicyListenersLocked();
+    }
+
+    @GuardedBy("mLock")
+    private void notifyAllPolicyListenersLocked() {
+        for (final PolicyListenerBinderDeath policyListener : mRegisteredPolicyListeners.values()) {
+            Binder.withCleanCallingIdentity(() -> policyListener.mListener.onPolicyChanged());
         }
     }
 
@@ -393,8 +440,17 @@ public class VcnManagementService extends IVcnManagementService.Stub {
         // TODO(b/176939047): Support multiple VCNs active at the same time, or limit to one active
         //                    VCN.
 
-        final Vcn newInstance = mDeps.newVcn(mVcnContext, subscriptionGroup, config);
+        final VcnSafemodeCallbackImpl safemodeCallback =
+                new VcnSafemodeCallbackImpl(subscriptionGroup);
+
+        final Vcn newInstance =
+                mDeps.newVcn(
+                        mVcnContext, subscriptionGroup, config, mLastSnapshot, safemodeCallback);
         mVcns.put(subscriptionGroup, newInstance);
+
+        // Now that a new VCN has started, notify all registered listeners to refresh their
+        // UnderlyingNetworkPolicy.
+        notifyAllPolicyListenersLocked();
     }
 
     @GuardedBy("mLock")
@@ -457,9 +513,7 @@ public class VcnManagementService extends IVcnManagementService.Stub {
             synchronized (mLock) {
                 mConfigs.remove(subscriptionGroup);
 
-                if (mVcns.containsKey(subscriptionGroup)) {
-                    mVcns.remove(subscriptionGroup).teardownAsynchronously();
-                }
+                stopVcnLocked(subscriptionGroup);
 
                 writeConfigsToDiskLocked();
             }
@@ -489,7 +543,7 @@ public class VcnManagementService extends IVcnManagementService.Stub {
         }
     }
 
-    /** Get current configuration list for testing purposes */
+    /** Get current VCNs for testing purposes */
     @VisibleForTesting(visibility = Visibility.PRIVATE)
     public Map<ParcelUuid, Vcn> getAllVcns() {
         synchronized (mLock) {
@@ -497,19 +551,138 @@ public class VcnManagementService extends IVcnManagementService.Stub {
         }
     }
 
+    /** Binder death recipient used to remove a registered policy listener. */
+    private class PolicyListenerBinderDeath implements Binder.DeathRecipient {
+        @NonNull private final IVcnUnderlyingNetworkPolicyListener mListener;
+
+        PolicyListenerBinderDeath(@NonNull IVcnUnderlyingNetworkPolicyListener listener) {
+            mListener = listener;
+        }
+
+        @Override
+        public void binderDied() {
+            Log.e(TAG, "app died without removing VcnUnderlyingNetworkPolicyListener");
+            removeVcnUnderlyingNetworkPolicyListener(mListener);
+        }
+    }
+
     /** Adds the provided listener for receiving VcnUnderlyingNetworkPolicy updates. */
+    @GuardedBy("mLock")
     @Override
     public void addVcnUnderlyingNetworkPolicyListener(
-            IVcnUnderlyingNetworkPolicyListener listener) {
-        // TODO(b/175739863): implement policy listener registration
-        throw new UnsupportedOperationException("Not yet implemented");
+            @NonNull IVcnUnderlyingNetworkPolicyListener listener) {
+        requireNonNull(listener, "listener was null");
+
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.NETWORK_FACTORY,
+                "Must have permission NETWORK_FACTORY to register a policy listener");
+
+        PolicyListenerBinderDeath listenerBinderDeath = new PolicyListenerBinderDeath(listener);
+
+        synchronized (mLock) {
+            mRegisteredPolicyListeners.put(listener.asBinder(), listenerBinderDeath);
+
+            try {
+                listener.asBinder().linkToDeath(listenerBinderDeath, 0 /* flags */);
+            } catch (RemoteException e) {
+                // Remote binder already died - cleanup registered Listener
+                listenerBinderDeath.binderDied();
+            }
+        }
     }
 
     /** Removes the provided listener from receiving VcnUnderlyingNetworkPolicy updates. */
+    @GuardedBy("mLock")
     @Override
     public void removeVcnUnderlyingNetworkPolicyListener(
-            IVcnUnderlyingNetworkPolicyListener listener) {
-        // TODO(b/175739863): implement policy listener unregistration
-        throw new UnsupportedOperationException("Not yet implemented");
+            @NonNull IVcnUnderlyingNetworkPolicyListener listener) {
+        requireNonNull(listener, "listener was null");
+
+        synchronized (mLock) {
+            PolicyListenerBinderDeath listenerBinderDeath =
+                    mRegisteredPolicyListeners.remove(listener.asBinder());
+
+            if (listenerBinderDeath != null) {
+                listener.asBinder().unlinkToDeath(listenerBinderDeath, 0 /* flags */);
+            }
+        }
+    }
+
+    /**
+     * Gets the UnderlyingNetworkPolicy as determined by the provided NetworkCapabilities and
+     * LinkProperties.
+     */
+    @NonNull
+    @Override
+    public VcnUnderlyingNetworkPolicy getUnderlyingNetworkPolicy(
+            @NonNull NetworkCapabilities networkCapabilities,
+            @NonNull LinkProperties linkProperties) {
+        requireNonNull(networkCapabilities, "networkCapabilities was null");
+        requireNonNull(linkProperties, "linkProperties was null");
+
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.NETWORK_FACTORY,
+                "Must have permission NETWORK_FACTORY or be the SystemServer to get underlying"
+                        + " Network policies");
+
+        // Defensive copy in case this call is in-process and the given NetworkCapabilities mutates
+        networkCapabilities = new NetworkCapabilities(networkCapabilities);
+
+        int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                && networkCapabilities.getNetworkSpecifier() instanceof TelephonyNetworkSpecifier) {
+            TelephonyNetworkSpecifier telephonyNetworkSpecifier =
+                    (TelephonyNetworkSpecifier) networkCapabilities.getNetworkSpecifier();
+            subId = telephonyNetworkSpecifier.getSubscriptionId();
+        } else if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                && networkCapabilities.getTransportInfo() instanceof WifiInfo) {
+            WifiInfo wifiInfo = (WifiInfo) networkCapabilities.getTransportInfo();
+            subId = mDeps.getSubIdForWifiInfo(wifiInfo);
+        }
+
+        boolean isVcnManagedNetwork = false;
+        if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            synchronized (mLock) {
+                ParcelUuid subGroup = mLastSnapshot.getGroupForSubId(subId);
+
+                Vcn vcn = mVcns.get(subGroup);
+                if (vcn != null && vcn.isActive()) {
+                    isVcnManagedNetwork = true;
+                }
+            }
+        }
+        if (isVcnManagedNetwork) {
+            networkCapabilities.removeCapability(
+                    NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED);
+        }
+
+        return new VcnUnderlyingNetworkPolicy(false /* isTearDownRequested */, networkCapabilities);
+    }
+
+    /** Callback for signalling when a Vcn has entered Safemode. */
+    public interface VcnSafemodeCallback {
+        /** Called by a Vcn to signal that it has entered Safemode. */
+        void onEnteredSafemode();
+    }
+
+    /** VcnSafemodeCallback is used by Vcns to notify VcnManagementService on entering Safemode. */
+    private class VcnSafemodeCallbackImpl implements VcnSafemodeCallback {
+        @NonNull private final ParcelUuid mSubGroup;
+
+        private VcnSafemodeCallbackImpl(@NonNull final ParcelUuid subGroup) {
+            mSubGroup = Objects.requireNonNull(subGroup, "Missing subGroup");
+        }
+
+        @Override
+        public void onEnteredSafemode() {
+            synchronized (mLock) {
+                // Ignore if this subscription group doesn't exist anymore
+                if (!mVcns.containsKey(mSubGroup)) {
+                    return;
+                }
+
+                notifyAllPolicyListenersLocked();
+            }
+        }
     }
 }

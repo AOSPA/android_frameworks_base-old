@@ -16,7 +16,7 @@
 
 package com.android.internal.os;
 
-import android.location.GnssSignalQuality;
+import android.net.NetworkStats;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.SparseIntArray;
@@ -38,30 +38,19 @@ import java.util.concurrent.Future;
 public class MockBatteryStatsImpl extends BatteryStatsImpl {
     public BatteryStatsImpl.Clocks clocks;
     public boolean mForceOnBattery;
+    private NetworkStats mNetworkStats;
 
     MockBatteryStatsImpl(Clocks clocks) {
         super(clocks);
         this.clocks = mClocks;
-        mScreenOnTimer = new BatteryStatsImpl.StopwatchTimer(clocks, null, -1, null,
-                mOnBatteryTimeBase);
-        mScreenDozeTimer = new BatteryStatsImpl.StopwatchTimer(clocks, null, -1, null,
-                mOnBatteryTimeBase);
-        for (int i = 0; i < mScreenBrightnessTimer.length; i++) {
-            mScreenBrightnessTimer[i] = new BatteryStatsImpl.StopwatchTimer(clocks, null, -1, null,
-                    mOnBatteryTimeBase);
-        }
-        mBluetoothScanTimer = new StopwatchTimer(mClocks, null, -14, null, mOnBatteryTimeBase);
-        mBluetoothActivity = new ControllerActivityCounterImpl(mOnBatteryTimeBase, 1);
+        initTimersAndCounters();
+
         setExternalStatsSyncLocked(new DummyExternalStatsSync());
 
-        for (int i = 0; i < GnssSignalQuality.NUM_GNSS_SIGNAL_QUALITY_LEVELS; i++) {
-            mGpsSignalQualityTimer[i] = new StopwatchTimer(clocks, null, -1000 - i, null,
-                    mOnBatteryTimeBase);
-        }
-
-        final boolean[] supportedBuckets = new boolean[MeasuredEnergyStats.NUMBER_ENERGY_BUCKETS];
-        Arrays.fill(supportedBuckets, true);
-        mGlobalMeasuredEnergyStats = new MeasuredEnergyStats(supportedBuckets);
+        final boolean[] supportedStandardBuckets
+                = new boolean[MeasuredEnergyStats.NUMBER_STANDARD_ENERGY_BUCKETS];
+        Arrays.fill(supportedStandardBuckets, true);
+        mGlobalMeasuredEnergyStats = new MeasuredEnergyStats(supportedStandardBuckets, 2);
 
         // A no-op handler.
         mHandler = new Handler(Looper.getMainLooper()) {
@@ -104,6 +93,16 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
 
     public TimeBase getOnBatteryScreenOffBackgroundTimeBase(int uid) {
         return getUidStatsLocked(uid).mOnBatteryScreenOffBackgroundTimeBase;
+    }
+
+    public MockBatteryStatsImpl setNetworkStats(NetworkStats networkStats) {
+        mNetworkStats = networkStats;
+        return this;
+    }
+
+    @Override
+    protected NetworkStats readNetworkStatsLocked(String[] ifaces) {
+        return mNetworkStats;
     }
 
     public MockBatteryStatsImpl setPowerProfile(PowerProfile powerProfile) {

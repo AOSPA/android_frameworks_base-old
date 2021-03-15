@@ -39,11 +39,13 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApkChecksum;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ChangedPackages;
 import android.content.pm.Checksum;
 import android.content.pm.ComponentInfo;
 import android.content.pm.FeatureInfo;
+import android.content.pm.IOnChecksumsReadyListener;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageDeleteObserver;
 import android.content.pm.IPackageManager;
@@ -59,6 +61,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageUserState;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
@@ -70,6 +73,13 @@ import android.content.pm.SuspendDialogInfo;
 import android.content.pm.VerifierDeviceIdentity;
 import android.content.pm.VersionedPackage;
 import android.content.pm.dex.ArtManager;
+import android.content.pm.parsing.PackageInfoWithoutStateUtils;
+import android.content.pm.parsing.ParsingPackage;
+import android.content.pm.parsing.ParsingPackageUtils;
+import android.content.pm.parsing.result.ParseInput;
+import android.content.pm.parsing.result.ParseResult;
+import android.content.pm.parsing.result.ParseTypeImpl;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.graphics.Bitmap;
@@ -115,6 +125,7 @@ import dalvik.system.VMRuntime;
 
 import libcore.util.EmptyArray;
 
+import java.io.File;
 import java.lang.ref.WeakReference;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
@@ -871,10 +882,10 @@ public class ApplicationPackageManager extends PackageManager {
     @Override
     public void requestChecksums(@NonNull String packageName, boolean includeSplits,
             @Checksum.Type int required, @NonNull List<Certificate> trustedInstallers,
-            @NonNull IntentSender statusReceiver)
+            @NonNull OnChecksumsReadyListener onChecksumsReadyListener)
             throws CertificateEncodingException, NameNotFoundException {
         Objects.requireNonNull(packageName);
-        Objects.requireNonNull(statusReceiver);
+        Objects.requireNonNull(onChecksumsReadyListener);
         Objects.requireNonNull(trustedInstallers);
         try {
             if (trustedInstallers == TRUST_ALL) {
@@ -886,8 +897,17 @@ public class ApplicationPackageManager extends PackageManager {
                         "trustedInstallers has to be one of TRUST_ALL/TRUST_NONE or a non-empty "
                                 + "list of certificates.");
             }
+            IOnChecksumsReadyListener onChecksumsReadyListenerDelegate =
+                    new IOnChecksumsReadyListener.Stub() {
+                        @Override
+                        public void onChecksumsReady(List<ApkChecksum> checksums)
+                                throws RemoteException {
+                            onChecksumsReadyListener.onChecksumsReady(checksums);
+                        }
+                    };
             mPM.requestChecksums(packageName, includeSplits, DEFAULT_CHECKSUMS, required,
-                    encodeCertificates(trustedInstallers), statusReceiver, getUserId());
+                    encodeCertificates(trustedInstallers), onChecksumsReadyListenerDelegate,
+                    getUserId());
         } catch (ParcelableException e) {
             e.maybeRethrow(PackageManager.NameNotFoundException.class);
             throw new RuntimeException(e);
@@ -1691,20 +1711,29 @@ public class ApplicationPackageManager extends PackageManager {
     @Override
     public Resources getResourcesForApplication(@NonNull ApplicationInfo app)
             throws NameNotFoundException {
+        return getResourcesForApplication(app, null);
+    }
+
+    @Override
+    public Resources getResourcesForApplication(@NonNull ApplicationInfo app,
+            @Nullable Configuration configuration) throws NameNotFoundException {
         if (app.packageName.equals("system")) {
-            return mContext.mMainThread.getSystemUiContext().getResources();
+            Context sysuiContext = mContext.mMainThread.getSystemUiContext();
+            if (configuration != null) {
+                sysuiContext = sysuiContext.createConfigurationContext(configuration);
+            }
+            return sysuiContext.getResources();
         }
         final boolean sameUid = (app.uid == Process.myUid());
         final Resources r = mContext.mMainThread.getTopLevelResources(
-                    sameUid ? app.sourceDir : app.publicSourceDir,
-                    sameUid ? app.splitSourceDirs : app.splitPublicSourceDirs,
-                    app.resourceDirs, app.sharedLibraryFiles,
-                    mContext.mPackageInfo);
+                sameUid ? app.sourceDir : app.publicSourceDir,
+                sameUid ? app.splitSourceDirs : app.splitPublicSourceDirs,
+                app.resourceDirs, app.sharedLibraryFiles,
+                mContext.mPackageInfo, configuration);
         if (r != null) {
             return r;
         }
         throw new NameNotFoundException("Unable to open " + app.publicSourceDir);
-
     }
 
     @Override
@@ -2043,6 +2072,31 @@ public class ApplicationPackageManager extends PackageManager {
     @Override
     public CharSequence getApplicationLabel(ApplicationInfo info) {
         return info.loadLabel(this);
+    }
+
+    @Nullable
+    public PackageInfo getPackageArchiveInfo(@NonNull String archiveFilePath,
+            @PackageInfoFlags int flags) {
+        if ((flags & (PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                | PackageManager.MATCH_DIRECT_BOOT_AWARE)) == 0) {
+            // Caller expressed no opinion about what encryption
+            // aware/unaware components they want to see, so match both
+            flags |= PackageManager.MATCH_DIRECT_BOOT_AWARE
+                    | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
+        }
+
+        boolean collectCertificates = (flags & PackageManager.GET_SIGNATURES) != 0
+                || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0;
+
+        ParseInput input = ParseTypeImpl.forParsingWithoutPlatformCompat().reset();
+        ParseResult<ParsingPackage> result = ParsingPackageUtils.parseDefault(input,
+                new File(archiveFilePath), 0, getPermissionManager().getSplitPermissions(),
+                collectCertificates);
+        if (result.isError()) {
+            return null;
+        }
+        return PackageInfoWithoutStateUtils.generate(result.getResult(), null, flags, 0, 0, null,
+                new PackageUserState(), UserHandle.getCallingUserId());
     }
 
     @Override
@@ -3256,6 +3310,15 @@ public class ApplicationPackageManager extends PackageManager {
     public String getAttentionServicePackageName() {
         try {
             return mPM.getAttentionServicePackageName();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public String getRotationResolverPackageName() {
+        try {
+            return mPM.getRotationResolverPackageName();
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }

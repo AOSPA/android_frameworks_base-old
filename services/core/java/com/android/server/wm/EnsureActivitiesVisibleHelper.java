@@ -33,7 +33,6 @@ class EnsureActivitiesVisibleHelper {
     private int mConfigChanges;
     private boolean mPreserveWindows;
     private boolean mNotifyClients;
-    private boolean mUserLeaving;
 
     EnsureActivitiesVisibleHelper(Task container) {
         mTask = container;
@@ -50,7 +49,7 @@ class EnsureActivitiesVisibleHelper {
      *                      be sent to the clients.
      */
     void reset(ActivityRecord starting, int configChanges, boolean preserveWindows,
-            boolean notifyClients, boolean userLeaving) {
+            boolean notifyClients) {
         mStarting = starting;
         mTop = mTask.topRunningActivity();
         // If the top activity is not fullscreen, then we need to make sure any activities under it
@@ -61,7 +60,6 @@ class EnsureActivitiesVisibleHelper {
         mConfigChanges = configChanges;
         mPreserveWindows = preserveWindows;
         mNotifyClients = notifyClients;
-        mUserLeaving = userLeaving;
     }
 
     /**
@@ -78,12 +76,10 @@ class EnsureActivitiesVisibleHelper {
      * @param preserveWindows Flag indicating whether windows should be preserved when updating.
      * @param notifyClients Flag indicating whether the configuration and visibility changes shoulc
      *                      be sent to the clients.
-     * @param userLeaving Flag indicating whether a userLeaving callback should be issued in the
-     *                      case the activity is being set to invisible.
      */
     void process(@Nullable ActivityRecord starting, int configChanges, boolean preserveWindows,
-            boolean notifyClients, boolean userLeaving) {
-        reset(starting, configChanges, preserveWindows, notifyClients, userLeaving);
+            boolean notifyClients) {
+        reset(starting, configChanges, preserveWindows, notifyClients);
 
         if (DEBUG_VISIBILITY) {
             Slog.v(TAG_VISIBILITY, "ensureActivitiesVisible behind " + mTop
@@ -122,7 +118,7 @@ class EnsureActivitiesVisibleHelper {
                 // At this point, nothing else needs to be shown in this task.
                 if (DEBUG_VISIBILITY) {
                     Slog.v(TAG_VISIBILITY, "Fullscreen: at " + r
-                            + " stackVisible=" + mContainerShouldBeVisible
+                            + " containerVisible=" + mContainerShouldBeVisible
                             + " behindFullscreen=" + mBehindFullscreenActivity);
                 }
                 mBehindFullscreenActivity = true;
@@ -173,24 +169,24 @@ class EnsureActivitiesVisibleHelper {
             if (DEBUG_VISIBILITY) {
                 Slog.v(TAG_VISIBILITY, "Make invisible? " + r
                         + " finishing=" + r.finishing + " state=" + r.getState()
-                        + " stackShouldBeVisible=" + mContainerShouldBeVisible
+                        + " containerShouldBeVisible=" + mContainerShouldBeVisible
                         + " behindFullscreenActivity=" + mBehindFullscreenActivity
                         + " mLaunchTaskBehind=" + r.mLaunchTaskBehind);
             }
-            r.makeInvisible(mUserLeaving);
+            r.makeInvisible();
         }
 
         if (!mBehindFullscreenActivity && mTask.isActivityTypeHome() && r.isRootOfTask()) {
             if (DEBUG_VISIBILITY) {
                 Slog.v(TAG_VISIBILITY, "Home task: at " + mTask
-                        + " stackShouldBeVisible=" + mContainerShouldBeVisible
+                        + " containerShouldBeVisible=" + mContainerShouldBeVisible
                         + " behindFullscreenActivity=" + mBehindFullscreenActivity);
             }
-            // No other task in the home stack should be visible behind the home activity.
+            // No other task in the root home task should be visible behind the home activity.
             // Home activities is usually a translucent activity with the wallpaper behind
             // them. However, when they don't have the wallpaper behind them, we want to
-            // show activities in the next application stack behind them vs. another
-            // task in the home stack like recents.
+            // show activities in the next application root task behind them vs. another
+            // task in the root home task like recents.
             mBehindFullscreenActivity = true;
         }
     }
@@ -206,7 +202,7 @@ class EnsureActivitiesVisibleHelper {
         }
 
         // This activity needs to be visible, but isn't even running...
-        // get it started and resume if no other stack in this stack is resumed.
+        // get it started and resume if no other root task in this root task is resumed.
         if (DEBUG_VISIBILITY) {
             Slog.v(TAG_VISIBILITY, "Start and freeze screen for " + r);
         }

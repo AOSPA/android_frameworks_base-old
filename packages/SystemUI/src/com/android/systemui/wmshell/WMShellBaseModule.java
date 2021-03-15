@@ -71,6 +71,8 @@ import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
 import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.phone.PipAppOpsListener;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
+import com.android.wm.shell.sizecompatui.SizeCompatUI;
+import com.android.wm.shell.sizecompatui.SizeCompatUIController;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.splitscreen.SplitScreenController;
 import com.android.wm.shell.transition.Transitions;
@@ -250,14 +252,17 @@ public abstract class WMShellBaseModule {
     @Provides
     static PipAppOpsListener providePipAppOpsListener(Context context,
             IActivityManager activityManager,
-            PipTouchHandler pipTouchHandler) {
-        return new PipAppOpsListener(context, activityManager, pipTouchHandler.getMotionHelper());
+            PipTouchHandler pipTouchHandler,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new PipAppOpsListener(context, pipTouchHandler.getMotionHelper(), mainExecutor);
     }
 
+    // Needs handler for registering broadcast receivers
     @WMSingleton
     @Provides
-    static PipMediaController providePipMediaController(Context context) {
-        return new PipMediaController(context);
+    static PipMediaController providePipMediaController(Context context,
+            @ShellMainThread Handler mainHandler) {
+        return new PipMediaController(context, mainHandler);
     }
 
     @WMSingleton
@@ -290,8 +295,8 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static ShellTaskOrganizer provideShellTaskOrganizer(@ShellMainThread ShellExecutor mainExecutor,
-            Context context) {
-        return new ShellTaskOrganizer(mainExecutor, context);
+            Context context, SizeCompatUI sizeCompatUI) {
+        return new ShellTaskOrganizer(mainExecutor, context, sizeCompatUI);
     }
 
     @WMSingleton
@@ -328,6 +333,7 @@ public abstract class WMShellBaseModule {
     @BindsOptionalOf
     abstract AppPairs optionalAppPairs();
 
+    // Note: Handler needed for LauncherApps.register
     @WMSingleton
     @Provides
     static Optional<Bubbles> provideBubbles(Context context,
@@ -338,11 +344,12 @@ public abstract class WMShellBaseModule {
             LauncherApps launcherApps,
             UiEventLogger uiEventLogger,
             ShellTaskOrganizer organizer,
-            @ShellMainThread ShellExecutor mainExecutor) {
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellMainThread Handler mainHandler) {
         return Optional.of(BubbleController.create(context, null /* synchronizer */,
                 floatingContentCoordinator, statusBarService, windowManager,
                 windowManagerShellWrapper, launcherApps, uiEventLogger, organizer,
-                mainExecutor));
+                mainExecutor, mainHandler));
     }
 
     // Needs the shell main handler for ContentObserver callbacks
@@ -375,8 +382,7 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static FullscreenTaskListener provideFullscreenTaskListener(
-            SyncTransactionQueue syncQueue) {
+    static FullscreenTaskListener provideFullscreenTaskListener(SyncTransactionQueue syncQueue) {
         return new FullscreenTaskListener(syncQueue);
     }
 
@@ -386,5 +392,13 @@ public abstract class WMShellBaseModule {
             @ShellMainThread ShellExecutor mainExecutor,
             @ShellAnimationThread ShellExecutor animExecutor) {
         return new Transitions(organizer, pool, mainExecutor, animExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    static SizeCompatUI provideSizeCompatUI(Context context, DisplayController displayController,
+            DisplayImeController imeController, @ShellMainThread ShellExecutor mainExecutor) {
+        return SizeCompatUIController.create(context, displayController, imeController,
+                mainExecutor);
     }
 }

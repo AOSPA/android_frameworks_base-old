@@ -897,6 +897,10 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
         synchronized (mSurfaceControlLock) {
             mSurface.release();
+            if (mBlastBufferQueue != null) {
+                mBlastBufferQueue.destroy();
+                mBlastBufferQueue = null;
+            }
 
             if (mRtHandlingPositionUpdates) {
                 mRtReleaseSurfaces = true;
@@ -920,10 +924,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         if (mBlastSurfaceControl != null) {
             transaction.remove(mBlastSurfaceControl);
             mBlastSurfaceControl = null;
-        }
-        if (mBlastBufferQueue != null) {
-            mBlastBufferQueue.destroy();
-            mBlastBufferQueue = null;
         }
     }
 
@@ -1213,11 +1213,9 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
     private void setBufferSize(Transaction transaction) {
         if (mUseBlastAdapter) {
-            mBlastBufferQueue.update(mBlastSurfaceControl, mSurfaceWidth,
-                    mSurfaceHeight);
+            mBlastBufferQueue.update(mBlastSurfaceControl, mSurfaceWidth, mSurfaceHeight, mFormat);
         } else {
-            transaction.setBufferSize(mSurfaceControl, mSurfaceWidth,
-                    mSurfaceHeight);
+            transaction.setBufferSize(mSurfaceControl, mSurfaceWidth, mSurfaceHeight);
         }
     }
 
@@ -1261,15 +1259,14 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     .setName(name + "(BLAST)")
                     .setLocalOwnerView(this)
                     .setBufferSize(mSurfaceWidth, mSurfaceHeight)
-                    .setFormat(mFormat)
                     .setParent(mSurfaceControl)
                     .setFlags(mSurfaceFlags)
                     .setHidden(false)
                     .setBLASTLayer()
                     .setCallsite("SurfaceView.updateSurface")
                     .build();
-            mBlastBufferQueue = new BLASTBufferQueue(name,
-                    mBlastSurfaceControl, mSurfaceWidth, mSurfaceHeight, true /* TODO */);
+            mBlastBufferQueue = new BLASTBufferQueue(name, mBlastSurfaceControl, mSurfaceWidth,
+                    mSurfaceHeight, mFormat, true /* TODO */);
         } else {
             previousSurfaceControl = mSurfaceControl;
             mSurfaceControl = builder

@@ -27,6 +27,7 @@
 #include <android-base/chrono_utils.h>
 #include <android/graphics/region.h>
 #include <android/gui/BnScreenCaptureListener.h>
+#include <android/os/IInputConstants.h>
 #include <android_runtime/AndroidRuntime.h>
 #include <android_runtime/android_hardware_HardwareBuffer.h>
 #include <android_runtime/android_view_Surface.h>
@@ -110,10 +111,12 @@ static struct {
 static struct {
     jfieldID pixelFormat;
     jfieldID sourceCrop;
-    jfieldID frameScale;
+    jfieldID frameScaleX;
+    jfieldID frameScaleY;
     jfieldID captureSecureLayers;
     jfieldID allowProtected;
     jfieldID uid;
+    jfieldID grayscale;
 } gCaptureArgsClassInfo;
 
 static struct {
@@ -262,7 +265,7 @@ public:
         }
     }
 
-    binder::Status onScreenCaptureComplete(
+    binder::Status onScreenCaptureCompleted(
             const gui::ScreenCaptureResults& captureResults) override {
         JNIEnv* env = getenv();
         if (captureResults.result != NO_ERROR || captureResults.buffer == nullptr) {
@@ -270,6 +273,7 @@ public:
                                 gScreenCaptureListenerClassInfo.onScreenCaptureComplete, nullptr);
             return binder::Status::ok();
         }
+        captureResults.fence->waitForever("");
         jobject jhardwareBuffer = android_hardware_HardwareBuffer_createFromAHardwareBuffer(
                 env, captureResults.buffer->toAHardwareBuffer());
         const jint namedColorSpace =
@@ -379,13 +383,17 @@ static void getCaptureArgs(JNIEnv* env, jobject captureArgsObject, CaptureArgs& 
     captureArgs.sourceCrop =
             rectFromObj(env,
                         env->GetObjectField(captureArgsObject, gCaptureArgsClassInfo.sourceCrop));
-    captureArgs.frameScale =
-            env->GetFloatField(captureArgsObject, gCaptureArgsClassInfo.frameScale);
+    captureArgs.frameScaleX =
+            env->GetFloatField(captureArgsObject, gCaptureArgsClassInfo.frameScaleX);
+    captureArgs.frameScaleY =
+            env->GetFloatField(captureArgsObject, gCaptureArgsClassInfo.frameScaleY);
     captureArgs.captureSecureLayers =
             env->GetBooleanField(captureArgsObject, gCaptureArgsClassInfo.captureSecureLayers);
     captureArgs.allowProtected =
             env->GetBooleanField(captureArgsObject, gCaptureArgsClassInfo.allowProtected);
     captureArgs.uid = env->GetLongField(captureArgsObject, gCaptureArgsClassInfo.uid);
+    captureArgs.grayscale =
+            env->GetBooleanField(captureArgsObject, gCaptureArgsClassInfo.grayscale);
 }
 
 static DisplayCaptureArgs displayCaptureArgsFromObject(JNIEnv* env,
@@ -1401,16 +1409,6 @@ static void nativeDeferTransactionUntil(JNIEnv* env, jclass clazz, jlong transac
     transaction->deferTransactionUntil_legacy(ctrl, barrier, frameNumber);
 }
 
-static void nativeReparentChildren(JNIEnv* env, jclass clazz, jlong transactionObj,
-        jlong nativeObject,
-        jlong newParentObject) {
-
-    auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    auto newParent = reinterpret_cast<SurfaceControl *>(newParentObject);
-    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->reparentChildren(ctrl, newParent);
-}
-
 static void nativeReparent(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject,
         jlong newParentObject) {
@@ -1418,14 +1416,6 @@ static void nativeReparent(JNIEnv* env, jclass clazz, jlong transactionObj,
     auto newParent = reinterpret_cast<SurfaceControl *>(newParentObject);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
     transaction->reparent(ctrl, newParent);
-}
-
-static void nativeSeverChildren(JNIEnv* env, jclass clazz, jlong transactionObj,
-        jlong nativeObject) {
-    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-
-    auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    transaction->detachChildren(ctrl);
 }
 
 static jobject nativeGetHdrCapabilities(JNIEnv* env, jclass clazz, jobject tokenObject) {
@@ -1626,7 +1616,8 @@ static void nativeSetFrameTimelineVsync(JNIEnv* env, jclass clazz, jlong transac
                                         jlong frameTimelineVsyncId) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
 
-    transaction->setFrameTimelineVsync(frameTimelineVsyncId);
+    transaction->setFrameTimelineInfo(
+            {frameTimelineVsyncId, android::os::IInputConstants::INVALID_INPUT_EVENT_ID});
 }
 
 class JankDataListenerWrapper : public JankDataListener {
@@ -1837,12 +1828,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetProtectedContentSupport },
     {"nativeDeferTransactionUntil", "(JJJJ)V",
             (void*)nativeDeferTransactionUntil },
-    {"nativeReparentChildren", "(JJJ)V",
-            (void*)nativeReparentChildren } ,
     {"nativeReparent", "(JJJ)V",
             (void*)nativeReparent },
-    {"nativeSeverChildren", "(JJ)V",
-            (void*)nativeSeverChildren } ,
     {"nativeCaptureDisplay",
             "(Landroid/view/SurfaceControl$DisplayCaptureArgs;Landroid/view/SurfaceControl$ScreenCaptureListener;)I",
             (void*)nativeCaptureDisplay },
@@ -2041,12 +2028,14 @@ int register_android_view_SurfaceControl(JNIEnv* env)
     gCaptureArgsClassInfo.pixelFormat = GetFieldIDOrDie(env, captureArgsClazz, "mPixelFormat", "I");
     gCaptureArgsClassInfo.sourceCrop =
             GetFieldIDOrDie(env, captureArgsClazz, "mSourceCrop", "Landroid/graphics/Rect;");
-    gCaptureArgsClassInfo.frameScale = GetFieldIDOrDie(env, captureArgsClazz, "mFrameScale", "F");
+    gCaptureArgsClassInfo.frameScaleX = GetFieldIDOrDie(env, captureArgsClazz, "mFrameScaleX", "F");
+    gCaptureArgsClassInfo.frameScaleY = GetFieldIDOrDie(env, captureArgsClazz, "mFrameScaleY", "F");
     gCaptureArgsClassInfo.captureSecureLayers =
             GetFieldIDOrDie(env, captureArgsClazz, "mCaptureSecureLayers", "Z");
     gCaptureArgsClassInfo.allowProtected =
             GetFieldIDOrDie(env, captureArgsClazz, "mAllowProtected", "Z");
     gCaptureArgsClassInfo.uid = GetFieldIDOrDie(env, captureArgsClazz, "mUid", "J");
+    gCaptureArgsClassInfo.grayscale = GetFieldIDOrDie(env, captureArgsClazz, "mGrayscale", "Z");
 
     jclass displayCaptureArgsClazz =
             FindClassOrDie(env, "android/view/SurfaceControl$DisplayCaptureArgs");

@@ -122,6 +122,8 @@
     <uses-permission android:name="android.permission.MANAGE_CREDENTIAL_MANAGEMENT_APP" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_ADMINS" />
     <uses-permission android:name="android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS" />
+    <uses-permission android:name="android.permission.QUERY_USERS" />
+    <uses-permission android:name="android.permission.MODIFY_QUIET_MODE" />
     <uses-permission android:name="android.permission.ACCESS_LOWPAN_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_LOWPAN_STATE"/>
     <uses-permission android:name="android.permission.READ_LOWPAN_CREDENTIAL"/>
@@ -300,8 +302,8 @@
     <!-- Permission needed to test mainline permission module rollback -->
     <uses-permission android:name="android.permission.UPGRADE_RUNTIME_PERMISSIONS" />
 
-    <!-- Permission needed to read wifi network credentials for CtsNetTestCases -->
-    <uses-permission android:name="android.permission.NETWORK_AIRPLANE_MODE" />
+    <!-- Permission needed to restart WiFi Subsystem -->
+    <uses-permission android:name="android.permission.RESTART_WIFI_SUBSYSTEM" />
 
     <!-- Permission needed to read wifi network credentials for CtsNetTestCases -->
     <uses-permission android:name="android.permission.READ_WIFI_CREDENTIAL" />
@@ -390,6 +392,13 @@
 
     <!-- Permission needed for CTS test - CallLogTest -->
     <uses-permission android:name="com.android.voicemail.permission.READ_VOICEMAIL" />
+
+    <!-- Permission required for GTS test - GtsAssistIntentTestCases -->
+    <uses-permission android:name="android.permission.MANAGE_SOUND_TRIGGER" />
+    <uses-permission android:name="android.permission.CAPTURE_AUDIO_HOTWORD" />
+    <uses-permission android:name="android.permission.BIND_VOICE_INTERACTION" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
     <application android:label="@string/app_label"
                 android:theme="@android:style/Theme.DeviceDefault.DayNight"

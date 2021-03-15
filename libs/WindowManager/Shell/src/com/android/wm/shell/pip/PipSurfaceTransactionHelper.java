@@ -84,9 +84,19 @@ public class PipSurfaceTransactionHelper {
      */
     public PipSurfaceTransactionHelper scale(SurfaceControl.Transaction tx, SurfaceControl leash,
             Rect sourceBounds, Rect destinationBounds) {
+        return scale(tx, leash, sourceBounds, destinationBounds, 0 /* degrees */);
+    }
+
+    /**
+     * Operates the scale (setMatrix) on a given transaction and leash, along with a rotation.
+     * @return same {@link PipSurfaceTransactionHelper} instance for method chaining
+     */
+    public PipSurfaceTransactionHelper scale(SurfaceControl.Transaction tx, SurfaceControl leash,
+            Rect sourceBounds, Rect destinationBounds, float degrees) {
         mTmpSourceRectF.set(sourceBounds);
         mTmpDestinationRectF.set(destinationBounds);
         mTmpTransform.setRectToRect(mTmpSourceRectF, mTmpDestinationRectF, Matrix.ScaleToFit.FILL);
+        mTmpTransform.postRotate(degrees);
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
                 .setPosition(leash, mTmpDestinationRectF.left, mTmpDestinationRectF.top);
         return this;
@@ -138,6 +148,18 @@ public class PipSurfaceTransactionHelper {
         if (mEnableCornerRadius) {
             tx.setCornerRadius(leash, applyCornerRadius ? mCornerRadius : 0);
         }
+        return this;
+    }
+
+    /**
+     * Re-parents the snapshot to the parent's surface control and shows it.
+     */
+    public PipSurfaceTransactionHelper reparentAndShowSurfaceSnapshot(
+            SurfaceControl.Transaction t, SurfaceControl parent, SurfaceControl snapshot) {
+        t.reparent(snapshot, parent);
+        t.setLayer(snapshot, Integer.MAX_VALUE);
+        t.show(snapshot);
+        t.apply();
         return this;
     }
 

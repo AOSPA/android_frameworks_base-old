@@ -62,6 +62,11 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String ENABLE_NAS_FEEDBACK = "enable_nas_feedback";
 
+    /**
+     * Whether the Notification Assistant can label a notification not a conversation
+     */
+    public static final String ENABLE_NAS_NOT_CONVERSATION = "enable_nas_not_conversation";
+
     // Flags related to screenshot intelligence
 
     /**
@@ -418,6 +423,12 @@ public final class SystemUiDeviceConfigFlags {
      * (boolean) Whether to enable stashing for PIP.
      */
     public static final String PIP_STASHING = "pip_stashing";
+
+    /**
+     * (float) The threshold velocity to cause PiP to be stashed when flinging from one edge to the
+     * other.
+     */
+    public static final String PIP_STASH_MINIMUM_VELOCITY_THRESHOLD = "pip_velocity_threshold";
 
     /**
      * (float) Bottom height in DP for Back Gesture.

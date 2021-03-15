@@ -20,6 +20,8 @@
 #include "SkiaDisplayList.h"
 #include "utils/TraceUtils.h"
 
+#include <include/effects/SkImageFilters.h>
+
 #include <optional>
 
 namespace android {
@@ -169,14 +171,27 @@ void RenderNodeDrawable::forceDraw(SkCanvas* canvas) const {
 
 static bool layerNeedsPaint(const LayerProperties& properties, float alphaMultiplier,
                             SkPaint* paint) {
-    paint->setFilterQuality(kLow_SkFilterQuality);
     if (alphaMultiplier < 1.0f || properties.alpha() < 255 ||
         properties.xferMode() != SkBlendMode::kSrcOver || properties.getColorFilter() != nullptr ||
-        properties.getImageFilter() != nullptr) {
+        properties.getImageFilter() != nullptr || !properties.getStretchEffect().isEmpty()) {
         paint->setAlpha(properties.alpha() * alphaMultiplier);
         paint->setBlendMode(properties.xferMode());
         paint->setColorFilter(sk_ref_sp(properties.getColorFilter()));
-        paint->setImageFilter(sk_ref_sp(properties.getImageFilter()));
+
+        sk_sp<SkImageFilter> imageFilter = sk_ref_sp(properties.getImageFilter());
+        sk_sp<SkImageFilter> stretchFilter = properties.getStretchEffect().getImageFilter();
+        sk_sp<SkImageFilter> filter;
+        if (imageFilter && stretchFilter) {
+            filter = SkImageFilters::Compose(
+                  std::move(stretchFilter),
+                  std::move(imageFilter)
+            );
+        } else if (stretchFilter) {
+            filter = std::move(stretchFilter);
+        } else {
+            filter = std::move(imageFilter);
+        }
+        paint->setImageFilter(std::move(filter));
         return true;
     }
     return false;
@@ -226,6 +241,7 @@ void RenderNodeDrawable::drawContent(SkCanvas* canvas) const {
             SkASSERT(properties.effectiveLayerType() == LayerType::RenderLayer);
             SkPaint paint;
             layerNeedsPaint(layerProperties, alphaMultiplier, &paint);
+            SkSamplingOptions sampling(SkFilterMode::kLinear);
 
             // surfaces for layers are created on LAYER_SIZE boundaries (which are >= layer size) so
             // we need to restrict the portion of the surface drawn to the size of the renderNode.
@@ -239,7 +255,7 @@ void RenderNodeDrawable::drawContent(SkCanvas* canvas) const {
                     "SurfaceID|%" PRId64, renderNode->uniqueId()).c_str(), nullptr);
             }
             canvas->drawImageRect(renderNode->getLayerSurface()->makeImageSnapshot(), bounds,
-                                  bounds, &paint);
+                                  bounds, sampling, &paint, SkCanvas::kStrict_SrcRectConstraint);
 
             if (!renderNode->getSkiaLayer()->hasRenderedSinceRepaint) {
                 renderNode->getSkiaLayer()->hasRenderedSinceRepaint = true;

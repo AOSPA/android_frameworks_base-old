@@ -16,6 +16,8 @@
 
 package android.widget;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -25,15 +27,22 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
 import android.text.format.DateUtils;
 import android.util.AttributeSet;
+import android.util.Log;
+import android.view.RemotableViewMethod;
 import android.view.View;
+import android.view.inspector.InspectableProperty;
 import android.widget.RemoteViews.RemoteView;
 
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Formatter;
+import java.util.Locale;
 
 /**
  * This widget display an analogic clock with two hands for hours and
@@ -42,25 +51,36 @@ import java.time.ZoneId;
  * @attr ref android.R.styleable#AnalogClock_dial
  * @attr ref android.R.styleable#AnalogClock_hand_hour
  * @attr ref android.R.styleable#AnalogClock_hand_minute
+ * @attr ref android.R.styleable#AnalogClock_hand_second
+ * @attr ref android.R.styleable#AnalogClock_timeZone
  * @deprecated This widget is no longer supported.
  */
 @RemoteView
 @Deprecated
 public class AnalogClock extends View {
+    private static final String LOG_TAG = "AnalogClock";
+    /** How often the clock should refresh to make the seconds hand advance at ~15 FPS. */
+    private static final long SECONDS_TICK_FREQUENCY_MS = 1000 / 15;
+
     private Clock mClock;
+    @Nullable
+    private ZoneId mTimeZone;
 
     @UnsupportedAppUsage
     private Drawable mHourHand;
     @UnsupportedAppUsage
     private Drawable mMinuteHand;
+    @Nullable
+    private Drawable mSecondHand;
     @UnsupportedAppUsage
     private Drawable mDial;
 
     private int mDialWidth;
     private int mDialHeight;
 
-    private boolean mAttached;
+    private boolean mVisible;
 
+    private float mSeconds;
     private float mMinutes;
     private float mHour;
     private boolean mChanged;
@@ -101,18 +121,111 @@ public class AnalogClock extends View {
             mMinuteHand = context.getDrawable(com.android.internal.R.drawable.clock_hand_minute);
         }
 
-        mClock = Clock.systemDefaultZone();
+        mSecondHand = a.getDrawable(com.android.internal.R.styleable.AnalogClock_hand_second);
+
+        mTimeZone = toZoneId(a.getString(com.android.internal.R.styleable.AnalogClock_timeZone));
+        createClock();
 
         mDialWidth = mDial.getIntrinsicWidth();
         mDialHeight = mDial.getIntrinsicHeight();
     }
 
-    @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
+    /** Sets the dial of the clock to the specified Icon. */
+    @RemotableViewMethod
+    public void setDial(@NonNull Icon icon) {
+        mDial = icon.loadDrawable(getContext());
+        mDialWidth = mDial.getIntrinsicWidth();
+        mDialHeight = mDial.getIntrinsicHeight();
 
-        if (!mAttached) {
-            mAttached = true;
+        mChanged = true;
+        invalidate();
+    }
+
+    /** Sets the hour hand of the clock to the specified Icon. */
+    @RemotableViewMethod
+    public void setHourHand(@NonNull Icon icon) {
+        mHourHand = icon.loadDrawable(getContext());
+
+        mChanged = true;
+        invalidate();
+    }
+
+    /** Sets the minute hand of the clock to the specified Icon. */
+    @RemotableViewMethod
+    public void setMinuteHand(@NonNull Icon icon) {
+        mMinuteHand = icon.loadDrawable(getContext());
+
+        mChanged = true;
+        invalidate();
+    }
+
+    /**
+     * Sets the second hand of the clock to the specified Icon, or hides the second hand if it is
+     * null.
+     */
+    @RemotableViewMethod
+    public void setSecondHand(@Nullable Icon icon) {
+        mSecondHand = icon == null ? null : icon.loadDrawable(getContext());
+        mSecondsTick.run();
+
+        mChanged = true;
+        invalidate();
+    }
+
+    /**
+     * Indicates which time zone is currently used by this view.
+     *
+     * @return The ID of the current time zone or null if the default time zone,
+     *         as set by the user, must be used
+     *
+     * @see java.util.TimeZone
+     * @see java.util.TimeZone#getAvailableIDs()
+     * @see #setTimeZone(String)
+     */
+    @InspectableProperty
+    @Nullable
+    public String getTimeZone() {
+        ZoneId zoneId = mTimeZone;
+        return zoneId == null ? null : zoneId.getId();
+    }
+
+    /**
+     * Sets the specified time zone to use in this clock. When the time zone
+     * is set through this method, system time zone changes (when the user
+     * sets the time zone in settings for instance) will be ignored.
+     *
+     * @param timeZone The desired time zone's ID as specified in {@link java.util.TimeZone}
+     *                 or null to user the time zone specified by the user
+     *                 (system time zone)
+     *
+     * @see #getTimeZone()
+     * @see java.util.TimeZone#getAvailableIDs()
+     * @see java.util.TimeZone#getTimeZone(String)
+     *
+     * @attr ref android.R.styleable#AnalogClock_timeZone
+     */
+    @RemotableViewMethod
+    public void setTimeZone(@Nullable String timeZone) {
+        mTimeZone = toZoneId(timeZone);
+
+        createClock();
+        onTimeChanged();
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+
+        if (isVisible) {
+            onVisible();
+        } else {
+            onInvisible();
+        }
+    }
+
+    private void onVisible() {
+        if (!mVisible) {
+            mVisible = true;
             IntentFilter filter = new IntentFilter();
 
             filter.addAction(Intent.ACTION_TIME_TICK);
@@ -128,24 +241,25 @@ public class AnalogClock extends View {
             // user not the one the context is for.
             getContext().registerReceiverAsUser(mIntentReceiver,
                     android.os.Process.myUserHandle(), filter, null, getHandler());
+
+            mSecondsTick.run();
         }
 
         // NOTE: It's safe to do these after registering the receiver since the receiver always runs
         // in the main thread, therefore the receiver can't run before this method returns.
 
-        // The time zone may have changed while the receiver wasn't registered, so update the Time
-        mClock = Clock.systemDefaultZone();
+        // The time zone may have changed while the receiver wasn't registered, so update the clock.
+        createClock();
 
         // Make sure we update to the current time
         onTimeChanged();
     }
 
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        if (mAttached) {
+    private void onInvisible() {
+        if (mVisible) {
             getContext().unregisterReceiver(mIntentReceiver);
-            mAttached = false;
+            removeCallbacks(mSecondsTick);
+            mVisible = false;
         }
     }
 
@@ -237,6 +351,20 @@ public class AnalogClock extends View {
         minuteHand.draw(canvas);
         canvas.restore();
 
+        final Drawable secondHand = mSecondHand;
+        if (secondHand != null) {
+            canvas.save();
+            canvas.rotate(mSeconds / 60.0f * 360.0f, x, y);
+
+            if (changed) {
+                w = secondHand.getIntrinsicWidth();
+                h = secondHand.getIntrinsicHeight();
+                secondHand.setBounds(x - (w / 2), y - (h / 2), x + (w / 2), y + (h / 2));
+            }
+            secondHand.draw(canvas);
+            canvas.restore();
+        }
+
         if (scaled) {
             canvas.restore();
         }
@@ -250,6 +378,7 @@ public class AnalogClock extends View {
         int minute = localDateTime.getMinute();
         int second = localDateTime.getSecond();
 
+        mSeconds = second + localDateTime.getNano() / 1_000_000_000f;
         mMinutes = minute + second / 60.0f;
         mHour = hour + mMinutes / 60.0f;
         mChanged = true;
@@ -261,8 +390,7 @@ public class AnalogClock extends View {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals(Intent.ACTION_TIMEZONE_CHANGED)) {
-                String tz = intent.getStringExtra(Intent.EXTRA_TIMEZONE);
-                mClock = Clock.system(ZoneId.of(tz));
+                createClock();
             }
 
             onTimeChanged();
@@ -271,9 +399,41 @@ public class AnalogClock extends View {
         }
     };
 
+    private final Runnable mSecondsTick = new Runnable() {
+        @Override
+        public void run() {
+            if (!mVisible || mSecondHand == null) {
+                return;
+            }
+
+            onTimeChanged();
+
+            invalidate();
+
+            postDelayed(this, SECONDS_TICK_FREQUENCY_MS);
+        }
+    };
+
+    private void createClock() {
+        ZoneId zoneId = mTimeZone;
+        if (zoneId == null) {
+            mClock = Clock.systemDefaultZone();
+        } else {
+            mClock = Clock.system(zoneId);
+        }
+    }
+
     private void updateContentDescription(long timeMillis) {
         final int flags = DateUtils.FORMAT_SHOW_TIME | DateUtils.FORMAT_24HOUR;
-        String contentDescription = DateUtils.formatDateTime(mContext, timeMillis, flags);
+        String contentDescription =
+                DateUtils.formatDateRange(
+                        mContext,
+                        new Formatter(new StringBuilder(50), Locale.getDefault()),
+                        timeMillis /* startMillis */,
+                        timeMillis /* endMillis */,
+                        flags,
+                        getTimeZone())
+                        .toString();
         setContentDescription(contentDescription);
     }
 
@@ -283,5 +443,23 @@ public class AnalogClock extends View {
         // resulting exceptions while the input to this class is a long.
         Instant instant = Instant.ofEpochMilli(timeMillis);
         return LocalDateTime.ofInstant(instant, zoneId);
+    }
+
+    /**
+     * Tries to parse a {@link ZoneId} from {@code timeZone}, returning null if it is null or there
+     * is an error parsing.
+     */
+    @Nullable
+    private static ZoneId toZoneId(@Nullable String timeZone) {
+        if (timeZone == null) {
+            return null;
+        }
+
+        try {
+            return ZoneId.of(timeZone);
+        } catch (DateTimeException e) {
+            Log.w(LOG_TAG, "Failed to parse time zone from " + timeZone, e);
+            return null;
+        }
     }
 }

@@ -94,6 +94,9 @@ public class AndroidKeyStoreProvider extends Provider {
             put("KeyGenerator.DESede", PACKAGE_NAME + ".AndroidKeyStoreKeyGeneratorSpi$DESede");
         }
 
+        // javax.crypto.KeyAgreement
+        put("KeyAgreement.ECDH", PACKAGE_NAME + ".AndroidKeyStoreKeyAgreementSpi$ECDH");
+
         // java.security.SecretKeyFactory
         putSecretKeyFactoryImpl("AES");
         if (supports3DES) {
@@ -349,15 +352,23 @@ public class AndroidKeyStoreProvider extends Provider {
         try {
             response = keyStore.getKeyEntry(descriptor);
         } catch (android.security.KeyStoreException e) {
-            if (e.getErrorCode() == ResponseCode.KEY_PERMANENTLY_INVALIDATED) {
-                throw new KeyPermanentlyInvalidatedException(
-                        "User changed or deleted their auth credentials",
-                        e);
-            } else {
-                throw (UnrecoverableKeyException)
-                        new UnrecoverableKeyException("Failed to obtain information about key")
-                                .initCause(e);
+            switch (e.getErrorCode()) {
+                case ResponseCode.KEY_NOT_FOUND:
+                    return null;
+                case ResponseCode.KEY_PERMANENTLY_INVALIDATED:
+                    throw new KeyPermanentlyInvalidatedException(
+                            "User changed or deleted their auth credentials",
+                            e);
+                default:
+                    throw (UnrecoverableKeyException)
+                            new UnrecoverableKeyException("Failed to obtain information about key")
+                                    .initCause(e);
             }
+        }
+
+        if (response.iSecurityLevel == null) {
+            // This seems to be a pure certificate entry, nothing to return here.
+            return null;
         }
 
         Integer keymasterAlgorithm = null;

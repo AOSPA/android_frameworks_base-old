@@ -27,7 +27,6 @@ import static org.mockito.Mockito.when;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.hardware.biometrics.SensorProperties;
-import android.hardware.display.DisplayManager;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorProperties;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
@@ -45,8 +44,8 @@ import androidx.test.filters.SmallTest;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.util.concurrency.FakeExecutor;
-import com.android.systemui.util.settings.FakeSettings;
 import com.android.systemui.util.time.FakeSystemClock;
 
 import org.junit.Before;
@@ -85,13 +84,12 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Mock
     private FingerprintManager mFingerprintManager;
     @Mock
-    private DisplayManager mDisplayManager;
-    @Mock
     private WindowManager mWindowManager;
     @Mock
     private StatusBarStateController mStatusBarStateController;
+    @Mock
+    private StatusBar mStatusBar;
 
-    private FakeSettings mSystemSettings;
     private FakeExecutor mFgExecutor;
 
     // Stuff for configuring mocks
@@ -106,7 +104,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Captor private ArgumentCaptor<IUdfpsOverlayController> mOverlayCaptor;
     private IUdfpsOverlayController mOverlayController;
     @Captor private ArgumentCaptor<UdfpsView.OnTouchListener> mTouchListenerCaptor;
-    @Captor private ArgumentCaptor<Runnable> mRunAfterShowingScrimAndDotCaptor;
+    @Captor private ArgumentCaptor<Runnable> mOnIlluminatedRunnableCaptor;
 
     @Before
     public void setUp() {
@@ -119,18 +117,16 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 FingerprintSensorProperties.TYPE_UDFPS_OPTICAL,
                 true /* resetLockoutRequiresHardwareAuthToken */));
         when(mFingerprintManager.getSensorPropertiesInternal()).thenReturn(props);
-        mSystemSettings = new FakeSettings();
         mFgExecutor = new FakeExecutor(new FakeSystemClock());
         mUdfpsController = new UdfpsController(
                 mContext,
                 mResources,
                 mLayoutInflater,
                 mFingerprintManager,
-                mDisplayManager,
                 mWindowManager,
-                mSystemSettings,
                 mStatusBarStateController,
-                mFgExecutor);
+                mFgExecutor,
+                mStatusBar);
         verify(mFingerprintManager).setUdfpsOverlayController(mOverlayCaptor.capture());
         mOverlayController = mOverlayCaptor.getValue();
 
@@ -162,7 +158,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Test
     public void showUdfpsOverlay_addsViewToWindow() throws RemoteException {
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
-                IUdfpsOverlayController.REASON_AUTH);
+                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD);
         mFgExecutor.runAllReady();
         verify(mWindowManager).addView(eq(mUdfpsView), any());
     }
@@ -170,7 +166,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Test
     public void hideUdfpsOverlay_removesViewFromWindow() throws RemoteException {
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
-                IUdfpsOverlayController.REASON_AUTH);
+                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD);
         mOverlayController.hideUdfpsOverlay(TEST_UDFPS_SENSOR_ID);
         mFgExecutor.runAllReady();
         verify(mWindowManager).removeView(eq(mUdfpsView));
@@ -179,24 +175,22 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Test
     public void fingerDown() throws RemoteException {
         // Configure UdfpsView to accept the ACTION_DOWN event
-        when(mUdfpsView.isShowScrimAndDot()).thenReturn(false);
+        when(mUdfpsView.isIlluminationRequested()).thenReturn(false);
         when(mUdfpsView.isValidTouch(anyFloat(), anyFloat(), anyFloat())).thenReturn(true);
 
         // GIVEN that the overlay is showing
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
-                IUdfpsOverlayController.REASON_AUTH);
+                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD);
         mFgExecutor.runAllReady();
         // WHEN ACTION_DOWN is received
         verify(mUdfpsView).setOnTouchListener(mTouchListenerCaptor.capture());
         MotionEvent event = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 0, 0);
         mTouchListenerCaptor.getValue().onTouch(mUdfpsView, event);
         event.recycle();
-        // THEN the scrim and dot is shown
-        verify(mUdfpsView).showScrimAndDot();
-        // AND a runnable that passes the event to FingerprintManager is set on the view
-        verify(mUdfpsView).setRunAfterShowingScrimAndDot(
-                mRunAfterShowingScrimAndDotCaptor.capture());
-        mRunAfterShowingScrimAndDotCaptor.getValue().run();
+        // THEN illumination begins
+        // AND onIlluminatedRunnable that notifies FingerprintManager is set
+        verify(mUdfpsView).startIllumination(mOnIlluminatedRunnableCaptor.capture());
+        mOnIlluminatedRunnableCaptor.getValue().run();
         verify(mFingerprintManager).onPointerDown(eq(mUdfpsController.mSensorProps.sensorId), eq(0),
                 eq(0), eq(0f), eq(0f));
     }
@@ -205,16 +199,14 @@ public class UdfpsControllerTest extends SysuiTestCase {
     public void aodInterrupt() throws RemoteException {
         // GIVEN that the overlay is showing
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
-                IUdfpsOverlayController.REASON_AUTH);
+                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD);
         mFgExecutor.runAllReady();
         // WHEN fingerprint is requested because of AOD interrupt
         mUdfpsController.onAodInterrupt(0, 0, 2f, 3f);
-        // THEN the scrim and dot is shown
-        verify(mUdfpsView).showScrimAndDot();
-        // AND a runnable that passes the event to FingerprintManager is set on the view
-        verify(mUdfpsView).setRunAfterShowingScrimAndDot(
-                mRunAfterShowingScrimAndDotCaptor.capture());
-        mRunAfterShowingScrimAndDotCaptor.getValue().run();
+        // THEN illumination begins
+        // AND onIlluminatedRunnable that notifies FingerprintManager is set
+        verify(mUdfpsView).startIllumination(mOnIlluminatedRunnableCaptor.capture());
+        mOnIlluminatedRunnableCaptor.getValue().run();
         verify(mFingerprintManager).onPointerDown(eq(mUdfpsController.mSensorProps.sensorId), eq(0),
                 eq(0), eq(3f) /* minor */, eq(2f) /* major */);
     }
@@ -223,26 +215,32 @@ public class UdfpsControllerTest extends SysuiTestCase {
     public void cancelAodInterrupt() throws RemoteException {
         // GIVEN AOD interrupt
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
-                IUdfpsOverlayController.REASON_AUTH);
+                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD);
         mFgExecutor.runAllReady();
         mUdfpsController.onAodInterrupt(0, 0, 0f, 0f);
         // WHEN it is cancelled
         mUdfpsController.onCancelAodInterrupt();
-        // THEN the scrim and dot is hidden
-        verify(mUdfpsView).hideScrimAndDot();
+        // THEN the illumination is hidden
+        verify(mUdfpsView).stopIllumination();
     }
 
     @Test
     public void aodInterruptTimeout() throws RemoteException {
         // GIVEN AOD interrupt
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
-                IUdfpsOverlayController.REASON_AUTH);
+                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD);
         mFgExecutor.runAllReady();
         mUdfpsController.onAodInterrupt(0, 0, 0f, 0f);
         // WHEN it times out
         mFgExecutor.advanceClockToNext();
         mFgExecutor.runAllReady();
-        // THEN the scrim and dot is hidden
-        verify(mUdfpsView).hideScrimAndDot();
+        // THEN the illumination is hidden
+        verify(mUdfpsView).stopIllumination();
+    }
+
+    @Test
+    public void registersViewForCallbacks() throws RemoteException {
+        verify(mStatusBarStateController).addCallback(mUdfpsView);
+        verify(mStatusBar).addExpansionChangedListener(mUdfpsView);
     }
 }

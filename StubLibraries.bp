@@ -82,12 +82,13 @@ stubs_defaults {
         "android.hardware.vibrator-V1.3-java",
         "framework-protos",
         "stable.core.platform.api.stubs",
-        // There are a few classes from modules used as type arguments that
-        // need to be resolved by metalava. For now, we can use a previously
-        // finalized stub library to resolve them. If a new class gets added,
-        // this may be need to be revisited to use a manually maintained stub
-        // library with empty classes in order to resolve those references.
-        "sdk_system_30_android",
+        // There are a few classes from modules used by the core that
+        // need to be resolved by metalava. We use a prebuilt stub of the
+        // full sdk to ensure we can resolve them. If a new class gets added,
+        // the prebuilts/sdk/current needs to be updated.
+        "sdk_system_current_android",
+        // NOTE: The below can be removed once the prebuilt stub contains IKE.
+        "sdk_system_current_android.net.ipsec.ike",
     ],
     high_mem: true, // Lots of sources => high memory use, see b/170701554
     installable: false,
@@ -116,7 +117,7 @@ droidstubs {
         last_released: {
             api_file: ":android-non-updatable.api.public.latest",
             removed_api_file: ":android-non-updatable-removed.api.public.latest",
-            baseline_file: ":public-api-incompatibilities-with-last-released",
+            baseline_file: ":android-incompatibilities.api.public.latest",
         },
         api_lint: {
             enabled: true,
@@ -168,7 +169,7 @@ droidstubs {
         last_released: {
             api_file: ":android-non-updatable.api.system.latest",
             removed_api_file: ":android-non-updatable-removed.api.system.latest",
-            baseline_file: ":system-api-incompatibilities-with-last-released"
+            baseline_file: ":android-incompatibilities.api.system.latest"
         },
         api_lint: {
             enabled: true,
@@ -312,6 +313,7 @@ java_library_static {
         "framework-media.stubs",
         "framework-mediaprovider.stubs",
         "framework-permission.stubs",
+        "framework-permission-s.stubs",
         "framework-sdkextensions.stubs",
         "framework-statsd.stubs",
         "framework-tethering.stubs",
@@ -333,6 +335,7 @@ java_library_static {
         "framework-media.stubs.system",
         "framework-mediaprovider.stubs.system",
         "framework-permission.stubs.system",
+        "framework-permission-s.stubs.system",
         "framework-sdkextensions.stubs.system",
         "framework-statsd.stubs.system",
         "framework-tethering.stubs.system",
@@ -370,6 +373,7 @@ java_library_static {
         "framework-media.stubs.system",
         "framework-mediaprovider.stubs.system",
         "framework-permission.stubs.system",
+        "framework-permission-s.stubs.system",
         "framework-sdkextensions.stubs.system",
         "framework-statsd.stubs.system",
         "framework-tethering.stubs.system",
@@ -401,7 +405,11 @@ java_library_static {
         "android_defaults_stubs_current",
         "android_stubs_dists_default",
     ],
-    libs: ["sdk_system_29_android"],
+    libs: [
+        "sdk_system_current_android",
+        // NOTE: The below can be removed once the prebuilt stub contains IKE.
+        "sdk_system_current_android.net.ipsec.ike",
+    ],
     static_libs: ["art.module.public.api.stubs"],
     dist: {
         dir: "apistubs/android/module-lib",

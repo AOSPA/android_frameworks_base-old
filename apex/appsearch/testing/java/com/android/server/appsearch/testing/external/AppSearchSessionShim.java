@@ -33,7 +33,7 @@ import java.util.Set;
 public interface AppSearchSessionShim extends Closeable {
 
     /**
-     * Sets the schema that will be used by documents provided to the {@link #putDocuments} method.
+     * Sets the schema that will be used by documents provided to the {@link #put} method.
      *
      * <p>The schema provided here is compared to the stored copy of the schema previously supplied
      * to {@link #setSchema}, if any, to determine how to treat existing documents. The following
@@ -69,12 +69,19 @@ public interface AppSearchSessionShim extends Closeable {
      * {@link AppSearchResult#RESULT_INVALID_SCHEMA} and a message describing the incompatibility.
      * In this case the previously set schema will remain active.
      *
-     * <p>If you need to make non-backwards-compatible changes as described above, you can set the
-     * {@link SetSchemaRequest.Builder#setForceOverride} method to {@code true}. In this case,
-     * instead of completing its future with an {@link
-     * android.app.appsearch.exceptions.AppSearchException} with the {@link
-     * AppSearchResult#RESULT_INVALID_SCHEMA} error code, all documents which are not compatible
-     * with the new schema will be deleted and the incompatible schema will be applied.
+     * <p>If you need to make non-backwards-compatible changes as described above, you can either:
+     *
+     * <ul>
+     *   <li>Set the {@link SetSchemaRequest.Builder#setForceOverride} method to {@code true}. In
+     *       this case, instead of completing its future with an {@link
+     *       android.app.appsearch.exceptions.AppSearchException} with the {@link
+     *       AppSearchResult#RESULT_INVALID_SCHEMA} error code, all documents which are not
+     *       compatible with the new schema will be deleted and the incompatible schema will be
+     *       applied.
+     *   <li>Add a {@link android.app.appsearch.AppSearchSchema.Migrator} for each incompatible type
+     *       and make no deletion. The migrator will migrate documents from it's old schema version
+     *       to the new version. See the migration section below.
+     * </ul>
      *
      * <p>It is a no-op to set the same schema as has been previously set; this is handled
      * efficiently.
@@ -85,13 +92,34 @@ public interface AppSearchSessionShim extends Closeable {
      * Visibility settings for a schema type do not apply or persist across {@link
      * SetSchemaRequest}s.
      *
+     * <p>Migration: make non-backwards-compatible changes will delete all stored documents in old
+     * schema. You can save your documents by setting {@link
+     * android.app.appsearch.AppSearchSchema.Migrator} via the {@link
+     * SetSchemaRequest.Builder#setMigrator} for each type you want to save.
+     *
+     * <p>{@link android.app.appsearch.AppSearchSchema.Migrator#onDowngrade} or {@link
+     * android.app.appsearch.AppSearchSchema.Migrator#onUpgrade} will be triggered if the version
+     * number of the schema stored in AppSearch is different with the version in the request.
+     *
+     * <p>If any error or Exception occurred in the {@link
+     * android.app.appsearch.AppSearchSchema.Migrator#onDowngrade}, {@link
+     * android.app.appsearch.AppSearchSchema.Migrator#onUpgrade} or {@link
+     * android.app.appsearch.AppSearchMigrationHelper.Transformer#transform}, the migration will be
+     * terminated, the setSchema request will be rejected unless the schema changes are
+     * backwards-compatible, and stored documents won't have any observable changes.
+     *
      * @param request The schema update request.
-     * @return The pending result of performing this operation.
+     * @return The pending {@link SetSchemaResponse} of performing this operation. Success if the
+     *     the schema has been set and any migrations has been done. Otherwise, the failure {@link
+     *     android.app.appsearch.SetSchemaResponse.MigrationFailure} indicates which document is
+     *     fail to be migrated.
+     * @see android.app.appsearch.AppSearchSchema.Migrator
+     * @see android.app.appsearch.AppSearchMigrationHelper.Transformer
      */
     // TODO(b/169883602): Change @code references to @link when setPlatformSurfaceable APIs are
     //  exposed.
     @NonNull
-    ListenableFuture<Void> setSchema(@NonNull SetSchemaRequest request);
+    ListenableFuture<SetSchemaResponse> setSchema(@NonNull SetSchemaRequest request);
 
     /**
      * Retrieves the schema most recently successfully provided to {@link #setSchema}.
@@ -115,8 +143,7 @@ public interface AppSearchSessionShim extends Closeable {
      *     they were successfully indexed, or a failed {@link AppSearchResult} otherwise.
      */
     @NonNull
-    ListenableFuture<AppSearchBatchResult<String, Void>> putDocuments(
-            @NonNull PutDocumentsRequest request);
+    ListenableFuture<AppSearchBatchResult<String, Void>> put(@NonNull PutDocumentsRequest request);
 
     /**
      * Retrieves {@link GenericDocument}s by URI.
@@ -133,7 +160,7 @@ public interface AppSearchSessionShim extends Closeable {
             @NonNull GetByUriRequest request);
 
     /**
-     * Searches a document based on a given query string.
+     * Searches for documents based on a given query string.
      *
      * <p>Currently we support following features in the raw query format:
      *
@@ -172,7 +199,7 @@ public interface AppSearchSessionShim extends Closeable {
      * @return The search result of performing this operation.
      */
     @NonNull
-    SearchResultsShim query(@NonNull String queryExpression, @NonNull SearchSpec searchSpec);
+    SearchResultsShim search(@NonNull String queryExpression, @NonNull SearchSpec searchSpec);
 
     /**
      * Reports usage of a particular document by URI and namespace.
@@ -180,7 +207,7 @@ public interface AppSearchSessionShim extends Closeable {
      * <p>A usage report represents an event in which a user interacted with or viewed a document.
      *
      * <p>For each call to {@link #reportUsage}, AppSearch updates usage count and usage recency
-     * metrics for that particular document. These metrics are used for ordering {@link #query}
+     * metrics for that particular document. These metrics are used for ordering {@link #search}
      * results by the {@link SearchSpec#RANKING_STRATEGY_USAGE_COUNT} and {@link
      * SearchSpec#RANKING_STRATEGY_USAGE_LAST_USED_TIMESTAMP} ranking strategies.
      *
@@ -203,13 +230,13 @@ public interface AppSearchSessionShim extends Closeable {
      *     {@link AppSearchResult} with a result code of {@link AppSearchResult#RESULT_NOT_FOUND}.
      */
     @NonNull
-    ListenableFuture<AppSearchBatchResult<String, Void>> removeByUri(
+    ListenableFuture<AppSearchBatchResult<String, Void>> remove(
             @NonNull RemoveByUriRequest request);
 
     /**
      * Removes {@link GenericDocument}s from the index by Query. Documents will be removed if they
      * match the {@code queryExpression} in given namespaces and schemaTypes which is set via {@link
-     * SearchSpec.Builder#addNamespace} and {@link SearchSpec.Builder#addSchemaType}.
+     * SearchSpec.Builder#addFilterNamespaces} and {@link SearchSpec.Builder#addFilterSchemas}.
      *
      * <p>An empty {@code queryExpression} matches all documents.
      *
@@ -223,8 +250,18 @@ public interface AppSearchSessionShim extends Closeable {
      * @return The pending result of performing this operation.
      */
     @NonNull
-    ListenableFuture<Void> removeByQuery(
-            @NonNull String queryExpression, @NonNull SearchSpec searchSpec);
+    ListenableFuture<Void> remove(@NonNull String queryExpression, @NonNull SearchSpec searchSpec);
+
+    /**
+     * Flush all schema and document updates, additions, and deletes to disk if possible.
+     *
+     * @return The pending result of performing this operation. {@link
+     *     android.app.appsearch.exceptions.AppSearchException} with {@link
+     *     AppSearchResult#RESULT_INTERNAL_ERROR} will be set to the future if we hit error when
+     *     save to disk.
+     */
+    @NonNull
+    ListenableFuture<Void> maybeFlush();
 
     /**
      * Closes the {@link AppSearchSessionShim} to persist all schema and document updates,

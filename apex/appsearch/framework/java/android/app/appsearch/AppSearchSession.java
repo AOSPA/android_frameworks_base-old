@@ -102,7 +102,7 @@ public final class AppSearchSession implements Closeable {
     }
 
     /**
-     * Sets the schema that will be used by documents provided to the {@link #putDocuments} method.
+     * Sets the schema that will be used by documents provided to the {@link #put} method.
      *
      * <p>The schema provided here is compared to the stored copy of the schema previously supplied
      * to {@link #setSchema}, if any, to determine how to treat existing documents. The following
@@ -162,7 +162,7 @@ public final class AppSearchSession implements Closeable {
     public void setSchema(
             @NonNull SetSchemaRequest request,
             @NonNull @CallbackExecutor Executor executor,
-            @NonNull Consumer<AppSearchResult<Void>> callback) {
+            @NonNull Consumer<AppSearchResult<SetSchemaResponse>> callback) {
         Objects.requireNonNull(request);
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
@@ -192,7 +192,18 @@ public final class AppSearchSession implements Closeable {
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
                         public void onResult(AppSearchResult result) {
-                            executor.execute(() -> callback.accept(result));
+                            executor.execute(() -> {
+                                if (result.isSuccess()) {
+                                    callback.accept(
+                                            // TODO(b/151178558) implement Migration in platform.
+                                            AppSearchResult.newSuccessfulResult(
+                                                    new SetSchemaResponse.Builder().setResultCode(
+                                                            result.getResultCode())
+                                                            .build()));
+                                } else {
+                                    callback.accept(result);
+                                }
+                            });
                         }
                     });
             mIsMutated = true;
@@ -257,7 +268,7 @@ public final class AppSearchSession implements Closeable {
      *                 {@link Throwable} if an unexpected internal error occurred in AppSearch
      *                 service.
      */
-    public void putDocuments(
+    public void put(
             @NonNull PutDocumentsRequest request,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull BatchResultCallback<String, Void> callback) {
@@ -265,7 +276,7 @@ public final class AppSearchSession implements Closeable {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
         Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
-        List<GenericDocument> documents = request.getDocuments();
+        List<GenericDocument> documents = request.getGenericDocuments();
         List<Bundle> documentBundles = new ArrayList<>(documents.size());
         for (int i = 0; i < documents.size(); i++) {
             documentBundles.add(documents.get(i).getBundle());
@@ -316,7 +327,7 @@ public final class AppSearchSession implements Closeable {
                     mDatabaseName,
                     request.getNamespace(),
                     new ArrayList<>(request.getUris()),
-                    request.getProjectionsVisibleToPackagesInternal(),
+                    request.getProjectionsInternal(),
                     mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         public void onResult(AppSearchBatchResult result) {
@@ -412,7 +423,7 @@ public final class AppSearchSession implements Closeable {
      * @return The search result of performing this operation.
      */
     @NonNull
-    public SearchResults query(
+    public SearchResults search(
             @NonNull String queryExpression,
             @NonNull SearchSpec searchSpec,
             @NonNull @CallbackExecutor Executor executor) {
@@ -430,7 +441,7 @@ public final class AppSearchSession implements Closeable {
      * <p>A usage report represents an event in which a user interacted with or viewed a document.
      *
      * <p>For each call to {@link #reportUsage}, AppSearch updates usage count and usage recency
-     * metrics for that particular document. These metrics are used for ordering {@link #query}
+     * metrics for that particular document. These metrics are used for ordering {@link #search}
      * results by the {@link SearchSpec#RANKING_STRATEGY_USAGE_COUNT} and
      * {@link SearchSpec#RANKING_STRATEGY_USAGE_LAST_USED_TIMESTAMP} ranking strategies.
      *
@@ -483,7 +494,7 @@ public final class AppSearchSession implements Closeable {
      *                 {@link Throwable} if an unexpected internal error occurred in AppSearch
      *                 service.
      */
-    public void removeByUri(
+    public void remove(
             @NonNull RemoveByUriRequest request,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull BatchResultCallback<String, Void> callback) {
@@ -512,7 +523,8 @@ public final class AppSearchSession implements Closeable {
     /**
      * Removes {@link GenericDocument}s from the index by Query. Documents will be removed if they
      * match the {@code queryExpression} in given namespaces and schemaTypes which is set via
-     * {@link SearchSpec.Builder#addNamespace} and {@link SearchSpec.Builder#addSchemaType}.
+     * {@link SearchSpec.Builder#addFilterNamespaces} and
+     * {@link SearchSpec.Builder#addFilterSchemas}.
      *
      * <p> An empty {@code queryExpression} matches all documents.
      *
@@ -528,7 +540,8 @@ public final class AppSearchSession implements Closeable {
      *                        the operation succeeds, the callback will be invoked with
      *                        {@code null}.
      */
-    public void removeByQuery(@NonNull String queryExpression,
+    public void remove(
+            @NonNull String queryExpression,
             @NonNull SearchSpec searchSpec,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<Void>> callback) {

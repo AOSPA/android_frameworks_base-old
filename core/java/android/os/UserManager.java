@@ -1694,10 +1694,13 @@ public class UserManager {
     }
 
     /**
-     * @hide
-     * @return Whether the device is running in a headless system user mode. It means the headless
-     * user (system user) runs system services and system UI, but is not associated with any real
-     * person. Secondary users can be created to be associated with real person.
+     * Checks whether the device is running in a headless system user mode.
+     *
+     * <p>Headless system user mode means the {@link #isSystemUser() system user} runs system
+     * services and some system UI, but it is not associated with any real person and additional
+     * users must be created to be associated with real persons.
+     *
+     * @return whether the device is running in a headless system user mode.
      */
     public static boolean isHeadlessSystemUserMode() {
         return RoSystemProperties.MULTIUSER_HEADLESS_SYSTEM_USER;
@@ -4058,14 +4061,18 @@ public class UserManager {
      * the current user, then set the user as ephemeral so that it will be removed when it is
      * stopped.
      *
+     * @param evenWhenDisallowed when {@code true}, user is removed even if the caller user has the
+     * {@link #DISALLOW_REMOVE_USER} or {@link #DISALLOW_REMOVE_MANAGED_PROFILE} restriction
+     *
      * @return the {@link RemoveResult} code
      * @hide
      */
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.CREATE_USERS})
-    public @RemoveResult int removeUserOrSetEphemeral(@UserIdInt int userId) {
+    public @RemoveResult int removeUserOrSetEphemeral(@UserIdInt int userId,
+            boolean evenWhenDisallowed) {
         try {
-            return mService.removeUserOrSetEphemeral(userId);
+            return mService.removeUserOrSetEphemeral(userId, evenWhenDisallowed);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

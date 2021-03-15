@@ -49,6 +49,7 @@ import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.AppOpsManager;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -119,6 +120,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -148,6 +150,7 @@ public class VpnTest {
         managedProfileA.profileGroupId = primaryUser.id;
     }
 
+    static final Network EGRESS_NETWORK = new Network(101);
     static final String EGRESS_IFACE = "wlan0";
     static final String TEST_VPN_PKG = "com.testvpn.vpn";
     private static final String TEST_VPN_SERVER = "1.2.3.4";
@@ -212,6 +215,8 @@ public class VpnTest {
 
         when(mContext.getPackageName()).thenReturn(TEST_VPN_PKG);
         when(mContext.getOpPackageName()).thenReturn(TEST_VPN_PKG);
+        when(mContext.getSystemServiceName(UserManager.class))
+                .thenReturn(Context.USER_SERVICE);
         when(mContext.getSystemService(eq(Context.USER_SERVICE))).thenReturn(mUserManager);
         when(mContext.getSystemService(eq(Context.APP_OPS_SERVICE))).thenReturn(mAppOps);
         when(mContext.getSystemServiceName(NotificationManager.class))
@@ -252,12 +257,14 @@ public class VpnTest {
 
     @Test
     public void testRestrictedProfilesAreAddedToVpn() {
-        if (true) return; // TODO(b/175883995): Test disabled until updated for new UserManager API.
         setMockedUsers(primaryUser, secondaryUser, restrictedProfileA, restrictedProfileB);
 
         final Vpn vpn = createVpn(primaryUser.id);
-        final Set<UidRange> ranges = vpn.createUserAndRestrictedProfilesRanges(primaryUser.id,
-                null, null);
+
+        // Assume the user can have restricted profiles.
+        doReturn(true).when(mUserManager).canHaveRestrictedProfile();
+        final Set<UidRange> ranges =
+                vpn.createUserAndRestrictedProfilesRanges(primaryUser.id, null, null);
 
         assertEquals(new ArraySet<>(Arrays.asList(new UidRange[] {
                 PRI_USER_RANGE, UidRange.createForUser(restrictedProfileA.id)
@@ -266,7 +273,6 @@ public class VpnTest {
 
     @Test
     public void testManagedProfilesAreNotAddedToVpn() {
-        if (true) return; // TODO(b/175883995): Test disabled until updated for new UserManager API.
         setMockedUsers(primaryUser, managedProfileA);
 
         final Vpn vpn = createVpn(primaryUser.id);
@@ -289,7 +295,6 @@ public class VpnTest {
 
     @Test
     public void testUidAllowAndDenylist() throws Exception {
-        if (true) return; // TODO(b/175883995): Test disabled until updated for new UserManager API.
         final Vpn vpn = createVpn(primaryUser.id);
         final UidRange user = PRI_USER_RANGE;
         final String[] packages = {PKGS[0], PKGS[1], PKGS[2]};
@@ -315,7 +320,6 @@ public class VpnTest {
 
     @Test
     public void testGetAlwaysAndOnGetLockDown() throws Exception {
-        if (true) return; // TODO(b/175883995): Test disabled until updated for new UserManager API.
         final Vpn vpn = createVpn(primaryUser.id);
 
         // Default state.
@@ -340,7 +344,6 @@ public class VpnTest {
 
     @Test
     public void testLockdownChangingPackage() throws Exception {
-        if (true) return; // TODO(b/175883995): Test disabled until updated for new UserManager API.
         final Vpn vpn = createVpn(primaryUser.id);
         final UidRange user = PRI_USER_RANGE;
 
@@ -368,7 +371,6 @@ public class VpnTest {
 
     @Test
     public void testLockdownAllowlist() throws Exception {
-        if (true) return; // TODO(b/175883995): Test disabled until updated for new UserManager API.
         final Vpn vpn = createVpn(primaryUser.id);
         final UidRange user = PRI_USER_RANGE;
 
@@ -443,7 +445,6 @@ public class VpnTest {
 
     @Test
     public void testLockdownRuleRepeatability() throws Exception {
-        if (true) return; // TODO(b/175883995): Test disabled until updated for new UserManager API.
         final Vpn vpn = createVpn(primaryUser.id);
         final UidRangeParcel[] primaryUserRangeParcel = new UidRangeParcel[] {
                 new UidRangeParcel(PRI_USER_RANGE.start, PRI_USER_RANGE.stop)};
@@ -476,7 +477,6 @@ public class VpnTest {
 
     @Test
     public void testLockdownRuleReversibility() throws Exception {
-        if (true) return; // TODO(b/175883995): Test disabled until updated for new UserManager API.
         final Vpn vpn = createVpn(primaryUser.id);
         final UidRangeParcel[] entireUser = {
             new UidRangeParcel(PRI_USER_RANGE.start, PRI_USER_RANGE.stop)
@@ -953,7 +953,14 @@ public class VpnTest {
     }
 
     private Vpn startLegacyVpn(final Vpn vpn, final VpnProfile vpnProfile) throws Exception {
-        setMockedUsers(primaryUser);
+        // TODO(b/175883995): once these tests have been updated for the changes to the UserManager
+        // API, remove this ad-hoc setup code and use setMockedUsers(primaryUser) again.
+        // setMockedUsers(primaryUser);
+        final ArrayList<UserInfo> users = new ArrayList<>();
+        users.add(primaryUser);
+        when(mUserManager.getAliveUsers()).thenReturn(users);
+        when(mUserManager.getUserInfo(primaryUser.id)).thenReturn(primaryUser);
+        when(mUserManager.canHaveRestrictedProfile()).thenReturn(false);
 
         // Dummy egress interface
         final LinkProperties lp = new LinkProperties();
@@ -963,7 +970,7 @@ public class VpnTest {
                         InetAddresses.parseNumericAddress("192.0.2.0"), EGRESS_IFACE);
         lp.addRoute(defaultRoute);
 
-        vpn.startLegacyVpn(vpnProfile, mKeyStore, lp);
+        vpn.startLegacyVpn(vpnProfile, mKeyStore, EGRESS_NETWORK, lp);
         return vpn;
     }
 
@@ -996,14 +1003,12 @@ public class VpnTest {
         profile.ipsecIdentifier = "id";
         profile.ipsecSecret = "secret";
         profile.l2tpSecret = "l2tpsecret";
+
         when(mConnectivityManager.getAllNetworks())
             .thenReturn(new Network[] { new Network(101) });
+
         when(mConnectivityManager.registerNetworkAgent(any(), any(), any(), any(),
-                anyInt(), any(), anyInt())).thenAnswer(invocation -> {
-                    // The runner has registered an agent and is now ready.
-                    legacyRunnerReady.open();
-                    return new Network(102);
-                });
+                anyInt(), any(), anyInt())).thenReturn(new Network(102));
         final Vpn vpn = startLegacyVpn(createVpn(primaryUser.id), profile);
         final TestDeps deps = (TestDeps) vpn.mDeps;
         try {
@@ -1019,14 +1024,20 @@ public class VpnTest {
                             "linkname", "vpn", "refuse-eap", "nodefaultroute", "usepeerdns",
                             "idle", "1800", "mtu", "1270", "mru", "1270" },
                     deps.mtpdArgs.get(10, TimeUnit.SECONDS));
+
             // Now wait for the runner to be ready before testing for the route.
-            legacyRunnerReady.block(10_000);
-            // In this test the expected address is always v4 so /32
+            ArgumentCaptor<LinkProperties> lpCaptor = ArgumentCaptor.forClass(LinkProperties.class);
+            verify(mConnectivityManager, timeout(10_000)).registerNetworkAgent(any(), any(),
+                    lpCaptor.capture(), any(), anyInt(), any(), anyInt());
+
+            // In this test the expected address is always v4 so /32.
+            // Note that the interface needs to be specified because RouteInfo objects stored in
+            // LinkProperties objects always acquire the LinkProperties' interface.
             final RouteInfo expectedRoute = new RouteInfo(new IpPrefix(expectedAddr + "/32"),
-                    RouteInfo.RTN_THROW);
-            assertTrue("Routes lack the expected throw route (" + expectedRoute + ") : "
-                    + vpn.mConfig.routes,
-                    vpn.mConfig.routes.contains(expectedRoute));
+                    null, EGRESS_IFACE, RouteInfo.RTN_THROW);
+            final List<RouteInfo> actualRoutes = lpCaptor.getValue().getRoutes();
+            assertTrue("Expected throw route (" + expectedRoute + ") not found in " + actualRoutes,
+                    actualRoutes.contains(expectedRoute));
         } finally {
             // Now interrupt the thread, unblock the runner and clean up.
             vpn.mVpnRunner.exitVpnRunner();
@@ -1079,6 +1090,11 @@ public class VpnTest {
         @Override
         public File getStateFile() {
             return mStateFile;
+        }
+
+        @Override
+        public PendingIntent getIntentForStatusPanel(Context context) {
+            return null;
         }
 
         @Override
@@ -1143,6 +1159,10 @@ public class VpnTest {
         doReturn(UserHandle.of(userId)).when(asUserContext).getUser();
         when(mContext.createContextAsUser(eq(UserHandle.of(userId)), anyInt()))
                 .thenReturn(asUserContext);
+        when(asUserContext.getSystemServiceName(UserManager.class))
+                .thenReturn(Context.USER_SERVICE);
+        when(asUserContext.getSystemService(UserManager.class))
+                .thenReturn(mUserManager);
         final TestLooper testLooper = new TestLooper();
         final Vpn vpn = new Vpn(testLooper.getLooper(), mContext, new TestDeps(), mNetService,
                 mNetd, userId, mKeyStore, mSystemServices, mIkev2SessionCreator);
@@ -1178,11 +1198,6 @@ public class VpnTest {
             final int id = (int) invocation.getArguments()[0];
             return userMap.get(id);
         }).when(mUserManager).getUserInfo(anyInt());
-
-        doAnswer(invocation -> {
-            final int id = (int) invocation.getArguments()[0];
-            return (userMap.get(id).flags & UserInfo.FLAG_ADMIN) != 0;
-        }).when(mUserManager).canHaveRestrictedProfile();
     }
 
     /**

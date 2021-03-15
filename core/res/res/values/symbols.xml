@@ -1897,6 +1897,7 @@
   <java-symbol type="bool" name="config_enableServerNotificationEffectsForAutomotive" />
   <java-symbol type="bool" name="config_useAttentionLight" />
   <java-symbol type="bool" name="config_adaptive_sleep_available" />
+  <java-symbol type="bool" name="config_camera_autorotate"/>
   <java-symbol type="bool" name="config_animateScreenLights" />
   <java-symbol type="bool" name="config_automatic_brightness_available" />
   <java-symbol type="bool" name="config_smart_battery_available" />
@@ -2505,6 +2506,7 @@
   <java-symbol type="string" name="fingerprint_error_lockout" />
   <java-symbol type="string" name="fingerprint_error_lockout_permanent" />
   <java-symbol type="string" name="fingerprint_name_template" />
+  <java-symbol type="string" name="fingerprint_dialog_default_subtitle" />
   <java-symbol type="string" name="fingerprint_authenticated" />
   <java-symbol type="string" name="fingerprint_error_no_fingerprints" />
   <java-symbol type="string" name="fingerprint_error_hw_not_present" />
@@ -2558,6 +2560,7 @@
   <java-symbol type="string" name="config_biometric_prompt_ui_package" />
   <java-symbol type="array" name="config_biometric_sensors" />
   <java-symbol type="bool" name="allow_test_udfps" />
+  <java-symbol type="array" name="config_udfps_sensor_props" />
 
   <java-symbol type="array" name="config_face_acquire_enroll_ignorelist" />
   <java-symbol type="array" name="config_face_acquire_vendor_enroll_ignorelist" />
@@ -3209,9 +3212,12 @@
   <java-symbol type="integer" name="config_nightDisplayColorTemperatureMax" />
   <java-symbol type="array" name="config_nightDisplayColorTemperatureCoefficients" />
   <java-symbol type="array" name="config_nightDisplayColorTemperatureCoefficientsNative" />
+  <java-symbol type="bool" name="config_reduceBrightColorsAvailable" />
   <java-symbol type="array" name="config_reduceBrightColorsCoefficients" />
-  <java-symbol type="array" name="config_reduceBrightColorsCoefficientsNative" />
+  <java-symbol type="array" name="config_reduceBrightColorsCoefficientsNonlinear" />
   <java-symbol type="array" name="config_availableColorModes" />
+  <java-symbol type="array" name="config_mappedColorModes" />
+  <java-symbol type="string" name="config_vendorColorModesRestoreHint" />
   <java-symbol type="integer" name="config_accessibilityColorMode" />
   <java-symbol type="array" name="config_displayCompositionColorModes" />
   <java-symbol type="array" name="config_displayCompositionColorSpaces" />
@@ -3505,6 +3511,7 @@
   <java-symbol type="string" name="notification_channel_do_not_disturb" />
   <java-symbol type="string" name="notification_channel_accessibility_magnification" />
   <java-symbol type="string" name="config_defaultAutofillService" />
+  <java-symbol type="string" name="config_defaultOnDeviceSpeechRecognitionService" />
   <java-symbol type="string" name="config_defaultTextClassifierPackage" />
   <java-symbol type="string" name="config_defaultWellbeingPackage" />
   <java-symbol type="string" name="config_defaultContentCaptureService" />
@@ -3513,8 +3520,10 @@
   <java-symbol type="string" name="config_defaultAppPredictionService" />
   <java-symbol type="string" name="config_defaultContentSuggestionsService" />
   <java-symbol type="string" name="config_defaultSearchUiService" />
+  <java-symbol type="string" name="config_defaultSmartspaceService" />
   <java-symbol type="string" name="config_defaultMusicRecognitionService" />
   <java-symbol type="string" name="config_defaultAttentionService" />
+  <java-symbol type="string" name="config_defaultRotationResolverService" />
   <java-symbol type="string" name="config_defaultSystemCaptionsService" />
   <java-symbol type="string" name="config_defaultSystemCaptionsManagerService" />
   <java-symbol type="string" name="config_retailDemoPackage" />
@@ -3750,7 +3759,7 @@
   <java-symbol type="string" name="config_customCountryDetector" />
 
   <!-- For Foldables -->
-  <java-symbol type="integer" name="config_foldedDeviceState" />
+  <java-symbol type="array" name="config_foldedDeviceStates" />
   <java-symbol type="string" name="config_foldedArea" />
 
   <java-symbol type="array" name="config_disableApksUnlessMatchedSku_apk_list" />
@@ -4154,6 +4163,9 @@
   <java-symbol type="dimen" name="controls_thumbnail_image_max_width" />
 
   <java-symbol type="dimen" name="config_taskLetterboxAspectRatio" />
+  <java-symbol type="integer" name="config_letterboxActivityCornersRadius" />
+  <java-symbol type="integer" name="config_letterboxBackgroundType" />
+  <java-symbol type="color" name="config_letterboxBackgroundColor" />
 
   <java-symbol type="bool" name="config_hideDisplayCutoutWithDisplayArea" />
 
@@ -4185,4 +4197,11 @@
   <java-symbol type="string" name="sensor_privacy_start_use_camera_notification_content" />
   <java-symbol type="string" name="sensor_privacy_start_use_dialog_turn_on_button" />
   <java-symbol type="string" name="sensor_privacy_notification_channel_label" />
+
+  <java-symbol type="bool" name="config_telephony5gStandalone" />
+  <java-symbol type="bool" name="config_telephony5gNonStandalone" />
+
+  <java-symbol type="bool" name="config_voice_data_sms_auto_fallback" />
+
+  <java-symbol type="bool" name="config_enableOneHandedKeyguard" />
 </resources>

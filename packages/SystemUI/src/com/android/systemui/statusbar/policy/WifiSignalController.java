@@ -161,7 +161,8 @@ public class WifiSignalController extends
         IconState statusIcon = new IconState(wifiVisible, getCurrentIconId(), contentDescription);
         if (mProviderModel) {
             IconState qsIcon = null;
-            if (mCurrentState.isDefault) {
+            if (mCurrentState.isDefault || (!mNetworkController.isRadioOn()
+                    && !mNetworkController.isEthernetDefault())) {
                 qsIcon = new IconState(mCurrentState.connected,
                         mWifiTracker.isCaptivePortal ? R.drawable.ic_qs_wifi_disconnected
                                 : getQsCurrentIconId(), contentDescription);
@@ -207,7 +208,7 @@ public class WifiSignalController extends
         callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, qsTypeIcon,
                 mCurrentState.activityIn, mCurrentState.activityOut, volteIcon, dataContentDescription,
                 dataContentDescriptionHtml, description, icons.isWide,
-                mCurrentState.subId, /* roaming= */ false);
+                mCurrentState.subId, /* roaming= */ false, /* showTriangle= */ true);
     }
 
     private int getCurrentIconIdForCarrierWifi() {

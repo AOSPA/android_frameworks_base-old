@@ -24,13 +24,15 @@
 #include <android/hardware/tv/tuner/1.1/ITuner.h>
 #include <android/hardware/tv/tuner/1.1/types.h>
 
-#include "FrontendClient.h"
 #include "DemuxClient.h"
+#include "ClientHelper.h"
+#include "FrontendClient.h"
 #include "DescramblerClient.h"
 #include "LnbClient.h"
 
 using Status = ::ndk::ScopedAStatus;
 
+using ::aidl::android::media::tv::tuner::TunerDemuxCapabilities;
 using ::aidl::android::media::tv::tuner::ITunerService;
 using ::aidl::android::media::tv::tuner::TunerFrontendInfo;
 using ::aidl::android::media::tv::tunerresourcemanager::ITunerResourceManager;
@@ -135,15 +137,6 @@ public:
      */
     int getHalTunerVersion() { return mTunerVersion; }
 
-    static Result getServiceSpecificErrorCode(Status& s) {
-        if (s.getExceptionCode() == EX_SERVICE_SPECIFIC) {
-            return static_cast<Result>(s.getServiceSpecificError());
-        } else if (s.isOk()) {
-            return Result::SUCCESS;
-        }
-        return Result::UNKNOWN_ERROR;
-    }
-
 private:
     sp<ITuner> getHidlTuner();
     sp<IFrontend> openHidlFrontendById(int id);
@@ -153,6 +146,7 @@ private:
     sp<ILnb> openHidlLnbByName(string name, LnbId& lnbId);
     sp<IDescrambler> openHidlDescrambler();
     vector<int> getLnbHandles();
+    DemuxCapabilities getHidlDemuxCaps(TunerDemuxCapabilities& aidlCaps);
     FrontendInfo FrontendInfoAidlToHidl(TunerFrontendInfo aidlFrontendInfo);
     void updateTunerResources();
     void updateFrontendResources();

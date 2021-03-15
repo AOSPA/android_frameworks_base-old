@@ -487,7 +487,9 @@ struct DrawVectorDrawable final : Op {
         tree->getPaintFor(&paint, tree->stagingProperties());
     }
 
-    void draw(SkCanvas* canvas, const SkMatrix&) const { mRoot->draw(canvas, mBounds, paint); }
+    void draw(SkCanvas* canvas, const SkMatrix&) const {
+        mRoot->draw(canvas, mBounds, paint);
+    }
 
     sp<VectorDrawableRoot> mRoot;
     SkRect mBounds;
@@ -559,7 +561,7 @@ public:
                 return;
             }
             c->concat(invertedMatrix);
-            mLayerSurface->draw(c, deviceBounds.fLeft, deviceBounds.fTop, nullptr);
+            mLayerSurface->draw(c, deviceBounds.fLeft, deviceBounds.fTop);
         } else {
             c->drawDrawable(drawable.get());
         }

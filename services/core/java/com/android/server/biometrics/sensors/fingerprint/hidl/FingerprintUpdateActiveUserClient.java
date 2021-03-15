@@ -26,6 +26,7 @@ import android.os.RemoteException;
 import android.os.SELinux;
 import android.util.Slog;
 
+import com.android.server.biometrics.BiometricsProto;
 import com.android.server.biometrics.sensors.HalClientMonitor;
 
 import java.io.File;
@@ -61,13 +62,7 @@ public class FingerprintUpdateActiveUserClient extends HalClientMonitor<IBiometr
         super.start(callback);
 
         if (mCurrentUserId == getTargetUserId()) {
-            Slog.d(TAG, "Already user: " + mCurrentUserId + ", refreshing authenticatorId");
-            try {
-                mAuthenticatorIds.put(getTargetUserId(), mHasEnrolledBiometrics
-                        ? getFreshDaemon().getAuthenticatorId() : 0L);
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Unable to refresh authenticatorId", e);
-            }
+            Slog.d(TAG, "Already user: " + mCurrentUserId + ", returning");
             callback.onClientFinished(this, true /* success */);
             return;
         }
@@ -120,5 +115,10 @@ public class FingerprintUpdateActiveUserClient extends HalClientMonitor<IBiometr
             Slog.e(TAG, "Failed to setActiveGroup: " + e);
             mCallback.onClientFinished(this, false /* success */);
         }
+    }
+
+    @Override
+    public int getProtoEnum() {
+        return BiometricsProto.CM_UPDATE_ACTIVE_USER;
     }
 }

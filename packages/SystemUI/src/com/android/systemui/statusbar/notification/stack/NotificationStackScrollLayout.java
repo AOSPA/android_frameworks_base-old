@@ -41,8 +41,6 @@ import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.PointF;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.UserHandle;
@@ -493,7 +491,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             NotificationSectionsManager notificationSectionsManager,
             GroupMembershipManager groupMembershipManager,
             GroupExpansionManager groupExpansionManager,
-            SysuiStatusBarStateController statusbarStateController
+            SysuiStatusBarStateController statusbarStateController,
+            AmbientState ambientState
     ) {
         super(context, attrs, 0, 0);
         Resources res = getResources();
@@ -502,8 +501,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mSectionsManager.initialize(this, LayoutInflater.from(context));
         mSections = mSectionsManager.createSectionsForBuckets();
 
-        mAmbientState = new AmbientState(context, mSectionsManager);
-        mBgColor = Utils.getColorAttr(mContext, android.R.attr.colorBackground).getDefaultColor();
+        mAmbientState = ambientState;
+        mBgColor = Utils.getColorAttr(mContext, android.R.attr.colorBackgroundFloating)
+                .getDefaultColor();
         int minHeight = res.getDimensionPixelSize(R.dimen.notification_min_height);
         int maxHeight = res.getDimensionPixelSize(R.dimen.notification_max_height);
         mExpandHelper = new ExpandHelper(getContext(), mExpandHelperCallback,
@@ -548,10 +548,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                 ((ExpandableNotificationRow) child).setDismissRtl(dismissRtl);
             }
         }
-    }
-
-    void setIsShadeOpening(boolean isOpening) {
-        mAmbientState.setIsShadeOpening(isOpening);
     }
 
     void setSectionPadding(float margin) {
@@ -623,7 +619,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     }
 
     void updateBgColor() {
-        mBgColor = Utils.getColorAttr(mContext, android.R.attr.colorBackground).getDefaultColor();
+        mBgColor = Utils.getColorAttr(mContext, android.R.attr.colorBackgroundFloating)
+                .getDefaultColor();
         updateBackgroundDimming();
         mShelf.onUiModeChanged();
     }
@@ -2282,7 +2279,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             if (child.getVisibility() != View.GONE
                     && !(child instanceof StackScrollerDecorView)
                     && child != mShelf
-                    && mSwipeHelper.getSwipedView() != child) {
+                    && (mSwipeHelper.getSwipedView() != child
+                        || !child.getResources().getBoolean(R.bool.flag_notif_updates))) {
                 children.add(child);
             }
         }

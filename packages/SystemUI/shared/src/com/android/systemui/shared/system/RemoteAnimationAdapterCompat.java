@@ -18,9 +18,11 @@ package com.android.systemui.shared.system;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.view.WindowManager.TRANSIT_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
+import static android.view.WindowManager.TransitionOldType;
 
 import android.os.RemoteException;
 import android.util.Log;
@@ -30,6 +32,7 @@ import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.window.IRemoteTransition;
+import android.window.IRemoteTransitionFinishedCallback;
 import android.window.TransitionInfo;
 
 /**
@@ -64,13 +67,17 @@ public class RemoteAnimationAdapterCompat {
             final RemoteAnimationRunnerCompat remoteAnimationAdapter) {
         return new IRemoteAnimationRunner.Stub() {
             @Override
-            public void onAnimationStart(RemoteAnimationTarget[] apps,
+            public void onAnimationStart(@TransitionOldType int transit,
+                    RemoteAnimationTarget[] apps,
                     RemoteAnimationTarget[] wallpapers,
+                    RemoteAnimationTarget[] nonApps,
                     final IRemoteAnimationFinishedCallback finishedCallback) {
                 final RemoteAnimationTargetCompat[] appsCompat =
                         RemoteAnimationTargetCompat.wrap(apps);
                 final RemoteAnimationTargetCompat[] wallpapersCompat =
                         RemoteAnimationTargetCompat.wrap(wallpapers);
+                final RemoteAnimationTargetCompat[] nonAppsCompat =
+                        RemoteAnimationTargetCompat.wrap(nonApps);
                 final Runnable animationFinishedCallback = new Runnable() {
                     @Override
                     public void run() {
@@ -82,8 +89,8 @@ public class RemoteAnimationAdapterCompat {
                         }
                     }
                 };
-                remoteAnimationAdapter.onAnimationStart(appsCompat, wallpapersCompat,
-                        animationFinishedCallback);
+                remoteAnimationAdapter.onAnimationStart(transit, appsCompat, wallpapersCompat,
+                        nonAppsCompat, animationFinishedCallback);
             }
 
             @Override
@@ -98,16 +105,19 @@ public class RemoteAnimationAdapterCompat {
         return new IRemoteTransition.Stub() {
             @Override
             public void startAnimation(TransitionInfo info, SurfaceControl.Transaction t,
-                    IRemoteAnimationFinishedCallback finishCallback) {
+                    IRemoteTransitionFinishedCallback finishCallback) {
                 final RemoteAnimationTargetCompat[] appsCompat =
                         RemoteAnimationTargetCompat.wrap(info, false /* wallpapers */);
                 final RemoteAnimationTargetCompat[] wallpapersCompat =
                         RemoteAnimationTargetCompat.wrap(info, true /* wallpapers */);
+                // TODO(bc-unlock): Build wrapped object for non-apps target.
+                final RemoteAnimationTargetCompat[] nonAppsCompat =
+                        new RemoteAnimationTargetCompat[0];
                 final Runnable animationFinishedCallback = new Runnable() {
                     @Override
                     public void run() {
                         try {
-                            finishCallback.onAnimationFinished();
+                            finishCallback.onTransitionFinished(null /* wct */);
                         } catch (RemoteException e) {
                             Log.e("ActivityOptionsCompat", "Failed to call app controlled animation"
                                     + " finished callback", e);
@@ -146,7 +156,10 @@ public class RemoteAnimationAdapterCompat {
                     }
                 }
                 t.apply();
-                remoteAnimationAdapter.onAnimationStart(appsCompat, wallpapersCompat,
+                // TODO(bc-unlcok): Pass correct transit type.
+                remoteAnimationAdapter.onAnimationStart(
+                        TRANSIT_OLD_NONE,
+                        appsCompat, wallpapersCompat, nonAppsCompat,
                         animationFinishedCallback);
             }
         };

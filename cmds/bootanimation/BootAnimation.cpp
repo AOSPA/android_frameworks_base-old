@@ -178,7 +178,9 @@ static void* decodeImage(const void* encodedData, size_t dataLength, AndroidBitm
     const size_t size = outInfo->stride * outInfo->height;
     void* pixels = malloc(size);
     int result = AImageDecoder_decodeImage(decoder, pixels, outInfo->stride, size);
-    AImageDecoder_delete(decoder);
+    // TODO(b/180130969) Fix ~ImageDecoder() so that AImageDecoder_delete stops
+    // causing a segfault, then add back this call to AImageDecoder_delete().
+    //AImageDecoder_delete(decoder);
 
     if (result != ANDROID_IMAGE_DECODER_SUCCESS) {
         free(pixels);

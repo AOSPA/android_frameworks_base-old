@@ -602,7 +602,7 @@ public class Face10 implements IHwBinder.DeathRecipient, ServiceProvider {
     public void scheduleEnroll(int sensorId, @NonNull IBinder token,
             @NonNull byte[] hardwareAuthToken, int userId, @NonNull IFaceServiceReceiver receiver,
             @NonNull String opPackageName, @NonNull int[] disabledFeatures,
-            @Nullable NativeHandle surfaceHandle) {
+            @Nullable NativeHandle surfaceHandle, boolean debugConsent) {
         mHandler.post(() -> {
             scheduleUpdateActiveUserWithoutHandler(userId);
 
@@ -646,7 +646,7 @@ public class Face10 implements IHwBinder.DeathRecipient, ServiceProvider {
             final FaceAuthenticationClient client = new FaceAuthenticationClient(mContext,
                     mLazyDaemon, token, receiver, userId, operationId, restricted, opPackageName,
                     cookie, false /* requireConfirmation */, mSensorId, isStrongBiometric,
-                    statsClient, mLockoutTracker, mUsageStats);
+                    statsClient, mLockoutTracker, mUsageStats, isKeyguard);
             mScheduler.scheduleClientMonitor(client);
         });
     }
@@ -767,12 +767,13 @@ public class Face10 implements IHwBinder.DeathRecipient, ServiceProvider {
     }
 
     @Override
-    public void dumpProtoState(int sensorId, ProtoOutputStream proto) {
+    public void dumpProtoState(int sensorId, ProtoOutputStream proto,
+            boolean clearSchedulerBuffer) {
         final long sensorToken = proto.start(SensorServiceStateProto.SENSOR_STATES);
 
         proto.write(SensorStateProto.SENSOR_ID, mSensorProperties.sensorId);
         proto.write(SensorStateProto.MODALITY, SensorStateProto.FACE);
-        proto.write(SensorStateProto.IS_BUSY, mScheduler.getCurrentClient() != null);
+        proto.write(SensorStateProto.SCHEDULER, mScheduler.dumpProtoState(clearSchedulerBuffer));
 
         for (UserInfo user : UserManager.get(mContext).getUsers()) {
             final int userId = user.getUserHandle().getIdentifier();

@@ -196,7 +196,7 @@
 
     <style name="TextAppearance.QS.TileLabel">
         <item name="android:textSize">@dimen/qs_tile_text_size</item>
-        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+        <item name="android:fontFamily">@string/qs_tile_label_fontFamily</item>
     </style>
 
     <style name="TextAppearance.QS.TileLabel.Secondary">
@@ -319,6 +319,7 @@
         <item name="android:colorControlHighlight">@*android:color/primary_text_material_dark</item>
         <item name="*android:lockPatternStyle">@style/LockPatternStyle</item>
         <item name="passwordStyle">@style/PasswordTheme</item>
+        <item name="numPadKeyStyle">@style/NumPadKey</item>
         <item name="backgroundProtectedStyle">@style/BackgroundProtectedStyle</item>
         <item name="android:homeAsUpIndicator">@drawable/ic_arrow_back</item>
         <item name="shadowRadius">@dimen/keyguard_shadow_radius</item>
@@ -353,15 +354,17 @@
     </style>
 
     <style name="LockPatternStyle">
-        <item name="*android:regularColor">?android:attr/textColorPrimary</item>
+        <item name="*android:regularColor">?android:attr/colorAccent</item>
         <item name="*android:successColor">?android:attr/textColorPrimary</item>
         <item name="*android:errorColor">?android:attr/colorError</item>
+        <item name="*android:dotColor">?android:attr/textColorSecondary</item>
     </style>
 
     <style name="LockPatternStyleBiometricPrompt">
         <item name="*android:regularColor">?android:attr/colorForeground</item>
         <item name="*android:successColor">?android:attr/colorForeground</item>
         <item name="*android:errorColor">?android:attr/colorError</item>
+        <item name="*android:dotColor">?android:attr/textColorSecondary</item>
     </style>
 
     <style name="qs_theme" parent="@*android:style/Theme.DeviceDefault.QuickSettings">
@@ -659,6 +662,19 @@
       <item name="android:windowExitAnimation">@anim/bottomsheet_out</item>
     </style>
 
+    <style name="Theme.SystemUI.Dialog.Control.LockScreen" parent="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
+      <item name="android:windowAnimationStyle">@style/Animation.Fade</item>
+      <item name="android:windowFullscreen">true</item>
+      <item name="android:windowIsFloating">false</item>
+      <item name="android:windowBackground">@color/controls_lockscreen_scrim</item>
+      <item name="android:backgroundDimEnabled">true</item>
+    </style>
+
+    <style name="Animation.Fade">
+      <item name="android:windowEnterAnimation">@android:anim/fade_in</item>
+      <item name="android:windowExitAnimation">@android:anim/fade_out</item>
+    </style>
+
     <style name="Control" />
 
     <style name="Control.MenuItem">
@@ -744,4 +760,17 @@
           * Title: headline, medium 20sp
           * Message: body, 16 sp -->
     <style name="Theme.ControlsRequestDialog" parent="@*android:style/Theme.DeviceDefault.Dialog.Alert"/>
+
+    <style name="TextAppearance.PrivacyDialog">
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+    </style>
+
+    <style name="UdfpsProgressBarStyle"
+        parent="android:style/Widget.Material.ProgressBar.Horizontal">
+        <item name="android:indeterminate">false</item>
+        <item name="android:max">10000</item>
+        <item name="android:mirrorForRtl">false</item>
+        <item name="android:progressDrawable">@drawable/udfps_progress_bar</item>
+    </style>
 </resources>

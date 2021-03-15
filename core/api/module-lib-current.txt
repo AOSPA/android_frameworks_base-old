@@ -1,4 +1,12 @@
 // Signature format: 2.0
+package android {
+
+  public static final class Manifest.permission {
+    field public static final String GET_INTENT_SENDER_INTENT = "android.permission.GET_INTENT_SENDER_INTENT";
+  }
+
+}
+
 package android.app {
 
   public class ActivityManager {
@@ -26,16 +34,28 @@ package android.app {
     field public static final String ACTION_NOTIFICATION_LISTENER_ENABLED_CHANGED = "android.app.action.NOTIFICATION_LISTENER_ENABLED_CHANGED";
   }
 
+  public final class PendingIntent implements android.os.Parcelable {
+    method @Nullable @RequiresPermission(android.Manifest.permission.GET_INTENT_SENDER_INTENT) public java.util.List<android.content.pm.ResolveInfo> queryIntentComponents(int);
+  }
+
   public class StatusBarManager {
     method @RequiresPermission(android.Manifest.permission.STATUS_BAR) public void setExpansionDisabledForSimNetworkLock(boolean);
   }
 
 }
 
-package android.app.role {
+package android.content {
 
-  public final class RoleManager {
-    method @Nullable public String getSmsRoleHolder(int);
+  public abstract class Context {
+    method @NonNull public android.os.UserHandle getUser();
+  }
+
+}
+
+package android.content.pm {
+
+  public abstract class PackageManager {
+    method @NonNull public String getPermissionControllerPackageName();
   }
 
 }
@@ -83,6 +103,7 @@ package android.media {
   }
 
   public class MediaServiceManager {
+    method @NonNull public android.media.MediaServiceManager.ServiceRegisterer getMediaCommunicationServiceRegisterer();
     method @NonNull public android.media.MediaServiceManager.ServiceRegisterer getMediaSessionServiceRegisterer();
     method @NonNull public android.media.MediaServiceManager.ServiceRegisterer getMediaTranscodingServiceRegisterer();
   }
@@ -136,6 +157,35 @@ package android.media.session {
 
 package android.net {
 
+  public final class ConnectivityFrameworkInitializer {
+    method public static void registerServiceWrappers();
+  }
+
+  public class ConnectivityManager {
+    method @RequiresPermission(anyOf={android.Manifest.permission.NETWORK_SETTINGS, android.Manifest.permission.NETWORK_STACK, android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK}) public void requestBackgroundNetwork(@NonNull android.net.NetworkRequest, @Nullable android.os.Handler, @NonNull android.net.ConnectivityManager.NetworkCallback);
+    method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_TEST_NETWORKS, android.Manifest.permission.NETWORK_STACK}) public void simulateDataStall(int, long, @NonNull android.net.Network, @NonNull android.os.PersistableBundle);
+  }
+
+  public static final class IpSecManager.UdpEncapsulationSocket implements java.lang.AutoCloseable {
+    method public int getResourceId();
+  }
+
+  public final class NetworkAgentConfig implements android.os.Parcelable {
+    method @Nullable public String getSubscriberId();
+  }
+
+  public static final class NetworkAgentConfig.Builder {
+    method @NonNull public android.net.NetworkAgentConfig.Builder setSubscriberId(@Nullable String);
+  }
+
+  public final class NetworkCapabilities implements android.os.Parcelable {
+    field public static final int TRANSPORT_TEST = 7; // 0x7
+  }
+
+  public final class Proxy {
+    method public static void setHttpProxyConfiguration(@Nullable android.net.ProxyInfo);
+  }
+
   public final class TcpRepairWindow {
     ctor public TcpRepairWindow(int, int, int, int, int, int);
     field public final int maxWindow;
@@ -162,12 +212,26 @@ package android.net {
     method public void teardownTestNetwork(@NonNull android.net.Network);
   }
 
+  public final class UnderlyingNetworkInfo implements android.os.Parcelable {
+    ctor public UnderlyingNetworkInfo(int, @NonNull String, @NonNull java.util.List<java.lang.String>);
+    method public int describeContents();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.net.UnderlyingNetworkInfo> CREATOR;
+    field @NonNull public final String iface;
+    field public final int ownerUid;
+    field @NonNull public final java.util.List<java.lang.String> underlyingIfaces;
+  }
+
 }
 
 package android.os {
 
   public class Binder implements android.os.IBinder {
     method public final void markVintfStability();
+  }
+
+  public static class Build.VERSION {
+    field public static final int FIRST_SDK_INT;
   }
 
   public interface Parcelable {

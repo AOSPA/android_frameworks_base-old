@@ -157,12 +157,14 @@ static void setBufferCount(ANativeWindow* window) {
 void CanvasContext::setSurface(ANativeWindow* window, bool enableTimeout) {
     ATRACE_CALL();
 
-    if (mRenderAheadDepth == 0 && DeviceInfo::get()->getMaxRefreshRate() > 66.6f) {
-        mFixedRenderAhead = false;
-        mRenderAheadCapacity = 1;
-    } else {
-        mFixedRenderAhead = true;
+    if (mFixedRenderAhead) {
         mRenderAheadCapacity = mRenderAheadDepth;
+    } else {
+        if (DeviceInfo::get()->getMaxRefreshRate() > 66.6f) {
+            mRenderAheadCapacity = 1;
+        } else {
+            mRenderAheadCapacity = 0;
+        }
     }
 
     if (window) {
@@ -505,9 +507,11 @@ void CanvasContext::draw() {
 
     if (mNativeSurface) {
         // TODO(b/165985262): measure performance impact
-        if (const auto vsyncId = mCurrentFrameInfo->get(FrameInfoIndex::FrameTimelineVsyncId);
-                vsyncId != UiFrameInfoBuilder::INVALID_VSYNC_ID) {
-            native_window_set_frame_timeline_vsync(mNativeSurface->getNativeWindow(), vsyncId);
+        const auto vsyncId = mCurrentFrameInfo->get(FrameInfoIndex::FrameTimelineVsyncId);
+        if (vsyncId != UiFrameInfoBuilder::INVALID_VSYNC_ID) {
+            const auto inputEventId = mCurrentFrameInfo->get(FrameInfoIndex::NewestInputEvent);
+            native_window_set_frame_timeline_info(mNativeSurface->getNativeWindow(), vsyncId,
+                                                  inputEventId);
         }
     }
 
@@ -777,11 +781,16 @@ bool CanvasContext::surfaceRequiresRedraw() {
 }
 
 void CanvasContext::setRenderAheadDepth(int renderAhead) {
-    if (renderAhead > 2 || renderAhead < 0 || mNativeSurface) {
+    if (renderAhead > 2 || renderAhead < -1 || mNativeSurface) {
         return;
     }
-    mFixedRenderAhead = true;
-    mRenderAheadDepth = static_cast<uint32_t>(renderAhead);
+    if (renderAhead == -1) {
+        mFixedRenderAhead = false;
+        mRenderAheadDepth = 0;
+    } else {
+        mFixedRenderAhead = true;
+        mRenderAheadDepth = static_cast<uint32_t>(renderAhead);
+    }
 }
 
 SkRect CanvasContext::computeDirtyRect(const Frame& frame, SkRect* dirty) {

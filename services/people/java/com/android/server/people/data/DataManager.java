@@ -222,33 +222,66 @@ public class DataManager {
                 mContext.getPackageName(), intentFilter, callingUserId);
     }
 
+    /**
+     * Returns a {@link ConversationChannel} with the associated {@code shortcutId} if existent.
+     * Otherwise, returns null.
+     */
+    @Nullable
+    public ConversationChannel getConversation(String packageName, int userId, String shortcutId) {
+        UserData userData = getUnlockedUserData(userId);
+        if (userData != null) {
+            PackageData packageData = userData.getPackageData(packageName);
+            // App may have been uninstalled.
+            if (packageData != null) {
+                return getConversationChannel(packageData, shortcutId);
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private ConversationChannel getConversationChannel(PackageData packageData, String shortcutId) {
+        ConversationInfo conversationInfo = packageData.getConversationInfo(shortcutId);
+        if (conversationInfo == null) {
+            return null;
+        }
+        int userId = packageData.getUserId();
+        String packageName = packageData.getPackageName();
+        ShortcutInfo shortcutInfo = getShortcut(packageName, userId, shortcutId);
+        if (shortcutInfo == null) {
+            return null;
+        }
+        int uid = mPackageManagerInternal.getPackageUid(packageName, 0, userId);
+        NotificationChannel parentChannel =
+                mNotificationManagerInternal.getNotificationChannel(packageName, uid,
+                        conversationInfo.getParentNotificationChannelId());
+        NotificationChannelGroup parentChannelGroup = null;
+        if (parentChannel != null) {
+            parentChannelGroup =
+                    mNotificationManagerInternal.getNotificationChannelGroup(packageName,
+                            uid, parentChannel.getId());
+        }
+        return new ConversationChannel(shortcutInfo, uid, parentChannel,
+                parentChannelGroup,
+                conversationInfo.getLastEventTimestamp(),
+                hasActiveNotifications(packageName, userId, shortcutId), false,
+                getStatuses(conversationInfo));
+    }
+
     /** Returns the cached non-customized recent conversations. */
     public List<ConversationChannel> getRecentConversations(@UserIdInt int callingUserId) {
         List<ConversationChannel> conversationChannels = new ArrayList<>();
         forPackagesInProfile(callingUserId, packageData -> {
-            String packageName = packageData.getPackageName();
-            int userId = packageData.getUserId();
             packageData.forAllConversations(conversationInfo -> {
                 if (!isCachedRecentConversation(conversationInfo)) {
                     return;
                 }
                 String shortcutId = conversationInfo.getShortcutId();
-                ShortcutInfo shortcutInfo = getShortcut(packageName, userId, shortcutId);
-                int uid = mPackageManagerInternal.getPackageUid(packageName, 0, userId);
-                NotificationChannel parentChannel =
-                        mNotificationManagerInternal.getNotificationChannel(packageName, uid,
-                                conversationInfo.getParentNotificationChannelId());
-                if (shortcutInfo == null || parentChannel == null) {
+                ConversationChannel channel = getConversationChannel(packageData, shortcutId);
+                if (channel == null || channel.getParentNotificationChannel() == null) {
                     return;
                 }
-                NotificationChannelGroup parentChannelGroup =
-                        mNotificationManagerInternal.getNotificationChannelGroup(packageName,
-                                uid, parentChannel.getId());
-                conversationChannels.add(
-                        new ConversationChannel(shortcutInfo, uid, parentChannel,
-                                parentChannelGroup,
-                                conversationInfo.getLastEventTimestamp(),
-                                hasActiveNotifications(packageName, userId, shortcutId)));
+                conversationChannels.add(channel);
             });
         });
         return conversationChannels;
@@ -372,6 +405,10 @@ public class DataManager {
             String conversationId) {
         ConversationStore cs = getConversationStoreOrThrow(packageName, userId);
         ConversationInfo conversationInfo = getConversationInfoOrThrow(cs, conversationId);
+        return getStatuses(conversationInfo);
+    }
+
+    private @NonNull List<ConversationStatus> getStatuses(ConversationInfo conversationInfo) {
         Collection<ConversationStatus> statuses = conversationInfo.getStatuses();
         if (statuses != null) {
             final ArrayList<ConversationStatus> list = new ArrayList<>(statuses.size());

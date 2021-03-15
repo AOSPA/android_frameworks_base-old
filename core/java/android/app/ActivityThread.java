@@ -95,7 +95,6 @@ import android.media.MediaFrameworkInitializer;
 import android.media.MediaFrameworkPlatformInitializer;
 import android.media.MediaServiceManager;
 import android.net.ConnectivityManager;
-import android.net.IConnectivityManager;
 import android.net.Proxy;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -176,6 +175,8 @@ import android.view.ViewRootImpl;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
+import android.view.autofill.AutofillId;
+import android.view.translation.TranslationSpec;
 import android.webkit.WebView;
 
 import com.android.internal.annotations.GuardedBy;
@@ -1809,6 +1810,18 @@ public final class ActivityThread extends ClientTransactionHandler {
             data.appInfo = targetInfo;
             sendMessage(H.INSTRUMENT_WITHOUT_RESTART, data);
         }
+
+        @Override
+        public void updateUiTranslationState(IBinder activityToken, int state,
+                TranslationSpec sourceSpec, TranslationSpec destSpec, List<AutofillId> viewIds) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = activityToken;
+            args.arg2 = state;
+            args.arg3 = sourceSpec;
+            args.arg4 = destSpec;
+            args.arg5 = viewIds;
+            sendMessage(H.UPDATE_UI_TRANSLATION_STATE, args);
+        }
     }
 
     private @NonNull SafeCancellationTransport createSafeCancellationTransport(
@@ -1913,6 +1926,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int RELAUNCH_ACTIVITY = 160;
         public static final int PURGE_RESOURCES = 161;
         public static final int ATTACH_STARTUP_AGENTS = 162;
+        public static final int UPDATE_UI_TRANSLATION_STATE = 163;
 
         public static final int INSTRUMENT_WITHOUT_RESTART = 170;
         public static final int FINISH_INSTRUMENTATION_WITHOUT_RESTART = 171;
@@ -1959,6 +1973,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case RELAUNCH_ACTIVITY: return "RELAUNCH_ACTIVITY";
                     case PURGE_RESOURCES: return "PURGE_RESOURCES";
                     case ATTACH_STARTUP_AGENTS: return "ATTACH_STARTUP_AGENTS";
+                    case UPDATE_UI_TRANSLATION_STATE: return "UPDATE_UI_TRANSLATION_STATE";
                     case INSTRUMENT_WITHOUT_RESTART: return "INSTRUMENT_WITHOUT_RESTART";
                     case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
                         return "FINISH_INSTRUMENTATION_WITHOUT_RESTART";
@@ -2143,6 +2158,12 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case ATTACH_STARTUP_AGENTS:
                     handleAttachStartupAgents((String) msg.obj);
                     break;
+                case UPDATE_UI_TRANSLATION_STATE:
+                    final SomeArgs args = (SomeArgs) msg.obj;
+                    updateUiTranslationState((IBinder) args.arg1, (int) args.arg2,
+                            (TranslationSpec) args.arg3, (TranslationSpec) args.arg4,
+                            (List<AutofillId>) args.arg5);
+                    break;
                 case INSTRUMENT_WITHOUT_RESTART:
                     handleInstrumentWithoutRestart((AppBindData) msg.obj);
                     break;
@@ -2270,9 +2291,10 @@ public final class ActivityThread extends ClientTransactionHandler {
      * Resources if one has already been created.
      */
     Resources getTopLevelResources(String resDir, String[] splitResDirs, String[] overlayDirs,
-            String[] libDirs, LoadedApk pkgInfo) {
+            String[] libDirs, LoadedApk pkgInfo, Configuration overrideConfig) {
         return mResourcesManager.getResources(null, resDir, splitResDirs, overlayDirs, libDirs,
-                null, null, pkgInfo.getCompatibilityInfo(), pkgInfo.getClassLoader(), null);
+                null, overrideConfig, pkgInfo.getCompatibilityInfo(), pkgInfo.getClassLoader(),
+                null);
     }
 
     @UnsupportedAppUsage
@@ -4019,6 +4041,16 @@ public final class ActivityThread extends ClientTransactionHandler {
         } catch (Exception e) {
             // Ignored.
         }
+    }
+
+    private void updateUiTranslationState(IBinder activityToken, int state,
+            TranslationSpec sourceSpec, TranslationSpec destSpec, List<AutofillId> viewIds) {
+        final ActivityClientRecord r = mActivities.get(activityToken);
+        if (r == null) {
+            Log.w(TAG, "updateUiTranslationState(): no activity for " + activityToken);
+            return;
+        }
+        r.activity.updateUiTranslationState(state, sourceSpec, destSpec, viewIds);
     }
 
     private static final ThreadLocal<Intent> sCurrentBroadcastIntent = new ThreadLocal<Intent>();
@@ -6553,25 +6585,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         // Pass the current context to HardwareRenderer
         HardwareRenderer.setContextForInit(getSystemContext());
 
-        /**
-         * Initialize the default http proxy in this process for the reasons we set the time zone.
-         */
-        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Setup proxies");
-        final IBinder b = ServiceManager.getService(Context.CONNECTIVITY_SERVICE);
-        if (b != null) {
-            // In pre-boot mode (doing initial launch to collect password), not
-            // all system is up.  This includes the connectivity service, so don't
-            // crash if we can't get it.
-            final IConnectivityManager service = IConnectivityManager.Stub.asInterface(b);
-            try {
-                Proxy.setHttpProxySystemProperty(service.getProxyForNetwork(null));
-            } catch (RemoteException e) {
-                Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
-                throw e.rethrowFromSystemServer();
-            }
-        }
-        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
-
         // Instrumentation info affects the class loader, so load it before
         // setting up the app context.
         final InstrumentationInfo ii;
@@ -6584,6 +6597,23 @@ public final class ActivityThread extends ClientTransactionHandler {
         final ContextImpl appContext = ContextImpl.createAppContext(this, data.info);
         updateLocaleListFromAppContext(appContext,
                 mResourcesManager.getConfiguration().getLocales());
+
+        // Initialize the default http proxy in this process.
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Setup proxies");
+        try {
+            // In pre-boot mode (doing initial launch to collect password), not all system is up.
+            // This includes the connectivity service, so trying to obtain ConnectivityManager at
+            // that point would return null. Check whether the ConnectivityService is available, and
+            // avoid crashing with a NullPointerException if it is not.
+            final IBinder b = ServiceManager.getService(Context.CONNECTIVITY_SERVICE);
+            if (b != null) {
+                final ConnectivityManager cm =
+                        appContext.getSystemService(ConnectivityManager.class);
+                Proxy.setHttpProxyConfiguration(cm.getDefaultProxy());
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+        }
 
         if (!Process.isIsolated()) {
             final int old_mask = StrictMode.allowThreadDiskWritesMask();
@@ -7530,8 +7560,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     public static void updateHttpProxy(@NonNull Context context) {
-        final ConnectivityManager cm = ConnectivityManager.from(context);
-        Proxy.setHttpProxySystemProperty(cm.getDefaultProxy());
+        final ConnectivityManager cm = context.getSystemService(ConnectivityManager.class);
+        Proxy.setHttpProxyConfiguration(cm.getDefaultProxy());
     }
 
     @UnsupportedAppUsage

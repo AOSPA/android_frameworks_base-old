@@ -38,6 +38,7 @@ import com.android.internal.os.ProcessCpuTracker;
 
 import libcore.io.IoUtils;
 
+import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -109,10 +110,23 @@ public final class PhantomProcessList {
     private final ActivityManagerService mService;
     private final Handler mKillHandler;
 
+    private static final int CGROUP_V1 = 0;
+    private static final int CGROUP_V2 = 1;
+    private static final String[] CGROUP_PATH_PREFIXES = {
+        "/acct/uid_" /* cgroup v1 */,
+        "/sys/fs/cgroup/uid_" /* cgroup v2 */
+    };
+    private static final String CGROUP_PID_PREFIX = "/pid_";
+    private static final String CGROUP_PROCS = "/cgroup.procs";
+
+    @VisibleForTesting
+    int mCgroupVersion = CGROUP_V1;
+
     PhantomProcessList(final ActivityManagerService service) {
         mService = service;
         mKillHandler = service.mProcessList.sKillHandler;
         mInjector = new Injector();
+        probeCgroupVersion();
     }
 
     @VisibleForTesting
@@ -134,13 +148,14 @@ public final class PhantomProcessList {
 
     @GuardedBy({"mLock", "mService.mPidsSelfLocked"})
     private void lookForPhantomProcessesLocked(ProcessRecord app) {
-        if (app.appZygote || app.killed || app.killedByAm) {
+        if (app.appZygote || app.isKilled() || app.isKilledByAm()) {
             // process forked from app zygote doesn't have its own acct entry
             return;
         }
-        InputStream input = mCgroupProcsFds.get(app.pid);
+        final int appPid = app.getPid();
+        InputStream input = mCgroupProcsFds.get(appPid);
         if (input == null) {
-            final String path = getCgroupFilePath(app.info.uid, app.pid);
+            final String path = getCgroupFilePath(app.info.uid, appPid);
             try {
                 input = mInjector.openCgroupProcs(path);
             } catch (FileNotFoundException | SecurityException e) {
@@ -150,7 +165,7 @@ public final class PhantomProcessList {
                 return;
             }
             // Keep the FD open for better performance
-            mCgroupProcsFds.put(app.pid, input);
+            mCgroupProcsFds.put(appPid, input);
         }
         final byte[] buf = mDataBuffer;
         try {
@@ -166,7 +181,7 @@ public final class PhantomProcessList {
                 for (int i = 0; i < read; i++) {
                     final byte b = buf[i];
                     if (b == '\n') {
-                        addChildPidLocked(app, pid);
+                        addChildPidLocked(app, pid, appPid);
                         pid = 0;
                     } else {
                         pid = pid * 10 + (b - '0');
@@ -179,20 +194,29 @@ public final class PhantomProcessList {
                 }
             } while (true);
             if (pid != 0) {
-                addChildPidLocked(app, pid);
+                addChildPidLocked(app, pid, appPid);
             }
             // rewind the fd for the next read
             input.skip(-totalRead);
         } catch (IOException e) {
             Slog.e(TAG, "Error in reading cgroup procs from " + app, e);
             IoUtils.closeQuietly(input);
-            mCgroupProcsFds.delete(app.pid);
+            mCgroupProcsFds.delete(appPid);
+        }
+    }
+
+    private void probeCgroupVersion() {
+        for (int i = CGROUP_PATH_PREFIXES.length - 1; i >= 0; i--) {
+            if ((new File(CGROUP_PATH_PREFIXES[i] + Process.SYSTEM_UID)).exists()) {
+                mCgroupVersion = i;
+                break;
+            }
         }
     }
 
     @VisibleForTesting
-    static String getCgroupFilePath(int uid, int pid) {
-        return "/acct/uid_" + uid + "/pid_" + pid + "/cgroup.procs";
+    String getCgroupFilePath(int uid, int pid) {
+        return CGROUP_PATH_PREFIXES[mCgroupVersion] + uid + CGROUP_PID_PREFIX + pid + CGROUP_PROCS;
     }
 
     static String getProcessName(int pid) {
@@ -209,8 +233,8 @@ public final class PhantomProcessList {
     }
 
     @GuardedBy({"mLock", "mService.mPidsSelfLocked"})
-    private void addChildPidLocked(final ProcessRecord app, final int pid) {
-        if (app.pid != pid) {
+    private void addChildPidLocked(final ProcessRecord app, final int pid, final int appPid) {
+        if (appPid != pid) {
             // That's something else...
             final ProcessRecord r = mService.mPidsSelfLocked.get(pid);
             if (r != null) {
@@ -305,15 +329,16 @@ public final class PhantomProcessList {
         if (r != null) {
             // It's a phantom process, bookkeep it
             try {
+                final int appPid = r.getPid();
                 final PhantomProcessRecord proc = new PhantomProcessRecord(
-                        processName, uid, pid, r.pid, mService,
+                        processName, uid, pid, appPid, mService,
                         this::onPhantomProcessKilledLocked);
                 proc.mUpdateSeq = mUpdateSeq;
                 mPhantomProcesses.put(pid, proc);
-                SparseArray<PhantomProcessRecord> array = mAppPhantomProcessMap.get(r.pid);
+                SparseArray<PhantomProcessRecord> array = mAppPhantomProcessMap.get(appPid);
                 if (array == null) {
                     array = new SparseArray<>();
-                    mAppPhantomProcessMap.put(r.pid, array);
+                    mAppPhantomProcessMap.put(appPid, array);
                 }
                 array.put(pid, proc);
                 if (proc.mPidFd != null) {
@@ -391,40 +416,42 @@ public final class PhantomProcessList {
      * order of the oom adjs of their parent process.
      */
     void trimPhantomProcessesIfNecessary() {
-        synchronized (mLock) {
-            mTrimPhantomProcessScheduled = false;
-            if (mService.mConstants.MAX_PHANTOM_PROCESSES < mPhantomProcesses.size()) {
-                for (int i = mPhantomProcesses.size() - 1; i >= 0; i--) {
-                    mTempPhantomProcesses.add(mPhantomProcesses.valueAt(i));
+        synchronized (mService.mProcLock) {
+            synchronized (mLock) {
+                mTrimPhantomProcessScheduled = false;
+                if (mService.mConstants.MAX_PHANTOM_PROCESSES < mPhantomProcesses.size()) {
+                    for (int i = mPhantomProcesses.size() - 1; i >= 0; i--) {
+                        mTempPhantomProcesses.add(mPhantomProcesses.valueAt(i));
+                    }
+                    synchronized (mService.mPidsSelfLocked) {
+                        Collections.sort(mTempPhantomProcesses, (a, b) -> {
+                            final ProcessRecord ra = mService.mPidsSelfLocked.get(a.mPpid);
+                            if (ra == null) {
+                                // parent is gone, this process should have been killed too
+                                return 1;
+                            }
+                            final ProcessRecord rb = mService.mPidsSelfLocked.get(b.mPpid);
+                            if (rb == null) {
+                                // parent is gone, this process should have been killed too
+                                return -1;
+                            }
+                            if (ra.mState.getCurAdj() != rb.mState.getCurAdj()) {
+                                return ra.mState.getCurAdj() - rb.mState.getCurAdj();
+                            }
+                            if (a.mKnownSince != b.mKnownSince) {
+                                // In case of identical oom adj, younger one first
+                                return a.mKnownSince < b.mKnownSince ? 1 : -1;
+                            }
+                            return 0;
+                        });
+                    }
+                    for (int i = mTempPhantomProcesses.size() - 1;
+                            i >= mService.mConstants.MAX_PHANTOM_PROCESSES; i--) {
+                        final PhantomProcessRecord proc = mTempPhantomProcesses.get(i);
+                        proc.killLocked("Trimming phantom processes", true);
+                    }
+                    mTempPhantomProcesses.clear();
                 }
-                synchronized (mService.mPidsSelfLocked) {
-                    Collections.sort(mTempPhantomProcesses, (a, b) -> {
-                        final ProcessRecord ra = mService.mPidsSelfLocked.get(a.mPpid);
-                        if (ra == null) {
-                            // parent is gone, this process should have been killed too
-                            return 1;
-                        }
-                        final ProcessRecord rb = mService.mPidsSelfLocked.get(b.mPpid);
-                        if (rb == null) {
-                            // parent is gone, this process should have been killed too
-                            return -1;
-                        }
-                        if (ra.curAdj != rb.curAdj) {
-                            return ra.curAdj - rb.curAdj;
-                        }
-                        if (a.mKnownSince != b.mKnownSince) {
-                            // In case of identical oom adj, younger one first
-                            return a.mKnownSince < b.mKnownSince ? 1 : -1;
-                        }
-                        return 0;
-                    });
-                }
-                for (int i = mTempPhantomProcesses.size() - 1;
-                        i >= mService.mConstants.MAX_PHANTOM_PROCESSES; i--) {
-                    final PhantomProcessRecord proc = mTempPhantomProcesses.get(i);
-                    proc.killLocked("Trimming phantom processes", true);
-                }
-                mTempPhantomProcesses.clear();
             }
         }
     }
@@ -475,7 +502,7 @@ public final class PhantomProcessList {
             }
         }
         // Lastly, kill the parent process too
-        app.kill("Caused by child process: " + msg, reasonCode, subReason, true);
+        app.killLocked("Caused by child process: " + msg, reasonCode, subReason, true);
     }
 
     /**
@@ -485,7 +512,7 @@ public final class PhantomProcessList {
     void forEachPhantomProcessOfApp(final ProcessRecord app,
             final Function<PhantomProcessRecord, Boolean> callback) {
         synchronized (mLock) {
-            int index = mAppPhantomProcessMap.indexOfKey(app.pid);
+            int index = mAppPhantomProcessMap.indexOfKey(app.getPid());
             if (index >= 0) {
                 final SparseArray<PhantomProcessRecord> array =
                         mAppPhantomProcessMap.valueAt(index);

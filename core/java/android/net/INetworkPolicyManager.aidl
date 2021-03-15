@@ -81,4 +81,6 @@ interface INetworkPolicyManager {
     void factoryReset(String subscriber);
 
     boolean isUidNetworkingBlocked(int uid, boolean meteredNetwork);
+    boolean isUidRestrictedOnMeteredNetworks(int uid);
+    boolean checkUidNetworkingBlocked(int uid, int uidRules, boolean isNetworkMetered, boolean isBackgroundRestricted);
 }

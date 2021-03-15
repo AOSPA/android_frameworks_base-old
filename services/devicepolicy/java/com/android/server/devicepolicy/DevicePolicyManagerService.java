@@ -24,6 +24,7 @@ import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.admin.DeviceAdminReceiver.EXTRA_TRANSFER_OWNERSHIP_ADMIN_EXTRAS_BUNDLE;
 import static android.app.admin.DevicePolicyManager.ACTION_CHECK_POLICY_COMPLIANCE;
+import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_DEVICE;
 import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE;
 import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_USER;
 import static android.app.admin.DevicePolicyManager.CODE_ACCOUNTS_NOT_EMPTY;
@@ -34,9 +35,8 @@ import static android.app.admin.DevicePolicyManager.CODE_HAS_PAIRED;
 import static android.app.admin.DevicePolicyManager.CODE_MANAGED_USERS_NOT_SUPPORTED;
 import static android.app.admin.DevicePolicyManager.CODE_NONSYSTEM_USER_EXISTS;
 import static android.app.admin.DevicePolicyManager.CODE_NOT_SYSTEM_USER;
-import static android.app.admin.DevicePolicyManager.CODE_NOT_SYSTEM_USER_SPLIT;
 import static android.app.admin.DevicePolicyManager.CODE_OK;
-import static android.app.admin.DevicePolicyManager.CODE_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER;
+import static android.app.admin.DevicePolicyManager.CODE_PROVISIONING_NOT_ALLOWED_FOR_NON_DEVELOPER_USERS;
 import static android.app.admin.DevicePolicyManager.CODE_SYSTEM_USER;
 import static android.app.admin.DevicePolicyManager.CODE_USER_HAS_PROFILE_OWNER;
 import static android.app.admin.DevicePolicyManager.CODE_USER_NOT_RUNNING;
@@ -88,8 +88,11 @@ import static android.app.admin.DevicePolicyManager.PROFILE_KEYGUARD_FEATURES_AF
 import static android.app.admin.DevicePolicyManager.PROVISIONING_RESULT_ADMIN_PACKAGE_INSTALLATION_FAILED;
 import static android.app.admin.DevicePolicyManager.PROVISIONING_RESULT_PRE_CONDITION_FAILED;
 import static android.app.admin.DevicePolicyManager.PROVISIONING_RESULT_PROFILE_CREATION_FAILED;
+import static android.app.admin.DevicePolicyManager.PROVISIONING_RESULT_REMOVE_NON_REQUIRED_APPS_FAILED;
 import static android.app.admin.DevicePolicyManager.PROVISIONING_RESULT_SETTING_PROFILE_OWNER_FAILED;
+import static android.app.admin.DevicePolicyManager.PROVISIONING_RESULT_SET_DEVICE_OWNER_FAILED;
 import static android.app.admin.DevicePolicyManager.PROVISIONING_RESULT_STARTING_PROFILE_FAILED;
+import static android.app.admin.DevicePolicyManager.UNSAFE_OPERATION_REASON_NONE;
 import static android.app.admin.DevicePolicyManager.WIPE_EUICC;
 import static android.app.admin.DevicePolicyManager.WIPE_EXTERNAL_STORAGE;
 import static android.app.admin.DevicePolicyManager.WIPE_RESET_PROTECTION_DATA;
@@ -126,6 +129,7 @@ import android.accounts.AccountManager;
 import android.accounts.AccountManagerFuture;
 import android.accounts.AuthenticatorException;
 import android.accounts.OperationCanceledException;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -155,10 +159,12 @@ import android.app.admin.DevicePolicyManager;
 import android.app.admin.DevicePolicyManager.DevicePolicyOperation;
 import android.app.admin.DevicePolicyManager.PasswordComplexity;
 import android.app.admin.DevicePolicyManager.PersonalAppsSuspensionReason;
+import android.app.admin.DevicePolicyManager.UnsafeOperationReason;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.app.admin.DevicePolicySafetyChecker;
 import android.app.admin.DeviceStateCache;
 import android.app.admin.FactoryResetProtectionPolicy;
+import android.app.admin.FullyManagedDeviceProvisioningParams;
 import android.app.admin.ManagedProfileProvisioningParams;
 import android.app.admin.NetworkEvent;
 import android.app.admin.PasswordMetrics;
@@ -281,6 +287,7 @@ import android.view.inputmethod.InputMethodInfo;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.LocalePicker;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.net.NetworkUtilsInternal;
@@ -306,6 +313,7 @@ import com.android.server.PersistentDataBlockManagerInternal;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.SystemService;
 import com.android.server.devicepolicy.ActiveAdmin.TrustAgentInfo;
+import com.android.server.devicepolicy.Owners.OwnerDto;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.net.NetworkPolicyManagerInternal;
 import com.android.server.pm.RestrictionsSet;
@@ -339,6 +347,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -394,6 +403,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     private static final String NOT_CREDENTIAL_MANAGEMENT_APP = "notCredentialManagementApp";
 
     private static final String NULL_STRING_ARRAY = "nullStringArray";
+
+    private static final String ALLOW_USER_PROVISIONING_KEY = "ro.config.allowuserprovisioning";
 
     // Comprehensive list of delegations.
     private static final String DELEGATIONS[] = {
@@ -550,6 +561,21 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @ChangeId
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
     private static final long USE_SET_LOCATION_ENABLED = 117835097L;
+
+    // Only add to the end of the list. Do not change or rearrange these values, that will break
+    // historical data. Do not use negative numbers or zero, logger only handles positive
+    // integers.
+    private static final int COPY_ACCOUNT_SUCCEEDED = 1;
+    private static final int COPY_ACCOUNT_FAILED = 2;
+    private static final int COPY_ACCOUNT_TIMED_OUT = 3;
+    private static final int COPY_ACCOUNT_EXCEPTION = 4;
+
+    @IntDef({
+            COPY_ACCOUNT_SUCCEEDED,
+            COPY_ACCOUNT_FAILED,
+            COPY_ACCOUNT_TIMED_OUT,
+            COPY_ACCOUNT_EXCEPTION})
+    private @interface CopyAccountStatus {}
 
     /**
      * Admin apps targeting Android S+ may not use
@@ -885,12 +911,20 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     };
 
     protected static class RestrictionsListener implements UserRestrictionsListener {
-        private Context mContext;
+        private final Context mContext;
+        private final UserManagerInternal mUserManagerInternal;
+        private final DevicePolicyManagerService mDpms;
 
-        public RestrictionsListener(Context context) {
+        public RestrictionsListener(
+                Context context,
+                UserManagerInternal userManagerInternal,
+                DevicePolicyManagerService dpms) {
             mContext = context;
+            mUserManagerInternal = userManagerInternal;
+            mDpms = dpms;
         }
 
+        @Override
         public void onUserRestrictionsChanged(int userId, Bundle newRestrictions,
                 Bundle prevRestrictions) {
             final boolean newlyDisallowed =
@@ -900,13 +934,19 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             final boolean restrictionChanged = (newlyDisallowed != previouslyDisallowed);
 
             if (restrictionChanged) {
-                // Notify ManagedProvisioning to update the built-in cross profile intent filters.
-                Intent intent = new Intent(
-                        DevicePolicyManager.ACTION_DATA_SHARING_RESTRICTION_CHANGED);
-                intent.setPackage(getManagedProvisioningPackage(mContext));
-                intent.putExtra(Intent.EXTRA_USER_ID, userId);
-                intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-                mContext.sendBroadcastAsUser(intent, UserHandle.SYSTEM);
+                final int parentId = mUserManagerInternal.getProfileParentId(userId);
+                if (parentId == userId) {
+                    return;
+                }
+
+                // Always reset filters on the parent user, which handles cross profile intent
+                // filters between the parent and its profiles.
+                Slog.i(LOG_TAG, "Resetting cross-profile intent filters on restriction "
+                        + "change");
+                mDpms.resetDefaultCrossProfileIntentFilters(parentId);
+                mContext.sendBroadcastAsUser(new Intent(
+                                DevicePolicyManager.ACTION_DATA_SHARING_RESTRICTION_APPLIED),
+                        UserHandle.of(userId));
             }
         }
     }
@@ -1060,30 +1100,51 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      * @throws UnsafeStateException if it's not safe to execute the operation.
      */
     private void checkCanExecuteOrThrowUnsafe(@DevicePolicyOperation int operation) {
-        if (!canExecute(operation)) {
-            if (mSafetyChecker == null) {
-                // Happens on CTS after it's set just once (by OneTimeSafetyChecker)
-                throw new UnsafeStateException(operation);
-            }
-            // Let mSafetyChecker customize it (for example, by explaining how to retry)
-            throw mSafetyChecker.newUnsafeStateException(operation);
+        int reason = getUnsafeOperationReason(operation);
+        if (reason == UNSAFE_OPERATION_REASON_NONE) return;
+
+        if (mSafetyChecker == null) {
+            // Happens on CTS after it's set just once (by OneTimeSafetyChecker)
+            throw new UnsafeStateException(operation, reason);
         }
+        // Let mSafetyChecker customize it (for example, by explaining how to retry)
+        throw mSafetyChecker.newUnsafeStateException(operation, reason);
     }
 
     /**
-     * Returns whether it's safe to execute the given {@code operation}.
+     * Returns whether it's safe to execute the given {@code operation}, and why.
      */
-    boolean canExecute(@DevicePolicyOperation int operation) {
-        return mSafetyChecker == null || mSafetyChecker.isDevicePolicyOperationSafe(operation);
+    @UnsafeOperationReason
+    int getUnsafeOperationReason(@DevicePolicyOperation int operation) {
+        return mSafetyChecker == null ? UNSAFE_OPERATION_REASON_NONE
+                : mSafetyChecker.getUnsafeOperationReason(operation);
     }
 
     @Override
-    public void setNextOperationSafety(@DevicePolicyOperation int operation, boolean safe) {
+    public void setNextOperationSafety(@DevicePolicyOperation int operation,
+            @UnsafeOperationReason int reason) {
         Preconditions.checkCallAuthorization(
                 hasCallingOrSelfPermission(permission.MANAGE_DEVICE_ADMINS));
-        Slog.i(LOG_TAG, String.format("setNextOperationSafety(%s, %b)",
-                DevicePolicyManager.operationToString(operation), safe));
-        mSafetyChecker = new OneTimeSafetyChecker(this, operation, safe);
+        Slog.i(LOG_TAG, String.format("setNextOperationSafety(%s, %s)",
+                DevicePolicyManager.operationToString(operation),
+                DevicePolicyManager.unsafeOperationReasonToString(reason)));
+        mSafetyChecker = new OneTimeSafetyChecker(this, operation, reason);
+    }
+
+    // Used by DevicePolicyManagerServiceShellCommand
+    List<OwnerDto> listAllOwners() {
+        Preconditions.checkCallAuthorization(
+                hasCallingOrSelfPermission(permission.MANAGE_DEVICE_ADMINS));
+
+        List<OwnerDto> owners = mOwners.listAllOwners();
+        synchronized (getLockObject()) {
+            for (int i = 0; i < owners.size(); i++) {
+                OwnerDto owner = owners.get(i);
+                owner.isAffiliated = isUserAffiliatedWithDeviceLocked(owner.userId);
+            }
+        }
+
+        return owners;
     }
 
     /**
@@ -1371,11 +1432,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             SystemProperties.set(key, value);
         }
 
-        // TODO (b/137101239): clean up split system user codes
-        boolean userManagerIsSplitSystemUser() {
-            return UserManager.isSplitSystemUser();
-        }
-
         boolean userManagerIsHeadlessSystemUserMode() {
             return UserManager.isHeadlessSystemUserMode();
         }
@@ -1596,7 +1652,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         mSetupContentObserver = new SetupContentObserver(mHandler);
 
-        mUserManagerInternal.addUserRestrictionsListener(new RestrictionsListener(mContext));
+        mUserManagerInternal.addUserRestrictionsListener(
+                new RestrictionsListener(mContext, mUserManagerInternal, this));
         mUserManagerInternal.addUserLifecycleListener(new UserLifecycleListener());
 
         loadOwners();
@@ -2933,6 +2990,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         // reading the value during user switch, due to onStartUser() being asynchronous.
         updatePasswordQualityCacheForUserGroup(
                 userId == UserHandle.USER_SYSTEM ? UserHandle.USER_ALL : userId);
+        updatePermissionPolicyCache(userId);
+        updateAdminCanGrantSensorsPermissionCache(userId);
 
         startOwnerService(userId, "start-user");
     }
@@ -7395,48 +7454,18 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         return mInjector.settingsGlobalGetInt(Global.AUTO_TIME_ZONE, 0) > 0;
     }
 
+    // TODO (b/137101239): remove this method in follow-up CL
+    // since it's only used for split system user.
     @Override
     public void setForceEphemeralUsers(ComponentName who, boolean forceEphemeralUsers) {
-        if (!mHasFeature) {
-            return;
-        }
-        Objects.requireNonNull(who, "ComponentName is null");
-        final CallerIdentity caller = getCallerIdentity(who);
-        Preconditions.checkCallAuthorization(isDeviceOwner(caller));
-
-        // Allow setting this policy to true only if there is a split system user.
-        if (forceEphemeralUsers && !mInjector.userManagerIsSplitSystemUser()) {
-            throw new UnsupportedOperationException(
-                    "Cannot force ephemeral users on systems without split system user.");
-        }
-        boolean removeAllUsers = false;
-        synchronized (getLockObject()) {
-            final ActiveAdmin deviceOwner = getDeviceOwnerAdminLocked();
-            if (deviceOwner.forceEphemeralUsers != forceEphemeralUsers) {
-                deviceOwner.forceEphemeralUsers = forceEphemeralUsers;
-                saveSettingsLocked(caller.getUserId());
-                mUserManagerInternal.setForceEphemeralUsers(forceEphemeralUsers);
-                removeAllUsers = forceEphemeralUsers;
-            }
-        }
-        if (removeAllUsers) {
-            mInjector.binderWithCleanCallingIdentity(() -> mUserManagerInternal.removeAllUsers());
-        }
+        throw new UnsupportedOperationException("This method was used by split system user only.");
     }
 
+    // TODO (b/137101239): remove this method in follow-up CL
+    // since it's only used for split system user.
     @Override
     public boolean getForceEphemeralUsers(ComponentName who) {
-        if (!mHasFeature) {
-            return false;
-        }
-        Objects.requireNonNull(who, "ComponentName is null");
-        final CallerIdentity caller = getCallerIdentity(who);
-        Preconditions.checkCallAuthorization(isDeviceOwner(caller));
-
-        synchronized (getLockObject()) {
-            final ActiveAdmin deviceOwner = getDeviceOwnerAdminLocked();
-            return deviceOwner.forceEphemeralUsers;
-        }
+        throw new UnsupportedOperationException("This method was used by split system user only.");
     }
 
     @Override
@@ -8369,7 +8398,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public boolean hasUserSetupCompleted() {
-        return hasUserSetupCompleted(UserHandle.getCallingUserId());
+        return hasUserSetupCompleted(mInjector.userHandleGetCallingUserId());
     }
 
     // This checks only if the Setup Wizard has run.  Since Wear devices pair before
@@ -12489,11 +12518,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 || (caller.hasPackage() && isCallerDelegate(caller, DELEGATION_PERMISSION_GRANT)));
         checkCanExecuteOrThrowUnsafe(DevicePolicyManager.OPERATION_SET_PERMISSION_POLICY);
 
+        final int forUser = caller.getUserId();
         synchronized (getLockObject()) {
-            DevicePolicyData userPolicy = getUserData(caller.getUserId());
+            DevicePolicyData userPolicy = getUserData(forUser);
             if (userPolicy.mPermissionPolicy != policy) {
                 userPolicy.mPermissionPolicy = policy;
-                saveSettingsLocked(caller.getUserId());
+                mPolicyCache.setPermissionPolicy(forUser, policy);
+                saveSettingsLocked(forUser);
             }
         }
         DevicePolicyEventLogger
@@ -12504,13 +12535,17 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 .write();
     }
 
+    private void updatePermissionPolicyCache(int userId) {
+        synchronized (getLockObject()) {
+            DevicePolicyData userPolicy = getUserData(userId);
+            mPolicyCache.setPermissionPolicy(userId, userPolicy.mPermissionPolicy);
+        }
+    }
+
     @Override
     public int getPermissionPolicy(ComponentName admin) throws RemoteException {
         int userId = UserHandle.getCallingUserId();
-        synchronized (getLockObject()) {
-            DevicePolicyData userPolicy = getUserData(userId);
-            return userPolicy.mPermissionPolicy;
-        }
+        return mPolicyCache.getPermissionPolicy(userId);
     }
 
     @Override
@@ -12685,6 +12720,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             logMissingFeatureAction("Cannot check provisioning for action " + action);
             return CODE_DEVICE_ADMIN_NOT_SUPPORTED;
         }
+        if (!isProvisioningAllowed()) {
+            return CODE_PROVISIONING_NOT_ALLOWED_FOR_NON_DEVELOPER_USERS;
+        }
         final int code = checkProvisioningPreConditionSkipPermissionNoLog(action, packageName);
         if (code != CODE_OK) {
             Slog.d(LOG_TAG, "checkProvisioningPreCondition(" + action + ", " + packageName
@@ -12692,6 +12730,23 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     + computeProvisioningErrorString(code, mInjector.userHandleGetCallingUserId()));
         }
         return code;
+    }
+
+    /**
+     *  Checks if provisioning is allowed during regular usage (non-developer/CTS). This could
+     *  return {@code false} if the device has an overlaid config value set to false. If not set,
+     *  the default is true.
+     */
+    private boolean isProvisioningAllowed() {
+        boolean isDeveloperMode = isDeveloperMode(mContext);
+        boolean isProvisioningAllowedForNormalUsers = SystemProperties.getBoolean(
+                ALLOW_USER_PROVISIONING_KEY, /* defValue= */ true);
+
+        return isDeveloperMode || isProvisioningAllowedForNormalUsers;
+    }
+
+    private static boolean isDeveloperMode(Context context) {
+        return Global.getInt(context.getContentResolver(), Global.ADB_ENABLED, 0) > 0;
     }
 
     private int checkProvisioningPreConditionSkipPermissionNoLog(String action,
@@ -12704,13 +12759,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 case DevicePolicyManager.ACTION_PROVISION_MANAGED_DEVICE:
                 case DevicePolicyManager.ACTION_PROVISION_FINANCED_DEVICE:
                     return checkDeviceOwnerProvisioningPreCondition(callingUserId);
-                // TODO (b/137101239): clean up split system user codes
-                //  ACTION_PROVISION_MANAGED_USER and ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE
-                //  only supported on split-user systems.
-                case DevicePolicyManager.ACTION_PROVISION_MANAGED_USER:
-                    return checkManagedUserProvisioningPreCondition(callingUserId);
-                case DevicePolicyManager.ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE:
-                    return checkManagedShareableDeviceProvisioningPreCondition(callingUserId);
             }
         }
         throw new IllegalArgumentException("Unknown provisioning action " + action);
@@ -12746,14 +12794,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
         }
 
-        // TODO (b/137101239): clean up split system user codes
         if (isAdb) {
             // If shell command runs after user setup completed check device status. Otherwise, OK.
             if (mIsWatch || hasUserSetupCompleted(UserHandle.USER_SYSTEM)) {
                 // In non-headless system user mode, DO can be setup only if
                 // there's no non-system user
                 if (!mInjector.userManagerIsHeadlessSystemUserMode()
-                        && !mInjector.userManagerIsSplitSystemUser()
                         && mUserManager.getUserCount() > 1) {
                     return CODE_NONSYSTEM_USER_EXISTS;
                 }
@@ -12772,16 +12818,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
             return CODE_OK;
         } else {
-            if (!mInjector.userManagerIsSplitSystemUser()) {
-                // In non-split user mode, DO has to be user 0
-                if (deviceOwnerUserId != UserHandle.USER_SYSTEM) {
-                    return CODE_NOT_SYSTEM_USER;
-                }
-                // Only provision DO before setup wizard completes
-                // TODO (b/171423186): implement deferred DO setup for headless system user mode
-                if (hasUserSetupCompleted(UserHandle.USER_SYSTEM)) {
-                    return CODE_USER_SETUP_COMPLETED;
-                }
+            // DO has to be user 0
+            if (deviceOwnerUserId != UserHandle.USER_SYSTEM) {
+                return CODE_NOT_SYSTEM_USER;
+            }
+            // Only provision DO before setup wizard completes
+            if (hasUserSetupCompleted(UserHandle.USER_SYSTEM)) {
+                return CODE_USER_SETUP_COMPLETED;
             }
             return CODE_OK;
         }
@@ -12802,16 +12845,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
-    // TODO (b/137101239): clean up split system user codes
     private int checkManagedProfileProvisioningPreCondition(String packageName,
             @UserIdInt int callingUserId) {
         if (!hasFeatureManagedUsers()) {
             return CODE_MANAGED_USERS_NOT_SUPPORTED;
-        }
-        if (callingUserId == UserHandle.USER_SYSTEM
-                && mInjector.userManagerIsSplitSystemUser()) {
-            // Managed-profiles cannot be setup on the system user.
-            return CODE_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER;
         }
         if (getProfileOwnerAsUser(callingUserId) != null) {
             // Managed user cannot have a managed profile.
@@ -12850,14 +12887,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         callingUserHandle, hasDeviceOwner));
                 return CODE_CANNOT_ADD_MANAGED_PROFILE;
             }
-            // If there's a restriction on removing the managed profile then we have to take it
-            // into account when checking whether more profiles can be added.
-            boolean canRemoveProfile =
-                    !mUserManager.hasUserRestriction(UserManager.DISALLOW_REMOVE_MANAGED_PROFILE,
-                    callingUserHandle);
-            if (!mUserManager.canAddMoreManagedProfiles(callingUserId, canRemoveProfile)) {
-                Slog.i(LOG_TAG, String.format(
-                        "Cannot add more profiles: Can remove current? %b", canRemoveProfile));
+
+            // Bail out if we are trying to provision a work profile but one already exists.
+            if (!mUserManager.canAddMoreManagedProfiles(
+                    callingUserId, /* allowedToRemoveOne= */ false)) {
+                Slog.i(LOG_TAG, String.format("A work profile already exists."));
                 return CODE_CANNOT_ADD_MANAGED_PROFILE;
             }
         } finally {
@@ -12889,37 +12923,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
         }
         return null;
-    }
-
-    // TODO (b/137101239): clean up split system user codes
-    private int checkManagedUserProvisioningPreCondition(int callingUserId) {
-        if (!hasFeatureManagedUsers()) {
-            return CODE_MANAGED_USERS_NOT_SUPPORTED;
-        }
-        if (!mInjector.userManagerIsSplitSystemUser()) {
-            // ACTION_PROVISION_MANAGED_USER only supported on split-user systems.
-            return CODE_NOT_SYSTEM_USER_SPLIT;
-        }
-        if (callingUserId == UserHandle.USER_SYSTEM) {
-            // System user cannot be a managed user.
-            return CODE_SYSTEM_USER;
-        }
-        if (hasUserSetupCompleted(callingUserId)) {
-            return CODE_USER_SETUP_COMPLETED;
-        }
-        if (mIsWatch && hasPaired(UserHandle.USER_SYSTEM)) {
-            return CODE_HAS_PAIRED;
-        }
-        return CODE_OK;
-    }
-
-    // TODO (b/137101239): clean up split system user codes
-    private int checkManagedShareableDeviceProvisioningPreCondition(int callingUserId) {
-        if (!mInjector.userManagerIsSplitSystemUser()) {
-            // ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE only supported on split-user systems.
-            return CODE_NOT_SYSTEM_USER_SPLIT;
-        }
-        return checkDeviceOwnerProvisioningPreCondition(callingUserId);
     }
 
     private boolean hasFeatureManagedUsers() {
@@ -13481,13 +13484,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         if (!mOwners.hasDeviceOwner()) {
             return false;
         }
-        if (userId == mOwners.getDeviceOwnerUserId()) {
-            // The user that the DO is installed on is always affiliated with the device.
-            return true;
-        }
         if (userId == UserHandle.USER_SYSTEM) {
             // The system user is always affiliated in a DO device,
             // even if in headless system user mode.
+            return true;
+        }
+        if (userId == mOwners.getDeviceOwnerUserId()) {
+            // The user that the DO is installed on is always affiliated with the device.
             return true;
         }
 
@@ -15277,7 +15280,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     private List<ActiveAdmin> getProfileOwnerAdminsForCurrentProfileGroup() {
         synchronized (getLockObject()) {
             final List<ActiveAdmin> admins = new ArrayList<>();
-            int[] users = mUserManager.getProfileIdsWithDisabled(UserHandle.getCallingUserId());
+            int[] users = mUserManager.getProfileIdsWithDisabled(
+                    mInjector.userHandleGetCallingUserId());
             for (int i = 0; i < users.length; i++) {
                 final ComponentName componentName = getProfileOwnerAsUser(users[i]);
                 if (componentName != null) {
@@ -15979,11 +15983,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public UserHandle createAndProvisionManagedProfile(
-            @NonNull ManagedProfileProvisioningParams provisioningParams) {
+            @NonNull ManagedProfileProvisioningParams provisioningParams,
+            @NonNull String callerPackage) {
         final ComponentName admin = provisioningParams.getProfileAdminComponentName();
         Objects.requireNonNull(admin, "admin is null");
 
-        final CallerIdentity caller = getCallerIdentity();
+        final CallerIdentity caller = getCallerIdentity(callerPackage);
         Preconditions.checkCallAuthorization(
                 hasCallingOrSelfPermission(permission.MANAGE_PROFILE_AND_DEVICE_OWNERS));
 
@@ -15998,6 +16003,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         "Provisioning preconditions failed with result: " + result);
             }
 
+            final long startTime = SystemClock.elapsedRealtime();
             final Set<String> nonRequiredApps = provisioningParams.isLeaveAllSystemAppsEnabled()
                     ? Collections.emptySet()
                     : mOverlayPackagesProvider.getNonRequiredApps(
@@ -16014,8 +16020,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         "Error creating profile, createProfileForUserEvenWhenDisallowed "
                                 + "returned null.");
             }
-
             resetInteractAcrossProfilesAppOps();
+            logEventDuration(
+                    DevicePolicyEnums.PLATFORM_PROVISIONING_CREATE_PROFILE_MS,
+                    startTime,
+                    callerPackage);
+
             installExistingAdminPackage(userInfo.id, admin.getPackageName());
             if (!enableAdminAndSetProfileOwner(
                     userInfo.id, caller.getUserId(), admin, provisioningParams.getOwnerName())) {
@@ -16025,28 +16035,22 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
             setUserSetupComplete(userInfo.id);
 
-            startUser(userInfo.id);
+            startUser(userInfo.id, callerPackage);
             maybeMigrateAccount(
                     userInfo.id, caller.getUserId(), provisioningParams.getAccountToMigrate(),
-                    provisioningParams.isKeepAccountMigrated());
+                    provisioningParams.isKeepAccountMigrated(), callerPackage);
 
             if (provisioningParams.isOrganizationOwnedProvisioning()) {
-                markIsProfileOwnerOnOrganizationOwnedDevice(admin, userInfo.id);
-                restrictRemovalOfManagedProfile(admin, userInfo.id);
+                setProfileOwnerOnOrgOwnedDeviceState(admin, userInfo.id, caller.getUserId());
             }
-
-            final Intent intent = new Intent(DevicePolicyManager.ACTION_MANAGED_PROFILE_CREATED)
-                    .putExtra(Intent.EXTRA_USER_HANDLE, userInfo.id)
-                    .putExtra(
-                            DevicePolicyManager.EXTRA_PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED,
-                            provisioningParams.isLeaveAllSystemAppsEnabled())
-                    .setPackage(getManagedProvisioningPackage(mContext))
-                    .addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-            mContext.sendBroadcastAsUser(intent, UserHandle.SYSTEM);
 
             return userInfo.getUserHandle();
         } catch (Exception e) {
-            // in case of any errors during provisioning, remove the newly created profile.
+            DevicePolicyEventLogger
+                    .createEvent(DevicePolicyEnums.PLATFORM_PROVISIONING_ERROR)
+                    .setStrings(callerPackage)
+                    .write();
+            // In case of any errors during provisioning, remove the newly created profile.
             if (userInfo != null) {
                 mUserManager.removeUserEvenWhenDisallowed(userInfo.id);
             }
@@ -16115,10 +16119,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     private boolean enableAdminAndSetProfileOwner(
             @UserIdInt int userId, @UserIdInt int callingUserId, ComponentName adminComponent,
             String ownerName) {
+        enableAndSetActiveAdmin(userId, callingUserId, adminComponent);
+        return setProfileOwner(adminComponent, ownerName, userId);
+    }
+
+    private void enableAndSetActiveAdmin(
+            @UserIdInt int userId, @UserIdInt int callingUserId, ComponentName adminComponent) {
         final String adminPackage = adminComponent.getPackageName();
         enablePackage(adminPackage, callingUserId);
         setActiveAdmin(adminComponent, /* refreshing= */ true, userId);
-        return setProfileOwner(adminComponent, ownerName, userId);
     }
 
     private void enablePackage(String packageName, @UserIdInt int userId) {
@@ -16146,7 +16155,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 mContext.getContentResolver(), USER_SETUP_COMPLETE, 1, userId);
     }
 
-    private void startUser(@UserIdInt int userId) throws IllegalStateException {
+    private void startUser(@UserIdInt int userId, String callerPackage)
+            throws IllegalStateException {
+        final long startTime = SystemClock.elapsedRealtime();
         final UserUnlockedBlockingReceiver unlockedReceiver = new UserUnlockedBlockingReceiver(
                 userId);
         mContext.registerReceiverAsUser(
@@ -16165,6 +16176,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 throw new ServiceSpecificException(PROVISIONING_RESULT_STARTING_PROFILE_FAILED,
                         String.format("Timeout whilst waiting for unlock of user %d.", userId));
             }
+            logEventDuration(
+                    DevicePolicyEnums.PLATFORM_PROVISIONING_START_PROFILE_MS,
+                    startTime,
+                    callerPackage);
         } catch (RemoteException e) {
             // Shouldn't happen.
         } finally {
@@ -16172,9 +16187,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
-    void maybeMigrateAccount(
+    private void maybeMigrateAccount(
             @UserIdInt int targetUserId, @UserIdInt int sourceUserId, Account accountToMigrate,
-            boolean keepAccountMigrated) {
+            boolean keepAccountMigrated, String callerPackage) {
         final UserHandle sourceUser = UserHandle.of(sourceUserId);
         final UserHandle targetUser = UserHandle.of(targetUserId);
         if (accountToMigrate == null) {
@@ -16185,13 +16200,16 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             Slog.w(LOG_TAG, "sourceUser and targetUser are the same, won't migrate account.");
             return;
         }
-        copyAccount(targetUser, sourceUser, accountToMigrate);
+        copyAccount(targetUser, sourceUser, accountToMigrate, callerPackage);
         if (!keepAccountMigrated) {
             removeAccount(accountToMigrate);
         }
     }
 
-    void copyAccount(UserHandle targetUser, UserHandle sourceUser, Account accountToMigrate) {
+    private void copyAccount(
+            UserHandle targetUser, UserHandle sourceUser, Account accountToMigrate,
+            String callerPackage) {
+        final long startTime = SystemClock.elapsedRealtime();
         try {
             final AccountManager accountManager = mContext.getSystemService(AccountManager.class);
             final boolean copySucceeded = accountManager.copyAccountToUser(
@@ -16200,16 +16218,35 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     targetUser,
                     /* callback= */ null, /* handler= */ null)
                     .getResult(60 * 3, TimeUnit.SECONDS);
-            if (!copySucceeded) {
+            if (copySucceeded) {
+                logCopyAccountStatus(COPY_ACCOUNT_SUCCEEDED, callerPackage);
+                logEventDuration(
+                        DevicePolicyEnums.PLATFORM_PROVISIONING_COPY_ACCOUNT_MS,
+                        startTime,
+                        callerPackage);
+            } else {
+                logCopyAccountStatus(COPY_ACCOUNT_FAILED, callerPackage);
                 Slog.e(LOG_TAG, "Failed to copy account to " + targetUser);
             }
-        } catch (OperationCanceledException | AuthenticatorException | IOException e) {
+        } catch (OperationCanceledException e) {
             // Account migration is not considered a critical operation.
+            logCopyAccountStatus(COPY_ACCOUNT_TIMED_OUT, callerPackage);
+            Slog.e(LOG_TAG, "Exception copying account to " + targetUser, e);
+        } catch (AuthenticatorException | IOException e) {
+            logCopyAccountStatus(COPY_ACCOUNT_EXCEPTION, callerPackage);
             Slog.e(LOG_TAG, "Exception copying account to " + targetUser, e);
         }
     }
 
-    void removeAccount(Account account) {
+    private static void logCopyAccountStatus(@CopyAccountStatus int status, String callerPackage) {
+        DevicePolicyEventLogger
+                .createEvent(DevicePolicyEnums.PLATFORM_PROVISIONING_COPY_ACCOUNT_STATUS)
+                .setInt(status)
+                .setStrings(callerPackage)
+                .write();
+    }
+
+    private void removeAccount(Account account) {
         final AccountManager accountManager =
                 mContext.getSystemService(AccountManager.class);
         final AccountManagerFuture<Bundle> bundle = accountManager.removeAccount(account,
@@ -16236,20 +16273,238 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
-    private void markIsProfileOwnerOnOrganizationOwnedDevice(
-            ComponentName admin, @UserIdInt int profileId) {
-        getDpmForProfile(profileId).markProfileOwnerOnOrganizationOwnedDevice(admin);
+    private void setProfileOwnerOnOrgOwnedDeviceState(
+            ComponentName admin, @UserIdInt int profileId, @UserIdInt int parentUserId) {
+        synchronized (getLockObject()) {
+            markProfileOwnerOnOrganizationOwnedDeviceUncheckedLocked(admin, profileId);
+        }
+        restrictRemovalOfManagedProfile(parentUserId);
     }
 
-    private void restrictRemovalOfManagedProfile(
-            ComponentName admin, @UserIdInt int profileId) {
-        getDpmForProfile(profileId).addUserRestriction(
-                admin, UserManager.DISALLOW_REMOVE_MANAGED_PROFILE);
+    private void restrictRemovalOfManagedProfile(@UserIdInt int parentUserId) {
+        final UserHandle parentUserHandle = UserHandle.of(parentUserId);
+        mUserManager.setUserRestriction(
+                UserManager.DISALLOW_REMOVE_MANAGED_PROFILE,
+                /* value= */ true,
+                parentUserHandle);
     }
 
-    private DevicePolicyManager getDpmForProfile(@UserIdInt int profileId) {
-        final Context profileContext = mContext.createContextAsUser(
-                UserHandle.of(profileId), /* flags= */ 0);
-        return profileContext.getSystemService(DevicePolicyManager.class);
+    @Override
+    public void provisionFullyManagedDevice(
+            FullyManagedDeviceProvisioningParams provisioningParams, String callerPackage) {
+        ComponentName deviceAdmin = provisioningParams.getDeviceAdminComponentName();
+
+        Objects.requireNonNull(deviceAdmin, "admin is null.");
+        Objects.requireNonNull(provisioningParams.getOwnerName(), "owner name is null.");
+
+        final CallerIdentity caller = getCallerIdentity();
+        Preconditions.checkCallAuthorization(
+                hasCallingOrSelfPermission(permission.MANAGE_PROFILE_AND_DEVICE_OWNERS));
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            // TODO(b/178187130): This check fails silent provisioning, uncomment once silent
+            //  provisioning is no longer used.
+            if (false) {
+                int result = checkProvisioningPreConditionSkipPermission(
+                        ACTION_PROVISION_MANAGED_DEVICE, deviceAdmin.getPackageName());
+                if (result != CODE_OK) {
+                    throw new ServiceSpecificException(
+                            PROVISIONING_RESULT_PRE_CONDITION_FAILED,
+                            "Provisioning preconditions failed with result: " + result);
+                }
+            }
+
+            setTimeAndTimezone(provisioningParams.getTimeZone(), provisioningParams.getLocalTime());
+            setLocale(provisioningParams.getLocale());
+
+            if (!removeNonRequiredAppsForManagedDevice(
+                    caller.getUserId(),
+                    provisioningParams.isLeaveAllSystemAppsEnabled(),
+                    deviceAdmin)) {
+                throw new ServiceSpecificException(
+                        PROVISIONING_RESULT_REMOVE_NON_REQUIRED_APPS_FAILED,
+                        "PackageManager failed to remove non required apps.");
+            }
+
+            if (!setActiveAdminAndDeviceOwner(
+                    caller.getUserId(), deviceAdmin, provisioningParams.getOwnerName())) {
+                throw new ServiceSpecificException(
+                        PROVISIONING_RESULT_SET_DEVICE_OWNER_FAILED,
+                        "Failed to set device owner.");
+            }
+
+            disallowAddUser();
+            setAdminCanGrantSensorsPermissionForUserUnchecked(caller.getUserId(),
+                    provisioningParams.canDeviceOwnerGrantSensorsPermissions());
+        } catch (Exception e) {
+            DevicePolicyEventLogger
+                    .createEvent(DevicePolicyEnums.PLATFORM_PROVISIONING_ERROR)
+                    .setStrings(callerPackage)
+                    .write();
+            throw e;
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    private void setTimeAndTimezone(String timeZone, long localTime) {
+        try {
+            final AlarmManager alarmManager = mContext.getSystemService(AlarmManager.class);
+            if (timeZone != null) {
+                alarmManager.setTimeZone(timeZone);
+            }
+            if (localTime > 0) {
+                alarmManager.setTime(localTime);
+            }
+        } catch (Exception e) {
+            // Do not stop provisioning and ignore this error.
+            Slog.e(LOG_TAG, "Alarm manager failed to set the system time/timezone.", e);
+        }
+    }
+
+    private void setLocale(Locale locale) {
+        if (locale == null || locale.equals(Locale.getDefault())) {
+            return;
+        }
+        try {
+            // If locale is different from current locale this results in a configuration change,
+            // which will trigger the restarting of the activity.
+            LocalePicker.updateLocale(locale);
+        } catch (Exception e) {
+            // Do not stop provisioning and ignore this error.
+            Slog.e(LOG_TAG, "Failed to set the system locale.", e);
+        }
+    }
+
+    private boolean removeNonRequiredAppsForManagedDevice(
+            int userId, boolean leaveAllSystemAppsEnabled, ComponentName admin) {
+        Set<String> packagesToDelete = leaveAllSystemAppsEnabled
+                ? Collections.emptySet()
+                : mOverlayPackagesProvider.getNonRequiredApps(
+                        admin, userId, ACTION_PROVISION_MANAGED_DEVICE);
+        if (packagesToDelete.isEmpty()) {
+            return true;
+        }
+        NonRequiredPackageDeleteObserver packageDeleteObserver =
+                new NonRequiredPackageDeleteObserver(packagesToDelete.size());
+        for (String packageName : packagesToDelete) {
+            if (isPackageInstalledForUser(packageName, userId)) {
+                Slog.i(LOG_TAG, "Deleting package [" + packageName + "] as user " + userId);
+                mContext.getPackageManager().deletePackageAsUser(
+                        packageName,
+                        packageDeleteObserver,
+                        PackageManager.DELETE_SYSTEM_APP,
+                        userId);
+            }
+        }
+        Slog.i(LOG_TAG, "Waiting for non required apps to be deleted");
+        return packageDeleteObserver.awaitPackagesDeletion();
+    }
+
+    private void disallowAddUser() {
+        if (mInjector.userManagerIsHeadlessSystemUserMode()) {
+            Slog.i(LOG_TAG, "Not setting DISALLOW_ADD_USER on headless system user mode.");
+            return;
+        }
+        for (UserInfo userInfo : mUserManager.getUsers()) {
+            UserHandle userHandle = userInfo.getUserHandle();
+            if (!mUserManager.hasUserRestriction(UserManager.DISALLOW_ADD_USER, userHandle)) {
+                mUserManager.setUserRestriction(
+                        UserManager.DISALLOW_ADD_USER, /* value= */ true, userHandle);
+            }
+        }
+    }
+
+    private boolean setActiveAdminAndDeviceOwner(
+            @UserIdInt int userId, ComponentName adminComponent, String name) {
+        enableAndSetActiveAdmin(userId, userId, adminComponent);
+        // TODO(b/178187130): Directly set DO and remove the check once silent provisioning is no
+        //  longer used.
+        if (getDeviceOwnerComponent(/* callingUserOnly= */ true) == null) {
+            return setDeviceOwner(adminComponent, name, userId);
+        }
+        return true;
+    }
+
+    private static void logEventDuration(int eventId, long startTime, String callerPackage) {
+        final long duration = SystemClock.elapsedRealtime() - startTime;
+        DevicePolicyEventLogger
+                .createEvent(eventId)
+                .setTimePeriod(duration)
+                .setStrings(callerPackage)
+                .write();
+    }
+
+    @Override
+    public void resetDefaultCrossProfileIntentFilters(@UserIdInt int userId) {
+        Preconditions.checkCallAuthorization(
+                hasCallingOrSelfPermission(permission.MANAGE_PROFILE_AND_DEVICE_OWNERS));
+
+        mInjector.binderWithCleanCallingIdentity(() -> {
+            try {
+                final List<UserInfo> profiles = mUserManager.getProfiles(userId);
+                final int numOfProfiles = profiles.size();
+                if (numOfProfiles <= 1) {
+                    return;
+                }
+
+                final String managedProvisioningPackageName = getManagedProvisioningPackage(
+                        mContext);
+                // Removes cross profile intent filters from the parent to all the profiles.
+                mIPackageManager.clearCrossProfileIntentFilters(
+                        userId, mContext.getOpPackageName());
+                // Setting and resetting default cross profile intent filters was previously handled
+                // by Managed Provisioning. For backwards compatibility, clear any intent filters
+                // that were set by ManagedProvisioning.
+                mIPackageManager.clearCrossProfileIntentFilters(
+                        userId, managedProvisioningPackageName);
+
+                // For each profile reset cross profile intent filters
+                for (int i = 0; i < numOfProfiles; i++) {
+                    UserInfo profile = profiles.get(i);
+                    mIPackageManager.clearCrossProfileIntentFilters(
+                            profile.id, mContext.getOpPackageName());
+                    // Clear any intent filters that were set by ManagedProvisioning.
+                    mIPackageManager.clearCrossProfileIntentFilters(
+                            profile.id, managedProvisioningPackageName);
+
+                    mUserManagerInternal.setDefaultCrossProfileIntentFilters(userId, profile.id);
+                }
+            } catch (RemoteException e) {
+                // Shouldn't happen.
+            }
+        });
+    }
+
+    private void setAdminCanGrantSensorsPermissionForUserUnchecked(int userId, boolean canGrant) {
+        synchronized (getLockObject()) {
+            ActiveAdmin owner = getDeviceOrProfileOwnerAdminLocked(userId);
+
+            Preconditions.checkState(
+                    isDeviceOwner(owner) && owner.getUserHandle().getIdentifier() == userId,
+                    "May only be set on a the user of a device owner.");
+
+            owner.mAdminCanGrantSensorsPermissions = canGrant;
+            mPolicyCache.setAdminCanGrantSensorsPermissions(userId, canGrant);
+            saveSettingsLocked(userId);
+        }
+    }
+
+    private void updateAdminCanGrantSensorsPermissionCache(int userId) {
+        synchronized (getLockObject()) {
+            ActiveAdmin owner = getDeviceOrProfileOwnerAdminLocked(userId);
+            final boolean canGrant = owner != null ? owner.mAdminCanGrantSensorsPermissions : false;
+            mPolicyCache.setAdminCanGrantSensorsPermissions(userId, canGrant);
+        }
+    }
+
+    @Override
+    public boolean canAdminGrantSensorsPermissionsForUser(int userId) {
+        if (!mHasFeature) {
+            return false;
+        }
+
+        return mPolicyCache.canAdminGrantSensorsPermissionsForUser(userId);
     }
 }
