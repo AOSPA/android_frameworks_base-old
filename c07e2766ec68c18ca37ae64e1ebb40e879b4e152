@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a22f37d1_eed0e91a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000447
+      },
+      "writtenOn": "2021-03-16T16:31:14Z",
+      "side": 1,
+      "message": "Don\u0027t like this huge import of stuff for such a small feature",
+      "revId": "c07e2766ec68c18ca37ae64e1ebb40e879b4e152",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
