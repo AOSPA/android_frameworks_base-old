@@ -1259,7 +1259,7 @@ public final class DisplayManagerService extends SystemService {
             recordTopInsetLocked(display);
         }
         addDisplayPowerControllerLocked(display);
-        mDisplayStates.append(displayId, Display.STATE_OFF);
+        mDisplayStates.append(displayId, Display.STATE_ON);
 
         final float brightnessDefault = display.getDisplayInfoLocked().brightnessDefault;
         mDisplayBrightnesses.append(displayId,
