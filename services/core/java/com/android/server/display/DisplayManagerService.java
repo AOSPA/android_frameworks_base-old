@@ -1119,7 +1119,7 @@ public final class DisplayManagerService extends SystemService {
             recordTopInsetLocked(display);
         }
         addDisplayPowerControllerLocked(display);
-        mDisplayStates.append(displayId, Display.STATE_OFF);
+        mDisplayStates.append(displayId, Display.STATE_ON);
         mDisplayBrightnesses.append(displayId, display.getDisplayInfoLocked().brightnessDefault);
 
         DisplayManagerGlobal.invalidateLocalDisplayInfoCaches();
